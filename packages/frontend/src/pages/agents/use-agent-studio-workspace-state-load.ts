@@ -15,7 +15,7 @@ export function useAgentStudioWorkspaceStateLoad({
   activeWorkspaceId,
   tasks,
   isLoadingTasks,
-  hasCurrentTaskSnapshot,
+  tasksAreCurrent,
   sessions,
   sessionReadModelLoadState,
   hostClient = host,
@@ -23,7 +23,7 @@ export function useAgentStudioWorkspaceStateLoad({
   activeWorkspaceId: string | null;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
-  hasCurrentTaskSnapshot: boolean;
+  tasksAreCurrent: boolean;
   sessions: AgentSessionSummary[];
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
   hostClient?: AgentStudioWorkspaceStateHost;
@@ -49,13 +49,13 @@ export function useAgentStudioWorkspaceStateLoad({
         isQueryFetching: repoConfigQuery.isFetching,
         tasks,
         isLoadingTasks,
-        hasCurrentTaskSnapshot,
+        tasksAreCurrent,
         sessions,
         sessionReadModelLoadState,
       }),
     [
       activeWorkspaceId,
-      hasCurrentTaskSnapshot,
+      tasksAreCurrent,
       isLoadingTasks,
       repoConfigQuery.data,
       repoConfigQuery.error,

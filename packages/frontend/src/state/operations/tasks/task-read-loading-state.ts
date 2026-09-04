@@ -1,5 +1,5 @@
 export type TaskReadLoadingState = {
-  hasCurrentTaskSnapshot: boolean;
+  tasksAreCurrent: boolean;
   isForegroundLoadingTasks: boolean;
   isRefreshingTasksInBackground: boolean;
   isLoadingTasks: boolean;
@@ -28,14 +28,14 @@ export const getTaskReadLoadingState = ({
     (isManualLoadingTasks || isSettingsLoadingForActiveRepo || isTaskQueryLoadingForActiveRepo);
   const isRefreshingTasksInBackground =
     hasActiveRepo && isTaskQueryFetchingForActiveRepo && !isForegroundLoadingTasks;
-  const hasCurrentTaskSnapshot =
+  const tasksAreCurrent =
     hasActiveRepo &&
     isTaskQuerySuccessForActiveRepo &&
     !isForegroundLoadingTasks &&
     !isTaskQueryFetchingForActiveRepo;
 
   return {
-    hasCurrentTaskSnapshot,
+    tasksAreCurrent,
     isForegroundLoadingTasks,
     isRefreshingTasksInBackground,
     isLoadingTasks: isForegroundLoadingTasks,

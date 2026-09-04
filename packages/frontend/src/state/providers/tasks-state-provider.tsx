@@ -14,7 +14,7 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
   const { activeWorkspace } = useActiveWorkspaceContext();
   const {
     tasks,
-    hasCurrentTaskSnapshot,
+    tasksAreCurrent,
     isForegroundLoadingTasks,
     isRefreshingTasksInBackground,
     isLoadingTasks,
@@ -49,7 +49,7 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
   const tasksStateValue = useMemo(
     () =>
       buildTasksStateValue({
-        hasCurrentTaskSnapshot,
+        tasksAreCurrent,
         isForegroundLoadingTasks,
         isRefreshingTasksInBackground,
         isLoadingTasks,
@@ -82,7 +82,7 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
       detectingPullRequestTaskId,
       humanApproveTask,
       humanRequestChangesTask,
-      hasCurrentTaskSnapshot,
+      tasksAreCurrent,
       isForegroundLoadingTasks,
       isRefreshingTasksInBackground,
       isLoadingTasks,

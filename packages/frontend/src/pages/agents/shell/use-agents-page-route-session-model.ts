@@ -20,7 +20,7 @@ type UseAgentsPageRouteSessionModelArgs = {
   activeWorkspaceId: string | null;
   workspaceRepoPath: string | null;
   tasks: Parameters<typeof useAgentStudioSelectionController>[0]["tasks"];
-  hasCurrentTaskSnapshot: boolean;
+  tasksAreCurrent: boolean;
   isForegroundLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
   repoSettings: RepoSettingsInput | null;
@@ -40,7 +40,7 @@ export function useAgentsPageRouteSessionModel({
   activeWorkspaceId,
   workspaceRepoPath,
   tasks,
-  hasCurrentTaskSnapshot,
+  tasksAreCurrent,
   isForegroundLoadingTasks,
   sessions,
   repoSettings,
@@ -62,7 +62,7 @@ export function useAgentsPageRouteSessionModel({
     activeWorkspaceId,
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,
-    hasCurrentTaskSnapshot,
+    tasksAreCurrent,
     sessions,
     sessionReadModelLoadState,
   });
@@ -72,7 +72,7 @@ export function useAgentsPageRouteSessionModel({
     sessionExternalIdParam,
     hasExplicitRoleParam,
     roleFromQuery,
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     isWorkspaceStateLoaded,
     navigationPersistenceError,
     updateQuery,
@@ -101,7 +101,7 @@ export function useAgentsPageRouteSessionModel({
   const taskExecutionFilePreview = useTaskExecutionFilePreviewController();
   const { selection: selectionState, selectAgentStudioSelection: applyAgentStudioSelection } =
     useAgentStudioSelectionState({
-      isRepoNavigationBoundaryPending,
+      isWorkspaceRestorePending,
       taskIdParam,
       sessionExternalIdParam,
       hasExplicitRoleParam,
@@ -110,7 +110,6 @@ export function useAgentsPageRouteSessionModel({
       requestContextTransition: taskExecutionFilePreview.requestContextTransition,
     });
   const selectAgentStudioSelection: SelectAgentStudioSelection = applyAgentStudioSelection;
-  const canPruneTaskIds = hasCurrentTaskSnapshot && !isForegroundLoadingTasks;
 
   const selection = useAgentStudioSelectionController({
     activeWorkspaceId,
@@ -118,10 +117,10 @@ export function useAgentsPageRouteSessionModel({
     agentStudioStateLoadKey,
     agentStudioState,
     workspaceRepoPath,
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,
-    canPruneTaskIds,
+    tasksAreCurrent,
     sessions,
     taskIdParam,
     sessionExternalIdParam,
@@ -156,8 +155,7 @@ export function useAgentsPageRouteSessionModel({
       enabled:
         canSaveAgentStudioState &&
         isWorkspaceStateLoaded &&
-        !isRepoNavigationBoundaryPending &&
-        !isForegroundLoadingTasks &&
+        !isWorkspaceRestorePending &&
         selection.loadedStateWorkspaceId === activeWorkspaceId,
     });
   const retryNavigationPersistence = useCallback((): void => {

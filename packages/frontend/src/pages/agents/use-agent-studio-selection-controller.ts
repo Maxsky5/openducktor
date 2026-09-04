@@ -28,10 +28,10 @@ type UseAgentStudioSelectionControllerArgs = {
   agentStudioStateLoadKey: string | null;
   agentStudioState: WorkspaceAgentStudioState | null;
   workspaceRepoPath: string | null;
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
-  canPruneTaskIds: boolean;
+  tasksAreCurrent: boolean;
   sessions: AgentSessionSummary[];
   taskIdParam: string;
   sessionExternalIdParam: string | null;
@@ -82,10 +82,10 @@ export function useAgentStudioSelectionController({
   agentStudioStateLoadKey,
   agentStudioState,
   workspaceRepoPath,
-  isRepoNavigationBoundaryPending,
+  isWorkspaceRestorePending,
   tasks,
   isLoadingTasks,
-  canPruneTaskIds,
+  tasksAreCurrent,
   sessions,
   taskIdParam,
   sessionExternalIdParam,
@@ -102,7 +102,7 @@ export function useAgentStudioSelectionController({
   const navigationBase = useMemo(
     () =>
       resolveAgentStudioNavigationState({
-        isRepoNavigationBoundaryPending,
+        isWorkspaceRestorePending,
         isLoadingTasks,
         sessionReadModelLoadState,
         tasks,
@@ -117,7 +117,7 @@ export function useAgentStudioSelectionController({
     [
       hasExplicitRoleParam,
       isLoadingTasks,
-      isRepoNavigationBoundaryPending,
+      isWorkspaceRestorePending,
       roleFromQuery,
       selectionState,
       sessionExternalIdParam,
@@ -171,11 +171,11 @@ export function useAgentStudioSelectionController({
     loadedAgentStudioState,
     agentStudioStateLoadKey,
     agentStudioState,
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     taskId: navigationBase.taskId,
     selectedTask: navigationBase.selectedTask,
     tasks,
-    canPruneTaskIds,
+    tasksAreCurrent,
     latestSessionByTaskId,
     activeSessionByTaskId,
     selectAgentStudioSelection,
@@ -186,7 +186,7 @@ export function useAgentStudioSelectionController({
       return navigationBase;
     }
     return resolveAgentStudioNavigationState({
-      isRepoNavigationBoundaryPending,
+      isWorkspaceRestorePending,
       isLoadingTasks,
       sessionReadModelLoadState,
       tasks,
@@ -202,7 +202,7 @@ export function useAgentStudioSelectionController({
     activeTaskTabId,
     hasExplicitRoleParam,
     isLoadingTasks,
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     navigationBase,
     roleFromQuery,
     selectionState,

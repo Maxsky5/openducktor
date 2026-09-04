@@ -15,7 +15,7 @@ type TaskToastDedupeRef = MutableRefObject<{ repoPath: string; description: stri
 
 export type UseTaskReadFlowResult = {
   tasks: TaskCard[];
-  hasCurrentTaskSnapshot: boolean;
+  tasksAreCurrent: boolean;
   isForegroundLoadingTasks: boolean;
   isRefreshingTasksInBackground: boolean;
   isLoadingTasks: boolean;

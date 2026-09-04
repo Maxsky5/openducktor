@@ -246,21 +246,21 @@ export type AgentStudioRouteSessionResolution =
   | { kind: "failed"; sessionExternalId: string; message: string };
 
 export const resolveAgentStudioRouteSession = ({
-  isRepoNavigationBoundaryPending,
+  isWorkspaceRestorePending,
   isLoadingTasks,
   sessionReadModelLoadState,
   sessions,
   taskId,
   sessionExternalId,
 }: {
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   isLoadingTasks: boolean;
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
   sessions: AgentSessionSummary[];
   taskId: string;
   sessionExternalId: string | null;
 }): AgentStudioRouteSessionResolution => {
-  if (isRepoNavigationBoundaryPending || !sessionExternalId) {
+  if (isWorkspaceRestorePending || !sessionExternalId) {
     return { kind: "none" };
   }
 

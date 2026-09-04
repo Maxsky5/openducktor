@@ -4,7 +4,7 @@ import type { TaskTabState } from "./use-agent-studio-task-tabs-state";
 
 type UseTaskTabSelectionArgs = {
   activeWorkspaceId: string | null;
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   taskId: string;
   tabTaskIds: string[];
   persistedActiveTaskId: string | null;
@@ -22,7 +22,7 @@ type UseTaskTabSelectionResult = {
 export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSelectionResult {
   const {
     activeWorkspaceId,
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     taskId,
     tabTaskIds,
     persistedActiveTaskId,
@@ -46,7 +46,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     if (
       !activeWorkspaceId ||
       loadedStateWorkspaceId !== activeWorkspaceId ||
-      isRepoNavigationBoundaryPending
+      isWorkspaceRestorePending
     ) {
       return;
     }
@@ -68,7 +68,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     selectTask(fallbackTaskId);
   }, [
     activeWorkspaceId,
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     persistedActiveTaskId,
     selectTask,
     tabTaskIds,
@@ -77,10 +77,10 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
   ]);
 
   useEffect(() => {
-    if (!activeWorkspaceId || taskId || isRepoNavigationBoundaryPending) {
+    if (!activeWorkspaceId || taskId || isWorkspaceRestorePending) {
       appliedFallbackKeyRef.current = null;
     }
-  }, [activeWorkspaceId, isRepoNavigationBoundaryPending, taskId]);
+  }, [activeWorkspaceId, isWorkspaceRestorePending, taskId]);
 
   const handleSelectTab = useCallback(
     (nextTaskId: string): void => {

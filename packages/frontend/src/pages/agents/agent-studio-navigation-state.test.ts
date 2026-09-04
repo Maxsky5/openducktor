@@ -28,7 +28,7 @@ const createNavigationState = (
   overrides: Partial<Parameters<typeof resolveAgentStudioNavigationState>[0]> = {},
 ) => {
   const base = {
-    isRepoNavigationBoundaryPending: false,
+    isWorkspaceRestorePending: false,
     isLoadingTasks: false,
     sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo"),
     tasks: [createTask("task-1")],
@@ -45,7 +45,7 @@ const createNavigationState = (
     selectionState:
       overrides.selectionState ??
       createAgentStudioRouteSelectionState({
-        isRepoNavigationBoundaryPending: base.isRepoNavigationBoundaryPending,
+        isWorkspaceRestorePending: base.isWorkspaceRestorePending,
         taskIdParam: base.taskIdParam,
         sessionExternalIdParam: base.sessionExternalIdParam,
         hasExplicitRoleParam: base.hasExplicitRoleParam,

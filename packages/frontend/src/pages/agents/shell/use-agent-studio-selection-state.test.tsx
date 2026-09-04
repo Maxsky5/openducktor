@@ -23,7 +23,7 @@ const session = {
 };
 
 const baseProps = (overrides: Partial<HookProps> = {}): HookProps => ({
-  isRepoNavigationBoundaryPending: false,
+  isWorkspaceRestorePending: false,
   taskIdParam: "task-1",
   sessionExternalIdParam: null,
   hasExplicitRoleParam: false,
@@ -178,7 +178,7 @@ describe("useAgentStudioSelectionState", () => {
     await harness.unmount();
   });
 
-  test("forces the transition while a repository boundary is pending", async () => {
+  test("forces the change while workspace restore is pending", async () => {
     const options: Array<{ force: boolean } | undefined> = [];
     const requestContextTransition = mock(
       (_apply: () => void, _cancel?: () => void, transitionOptions?: { force: boolean }) => {
@@ -188,9 +188,7 @@ describe("useAgentStudioSelectionState", () => {
     const harness = createHookHarness(baseProps({ requestContextTransition }));
 
     await harness.mount();
-    await harness.update(
-      baseProps({ isRepoNavigationBoundaryPending: true, requestContextTransition }),
-    );
+    await harness.update(baseProps({ isWorkspaceRestorePending: true, requestContextTransition }));
 
     expect(options.at(-1)).toEqual({ force: true });
     await harness.unmount();

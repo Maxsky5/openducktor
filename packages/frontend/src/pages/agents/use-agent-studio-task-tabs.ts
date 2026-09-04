@@ -18,11 +18,11 @@ export function useAgentStudioTaskTabs(args: {
   loadedAgentStudioState: WorkspaceAgentStudioState | null;
   agentStudioStateLoadKey: string | null;
   agentStudioState: WorkspaceAgentStudioState | null;
-  isRepoNavigationBoundaryPending?: boolean;
+  isWorkspaceRestorePending?: boolean;
   taskId: string;
   selectedTask: TaskCard | null;
   tasks: TaskCard[];
-  canPruneTaskIds: boolean;
+  tasksAreCurrent: boolean;
   latestSessionByTaskId: Map<string, AgentSessionSummary>;
   activeSessionByTaskId?: Map<string, AgentSessionSummary>;
   selectAgentStudioSelection: SelectAgentStudioSelection;
@@ -32,11 +32,11 @@ export function useAgentStudioTaskTabs(args: {
     loadedAgentStudioState,
     agentStudioStateLoadKey,
     agentStudioState,
-    isRepoNavigationBoundaryPending = false,
+    isWorkspaceRestorePending = false,
     taskId,
     selectedTask,
     tasks,
-    canPruneTaskIds,
+    tasksAreCurrent,
     latestSessionByTaskId,
     activeSessionByTaskId,
     selectAgentStudioSelection,
@@ -63,12 +63,12 @@ export function useAgentStudioTaskTabs(args: {
       taskId: taskIdForTabs,
       selectedTask,
       tasks,
-      canPruneTaskIds,
+      tasksAreCurrent,
     });
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({
     activeWorkspaceId,
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     taskId: taskIdForTabs,
     tabTaskIds: openTaskIds,
     persistedActiveTaskId,

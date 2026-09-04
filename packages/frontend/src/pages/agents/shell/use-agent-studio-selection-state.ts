@@ -10,7 +10,7 @@ import {
 } from "./agent-studio-selection-state";
 
 type UseAgentStudioSelectionStateArgs = {
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   taskIdParam: string;
   sessionExternalIdParam: string | null;
   hasExplicitRoleParam: boolean;
@@ -34,7 +34,7 @@ export type AgentStudioSelectionStateModel = {
 };
 
 export function useAgentStudioSelectionState({
-  isRepoNavigationBoundaryPending,
+  isWorkspaceRestorePending,
   taskIdParam,
   sessionExternalIdParam,
   hasExplicitRoleParam,
@@ -45,7 +45,7 @@ export function useAgentStudioSelectionState({
   const routeSelection = useMemo(
     () =>
       createAgentStudioRouteSelectionState({
-        isRepoNavigationBoundaryPending,
+        isWorkspaceRestorePending,
         taskIdParam,
         sessionExternalIdParam,
         hasExplicitRoleParam,
@@ -53,7 +53,7 @@ export function useAgentStudioSelectionState({
       }),
     [
       hasExplicitRoleParam,
-      isRepoNavigationBoundaryPending,
+      isWorkspaceRestorePending,
       roleFromQuery,
       sessionExternalIdParam,
       taskIdParam,
@@ -111,10 +111,10 @@ export function useAgentStudioSelectionState({
           buildAgentStudioSelectionQueryUpdateFromState(latest.snapshot.selection),
         );
       },
-      { force: isRepoNavigationBoundaryPending },
+      { force: isWorkspaceRestorePending },
     );
   }, [
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     requestContextTransition,
     routeSelectionQueryKey,
     scheduleQueryUpdate,

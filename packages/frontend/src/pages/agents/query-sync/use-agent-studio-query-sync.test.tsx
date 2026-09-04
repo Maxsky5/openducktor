@@ -1,64 +1,60 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { WorkspaceAgentStudioState } from "@openducktor/contracts";
-import { useState } from "react";
+import type { SetURLSearchParams } from "react-router";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
-} from "./agent-studio-test-utils";
-import type { AgentStudioNavigationState } from "./query-sync/agent-studio-navigation";
-import {
-  resolveRepoNavigationBoundaryPhase,
-  useRepoNavigationPersistence,
-} from "./use-repo-navigation-persistence";
+} from "../agent-studio-test-utils";
+import { getWorkspaceRestorePhase, useAgentStudioQuerySync } from "./use-agent-studio-query-sync";
 
 enableReactActEnvironment();
+
+const emptySearchParams = new URLSearchParams();
+const setSearchParams: SetURLSearchParams = () => {};
 
 type HookArgs = {
   activeWorkspaceId: string | null;
   agentStudioState: WorkspaceAgentStudioState | null;
-  initialNavigation?: AgentStudioNavigationState;
+  searchParams?: URLSearchParams;
   isLoadingAgentStudioState?: boolean;
   agentStudioStateError?: Error | null;
-  retryPersistenceRestore?: () => void;
+  retry?: () => void;
 };
 
 const useHookHarness = ({
   activeWorkspaceId,
   agentStudioState,
-  initialNavigation,
+  searchParams = emptySearchParams,
   isLoadingAgentStudioState = false,
   agentStudioStateError = null,
-  retryPersistenceRestore = () => {},
-}: HookArgs) => {
-  const [navigation, setNavigation] = useState<AgentStudioNavigationState>(
-    initialNavigation ?? { taskId: "", sessionExternalId: null, role: null },
-  );
-  const result = useRepoNavigationPersistence({
+  retry = () => {},
+}: HookArgs) =>
+  useAgentStudioQuerySync({
     activeWorkspaceId,
     agentStudioState,
     isLoadingAgentStudioState,
     agentStudioStateError,
-    navigation,
-    retryPersistenceRestore,
-    setNavigation,
+    retryAgentStudioStateLoad: retry,
+    locationKey: "location-1",
+    navigationType: "REPLACE",
+    searchParams,
+    setSearchParams,
   });
-  return { ...result, navigation, setNavigation };
-};
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useHookHarness, initialProps);
 
-describe("useRepoNavigationPersistence", () => {
-  test("reports repo boundary phases", () => {
+describe("useAgentStudioQuerySync", () => {
+  test("reports workspace boundary phases", () => {
     expect(
-      resolveRepoNavigationBoundaryPhase({
+      getWorkspaceRestorePhase({
         activeWorkspaceId: "repo-b",
         lastWorkspaceId: "repo-a",
         boundaryWorkspaceId: null,
       }),
     ).toBe("detecting");
     expect(
-      resolveRepoNavigationBoundaryPhase({
+      getWorkspaceRestorePhase({
         activeWorkspaceId: "repo-a",
         lastWorkspaceId: "repo-a",
         boundaryWorkspaceId: null,
@@ -82,12 +78,10 @@ describe("useRepoNavigationPersistence", () => {
     await harness.mount();
     await harness.waitFor((state) => state.isWorkspaceStateLoaded);
 
-    expect(harness.getLatest().navigation).toEqual({
-      taskId: "task-a",
-      sessionExternalId: "session-a",
-      role: "planner",
-    });
-    expect(harness.getLatest().isRepoNavigationBoundaryPending).toBeFalse();
+    expect(harness.getLatest().taskIdParam).toBe("task-a");
+    expect(harness.getLatest().sessionExternalIdParam).toBe("session-a");
+    expect(harness.getLatest().roleFromQuery).toBe("planner");
+    expect(harness.getLatest().isWorkspaceRestorePending).toBeFalse();
     await harness.unmount();
   });
 
@@ -98,20 +92,14 @@ describe("useRepoNavigationPersistence", () => {
         openTaskIds: ["task-saved"],
         activeTask: { taskId: "task-saved", role: "planner" },
       },
-      initialNavigation: {
-        taskId: "task-url",
-        sessionExternalId: "session-url",
-        role: "qa",
-      },
+      searchParams: new URLSearchParams("task=task-url&session=session-url&agent=qa"),
     });
 
     await harness.mount();
     await harness.waitFor((state) => state.isWorkspaceStateLoaded);
-    expect(harness.getLatest().navigation).toEqual({
-      taskId: "task-url",
-      sessionExternalId: "session-url",
-      role: "qa",
-    });
+    expect(harness.getLatest().taskIdParam).toBe("task-url");
+    expect(harness.getLatest().sessionExternalIdParam).toBe("session-url");
+    expect(harness.getLatest().roleFromQuery).toBe("qa");
     await harness.unmount();
   });
 
@@ -125,7 +113,7 @@ describe("useRepoNavigationPersistence", () => {
     });
 
     await harness.mount();
-    await harness.waitFor((state) => state.navigation.taskId === "task-a");
+    await harness.waitFor((state) => state.taskIdParam === "task-a");
     await harness.update({
       activeWorkspaceId: "repo-b",
       agentStudioState: {
@@ -133,13 +121,10 @@ describe("useRepoNavigationPersistence", () => {
         activeTask: { taskId: "task-b", role: "build" },
       },
     });
-    await harness.waitFor((state) => state.navigation.taskId === "task-b");
+    await harness.waitFor((state) => state.taskIdParam === "task-b");
 
-    expect(harness.getLatest().navigation).toEqual({
-      taskId: "task-b",
-      sessionExternalId: null,
-      role: "build",
-    });
+    expect(harness.getLatest().sessionExternalIdParam).toBeNull();
+    expect(harness.getLatest().roleFromQuery).toBe("build");
     await harness.unmount();
   });
 
@@ -150,12 +135,12 @@ describe("useRepoNavigationPersistence", () => {
       activeWorkspaceId: "repo-a",
       agentStudioState: null,
       agentStudioStateError: error,
-      retryPersistenceRestore: retry,
+      retry,
     });
 
     await harness.mount();
-    expect(harness.getLatest().persistenceError).toBe(error);
-    harness.getLatest().retryPersistenceRestore();
+    expect(harness.getLatest().navigationPersistenceError).toBe(error);
+    harness.getLatest().retryNavigationPersistence();
     expect(retry).toHaveBeenCalledTimes(1);
     await harness.unmount();
   });

@@ -66,7 +66,7 @@ const specState = {
 const createTasksState = (
   updateTask: TasksStateContextValue["updateTask"],
 ): TasksStateContextValue => ({
-  hasCurrentTaskSnapshot: true,
+  tasksAreCurrent: true,
   isForegroundLoadingTasks: false,
   isRefreshingTasksInBackground: false,
   isLoadingTasks: false,

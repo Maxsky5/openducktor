@@ -44,7 +44,7 @@ export type AgentStudioNavigationState = {
 };
 
 export type ResolveAgentStudioNavigationStateArgs = {
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   isLoadingTasks: boolean;
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
   tasks: TaskCard[];
@@ -58,7 +58,7 @@ export type ResolveAgentStudioNavigationStateArgs = {
 };
 
 export const resolveAgentStudioNavigationState = ({
-  isRepoNavigationBoundaryPending,
+  isWorkspaceRestorePending,
   isLoadingTasks,
   sessionReadModelLoadState,
   tasks,
@@ -73,7 +73,7 @@ export const resolveAgentStudioNavigationState = ({
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
   const sessionsByTaskId = groupSessionsByTaskId(sessions);
   const routeSessionResolution = resolveAgentStudioRouteSession({
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     isLoadingTasks,
     sessionReadModelLoadState,
     sessions,
@@ -87,7 +87,7 @@ export const resolveAgentStudioNavigationState = ({
   const sessionsForTask = taskId ? (sessionsByTaskId.get(taskId) ?? []) : [];
   const routeTaskId = taskIdParam;
   const resolvedRouteSession = resolveRouteSession({
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     tasksById,
     sessionsByTaskId,
     routeTaskId,
@@ -110,7 +110,7 @@ export const resolveAgentStudioNavigationState = ({
     selectedViewSessions,
   });
   const queryUpdate = resolveNavigationQueryUpdate({
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     isLoadingTasks,
     tasks,
     taskIdParam,
@@ -135,7 +135,7 @@ export const resolveAgentStudioNavigationState = ({
 };
 
 const resolveRouteSession = ({
-  isRepoNavigationBoundaryPending,
+  isWorkspaceRestorePending,
   tasksById,
   sessionsByTaskId,
   routeTaskId,
@@ -144,7 +144,7 @@ const resolveRouteSession = ({
   hasExplicitRoleParam,
   roleFromQuery,
 }: {
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   tasksById: Map<string, TaskCard>;
   sessionsByTaskId: Map<string, AgentSessionSummary[]>;
   routeTaskId: string;
@@ -153,7 +153,7 @@ const resolveRouteSession = ({
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
 }): AgentSessionSummary | null => {
-  if (isRepoNavigationBoundaryPending) {
+  if (isWorkspaceRestorePending) {
     return null;
   }
 
@@ -220,7 +220,7 @@ const resolveNavigationViewSelection = ({
 };
 
 const resolveNavigationQueryUpdate = ({
-  isRepoNavigationBoundaryPending,
+  isWorkspaceRestorePending,
   isLoadingTasks,
   tasks,
   taskIdParam,
@@ -231,7 +231,7 @@ const resolveNavigationQueryUpdate = ({
   selectionState,
   hasExplicitRoleParam,
 }: {
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   isLoadingTasks: boolean;
   tasks: TaskCard[];
   taskIdParam: string;
@@ -243,9 +243,9 @@ const resolveNavigationQueryUpdate = ({
   hasExplicitRoleParam: boolean;
 }): AgentStudioQueryUpdate | null => {
   if (
-    isRepoNavigationBoundaryPending ||
+    isWorkspaceRestorePending ||
     hasLocalSelectionAheadOfRoute({
-      isRepoNavigationBoundaryPending,
+      isWorkspaceRestorePending,
       taskIdParam,
       sessionExternalIdParam,
       hasExplicitRoleParam,
@@ -281,14 +281,14 @@ const resolveNavigationQueryUpdate = ({
 };
 
 const hasLocalSelectionAheadOfRoute = ({
-  isRepoNavigationBoundaryPending,
+  isWorkspaceRestorePending,
   taskIdParam,
   sessionExternalIdParam,
   hasExplicitRoleParam,
   roleFromQuery,
   selectionState,
 }: {
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   taskIdParam: string;
   sessionExternalIdParam: string | null;
   hasExplicitRoleParam: boolean;
@@ -296,7 +296,7 @@ const hasLocalSelectionAheadOfRoute = ({
   selectionState: AgentStudioSelectionState;
 }): boolean => {
   const routeSelection = createAgentStudioRouteSelectionState({
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     taskIdParam,
     sessionExternalIdParam,
     hasExplicitRoleParam,

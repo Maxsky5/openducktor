@@ -184,7 +184,7 @@ const createChecksState = (): ChecksStateContextValue => ({
 });
 
 const createTasksState = (): TasksStateContextValue => ({
-  hasCurrentTaskSnapshot: true,
+  tasksAreCurrent: true,
   isForegroundLoadingTasks: false,
   isRefreshingTasksInBackground: false,
   isLoadingTasks: false,
