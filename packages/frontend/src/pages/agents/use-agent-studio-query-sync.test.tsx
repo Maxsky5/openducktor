@@ -106,6 +106,39 @@ describe("useAgentStudioQuerySync", () => {
     await harness.unmount();
   });
 
+  test("keeps a direct route active while workspace state loads", async () => {
+    const route = new URLSearchParams("task=task-url&session=session-url&agent=build");
+    const harness = createHookHarness(
+      withDefaults({
+        activeWorkspaceId: "repo-a",
+        isLoadingAgentStudioState: true,
+        searchParams: route,
+      }),
+    );
+
+    await harness.mount();
+
+    expect(harness.getLatest().isWorkspaceRestorePending).toBeFalse();
+    expect(harness.getLatest().taskIdParam).toBe("task-url");
+
+    await harness.update(
+      withDefaults({
+        activeWorkspaceId: "repo-a",
+        agentStudioState: {
+          openTaskIds: ["task-saved"],
+          activeTask: { taskId: "task-saved", role: "qa" },
+        },
+        searchParams: route,
+      }),
+    );
+    await harness.waitFor((result) => result.isWorkspaceStateLoaded);
+
+    expect(harness.getLatest().taskIdParam).toBe("task-url");
+    expect(harness.getLatest().sessionExternalIdParam).toBe("session-url");
+    expect(harness.getLatest().roleFromQuery).toBe("build");
+    await harness.unmount();
+  });
+
   test("keeps direct-link URL parameters authoritative", async () => {
     const harness = createHookHarness(
       withDefaults({

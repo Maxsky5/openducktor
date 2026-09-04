@@ -72,7 +72,10 @@ export function useAgentStudioQuerySync({
     activeWorkspaceId !== null && restoredWorkspaceId === activeWorkspaceId;
   const isWorkspaceRestorePending =
     restorePhase !== "idle" ||
-    (activeWorkspaceId !== null && !isWorkspaceStateLoaded && agentStudioStateError === null);
+    (activeWorkspaceId !== null &&
+      !isWorkspaceStateLoaded &&
+      agentStudioStateError === null &&
+      !hasAgentStudioNavigationSelection(navigation));
 
   useEffect(() => {
     if (lastWorkspaceIdRef.current === activeWorkspaceId) {
