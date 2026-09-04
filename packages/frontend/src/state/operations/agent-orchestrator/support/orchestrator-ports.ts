@@ -18,9 +18,6 @@ export type AgentOrchestratorRuntimeHostPort = {
   taskSessionBootstrapPrepare: typeof host.taskSessionBootstrapPrepare;
   taskSessionBootstrapComplete: typeof host.taskSessionBootstrapComplete;
   taskSessionBootstrapAbort: typeof host.taskSessionBootstrapAbort;
-  taskSessionStartupLeasePrepare: typeof host.taskSessionStartupLeasePrepare;
-  taskSessionStartupLeaseComplete: typeof host.taskSessionStartupLeaseComplete;
-  taskSessionStartupLeaseAbort: typeof host.taskSessionStartupLeaseAbort;
 };
 
 export type AgentOrchestratorLiveSessionHostPort = {

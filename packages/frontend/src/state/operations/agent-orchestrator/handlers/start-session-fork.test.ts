@@ -137,7 +137,9 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       });
 
       expect(externalSessionId).toEqual(
-        expect.objectContaining({ externalSessionId: "external-forked-pr-session" }),
+        expect.objectContaining({
+          externalSessionId: "external-forked-pr-session",
+        }),
       );
       expect(getSession(sessionsRef.current, "external-forked-pr-session")?.workingDirectory).toBe(
         "/tmp/repo/worktree",
@@ -181,7 +183,7 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     }
   });
 
-  test("holds the task startup lease until the host-controlled fork returns", async () => {
+  test("starts a workflow fork through the host-controlled operation", async () => {
     const adapter = new OpencodeSdkAdapter();
     const events: string[] = [];
     let finishPersistence: (() => void) | undefined;
@@ -212,13 +214,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         }),
       ]),
       taskRef: { current: [taskFixture] },
-      prepareTaskSessionStartupLease: async () => {
-        events.push("prepare");
-        return "fork-lease";
-      },
-      completeTaskSessionStartupLease: async () => {
-        events.push("lease-complete");
-      },
     });
 
     const started = start({
@@ -233,72 +228,15 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       },
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(events).toEqual(["prepare", "host-fork-start"]);
+    expect(events).toEqual(["host-fork-start"]);
 
     finishPersistence?.();
     await started;
-    expect(events).toEqual(["prepare", "host-fork-start", "host-fork-complete", "lease-complete"]);
+    expect(events).toEqual(["host-fork-start", "host-fork-complete"]);
   });
 
-  test("stops and keeps a stale fork after lease completion", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
+  test("does not register a session when the host-controlled fork fails", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const stoppedSessionIds: string[] = [];
-    const abortedLeaseIds: string[] = [];
-    const sessionsRef = createSessionsRef([
-      sessionFixture({
-        externalSessionId: "source-stale-after-complete",
-        historyLoadState: "loaded",
-      }),
-    ]);
-    adapter.forkSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "fork-stale-after-complete",
-      startedAt: "2026-02-22T08:20:00.000Z",
-      sessionAssociation: input.sessionScope,
-      status: "idle",
-    });
-    adapter.loadSessionHistory = async () => [];
-    adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(sessionRef.externalSessionId);
-    };
-
-    const { start } = createStartSessionTestHarness({
-      adapter,
-      sessionsRef,
-      taskRef: { current: [taskFixture] },
-      currentWorkspaceRepoPathRef,
-      prepareTaskSessionStartupLease: async () => "stale-after-complete-lease",
-      completeTaskSessionStartupLease: async () => {
-        currentWorkspaceRepoPathRef.current = "/tmp/other";
-      },
-      abortTaskSessionStartupLease: async (_repoPath, _taskId, leaseId) => {
-        abortedLeaseIds.push(leaseId);
-      },
-    });
-
-    await expect(
-      start({
-        taskId: "task-1",
-        role: "build",
-        startMode: "fork",
-        selectedModel: BUILD_SELECTION,
-        sourceSession: {
-          externalSessionId: "source-stale-after-complete",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      }),
-    ).rejects.toThrow("Workspace changed while starting session.");
-    expect(stoppedSessionIds).toEqual(["fork-stale-after-complete"]);
-    expect(abortedLeaseIds).toEqual([]);
-    expect(getSession(sessionsRef.current, "fork-stale-after-complete")).toBeDefined();
-  });
-
-  test("aborts the task startup lease when the host-controlled fork fails", async () => {
-    const adapter = new OpencodeSdkAdapter();
-    const abortedLeaseIds: string[] = [];
     const stoppedSessionIds: string[] = [];
     const sessionsRef = createSessionsRef([
       sessionFixture({
@@ -318,10 +256,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      prepareTaskSessionStartupLease: async () => "persistence-failure-lease",
-      abortTaskSessionStartupLease: async (_repoPath, _taskId, leaseId) => {
-        abortedLeaseIds.push(leaseId);
-      },
     });
 
     await expect(
@@ -337,14 +271,12 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         },
       }),
     ).rejects.toThrow("session store unavailable");
-    expect(abortedLeaseIds).toEqual(["persistence-failure-lease"]);
     expect(stoppedSessionIds).toEqual([]);
     expect(getSession(sessionsRef.current, "fork-persistence-failure")).toBeUndefined();
   });
 
-  test("aborts the task startup lease when host fork cleanup fails", async () => {
+  test("reports host fork cleanup failure", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const abortedLeaseIds: string[] = [];
     const sessionsRef = createSessionsRef([
       sessionFixture({
         externalSessionId: "source-persistence-stop-failure",
@@ -362,10 +294,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      prepareTaskSessionStartupLease: async () => "persistence-stop-failure-lease",
-      abortTaskSessionStartupLease: async (_repoPath, _taskId, leaseId) => {
-        abortedLeaseIds.push(leaseId);
-      },
     });
 
     await expect(
@@ -383,11 +311,10 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     ).rejects.toThrow(
       "Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.",
     );
-    expect(abortedLeaseIds).toEqual(["persistence-stop-failure-lease"]);
     expect(getSession(sessionsRef.current, "fork-persistence-stop-failure")).toBeUndefined();
   });
 
-  test("acquires the task startup lease before loading stopped source session history", async () => {
+  test("loads stopped source session history before forking", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
@@ -452,10 +379,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         sessionsRef.current = replaceAgentSession(sessionsRef.current, loadedSourceBuild);
         return loadedSourceBuild;
       },
-      prepareTaskSessionStartupLease: async () => {
-        events.push("prepare-lease");
-        return "source-history-lease";
-      },
     });
 
     try {
@@ -472,10 +395,12 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       });
 
       expect(externalSessionId).toEqual(
-        expect.objectContaining({ externalSessionId: "external-forked-from-loaded-source" }),
+        expect.objectContaining({
+          externalSessionId: "external-forked-from-loaded-source",
+        }),
       );
       expect(loadSourceSessionCalls).toEqual([]);
-      expect(events).toEqual(["prepare-lease", "load-source-history"]);
+      expect(events).toEqual(["load-source-history"]);
       expect(loadAgentSessionHistoryCalls).toEqual([
         {
           externalSessionId: "external-source-build",
@@ -568,7 +493,9 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
           },
         }),
       ).resolves.toEqual(
-        expect.objectContaining({ externalSessionId: "external-forked-from-runtime-connection" }),
+        expect.objectContaining({
+          externalSessionId: "external-forked-from-runtime-connection",
+        }),
       );
       expect(forkCalls).toHaveLength(1);
     } finally {
@@ -582,8 +509,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     const originalStopSession = adapter.stopSession;
     const stoppedSessionIds: string[] = [];
-    const completedLeaseIds: string[] = [];
-    const abortedLeaseIds: string[] = [];
     const sessionsRef = createSessionsRef([
       sessionFixture({
         externalSessionId: "external-source-build",
@@ -619,13 +544,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      prepareTaskSessionStartupLease: async () => "failed-fork-lease",
-      completeTaskSessionStartupLease: async (_repoPath, _taskId, leaseId) => {
-        completedLeaseIds.push(leaseId);
-      },
-      abortTaskSessionStartupLease: async (_repoPath, _taskId, leaseId) => {
-        abortedLeaseIds.push(leaseId);
-      },
     });
 
     try {
@@ -643,8 +561,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         }),
       ).rejects.toThrow("The stored task session was kept.");
       expect(stoppedSessionIds).toEqual(["external-fork-history-failure"]);
-      expect(completedLeaseIds).toEqual(["failed-fork-lease"]);
-      expect(abortedLeaseIds).toEqual([]);
       expect(getSession(sessionsRef.current, "external-fork-history-failure")).toBeUndefined();
     } finally {
       adapter.forkSession = originalForkSession;
@@ -653,9 +569,8 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
     }
   });
 
-  test("keeps the task startup lease when child-history rollback cannot stop the fork", async () => {
+  test("reports when child-history rollback cannot stop the fork", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const abortedLeaseIds: string[] = [];
     const sessionsRef = createSessionsRef([
       sessionFixture({
         externalSessionId: "source-child-history-stop-failure",
@@ -681,10 +596,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      prepareTaskSessionStartupLease: async () => "child-history-stop-failure-lease",
-      abortTaskSessionStartupLease: async (_repoPath, _taskId, leaseId) => {
-        abortedLeaseIds.push(leaseId);
-      },
     });
 
     await expect(
@@ -700,7 +611,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
         },
       }),
     ).rejects.toThrow("Failed to stop the started session during rollback: runtime unavailable");
-    expect(abortedLeaseIds).toEqual([]);
     expect(getSession(sessionsRef.current, "fork-child-history-stop-failure")).toBeUndefined();
   });
 

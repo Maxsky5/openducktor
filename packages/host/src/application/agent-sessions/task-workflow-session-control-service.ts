@@ -12,6 +12,7 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { TaskService } from "../tasks/task-service";
+import { validateTaskSessionWorkflowAvailable } from "../tasks/support/task-session-workflow-validation";
 import type { TaskSessionBootstrapCoordinator } from "../tasks/worktrees/task-session-bootstrap-coordinator";
 import {
   type HostError,
@@ -20,6 +21,7 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
+import type { TaskStorePort } from "../../ports/task-repository-ports";
 
 type RuntimeControl = Pick<
   AgentSessionLiveStateService,
@@ -36,6 +38,7 @@ type TaskSessions = Pick<
   TaskService,
   "agentSessionsList" | "agentSessionUpsert" | "agentSessionUpdateModel"
 >;
+type TaskReader = Pick<TaskStorePort, "getTask">;
 
 type TaskLifecycle = Pick<TaskSessionBootstrapCoordinator, "acquireLifecycle">;
 type CanonicalizeRepoPath = (repoPath: string) => Effect.Effect<string, HostError>;
@@ -181,11 +184,13 @@ const toRuntimeModel = (
 export const createTaskWorkflowSessionControlService = ({
   canonicalizeRepoPath,
   runtime,
+  taskReader,
   tasks,
   taskLifecycle,
 }: {
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtime: RuntimeControl;
+  taskReader: TaskReader;
   tasks: TaskSessions;
   taskLifecycle: TaskLifecycle;
 }): RuntimeControl => ({
@@ -242,6 +247,15 @@ export const createTaskWorkflowSessionControlService = ({
       Effect.gen(function* () {
         const repoPath = yield* canonicalizeRepoPath(input.repoPath);
         yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "fork session");
+        const task = yield* taskReader.getTask({ repoPath, taskId: scope.taskId }).pipe(
+          Effect.mapError((cause) =>
+            toHostOperationError(cause, "task-workflow-session.read-fork-task", {
+              repoPath,
+              taskId: scope.taskId,
+            }),
+          ),
+        );
+        yield* validateTaskSessionWorkflowAvailable(task, scope.role, repoPath);
         const parent = yield* readStoredWorkflowSession(
           tasks,
           {

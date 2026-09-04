@@ -75,8 +75,6 @@ import type {
   TaskIdInput,
   TaskSessionBootstrapFinalizeInput,
   TaskSessionBootstrapPrepareInput,
-  TaskSessionStartupLeaseFinalizeInput,
-  TaskSessionStartupLeasePrepareInput,
   TransitionTaskInput,
   UpdateTaskInput,
 } from "./task-inputs";
@@ -97,7 +95,6 @@ import { createTaskFullResetUseCase } from "./use-cases/reset-task";
 import { createTaskReviewUseCases } from "./use-cases/review-task";
 import { createTaskPullRequestSyncUseCases } from "./use-cases/sync-pull-requests";
 import { createTaskSessionBootstrapUseCase } from "./use-cases/task-session-bootstrap";
-import { createTaskSessionStartupLeaseUseCase } from "./use-cases/task-session-startup-lease";
 import { createTaskBuildStateUseCases } from "./use-cases/update-build-state";
 import {
   createTaskSessionBootstrapCoordinator,
@@ -182,15 +179,6 @@ export type TaskService = {
   ): Effect.Effect<boolean, TaskServiceError>;
   taskSessionBootstrapAbort(
     input: TaskSessionBootstrapFinalizeInput,
-  ): Effect.Effect<boolean, TaskServiceError>;
-  taskSessionStartupLeasePrepare(
-    input: TaskSessionStartupLeasePrepareInput,
-  ): Effect.Effect<string, TaskServiceError>;
-  taskSessionStartupLeaseComplete(
-    input: TaskSessionStartupLeaseFinalizeInput,
-  ): Effect.Effect<boolean, TaskServiceError>;
-  taskSessionStartupLeaseAbort(
-    input: TaskSessionStartupLeaseFinalizeInput,
   ): Effect.Effect<boolean, TaskServiceError>;
   buildResumed(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildCompleted(input: BuildCompletedInput): Effect.Effect<TaskCard, TaskServiceError>;
@@ -360,7 +348,6 @@ const createTaskServiceImplementation = (
     ...createTaskFullResetUseCase(useCaseInput),
     ...createTaskDocumentUseCases(useCaseInput),
     ...taskSessionBootstrap,
-    ...createTaskSessionStartupLeaseUseCase(useCaseInput),
     buildStart: (startInput: BuildStartInput) =>
       Effect.gen(function* () {
         const bootstrap = yield* taskSessionBootstrap.taskSessionBootstrapPrepare({
@@ -387,7 +374,10 @@ const createTaskServiceImplementation = (
               operation: "task.build_start.finalize",
               message: `${errorMessage(completed.left)}${abort._tag === "Left" ? `\nAlso failed to roll back: ${errorMessage(abort.left)}` : ""}`,
               cause: completed.left,
-              details: { repoPath: startInput.repoPath, taskId: startInput.taskId },
+              details: {
+                repoPath: startInput.repoPath,
+                taskId: startInput.taskId,
+              },
             }),
           );
         }
@@ -418,12 +408,6 @@ const createTaskServiceImplementation = (
       mapTaskServiceErrors(service.taskSessionBootstrapComplete(input)),
     taskSessionBootstrapAbort: (input) =>
       mapTaskServiceErrors(service.taskSessionBootstrapAbort(input)),
-    taskSessionStartupLeasePrepare: (input) =>
-      mapTaskServiceErrors(service.taskSessionStartupLeasePrepare(input)),
-    taskSessionStartupLeaseComplete: (input) =>
-      mapTaskServiceErrors(service.taskSessionStartupLeaseComplete(input)),
-    taskSessionStartupLeaseAbort: (input) =>
-      mapTaskServiceErrors(service.taskSessionStartupLeaseAbort(input)),
     completeDirectMerge: (input) => mapTaskServiceErrors(service.completeDirectMerge(input)),
     createTask: (input) => mapTaskMutationProgressErrors(service.createTask(input)),
     closeTask: (input) => mapTaskServiceErrors(service.closeTask(input)),

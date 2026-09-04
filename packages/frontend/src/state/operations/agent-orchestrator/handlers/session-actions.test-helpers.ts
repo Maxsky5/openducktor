@@ -121,16 +121,17 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
       return nextSession;
     },
     canonicalizePath: async (path) => path,
-    prepareTaskSessionStartupLease: async () => "lease-1",
-    completeTaskSessionStartupLease: async () => {},
-    abortTaskSessionStartupLease: async () => {},
     ensureRuntime: async () => ({
       kind: "opencode",
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo",
     }),
     ensureExistingSessionRuntime: async () => {},
-    loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+    loadTaskDocuments: async () => ({
+      specMarkdown: "",
+      planMarkdown: "",
+      qaMarkdown: "",
+    }),
     loadRepoPromptOverrides: async () => ({}),
     loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
     liveSessionHost: {

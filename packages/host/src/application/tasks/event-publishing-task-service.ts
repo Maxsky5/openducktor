@@ -278,9 +278,6 @@ export const createEventPublishingTaskService = ({
         taskService.taskSessionBootstrapComplete(input),
       ),
     taskSessionBootstrapAbort: (input) => taskService.taskSessionBootstrapAbort(input),
-    taskSessionStartupLeasePrepare: (input) => taskService.taskSessionStartupLeasePrepare(input),
-    taskSessionStartupLeaseComplete: (input) => taskService.taskSessionStartupLeaseComplete(input),
-    taskSessionStartupLeaseAbort: (input) => taskService.taskSessionStartupLeaseAbort(input),
     buildResumed: (input) =>
       publishAfterMutation(
         "build-resumed",

@@ -21,8 +21,6 @@ import {
   parseTaskIdInput,
   parseTaskSessionBootstrapFinalizeInput,
   parseTaskSessionBootstrapPrepareInput,
-  parseTaskSessionStartupLeaseFinalizeInput,
-  parseTaskSessionStartupLeasePrepareInput,
   parseTaskStopImpactInput,
   parseTransitionTaskInput,
   parseUpdateTaskInput,
@@ -50,19 +48,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
     task_session_bootstrap_abort: (args) =>
       taskService.taskSessionBootstrapAbort(
         parseTaskSessionBootstrapFinalizeInput(args, "task_session_bootstrap_abort input"),
-      ),
-    task_session_startup_lease_prepare: (args) =>
-      taskService.taskSessionStartupLeasePrepare(parseTaskSessionStartupLeasePrepareInput(args)),
-    task_session_startup_lease_complete: (args) =>
-      taskService.taskSessionStartupLeaseComplete(
-        parseTaskSessionStartupLeaseFinalizeInput(
-          args,
-          "task_session_startup_lease_complete input",
-        ),
-      ),
-    task_session_startup_lease_abort: (args) =>
-      taskService.taskSessionStartupLeaseAbort(
-        parseTaskSessionStartupLeaseFinalizeInput(args, "task_session_startup_lease_abort input"),
       ),
     human_approve: (args) =>
       taskService.humanApprove(parseTaskIdInput(args, "human_approve input")),

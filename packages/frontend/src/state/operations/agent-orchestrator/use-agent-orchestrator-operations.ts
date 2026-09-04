@@ -243,9 +243,6 @@ export function useAgentOrchestratorOperations({
         sessionTurnState,
         updateSession,
         canonicalizePath: runtimeHostPort.gitCanonicalizePath,
-        prepareTaskSessionStartupLease: runtimeHostPort.taskSessionStartupLeasePrepare,
-        completeTaskSessionStartupLease: runtimeHostPort.taskSessionStartupLeaseComplete,
-        abortTaskSessionStartupLease: runtimeHostPort.taskSessionStartupLeaseAbort,
         ensureRuntime,
         ensureExistingSessionRuntime,
         loadTaskDocuments: (repoPath, taskId) =>

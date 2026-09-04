@@ -34,9 +34,6 @@ type SessionActionsDependencies = {
   sessionTurnState: SessionTurnState;
   updateSession: UpdateSession;
   canonicalizePath: RuntimeDependencies["canonicalizePath"];
-  prepareTaskSessionStartupLease: RuntimeDependencies["prepareTaskSessionStartupLease"];
-  completeTaskSessionStartupLease: RuntimeDependencies["completeTaskSessionStartupLease"];
-  abortTaskSessionStartupLease: RuntimeDependencies["abortTaskSessionStartupLease"];
   ensureRuntime: EnsureRuntime;
   ensureExistingSessionRuntime: EnsureExistingSessionRuntime;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
@@ -63,9 +60,6 @@ export const createAgentSessionActions = ({
   sessionTurnState,
   updateSession,
   canonicalizePath,
-  prepareTaskSessionStartupLease,
-  completeTaskSessionStartupLease,
-  abortTaskSessionStartupLease,
   ensureRuntime,
   ensureExistingSessionRuntime,
   loadTaskDocuments,
@@ -123,9 +117,6 @@ export const createAgentSessionActions = ({
     runtime: {
       adapter,
       canonicalizePath,
-      prepareTaskSessionStartupLease,
-      completeTaskSessionStartupLease,
-      abortTaskSessionStartupLease,
       ensureRuntime,
     },
     task: {

@@ -43,11 +43,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     ).rejects.toThrow("Workspace changed while starting session.");
   });
 
-  test("routes fork canonicalization and startup leases through injected dependencies", async () => {
+  test("routes fork canonicalization through injected dependencies", async () => {
     const adapter = new OpencodeSdkAdapter();
     const canonicalizedPaths: string[] = [];
-    const preparedLeases: Array<[string, string, string]> = [];
-    const completedLeaseIds: string[] = [];
     const sourceSession = buildSession({
       externalSessionId: "source-session",
       historyLoadState: "loaded",
@@ -68,18 +66,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         canonicalizedPaths.push(path);
         return path;
       },
-      prepareTaskSessionStartupLease: async (repoPath: string, taskId: string, role: string) => {
-        preparedLeases.push([repoPath, taskId, role]);
-        return "injected-lease";
-      },
-      completeTaskSessionStartupLease: async (
-        _repoPath: string,
-        _taskId: string,
-        leaseId: string,
-      ) => {
-        completedLeaseIds.push(leaseId);
-      },
-      abortTaskSessionStartupLease: async () => {},
     };
     const actions = createSessionActions({
       ...injectedRuntimeDependencies,
@@ -107,7 +93,5 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       }),
     ).resolves.toMatchObject({ externalSessionId: "forked-session" });
     expect(canonicalizedPaths).toEqual([sourceSession.workingDirectory, "/tmp/repo"]);
-    expect(preparedLeases).toEqual([["/tmp/repo", "task-1", "build"]]);
-    expect(completedLeaseIds).toEqual(["injected-lease"]);
   });
 });

@@ -6,6 +6,7 @@ import type {
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
   AgentSessionRecord,
+  TaskCard,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
@@ -41,8 +42,52 @@ const storedModel: AgentSessionRecord["selectedModel"] = {
   profileId: "build",
 };
 
+const task = (status: TaskCard["status"]): TaskCard => ({
+  id: "task-1",
+  title: "Task 1",
+  description: "",
+  status,
+  priority: 2,
+  issueType: "task",
+  aiReviewEnabled: true,
+  availableActions: [],
+  labels: [],
+  subtaskIds: [],
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: {
+      required: false,
+      canSkip: true,
+      available: false,
+      completed: false,
+    },
+    planner: {
+      required: false,
+      canSkip: true,
+      available: false,
+      completed: false,
+    },
+    builder: {
+      required: true,
+      canSkip: false,
+      available: false,
+      completed: false,
+    },
+    qa: { required: true, canSkip: false, available: false, completed: false },
+  },
+  updatedAt: "2026-09-02T10:00:00.000Z",
+  createdAt: "2026-09-02T09:00:00.000Z",
+});
+
+const taskReader = { getTask: () => Effect.succeed(task("in_progress")) };
+
 const createControlDeps = () => ({
   canonicalizeRepoPath: (repoPath: string) => Effect.succeed(repoPath),
+  taskReader,
   taskLifecycle: createTaskSessionBootstrapCoordinator(),
 });
 
@@ -114,7 +159,11 @@ const createModelUpdateService = ({
 describe("createTaskWorkflowSessionControlService", () => {
   test("stores a workflow session only from its runtime control result", async () => {
     const calls: string[] = [];
-    const stored: Array<{ repoPath: string; taskId: string; session: AgentSessionRecord }> = [];
+    const stored: Array<{
+      repoPath: string;
+      taskId: string;
+      session: AgentSessionRecord;
+    }> = [];
     const service = createTaskWorkflowSessionControlService({
       ...createControlDeps(),
       runtime: {
@@ -206,7 +255,10 @@ describe("createTaskWorkflowSessionControlService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: (input) =>
-          Effect.succeed({ ...summary, externalSessionId: input.externalSessionId }),
+          Effect.succeed({
+            ...summary,
+            externalSessionId: input.externalSessionId,
+          }),
         forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -278,7 +330,13 @@ describe("createTaskWorkflowSessionControlService", () => {
       },
       tasks: {
         agentSessionsList: () =>
-          Effect.succeed([{ ...summary, role: "planner" as const, selectedModel: storedModel }]),
+          Effect.succeed([
+            {
+              ...summary,
+              role: "planner" as const,
+              selectedModel: storedModel,
+            },
+          ]),
         agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
         agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
       },
@@ -338,10 +396,53 @@ describe("createTaskWorkflowSessionControlService", () => {
     expect(runtimeCalls).toBe(0);
   });
 
+  test("rejects a workflow fork when its role is not available", async () => {
+    let runtimeCalls = 0;
+    const service = createTaskWorkflowSessionControlService({
+      ...createControlDeps(),
+      taskReader: { getTask: () => Effect.succeed(task("closed")) },
+      runtime: {
+        startSession: () => Effect.dieMessage("unexpected start"),
+        resumeSession: () => Effect.dieMessage("unexpected resume"),
+        forkSession: () =>
+          Effect.sync(() => {
+            runtimeCalls += 1;
+            return { ...summary, externalSessionId: "fork-1" };
+          }),
+        sendUserMessage: unexpectedSend,
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () => Effect.dieMessage("unexpected stop"),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () =>
+          Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
+        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.forkSession({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          parentExternalSessionId: "session-1",
+          sessionScope: workflowStart.sessionScope,
+          systemPrompt: "Fork it",
+          model: workflowStart.model,
+        }),
+      ),
+    ).rejects.toThrow("build workflow is not available for task task-1");
+    expect(runtimeCalls).toBe(0);
+  });
+
   test("sends a workflow message through its stored session", async () => {
     const runtimeInputs: AgentSessionControlSendInput[] = [];
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: () => Effect.succeed("/repo"),
+      taskReader,
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
@@ -411,6 +512,7 @@ describe("createTaskWorkflowSessionControlService", () => {
     const taskLifecycle = createTaskSessionBootstrapCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      taskReader,
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
@@ -488,6 +590,7 @@ describe("createTaskWorkflowSessionControlService", () => {
     const taskLifecycle = createTaskSessionBootstrapCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      taskReader,
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
@@ -693,6 +796,7 @@ describe("createTaskWorkflowSessionControlService", () => {
     const taskLifecycle = createTaskSessionBootstrapCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      taskReader,
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
@@ -733,6 +837,7 @@ describe("createTaskWorkflowSessionControlService", () => {
     const taskLifecycle = createTaskSessionBootstrapCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      taskReader,
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
@@ -781,6 +886,7 @@ describe("createTaskWorkflowSessionControlService", () => {
     const taskLifecycle = createTaskSessionBootstrapCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      taskReader,
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () =>
@@ -829,6 +935,7 @@ describe("createTaskWorkflowSessionControlService", () => {
     const taskLifecycle = createTaskSessionBootstrapCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      taskReader,
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
@@ -874,11 +981,59 @@ describe("createTaskWorkflowSessionControlService", () => {
     expect(runtimeCalls).toBe(0);
   });
 
+  test("holds the task lifecycle gate until the fork record is stored", async () => {
+    const taskLifecycle = createTaskSessionBootstrapCoordinator();
+    let resetWasBlocked = false;
+    const service = createTaskWorkflowSessionControlService({
+      ...createControlDeps(),
+      runtime: {
+        startSession: () => Effect.dieMessage("unexpected start"),
+        resumeSession: () => Effect.dieMessage("unexpected resume"),
+        forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
+        sendUserMessage: unexpectedSend,
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () => Effect.dieMessage("unexpected stop"),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () =>
+          Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
+        agentSessionUpsert: () =>
+          Effect.scoped(taskLifecycle.acquireLifecycle("/repo", ["task-1"], "reset task")).pipe(
+            Effect.either,
+            Effect.tap((result) =>
+              Effect.sync(() => {
+                resetWasBlocked = result._tag === "Left";
+              }),
+            ),
+            Effect.as(true),
+          ),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+      },
+      taskLifecycle,
+    });
+
+    await Effect.runPromise(
+      service.forkSession({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        parentExternalSessionId: "session-1",
+        sessionScope: workflowStart.sessionScope,
+        systemPrompt: "Fork it",
+        model: workflowStart.model,
+      }),
+    );
+
+    expect(resetWasBlocked).toBe(true);
+  });
+
   test("holds the task lifecycle gate until the model record is stored", async () => {
     const taskLifecycle = createTaskSessionBootstrapCoordinator();
     let resetWasBlocked = false;
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      taskReader,
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),

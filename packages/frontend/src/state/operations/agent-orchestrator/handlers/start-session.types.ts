@@ -20,21 +20,6 @@ export type SessionDependencies = {
 
 export type RuntimeDependencies = {
   canonicalizePath: (path: string) => Promise<string>;
-  prepareTaskSessionStartupLease: (
-    repoPath: string,
-    taskId: string,
-    role: AgentRole,
-  ) => Promise<string>;
-  completeTaskSessionStartupLease: (
-    repoPath: string,
-    taskId: string,
-    leaseId: string,
-  ) => Promise<void>;
-  abortTaskSessionStartupLease: (
-    repoPath: string,
-    taskId: string,
-    leaseId: string,
-  ) => Promise<void>;
   adapter: AgentEnginePort;
   ensureRuntime: EnsureRuntime;
 };

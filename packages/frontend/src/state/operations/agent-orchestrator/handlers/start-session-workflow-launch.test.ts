@@ -22,10 +22,30 @@ const unavailableBuildTaskCard = () =>
   createTaskCardFixture({
     id: "task-1",
     agentWorkflows: {
-      spec: { required: false, canSkip: true, available: true, completed: false },
-      planner: { required: false, canSkip: true, available: true, completed: false },
-      builder: { required: true, canSkip: false, available: false, completed: false },
-      qa: { required: false, canSkip: true, available: false, completed: false },
+      spec: {
+        required: false,
+        canSkip: true,
+        available: true,
+        completed: false,
+      },
+      planner: {
+        required: false,
+        canSkip: true,
+        available: true,
+        completed: false,
+      },
+      builder: {
+        required: true,
+        canSkip: false,
+        available: false,
+        completed: false,
+      },
+      qa: {
+        required: false,
+        canSkip: true,
+        available: false,
+        completed: false,
+      },
     },
   });
 
@@ -61,9 +81,6 @@ type Harness = {
     ensureRuntime: Array<
       [Parameters<StartSessionExecutionDependencies["runtime"]["ensureRuntime"]>[3]]
     >;
-    prepareLease: string[];
-    completeLease: string[];
-    abortLease: string[];
     stopSession: string[];
     clearObservation: string[];
     bootstrapComplete: number;
@@ -82,9 +99,6 @@ const createHarness = (
 ): Harness => {
   const calls: Harness["calls"] = {
     ensureRuntime: [],
-    prepareLease: [],
-    completeLease: [],
-    abortLease: [],
     stopSession: [],
     clearObservation: [],
     bootstrapComplete: 0,
@@ -129,16 +143,6 @@ const createHarness = (
     runtime: {
       adapter,
       canonicalizePath: async (path) => path,
-      prepareTaskSessionStartupLease: async (_repoPath, _taskId, _role) => {
-        calls.prepareLease.push("lease-1");
-        return "lease-1";
-      },
-      completeTaskSessionStartupLease: async (_repoPath, _taskId, leaseId) => {
-        calls.completeLease.push(leaseId);
-      },
-      abortTaskSessionStartupLease: async (_repoPath, _taskId, leaseId) => {
-        calls.abortLease.push(leaseId);
-      },
       ensureRuntime: async (_repoPath, _taskId, _role, runtimeOptions) => {
         calls.ensureRuntime.push([runtimeOptions]);
         return {
@@ -150,7 +154,11 @@ const createHarness = (
     },
     task: {
       taskRef: { current: options.taskCards ?? [taskCard()] },
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+      loadTaskDocuments: async () => ({
+        specMarkdown: "",
+        planMarkdown: "",
+        qaMarkdown: "",
+      }),
       refreshSessionRecords: async () => undefined,
       refreshTaskData: async () => undefined,
       sendAgentMessage: async () => undefined,
@@ -311,7 +319,6 @@ describe("prepareWorkflowFreshLaunch", () => {
       }),
     ).rejects.toThrow("Role 'build' is unavailable for task 'task-1'");
     expect(harness.calls.ensureRuntime).toHaveLength(0);
-    expect(harness.calls.prepareLease).toHaveLength(0);
   });
 
   test("aborts the worktree bootstrap when preparation becomes stale after runtime resolution", async () => {
@@ -337,14 +344,9 @@ describe("prepareWorkflowFreshLaunch", () => {
 });
 
 describe("prepareWorkflowForkLaunch", () => {
-  test("acquires the lease before resolving the source and prepares the fork launch", async () => {
+  test("resolves the source and prepares the fork launch", async () => {
     const harness = createHarness();
     const events: string[] = [];
-    const originalPrepare = harness.deps.runtime.prepareTaskSessionStartupLease;
-    harness.deps.runtime.prepareTaskSessionStartupLease = async (...args) => {
-      events.push("lease");
-      return originalPrepare(...args);
-    };
     const originalReadSnapshot = harness.deps.session.readSessionSnapshot;
     harness.deps.session.readSessionSnapshot = (identity) => {
       events.push("source");
@@ -357,7 +359,7 @@ describe("prepareWorkflowForkLaunch", () => {
       deps: harness.deps,
     });
 
-    expect(events).toEqual(["lease", "source"]);
+    expect(events).toEqual(["source"]);
     expect(prepared.launch).toMatchObject({
       mode: "fork",
       repoPath: REPO_PATH,
@@ -367,7 +369,6 @@ describe("prepareWorkflowForkLaunch", () => {
       parentExternalSessionId: "source-session",
     });
     expect(prepared.launch.systemPrompt).toContain("Implement feature");
-    expect(harness.calls.abortLease).toHaveLength(0);
   });
 
   test("forwards holdForPostStartMessage into the prepared fork launch", async () => {
@@ -382,7 +383,7 @@ describe("prepareWorkflowForkLaunch", () => {
     expect(prepared.launch.holdForPostStartMessage).toBe(true);
   });
 
-  test("aborts the lease when the source session cannot be resolved", async () => {
+  test("rejects when the source session cannot be resolved", async () => {
     const harness = createHarness({ sourceSessions: [] });
 
     await expect(
@@ -392,11 +393,9 @@ describe("prepareWorkflowForkLaunch", () => {
         deps: harness.deps,
       }),
     ).rejects.toThrow('Session "source-session" is not available');
-    expect(harness.calls.prepareLease).toHaveLength(1);
-    expect(harness.calls.abortLease).toEqual(["lease-1"]);
   });
 
-  test("aborts the lease when a legacy repository-root session cannot be forked", async () => {
+  test("rejects when a legacy repository-root session cannot be forked", async () => {
     const legacyRootSession = {
       ...workflowSourceSession(),
       workingDirectory: REPO_PATH,
@@ -417,10 +416,9 @@ describe("prepareWorkflowForkLaunch", () => {
         deps: harness.deps,
       }),
     ).rejects.toThrow("legacy repository-root task session");
-    expect(harness.calls.abortLease).toEqual(["lease-1"]);
   });
 
-  test("aborts the lease when the selected model runtime does not match the source runtime", async () => {
+  test("rejects when the selected model runtime does not match the source runtime", async () => {
     const harness = createHarness();
 
     await expect(
@@ -437,7 +435,6 @@ describe("prepareWorkflowForkLaunch", () => {
         deps: harness.deps,
       }),
     ).rejects.toThrow('cannot be forked with runtime "codex"');
-    expect(harness.calls.abortLease).toEqual(["lease-1"]);
   });
 });
 

@@ -317,233 +317,17 @@ describe("createTaskService build start worktree handling", () => {
     await Effect.runPromise(Fiber.interrupt(lifecycleFiber));
   });
 
-  test("coordinates fork startup leases with destructive task lifecycle operations", async () => {
-    const calls: unknown[] = [];
-    const coordinator = createTaskSessionBootstrapCoordinator();
-    const service = createTaskService({
-      taskStore: {
-        getTask: () => Effect.succeed(task({ status: "ai_review" })),
-      } satisfies TaskStorePort,
-      taskSessionBootstrapCoordinator: coordinator,
-      gitPort: createBuildStartGitPort({ calls }),
-      runtimeDefinitionsService: createRuntimeDefinitionsService(),
-      runtimeRegistry: createBuildStartRuntimeRegistry(calls),
-      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-      systemCommands: createBuildSystemCommands(calls),
-      worktreeFiles: createBuildStartWorktreeFiles(calls),
-      workspaceSettingsService: createBuildWorkspaceSettingsService({
-        workspaceId: "repo",
-        repoPath: "/repo",
-        hooks: { preStart: [], postComplete: [] },
-      }),
-    });
-
-    const leaseId = await Effect.runPromise(
-      service.taskSessionStartupLeasePrepare({ repoPath: "/repo", taskId: "task-1", role: "qa" }),
-    );
-    for (const operation of ["reset implementation", "reset task", "close task", "delete task"]) {
-      await expect(
-        Effect.runPromise(
-          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], operation)),
-        ),
-      ).rejects.toThrow("bootstrap is in progress");
-    }
-    await Effect.runPromise(
-      service.taskSessionStartupLeaseComplete({ repoPath: "/repo", taskId: "task-1", leaseId }),
-    );
-
-    const lifecycleAcquired = Effect.runSync(Deferred.make<void>());
-    const lifecycleFiber = Effect.runFork(
-      Effect.scoped(
-        Effect.gen(function* () {
-          yield* coordinator.acquireLifecycle("/repo", ["task-1"], "full reset");
-          yield* Deferred.succeed(lifecycleAcquired, undefined);
-          yield* Effect.never;
-        }),
-      ),
-    );
-    await Effect.runPromise(Deferred.await(lifecycleAcquired));
-    await expect(
-      Effect.runPromise(
-        service.taskSessionStartupLeasePrepare({
-          repoPath: "/repo",
-          taskId: "task-1",
-          role: "spec",
-        }),
-      ),
-    ).rejects.toThrow("full reset is in progress");
-    await Effect.runPromise(Fiber.interrupt(lifecycleFiber));
-  });
-
-  test.each([
-    { role: "spec", task: task({ status: "closed" }) },
-    { role: "planner", task: task({ issueType: "feature", status: "open" }) },
-    { role: "build", task: task({ issueType: "feature", status: "spec_ready" }) },
-    { role: "qa", task: task({ status: "ready_for_dev" }) },
-  ] as const)("rejects an unavailable $role fork lease before locking the task", async (entry) => {
-    const coordinator = createTaskSessionBootstrapCoordinator();
-    const service = createTaskService({
-      taskStore: {
-        getTask: () => Effect.succeed(entry.task),
-      },
-      taskSessionBootstrapCoordinator: coordinator,
-      gitPort: createBuildStartGitPort({ calls: [] }),
-    });
-
-    await expect(
-      Effect.runPromise(
-        service.taskSessionStartupLeasePrepare({
-          repoPath: "/repo",
-          taskId: "task-1",
-          role: entry.role,
-        }),
-      ),
-    ).rejects.toThrow(`${entry.role} workflow is not available for task task-1`);
-    await expect(
-      Effect.runPromise(
-        Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
-      ),
-    ).resolves.toBeUndefined();
-  });
-
-  test.each([
-    {
-      role: "build",
-      before: task({ issueType: "feature", status: "ready_for_dev" }),
-      after: task({ issueType: "feature", status: "spec_ready" }),
-    },
-    { role: "qa", before: task({ status: "blocked" }), after: task({ status: "in_progress" }) },
-  ] as const)(
-    "rejects a $role fork lease when its workflow becomes unavailable before completion",
-    async (entry) => {
-      const coordinator = createTaskSessionBootstrapCoordinator();
-      let currentTask = entry.before;
-      const service = createTaskService({
-        taskStore: {
-          getTask: () => Effect.succeed(currentTask),
-        },
-        taskSessionBootstrapCoordinator: coordinator,
-        gitPort: createBuildStartGitPort({ calls: [] }),
-      });
-      const leaseId = await Effect.runPromise(
-        service.taskSessionStartupLeasePrepare({
-          repoPath: "/repo",
-          taskId: "task-1",
-          role: entry.role,
-        }),
-      );
-
-      currentTask = entry.after;
-      await expect(
-        Effect.runPromise(
-          service.taskSessionStartupLeaseComplete({
-            repoPath: "/repo",
-            taskId: "task-1",
-            leaseId,
-          }),
-        ),
-      ).rejects.toThrow(`${entry.role} workflow is not available for task task-1`);
-      await expect(
-        Effect.runPromise(
-          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
-        ),
-      ).rejects.toThrow("bootstrap is in progress");
-
-      await Effect.runPromise(
-        service.taskSessionStartupLeaseAbort({
-          repoPath: "/repo",
-          taskId: "task-1",
-          leaseId,
-        }),
-      );
-      await expect(
-        Effect.runPromise(
-          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "reset task")),
-        ),
-      ).resolves.toBeUndefined();
-    },
-  );
-
-  test("completes a QA fork lease across available statuses and replays completion", async () => {
-    let currentTask = task({ status: "blocked" });
-    const service = createTaskService({
-      taskStore: {
-        getTask: () => Effect.succeed(currentTask),
-      } satisfies TaskStorePort,
-      taskSessionBootstrapCoordinator: createTaskSessionBootstrapCoordinator(),
-      gitPort: createBuildStartGitPort({ calls: [] }),
-    });
-    const leaseId = await Effect.runPromise(
-      service.taskSessionStartupLeasePrepare({
-        repoPath: "/repo",
-        taskId: "task-1",
-        role: "qa",
-      }),
-    );
-
-    currentTask = task({ status: "ai_review" });
-    await expect(
-      Effect.runPromise(
-        service.taskSessionStartupLeaseComplete({
-          repoPath: "/repo",
-          taskId: "task-1",
-          leaseId,
-        }),
-      ),
-    ).resolves.toBe(true);
-
-    currentTask = task({ status: "in_progress" });
-    await expect(
-      Effect.runPromise(
-        service.taskSessionStartupLeaseComplete({
-          repoPath: "/repo",
-          taskId: "task-1",
-          leaseId,
-        }),
-      ),
-    ).resolves.toBe(true);
-  });
-
-  test("rejects completing an aborted fork lease while replaying abort", async () => {
-    const service = createTaskService({
-      taskStore: {
-        getTask: () => Effect.succeed(task({ status: "blocked" })),
-      } satisfies TaskStorePort,
-      taskSessionBootstrapCoordinator: createTaskSessionBootstrapCoordinator(),
-      gitPort: createBuildStartGitPort({ calls: [] }),
-    });
-    const leaseId = await Effect.runPromise(
-      service.taskSessionStartupLeasePrepare({
-        repoPath: "/repo",
-        taskId: "task-1",
-        role: "qa",
-      }),
-    );
-
-    await expect(
-      Effect.runPromise(
-        service.taskSessionStartupLeaseAbort({ repoPath: "/repo", taskId: "task-1", leaseId }),
-      ),
-    ).resolves.toBe(true);
-    await expect(
-      Effect.runPromise(
-        service.taskSessionStartupLeaseAbort({ repoPath: "/repo", taskId: "task-1", leaseId }),
-      ),
-    ).resolves.toBe(true);
-    await expect(
-      Effect.runPromise(
-        service.taskSessionStartupLeaseComplete({ repoPath: "/repo", taskId: "task-1", leaseId }),
-      ),
-    ).rejects.toThrow("startup lease was already finalized as aborted");
-  });
-
   test("prepares the same canonical worktree for non-Builder roles without transitioning", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask(input) {
         return taskStoreEffect(async () => {
           calls.push({ type: "getTask", input });
-          return task({ id: "task-1", title: "Task 1", status: "ready_for_dev" });
+          return task({
+            id: "task-1",
+            title: "Task 1",
+            status: "ready_for_dev",
+          });
         });
       },
       transitionTask(input) {
@@ -690,7 +474,11 @@ describe("createTaskService build start worktree handling", () => {
       getTask(input) {
         return taskStoreEffect(async () => {
           calls.push({ type: "getTask", input });
-          return task({ id: "task-1", title: "Task 1", status: "ready_for_dev" });
+          return task({
+            id: "task-1",
+            title: "Task 1",
+            status: "ready_for_dev",
+          });
         });
       },
       transitionTask(input) {
@@ -716,7 +504,11 @@ describe("createTaskService build start worktree handling", () => {
           hooks: { preStart: ["bun test"], postComplete: [] },
           worktreeCopyPaths: [".env"],
         }),
-      }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+      }).buildStart({
+        repoPath: "/repo",
+        taskId: "task-1",
+        runtimeKind: "opencode",
+      }),
     );
 
     expect(bootstrap).toEqual({
@@ -757,7 +549,11 @@ describe("createTaskService build start worktree handling", () => {
       getTask(input) {
         return taskStoreEffect(async () => {
           calls.push({ type: "getTask", input });
-          return task({ id: "task-1", title: "Task 1", status: "ready_for_dev" });
+          return task({
+            id: "task-1",
+            title: "Task 1",
+            status: "ready_for_dev",
+          });
         });
       },
       transitionTask(input) {
@@ -802,7 +598,11 @@ describe("createTaskService build start worktree handling", () => {
             repoPath: "/repo",
             hooks: { preStart: [], postComplete: [] },
           }),
-        }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+        }).buildStart({
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
       ),
     ).rejects.toThrow("exists but is not a Git worktree");
     expect(calls.some((call) => JSON.stringify(call).includes("removeWorktree"))).toBe(false);
@@ -815,7 +615,11 @@ describe("createTaskService build start worktree handling", () => {
       getTask(input) {
         return taskStoreEffect(async () => {
           calls.push({ type: "getTask", input });
-          return task({ id: "task-1", title: "Task 1", status: "ready_for_dev" });
+          return task({
+            id: "task-1",
+            title: "Task 1",
+            status: "ready_for_dev",
+          });
         });
       },
       transitionTask(input) {
@@ -842,7 +646,11 @@ describe("createTaskService build start worktree handling", () => {
             hooks: { preStart: ["bun test"], postComplete: [] },
             worktreeCopyPaths: [".env"],
           }),
-        }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+        }).buildStart({
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
       ),
     ).rejects.toThrow("transition failed");
     expect(calls).toEqual(
@@ -879,7 +687,11 @@ describe("createTaskService build start worktree handling", () => {
       getTask(input) {
         return taskStoreEffect(async () => {
           calls.push({ type: "getTask", input });
-          return task({ id: "task-1", title: "Task 1", status: "ready_for_dev" });
+          return task({
+            id: "task-1",
+            title: "Task 1",
+            status: "ready_for_dev",
+          });
         });
       },
       transitionTask(input) {
@@ -921,7 +733,11 @@ describe("createTaskService build start worktree handling", () => {
             repoPath: "/repo",
             hooks: { preStart: [], postComplete: [] },
           }),
-        }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+        }).buildStart({
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
       ),
     ).rejects.toThrow("opencode build runtime failed to start for task task-1");
     expect(calls).toEqual(
@@ -1105,7 +921,11 @@ describe("createTaskService build start worktree handling", () => {
       getTask(input) {
         return taskStoreEffect(async () => {
           calls.push({ type: "getTask", input });
-          return task({ id: "task-1", title: "Task 1", status: "ready_for_dev" });
+          return task({
+            id: "task-1",
+            title: "Task 1",
+            status: "ready_for_dev",
+          });
         });
       },
       transitionTask() {
@@ -1141,7 +961,11 @@ describe("createTaskService build start worktree handling", () => {
             repoPath: "/repo",
             hooks: { preStart: [], postComplete: [] },
           }),
-        }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+        }).buildStart({
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
       ),
     ).rejects.toThrow("worktree create failed");
 
@@ -1225,7 +1049,11 @@ describe("createTaskService build start worktree handling", () => {
       getTask(input) {
         return taskStoreEffect(async () => {
           calls.push({ type: "getTask", input });
-          return task({ id: "task-1", title: "Task 1", status: "ready_for_dev" });
+          return task({
+            id: "task-1",
+            title: "Task 1",
+            status: "ready_for_dev",
+          });
         });
       },
       transitionTask(input) {
@@ -1251,7 +1079,11 @@ describe("createTaskService build start worktree handling", () => {
             repoPath: "/repo",
             hooks: { preStart: [], postComplete: [] },
           }),
-        }).buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+        }).buildStart({
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
       ),
     ).rejects.toThrow("transition failed");
     expect(calls).toEqual(

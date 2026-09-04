@@ -81,7 +81,6 @@ import { createRuntimeActiveSessionResolver } from "./runtime-active-session-res
 import { resolveWorkspaceRuntimeMcpBridgeConnection } from "./workspace-runtime-mcp-bridge-connection";
 
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
-
 export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
   defaultPorts: ReturnType<typeof createNodeHostDefaultPorts>,
@@ -119,7 +118,11 @@ export const assembleNodeEffectHostCommandRouter = (
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
-  const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
+  const gitService = createGitService({
+    gitPort: git,
+    settingsConfig,
+    worktreeFiles,
+  });
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
   const gitProviderService = createGitProviderService({
     resolver: gitProviderResolver,
@@ -163,7 +166,10 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     repoStoreDiagnostics: taskStore,
   });
-  const claudeWorkingDirectoryDependencies = { settingsConfig, workspaceSettingsService };
+  const claudeWorkingDirectoryDependencies = {
+    settingsConfig,
+    workspaceSettingsService,
+  };
   let resolvedMcpHostBridge = mcpHostBridge;
   const resolveRuntimeMcpBridge = (kind: "codex" | "opencode", repoPath: string) =>
     resolveWorkspaceRuntimeMcpBridgeConnection(resolvedMcpHostBridge, kind, repoPath);
@@ -300,15 +306,15 @@ export const assembleNodeEffectHostCommandRouter = (
     taskEventPublicationReporter,
     workspaceSettingsService,
   });
-  const taskWorkflowSessionControlService = createTaskWorkflowSessionControlService({
-    canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
-    runtime: agentSessionLiveStateService,
-    tasks: taskService,
-    taskLifecycle: taskSessionBootstrapCoordinator,
-  });
   const agentSessionCommandService = {
     ...agentSessionLiveStateService,
-    ...taskWorkflowSessionControlService,
+    ...createTaskWorkflowSessionControlService({
+      canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
+      runtime: agentSessionLiveStateService,
+      taskReader: taskStore,
+      tasks: taskService,
+      taskLifecycle: taskSessionBootstrapCoordinator,
+    }),
   };
   const odtMcpBridgeService = createOdtMcpBridgeService({
     taskAssetReadService,
@@ -485,5 +491,9 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService),
     },
   });
-  return Object.assign(router, { taskAssetReadService, taskEventStream, terminalService });
+  return Object.assign(router, {
+    taskAssetReadService,
+    taskEventStream,
+    terminalService,
+  });
 };

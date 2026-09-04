@@ -30,8 +30,6 @@ import type {
   TaskIdInput,
   TaskSessionBootstrapFinalizeInput,
   TaskSessionBootstrapPrepareInput,
-  TaskSessionStartupLeaseFinalizeInput,
-  TaskSessionStartupLeasePrepareInput,
   TransitionTaskInput,
   UpdateTaskInput,
 } from "../../application/tasks/task-inputs";
@@ -359,38 +357,6 @@ export const parseTaskSessionBootstrapFinalizeInput = (
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     bootstrapId: readRequiredString(record, "bootstrapId"),
-  };
-};
-
-export const parseTaskSessionStartupLeasePrepareInput = (
-  input: HostCommandArgs,
-): TaskSessionStartupLeasePrepareInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "task_session_startup_lease_prepare input",
-  );
-  const role = agentRoleSchema.safeParse(record.role);
-  if (!role.success)
-    throw new HostValidationError({
-      field: "role",
-      message: "A supported agent role is required.",
-    });
-  return {
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    role: role.data,
-  };
-};
-
-export const parseTaskSessionStartupLeaseFinalizeInput = (
-  input: HostCommandArgs,
-  label: string,
-): TaskSessionStartupLeaseFinalizeInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
-  return {
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    leaseId: readRequiredString(record, "leaseId"),
   };
 };
 

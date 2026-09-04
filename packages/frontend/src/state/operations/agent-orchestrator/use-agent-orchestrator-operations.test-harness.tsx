@@ -122,9 +122,6 @@ export const createTestDependencies = (
       taskSessionBootstrapPrepare: (...args) => host.taskSessionBootstrapPrepare(...args),
       taskSessionBootstrapComplete: (...args) => host.taskSessionBootstrapComplete(...args),
       taskSessionBootstrapAbort: (...args) => host.taskSessionBootstrapAbort(...args),
-      taskSessionStartupLeasePrepare: async () => "lease-1",
-      taskSessionStartupLeaseComplete: async () => undefined,
-      taskSessionStartupLeaseAbort: async () => undefined,
       ...runtimeHostOverrides,
     },
     liveSessionHostPort: {
@@ -268,7 +265,9 @@ export const createHookHarness = (args: {
       { value: runtimeDefinitionsContextValue },
       createElement(
         RepoRuntimeHealthContext.Provider,
-        { value: createRepoRuntimeHealthContextValue(currentArgs.runtimeHealthByRuntime) },
+        {
+          value: createRepoRuntimeHealthContextValue(currentArgs.runtimeHealthByRuntime),
+        },
         createElement(
           ChecksStateContext.Provider,
           { value: createChecksStateContextValue() },
@@ -277,7 +276,9 @@ export const createHookHarness = (args: {
       ),
     );
 
-  const sharedHarness = createSharedHookHarness(Harness, undefined, { wrapper });
+  const sharedHarness = createSharedHookHarness(Harness, undefined, {
+    wrapper,
+  });
 
   const mount = async () => {
     await sharedHarness.mount();

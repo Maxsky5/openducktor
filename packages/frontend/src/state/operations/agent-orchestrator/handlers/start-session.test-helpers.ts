@@ -179,22 +179,8 @@ export type FlatStartSessionDependencies = Omit<
       "loadAgentSessionHistory" | "sessionStartGateRef" | "readSessionSnapshot"
     >
   > &
-  Omit<
-    StartSessionDependencies["runtime"],
-    | "canonicalizePath"
-    | "prepareTaskSessionStartupLease"
-    | "completeTaskSessionStartupLease"
-    | "abortTaskSessionStartupLease"
-  > &
-  Partial<
-    Pick<
-      StartSessionDependencies["runtime"],
-      | "canonicalizePath"
-      | "prepareTaskSessionStartupLease"
-      | "completeTaskSessionStartupLease"
-      | "abortTaskSessionStartupLease"
-    >
-  > &
+  Omit<StartSessionDependencies["runtime"], "canonicalizePath"> &
+  Partial<Pick<StartSessionDependencies["runtime"], "canonicalizePath">> &
   StartSessionDependencies["task"] &
   StartSessionDependencies["model"];
 
@@ -213,7 +199,9 @@ export const toStartSessionDependencies = (
       readSessionSnapshot:
         deps.readSessionSnapshot ??
         ((identity) => getAgentSession(deps.sessionsRef.current, identity)),
-      sessionStartGateRef: deps.sessionStartGateRef ?? { current: createSessionStartGate() },
+      sessionStartGateRef: deps.sessionStartGateRef ?? {
+        current: createSessionStartGate(),
+      },
       loadSourceSession: deps.loadSourceSession,
       loadAgentSessionHistory: deps.loadAgentSessionHistory ?? (async () => null),
       clearSessionObservationState: deps.clearSessionObservationState,
@@ -221,10 +209,6 @@ export const toStartSessionDependencies = (
     runtime: {
       adapter: deps.adapter,
       canonicalizePath: deps.canonicalizePath ?? (async (path) => path),
-      prepareTaskSessionStartupLease:
-        deps.prepareTaskSessionStartupLease ?? (async () => "lease-1"),
-      completeTaskSessionStartupLease: deps.completeTaskSessionStartupLease ?? (async () => {}),
-      abortTaskSessionStartupLease: deps.abortTaskSessionStartupLease ?? (async () => {}),
       ensureRuntime: deps.ensureRuntime ?? ensureRuntimeWithKind,
     },
     task: {
@@ -265,11 +249,12 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory = async () => null,
     canonicalizePath = async (path: string) => path,
-    prepareTaskSessionStartupLease = async () => "lease-1",
-    completeTaskSessionStartupLease = async () => {},
-    abortTaskSessionStartupLease = async () => {},
     ensureRuntime = ensureRuntimeWithKind,
-    loadTaskDocuments = async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+    loadTaskDocuments = async () => ({
+      specMarkdown: "",
+      planMarkdown: "",
+      qaMarkdown: "",
+    }),
     refreshSessionRecords = async () => {},
     refreshTaskData = async () => {},
     sendAgentMessage = async () => {},
@@ -301,9 +286,6 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     loadSourceSession,
     loadAgentSessionHistory,
     canonicalizePath,
-    prepareTaskSessionStartupLease,
-    completeTaskSessionStartupLease,
-    abortTaskSessionStartupLease,
     ensureRuntime,
     loadTaskDocuments,
     refreshSessionRecords,
