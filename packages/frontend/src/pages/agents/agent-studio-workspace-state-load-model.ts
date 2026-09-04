@@ -1,17 +1,17 @@
 import type { RepoConfig, TaskCard, WorkspaceAgentStudioState } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
-import { reconcileAgentStudioStateForReadModel } from "./agent-studio-workspace-state";
+import { buildAgentStudioReadState } from "./agent-studio-workspace-state";
 
 export type AgentStudioWorkspaceStateLoadModel = {
   loadedAgentStudioState: WorkspaceAgentStudioState | null;
   agentStudioState: WorkspaceAgentStudioState | null;
   isLoading: boolean;
   error: Error | null;
-  canPersist: boolean;
+  canSave: boolean;
 };
 
-export const resolveAgentStudioWorkspaceStateLoad = ({
+export const buildAgentStudioStateLoad = ({
   activeWorkspaceId,
   repoConfig,
   queryError,
@@ -35,22 +35,22 @@ export const resolveAgentStudioWorkspaceStateLoad = ({
   const error = queryError instanceof Error ? queryError : null;
   const loadedAgentStudioState =
     activeWorkspaceId && !isQueryFetching && !error ? (repoConfig?.agentStudioState ?? null) : null;
-  const isWaitingForSessionList = Boolean(
+  const waitsForSessions = Boolean(
     loadedAgentStudioState?.activeTask?.externalSessionId &&
     sessionReadModelLoadState.kind !== "ready" &&
     sessionReadModelLoadState.kind !== "failed",
   );
   const agentStudioState =
-    loadedAgentStudioState && !isLoadingTasks && !isWaitingForSessionList
-      ? reconcileAgentStudioStateForReadModel({
+    loadedAgentStudioState && !isLoadingTasks && !waitsForSessions
+      ? buildAgentStudioReadState({
           state: loadedAgentStudioState,
           tasks,
           sessions,
-          sessionListAuthoritative: sessionReadModelLoadState.kind === "ready",
+          sessionsReady: sessionReadModelLoadState.kind === "ready",
         })
       : null;
-  const isLoading = isQueryPending || isQueryFetching || isLoadingTasks || isWaitingForSessionList;
-  const canPersist =
+  const isLoading = isQueryPending || isQueryFetching || isLoadingTasks || waitsForSessions;
+  const canSave =
     activeWorkspaceId !== null &&
     agentStudioState !== null &&
     !isLoading &&
@@ -62,6 +62,6 @@ export const resolveAgentStudioWorkspaceStateLoad = ({
     agentStudioState,
     isLoading,
     error,
-    canPersist,
+    canSave,
   };
 };

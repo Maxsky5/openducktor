@@ -5,7 +5,7 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { host } from "@/state/operations/host";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
-import { resolveAgentStudioWorkspaceStateLoad } from "./agent-studio-workspace-state-load-model";
+import { buildAgentStudioStateLoad } from "./agent-studio-workspace-state-load-model";
 
 type AgentStudioWorkspaceStateHost = Pick<typeof host, "workspaceGetRepoConfig">;
 
@@ -39,7 +39,7 @@ export function useAgentStudioWorkspaceStateLoad({
   });
   const loadModel = useMemo(
     () =>
-      resolveAgentStudioWorkspaceStateLoad({
+      buildAgentStudioStateLoad({
         activeWorkspaceId,
         repoConfig: repoConfigQuery.data,
         queryError: repoConfigQuery.error,
@@ -70,7 +70,7 @@ export function useAgentStudioWorkspaceStateLoad({
 
   return {
     ...loadModel,
-    loadedAgentStudioStateVersion:
+    agentStudioStateLoadKey:
       loadModel.loadedAgentStudioState === null
         ? null
         : `${dataUpdateCount}:${repoConfigQuery.dataUpdatedAt}`,

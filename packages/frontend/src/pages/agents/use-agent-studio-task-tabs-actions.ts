@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { closeTaskTab, reorderTaskTabs } from "./agent-studio-task-tabs-list";
-import type { TaskTabStateUpdate } from "./use-agent-studio-task-tabs-state";
+import type { TaskTabState } from "./use-agent-studio-task-tabs-state";
 
 const focusTaskTabTrigger = (taskId: string): void => {
   globalThis.setTimeout(() => {
@@ -21,7 +21,7 @@ type UseTaskTabActionsArgs = {
   clearTaskSelection: () => void;
   selectTask: (taskId: string) => void;
   handleSelectTab: (nextTaskId: string) => void;
-  updateTaskTabState: (state: TaskTabStateUpdate) => void;
+  setTaskTabState: (state: TaskTabState) => void;
 };
 
 type UseTaskTabActionsResult = {
@@ -41,7 +41,7 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
     clearTaskSelection,
     selectTask,
     handleSelectTab,
-    updateTaskTabState,
+    setTaskTabState,
   } = args;
 
   const handleCreateTab = useCallback(
@@ -63,7 +63,7 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
         return;
       }
 
-      updateTaskTabState({
+      setTaskTabState({
         openTaskIds: nextTabTaskIds,
         activeTaskId: nextActiveTaskId,
       });
@@ -80,7 +80,7 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
       focusTaskTabTrigger(nextActiveTaskId);
       selectTask(nextActiveTaskId);
     },
-    [activeTaskTabId, clearTaskSelection, selectTask, tabTaskIds, updateTaskTabState],
+    [activeTaskTabId, clearTaskSelection, selectTask, setTaskTabState, tabTaskIds],
   );
 
   const handleReorderTab = useCallback(
@@ -96,12 +96,12 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
         return;
       }
 
-      updateTaskTabState({
+      setTaskTabState({
         openTaskIds: nextTabTaskIds,
         activeTaskId: activeTaskTabId || null,
       });
     },
-    [activeTaskTabId, tabTaskIds, updateTaskTabState],
+    [activeTaskTabId, setTaskTabState, tabTaskIds],
   );
 
   return {

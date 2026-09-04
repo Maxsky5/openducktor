@@ -7,11 +7,11 @@ import {
   createDeferred,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { useAgentStudioWorkspaceStatePersistence } from "./use-agent-studio-workspace-state-persistence";
+import { useAgentStudioWorkspaceStateSave } from "./use-agent-studio-workspace-state-save";
 
 enableReactActEnvironment();
 
-type HookArgs = Parameters<typeof useAgentStudioWorkspaceStatePersistence>[0];
+type HookArgs = Parameters<typeof useAgentStudioWorkspaceStateSave>[0];
 
 const createRepoConfig = (agentStudioState: WorkspaceAgentStudioState): RepoConfig => ({
   workspaceId: "repo-a",
@@ -33,9 +33,9 @@ const wrapper = ({ children }: PropsWithChildren): ReactElement =>
   createElement(QueryProvider, { useIsolatedClient: true }, children);
 
 const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentStudioWorkspaceStatePersistence, initialProps, { wrapper });
+  createSharedHookHarness(useAgentStudioWorkspaceStateSave, initialProps, { wrapper });
 
-describe("useAgentStudioWorkspaceStatePersistence", () => {
+describe("useAgentStudioWorkspaceStateSave", () => {
   test("does not rewrite the loaded snapshot", async () => {
     const state = { openTaskIds: ["task-1"] };
     const workspaceReplaceAgentStudioState = mock(async () => createRepoConfig(state));
@@ -105,12 +105,12 @@ describe("useAgentStudioWorkspaceStatePersistence", () => {
     });
 
     await harness.mount();
-    await harness.waitFor((result) => result.persistenceError?.message === "write failed");
+    await harness.waitFor((result) => result.saveError?.message === "write failed");
     expect(workspaceReplaceAgentStudioState).toHaveBeenCalledTimes(1);
 
     shouldFail = false;
-    await harness.run((result) => result.retryPersistence());
-    await harness.waitFor((result) => result.persistenceError === null);
+    await harness.run((result) => result.retrySave());
+    await harness.waitFor((result) => result.saveError === null);
     expect(workspaceReplaceAgentStudioState).toHaveBeenCalledTimes(2);
     await harness.unmount();
   });
@@ -138,7 +138,7 @@ describe("useAgentStudioWorkspaceStatePersistence", () => {
     });
 
     await harness.mount();
-    await harness.waitFor((result) => result.persistenceError?.message === "obsolete write failed");
+    await harness.waitFor((result) => result.saveError?.message === "obsolete write failed");
     await harness.update({
       workspaceId: "repo-a",
       loadedState,
@@ -147,7 +147,7 @@ describe("useAgentStudioWorkspaceStatePersistence", () => {
       hostClient,
     });
 
-    expect(harness.getLatest().persistenceError).toBeNull();
+    expect(harness.getLatest().saveError).toBeNull();
     await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 2);
     await harness.run(async () => {
       nextSave.resolve(createRepoConfig(nextState));
@@ -200,7 +200,7 @@ describe("useAgentStudioWorkspaceStatePersistence", () => {
     });
 
     expect(workspaceReplaceAgentStudioState).toHaveBeenCalledTimes(1);
-    expect(harness.getLatest().persistenceError).toBeNull();
+    expect(harness.getLatest().saveError).toBeNull();
     await harness.unmount();
   });
 
@@ -233,7 +233,7 @@ describe("useAgentStudioWorkspaceStatePersistence", () => {
       await Promise.resolve();
     });
 
-    expect(harness.getLatest().persistenceError).toBeNull();
+    expect(harness.getLatest().saveError).toBeNull();
     expect(workspaceReplaceAgentStudioState).toHaveBeenCalledTimes(1);
     await harness.unmount();
   });

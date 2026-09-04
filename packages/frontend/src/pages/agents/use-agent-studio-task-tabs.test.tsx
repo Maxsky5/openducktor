@@ -20,7 +20,7 @@ const withDefaults = (overrides: Partial<HookArgs> = {}): HookArgs => {
   return {
     activeWorkspaceId: "repo-a",
     loadedAgentStudioState: overrides.loadedAgentStudioState ?? agentStudioState,
-    loadedAgentStudioStateVersion: overrides.loadedAgentStudioStateVersion ?? "1:1",
+    agentStudioStateLoadKey: overrides.agentStudioStateLoadKey ?? "1:1",
     agentStudioState,
     taskId: "",
     selectedTask: null,
@@ -130,7 +130,7 @@ describe("useAgentStudioTaskTabs", () => {
     const harness = createHookHarness(
       withDefaults({
         loadedAgentStudioState: loadedState,
-        loadedAgentStudioStateVersion: "1:1",
+        agentStudioStateLoadKey: "1:1",
         agentStudioState: loadedState,
         taskId: "task-1",
         selectedTask: allTasks[0] ?? null,
@@ -145,7 +145,7 @@ describe("useAgentStudioTaskTabs", () => {
     await harness.update(
       withDefaults({
         loadedAgentStudioState: loadedState,
-        loadedAgentStudioStateVersion: "2:1",
+        agentStudioStateLoadKey: "2:1",
         agentStudioState: loadedState,
         taskId: "",
         selectedTask: null,

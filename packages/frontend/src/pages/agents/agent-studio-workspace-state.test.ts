@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   addTaskToAgentStudioState,
   createAgentStudioStateSnapshot,
-  reconcileAgentStudioOpenTaskIds,
-  reconcileAgentStudioStateForReadModel,
+  pruneAgentStudioTaskIds,
+  buildAgentStudioReadState,
 } from "./agent-studio-workspace-state";
 import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 
@@ -11,9 +11,9 @@ const createTask = (id: string, status: "open" | "closed" = "open") =>
   createTaskCardFixture({ id, status });
 
 describe("agent-studio-workspace-state", () => {
-  test("reconciles known open task ids in first-seen order", () => {
+  test("prunes task ids in first-seen order", () => {
     expect(
-      reconcileAgentStudioOpenTaskIds(
+      pruneAgentStudioTaskIds(
         ["missing", "task-2", "task-1", "task-2", "closed"],
         [createTask("task-1"), createTask("task-2"), createTask("closed", "closed")],
       ),
@@ -31,18 +31,18 @@ describe("agent-studio-workspace-state", () => {
     expect(addTaskToAgentStudioState({ state, taskId: "closed", tasks })).toBe(state);
   });
 
-  test("drops stale active tasks and sessions during read-model reconciliation", () => {
+  test("drops stale active tasks and sessions from the read state", () => {
     const task = createTask("task-1");
     expect(
-      reconcileAgentStudioStateForReadModel({
+      buildAgentStudioReadState({
         state: { openTaskIds: ["task-1"], activeTask: { taskId: "missing", role: "qa" } },
         tasks: [task],
         sessions: [],
-        sessionListAuthoritative: true,
+        sessionsReady: true,
       }),
     ).toEqual({ openTaskIds: ["task-1"] });
     expect(
-      reconcileAgentStudioStateForReadModel({
+      buildAgentStudioReadState({
         state: {
           openTaskIds: ["task-1"],
           activeTask: {
@@ -53,14 +53,14 @@ describe("agent-studio-workspace-state", () => {
         },
         tasks: [task],
         sessions: [],
-        sessionListAuthoritative: true,
+        sessionsReady: true,
       }),
     ).toEqual({ openTaskIds: ["task-1"], activeTask: { taskId: "task-1", role: "planner" } });
   });
 
-  test("preserves a saved session when the session list is not authoritative", () => {
+  test("keeps a saved session until the session list is ready", () => {
     expect(
-      reconcileAgentStudioStateForReadModel({
+      buildAgentStudioReadState({
         state: {
           openTaskIds: ["task-1"],
           activeTask: {
@@ -71,7 +71,7 @@ describe("agent-studio-workspace-state", () => {
         },
         tasks: [createTask("task-1")],
         sessions: [],
-        sessionListAuthoritative: false,
+        sessionsReady: false,
       }),
     ).toEqual({
       openTaskIds: ["task-1"],
@@ -89,7 +89,7 @@ describe("agent-studio-workspace-state", () => {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     });
     expect(
-      reconcileAgentStudioStateForReadModel({
+      buildAgentStudioReadState({
         state: {
           openTaskIds: ["task-1"],
           activeTask: {
@@ -100,7 +100,7 @@ describe("agent-studio-workspace-state", () => {
         },
         tasks: [createTask("task-1")],
         sessions: [session],
-        sessionListAuthoritative: true,
+        sessionsReady: true,
       }),
     ).toEqual({
       openTaskIds: ["task-1"],

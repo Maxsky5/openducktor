@@ -61,7 +61,7 @@ const useWorkspaceRestore = (args: LoadHookArgs) => {
   const tabs = useAgentStudioTaskTabs({
     activeWorkspaceId: args.activeWorkspaceId,
     loadedAgentStudioState: load.loadedAgentStudioState,
-    loadedAgentStudioStateVersion: load.loadedAgentStudioStateVersion,
+    agentStudioStateLoadKey: load.agentStudioStateLoadKey,
     agentStudioState: load.agentStudioState,
     isRepoNavigationBoundaryPending: navigation.isRepoNavigationBoundaryPending,
     taskId: navigation.taskIdParam,
@@ -75,7 +75,7 @@ const useWorkspaceRestore = (args: LoadHookArgs) => {
 };
 
 describe("useAgentStudioWorkspaceStateLoad", () => {
-  test("advances the load version when an unchanged host snapshot reloads", async () => {
+  test("changes the load key when the host reloads the same state", async () => {
     const savedState: WorkspaceAgentStudioState = {
       openTaskIds: ["task-1"],
       activeTask: { taskId: "task-1" },
@@ -93,12 +93,12 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     const harness = createSharedHookHarness(useAgentStudioWorkspaceStateLoad, hookArgs);
 
     await harness.mount();
-    await harness.waitFor((result) => result.loadedAgentStudioStateVersion !== null);
-    const firstVersion = harness.getLatest().loadedAgentStudioStateVersion;
+    await harness.waitFor((result) => result.agentStudioStateLoadKey !== null);
+    const firstLoadKey = harness.getLatest().agentStudioStateLoadKey;
 
     await harness.run((result) => result.retry());
     await harness.waitFor(() => workspaceGetRepoConfig.mock.calls.length === 2);
-    await harness.waitFor((result) => result.loadedAgentStudioStateVersion !== firstVersion);
+    await harness.waitFor((result) => result.agentStudioStateLoadKey !== firstLoadKey);
 
     expect(harness.getLatest().loadedAgentStudioState).toBe(savedState);
     await harness.unmount();
@@ -218,7 +218,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     await harness.unmount();
   });
 
-  test("preserves the saved session through read failure and enables persistence after recovery", async () => {
+  test("keeps the saved session through read failure and enables save after recovery", async () => {
     const savedState: WorkspaceAgentStudioState = {
       openTaskIds: ["task-1"],
       activeTask: { taskId: "task-1", role: "build", externalSessionId: "session-saved" },
@@ -243,14 +243,14 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     expect(harness.getLatest().agentStudioState?.activeTask?.externalSessionId).toBe(
       "session-saved",
     );
-    expect(harness.getLatest().canPersist).toBe(false);
+    expect(harness.getLatest().canSave).toBe(false);
 
     await harness.update({
       ...failedArgs,
       sessionReadModelLoadState: loadingAgentSessionReadModelLoadState("/repo-a"),
     });
     expect(harness.getLatest().agentStudioState).toBeNull();
-    expect(harness.getLatest().canPersist).toBe(false);
+    expect(harness.getLatest().canSave).toBe(false);
 
     const savedSession = createAgentSessionSummaryFixture({
       externalSessionId: "session-saved",
@@ -266,7 +266,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       role: "build",
       externalSessionId: "session-saved",
     });
-    expect(harness.getLatest().canPersist).toBe(true);
+    expect(harness.getLatest().canSave).toBe(true);
     await harness.unmount();
   });
 });

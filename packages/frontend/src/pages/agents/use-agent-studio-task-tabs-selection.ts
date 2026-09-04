@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { ensureActiveTaskTab, resolveFallbackTaskId } from "./agent-studio-task-tabs-list";
-import type { TaskTabStateUpdate } from "./use-agent-studio-task-tabs-state";
+import type { TaskTabState } from "./use-agent-studio-task-tabs-state";
 
 type UseTaskTabSelectionArgs = {
   activeWorkspaceId: string | null;
@@ -10,7 +10,7 @@ type UseTaskTabSelectionArgs = {
   persistedActiveTaskId: string | null;
   loadedStateWorkspaceId: string | null;
   selectTask: (taskId: string) => void;
-  updateTaskTabState: (state: TaskTabStateUpdate) => void;
+  setTaskTabState: (state: TaskTabState) => void;
 };
 
 type UseTaskTabSelectionResult = {
@@ -28,7 +28,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     persistedActiveTaskId,
     loadedStateWorkspaceId,
     selectTask,
-    updateTaskTabState,
+    setTaskTabState,
   } = args;
   const appliedFallbackKeyRef = useRef<string | null>(null);
 
@@ -91,13 +91,13 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
         return;
       }
 
-      updateTaskTabState({
+      setTaskTabState({
         openTaskIds: ensureActiveTaskTab(tabTaskIds, nextTaskId),
         activeTaskId: nextTaskId,
       });
       selectTask(nextTaskId);
     },
-    [activeTaskTabId, selectTask, tabTaskIds, updateTaskTabState],
+    [activeTaskTabId, selectTask, setTaskTabState, tabTaskIds],
   );
 
   return {

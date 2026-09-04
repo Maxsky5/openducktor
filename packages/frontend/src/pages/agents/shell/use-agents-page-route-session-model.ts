@@ -7,7 +7,7 @@ import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigati
 import { createAgentStudioStateSnapshot } from "../agent-studio-workspace-state";
 import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
-import { useAgentStudioWorkspaceStatePersistence } from "../use-agent-studio-workspace-state-persistence";
+import { useAgentStudioWorkspaceStateSave } from "../use-agent-studio-workspace-state-save";
 import { useAgentStudioWorkspaceStateLoad } from "../use-agent-studio-workspace-state-load";
 import {
   type UseTaskExecutionFilePreviewControllerResult,
@@ -50,12 +50,12 @@ export function useAgentsPageRouteSessionModel({
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
   const {
     loadedAgentStudioState,
-    loadedAgentStudioStateVersion,
+    agentStudioStateLoadKey,
     agentStudioState,
     isLoading: isLoadingAgentStudioState,
     error: agentStudioStateLoadError,
     retry: retryAgentStudioStateLoad,
-    canPersist: canPersistAgentStudioState,
+    canSave: canSaveAgentStudioState,
   } = useAgentStudioWorkspaceStateLoad({
     activeWorkspaceId,
     tasks,
@@ -87,7 +87,7 @@ export function useAgentsPageRouteSessionModel({
 
   const scheduleQueryUpdate = useCallback(
     (updates: AgentStudioQueryUpdate): void => {
-      // Local selection state owns click responsiveness; URL persistence must not block it.
+      // Keep the URL write out of the click's main render.
       startTransition(() => {
         updateQuery(updates);
       });
@@ -111,7 +111,7 @@ export function useAgentsPageRouteSessionModel({
   const selection = useAgentStudioSelectionController({
     activeWorkspaceId,
     loadedAgentStudioState,
-    loadedAgentStudioStateVersion,
+    agentStudioStateLoadKey,
     agentStudioState,
     workspaceRepoPath,
     isRepoNavigationBoundaryPending,
@@ -143,13 +143,13 @@ export function useAgentsPageRouteSessionModel({
       selection.view.taskId,
     ],
   );
-  const { persistenceError: stateSaveError, retryPersistence: retryAgentStudioStateSave } =
-    useAgentStudioWorkspaceStatePersistence({
+  const { saveError: stateSaveError, retrySave: retryAgentStudioStateSave } =
+    useAgentStudioWorkspaceStateSave({
       workspaceId: activeWorkspaceId,
       loadedState: loadedAgentStudioState,
       state: stateSnapshot,
       enabled:
-        canPersistAgentStudioState &&
+        canSaveAgentStudioState &&
         isWorkspaceStateLoaded &&
         !isRepoNavigationBoundaryPending &&
         !isForegroundLoadingTasks &&

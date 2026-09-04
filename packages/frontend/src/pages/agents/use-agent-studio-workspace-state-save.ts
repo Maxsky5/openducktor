@@ -6,20 +6,20 @@ import { workspaceQueryKeys } from "@/state/queries/workspace";
 
 type AgentStudioStateHost = Pick<typeof host, "workspaceReplaceAgentStudioState">;
 
-type PersistRequest = {
+type SaveRequest = {
   workspaceId: string;
   state: WorkspaceAgentStudioState;
   key: string;
 };
 
-type PersistFailure = {
-  request: PersistRequest;
+type SaveFailure = {
+  request: SaveRequest;
   error: Error;
 };
 
-const stateKey = (state: WorkspaceAgentStudioState): string => JSON.stringify(state);
+const toStateKey = (state: WorkspaceAgentStudioState): string => JSON.stringify(state);
 
-export function useAgentStudioWorkspaceStatePersistence({
+export function useAgentStudioWorkspaceStateSave({
   workspaceId,
   loadedState,
   state,
@@ -33,10 +33,10 @@ export function useAgentStudioWorkspaceStatePersistence({
   hostClient?: AgentStudioStateHost;
 }) {
   const queryClient = useQueryClient();
-  const lastRequestedRef = useRef<{ workspaceId: string; key: string } | null>(null);
-  const [failure, setFailure] = useState<PersistFailure | null>(null);
+  const lastSaveRef = useRef<{ workspaceId: string; key: string } | null>(null);
+  const [failure, setFailure] = useState<SaveFailure | null>(null);
   const { mutate } = useMutation({
-    mutationFn: (request: PersistRequest) =>
+    mutationFn: (request: SaveRequest) =>
       hostClient.workspaceReplaceAgentStudioState(request.workspaceId, request.state),
     scope: { id: `agent-studio-workspace-state:${workspaceId ?? "inactive"}` },
     onSuccess: (repoConfig, request) => {
@@ -53,44 +53,44 @@ export function useAgentStudioWorkspaceStatePersistence({
       });
     },
   });
-  const loadedKey = loadedState ? stateKey(loadedState) : null;
-  const desiredKey = stateKey(state);
-  const failedRequestIsCurrent = Boolean(
+  const loadedKey = loadedState ? toStateKey(loadedState) : null;
+  const nextKey = toStateKey(state);
+  const saveFailedForCurrentState = Boolean(
     failure &&
     failure.request.workspaceId === workspaceId &&
-    failure.request.key === desiredKey &&
-    loadedKey !== desiredKey,
+    failure.request.key === nextKey &&
+    loadedKey !== nextKey,
   );
-  const persistenceError = failedRequestIsCurrent ? (failure?.error ?? null) : null;
+  const saveError = saveFailedForCurrentState ? (failure?.error ?? null) : null;
 
   useEffect(() => {
     if (!enabled || !workspaceId || !loadedState) {
       return;
     }
-    if (loadedKey === desiredKey) {
+    if (loadedKey === nextKey) {
       return;
     }
-    const lastRequested = lastRequestedRef.current;
-    if (lastRequested?.workspaceId === workspaceId && lastRequested.key === desiredKey) {
+    const lastSave = lastSaveRef.current;
+    if (lastSave?.workspaceId === workspaceId && lastSave.key === nextKey) {
       return;
     }
 
-    const request = { workspaceId, state, key: desiredKey };
-    lastRequestedRef.current = { workspaceId, key: desiredKey };
+    const request = { workspaceId, state, key: nextKey };
+    lastSaveRef.current = { workspaceId, key: nextKey };
     mutate(request);
-  }, [desiredKey, enabled, loadedKey, loadedState, mutate, state, workspaceId]);
+  }, [enabled, loadedKey, loadedState, mutate, nextKey, state, workspaceId]);
 
-  const retryPersistence = useCallback((): void => {
-    if (!failedRequestIsCurrent || !failure) {
+  const retrySave = useCallback((): void => {
+    if (!saveFailedForCurrentState || !failure) {
       return;
     }
     setFailure(null);
-    lastRequestedRef.current = {
+    lastSaveRef.current = {
       workspaceId: failure.request.workspaceId,
       key: failure.request.key,
     };
     mutate(failure.request);
-  }, [failedRequestIsCurrent, failure, mutate]);
+  }, [failure, mutate, saveFailedForCurrentState]);
 
-  return { persistenceError, retryPersistence };
+  return { saveError, retrySave };
 }

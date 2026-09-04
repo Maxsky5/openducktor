@@ -1,19 +1,17 @@
 import type { AgentRole, TaskCard, WorkspaceAgentStudioState } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 
-export const reconcileAgentStudioOpenTaskIds = (
-  openTaskIds: readonly string[],
+export const pruneAgentStudioTaskIds = (
+  taskIds: readonly string[],
   tasks: readonly TaskCard[],
 ): string[] => {
-  const knownOpenTaskIds = new Set(
-    tasks.flatMap((task) => (task.status === "closed" ? [] : [task.id])),
-  );
-  const seenTaskIds = new Set<string>();
-  return openTaskIds.filter((taskId) => {
-    if (!knownOpenTaskIds.has(taskId) || seenTaskIds.has(taskId)) {
+  const openIds = new Set(tasks.flatMap((task) => (task.status === "closed" ? [] : [task.id])));
+  const seenIds = new Set<string>();
+  return taskIds.filter((taskId) => {
+    if (!openIds.has(taskId) || seenIds.has(taskId)) {
       return false;
     }
-    seenTaskIds.add(taskId);
+    seenIds.add(taskId);
     return true;
   });
 };
@@ -37,18 +35,18 @@ export const addTaskToAgentStudioState = ({
   };
 };
 
-export const reconcileAgentStudioStateForReadModel = ({
+export const buildAgentStudioReadState = ({
   state,
   tasks,
   sessions,
-  sessionListAuthoritative,
+  sessionsReady,
 }: {
   state: WorkspaceAgentStudioState;
   tasks: readonly TaskCard[];
   sessions: readonly AgentSessionSummary[];
-  sessionListAuthoritative: boolean;
+  sessionsReady: boolean;
 }): WorkspaceAgentStudioState => {
-  const openTaskIds = reconcileAgentStudioOpenTaskIds(state.openTaskIds, tasks);
+  const openTaskIds = pruneAgentStudioTaskIds(state.openTaskIds, tasks);
   const activeTask = state.activeTask;
   const task = activeTask
     ? tasks.find((entry) => entry.id === activeTask.taskId && entry.status !== "closed")
@@ -64,20 +62,20 @@ export const reconcileAgentStudioStateForReadModel = ({
           entry.externalSessionId === activeTask.externalSessionId,
       )
     : undefined;
-  const reconciledActiveTask: NonNullable<WorkspaceAgentStudioState["activeTask"]> = {
+  const nextActiveTask: NonNullable<WorkspaceAgentStudioState["activeTask"]> = {
     taskId: activeTask.taskId,
   };
   const role = session?.role ?? activeTask.role;
   if (role) {
-    reconciledActiveTask.role = role;
+    nextActiveTask.role = role;
   }
   if (session) {
-    reconciledActiveTask.externalSessionId = session.externalSessionId;
-  } else if (activeTask.externalSessionId && !sessionListAuthoritative) {
-    reconciledActiveTask.externalSessionId = activeTask.externalSessionId;
+    nextActiveTask.externalSessionId = session.externalSessionId;
+  } else if (activeTask.externalSessionId && !sessionsReady) {
+    nextActiveTask.externalSessionId = activeTask.externalSessionId;
   }
 
-  return { openTaskIds, activeTask: reconciledActiveTask };
+  return { openTaskIds, activeTask: nextActiveTask };
 };
 
 export const createAgentStudioStateSnapshot = ({

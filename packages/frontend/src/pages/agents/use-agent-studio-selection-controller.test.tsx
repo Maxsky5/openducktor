@@ -266,15 +266,14 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
 const noopSelectAgentStudioSelection: SelectAgentStudioSelection = () => {};
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
-  const { loadedAgentStudioState, loadedAgentStudioStateVersion, selectionState, ...argOverrides } =
+  const { loadedAgentStudioState, agentStudioStateLoadKey, selectionState, ...argOverrides } =
     overrides;
   const agentStudioState = argOverrides.agentStudioState ?? null;
   const loadedState = loadedAgentStudioState ?? agentStudioState;
   const baseArgs: Omit<HookArgs, "selectionState"> = {
     activeWorkspaceId: null,
     loadedAgentStudioState: loadedState,
-    loadedAgentStudioStateVersion:
-      loadedAgentStudioStateVersion ?? (loadedState === null ? null : "1:1"),
+    agentStudioStateLoadKey: agentStudioStateLoadKey ?? (loadedState === null ? null : "1:1"),
     agentStudioState,
     workspaceRepoPath: null,
     isRepoNavigationBoundaryPending: false,

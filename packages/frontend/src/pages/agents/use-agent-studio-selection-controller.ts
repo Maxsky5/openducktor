@@ -25,7 +25,7 @@ import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 type UseAgentStudioSelectionControllerArgs = {
   activeWorkspaceId: string | null;
   loadedAgentStudioState: WorkspaceAgentStudioState | null;
-  loadedAgentStudioStateVersion: string | null;
+  agentStudioStateLoadKey: string | null;
   agentStudioState: WorkspaceAgentStudioState | null;
   workspaceRepoPath: string | null;
   isRepoNavigationBoundaryPending: boolean;
@@ -78,7 +78,7 @@ export type AgentStudioSelectionControllerResult = {
 export function useAgentStudioSelectionController({
   activeWorkspaceId,
   loadedAgentStudioState,
-  loadedAgentStudioStateVersion,
+  agentStudioStateLoadKey,
   agentStudioState,
   workspaceRepoPath,
   isRepoNavigationBoundaryPending,
@@ -167,7 +167,7 @@ export function useAgentStudioSelectionController({
   } = useAgentStudioTaskTabs({
     activeWorkspaceId,
     loadedAgentStudioState,
-    loadedAgentStudioStateVersion,
+    agentStudioStateLoadKey,
     agentStudioState,
     isRepoNavigationBoundaryPending,
     taskId: navigationBase.taskId,

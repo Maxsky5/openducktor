@@ -6,10 +6,7 @@ import { useTaskTabActions } from "./use-agent-studio-task-tabs-actions";
 
 enableReactActEnvironment();
 
-type HookArgs = Omit<
-  Parameters<typeof useTaskTabActions>[0],
-  "tabTaskIds" | "updateTaskTabState"
-> & {
+type HookArgs = Omit<Parameters<typeof useTaskTabActions>[0], "tabTaskIds" | "setTaskTabState"> & {
   initialOpenTaskTabs: string[];
   initialPersistedActiveTaskId?: string | null;
 };
@@ -26,7 +23,7 @@ const useTaskTabActionsHarness = (props: HookArgs) => {
     clearTaskSelection: props.clearTaskSelection,
     selectTask: props.selectTask,
     handleSelectTab: props.handleSelectTab,
-    updateTaskTabState: setTaskTabState,
+    setTaskTabState,
   });
 
   return {

@@ -16,7 +16,7 @@ import { useTaskTabState } from "./use-agent-studio-task-tabs-state";
 export function useAgentStudioTaskTabs(args: {
   activeWorkspaceId: string | null;
   loadedAgentStudioState: WorkspaceAgentStudioState | null;
-  loadedAgentStudioStateVersion: string | null;
+  agentStudioStateLoadKey: string | null;
   agentStudioState: WorkspaceAgentStudioState | null;
   isRepoNavigationBoundaryPending?: boolean;
   taskId: string;
@@ -30,7 +30,7 @@ export function useAgentStudioTaskTabs(args: {
   const {
     activeWorkspaceId,
     loadedAgentStudioState,
-    loadedAgentStudioStateVersion,
+    agentStudioStateLoadKey,
     agentStudioState,
     isRepoNavigationBoundaryPending = false,
     taskId,
@@ -54,11 +54,11 @@ export function useAgentStudioTaskTabs(args: {
   const clearTaskSelection = useCallback((): void => {
     selectAgentStudioSelection(emptyAgentStudioSelectionState());
   }, [selectAgentStudioSelection]);
-  const { openTaskIds, persistedActiveTaskId, loadedStateWorkspaceId, updateState } =
+  const { openTaskIds, persistedActiveTaskId, loadedStateWorkspaceId, setTabState } =
     useTaskTabState({
       activeWorkspaceId,
       loadedAgentStudioState,
-      loadedAgentStudioStateVersion,
+      agentStudioStateLoadKey,
       agentStudioState,
       taskId: taskIdForTabs,
       selectedTask,
@@ -74,7 +74,7 @@ export function useAgentStudioTaskTabs(args: {
     persistedActiveTaskId,
     loadedStateWorkspaceId,
     selectTask,
-    updateTaskTabState: updateState,
+    setTaskTabState: setTabState,
   });
 
   const availableTabTasks = useMemo(
@@ -99,7 +99,7 @@ export function useAgentStudioTaskTabs(args: {
     clearTaskSelection,
     selectTask,
     handleSelectTab,
-    updateTaskTabState: updateState,
+    setTaskTabState: setTabState,
   });
 
   return {

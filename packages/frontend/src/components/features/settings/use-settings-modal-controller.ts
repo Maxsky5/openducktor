@@ -14,7 +14,7 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useIsMutating } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
@@ -173,16 +173,9 @@ export const useSettingsModalController = ({
   const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const isAgentModelFavoritesMutationPending =
     useIsMutating({ mutationKey: AGENT_MODEL_FAVORITES_MUTATION_KEY }) > 0;
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const workspaceSelectionKind = workspaceSelectionPolicy?.kind ?? "preferred";
-  const workspaceSelectionRepoPath =
-    workspaceSelectionPolicy === undefined ? workspaceRepoPath : workspaceSelectionPolicy.repoPath;
-  const resolvedWorkspaceSelectionPolicy = useMemo<SettingsWorkspaceSelectionPolicy>(
-    () => ({
-      kind: workspaceSelectionKind,
-      repoPath: workspaceSelectionRepoPath,
-    }),
-    [workspaceSelectionKind, workspaceSelectionRepoPath],
+  const workspacePolicy = useWorkspacePolicy(
+    activeWorkspace?.repoPath ?? null,
+    workspaceSelectionPolicy,
   );
   const { runtimeCheck } = checksState;
   const {
@@ -207,7 +200,7 @@ export const useSettingsModalController = ({
     requiredWorkspaceRepoPath,
   } = useSettingsModalSnapshotState({
     open,
-    workspaceSelectionPolicy: resolvedWorkspaceSelectionPolicy,
+    workspaceSelectionPolicy: workspacePolicy,
     loadSettingsSnapshot,
   });
 
@@ -281,52 +274,27 @@ export const useSettingsModalController = ({
   });
   const reusablePromptValidationState = useSettingsModalReusablePromptValidation({ snapshotDraft });
   const hasReusablePromptValidationErrors = reusablePromptValidationState.totalErrorCount > 0;
-  const runtimeValidationInput: Parameters<typeof useSettingsModalRuntimeValidation>[0] = {
+  const {
+    runtimeAvailabilityValidationState,
+    hasRuntimeAvailabilityErrors,
+    invalidRuntimeKind,
+    selectedRepoRuntimeAvailabilityErrors,
+  } = useRuntimeState({
     runtimeDefinitions,
     snapshotDraft,
-    checkingRuntimeKinds: runtimeExecutableValidation.checkingRuntimeKinds,
-  };
-  if (runtimeExecutableValidation.results.length > 0) {
-    runtimeValidationInput.runtimeExecutableResults = runtimeExecutableValidation.results;
-  }
-  const runtimeAvailabilityValidationState =
-    useSettingsModalRuntimeValidation(runtimeValidationInput);
-  const hasRuntimeAvailabilityErrors = runtimeAvailabilityValidationState.totalErrorCount > 0;
-  const invalidRuntimeKind = snapshotDraft
-    ? (invalidEnabledRuntime(snapshotDraft.agentRuntimes, runtimeExecutableValidation.results)
-        ?.kind ?? null)
-    : null;
-  const codexDangerAcknowledgementKey = useMemo(
-    () =>
-      snapshotDraft
-        ? buildNewCodexDangerousSelectionKey({
-            baseline: loadedSnapshot?.agentRuntimes.codex ?? null,
-            draft: snapshotDraft.agentRuntimes.codex,
-          })
-        : "",
-    [loadedSnapshot?.agentRuntimes.codex, snapshotDraft],
-  );
-  const requiresCodexDangerAcknowledgement = codexDangerAcknowledgementKey !== "";
-  const [acknowledgedCodexDangerKey, setAcknowledgedCodexDangerKey] = useState("");
-  useEffect(() => {
-    if (!open || !requiresCodexDangerAcknowledgement) {
-      setAcknowledgedCodexDangerKey("");
-    }
-  }, [open, requiresCodexDangerAcknowledgement]);
-  const isCodexDangerAcknowledged =
-    requiresCodexDangerAcknowledgement &&
-    acknowledgedCodexDangerKey === codexDangerAcknowledgementKey;
-  const setCodexDangerAcknowledged = useCallback(
-    (acknowledged: boolean) => {
-      setAcknowledgedCodexDangerKey(acknowledged ? codexDangerAcknowledgementKey : "");
-    },
-    [codexDangerAcknowledgementKey],
-  );
-  const hasUnacknowledgedCodexDangerousSettings =
-    requiresCodexDangerAcknowledgement && !isCodexDangerAcknowledged;
-  const selectedRepoRuntimeAvailabilityErrors = selectedWorkspaceId
-    ? (runtimeAvailabilityValidationState.errorsByWorkspaceId[selectedWorkspaceId] ?? [])
-    : [];
+    runtimeExecutableValidation,
+    selectedWorkspaceId,
+  });
+  const {
+    hasUnacknowledgedCodexDangerousSettings,
+    requiresCodexDangerAcknowledgement,
+    isCodexDangerAcknowledged,
+    setCodexDangerAcknowledged,
+  } = useCodexDangerState({
+    open,
+    baseline: loadedSnapshot?.agentRuntimes.codex ?? null,
+    draft: snapshotDraft?.agentRuntimes.codex ?? null,
+  });
   const selectedRepoRuntimeAvailabilityErrorCount = selectedRepoRuntimeAvailabilityErrors.length;
   const {
     updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
@@ -578,5 +546,94 @@ export const useSettingsModalController = ({
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
     submit,
+  };
+};
+
+type CodexDangerState = Pick<
+  SettingsModalController,
+  | "hasUnacknowledgedCodexDangerousSettings"
+  | "requiresCodexDangerAcknowledgement"
+  | "isCodexDangerAcknowledged"
+  | "setCodexDangerAcknowledged"
+>;
+
+const useCodexDangerState = ({
+  open,
+  baseline,
+  draft,
+}: {
+  open: boolean;
+  baseline: AgentRuntimes["codex"] | null;
+  draft: AgentRuntimes["codex"] | null;
+}): CodexDangerState => {
+  const key = useMemo(
+    () => (open && draft ? buildNewCodexDangerousSelectionKey({ baseline, draft }) : ""),
+    [baseline, draft, open],
+  );
+  const [choice, setChoice] = useState({ key, acknowledged: false });
+  if (choice.key !== key) {
+    setChoice({ key, acknowledged: false });
+  }
+
+  const requiresCodexDangerAcknowledgement = key !== "";
+  const isCodexDangerAcknowledged =
+    requiresCodexDangerAcknowledgement && choice.key === key && choice.acknowledged;
+  const setCodexDangerAcknowledged = useCallback(
+    (acknowledged: boolean): void => setChoice({ key, acknowledged }),
+    [key],
+  );
+
+  return {
+    hasUnacknowledgedCodexDangerousSettings:
+      requiresCodexDangerAcknowledgement && !isCodexDangerAcknowledged,
+    requiresCodexDangerAcknowledgement,
+    isCodexDangerAcknowledged,
+    setCodexDangerAcknowledged,
+  };
+};
+
+const useWorkspacePolicy = (
+  activeRepoPath: string | null,
+  policy: SettingsWorkspaceSelectionPolicy | undefined,
+): SettingsWorkspaceSelectionPolicy => {
+  const kind = policy?.kind ?? "preferred";
+  const repoPath = policy === undefined ? activeRepoPath : policy.repoPath;
+  return useMemo(() => ({ kind, repoPath }), [kind, repoPath]);
+};
+
+const useRuntimeState = ({
+  runtimeDefinitions,
+  snapshotDraft,
+  runtimeExecutableValidation,
+  selectedWorkspaceId,
+}: {
+  runtimeDefinitions: RuntimeDescriptor[];
+  snapshotDraft: SettingsSnapshot | null;
+  runtimeExecutableValidation: RuntimeExecutableValidationState;
+  selectedWorkspaceId: string | null;
+}) => {
+  const input: Parameters<typeof useSettingsModalRuntimeValidation>[0] = {
+    runtimeDefinitions,
+    snapshotDraft,
+    checkingRuntimeKinds: runtimeExecutableValidation.checkingRuntimeKinds,
+  };
+  if (runtimeExecutableValidation.results.length > 0) {
+    input.runtimeExecutableResults = runtimeExecutableValidation.results;
+  }
+
+  const validation = useSettingsModalRuntimeValidation(input);
+  const invalidRuntimeKind = snapshotDraft
+    ? (invalidEnabledRuntime(snapshotDraft.agentRuntimes, runtimeExecutableValidation.results)
+        ?.kind ?? null)
+    : null;
+  const selectedRepoRuntimeAvailabilityErrors = selectedWorkspaceId
+    ? (validation.errorsByWorkspaceId[selectedWorkspaceId] ?? [])
+    : [];
+
+  return {
+    runtimeAvailabilityValidationState: validation,
+    hasRuntimeAvailabilityErrors: validation.totalErrorCount > 0,
+    invalidRuntimeKind,
+    selectedRepoRuntimeAvailabilityErrors,
   };
 };
