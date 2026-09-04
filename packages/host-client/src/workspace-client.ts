@@ -8,7 +8,6 @@ import {
   type RepoConfig,
   type RuntimeKind,
   repoConfigSchema,
-  type SystemSettings,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
   settingsSnapshotSchema,
@@ -244,14 +243,6 @@ export class HostWorkspaceClient {
     snapshot: SettingsSnapshotSaveInput,
   ): Promise<WorkspaceRecord[]> {
     return workspaceSaveSettingsSnapshot(this.invokeFn, snapshot);
-  }
-
-  async systemUpdatePreferredOpenInTool(system: SystemSettings): Promise<SettingsSnapshot> {
-    return this.invokeFn(
-      "system_update_preferred_open_in_tool",
-      { system },
-      settingsSnapshotSchema,
-    );
   }
 
   async workspaceUpdateAgentModelFavorites(

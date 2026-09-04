@@ -83,27 +83,27 @@ const createDeferred = <TValue,>() => {
 };
 
 describe("useSettingsModalSaveOrchestration", () => {
-  test("sends the loaded System baseline instead of replacing it with a newer cached value", async () => {
-    for (const systemDirty of [true, false]) {
-      const latest = { ...createSnapshot(), system: { preferredOpenInToolId: "zed" as const } };
+  test("saves and clears the preferred tool through the settings snapshot", async () => {
+    for (const system of [{ preferredOpenInToolId: "zed" as const }, {}]) {
       const save = mock(async (_snapshot: Parameters<HookArgs["saveSettingsSnapshot"]>[0]) => {});
       const harness = createHookHarness(
         createArgs(
           {
-            snapshotDraft: { ...createSnapshot(), system: {} },
-            loadSettingsSnapshot: async () => latest,
+            snapshotDraft: { ...createSnapshot(), system },
             saveSettingsSnapshot: save,
           },
-          { ...EMPTY_DIRTY_SECTIONS, system: systemDirty, general: !systemDirty },
+          { ...EMPTY_DIRTY_SECTIONS, system: true },
         ),
       );
-      await harness.mount();
-      await harness.run(async (state) => {
-        expect(await state.submit()).toBe(true);
-      });
-      expect(save.mock.calls[0]?.[0].system).toEqual({});
-      expect(save.mock.calls[0]?.[0].expectedSystem).toEqual({});
-      await harness.unmount();
+      try {
+        await harness.mount();
+        await harness.run(async (state) => {
+          expect(await state.submit()).toBe(true);
+        });
+        expect(save.mock.calls[0]?.[0].system).toEqual(system);
+      } finally {
+        await harness.unmount();
+      }
     }
   });
 

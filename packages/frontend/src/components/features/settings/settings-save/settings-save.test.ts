@@ -344,7 +344,6 @@ describe("settings save transforms", () => {
           },
         },
       }),
-      {},
     );
 
     expect(snapshot.workspaces["repo-a"]?.hooks.preStart).toEqual(["npm ci"]);

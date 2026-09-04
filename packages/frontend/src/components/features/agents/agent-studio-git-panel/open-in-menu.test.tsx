@@ -5,10 +5,13 @@ import {
   type SystemOpenInToolInfo,
 } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { toRightPanelStorageKey } from "@/pages/agents/agents-page-selection";
 import { host } from "@/state/operations/host";
+import { workspaceQueryKeys } from "@/state/queries/workspace";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
@@ -32,19 +35,16 @@ describe("OpenInMenu", () => {
   let rendered: ReturnType<typeof render> | null = null;
 
   const originalGetSettings = host.workspaceGetSettingsSnapshot;
-  const originalUpdatePreference = host.systemUpdatePreferredOpenInTool;
+  const originalSaveSettings = host.workspaceSaveSettingsSnapshot;
   let system: SystemSettings = {};
-  const updatePreference = mock(async (next: SystemSettings) => {
-    system = next;
-    return settingsSnapshotSchema.parse({ theme: "light", system });
-  });
+  const saveSettings = mock(async () => []);
 
   beforeEach(() => {
     system = {};
-    updatePreference.mockClear();
+    saveSettings.mockClear();
     host.workspaceGetSettingsSnapshot = async () =>
       settingsSnapshotSchema.parse({ theme: "light", system });
-    host.systemUpdatePreferredOpenInTool = updatePreference;
+    host.workspaceSaveSettingsSnapshot = saveSettings;
     enableReactActEnvironment();
   });
 
@@ -56,7 +56,7 @@ describe("OpenInMenu", () => {
       rendered = null;
     }
     host.workspaceGetSettingsSnapshot = originalGetSettings;
-    host.systemUpdatePreferredOpenInTool = originalUpdatePreference;
+    host.workspaceSaveSettingsSnapshot = originalSaveSettings;
     globalThis.localStorage.clear();
   });
 
@@ -116,7 +116,10 @@ describe("OpenInMenu", () => {
       });
 
       expect(onOpenInTool).toHaveBeenCalledWith("ghostty");
-      expect(updatePreference).toHaveBeenCalledWith({ preferredOpenInToolId: "ghostty" });
+      expect(saveSettings).not.toHaveBeenCalled();
+      expect(screen.getByTestId("agent-studio-git-open-in-default-button").textContent).toContain(
+        "Finder",
+      );
       expect(globalThis.localStorage.getItem(storageKey)).toBeNull();
       expect(systemListOpenInTools).toHaveBeenCalledTimes(1);
     } finally {
@@ -124,48 +127,8 @@ describe("OpenInMenu", () => {
     }
   });
 
-  test("keeps the canonical preference when saving fails after launch", async () => {
-    await withMockedToast(async ({ toastErrorMock }) => {
-      const originalList = host.systemListOpenInTools;
-      host.systemListOpenInTools = async () => [{ toolId: "finder" }, { toolId: "zed" }];
-      host.systemUpdatePreferredOpenInTool = async () => {
-        throw new Error("config write failed");
-      };
-      const onOpenInTool = mock(async () => {});
-      try {
-        rendered = render(
-          <QueryProvider useIsolatedClient>
-            <TooltipProvider>
-              <OpenInMenu
-                contextMode="repository"
-                targetPath="/tmp/repo"
-                disabledReason={null}
-                onOpenInTool={onOpenInTool}
-              />
-            </TooltipProvider>
-          </QueryProvider>,
-        );
-        await screen.findByTestId("agent-studio-git-open-in-icon-finder");
-        await runWithReactAct(async () => {
-          fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
-        });
-        await runWithReactAct(async () => {
-          fireEvent.click(screen.getByTestId("agent-studio-git-open-in-item-zed"));
-        });
-        expect(onOpenInTool).toHaveBeenCalledWith("zed");
-        expect(toastErrorMock).toHaveBeenCalledWith("Opened tool, but failed to save preference", {
-          description: "config write failed",
-        });
-        expect(screen.getByTestId("agent-studio-git-open-in-default-button").textContent).toContain(
-          "Finder",
-        );
-      } finally {
-        host.systemListOpenInTools = originalList;
-      }
-    });
-  });
-
-  test("shares a successful preference update with another mounted menu", async () => {
+  test("opening another tool keeps the Settings preference in both mounted menus", async () => {
+    system = { preferredOpenInToolId: "finder" };
     const originalList = host.systemListOpenInTools;
     host.systemListOpenInTools = async () => [{ toolId: "finder" }, { toolId: "zed" }];
     let completeLaunch!: () => void;
@@ -198,7 +161,7 @@ describe("OpenInMenu", () => {
       await runWithReactAct(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-item-zed"));
       });
-      expect(updatePreference).not.toHaveBeenCalled();
+      expect(saveSettings).not.toHaveBeenCalled();
       expect(
         screen.getByRole<HTMLButtonElement>("button", { name: "Open repository root in Finder" })
           .disabled,
@@ -208,10 +171,46 @@ describe("OpenInMenu", () => {
       });
       await waitFor(
         () =>
-          expect(screen.getByRole("button", { name: "Open task worktree in Zed" })).toBeTruthy(),
+          expect(screen.getByRole("button", { name: "Open task worktree in Finder" })).toBeTruthy(),
         { timeout: 700 },
       );
-      expect(updatePreference).toHaveBeenCalledTimes(1);
+      expect(saveSettings).not.toHaveBeenCalled();
+      expect(system).toEqual({ preferredOpenInToolId: "finder" });
+      expect(screen.getByRole("button", { name: "Open repository root in Finder" })).toBeTruthy();
+    } finally {
+      host.systemListOpenInTools = originalList;
+    }
+  });
+
+  test("updates the default when Settings changes or clears the preference", async () => {
+    const originalList = host.systemListOpenInTools;
+    host.systemListOpenInTools = async () => [{ toolId: "finder" }, { toolId: "zed" }];
+    const queryClient = createQueryClient();
+    try {
+      rendered = render(
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <OpenInMenu
+              contextMode="repository"
+              targetPath="/tmp/repo"
+              disabledReason={null}
+              onOpenInTool={async () => {}}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>,
+      );
+      await screen.findByRole("button", { name: "Open repository root in Finder" });
+      for (const [preference, label] of [
+        [{ preferredOpenInToolId: "zed" }, "Zed"],
+        [{}, "Finder"],
+      ] as const) {
+        system = preference;
+        await runWithReactAct(async () => {
+          await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.settingsSnapshot() });
+        });
+        await screen.findByRole("button", { name: `Open repository root in ${label}` });
+      }
+      expect(saveSettings).not.toHaveBeenCalled();
     } finally {
       host.systemListOpenInTools = originalList;
     }
@@ -322,7 +321,7 @@ describe("OpenInMenu", () => {
           await Promise.resolve();
         });
 
-        expect(updatePreference).not.toHaveBeenCalled();
+        expect(saveSettings).not.toHaveBeenCalled();
         expect(toastErrorMock).toHaveBeenCalledWith("Failed to open in Zed", {
           description: "launch failed",
         });
@@ -332,7 +331,7 @@ describe("OpenInMenu", () => {
     });
   });
 
-  test("uses the persisted last-used tool as the default action and keeps only alternatives in the menu", async () => {
+  test("uses the Settings preference as the default action and keeps only alternatives in the menu", async () => {
     const originalSystemListOpenInTools = host.systemListOpenInTools;
     const storageKey = toRightPanelStorageKey();
     system = { preferredOpenInToolId: "zed" };

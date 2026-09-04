@@ -6,7 +6,6 @@ import {
   isSameAgentModelFavorite,
   repoConfigSchema,
   settingsSnapshotSaveInputSchema,
-  systemSettingsSchema,
   themeSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -58,7 +57,6 @@ const withSerializedConfigWrites = (
     saveSettingsSnapshot: (snapshot) => serialize(service.saveSettingsSnapshot(snapshot)),
     updateAgentModelFavorites: (favorites) =>
       serialize(service.updateAgentModelFavorites(favorites)),
-    updatePreferredOpenInTool: (system) => serialize(service.updatePreferredOpenInTool(system)),
     setTheme: (theme) => serialize(service.setTheme(theme)),
     updateGlobalGitConfig: (git) => serialize(service.updateGlobalGitConfig(git)),
   };
@@ -352,20 +350,6 @@ const createUnserializedWorkspaceSettingsService = (
           }),
         );
       }
-      const systemChanged =
-        snapshot.system.preferredOpenInToolId !== snapshot.expectedSystem.preferredOpenInToolId;
-      if (
-        systemChanged &&
-        config.system.preferredOpenInToolId !== snapshot.expectedSystem.preferredOpenInToolId
-      ) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message:
-              "Open In preference changed since settings were loaded. Reload settings and apply your choice again.",
-            field: "system.preferredOpenInToolId",
-          }),
-        );
-      }
       const workspaces = yield* normalizeSnapshotWorkspaces(
         settingsConfig,
         config,
@@ -377,7 +361,7 @@ const createUnserializedWorkspaceSettingsService = (
             ...config,
             git: snapshot.git,
             general: snapshot.general,
-            system: systemChanged ? snapshot.system : config.system,
+            system: snapshot.system,
             appearance: snapshot.appearance,
             chat: snapshot.chat,
             reusablePrompts: snapshot.reusablePrompts,
@@ -439,24 +423,6 @@ const createUnserializedWorkspaceSettingsService = (
             cause,
           }),
       });
-    });
-  },
-  updatePreferredOpenInTool(system) {
-    return Effect.gen(function* () {
-      const config = yield* loadGlobalConfig(settingsConfig);
-      const nextConfig = yield* Effect.try({
-        try: () =>
-          globalConfigSchema.parse({ ...config, system: systemSettingsSchema.parse(system) }),
-        catch: (cause) =>
-          new HostValidationError({
-            message:
-              "Invalid preferred Open In tool. Choose a supported tool or clear the preference.",
-            field: "system.preferredOpenInToolId",
-            cause,
-          }),
-      });
-      yield* settingsConfig.writeConfig(nextConfig);
-      return toSettingsSnapshot(nextConfig);
     });
   },
   setTheme(theme) {

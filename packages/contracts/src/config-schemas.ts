@@ -695,9 +695,6 @@ const settingsSnapshotSaveAgentModelFavoritesSchema = agentModelFavoritesSchema
   );
 
 export const settingsSnapshotSaveInputSchema = z.object({
-  expectedSystem: systemSettingsSchema.describe(
-    "System settings loaded before editing. Unchanged values preserve newer host settings; conflicting edits are rejected.",
-  ),
   system: systemSettingsSchema,
   git: globalGitConfigSchema,
   general: generalSettingsSchema,

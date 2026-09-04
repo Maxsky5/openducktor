@@ -692,9 +692,7 @@ describe("use-repo-settings-operations", () => {
       unsubscribe = observer.subscribe((result) => {
         if (result.data) observed = result.data;
       });
-      await harness.run(async (operations) =>
-        operations.saveSettingsSnapshot({ ...saved, expectedSystem: {} }),
-      );
+      await harness.run(async (operations) => operations.saveSettingsSnapshot(saved));
       expect(observed.system).toEqual(saved.system);
     } finally {
       unsubscribe();
@@ -813,10 +811,9 @@ describe("use-repo-settings-operations", () => {
         .getQueryClient()
         .setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
       harness.getQueryClient().setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
-      await harness.getLatest().saveSettingsSnapshot({ ...snapshot, expectedSystem: {} });
+      await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith({
         ...snapshot,
-        expectedSystem: {},
       });
       expect(workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.chat).toEqual(explicitChatSettings);
       expect(
@@ -1051,7 +1048,7 @@ describe("use-repo-settings-operations", () => {
       queryClient.setQueryData(runtimeKey, { runtimes: [] });
       queryClient.setQueryData(checksKey, { ok: true });
 
-      await harness.getLatest().saveSettingsSnapshot({ ...snapshot, expectedSystem: {} });
+      await harness.getLatest().saveSettingsSnapshot(snapshot);
 
       expect(queryClient.getQueryState(runtimeKey)?.isInvalidated).toBe(false);
       expect(queryClient.getQueryState(checksKey)?.isInvalidated).toBe(true);
@@ -1133,10 +1130,9 @@ describe("use-repo-settings-operations", () => {
 
     try {
       await harness.mount();
-      await harness.getLatest().saveSettingsSnapshot({ ...snapshot, expectedSystem: {} });
+      await harness.getLatest().saveSettingsSnapshot(snapshot);
       expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith({
         ...snapshot,
-        expectedSystem: {},
       });
       const savedSnapshot = workspaceSaveSettingsSnapshot.mock.calls[0]?.[0];
       if (savedSnapshot === undefined) {

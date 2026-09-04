@@ -997,7 +997,6 @@ describe("useSettingsModalController", () => {
     expect(saveGlobalGitConfig).toHaveBeenCalledTimes(0);
     expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
     expect(saveSettingsSnapshot).toHaveBeenCalledWith({
-      expectedSystem: {},
       ...expectedSnapshotUpdate,
       chat: {
         ...expectedSnapshot.chat,

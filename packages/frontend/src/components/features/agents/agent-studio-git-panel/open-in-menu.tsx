@@ -8,7 +8,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { errorMessage } from "@/lib/errors";
-import { usePreferredOpenInTool } from "@/state/mutations/use-preferred-open-in-tool";
 import { openInToolsQueryOptions, refreshOpenInToolsFromQuery } from "@/state/queries/system";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { OpenInToolIcon } from "./open-in-tool-metadata";
@@ -30,7 +29,6 @@ export function OpenInMenu({
   const [isOpen, setIsOpen] = useState(false);
   const [pendingToolId, setPendingToolId] = useState<SystemOpenInToolId | null>(null);
   const settingsQuery = useQuery(settingsSnapshotQueryOptions());
-  const { savePreference, isSavingPreference } = usePreferredOpenInTool();
   const preferredToolId = settingsQuery.data?.system.preferredOpenInToolId;
   const [isRefreshingTools, setIsRefreshingTools] = useState(false);
   const queryClient = useQueryClient();
@@ -67,8 +65,7 @@ export function OpenInMenu({
     disabledReason,
     onOpenInTool,
   });
-  const isTriggerDisabled =
-    resolvedDisabledReason != null || pendingToolId !== null || isSavingPreference;
+  const isTriggerDisabled = resolvedDisabledReason != null || pendingToolId !== null;
   const isDefaultActionDisabled =
     isTriggerDisabled ||
     settingsQuery.isPending ||
@@ -94,15 +91,6 @@ export function OpenInMenu({
       setIsOpen(false);
     } catch (error) {
       toast.error(`Failed to open in ${getOpenInToolLabel(toolId)}`, {
-        description: errorMessage(error),
-      });
-      setPendingToolId(null);
-      return;
-    }
-    try {
-      await savePreference({ preferredOpenInToolId: toolId });
-    } catch (error) {
-      toast.error("Opened tool, but failed to save preference", {
         description: errorMessage(error),
       });
     } finally {

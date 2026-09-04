@@ -7,7 +7,6 @@ import { prepareRepoConfigForSave } from "./repo-config";
 
 export const prepareSettingsSnapshotForSave = (
   snapshot: SettingsSnapshot,
-  expectedSystem: SettingsSnapshot["system"],
 ): SettingsSnapshotSaveInput => {
   const workspaces = Object.fromEntries(
     Object.entries(snapshot.workspaces).map(([workspaceId, repoConfig]) => [
@@ -18,7 +17,6 @@ export const prepareSettingsSnapshotForSave = (
 
   return {
     git: prepareGlobalGitSettingsForSave(snapshot.git),
-    expectedSystem,
     system: snapshot.system,
     general: snapshot.general,
     appearance: snapshot.appearance,

@@ -1087,6 +1087,7 @@ describe("HostClient", () => {
     const { client, calls } = createClient((command) => {
       if (command === "workspace_get_settings_snapshot") {
         return {
+          system: { preferredOpenInToolId: "zed" },
           theme: "light",
           git: {
             defaultMergeMethod: "merge_commit",
@@ -1120,6 +1121,7 @@ describe("HostClient", () => {
 
     const snapshot = await client.workspaceGetSettingsSnapshot();
 
+    expect(snapshot.system).toEqual({ preferredOpenInToolId: "zed" });
     expect(snapshot.theme).toBe("light");
     expect(Object.keys(snapshot.workspaces)).toEqual(["repo"]);
     expect(calls).toEqual([
@@ -1199,6 +1201,7 @@ describe("HostClient", () => {
     });
 
     const result = await client.workspaceSaveSettingsSnapshot({
+      system: { preferredOpenInToolId: "zed" },
       git: {
         defaultMergeMethod: "merge_commit",
       },
@@ -1237,6 +1240,7 @@ describe("HostClient", () => {
         command: "workspace_save_settings_snapshot",
         args: {
           snapshot: {
+            system: { preferredOpenInToolId: "zed" },
             git: {
               defaultMergeMethod: "merge_commit",
             },
@@ -1271,29 +1275,6 @@ describe("HostClient", () => {
         },
       },
     ]);
-  });
-
-  test("systemUpdatePreferredOpenInTool uses the narrow route and validates the snapshot", async () => {
-    const { client, calls } = createClient(() => ({
-      theme: "light",
-      system: { preferredOpenInToolId: "zed" },
-    }));
-    expect(
-      (await client.systemUpdatePreferredOpenInTool({ preferredOpenInToolId: "zed" })).system,
-    ).toEqual({ preferredOpenInToolId: "zed" });
-    await client.systemUpdatePreferredOpenInTool({});
-    expect(calls).toEqual([
-      {
-        command: "system_update_preferred_open_in_tool",
-        args: { system: { preferredOpenInToolId: "zed" } },
-      },
-      { command: "system_update_preferred_open_in_tool", args: { system: {} } },
-    ]);
-    const invalid = createClient(() => ({
-      theme: "light",
-      system: { preferredOpenInToolId: "unknown" },
-    }));
-    await expect(invalid.client.systemUpdatePreferredOpenInTool({})).rejects.toThrow();
   });
 
   test("workspaceUpdateAgentModelFavorites returns the canonical settings snapshot", async () => {

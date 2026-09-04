@@ -48,8 +48,8 @@ export function SettingsSystemSection({
         <div className="grid gap-2">
           <Label id={labelId}>Preferred Open In tool</Label>
           <p id={descriptionId} className="text-xs text-muted-foreground">
-            Automatic uses the first available tool. A successful Open In action also saves your
-            choice.
+            Automatic uses the first available tool. Opening another tool does not change your
+            preference.
           </p>
           {unavailablePreference ? (
             <p className="text-xs text-muted-foreground">

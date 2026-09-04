@@ -24,12 +24,8 @@ describe("system settings", () => {
 
   test("save inputs require system and preserve an explicit clear", () => {
     const snapshot = settingsSnapshotSchema.parse({ theme: "light" });
-    expect(
-      settingsSnapshotSaveInputSchema.parse({ ...snapshot, expectedSystem: snapshot.system })
-        .system,
-    ).toEqual({});
-    expect(settingsSnapshotSaveInputSchema.safeParse(snapshot).success).toBe(false);
-    const { system: _system, ...withoutSystem } = { ...snapshot, expectedSystem: snapshot.system };
+    expect(settingsSnapshotSaveInputSchema.parse(snapshot).system).toEqual({});
+    const { system: _system, ...withoutSystem } = snapshot;
     expect(settingsSnapshotSaveInputSchema.safeParse(withoutSystem).success).toBe(false);
   });
 });

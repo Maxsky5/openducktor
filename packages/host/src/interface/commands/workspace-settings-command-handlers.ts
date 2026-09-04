@@ -4,7 +4,6 @@ import {
   repoHooksSchema,
   runtimeKindSchema,
   settingsSnapshotSaveInputSchema,
-  systemSettingsSchema,
   themeSchema,
   workspaceRepoConfigInputSchema,
   workspaceRepoSettingsInputSchema,
@@ -133,7 +132,6 @@ export const createWorkspaceSettingsCommandHandlers = (
     | "selectWorkspace"
     | "setTheme"
     | "updateAgentModelFavorites"
-    | "updatePreferredOpenInTool"
     | "updateGlobalGitConfig"
     | "updateRepoConfig"
     | "updateRepoHooks"
@@ -256,20 +254,6 @@ export const createWorkspaceSettingsCommandHandlers = (
           requireObjectArgs("workspace_update_agent_model_favorites", args, "favorites").favorites,
         ),
       ),
-    system_update_preferred_open_in_tool: (args) => {
-      const system = systemSettingsSchema.safeParse(
-        requireObjectArgs("system_update_preferred_open_in_tool", args, "system").system,
-      );
-      if (!system.success) {
-        throw new HostValidationError({
-          message:
-            "Invalid preferred Open In tool. Choose a supported tool or clear the preference.",
-          field: "system.preferredOpenInToolId",
-          cause: system.error,
-        });
-      }
-      return workspaceSettingsService.updatePreferredOpenInTool(system.data);
-    },
     set_theme: (args) =>
       workspaceSettingsService.setTheme(
         themeSchema.parse(requireObjectArgs("set_theme", args, "theme").theme),

@@ -142,8 +142,6 @@ Important paths:
 
 OpenDucktor uses one SQLite database per configured workspace.
 
-The preferred Open In tool is a global setting in `config.json` under `system.preferredOpenInToolId`. Edit it in Settings > System, or select a tool from the Open In menu. The menu saves the choice after the app opens. Clear the preference to use the first available tool. Right-panel layout remains in browser localStorage. Full settings saves include the loaded `expectedSystem` baseline. If System is unchanged, the host keeps the current preference. If an edit conflicts with a newer preference, reload Settings and apply the choice again. The frontend queues settings writes through their cache updates to keep delayed responses in order.
-
 ## Development Expectations
 
 - Keep changes consistent with the current hexagonal boundaries.

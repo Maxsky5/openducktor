@@ -64,8 +64,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceClient.workspaceReplaceAgentStudioState.bind(workspaceClient),
     workspaceGetSettingsSnapshot:
       workspaceClient.workspaceGetSettingsSnapshot.bind(workspaceClient),
-    systemUpdatePreferredOpenInTool:
-      workspaceClient.systemUpdatePreferredOpenInTool.bind(workspaceClient),
     workspaceUpdateAgentModelFavorites:
       workspaceClient.workspaceUpdateAgentModelFavorites.bind(workspaceClient),
     workspaceUpdateGlobalGitConfig:
