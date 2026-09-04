@@ -1,94 +1,71 @@
-# Task Workflow Status Model
+# Task workflow status model
 
-## Purpose
-This document defines the canonical task workflow model for OpenDucktor.
-It is the source of truth for:
-- persisted task statuses,
-- UI status labels,
-- type-specific behavior,
-- metadata ownership for agent-authored documents.
+This document defines persisted task status, UI labels, issue type rules, and task document ownership.
 
-## Core Principles
-- The persisted task `status` is the canonical lifecycle state.
-- OpenDucktor does not use labels for lifecycle state.
-- Transitions are backend-enforced and mostly tool-driven.
-- User-authored fields and agent-authored documents are separated.
+## Source of truth
 
-## Persisted Statuses
-OpenDucktor uses the following task statuses:
-- Built-in: `open`, `in_progress`, `blocked`, `closed`
-- Custom: `spec_ready`, `ready_for_dev`, `ai_review`, `human_review`
+- The persisted `status` is the task lifecycle state.
+- The backend validates each transition.
+- The frontend renders the actions in `TaskCard.availableActions`. It does not infer actions from status.
+- User fields and agent documents have separate owners.
 
-Notes:
-- `open` is used as the persisted backlog state.
-- UI displays `open` as `Backlog`.
-- `human_review` is considered in-progress work from an orchestration perspective.
-- Manual close is an administrative override to `closed`/Done. It is not evidence that code was merged, QA was approved, or unfinished workflow steps were completed.
+## Statuses
 
-## UI Mapping
-- `open` -> `Backlog`
-- `spec_ready` -> `Spec Ready`
-- `ready_for_dev` -> `Ready for Dev`
-- `in_progress` -> `In Progress`
-- `blocked` -> `Blocked needs input`
-- `ai_review` -> `AI Review`
-- `human_review` -> `Human Review`
-- `closed` -> `Done`
+| Stored status | UI label | Note |
+|---|---|---|
+| `open` | Backlog | Persisted backlog state. |
+| `spec_ready` | Spec Ready | The task has a specification. |
+| `ready_for_dev` | Ready for Dev | The task can start a build. |
+| `in_progress` | In Progress | Build work is active or can resume. |
+| `blocked` | Blocked needs input | Build work needs input. |
+| `ai_review` | AI Review | QA can review the build. |
+| `human_review` | Human Review | This still counts as work in progress for orchestration. |
+| `closed` | Done | The task is closed. |
 
-## Task Capability Contract (Backend-Driven)
-- Backend computes allowed task actions and returns them on each `TaskCard` as `availableActions`.
-- Frontend must render action buttons from `availableActions` and must not infer workflow actions from local status heuristics.
-- This keeps workflow authority in the backend transition matrix while allowing UI-specific presentation (button order, emphasis, labels).
+`close_task` is an administrative override. It does not prove that code was merged, QA passed, or all workflow steps finished.
 
-## Issue Types in Scope
-Allowed issue types in OpenDucktor UI:
-- `epic`
-- `feature`
-- `task`
-- `bug`
+## Issue types
 
-Removed from OpenDucktor UI scope:
-- `chore`
-- `decision`
+The UI supports `epic`, `feature`, `task`, and `bug`. It does not support `chore` or `decision`.
 
-## Type-Specific Flow Rules
-- `feature` and `epic` follow the standard path:
-  `open -> spec_ready -> ready_for_dev -> in_progress -> ai_review/human_review -> closed`
-- `feature` and `epic` cannot start planning directly from `open`; `set_plan` is allowed from `spec_ready`, `ready_for_dev`, and later active/review states as document revisions.
-- `task` and `bug` may skip spec/planning:
-  `open -> in_progress`
-- Spec and plan documents can be revised during `in_progress`, `blocked`, `ai_review`, and `human_review` without changing task status.
+`feature` and `epic` use this path:
 
-## QA Requirement Defaults
-`qaRequired` defaults by issue type:
-- `epic`: `true`
-- `feature`: `true`
-- `task`: `true` (for now)
-- `bug`: `true` (for now)
+```text
+open -> spec_ready -> ready_for_dev -> in_progress -> ai_review/human_review -> closed
+```
 
-When `qaRequired=true`, build completion returns to `ai_review` until the latest QA verdict is `approved`.
-When `qaRequired=false`, or when the latest QA verdict is already `approved`, build completion goes directly to `human_review`.
+They cannot plan from `open`. A later spec or plan edit does not change a task that is already in `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, or `human_review`.
 
-## Epic/Subtask Rules
-- Only `epic` can have subtasks.
-- Max hierarchy depth is 1 level.
-- Subtasks cannot have subtasks.
-- Epic completion guard checks direct children only.
-- Epic completion guard blocks while any direct child is not `closed`.
+`task` and `bug` can skip the spec and plan:
 
-## Document Contract (Agent-Owned Documents)
-Agent-authored documents are stored as task documents only, never in user-authored task fields.
+```text
+open -> in_progress
+```
 
-SQLite stores document bodies as plain markdown with an explicit `format` value. The current document kinds are:
+## QA defaults
 
-- `spec`
-- `implementationPlan`
-- `qaReports`
+`qaRequired` defaults to `true` for all four issue types.
 
-Document rows include task id, kind, revision, markdown, format, optional QA verdict, source tool, updater, and update timestamp.
-Frontend and MCP callers receive plain markdown on successful reads.
+When `qaRequired` is `true`, build completion moves to `ai_review` until the latest QA result is `approved`. When it is `false`, or the latest stored QA result is already `approved`, build completion moves to `human_review`.
 
-Example document rows keep canonical workflow source tools explicit:
+## Epic rules
+
+- Only an `epic` can have direct children.
+- The hierarchy has one child level.
+- A child cannot have children.
+- An epic cannot close while a direct child is not `closed`.
+
+## Task documents
+
+Store agent-written output as task documents, not user task fields. SQLite stores plain Markdown and an explicit `format`.
+
+| Kind | Current UI read |
+|---|---|
+| `spec` | Latest entry. |
+| `implementationPlan` | Latest entry. |
+| `qaReports` | Latest entry. |
+
+The store can keep history. Each row has a task ID, kind, revision, Markdown body, format, optional QA result, source tool, updater, and update time. Frontend and MCP reads return plain Markdown.
 
 ```json
 [
@@ -98,11 +75,4 @@ Example document rows keep canonical workflow source tools explicit:
 ]
 ```
 
-## Document History Policy
-- `qaReports`: history may be retained, but V1 UI surfaces the latest entry.
-- `spec`: history may be retained, but V1 UI surfaces the latest entry.
-- `implementationPlan`: history may be retained, but V1 UI surfaces the latest entry.
-
-## Write Safety Rules
-- Task-store updates must preserve unrelated durable task fields.
-- No workflow-critical data should depend on UI-only labels.
+Each write must keep unrelated durable task fields. Workflow rules use stored status, not UI labels.

@@ -1,19 +1,11 @@
-# Task Workflow Actions
+# Task workflow actions
 
-## Purpose
-This document defines the canonical action contract for task-level workflow operations in OpenDucktor.
-It complements:
-- `docs/task-workflow-status-model.md`
-- `docs/task-workflow-transition-matrix.md`
+The backend returns allowed task actions in `TaskCard.availableActions`. The frontend renders that list. It does not infer actions from status.
 
-The backend is the single source of truth for which actions are currently allowed for a task.
+Read [the status model](task-workflow-status-model.md) for status and issue type rules. Read [the transition matrix](task-workflow-transition-matrix.md) for all transition guards.
 
-## Core Rule
-- Backend computes `availableActions` for each `TaskCard`.
-- Frontend must render actions from `availableActions`.
-- Frontend must not infer allowed actions from local status-only heuristics.
+## Action IDs
 
-## Action Set (Canonical IDs)
 - `view_details`
 - `set_spec`
 - `set_plan`
@@ -27,122 +19,65 @@ The backend is the single source of truth for which actions are currently allowe
 - `human_request_changes`
 - `human_approve`
 
-## Action Semantics
+## Simple actions
 
-### `view_details`
-- Purpose: open task details panel.
-- Transition: none.
+| Action | Effect |
+|---|---|
+| `view_details` | Open task details. No transition. |
+| `build_start` | Move to `in_progress` when backend rules allow it. |
+| `open_builder` | Open the linked Builder session. No transition. |
+| `qa_start` | Open QA from `blocked`, `ai_review`, or `human_review`. No direct transition. |
+| `open_qa` | Open the linked QA session. No transition. |
+| `human_request_changes` | Move `ai_review` or `human_review` to `in_progress`. |
+| `human_approve` | Move `ai_review` or `human_review` to `closed` after the epic child check passes. |
 
-### `set_spec`
-- Purpose: author or revise the specification markdown.
-- Allowed from `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, and `human_review`.
-- Transition: `open -> spec_ready`; all other allowed statuses stay in place as document-only revisions.
+## Document actions
 
-### `set_plan`
-- Purpose: author or revise implementation plan markdown.
-- Allowed statuses:
-  - `feature/epic`: `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, and `human_review`.
-  - `task/bug`: `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, and `human_review`.
-- Transition: valid pre-build planning moves to `ready_for_dev`; `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, and `human_review` stay in place as document-only revisions.
-- Epic subtask proposals are replacement intent; replacing existing direct subtasks is allowed only when those subtasks are still `open`, `spec_ready`, or `ready_for_dev`. Omitting `subtasks` preserves existing direct subtasks.
+`set_spec` writes or revises the specification. From `open`, it moves the task to `spec_ready`. In any other allowed status, it changes only the document.
 
-### `build_start`
-- Purpose: start build execution for this task.
-- Transition: to `in_progress` when allowed by backend transition rules.
+`set_plan` writes or revises the implementation plan. A `feature` or `epic` can use it from `spec_ready` or any later active status. A `task` or `bug` can also use it from `open`. Valid planning before a build moves the task to `ready_for_dev`. A later edit changes only the document.
 
-### `open_builder`
-- Purpose: open existing builder context/run UX.
-- Transition: none.
+For an epic, `subtasks` means replace the direct child proposal. Replacement is allowed only when all current direct children are `open`, `spec_ready`, or `ready_for_dev`. If `subtasks` is absent, keep the current children.
 
-### `reset_implementation`
-- Purpose: discard the current implementation attempt and clean up task-owned build/QA state.
-- Transition: `in_progress`, `blocked`, `ai_review`, or `human_review` -> derived rollback target.
-- Rollback target:
-  - `ready_for_dev` when an implementation plan document is retained.
-  - `spec_ready` when only a spec document is retained.
-  - `open` when neither document is retained.
-- Guardrails:
-  - reject while any live task role uses the canonical worktree.
-  - validate the canonical worktree and expected task branch before mutation.
-  - restore tracked content to the locally available base and remove ordinary untracked files while preserving ignored files.
-  - retain the canonical worktree and task branch; do not rerun copy paths or hooks.
-  - preserve retained spec and plan documents.
+## Reset implementation
 
-### `reset_task`
-- Purpose: fully restart a non-completed task without deleting the task record.
-- Transition: `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, or `human_review` -> `open`.
-- Cleanup:
-  - clear spec, plan, and QA documents.
-  - clear linked spec/planner/build/QA sessions.
-  - clear linked pull request and direct-merge metadata.
-  - clear in-memory run state.
-  - stop task-scoped dev servers.
-  - remove task-managed worktrees and related local branches.
-- Guardrails:
-  - reject while live spec/planner/build/QA activity still exists for the task.
-  - reject on unsafe branch cleanup, including checked-out branches.
-  - preserve task identity and user-authored task fields.
+`reset_implementation` discards the current build and QA attempt. It can run from `in_progress`, `blocked`, `ai_review`, or `human_review`.
 
-### `qa_start`
-- Purpose: request or start a QA review loop for the current task state.
-- Transition: none directly; it opens the QA workflow from `blocked`, `ai_review`, or `human_review`.
+Choose the target from the documents that remain:
 
-### `open_qa`
-- Purpose: open existing QA context/run UX.
-- Transition: none.
+- Use `ready_for_dev` when the plan remains.
+- Use `spec_ready` when only the specification remains.
+- Use `open` when neither remains.
 
-### `close_task`
-- Purpose: manually close a task as an administrative override from the task detail sheet only.
-- Allowed from every non-`closed` status.
-- Transition: any non-`closed` status -> `closed`.
-- Semantics:
-  - marks the task as Done without merging code, creating or updating a pull request, or approving QA.
-  - bypasses unfinished workflow steps explicitly; it is not proof of merge, QA approval, or implementation completion.
-  - preserves the task record, user-authored fields, workflow documents, QA reports, linked history, pull request metadata, and direct-merge metadata.
-- Cleanup:
-  - stop task-scoped dev servers.
-  - remove task-managed worktrees and related local branches when present.
-  - fail with an actionable error when cleanup is unsafe or incomplete.
-- Guardrails:
-  - reject while live spec/planner/build/QA activity still owns mutable runtime state.
-  - epic completion checks direct children and blocks while any direct child is not `closed`.
-- UI placement: task detail sheet workflow actions only. Kanban cards, Agent Studio quick actions, bulk actions, headers, and command palettes must not render this action.
+Before the reset:
 
-### `human_request_changes`
-- Purpose: human review rejects current output and requests a rework loop.
-- Transition: `ai_review -> in_progress` or `human_review -> in_progress`.
+- Reject the action while a live task role uses the canonical worktree.
+- Check the canonical worktree and task branch.
+- Restore tracked files to the local base. Remove ordinary untracked files and keep ignored files.
+- Keep the canonical worktree, task branch, specification, and plan. Do not rerun copy paths or hooks.
 
-### `human_approve`
-- Purpose: human review accepts completion.
-- Transition: `ai_review -> closed` or `human_review -> closed`.
-- Guardrail: epic completion checks direct children and blocks while any direct child is not `closed`.
+## Reset task
 
-## UI Mapping Guidance
-- A task can expose multiple actions at once.
-- UI should surface:
-  - one primary action (based on product ordering preferences),
-  - remaining actions in a secondary menu.
-- Primary ordering is a UI concern; allowed action set is backend authority.
+`reset_task` moves any non-closed task to `open`. It keeps the task ID and user fields.
 
-## Current UI Scope
-Current card/detail primary+menu rendering uses workflow actions:
-- `set_spec`
-- `set_plan`
-- `build_start`
-- `open_builder`
-- `reset_implementation`
-- `reset_task`
-- `qa_start`
-- `open_qa`
-- `close_task` (detail sheet only)
-- `human_request_changes`
-- `human_approve`
+It clears workflow documents, linked role sessions, pull request data, direct merge data, and in-memory runs. It stops task dev servers, then removes task worktrees and related local branches.
 
-`view_details` is handled via card click / details panel affordance and is not shown as a dedicated workflow button.
+Reject the action while a live role still owns task state. Reject it when branch cleanup is unsafe, such as when another worktree has the branch checked out.
 
-## Notes For Future Changes
-- Add new action IDs only with:
-  1. backend action derivation update,
-  2. transition-matrix update,
-  3. docs update here and in transition/status model docs,
-  4. UI mapping update.
+## Close task
+
+`close_task` moves any non-closed task to `closed` from the task detail sheet. It is an administrative override.
+
+The action keeps the task record, user fields, documents, QA reports, session history, pull request data, and direct merge data. It stops task dev servers and removes managed worktrees and local branches. If cleanup is unsafe or incomplete, it fails with an error.
+
+Reject it while a live role owns mutable task state. Reject an epic while a direct child is not closed.
+
+Only the task detail sheet can show `close_task`. Do not show it on a Kanban card, Agent Studio quick action, bulk action, header, or command palette.
+
+## UI rules
+
+A task can have more than one action. The UI can choose one primary action and put the rest in a menu. Display order is a UI rule. The backend list remains the authority.
+
+Current card and detail views use all action IDs except `view_details`, which the card click and details panel already provide.
+
+When you add an action ID, update backend derivation, the transition matrix, the status and action docs, and UI mapping in one change.

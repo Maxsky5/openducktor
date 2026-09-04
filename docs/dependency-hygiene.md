@@ -1,107 +1,48 @@
-# Dependency Hygiene Policy
+# Dependency hygiene
 
-This repository uses recurring checks and automated update PRs to keep dependencies lean and up to date.
+Dependabot proposes version updates and security fixes. Knip finds unused dependencies and exports. Both checks run because neither replaces the other.
 
-## Automated Update PRs (Dependabot)
+## Pull request gate
 
-- Config: `.github/dependabot.yml`
-- Coverage:
-  - Bun workspace updates from repository root
-  - GitHub Actions updates
-- Cadence: weekly
-- Grouping: patch/minor updates are grouped to reduce PR noise
+Run the full gate with:
 
-Dependabot and `knip` solve different problems:
+```sh
+bun run deps:check
+```
 
-- Dependabot proposes version upgrades and security fixes.
-- `knip` detects unused dependencies/exports that update bots do not remove.
+The gate runs on pull requests and pushes to `main`. It includes:
 
-## 1) Blocking Dependency Hygiene Gate
+- `bun run deps:audit`, which applies the high-severity and Hono policies to one audit response
+- `bun run deps:unused:deps`
+- `bun run deps:unused:exports`
 
-- Command: `bun run deps:check`
-- Includes:
-  - `bun run deps:audit`, which applies the high-severity and Hono policies to one audit response
-  - `bun run deps:unused:deps`
-  - `bun run deps:unused:exports`
+The workflow is `.github/workflows/dependency-hygiene.yml`.
 
-This check runs on pull requests and `main` pushes and must pass.
+## Unused code checks
 
-Implementation notes:
+`bun run deps:unused:deps` runs Knip for dependencies in all `@openducktor/*` workspaces.
 
-- Workflow: `.github/workflows/dependency-hygiene.yml`
+`bun run deps:unused:exports` runs Knip for exports in those workspaces. Use `bun run deps:unused:exports:report` only when a workflow must publish a report despite findings. Do not use the report command as a blocking gate.
 
-## 2) Unused Dependency Detection (Blocking Component)
+- Add a short reason beside each intentional Knip exclusion.
+- Do not export production code only for a test. Test it through public behavior or keep the helper in test code.
+- Remove `export` when a symbol is used only in its own file.
 
-- Command: `bun run deps:unused:deps`
-- Backed by: `knip`
-- Scope: all workspaces matching `@openducktor/*`
-- Check type: `dependencies`
-- Implementation: `bunx knip --workspace='@openducktor/*' --include dependencies`
+## Security checks
 
-This check is included in `deps:check`.
+`bun run deps:audit` fails when one `bun audit --json` response reports a high or critical advisory. It also fails if GHSA-`xh87-mx6m-69f3` or GHSA-`v8w9-8mx6-g223` returns. `hono` must resolve to `>=4.12.7`.
 
-## 3) Unused Export Detection (Blocking Component)
+The audit request fails with a transport error after 30 seconds instead of waiting for Bun's default idle timeout.
 
-- Command: `bun run deps:unused:exports`
-- Backed by: `knip`
-- Scope: all workspaces matching `@openducktor/*`
-- Check type: `exports`
-- Implementation: `bunx knip --workspace='@openducktor/*' --include exports`
+## Update reports
 
-This check is included in `deps:check`.
+Dependabot reads `.github/dependabot.yml`. It checks the Bun workspace and GitHub Actions each week. It groups patch and minor updates.
 
-Implementation notes:
+`bun run deps:outdated` lists packages that can be updated. `.github/workflows/dependency-hygiene-report.yml` publishes this list and the unused-export report each week.
 
-- Report-only command: `bun run deps:unused:exports:report`
-- Report-only implementation: `bunx knip --workspace='@openducktor/*' --include exports --no-exit-code`
-- Use the report-only command only for artifact generation where the workflow needs to publish findings even when unused exports exist. Do not use it for blocking local or CI gates.
-- Intentional public entry points or generated files should be excluded in Knip configuration with a short rationale next to the exclusion.
-- Do not export production symbols only for tests. Cover private helpers through public behavior, or move reusable test setup into test files.
-- When Knip reports an export that is only used inside its own source file, remove the `export` keyword unless another module should import it.
+## Update rules
 
-## 4) Outdated Dependency Review
-
-- Command: `bun run deps:outdated`
-- Backed by: `bun outdated`
-- Output: package versions that can be upgraded
-
-Implementation notes:
-
-- Dedicated report workflow: `.github/workflows/dependency-hygiene-report.yml`
-
-## 5) High/Critical Vulnerability Gate
-
-- Command: `bun run deps:audit:high`
-- Backed by: `bun audit --json`
-- Scope: blocks any dependency that resolves to a high or critical advisory
-
-Implementation notes:
-
-- Included through the single-request `deps:audit` command in `deps:check`, which runs in `.github/workflows/dependency-hygiene.yml`.
-- The audit request fails after 30 seconds with a transport error instead of waiting for Bun's default idle timeout.
-
-## 6) Targeted Vulnerability Gate (Hono)
-
-- Command: `bun run deps:audit:hono`
-- Backed by: `bun audit --json`
-- Scope: blocks GHSA-`xh87-mx6m-69f3` and GHSA-`v8w9-8mx6-g223` reintroduction (`hono` must resolve to `>=4.12.7`)
-
-Implementation notes:
-
-- Included through the single-request `deps:audit` command in `deps:check`, which runs in `.github/workflows/dependency-hygiene.yml`.
-
-## Cadence
-
-- Weekly (automated): Dependabot creates update PRs, and report CI publishes `bun run deps:unused:exports:report` plus `bun run deps:outdated` outputs.
-- Per PR and on `main` pushes (automated): dependency hygiene CI runs `bun run deps:check` to catch dependency drift, unused exports, and vulnerability regressions without blocking lint/typecheck/test/build.
-- Monthly (manual): open a dependency refresh PR for safe patch/minor updates.
-- Urgent security advisories: process outside cadence and patch immediately.
-
-## Upgrade Handling Guidelines
-
-- Prefer patch and minor upgrades in routine refreshes.
-- Treat major upgrades separately with focused testing and release notes review.
-- After upgrades, run:
-  - `bun run typecheck`
-  - `bun run test`
-  - `bun run build`
+- Put routine patch and minor updates in a dependency refresh pull request.
+- Put each major update in a separate pull request. Read its release notes and run focused tests.
+- Process an urgent security advisory at once.
+- After an update, run `bun run typecheck`, `bun run test`, and `bun run build`.

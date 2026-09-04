@@ -1,117 +1,59 @@
-# Effect Adoption Guide
+# Effect guide
 
-This guide describes how OpenDucktor uses Effect in TypeScript packages.
+Read this guide before you change a host port, service, adapter, lifecycle, or typed error.
 
-The short version:
+Use Effect for application work that performs I/O, can fail, owns a resource, starts background work, or needs controlled time and concurrency. Keep pure data and policy code in plain TypeScript.
 
-- Use Effect for fallible or I/O-producing application work.
-- Keep pure domain policy synchronous when it has no useful failure channel.
-- Model expected failures as typed errors.
-- Use `Context.Tag` and `Layer` for dependency injection.
-- Wrap Promise and throwing APIs at the adapter boundary.
-- Convert Effects to Promises only at explicit external boundaries.
-- Do not use Effect recovery operators to hide broken contracts.
-
-The current reference implementation is `packages/host`. Future migrations in `packages/openducktor-web`,
-`packages/openducktor-mcp`, and other eligible TypeScript packages should reuse these conventions instead of inventing
-package-local Effect styles.
-
-## Why Effect
-
-Effect is OpenDucktor's TypeScript execution model for code that has one or more of these properties:
-
-- it performs I/O
-- it can fail with an expected application or infrastructure error
-- it coordinates dependencies
-- it owns a resource lifecycle
-- it starts background work
-- it needs deterministic retry, polling, scheduling, or interruption behavior
-
-Effect makes those concerns explicit in the type:
+The main type is:
 
 ```ts
 Effect.Effect<Success, Failure, Requirements>
 ```
 
-Read this as:
+- `Success` is the result.
+- `Failure` is an expected typed failure.
+- `Requirements` lists services supplied through `Context` and `Layer`.
 
-- `Success`: the value produced when the operation succeeds
-- `Failure`: expected failures returned through the Effect error channel
-- `Requirements`: services that must be provided through `Context` and `Layer`
+A JavaScript defect is not an expected failure. Keep expected failures in the Effect error channel until a public boundary converts them.
 
-JavaScript defects can still happen. They are not the same thing as expected failures. Expected failures should be typed
-and propagated until a public boundary maps them to a user-visible or transport-visible error.
+`packages/host` is the current reference. Use the same rules in another package only when its I/O and lifecycle need them.
 
-## Where Effect Belongs
+## Where Effect fits
 
-Use Effect inside eligible TypeScript packages when the code is application, adapter, infrastructure, lifecycle, or
-transport orchestration code.
+Use Effect for:
 
-Good candidates:
+- Host commands and use cases.
+- MCP bridge discovery and calls.
+- Web startup, readiness, HTTP, and SSE.
+- Runtime process lifecycle.
+- File, Git, SQLite, and CLI adapters.
+- Bounded loops, schedules, retries, polling, and shutdown.
 
-- host command handling and use cases
-- MCP bridge discovery and host calls
-- web runner startup, readiness, HTTP, and SSE orchestration
-- runtime process lifecycle
-- filesystem, git, SQLite task store, and external CLI adapters
-- long-running loops, polling, retries, and shutdown logic
+Keep these in plain TypeScript:
 
-Do not force Effect into code that is clearer as plain TypeScript:
+- Pure transforms and predicates.
+- Schema constants and lookup data.
+- React local state.
+- DTOs that only serialize data.
+- Packages that only export types or constants.
 
-- pure data transforms
-- pure domain predicates
-- schema constants
-- enum or lookup definitions
-- React local UI state
-- serialization-only DTO definitions
-
-Pure code may call pure code directly. It does not become better because it returns `Effect.succeed(value)`.
+Do not wrap a pure value in `Effect.succeed` only for style.
 
 ## Boundaries
 
-Effect should be internal to the package unless the package intentionally exposes an Effect-native API.
+Keep Effect inside its package unless the package exports an Effect API by design.
 
-Promise interop is allowed at explicit boundaries:
+Convert to Promise at an Electron IPC handler, HTTP or SSE handler, CLI entry point, shell bridge, test boundary, or third-party Promise API.
 
-- Electron IPC handlers
-- browser HTTP and SSE handlers
-- CLI entrypoints
-- shell bridge adapters
-- third-party package APIs that require Promises
-- test harness boundaries
+Wrap an external Promise once in its adapter. Application services compose Effects, not `async` functions.
 
-Inside an Effect-native package, avoid `async` orchestration as the main implementation style. If an external API returns
-a Promise, wrap it once at the adapter boundary with `Effect.tryPromise`. Application services should compose Effects,
-not Promises.
+Before a package migration, check that the package owns expected failures, I/O, replaceable dependencies, resources, or concurrency. Start with one complete path. Do not convert a full package only to change syntax.
 
-## Package Eligibility
+## Services and layers
 
-Before migrating another package, check that Effect will improve the package's boundary rather than only changing syntax.
+Use a service for a replaceable port, adapter dependency, runtime, config source, process service, or resource owner.
 
-Effect is a good fit when the package owns fallible I/O, dependency wiring, long-lived resources, or concurrent runtime
-behavior.
-
-Effect is not automatically a good fit for:
-
-- public contract packages where Zod schemas are the source of truth
-- frontend read caching owned by TanStack Query
-- small packages that only re-export types or constants
-- pure domain packages with no meaningful failure or resource model
-
-When in doubt, migrate a narrow vertical path first and document the boundary. Do not migrate an entire package just to
-make every function return an Effect.
-
-## Dependency Injection
-
-Use Effect services for replaceable dependencies. A service is usually:
-
-- a port in a hexagonal boundary
-- an adapter dependency
-- a runtime or process service
-- a configuration or environment provider
-- a lifecycle collaborator that tests need to replace
-
-Define service tags with `Context.Tag`:
+Define the tag with `Context.Tag`:
 
 ```ts
 import type { GlobalConfig } from "@openducktor/contracts";
@@ -127,6 +69,7 @@ export type SettingsConfigError = HostOperationError | HostPathAccessError | Hos
 export type SettingsConfigPort = {
   readConfig(): Effect.Effect<GlobalConfig | null, SettingsConfigError>;
   canonicalizePath(path: string): Effect.Effect<string, HostOperationError>;
+  pathExists(path: string): Effect.Effect<boolean, HostPathAccessError>;
   join(...paths: Array<string>): string;
 };
 
@@ -136,7 +79,7 @@ export class SettingsConfigPortTag extends Context.Tag("@openducktor/host/Settin
 >() {}
 ```
 
-Provide implementations with `Layer` at the composition root:
+Provide the implementation at the composition root:
 
 ```ts
 import { Layer } from "effect";
@@ -147,27 +90,21 @@ export const SettingsConfigPortLive = Layer.succeed(
 );
 ```
 
-Use a layer when an implementation is part of application wiring. Passing dependencies manually is still acceptable for
-small local factory functions, but application-level dependency graphs should be visible in one composition root.
+A small local factory can pass a dependency as an argument. Use layers when the app dependency graph needs one visible setup point.
 
-Current host reference:
+Rules:
 
-- `packages/host/src/ports/*`
-- `packages/host/src/composition/node/node-host-default-ports.ts`
+- Services depend on ports, not adapters.
+- Adapters implement ports and can import Node or third-party APIs.
+- Composition roots import and provide adapters.
+- Tests provide local fakes or test layers.
+- A required capability belongs in the port. Do not probe for an optional method at runtime.
 
-### Dependency Injection Rules
+References: `packages/host/src/ports/*` and `packages/host/src/composition/node/node-host-default-ports.ts`.
 
-- Application services depend on ports, not adapters.
-- Adapters implement ports and may import Node APIs or third-party APIs.
-- Composition roots import adapters and provide them through layers.
-- Tests replace services through local fake implementations or test layers.
-- Do not add runtime probes for optional methods. If a capability is required, make it part of the port.
+## Error model
 
-## Error Model
-
-Expected failures belong in the Effect error channel.
-
-Use `Data.TaggedError` for stable error types:
+Use `Data.TaggedError` for a stable expected error:
 
 ```ts
 import { Data } from "effect";
@@ -180,7 +117,7 @@ export class HostOperationError extends Data.TaggedError("HostOperationError")<{
 }> {}
 ```
 
-Inside `Effect.gen`, return failed effects explicitly:
+Return it from `Effect.gen`:
 
 ```ts
 return yield* new HostOperationError({
@@ -190,35 +127,23 @@ return yield* new HostOperationError({
 });
 ```
 
-Use `Effect.catchTag` when you intentionally recover from a specific expected failure. Avoid broad `catchAll` unless the
-product behavior truly handles every possible typed failure.
+Use `Effect.catchTag` when the product handles one known error. Use `Effect.catchAll` only when the product handles every error in the channel. Use `Effect.either` when the caller needs success or failure as a value. Use `Effect.exit` when the caller also needs defect or interruption data. A JavaScript `try` block inside `Effect.gen` does not catch an Effect failure.
 
-Do not use `try`/`catch` inside `Effect.gen` to catch Effect failures. Effect failures are not thrown JavaScript
-exceptions. Use `Effect.catchTag`, `Effect.catchAll`, or `Effect.result`.
+| Category | Example | Treatment |
+|---|---|---|
+| Rejection | User denied permission | Typed failure or an explicit success result |
+| Domain failure | Invalid task transition | Typed failure |
+| Infrastructure failure | File error or process exit | Typed failure at the adapter |
+| Defect | Broken invariant | Fail, or convert at the public boundary |
+| Interruption | Shutdown or canceled fiber | Run Effect cleanup |
 
-### Failure, Defect, and Interruption
+Do not hide a failed dependency with a fallback. Return an error from the layer that owns the failure.
 
-Use this taxonomy during design and review:
+References: `packages/host/src/effect/host-errors.ts` and `packages/host/src/domain/task/task-policy-error.ts`.
 
-| Category | Examples | Treatment |
-| --- | --- | --- |
-| Expected rejection | user denied permission, user cancelled | typed failure or explicit success value |
-| Domain failure | invalid task transition, missing required input | typed failure |
-| Infrastructure failure | filesystem error, process exit, git failure | typed failure at adapter boundary |
-| Defect | invariant violation, impossible state, programmer mistake | let it fail loudly or convert at a public boundary |
-| Interruption | shutdown, timeout, cancelled fiber | cleanup through Effect lifecycle primitives |
+## Wrap external APIs
 
-OpenDucktor does not add fallback behavior to mask broken contracts. If a dependency fails, propagate an actionable
-typed error from the layer where the failure originates.
-
-Current host reference:
-
-- `packages/host/src/effect/host-errors.ts`
-- `packages/host/src/domain/task/task-policy-error.ts`
-
-## Wrapping External APIs
-
-Use `Effect.tryPromise` for Promise-returning APIs:
+Use `Effect.tryPromise` for a Promise API:
 
 ```ts
 const ensureDirectory = (path: string) =>
@@ -229,7 +154,7 @@ const ensureDirectory = (path: string) =>
   }).pipe(Effect.asVoid);
 ```
 
-Use `Effect.try` for synchronous APIs that can throw, including parsers:
+Use `Effect.try` for a synchronous API that can throw:
 
 ```ts
 const parsePayload = (text: string) =>
@@ -239,16 +164,15 @@ const parsePayload = (text: string) =>
   });
 ```
 
-Use `Effect.sync` for synchronous code that does not throw but should run inside the Effect runtime, such as reserving
-mutable process-local state before forking background work.
+Use `Effect.sync` for synchronous work that must run inside the Effect runtime. One example is reserving process-local state before a fork.
 
-Do not wrap every pure expression. Prefer plain TypeScript until the code has a real Effect concern.
+## Compose steps
 
-## Composition Style
-
-Use `Effect.gen` for sequential application logic:
+Use `Effect.gen` for ordered application steps:
 
 ```ts
+import { HostPathNotFoundError } from "../effect/host-errors";
+
 const loadWorkspace = (repoPath: string) =>
   Effect.gen(function* () {
     const settings = yield* SettingsConfigPortTag;
@@ -267,7 +191,7 @@ const loadWorkspace = (repoPath: string) =>
   });
 ```
 
-Use `.pipe(...)` for transformations and short adapter pipelines:
+Use `.pipe(...)` for short transforms:
 
 ```ts
 Effect.tryPromise({
@@ -279,89 +203,57 @@ Effect.tryPromise({
 );
 ```
 
-Avoid deeply nested operators:
+Put the main Effect first. Do not wrap it in deeply nested operators.
 
 ```ts
-// Avoid
-Effect.asVoid(
-  Effect.tryPromise({
-    try: () => mkdir(path, { recursive: true }),
-    catch: (cause) => toHostOperationError(cause, "dir.ensure", { path }),
-  }),
-);
-
-// Prefer
 Effect.tryPromise({
   try: () => mkdir(path, { recursive: true }),
   catch: (cause) => toHostOperationError(cause, "dir.ensure", { path }),
 }).pipe(Effect.asVoid);
 ```
 
-Use named helpers when the same Effect pattern repeats enough to hide intent. Do not add a helper just to avoid one
-clear `Effect.tryPromise(...).pipe(...)` expression.
+Add a named helper when a repeated pattern hides what the code does. Keep one clear use inline.
 
-## Resource and Lifecycle Management
+## Resources and concurrency
 
-Use Effect runtime primitives for resources and background work:
+- Use `Effect.acquireUseRelease` or a scoped layer for acquire and release.
+- Use `Effect.addFinalizer` for cleanup tied to a scope.
+- Use `Effect.fork` for a background fiber.
+- Join or interrupt each owned fiber during shutdown.
+- Use `Deferred` for one-time coordination and single-flight work.
+- Use `Ref` for mutable Effect state.
+- Use `Schedule` with `Effect.retry` or `Effect.repeat` for a product retry or polling rule.
 
-- `Effect.acquireUseRelease` or scoped layers for resources with acquire/release lifecycles
-- `Effect.addFinalizer` for cleanup attached to a scope
-- `Effect.fork` for background fibers
-- `Fiber.join` or `Fiber.interrupt` for controlled shutdown
-- `Deferred` for one-time coordination and single-flight startup
-- `Ref` for mutable Effect state
-- `Schedule` with `Effect.retry` or `Effect.repeat` for explicit retry and polling behavior
+For single-flight startup, reserve the in-flight slot synchronously before the first yield. Then fork the work and complete a `Deferred` with the full `Exit`. Every caller then gets the same success or failure.
 
-Single-flight startup is a common OpenDucktor pattern. Reserve the in-flight operation synchronously, then fork the work,
-then complete a `Deferred` with the full `Exit` so all callers observe the same success or failure.
+`Deferred.make` and `Effect.fork` can yield. If code sets shared state after either call, two callers can both start the resource.
 
-This matters because `Deferred.make` and `Effect.fork` can yield. If shared process state is set only after a yield, two
-callers can both believe they own startup.
+References: `packages/host/src/adapters/mcp/mcp-host-bridge-server.ts` and `packages/host/src/adapters/runtimes/runtime-registry.ts`.
 
-Current host references:
+## Time and streams
 
-- `packages/host/src/adapters/mcp/mcp-host-bridge-server.ts`
-- `packages/host/src/adapters/runtimes/runtime-registry.ts`
-
-## Scheduling and Time
-
-Use Effect scheduling primitives for retries, polling, and loops only when they are explicit product behavior.
-
-Prefer readable duration strings:
+Use schedules only when retry, polling, or a loop is part of the product rule.
 
 ```ts
 Effect.sleep("500 millis");
 Schedule.fixed("5 seconds");
 ```
 
-Do not add retries to make failures disappear. Retrying must be part of the feature contract, such as waiting for a
-runtime that has just been launched.
+Use the Effect clock in a program so tests can control time.
 
-When code needs the current time inside an Effect program, prefer Effect's clock service over `Date.now()` so tests can
-control time deterministically.
+Use an Effect stream for SSE, process output, runtime events, watch mode, or subscription state. Bound stream reads in tests. Scope and finalize stream resources. Define backpressure. Convert native events at the transport boundary.
 
-## Streams
+Never collect an infinite stream without `Stream.take`, `takeUntil`, or another bound.
 
-Use Effect streams when a package owns a real stream: SSE, process output, runtime events, watch mode, or subscription
-state.
+## Tests
 
-Rules:
-
-- bound stream consumption in tests
-- do not collect infinite streams without `Stream.take`, `takeUntil`, or an equivalent bound
-- ensure stream resources are scoped and finalized
-- keep backpressure behavior explicit
-- convert to host or transport events only at the boundary
-
-## Testing
-
-Tests should run the Effect at the test boundary:
+Run the Effect at the test boundary:
 
 ```ts
 await Effect.runPromise(program);
 ```
 
-For service-dependent programs, provide a test layer or a local fake service:
+Provide a test layer for services:
 
 ```ts
 const TestSettingsConfig = Layer.succeed(SettingsConfigPortTag, fakeSettingsConfig);
@@ -369,79 +261,47 @@ const TestSettingsConfig = Layer.succeed(SettingsConfigPortTag, fakeSettingsConf
 await Effect.runPromise(program.pipe(Effect.provide(TestSettingsConfig)));
 ```
 
-When using Effect test helpers with a test clock:
+- Use `TestClock.adjust(...)` for controlled time.
+- Use a live clock only when wall time is the subject of the test.
+- Use scoped tests for resources with finalizers.
+- Interrupt forked fibers during cleanup.
+- Use a started latch and a gate for a concurrency test.
+- Inside an Effect test program, `yield*` a child Effect. Do not call `Effect.runPromise` again.
 
-- advance time with `TestClock.adjust(...)`
-- use live tests only when real wall-clock behavior is required
-- use scoped tests for resources that require finalization
-- interrupt forked fibers in cleanup paths
-- use a started latch plus a gate when asserting concurrency
+## Public boundaries
 
-Do not call `Effect.runPromise(...)` inside an already-running Effect test program. Stay inside the runtime and `yield*`
-the child Effect.
+Convert an Effect result at the edge that owns the caller contract. An IPC handler returns a Promise. An HTTP handler returns a status and body. An SSE handler writes frames. A CLI prints an error and exits with a code.
 
-## Public Boundaries
+Do not make an internal service throw only because its outer boundary needs a rejected Promise.
 
-Public boundaries must translate Effect results into the shape expected by the caller.
+## Migrate a package
 
-Examples:
+1. Name each external boundary such as CLI, HTTP, IPC, SDK, file, process, or transport.
+2. Define typed expected failures.
+3. Convert I/O ports and services to `Effect.Effect`.
+4. Add service tags for replaceable dependencies.
+5. Provide live layers at one composition root.
+6. Wrap Promise and throwing APIs in adapters.
+7. Move cleanup, schedules, and background work to Effect operators.
+8. Keep pure policy synchronous.
+9. Convert to Promise only at a public boundary.
+10. Test failures, replacement, cleanup, and relevant concurrency.
 
-- an Electron IPC handler returns a Promise and maps typed host errors to IPC errors
-- an HTTP route returns a response body and status code
-- an SSE endpoint maps stream events to transport frames
-- a CLI entrypoint logs an actionable error and exits with the right code
+The migration is complete when one full path uses Effect from its public adapter boundary through the service and back. Do not leave Promise orchestration in the middle.
 
-Keep this translation at the edge. Do not force internal services to throw because a boundary eventually needs a thrown
-or rejected Promise error.
+## Review checklist
 
-## Migration Recipe
+- I/O and expected failures use `Effect.Effect`.
+- Expected failures have tagged types.
+- Adapters wrap Promise APIs once.
+- Public Promise boundaries are clear.
+- Services depend on ports.
+- Layers make app dependency setup visible.
+- Recovery and retries match a product rule.
+- Cleanup runs on success, failure, and interruption.
+- Every background fiber has an owner.
+- Single-flight state changes before the first yield.
+- Pure code stays synchronous.
+- Tests control time, streams, fibers, and scopes.
 
-Use this sequence when migrating another eligible package:
-
-1. Identify the real external boundaries: CLI, HTTP, IPC, SDK, filesystem, process, or transport.
-2. Define typed errors for expected package failures.
-3. Convert ports and application services that perform I/O or can fail to return `Effect.Effect`.
-4. Add `Context.Tag` services for replaceable dependencies.
-5. Provide live implementations through a package composition root.
-6. Wrap Promise and throwing APIs at adapters with `Effect.tryPromise` or `Effect.try`.
-7. Move resource cleanup, polling, retries, and background work to Effect runtime primitives.
-8. Keep pure policy code synchronous.
-9. Convert to Promise only at public boundaries.
-10. Add tests for typed failures, dependency replacement, lifecycle cleanup, and concurrency when relevant.
-
-Do this vertically. A small path that is Effect-native end to end is better than a wide migration that leaves Promise
-orchestration in the middle.
-
-## Review Checklist
-
-Use this checklist for Effect code reviews:
-
-- Does fallible or I/O-producing application code return `Effect.Effect`?
-- Are expected failures typed with tagged errors?
-- Are Promise APIs wrapped at adapter boundaries?
-- Are public Promise boundaries explicit?
-- Does application code depend on ports/services instead of adapters?
-- Are services provided through `Context.Tag` and `Layer` where dependency wiring matters?
-- Are `catchAll`, retries, and default values real product behavior rather than fallback masking?
-- Does resource cleanup run on success, failure, and interruption?
-- Are background fibers joined, interrupted, or owned by a scope?
-- Are concurrent single-flight paths race-free before the first yield?
-- Is pure code kept simple and synchronous?
-- Are tests deterministic around time, streams, fibers, and scoped resources?
-
-## Current Reference Patterns
-
-The first OpenDucktor package migrated to Effect is `packages/host`. Use it as the reference for the next migrations, but
-preserve package boundaries:
-
-- port tags and Effect signatures: `packages/host/src/ports/*`
-- shared host errors: `packages/host/src/effect/host-errors.ts`
-- adapter Promise wrapping: `packages/host/src/adapters/attachments/local-attachment-adapter.ts`
-- dependency composition: `packages/host/src/composition/node/node-host-default-ports.ts`
-- command/router boundary: `packages/host/src/interface/router/*`
-- lifecycle shutdown: `packages/host/src/composition/host-lifecycle.ts`
-- single-flight runtime coordination: `packages/host/src/adapters/runtimes/runtime-registry.ts`
-- MCP bridge lifecycle: `packages/host/src/adapters/mcp/mcp-host-bridge-server.ts`
-
-The host is a reference, not a template to copy blindly. If a future package has a smaller dependency graph, use fewer
-layers. If a future package owns streams or request-scoped resources, use the Effect primitives that match that shape.
+Current examples are in `packages/host/src/ports/*`, `packages/host/src/effect/host-errors.ts`, `packages/host/src/adapters/attachments/local-attachment-adapter.ts`, `packages/host/src/composition/node/node-host-default-ports.ts`, `packages/host/src/interface/router/*`, `packages/host/src/composition/host-lifecycle.ts`, `packages/host/src/adapters/runtimes/runtime-registry.ts`, and `packages/host/src/adapters/mcp/mcp-host-bridge-server.ts`.

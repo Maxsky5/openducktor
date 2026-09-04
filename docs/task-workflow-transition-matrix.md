@@ -1,87 +1,61 @@
-# Task Workflow Transition Matrix
+# Task workflow transition matrix
 
-## Purpose
-This document defines the only allowed lifecycle transitions for OpenDucktor tasks,
-including trigger tools/actions and guardrails.
+This matrix lists every allowed task transition. The backend validates it. The UI cannot set a status directly. A workflow tool or task action must start each automatic transition.
 
-## Transition Policy
-- Backend owns transition validation.
-- UI cannot directly set arbitrary status values.
-- Auto-transitions are triggered only by explicit workflow tools/actions.
+## Workflow tools
 
-## Tool Naming (Canonical)
-MCP workflow tools:
-- `odt_read_task(taskId)`
-- `odt_read_task_assets(taskId, assetIds)`
-- `odt_read_task_documents(taskId, includeSpec?, includePlan?, includeQaReport?)`
-- `odt_set_spec(taskId, markdown)`
-- `odt_set_plan(taskId, markdown, subtasks?)` (epic only for `subtasks`, one level max)
-- `odt_build_blocked(taskId, reason)`
-- `odt_build_resumed(taskId)`
-- `odt_build_completed(taskId, summary?)`
-- `odt_set_pull_request(taskId, providerId, number)`
-- `odt_qa_approved(taskId, reportMarkdown)`
-- `odt_qa_rejected(taskId, reportMarkdown)`
+- `odt_read_task`: `taskId`
+- `odt_read_task_assets`: `taskId`, `assetIds`
+- `odt_read_task_documents`: `taskId`, `includeSpec?`, `includePlan?`, `includeQaReport?`
+- `odt_set_spec`: `taskId`, `markdown`
+- `odt_set_plan`: `taskId`, `markdown`, `subtasks?`
+- `odt_build_blocked`: `taskId`, `reason`
+- `odt_build_resumed`: `taskId`
+- `odt_build_completed`: `taskId`, `summary?`
+- `odt_set_pull_request`: `taskId`, `providerId`, `number`
+- `odt_qa_approved`: `taskId`, `reportMarkdown`
+- `odt_qa_rejected`: `taskId`, `reportMarkdown`
 
-Read flow:
-- Call `odt_read_task` first for the returned `task` summary object, including task state, `qaVerdict`, and document presence booleans.
-- When task Markdown contains `odt-asset:<assetId>` images needed for the work, collect the relevant IDs and call `odt_read_task_assets` once when their raw total is at most 20 MiB. Split only larger sets.
-- Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.
+Call `odt_read_task` first for the returned `task` summary object, including task state, `qaVerdict`, and document presence booleans.
 
-`subtasks` payload (optional):
-- `title` (required)
-- `issueType` (`task` | `feature` | `bug`, defaults to `task`)
-- `priority` (0..4, defaults to `2`)
-- `description` (optional)
+When task Markdown contains `odt-asset:<assetId>` images needed for the work, collect the relevant IDs and call `odt_read_task_assets` once when their raw total is at most 20 MiB. Split only larger sets.
 
-Human actions:
-- `human_request_changes(taskId, note)`
-- `human_approve(taskId)`
+Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.
 
-Native task actions:
-- `reset_implementation(taskId)`
-- `reset_task(taskId)`
-- `close_task(taskId)`
+An epic `subtasks` item has a required `title`, an optional `description`, an `issueType` of `task`, `feature`, or `bug`, and a `priority` from 0 through 4. The defaults are `task` and 2. Children can have one level only.
 
-## Transition Matrix
-| Trigger | From | Guards | To |
+Human actions are `human_request_changes(taskId, note)` and `human_approve(taskId)`. Native task actions are `reset_implementation(taskId)`, `reset_task(taskId)`, and `close_task(taskId)`.
+
+## Matrix
+
+| Trigger | From | Guard | To |
 |---|---|---|---|
-| `task_create` | n/a | always | `open` |
-| `odt_set_spec` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | non-empty markdown | `spec_ready` when starting from `open`, otherwise unchanged |
-| `odt_set_plan` (feature/epic) | `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | non-empty markdown | `ready_for_dev` when starting from `spec_ready`, otherwise unchanged |
-| `odt_set_plan` (task/bug) | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | non-empty markdown | `ready_for_dev` when starting from `open` or `spec_ready`, otherwise unchanged |
-| `odt_set_plan` (epic with subtasks) | `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | plan includes subtask proposals; replacing existing direct subtasks requires all direct subtasks to be `open`, `spec_ready`, or `ready_for_dev` | `ready_for_dev` when starting from `spec_ready`, otherwise unchanged |
-| `odt_build_resumed` | `ready_for_dev` | feature/epic standard flow | `in_progress` |
-| `odt_build_resumed` | `open`, `spec_ready`, `ready_for_dev`, `blocked` | task/bug optional flow + blocked resume | `in_progress` |
-| `odt_build_blocked` | `in_progress` | reason required | `blocked` |
-| `reset_implementation` | `in_progress`, `blocked`, `ai_review`, `human_review` | reject while live build/QA activity exists; reject on unsafe branch cleanup; retained plan/spec determine rollback target | `ready_for_dev`, `spec_ready`, or `open` |
-| `reset_task` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | reject while live spec/planner/build/QA activity exists; reject on unsafe branch cleanup; clear workflow documents, linked sessions, delivery metadata, and in-memory runs | `open` |
-| `odt_build_completed` | `in_progress` | `qaRequired=true` and latest QA verdict is not `approved` (including no QA verdict yet) | `ai_review` |
-| `odt_build_completed` | `in_progress` | `qaRequired=false` or latest QA verdict is `approved` | `human_review` |
-| `odt_build_completed` | `blocked` | `qaRequired=true` and latest QA verdict is not `approved` (including no QA verdict yet) | `ai_review` |
-| `odt_build_completed` | `blocked` | `qaRequired=false` or latest QA verdict is `approved` | `human_review` |
-| `odt_build_completed` | `ai_review`, `human_review` | idempotent no-op (no hooks, no transition patch) | unchanged |
-| `odt_set_pull_request` | `in_progress`, `ai_review`, `human_review` | provider id and PR number required; OpenDucktor resolves canonical PR metadata | unchanged |
-| `odt_qa_rejected` | `blocked`, `ai_review`, `human_review` | report markdown required | `in_progress` |
-| `odt_qa_approved` | `blocked`, `ai_review`, `human_review` | report markdown required | `human_review` |
-| `human_request_changes` | `ai_review`, `human_review` | note optional | `in_progress` |
-| `human_approve` | `ai_review`, `human_review` | epic completion guard passes | `closed` |
-| `close_task` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | manual override from task detail sheet only; reject while live spec/planner/build/QA activity exists; epic completion guard passes; cleanup of task-scoped dev servers, task-managed worktrees, and related local branches succeeds | `closed` |
+| `task_create` | none | Always. | `open` |
+| `odt_set_spec` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `spec_ready` from `open`; otherwise unchanged. |
+| `odt_set_plan` (feature/epic) | `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `ready_for_dev` from `spec_ready`; otherwise unchanged. |
+| `odt_set_plan` (task/bug) | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | Markdown is not empty. | `ready_for_dev` from `open` or `spec_ready`; otherwise unchanged. |
+| `odt_set_plan` (epic with subtasks) | Same as epic plan. | Replacement requires all current direct children to be `open`, `spec_ready`, or `ready_for_dev`. | Same as epic plan. |
+| `odt_build_resumed` for `feature` or `epic` | `ready_for_dev`, `blocked` | Standard flow or blocked resume. | `in_progress` |
+| `odt_build_resumed` for `task` or `bug` | `open`, `spec_ready`, `ready_for_dev`, `blocked` | Optional short flow or blocked resume. | `in_progress` |
+| `odt_build_blocked` | `in_progress` | `reason` is present. | `blocked` |
+| `reset_implementation` | `in_progress`, `blocked`, `ai_review`, `human_review` | No live build or QA activity. Branch cleanup is safe. | `ready_for_dev`, `spec_ready`, or `open` from retained documents. |
+| `reset_task` | Any non-closed status. | No live role activity. Branch cleanup is safe. | `open` |
+| `odt_build_completed` | `in_progress`, `blocked` | QA is required and the latest result is not `approved`. | `ai_review` |
+| `odt_build_completed` | `in_progress`, `blocked` | QA is not required, or the latest result is `approved`. | `human_review` |
+| `odt_build_completed` | `ai_review`, `human_review` | Idempotent. No hook or patch runs. | Unchanged. |
+| `odt_set_pull_request` | `in_progress`, `ai_review`, `human_review` | `providerId` and pull request number are present. | Unchanged. |
+| `odt_qa_rejected` | `blocked`, `ai_review`, `human_review` | Report Markdown is present. | `in_progress` |
+| `odt_qa_approved` | `blocked`, `ai_review`, `human_review` | Report Markdown is present. | `human_review` |
+| `human_request_changes` | `ai_review`, `human_review` | `note` is optional. | `in_progress` |
+| `human_approve` | `ai_review`, `human_review` | All direct epic children are closed. | `closed` |
+| `close_task` | Any non-closed status. | Detail sheet only. No live role activity. Epic children are closed. Cleanup succeeds. | `closed` |
 
-## Guardrails
-- Epic completion guard: block close if direct children are still open states.
-- Only epics can have direct children.
-- Subtasks cannot have children.
+`reset_task` clears documents, linked sessions, delivery data, and in-memory runs. `close_task` stops task dev servers and removes task worktrees and related local branches.
 
-## Invalid Transition Examples
-- `open -> closed` without an explicit `close_task` action.
-- `ai_review -> closed` without an explicit `human_approve` or `close_task` action.
-- `blocked -> closed` directly without `close_task`.
+## Invalid examples
 
-## Board Semantics
-UI labels are presentation only:
-- `Backlog` is persisted as `open`.
-- `Done` is persisted as `closed`.
-- `Blocked needs input` is persisted as `blocked`.
+- `open -> closed` without `close_task`.
+- `ai_review -> closed` without `human_approve` or `close_task`.
+- `blocked -> closed` without `close_task`.
 
-Any analytics/reporting must use persisted statuses, not UI labels.
+UI labels are display text. Analytics and reports use stored status values. `Backlog` means `open`, `Done` means `closed`, and `Blocked needs input` means `blocked`.

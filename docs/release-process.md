@@ -1,10 +1,8 @@
-# Desktop, Web, and MCP Release Process
+# Desktop, web, and MCP release process
 
-OpenDucktor releases are owned by GitHub Actions. Maintainers do not need to run local release commands or create tags by hand.
+GitHub Actions creates OpenDucktor releases. A maintainer starts `Prepare Release`. The workflows create the commit, tag, draft, packages, and desktop files.
 
-## Workflow Layout
-
-The release flow is split into these workflows:
+## Workflows
 
 - `.github/workflows/release-prep.yml`
 - `.github/workflows/release-desktop-electron.yml`
@@ -12,105 +10,58 @@ The release flow is split into these workflows:
 - `.github/workflows/publish-web.yml`
 - `.github/workflows/publish-homebrew-tap.yml`
 
-## Prepare Release
+## Prepare a release
 
-`Prepare Release` is the only workflow a maintainer starts manually.
+Start `Prepare Release` with `workflow_dispatch`. Set `version` and `release_channel`. Use `stable` for a normal semver version such as `0.4.0`. Use `beta` for a prerelease such as `0.4.0-beta.1`.
 
-- Trigger: `workflow_dispatch`
-- Input: `version` like `0.1.0`
-- Input: `release_channel`, either `stable` or `beta`
+The workflow:
 
-It does all release preparation work:
+1. Checks the version and channel.
+2. Updates package manifests and `bun.lock`.
+3. Creates and pushes the release commit and tag.
+4. Creates a draft GitHub release with generated notes. A beta is a GitHub prerelease.
+5. Starts the Electron, MCP, and web workflows after the draft exists.
+6. Sends the npm tag `latest` for stable or `beta` for beta.
 
-- validates the requested version
-- validates that stable releases use normal semver and beta releases use prerelease semver, for example `0.4.0-beta.1`
-- updates repo version manifests
-- refreshes `bun.lock`
-- creates the release bump commit on the default branch
-- creates the release tag
-- creates the draft GitHub release with generated notes after the commit and tag are pushed, marking beta releases as GitHub prereleases
-- dispatches the Electron desktop, MCP, and web publish workflows explicitly after the draft exists
-- passes the npm dist-tag to the web and MCP publish workflows:
-  - `stable` publishes npm packages with `latest`
-  - `beta` publishes npm packages with `beta`
+For a beta, npm packages keep the full prerelease version. The Electron repository manifest uses the numeric base version. The packaged app and updater use the full prerelease version so the updater can compare beta builds.
 
-For beta releases, npm-facing packages keep the full prerelease version, for example `0.4.0-beta.1`. The Electron repo package manifest keeps the numeric base version, for example `0.4.0`, while the packaged desktop app and updater metadata are built with the full prerelease version so in-app beta updates can compare `0.4.0-beta.1` to later beta releases.
+## Build the desktop app
 
-## Release Desktop Electron
+`Release Desktop Electron` gets the tag from `Prepare Release`. A maintainer can rerun it with the same tag.
 
-`Release Desktop Electron` is dispatched by `Prepare Release` with the release tag and can also be rerun manually with the same tag if needed.
+The workflow checks that the checked-out repository version matches the selected tag and draft release. It lints, typechecks, and tests the Electron workspace. It builds Linux x64, macOS arm64, macOS x64, and Windows x64 files.
 
-It:
+It signs and notarizes macOS files, packages the MCP sidecar, creates updater metadata, and uploads all files to the draft. It merges the two macOS manifests into `latest-mac.yml` or `beta-mac.yml`.
 
-- validates that the checked-out repo state matches the tag version
-- verifies that the draft GitHub release already exists
-- lints, typechecks, and tests the Electron workspace
-- builds Electron assets for:
-  - Linux x64
-  - macOS Apple Silicon
-  - macOS Intel
-  - Windows x64
-- signs and notarizes macOS Electron assets
-- packages the MCP sidecar under app resources
-- generates Electron updater metadata for GitHub Releases
-- merges the macOS per-architecture updater manifests into one canonical channel manifest, for example `latest-mac.yml` for stable releases or `beta-mac.yml` for beta releases
-- uploads Electron release assets to the draft GitHub release
+Windows and Linux files are experimental. Do not call them stable release channels.
 
-Windows and Linux Electron assets are experimental. They are included to gather feedback and platform evidence, but they are not yet considered stable release channels.
+## Publish MCP
 
-## Publish MCP Package
+`Publish MCP Package` checks that `packages/openducktor-mcp/package.json` matches the tag. It checks the npm tag, verifies the package, and publishes `@openducktor/mcp` to npmjs.
 
-`Publish MCP Package` is dispatched by `Prepare Release` with the release tag and can also be rerun manually with the same tag if needed.
+## Publish web
 
-It:
+`@openducktor/web` starts a loopback TypeScript host, waits for it, serves the built frontend, and stops the host through the protected `/shutdown` route.
 
-- validates that `packages/openducktor-mcp/package.json` matches the tag version
-- validates that prerelease tags are published to npm `beta` and stable tags are published to npm `latest`
-- verifies the MCP package
-- publishes `@openducktor/mcp` to npmjs with the requested dist-tag
+`Publish Web Package` builds the standalone package, runs `scripts/prepare-web-publish-packages.ts`, runs `npm publish --dry-run`, checks the npm tag, and publishes the package.
 
-## Publish Web Package
+`bun run browser:dev` uses the same launcher in workspace mode with Vite. A published install contains the frontend and host. It does not need published internal workspace packages.
 
-`@openducktor/web` is the npm-facing local browser runner. It is intentionally separate from the desktop bundle: the package starts a loopback-only TypeScript host backend, waits for readiness, serves the built web frontend, and shuts the host down with a control-token-protected `/shutdown` request.
+## Publish Homebrew
 
-`Publish Web Package` is dispatched by `Prepare Release` with the release tag and can also be rerun manually with the same tag if needed.
+`Publish Homebrew Tap` starts after a GitHub release becomes public. A maintainer can rerun it with the same tag.
 
-It:
+The workflow rejects a draft or prerelease. It downloads the signed arm64 and x64 DMG files, calculates SHA-256 values, writes `Casks/openducktor.rb`, then commits and pushes the cask to the tap.
 
-- builds the self-contained `@openducktor/web` package, including the static web frontend and TypeScript host backend
-- verifies package contents with `scripts/prepare-web-publish-packages.ts`
-- runs `npm publish --dry-run` for `@openducktor/web`
-- validates that prerelease tags are published to npm `beta` and stable tags are published to npm `latest`
-- publishes `@openducktor/web` with the requested dist-tag
+This workflow starts after the draft becomes public so Homebrew never points to a private or untested release.
 
-Development mode (`bun run browser:dev`) uses the same launcher in workspace mode and serves the repo-local frontend with Vite. Published installs serve the built frontend and TypeScript host backend from the `@openducktor/web` package and do not require publishing internal workspace packages.
+## Release notes
 
-## Publish Homebrew Tap
+`.github/release.yml` defines categories. `Prepare Release` creates notes with `--generate-notes`. Review and edit the draft before publication.
 
-`Publish Homebrew Tap` runs when a GitHub release is published and can also be rerun manually with the same tag if needed.
+## GitHub secrets
 
-It:
-
-- verifies that the GitHub release exists and is no longer a draft
-- rejects prereleases so the tap only tracks stable published desktop releases
-- downloads the signed macOS arm64 and Intel DMG assets from that release
-- computes SHA-256 checksums for both assets
-- renders `Casks/openducktor.rb` from Electron metadata plus the published asset names and checksums
-- commits and pushes the cask update to the configured Homebrew tap repository
-
-The tap workflow is intentionally separate from desktop artifact workflows because the release draft remains private to maintainers until smoke testing is complete. Homebrew should only point at the final published GitHub release.
-
-## Release Notes
-
-Desktop release notes use **GitHub-generated release notes**.
-
-- `.github/release.yml` defines the category mapping
-- the draft GitHub release is created with `--generate-notes`
-- maintainers can review and edit the draft notes before publishing
-
-## Required GitHub Secrets
-
-### Desktop Release Secrets
+### Desktop
 
 - `APPLE_CERTIFICATE`
 - `APPLE_CERTIFICATE_PASSWORD`
@@ -118,105 +69,74 @@ Desktop release notes use **GitHub-generated release notes**.
 - `APPLE_PASSWORD`
 - `APPLE_TEAM_ID`
 
-Notes:
+`APPLE_CERTIFICATE` is a base64 Developer ID Application `.p12`. The desktop workflow stops if an Apple secret is missing. macOS releases are signed but do not use a separate unsigned path.
 
-- `APPLE_CERTIFICATE` must be a base64-encoded Developer ID Application `.p12` signing certificate.
-- macOS desktop releases are signed-only; the workflow fails fast if any Apple release secret is missing.
+### MCP and web
 
-### MCP Publish Secrets
+MCP and web use npm Trusted Publisher with GitHub Actions OIDC. They do not need an npm secret.
 
-- None. MCP publishing uses npm Trusted Publisher via GitHub Actions OIDC.
+### Homebrew
 
-### Homebrew Tap Secret
+`HOMEBREW_TAP_TOKEN` must be able to push to the tap repository. The default target is `${owner}/homebrew-openducktor` on `main`. `HOMEBREW_TAP_REPOSITORY` and `HOMEBREW_TAP_BRANCH` can replace these defaults.
 
-- `HOMEBREW_TAP_TOKEN`
+### Release automation
 
-Notes:
+`RELEASE_AUTOMATION_TOKEN` pushes the release commit and tag. The workflow rejects the default GitHub Actions token. The desktop workflow also uses this token to read the draft and upload files.
 
-- The token must be able to push to the Homebrew tap repository.
-- By default the workflow targets `${owner}/homebrew-openducktor` on branch `main`.
-- You can override those defaults with repository variables:
-  - `HOMEBREW_TAP_REPOSITORY`
-  - `HOMEBREW_TAP_BRANCH`
+## Version sources
 
-### Release Automation Secret
+`scripts/release-version.ts` updates the root `package.json`, workspace package manifests, `apps/electron/package.json`, and `bun.lock`.
 
-- `RELEASE_AUTOMATION_TOKEN`
+Stable releases use one version. Beta releases use:
 
-`Prepare Release` requires this token and refuses to push with the default GitHub Actions token. `Release Desktop Electron` uses the same token to read the draft GitHub release and upload desktop assets to it. That keeps release automation aligned with normal repository protection and review expectations.
+| Source | Example |
+|---|---|
+| Root, internal packages, MCP, and web | `0.4.0-beta.1` |
+| Electron repository manifest | `0.4.0` |
+| Packaged app and updater metadata | `0.4.0-beta.1` with a numeric OS short version |
+| Git tag | `v0.4.0-beta.1` |
 
-## How Versioning Works
+## Release steps
 
-The repo uses `scripts/release-version.ts` to keep version sources aligned.
+1. Open GitHub Actions and run `Prepare Release`.
+2. Enter the version and select `stable` or `beta`.
+3. Wait for `Prepare Release` to create the commit, tag, draft, and downstream runs.
+4. Wait for desktop, MCP, and web workflows to finish.
+5. Open the draft. Check notes and every expected desktop file. Mark Windows and Linux as experimental.
+6. Publish the draft.
+7. For a stable release, wait for the Homebrew workflow to update `Casks/openducktor.rb`.
 
-The version sync touches:
-
-- root `package.json`
-- workspace package manifests discovered from the root `workspaces` configuration
-- `apps/electron/package.json`
-- `bun.lock`
-
-Stable releases use the same version everywhere. Beta releases split the version domains deliberately:
-
-- root, internal packages, `@openducktor/mcp`, and `@openducktor/web`: full prerelease version, for example `0.4.0-beta.1`
-- Electron repo package manifest: numeric desktop bundle version, for example `0.4.0`
-- packaged Electron app and updater metadata: full prerelease version, for example `0.4.0-beta.1`, with the OS bundle short version kept numeric
-
-The GitHub release tag remains the full release tag, for example `v0.4.0-beta.1`.
-
-## Recommended Release Sequence
-
-1. Open GitHub Actions.
-2. Run `Prepare Release`.
-3. Enter the target version, for example `0.1.0`.
-4. Select `stable` or `beta` for `release_channel`. Use a prerelease version such as `0.4.0-beta.1` for beta.
-5. Wait for `Prepare Release` to finish creating the version bump commit, release tag, draft GitHub release, and explicit downstream workflow dispatch.
-6. Wait for `Release Desktop Electron` to finish uploading Electron assets.
-7. Wait for `Publish MCP Package` to finish publishing `@openducktor/mcp`.
-8. Wait for `Publish Web Package` to finish publishing `@openducktor/web`.
-9. Open the draft GitHub release and review the desktop assets and notes. Treat Windows and Linux assets as experimental and collect feedback before calling them stable.
-10. Publish the draft release when the assets and notes look correct.
-11. For stable releases, wait for `Publish Homebrew Tap` to finish updating `Casks/openducktor.rb` in the tap repository. Beta releases are prereleases and are intentionally rejected by the Homebrew tap workflow.
-
-After a beta publish, verify that npm kept `latest` on the last stable version:
+After a beta, check that `latest` still points to the last stable package:
 
 ```sh
 npm dist-tag ls @openducktor/web
 npm dist-tag ls @openducktor/mcp
 ```
 
-The beta version should appear under `beta`; `latest` should still point to the latest stable version.
+The new version must appear under `beta`.
 
-## Homebrew Tap Setup
+## First Homebrew setup
 
-Before the first Homebrew release, create the tap repository and grant the workflow push access.
+Create `homebrew-openducktor` with `Casks/openducktor.rb` on `main`. Give the workflow token push access.
 
-Recommended defaults:
-
-- repository: `homebrew-openducktor`
-- path: `Casks/openducktor.rb`
-- default branch: `main`
-
-Once the tap exists and the workflow is configured, users can install OpenDucktor with:
+Users install the cask with:
 
 ```sh
 brew install --cask Maxsky5/openducktor/openducktor
 ```
 
-Homebrew requires explicit trust for non-official taps. The fully-qualified install trusts only the OpenDucktor cask. If the tap is already installed and users want the short cask name, they can run `brew trust --cask Maxsky5/openducktor/openducktor` once before `brew install --cask openducktor`.
+The full cask name grants trust only to this cask. A user who already installed the tap can run `brew trust --cask Maxsky5/openducktor/openducktor` once, then use `brew install --cask openducktor`.
 
-## Asset Policy
+## Desktop file policy
 
-OpenDucktor is currently macOS-first. The Electron workflow publishes macOS, Windows, and Linux artifacts, but Windows and Linux builds are experimental and should be labeled and treated accordingly until platform support is proven stable.
+OpenDucktor supports macOS first. Stable builds use the `latest` updater channel. A beta uses its first prerelease name, so `0.4.0-beta.1` uses `beta`.
 
-The packaged desktop updater uses GitHub Releases. Stable builds use the `latest` updater channel. Beta builds derive their updater channel from the first prerelease identifier, so `0.4.0-beta.1` uses `beta`.
+Each desktop release needs:
 
-For in-app updates to work, every desktop GitHub Release must include:
+- Installers for each shipped platform. These include macOS DMG and ZIP, Windows NSIS and ZIP, and Linux AppImage and DEB.
+- Electron Builder metadata. Stable releases need `latest.yml`, `latest-mac.yml`, and `latest-linux.yml`. Beta releases need the same files with the `beta` prefix.
+- Each `*.blockmap` that Electron Builder creates.
 
-- installable artifacts for each shipped platform, including macOS DMG/ZIP, Windows NSIS/ZIP, and Linux AppImage/DEB
-- updater metadata files generated by Electron Builder for the release channel: `latest.yml`, `latest-mac.yml`, and `latest-linux.yml` for stable releases, or `beta.yml`, `beta-mac.yml`, and `beta-linux.yml` for beta releases
-- generated blockmaps such as `*.blockmap` where Electron Builder produces them
+The workflow stops if required metadata is missing. The publish job merges arm64 and x64 macOS metadata before upload.
 
-The release workflow stages updater metadata next to installable artifacts and fails if a staged release is missing required channel metadata. macOS arm64 and x64 builds initially produce separate manifests; the publish job merges those into the canonical channel manifest before uploading assets to the draft release.
-
-Homebrew distribution also stays GitHub Releases based. The cask generator fails if the desktop asset naming stops being architecture-derivable, so maintainers update the generator at the same time the bundle naming changes instead of silently publishing a broken cask.
+The Homebrew cask uses GitHub Release files. If desktop file names change, update the cask generator in the same change. The generator stops when it cannot derive the architecture from a file name.
