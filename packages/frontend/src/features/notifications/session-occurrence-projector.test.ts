@@ -251,7 +251,7 @@ describe("session occurrence projector", () => {
     expect(occurrence).toBeDefined();
     if (!occurrence) throw new Error("Expected an idle notification occurrence.");
     expect(buildNotificationCopy(occurrence).body).toBe(
-      "Repo - Build notifications - Builder - Work is complete. The checks pass.",
+      "Work is complete. The checks pass.\nRepo · Builder",
     );
   });
 
