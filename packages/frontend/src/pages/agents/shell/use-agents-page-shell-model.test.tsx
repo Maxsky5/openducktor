@@ -49,12 +49,13 @@ import {
 
 interface RepoSettingsStateContract {
   repoSettings: RepoSettingsInput | null;
-  gitProviderContext: RepositoryGitProviderContext | undefined;
-  gitProviderContextError: Error | null;
-  isLoadingGitProviderContext: boolean;
+  gitProvider: {
+    context: RepositoryGitProviderContext | undefined;
+    error: Error | null;
+    load: () => Promise<RepositoryGitProviderContext>;
+    retry: () => void;
+  };
   isLoadingRepoSettings: boolean;
-  loadGitProviderContext: () => Promise<RepositoryGitProviderContext>;
-  retryGitProviderContext: () => void;
 }
 
 enableReactActEnvironment();
@@ -254,12 +255,13 @@ let agentSessions = [createSession()];
 let sessionStore = createAgentSessionsStore("/repo");
 let repoSettingsState: RepoSettingsStateContract = {
   repoSettings: null,
-  gitProviderContext: null,
-  gitProviderContextError: null,
-  isLoadingGitProviderContext: false,
+  gitProvider: {
+    context: null,
+    error: null,
+    load: async () => null,
+    retry: retryGitProviderContext,
+  },
   isLoadingRepoSettings: false,
-  loadGitProviderContext: async () => null,
-  retryGitProviderContext,
 };
 const sessionIdentity = (externalSessionId: string) => ({
   externalSessionId,
@@ -665,12 +667,13 @@ beforeEach(async () => {
   syncAgentSessionsStore();
   repoSettingsState = {
     repoSettings: null,
-    gitProviderContext: null,
-    gitProviderContextError: null,
-    isLoadingGitProviderContext: false,
+    gitProvider: {
+      context: null,
+      error: null,
+      load: async () => null,
+      retry: retryGitProviderContext,
+    },
     isLoadingRepoSettings: false,
-    loadGitProviderContext: async () => null,
-    retryGitProviderContext,
   };
   agentOperations = {
     readSessionTodos: mock(async () => []),
@@ -808,7 +811,10 @@ describe("useAgentsPageShellModel", () => {
   test("passes provider read errors to each Pull Request action model", async () => {
     repoSettingsState = {
       ...repoSettingsState,
-      gitProviderContextError: new Error("connection failed"),
+      gitProvider: {
+        ...repoSettingsState.gitProvider,
+        error: new Error("connection failed"),
+      },
     };
     const harness = createHookHarness();
 
@@ -854,7 +860,7 @@ describe("useAgentsPageShellModel", () => {
       expect(state.activeWorkspace?.repoPath).toBe("/repo");
       expect(state.navigationPersistenceError).toBe(querySyncState.navigationPersistenceError);
       expect(state.chatSettingsLoadError).toBe(orchestrationState.chatSettingsLoadError);
-      expect(state.gitProviderContextLoadError).toBe(repoSettingsState.gitProviderContextError);
+      expect(state.gitProviderContextLoadError).toBe(repoSettingsState.gitProvider.error);
       expect(state.onRetryNavigationPersistence).toBe(retryNavigationPersistence);
       expect(state.onRetryChatSettingsLoad).toBe(retryChatSettingsLoad);
       expect(state.onRetryGitProviderContext).toBe(retryGitProviderContext);

@@ -66,12 +66,11 @@ export function useKanbanPageModels({
   const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { gitProviderContext, gitProviderContextError, loadGitProviderContext, repoSettings } =
-    useAgentStudioRepoSettings({
-      activeRepoPath: workspaceRepoPath,
-      activeWorkspaceId,
-    });
-  const providerReadError = gitProviderReadError(gitProviderContextError);
+  const { gitProvider, repoSettings } = useAgentStudioRepoSettings({
+    activeRepoPath: workspaceRepoPath,
+    activeWorkspaceId,
+  });
+  const providerReadError = gitProviderReadError(gitProvider.error);
   const { startAgentSession, sendAgentMessage } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
   const {
@@ -292,9 +291,9 @@ export function useKanbanPageModels({
 
   const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
     activeWorkspace,
-    gitProviderContext,
-    gitProviderContextError,
-    loadGitProviderContext,
+    gitProviderContext: gitProvider.context,
+    gitProviderContextError: gitProvider.error,
+    loadGitProviderContext: gitProvider.load,
     tasks: kanbanTasks,
     requestPullRequestGeneration: onPullRequestGenerate,
     refreshTasks,
@@ -362,7 +361,7 @@ export function useKanbanPageModels({
       onResetTask,
       onCloseTask: closeTask,
       onDetectPullRequest,
-      gitProviderContext,
+      gitProviderContext: gitProvider.context,
       gitProviderReadError: providerReadError,
       onUnlinkPullRequest,
       detectingPullRequestTaskId,

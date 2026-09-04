@@ -13,8 +13,7 @@ import {
   getAutopilotSelectedValue,
   setAutopilotRuleAction,
 } from "@/features/autopilot/autopilot-catalog";
-import { errorMessage } from "@/lib/errors";
-import { pullRequestHealthError } from "@/lib/git-provider-health";
+import { gitProviderReadError, pullRequestHealthError } from "@/lib/git-provider-health";
 import { repositoryGitProviderContextQueryOptionsOrSkip } from "@/state/queries/git-provider-context";
 
 type SettingsAutopilotSectionProps = {
@@ -37,9 +36,7 @@ export function SettingsAutopilotSection({
     providerContext?.descriptor.capabilities.supportsPullRequests === true;
   const providerHealthError = pullRequestHealthError(providerContext);
   const providerReadError =
-    repoPath !== null && providerQuery.isError
-      ? `Could not load the current Git provider: ${errorMessage(providerQuery.error)}`
-      : null;
+    repoPath !== null && providerQuery.isError ? gitProviderReadError(providerQuery.error) : null;
 
   return (
     <div className="grid gap-4 p-4">

@@ -53,19 +53,21 @@ export function useAgentStudioRepoSettings(args: {
 
   return {
     repoSettings,
-    gitProviderContext,
-    gitProviderContextError,
-    isLoadingGitProviderContext: activeRepoPath !== null && providerContextQuery.isLoading,
+    gitProvider: {
+      context: gitProviderContext,
+      error: gitProviderContextError,
+      load: loadGitProviderContext,
+      retry: retryGitProviderContext,
+    },
     isLoadingRepoSettings: activeWorkspaceId !== null && isLoadingRepoConfig,
-    loadGitProviderContext,
-    retryGitProviderContext,
   } satisfies {
     repoSettings: RepoSettingsInput | null;
-    gitProviderContext: RepositoryGitProviderContext | undefined;
-    gitProviderContextError: Error | null;
-    isLoadingGitProviderContext: boolean;
+    gitProvider: {
+      context: RepositoryGitProviderContext | undefined;
+      error: Error | null;
+      load: () => Promise<RepositoryGitProviderContext>;
+      retry: () => void;
+    };
     isLoadingRepoSettings: boolean;
-    loadGitProviderContext: () => Promise<RepositoryGitProviderContext>;
-    retryGitProviderContext: () => void;
   };
 }

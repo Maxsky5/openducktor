@@ -113,10 +113,10 @@ describe("useAgentStudioRepoSettings", () => {
     });
 
     await harness.mount();
-    await harness.waitFor((state) => !state.isLoadingGitProviderContext);
+    await harness.waitFor((state) => state.gitProvider.context !== undefined);
 
     expect(hostClient.workspaceGetGitProviderContext).toHaveBeenCalledWith("/repo");
-    expect(harness.getLatest().gitProviderContext).toEqual(context);
+    expect(harness.getLatest().gitProvider.context).toEqual(context);
 
     await harness.unmount();
   });
@@ -133,25 +133,22 @@ describe("useAgentStudioRepoSettings", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest()).toMatchObject({
-      gitProviderContext: undefined,
-      gitProviderContextError: null,
-      isLoadingGitProviderContext: true,
+    expect(harness.getLatest().gitProvider).toMatchObject({
+      context: undefined,
+      error: null,
     });
 
     pendingContext.reject(new Error("provider context read failed"));
-    await harness.waitFor((state) => state.gitProviderContextError !== null);
+    await harness.waitFor((state) => state.gitProvider.error !== null);
 
-    expect(harness.getLatest().gitProviderContext).toBeUndefined();
-    expect(harness.getLatest().gitProviderContextError?.message).toBe(
-      "provider context read failed",
-    );
+    expect(harness.getLatest().gitProvider.context).toBeUndefined();
+    expect(harness.getLatest().gitProvider.error?.message).toBe("provider context read failed");
 
     loadProviderContext.mockImplementationOnce(async () => null);
-    harness.getLatest().retryGitProviderContext();
-    await harness.waitFor((state) => state.gitProviderContext === null);
+    harness.getLatest().gitProvider.retry();
+    await harness.waitFor((state) => state.gitProvider.context === null);
 
-    expect(harness.getLatest().gitProviderContextError).toBeNull();
+    expect(harness.getLatest().gitProvider.error).toBeNull();
     expect(loadProviderContext).toHaveBeenCalledTimes(2);
 
     await harness.unmount();
@@ -174,16 +171,14 @@ describe("useAgentStudioRepoSettings", () => {
     });
 
     await harness.mount();
-    await harness.waitFor((state) => state.gitProviderContext !== undefined);
+    await harness.waitFor((state) => state.gitProvider.context !== undefined);
 
     refreshFails = true;
-    harness.getLatest().retryGitProviderContext();
-    await harness.waitFor((state) => state.gitProviderContextError !== null);
+    harness.getLatest().gitProvider.retry();
+    await harness.waitFor((state) => state.gitProvider.error !== null);
 
-    expect(harness.getLatest().gitProviderContext).toEqual(context);
-    expect(harness.getLatest().gitProviderContextError?.message).toBe(
-      "provider context refresh failed",
-    );
+    expect(harness.getLatest().gitProvider.context).toEqual(context);
+    expect(harness.getLatest().gitProvider.error?.message).toBe("provider context refresh failed");
 
     await harness.unmount();
   });

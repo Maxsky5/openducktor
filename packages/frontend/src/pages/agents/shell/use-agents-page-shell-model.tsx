@@ -58,17 +58,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { allRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
-  const {
-    repoSettings,
-    gitProviderContext,
-    gitProviderContextError,
-    isLoadingRepoSettings,
-    retryGitProviderContext,
-  } = useAgentStudioRepoSettings({
+  const { repoSettings, gitProvider, isLoadingRepoSettings } = useAgentStudioRepoSettings({
     activeRepoPath: workspaceRepoPath,
     activeWorkspaceId,
   });
-  const providerReadError = gitProviderReadError(gitProviderContextError);
+  const providerReadError = gitProviderReadError(gitProvider.error);
   const {
     tasksAreCurrent,
     isForegroundLoadingTasks,
@@ -129,7 +123,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     linkMergedPullRequest,
     cancelLinkMergedPullRequest,
     unlinkPullRequest,
-    gitProviderContext,
+    gitProviderContext: gitProvider.context,
     gitProviderReadError: providerReadError,
   });
 
@@ -143,7 +137,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     branches: branches ?? [],
     runtimeDefinitions,
     repoSettings,
-    gitProviderContext,
+    gitProviderContext: gitProvider.context,
     gitProviderReadError: providerReadError,
     workspaceRepoPath,
     isForegroundLoadingTasks,
@@ -187,7 +181,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest: taskActions.onDetectPullRequest,
-      gitProviderContext,
+      gitProviderContext: gitProvider.context,
       gitProviderReadError: providerReadError,
       onResolveGitConflict: handleResolveRebaseConflict,
       onGitConflictQuickActionContextChange,
@@ -212,11 +206,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     activeWorkspace,
     navigationPersistenceError,
     chatSettingsLoadError: orchestration.chatSettingsLoadError,
-    gitProviderContextLoadError: gitProviderContextError,
+    gitProviderContextLoadError: gitProvider.error,
     activeTabValue: orchestration.activeTabValue,
     onRetryNavigationPersistence: retryNavigationPersistence,
     onRetryChatSettingsLoad: orchestration.retryChatSettingsLoad,
-    onRetryGitProviderContext: retryGitProviderContext,
+    onRetryGitProviderContext: gitProvider.retry,
     onTabValueChange: selection.handleSelectTab,
     taskTabsModel: orchestration.agentStudioTaskTabsModel,
     rightPanelToggleModel: orchestration.rightPanel.rightPanelToggleModel,

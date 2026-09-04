@@ -1,6 +1,6 @@
 import type { Dispatch } from "react";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
-import { errorMessage } from "@/lib/errors";
+import { gitProviderReadError } from "@/lib/git-provider-health";
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
@@ -33,9 +33,7 @@ export const buildTaskApprovalModalModel = ({
 }: BuildTaskApprovalModalModelArgs): TaskApprovalModalModel => {
   const approvalContext = state.approvalContext;
   const mode = resolveCurrentTaskApprovalMode(state.mode, gitProviderContext);
-  const providerReadError = gitProviderContextError
-    ? `Could not load the current Git provider: ${errorMessage(gitProviderContextError)}`
-    : null;
+  const providerReadError = gitProviderReadError(gitProviderContextError);
   let pullRequestSupported = false;
   let pullRequestAvailable = false;
   let pullRequestUnavailableReason: string | null = null;
