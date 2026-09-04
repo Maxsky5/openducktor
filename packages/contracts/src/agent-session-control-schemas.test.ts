@@ -37,6 +37,22 @@ describe("agent session control contracts", () => {
     ).toThrow();
   });
 
+  test("rejects a workflow start when the selected model belongs to another runtime", () => {
+    expect(
+      agentWorkflowSessionStartInputSchema.safeParse({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        sessionScope: workflowScope,
+        systemPrompt: "Build the feature",
+        model: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   test("parses a strict normalized start command", () => {
     expect(
       agentSessionControlStartInputSchema.parse({

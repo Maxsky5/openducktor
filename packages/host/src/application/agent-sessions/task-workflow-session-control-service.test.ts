@@ -315,6 +315,69 @@ describe("createTaskWorkflowSessionControlService", () => {
     expect(calls).toEqual(["stop-runtime", "cleanup-worktree"]);
   });
 
+  test("keeps a new worktree when session storage and runtime stop both fail", async () => {
+    const calls: string[] = [];
+    const preparedTask = task("ready_for_dev");
+    const service = createTaskWorkflowSessionControlService({
+      ...createControlDeps(),
+      taskSessionStart: {
+        prepare: () =>
+          Effect.succeed({
+            canonicalRepoPath: "/repo",
+            cleanup: () =>
+              Effect.sync(() => {
+                calls.push("cleanup-worktree");
+                return "";
+              }),
+            preparedStatus: preparedTask.status,
+            role: "build" as const,
+            runtimeKind: "opencode" as const,
+            task: preparedTask,
+            workingDirectory: "/repo/worktree",
+          }),
+        complete: () => Effect.dieMessage("unexpected completion"),
+      },
+      runtime: {
+        startSession: () => Effect.succeed(summary),
+        resumeSession: () => Effect.dieMessage("unexpected resume"),
+        forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () =>
+          Effect.sync(() => calls.push("stop-runtime")).pipe(
+            Effect.zipRight(
+              Effect.fail(
+                new HostOperationError({
+                  operation: "test.stop",
+                  message: "runtime stop failed",
+                }),
+              ),
+            ),
+          ),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () => Effect.dieMessage("unexpected list"),
+        agentSessionUpsert: () =>
+          Effect.fail(new HostOperationError({ operation: "test.store", message: "store failed" })),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.startWorkflowSession({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: workflowStart.systemPrompt,
+          model: workflowStart.model!,
+        }),
+      ),
+    ).rejects.toThrow("store failed Cleanup failed: runtime stop failed");
+    expect(calls).toEqual(["stop-runtime"]);
+  });
+
   test("keeps the stored session and worktree when Builder completion fails", async () => {
     const calls: string[] = [];
     const preparedTask = task("ready_for_dev");

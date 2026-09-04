@@ -92,7 +92,16 @@ export const agentWorkflowSessionStartInputSchema = z
     model: agentModelSelectionSchema,
     targetWorkingDirectory: nonEmptyStringSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    if (input.model.runtimeKind && input.model.runtimeKind !== input.runtimeKind) {
+      context.addIssue({
+        code: "custom",
+        path: ["model", "runtimeKind"],
+        message: "Selected model runtimeKind must match the workflow session runtimeKind.",
+      });
+    }
+  });
 export type AgentWorkflowSessionStartInput = z.infer<typeof agentWorkflowSessionStartInputSchema>;
 
 export const agentSessionControlResumeInputSchema = agentSessionLiveRefSchema

@@ -63,6 +63,51 @@ afterEach(() => {
 });
 
 describe("useAgentStudioTerminals", () => {
+  test("reloads the task worktree when the task version changes", async () => {
+    const baseDependencies = createTerminalTestDependencies();
+    let worktreeReads = 0;
+    const dependencies: TerminalTestDependencies = {
+      ...baseDependencies,
+      hostClient: {
+        ...baseDependencies.hostClient,
+        taskWorktreeGet: async () => {
+          worktreeReads += 1;
+          return worktreeReads === 1 ? null : { workingDirectory: "/repo/worktrees/task-a" };
+        },
+      },
+    };
+    const Harness = ({ taskVersion }: { taskVersion: string }) => {
+      useAgentStudioTerminals(
+        {
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-a",
+          taskVersion,
+          mountedTaskIds: ["task-a"],
+        },
+        dependencies,
+      );
+      return null;
+    };
+    const view = render(
+      <QueryProvider useIsolatedClient>
+        <Harness taskVersion="version-1" />
+      </QueryProvider>,
+    );
+
+    try {
+      await waitFor(() => expect(worktreeReads).toBe(1));
+      view.rerender(
+        <QueryProvider useIsolatedClient>
+          <Harness taskVersion="version-2" />
+        </QueryProvider>,
+      );
+      await waitFor(() => expect(worktreeReads).toBe(2));
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("uses workspace identity for terminal presentation scopes", async () => {
     const dependencies = createTerminalTestDependencies();
     let latest: ReturnType<typeof useAgentStudioTerminals> | null = null;

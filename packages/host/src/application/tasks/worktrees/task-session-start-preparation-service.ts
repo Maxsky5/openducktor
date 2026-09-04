@@ -187,7 +187,13 @@ export const createTaskSessionStartPreparationService = ({
                     worktreePath,
                     branch,
                   );
-                  cleanup = newWorktree.cleanup;
+                  cleanup = () =>
+                    Effect.scoped(
+                      Effect.gen(function* () {
+                        yield* coordinator.acquireWorktreeLifecycle([worktreePath]);
+                        return yield* newWorktree.cleanup();
+                      }),
+                    );
                 }
               }),
             );
