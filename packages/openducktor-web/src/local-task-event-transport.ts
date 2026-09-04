@@ -168,7 +168,9 @@ export const subscribeLocalTaskEventStreamEffect = (
       resolveInitialReadiness();
     };
     const handleOpen: EventListener = () => {
-      markInitialReadiness();
+      if (cursor !== null) {
+        markInitialReadiness();
+      }
     };
     const reportTerminalFailure = (cause: unknown): void => {
       if (unsubscribed || terminalFailureReported) {

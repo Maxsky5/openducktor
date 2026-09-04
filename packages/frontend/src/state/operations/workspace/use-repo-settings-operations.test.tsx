@@ -883,6 +883,65 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
+  test("refreshes the rebound active repository after retention settings change", async () => {
+    const taskRefreshFailure = new Error("task refresh failed");
+    const reboundWorkspace = {
+      ...createWorkspaceRecord("/repo-b"),
+      workspaceId: "repo-a",
+      workspaceName: "repo-a",
+    };
+    const normalizedSnapshot = createSettingsSnapshotFixture({
+      kanban: { doneVisibleDays: 7 },
+      workspaces: {
+        "repo-a": {
+          ...createRepoConfig(),
+          repoPath: reboundWorkspace.repoPath,
+        },
+      },
+    });
+    const workspaceSaveSettingsSnapshot = mock(async () => [reboundWorkspace]);
+    const workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
+    const tasksList = mock(async () => {
+      throw taskRefreshFailure;
+    });
+    const original = {
+      tasksList: host.tasksList,
+      workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.tasksList = tasksList;
+    host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords: mock(() => {}),
+      applyWorkspaceRecord: mock(() => {}),
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
+
+      await expect(
+        harness.getLatest().saveSettingsSnapshot(normalizedSnapshot),
+      ).resolves.toBeUndefined();
+
+      expect(tasksList).toHaveBeenCalledTimes(1);
+      expect(tasksList).toHaveBeenCalledWith("/repo-b");
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-b"))).toMatchObject({
+        error: taskRefreshFailure,
+        status: "error",
+      });
+    } finally {
+      await harness.unmount();
+      host.tasksList = original.tasksList;
+      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
   test("keeps exact runtime validation data and refreshes diagnostics after saving settings", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});

@@ -103,14 +103,13 @@ describe("browser shell bridge", () => {
     const eventSource = await waitForTaskEventSource();
     await waitForTaskEventSourceListener(eventSource, "open");
     eventSource.emit("open", "");
-    const subscription = await subscriptionPromise;
-
     const frame = {
       type: "snapshot_required",
       cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 },
       reason: "buffer_gap",
     };
     eventSource.emit("task-frame", JSON.stringify(frame));
+    const subscription = await subscriptionPromise;
 
     expect(listener).toHaveBeenCalledWith(frame);
     expect(reconcile).not.toHaveBeenCalled();

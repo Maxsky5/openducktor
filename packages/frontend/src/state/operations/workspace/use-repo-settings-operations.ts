@@ -188,6 +188,7 @@ export function useRepoSettingsOperations({
       queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
+      const savedActiveWorkspace = workspaces.find((workspace) => workspace.isActive);
       const retentionChanged =
         previousSnapshot !== undefined &&
         previousSnapshot.kanban.doneVisibleDays !== normalizedSnapshot.kanban.doneVisibleDays;
@@ -197,10 +198,10 @@ export function useRepoSettingsOperations({
           queryKey: taskQueryKeys.all,
           refetchType: "none",
         });
-        if (activeWorkspace) {
+        if (savedActiveWorkspace) {
           try {
             await queryClient.fetchQuery({
-              ...repoTaskDataQueryOptions(activeWorkspace.repoPath),
+              ...repoTaskDataQueryOptions(savedActiveWorkspace.repoPath),
               staleTime: 0,
             });
           } catch {
@@ -211,7 +212,7 @@ export function useRepoSettingsOperations({
       void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
       void queryClient.invalidateQueries({ queryKey: gitProviderHealthQueryKeys.all });
     },
-    [activeWorkspace, applyWorkspaceRecords, queryClient, settingsSnapshotQueryKey],
+    [applyWorkspaceRecords, queryClient, settingsSnapshotQueryKey],
   );
 
   const saveAgentModelFavorites = useCallback(

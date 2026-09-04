@@ -785,7 +785,7 @@ describe("local host SSE subscriptions", () => {
     unsubscribe();
   });
 
-  test("keeps task stream setup pending until its initial EventSource open", async () => {
+  test("keeps initial task stream setup pending until its first frame", async () => {
     const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
     const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";
     const fetchMock = mock(async (url: string | URL | Request, _init?: RequestInit) => {
@@ -813,15 +813,17 @@ describe("local host SSE subscriptions", () => {
     expect(FakeEventSource.instances).toHaveLength(1);
 
     eventSource.emit("open", "");
-    const readySubscription = await subscription;
-    expect(FakeEventSource.instances).toHaveLength(1);
-    eventSource.emit("task-frame", "not-json");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(didResolve).toBe(false);
+
     const frame = {
       type: "snapshot_required",
       cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 },
       reason: "buffer_gap",
     };
     eventSource.emit("task-frame", JSON.stringify(frame));
+    const readySubscription = await subscription;
+    expect(FakeEventSource.instances).toHaveLength(1);
     expect(listener).toHaveBeenCalledWith(frame);
 
     await readySubscription.acknowledge(frame.cursor);
@@ -946,6 +948,7 @@ describe("local host SSE subscriptions", () => {
     );
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
+    eventSource.emit("open", "");
     for (let attempt = 0; scheduledTimers.length === 0 && attempt < 10; attempt += 1) {
       await Promise.resolve();
     }
@@ -959,7 +962,7 @@ describe("local host SSE subscriptions", () => {
     ]);
   });
 
-  test("rejects and cleans up when the task stream closes after opening but before setup returns", async () => {
+  test("rejects and cleans up when the task stream closes after opening but before its first frame", async () => {
     const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
     const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";
     const fetchMock = mock(async (url: string | URL | Request) => {
@@ -984,7 +987,7 @@ describe("local host SSE subscriptions", () => {
     eventSource.readyState = FakeEventSource.CLOSED;
     eventSource.emit("error", "terminal failure");
 
-    await expect(setup).rejects.toThrow("closed after initial readiness");
+    await expect(setup).rejects.toThrow("closed before its initial connection was ready");
     expect(onTerminalFailure).not.toHaveBeenCalled();
     expect(eventSource.closed).toBe(true);
     expect(eventSource.hasListener("task-frame")).toBe(false);
@@ -1049,7 +1052,7 @@ describe("local host SSE subscriptions", () => {
     const onTerminalFailure = mock(() => {});
 
     const setup = subscribeLocalHostTaskStream(
-      { cursor: null },
+      { cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 } },
       mock(() => {}),
       onTerminalFailure,
     );
@@ -1088,6 +1091,14 @@ describe("local host SSE subscriptions", () => {
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
     eventSource.emit("open", "");
+    eventSource.emit(
+      "task-frame",
+      JSON.stringify({
+        type: "snapshot_required",
+        cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 },
+        reason: "buffer_gap",
+      }),
+    );
     const subscription = await setup;
     eventSource.readyState = FakeEventSource.CLOSED;
     eventSource.emit("error", "terminal failure");
@@ -1130,6 +1141,14 @@ describe("local host SSE subscriptions", () => {
     const eventSource = await waitForEventSourceInstance();
     await waitForEventSourceListener(eventSource, "open");
     eventSource.emit("open", "");
+    eventSource.emit(
+      "task-frame",
+      JSON.stringify({
+        type: "snapshot_required",
+        cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 },
+        reason: "buffer_gap",
+      }),
+    );
     const subscription = await setup;
     eventSource.emit("task-frame", "not-json");
     eventSource.emit("task-frame", JSON.stringify({ type: "invalid" }));
