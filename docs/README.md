@@ -9,7 +9,9 @@ Use this index to find the document for your task.
 - Read [the Effect guide](effect.md) before you change a host port, service, adapter, lifecycle, or typed error.
 - Read [the runtime integration guide](runtime-integration-guide.md) before you add a runtime or change runtime capabilities, sessions, history, approvals, prompts, or catalogs.
 - Read [the CLI and tool discovery guide](cli-tool-discovery.md) before you add a CLI tool or change how a shell finds one.
+- Read [the frontend guidelines](frontend-guidelines.md) before you change frontend state, forms, components, or themes.
 - Read [the TanStack Query cache strategy](tanstack-query-cache-strategy.md) before you add or change a frontend read from the host or backend.
+- Read [the testing guide](testing.md) before you add or change tests.
 
 ## Task workflow
 
