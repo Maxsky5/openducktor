@@ -20,8 +20,7 @@ Dependabot and `knip` solve different problems:
 
 - Command: `bun run deps:check`
 - Includes:
-  - `bun run deps:audit:high`
-  - `bun run deps:audit:hono`
+  - `bun run deps:audit`, which applies the high-severity and Hono policies to one audit response
   - `bun run deps:unused:deps`
   - `bun run deps:unused:exports`
 
@@ -78,7 +77,8 @@ Implementation notes:
 
 Implementation notes:
 
-- Included in `deps:check`, which runs in `.github/workflows/dependency-hygiene.yml`.
+- Included through the single-request `deps:audit` command in `deps:check`, which runs in `.github/workflows/dependency-hygiene.yml`.
+- The audit request fails after 30 seconds with a transport error instead of waiting for Bun's default idle timeout.
 
 ## 6) Targeted Vulnerability Gate (Hono)
 
@@ -88,7 +88,7 @@ Implementation notes:
 
 Implementation notes:
 
-- Included in `deps:check`, which runs in `.github/workflows/dependency-hygiene.yml`.
+- Included through the single-request `deps:audit` command in `deps:check`, which runs in `.github/workflows/dependency-hygiene.yml`.
 
 ## Cadence
 

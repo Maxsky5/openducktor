@@ -19,7 +19,7 @@ Current implementation uses `StdioServerTransport` in
 ## Supply-Chain Guardrails
 
 - `hono` is pinned via root `package.json` override to `^4.12.2` or later.
-- CI runs `bun run deps:audit:hono`, which wraps `bun audit --json` and fails on GHSA-`xh87-mx6m-69f3` regression.
+- CI runs the Hono policy through the single-request `bun run deps:audit` step in `bun run deps:check`. The policy fails on GHSA-`xh87-mx6m-69f3` or GHSA-`v8w9-8mx6-g223` regression.
 
 ## Change Control for Future Transport Expansion
 

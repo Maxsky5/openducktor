@@ -9,6 +9,20 @@ export type AuditAdvisory = {
 
 export type AuditResult = Record<string, AuditAdvisory[]>;
 
+export type AuditReporter = {
+  error: (message: string) => void;
+  warn: (message: string) => void;
+};
+
+type BunAuditProcessResult = {
+  exitedDueToTimeout?: boolean;
+  exitCode: number | null;
+  stderr: string;
+  stdout: string;
+};
+
+type BunAuditProcessRunner = (timeoutMs: number) => BunAuditProcessResult;
+
 const auditAdvisorySchema = z.object({
   title: z.string().optional(),
   url: z.string().optional(),
@@ -18,12 +32,45 @@ const auditAdvisorySchema = z.object({
 
 const auditResultSchema = z.record(z.string(), z.array(auditAdvisorySchema));
 
-type BunAuditJsonResult = {
+export type BunAuditJsonResult = {
   parsed: AuditResult;
   exitCode: number;
 };
 
+const BUN_AUDIT_TIMEOUT_MS = 30_000;
+
 const decode = (buffer: Uint8Array): string => new TextDecoder().decode(buffer);
+
+const runBunAuditProcess: BunAuditProcessRunner = (timeoutMs) => {
+  const audit = Bun.spawnSync(["bun", "audit", "--json"], {
+    stderr: "pipe",
+    stdout: "pipe",
+    timeout: timeoutMs,
+    windowsHide: true,
+  });
+
+  return {
+    exitedDueToTimeout: audit.exitedDueToTimeout,
+    exitCode: audit.exitCode,
+    stderr: decode(audit.stderr),
+    stdout: decode(audit.stdout),
+  };
+};
+
+class BunAuditCommandError extends Error {
+  readonly stderr: string;
+  readonly stdout: string;
+
+  constructor(
+    message: string,
+    { cause, stderr = "", stdout = "" }: { cause?: unknown; stderr?: string; stdout?: string } = {},
+  ) {
+    super(message, cause === undefined ? undefined : { cause });
+    this.name = "BunAuditCommandError";
+    this.stderr = stderr;
+    this.stdout = stdout;
+  }
+}
 
 const extractFirstJsonObject = (value: string): string | null => {
   const start = value.indexOf("{");
@@ -75,25 +122,34 @@ const extractFirstJsonObject = (value: string): string | null => {
   return null;
 };
 
-export const runBunAuditJson = (prefix: string): BunAuditJsonResult => {
-  const audit = Bun.spawnSync(["bun", "audit", "--json"], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+export const runBunAuditJson = (
+  prefix: string,
+  runAudit: BunAuditProcessRunner = runBunAuditProcess,
+): BunAuditJsonResult => {
+  let audit: BunAuditProcessResult;
+  try {
+    audit = runAudit(BUN_AUDIT_TIMEOUT_MS);
+  } catch (error) {
+    throw new BunAuditCommandError(`${prefix} Failed to start \`bun audit --json\`.`, {
+      cause: error,
+    });
+  }
+  const { stderr, stdout } = audit;
 
-  const stdout = decode(audit.stdout);
-  const stderr = decode(audit.stderr);
+  if (audit.exitedDueToTimeout) {
+    throw new BunAuditCommandError(`${prefix} \`bun audit --json\` timed out after 30 seconds.`, {
+      stderr,
+      stdout,
+    });
+  }
+
   const jsonPayload = extractFirstJsonObject(stdout);
 
   if (!jsonPayload) {
-    console.error(`${prefix} Unable to parse \`bun audit --json\` output.`);
-    if (stdout.trim().length > 0) {
-      console.error(stdout.trim());
-    }
-    if (stderr.trim().length > 0) {
-      console.error(stderr.trim());
-    }
-    process.exit(2);
+    throw new BunAuditCommandError(`${prefix} \`bun audit --json\` failed before returning JSON.`, {
+      stderr,
+      stdout,
+    });
   }
 
   try {
@@ -102,8 +158,28 @@ export const runBunAuditJson = (prefix: string): BunAuditJsonResult => {
       exitCode: audit.exitCode ?? 1,
     };
   } catch (error) {
-    console.error(`${prefix} Invalid JSON from \`bun audit --json\`.`);
-    console.error(error);
-    process.exit(2);
+    throw new BunAuditCommandError(`${prefix} Invalid JSON from \`bun audit --json\`.`, {
+      cause: error,
+      stderr,
+      stdout,
+    });
+  }
+};
+
+export const runBunAuditCli = (run: () => number, reporter: AuditReporter = console): void => {
+  try {
+    process.exitCode = run();
+  } catch (error) {
+    if (!(error instanceof BunAuditCommandError)) {
+      throw error;
+    }
+    reporter.error(error.message);
+    if (error.stdout.trim().length > 0) {
+      reporter.error(error.stdout.trim());
+    }
+    if (error.stderr.trim().length > 0) {
+      reporter.error(error.stderr.trim());
+    }
+    process.exitCode = 2;
   }
 };
