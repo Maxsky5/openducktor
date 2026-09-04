@@ -1,12 +1,17 @@
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
+import { z } from "zod";
 import {
+  agentSessionQueryKeys,
   type AgentSessionReadPort,
   loadAgentSessionListsFromQuery,
   removeAgentSessionListQueries,
   refreshAgentSessionLists,
 } from "./agent-sessions";
-import { taskQueryKeys } from "./tasks";
+
+type AgentSessionViewReadPort = AgentSessionReadPort & {
+  tasksList: (repoPath: string) => Promise<Array<{ id: string }>>;
+};
 
 export type AgentSessionViewSync = {
   reconcileExternalEvent: (event: ExternalTaskSyncEvent) => Promise<void>;
@@ -20,8 +25,8 @@ export const createAgentSessionViewSync = ({
   refreshLiveSessions,
 }: {
   queryClient: QueryClient;
-  readPort: AgentSessionReadPort;
-  removeTaskSessions: (taskIds: string[]) => void;
+  readPort: AgentSessionViewReadPort;
+  removeTaskSessions: (repoPath: string, taskIds: string[]) => void;
   refreshLiveSessions: (repoPath: string) => Promise<void>;
 }): AgentSessionViewSync => ({
   reconcileExternalEvent: async (event) => {
@@ -30,7 +35,7 @@ export const createAgentSessionViewSync = ({
     const removedTaskIdSet = new Set(removedTaskIds);
     const retainedTaskIds = taskIds.filter((taskId) => !removedTaskIdSet.has(taskId));
     await removeAgentSessionListQueries(queryClient, event.repoPath, removedTaskIds);
-    removeTaskSessions(removedTaskIds);
+    removeTaskSessions(event.repoPath, removedTaskIds);
     const ownershipChanged = await refreshAgentSessionLists(
       queryClient,
       event.repoPath,
@@ -41,15 +46,20 @@ export const createAgentSessionViewSync = ({
     }
   },
   reconcileStreamSnapshot: async (activeRepoPath) => {
+    const tasks = activeRepoPath ? await readPort.tasksList(activeRepoPath) : [];
+    const taskIds = tasks.map((task) => task.id);
+    const taskIdSet = new Set(taskIds);
+    const removedTaskIds = activeRepoPath
+      ? cachedAgentSessionTaskIds(queryClient, activeRepoPath).filter(
+          (taskId) => !taskIdSet.has(taskId),
+        )
+      : [];
+    await queryClient.cancelQueries({ queryKey: agentSessionQueryKeys.all, exact: false });
+    queryClient.removeQueries({ queryKey: agentSessionQueryKeys.all, exact: false });
     if (!activeRepoPath) {
       return;
     }
-    const taskIds = queryClient
-      .getQueriesData<{ tasks: Array<{ id: string }> }>({
-        queryKey: taskQueryKeys.repoDataPrefix(activeRepoPath),
-        type: "active",
-      })
-      .flatMap(([, data]) => data?.tasks.map((task) => task.id) ?? []);
+    removeTaskSessions(activeRepoPath, removedTaskIds);
     await loadAgentSessionListsFromQuery(queryClient, activeRepoPath, taskIds, {
       forceFresh: true,
       readPort,
@@ -57,3 +67,16 @@ export const createAgentSessionViewSync = ({
     await refreshLiveSessions(activeRepoPath);
   },
 });
+
+function cachedAgentSessionTaskIds(queryClient: QueryClient, repoPath: string): string[] {
+  return queryClient
+    .getQueryCache()
+    .findAll({ queryKey: agentSessionQueryKeys.all, exact: false })
+    .flatMap((query) => {
+      const [, kind, cachedRepoPath, taskId] = query.queryKey;
+      const taskIdResult = z.string().safeParse(taskId);
+      return kind === "list" && cachedRepoPath === repoPath && taskIdResult.success
+        ? [taskIdResult.data]
+        : [];
+    });
+}

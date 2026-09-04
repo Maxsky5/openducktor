@@ -291,9 +291,13 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         return;
       }
       assertClaudeSessionRef(session, input, "update session model");
-      await applyClaudeSessionModel(session, input.model);
+      const model =
+        input.model && session.model?.profileId !== undefined
+          ? { ...input.model, profileId: session.model.profileId }
+          : input.model;
+      await applyClaudeSessionModel(session, model);
       if (session.modelAfterQueuedTurns !== undefined) {
-        session.modelAfterQueuedTurns = input.model ?? null;
+        session.modelAfterQueuedTurns = model ?? null;
       }
       session.summary = { ...session.summary };
     });

@@ -623,6 +623,45 @@ describe("createClaudeAgentSdkService", () => {
     expect(session.model?.variant).toBe("xhigh");
   });
 
+  test("keeps the active Claude profile during a live model update", async () => {
+    const session = createSession({
+      model: {
+        runtimeKind: "claude",
+        providerId: "claude",
+        modelId: "claude-sonnet-4-6",
+        variant: "high",
+        profileId: "build",
+      },
+      query: createClaudeQueryFixture({
+        applyFlagSettings: mock(async () => {}),
+        close: mock(() => {}),
+        setModel: mock(async (_model?: string) => {}),
+      }),
+    });
+    const service = createService(session);
+
+    await Effect.runPromise(
+      service.updateSessionModel({
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: "session-1",
+        model: {
+          providerId: "claude",
+          modelId: "claude-opus-4-6",
+          variant: "xhigh",
+        },
+      }),
+    );
+
+    expect(session.model).toEqual({
+      providerId: "claude",
+      modelId: "claude-opus-4-6",
+      variant: "xhigh",
+      profileId: "build",
+    });
+  });
+
   test("keeps the latest live selection as the queued-turn restore model", async () => {
     const session = createSession({
       model: {

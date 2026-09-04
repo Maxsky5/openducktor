@@ -3,7 +3,6 @@ import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { agentSessionQueryKeys, type AgentSessionReadPort } from "./agent-sessions";
 import { createAgentSessionViewSync } from "./agent-session-view-sync";
-import { taskQueryKeys } from "./tasks";
 
 const event = (): ExternalTaskSyncEvent => ({
   kind: "tasks_updated",
@@ -22,6 +21,16 @@ const unusedReadPort: AgentSessionReadPort = {
     throw new Error("unexpected session batch");
   },
 };
+
+type TestReadPort = AgentSessionReadPort & {
+  tasksList: (repoPath: string) => Promise<Array<{ id: string }>>;
+};
+
+const readPort = (overrides: Partial<TestReadPort> = {}): TestReadPort => ({
+  ...unusedReadPort,
+  tasksList: async () => [{ id: "task-1" }],
+  ...overrides,
+});
 
 describe("AgentSessionViewSync", () => {
   test("refreshes live sessions when task session ownership changes", async () => {
@@ -47,7 +56,7 @@ describe("AgentSessionViewSync", () => {
     }).subscribe(() => {});
     const sync = createAgentSessionViewSync({
       queryClient,
-      readPort: unusedReadPort,
+      readPort: readPort(),
       removeTaskSessions: () => {},
       refreshLiveSessions,
     });
@@ -86,7 +95,7 @@ describe("AgentSessionViewSync", () => {
     }).subscribe(() => {});
     const sync = createAgentSessionViewSync({
       queryClient,
-      readPort: unusedReadPort,
+      readPort: readPort(),
       removeTaskSessions: () => {},
       refreshLiveSessions,
     });
@@ -105,7 +114,7 @@ describe("AgentSessionViewSync", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
     const loadSessions = mock(async () => []);
-    const removeTaskSessions = mock((_taskIds: string[]) => {});
+    const removeTaskSessions = mock((_repoPath: string, _taskIds: string[]) => {});
     const refreshLiveSessions = mock(async () => undefined);
     const unsubscribe = new QueryObserver(queryClient, {
       queryKey,
@@ -124,7 +133,7 @@ describe("AgentSessionViewSync", () => {
     }).subscribe(() => {});
     const sync = createAgentSessionViewSync({
       queryClient,
-      readPort: unusedReadPort,
+      readPort: readPort(),
       removeTaskSessions,
       refreshLiveSessions,
     });
@@ -140,7 +149,7 @@ describe("AgentSessionViewSync", () => {
       });
 
       expect(queryClient.getQueryData(queryKey)).toBeUndefined();
-      expect(removeTaskSessions).toHaveBeenCalledWith(["task-1"]);
+      expect(removeTaskSessions).toHaveBeenCalledWith("/repo", ["task-1"]);
       expect(refreshLiveSessions).not.toHaveBeenCalled();
     } finally {
       unsubscribe();
@@ -149,17 +158,10 @@ describe("AgentSessionViewSync", () => {
 
   test("reloads task session records and live sessions for a stream snapshot", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const taskQueryKey = taskQueryKeys.repoData("/repo", 7);
     const sessionQueryKey = agentSessionQueryKeys.list("/repo", "task-1");
     const loadSessions = mock(async () => []);
     const loadSessionBatch = mock(async () => [{ taskId: "task-1", agentSessions: [] }]);
     const refreshLiveSessions = mock(async () => undefined);
-    const unsubscribeTasks = new QueryObserver(queryClient, {
-      queryKey: taskQueryKey,
-      queryFn: async () => ({ tasks: [{ id: "task-1" }] }),
-      initialData: { tasks: [{ id: "task-1" }] },
-      staleTime: Infinity,
-    }).subscribe(() => {});
     const unsubscribeSessions = new QueryObserver(queryClient, {
       queryKey: sessionQueryKey,
       queryFn: loadSessions,
@@ -168,10 +170,10 @@ describe("AgentSessionViewSync", () => {
     }).subscribe(() => {});
     const sync = createAgentSessionViewSync({
       queryClient,
-      readPort: {
+      readPort: readPort({
         agentSessionsList: loadSessions,
         agentSessionsListForTasks: loadSessionBatch,
-      },
+      }),
       removeTaskSessions: () => {},
       refreshLiveSessions,
     });
@@ -183,7 +185,37 @@ describe("AgentSessionViewSync", () => {
       expect(refreshLiveSessions).toHaveBeenCalledWith("/repo");
     } finally {
       unsubscribeSessions();
-      unsubscribeTasks();
     }
+  });
+
+  test("drops stale session scopes before it reloads a stream snapshot", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const staleActiveSessionKey = agentSessionQueryKeys.list("/repo", "deleted-task");
+    const currentActiveSessionKey = agentSessionQueryKeys.list("/repo", "current-task");
+    const inactiveSessionKey = agentSessionQueryKeys.list("/other-repo", "other-task");
+    queryClient.setQueryData(staleActiveSessionKey, [{ externalSessionId: "stale-session" }]);
+    queryClient.setQueryData(inactiveSessionKey, [{ externalSessionId: "inactive-session" }]);
+    const removeTaskSessions = mock((_repoPath: string, _taskIds: string[]) => {});
+    const loadSessionBatch = mock(async () => [{ taskId: "current-task", agentSessions: [] }]);
+    const refreshLiveSessions = mock(async () => undefined);
+    const sync = createAgentSessionViewSync({
+      queryClient,
+      readPort: readPort({
+        agentSessionsList: async () => [],
+        agentSessionsListForTasks: loadSessionBatch,
+        tasksList: async () => [{ id: "current-task" }],
+      }),
+      removeTaskSessions,
+      refreshLiveSessions,
+    });
+
+    await sync.reconcileStreamSnapshot("/repo");
+
+    expect(queryClient.getQueryData(staleActiveSessionKey)).toBeUndefined();
+    expect(queryClient.getQueryData(inactiveSessionKey)).toBeUndefined();
+    expect(queryClient.getQueryData<unknown[]>(currentActiveSessionKey)).toEqual([]);
+    expect(removeTaskSessions).toHaveBeenCalledWith("/repo", ["deleted-task"]);
+    expect(loadSessionBatch).toHaveBeenCalledWith("/repo", ["current-task"]);
+    expect(refreshLiveSessions).toHaveBeenCalledWith("/repo");
   });
 });

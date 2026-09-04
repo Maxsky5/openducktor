@@ -17,7 +17,9 @@ import {
 import { type TaskStreamControllerFactory, useAppLifecycle } from "../lifecycle/use-app-lifecycle";
 
 const createProductionTaskStreamController =
-  (removeTaskSessions: (taskIds: string[]) => void): TaskStreamControllerFactory =>
+  (
+    removeTaskSessions: (repoPath: string, taskIds: string[]) => void,
+  ): TaskStreamControllerFactory =>
   ({ queryClient, getActiveRepoPath, onDegraded }) =>
     createTaskStreamController({
       transport: hostBridge,
@@ -53,7 +55,10 @@ export function AppLifecycleStateProvider({
   const sessionStore = useAgentSessionsContext();
   const taskStreamControllerFactory = useMemo(
     () =>
-      createProductionTaskStreamController((taskIds) => {
+      createProductionTaskStreamController((repoPath, taskIds) => {
+        if (sessionStore.getActivitySnapshot().workspaceRepoPath !== repoPath) {
+          return;
+        }
         const taskIdSet = new Set(taskIds);
         for (const session of sessionStore.listSessionSnapshots()) {
           if (
