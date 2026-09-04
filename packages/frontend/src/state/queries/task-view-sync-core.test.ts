@@ -5,7 +5,6 @@ import {
   createSettingsSnapshotFixture,
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { agentSessionQueryKeys } from "./agent-sessions";
 import { documentQueryKeys } from "./documents";
 import { createTaskViewSync, type TaskViewSyncPorts } from "./task-view-sync";
 import { taskQueryKeys } from "./tasks";
@@ -19,7 +18,6 @@ const settings: SettingsSnapshot = createSettingsSnapshotFixture({
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
   loadSettings: async () => settings,
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
-  refreshAgentSessions: async () => undefined,
   loadFreshDocument: async () => ({ markdown: "# Fresh", updatedAt: "2026-04-10T13:10:00.000Z" }),
   ...overrides,
 });
@@ -334,100 +332,6 @@ describe("TaskViewSync", () => {
     );
 
     expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
-  });
-
-  test("refreshes cached session records for tasks changed by another client", async () => {
-    const refreshAgentSessions = mock(async () => undefined);
-    const { queryClient, sync } = createSync(createPorts({ refreshAgentSessions }));
-    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
-    const freshRecords = [
-      {
-        externalSessionId: "session-from-other-client",
-        role: "build" as const,
-        runtimeKind: "opencode" as const,
-        workingDirectory: "/repo/worktree",
-        startedAt: "2026-09-03T20:00:00.000Z",
-        selectedModel: null,
-      },
-    ];
-    const loadSessions = mock(async () => freshRecords);
-    const unsubscribe = new QueryObserver(queryClient, {
-      queryKey,
-      queryFn: loadSessions,
-      initialData: [],
-      staleTime: Infinity,
-    }).subscribe(() => {});
-
-    try {
-      await sync.reconcileExternalEvent(
-        {
-          kind: "tasks_updated",
-          eventId: "event-session-create",
-          repoPath: "/repo",
-          taskIds: ["task-1"],
-          removedTaskIds: [],
-          emittedAt: "2026-09-03T20:00:00.000Z",
-        },
-        "/repo",
-      );
-
-      expect(loadSessions).toHaveBeenCalledTimes(1);
-      expect(queryClient.getQueryData<typeof freshRecords>(queryKey)).toEqual(freshRecords);
-      expect(refreshAgentSessions).toHaveBeenCalledWith("/repo");
-
-      await sync.reconcileExternalEvent(
-        {
-          kind: "tasks_updated",
-          eventId: "event-task-only-change",
-          repoPath: "/repo",
-          taskIds: ["task-1"],
-          removedTaskIds: [],
-          emittedAt: "2026-09-03T20:01:00.000Z",
-        },
-        "/repo",
-      );
-
-      expect(loadSessions).toHaveBeenCalledTimes(2);
-      expect(refreshAgentSessions).toHaveBeenCalledTimes(1);
-    } finally {
-      unsubscribe();
-    }
-  });
-
-  test("propagates active session record refresh failures", async () => {
-    const refreshAgentSessions = mock(async () => undefined);
-    const { queryClient, sync } = createSync(createPorts({ refreshAgentSessions }));
-    const queryKey = agentSessionQueryKeys.list("/repo", "task-1");
-    const loadSessions = mock(async () => {
-      throw new Error("session records unavailable");
-    });
-    const unsubscribe = new QueryObserver(queryClient, {
-      queryKey,
-      queryFn: loadSessions,
-      initialData: [],
-      staleTime: Infinity,
-    }).subscribe(() => {});
-
-    try {
-      await expect(
-        sync.reconcileExternalEvent(
-          {
-            kind: "tasks_updated",
-            eventId: "event-session-refresh-failed",
-            repoPath: "/repo",
-            taskIds: ["task-1"],
-            removedTaskIds: [],
-            emittedAt: "2026-09-04T10:00:00.000Z",
-          },
-          "/repo",
-        ),
-      ).rejects.toThrow("session records unavailable");
-
-      expect(loadSessions).toHaveBeenCalledTimes(1);
-      expect(refreshAgentSessions).not.toHaveBeenCalled();
-    } finally {
-      unsubscribe();
-    }
   });
 
   test("leaves retained cached documents invalidated when active task-list refresh fails", async () => {

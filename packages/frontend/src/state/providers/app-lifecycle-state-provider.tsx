@@ -1,6 +1,7 @@
 import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { hostBridge, hostClient } from "@/lib/host-client";
+import { createAgentSessionViewSync } from "@/state/queries/agent-session-view-sync";
 import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
 import { createTaskStreamController } from "@/state/tasks/task-stream-controller";
 import {
@@ -23,6 +24,10 @@ const createProductionTaskStreamController: TaskStreamControllerFactory = ({
     transport: hostBridge,
     metadata: hostClient,
     taskViewSync: getProductionTaskViewSync(queryClient),
+    agentSessionViewSync: createAgentSessionViewSync({
+      queryClient,
+      refreshLiveSessions: (repoPath) => hostClient.agentSessionLiveRefresh({ repoPath }),
+    }),
     getActiveRepoPath,
     onDegraded,
   });

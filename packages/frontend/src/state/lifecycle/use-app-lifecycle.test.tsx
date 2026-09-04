@@ -145,6 +145,9 @@ describe("useAppLifecycle task stream", () => {
           invalidateAllTaskMetadata: () => {},
         },
         taskViewSync,
+        agentSessionViewSync: {
+          reconcileExternalEvent: async () => {},
+        },
         getActiveRepoPath,
         onDegraded,
       });

@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { ExternalTaskSyncEvent, TaskEventCursor } from "@openducktor/contracts";
 import type { TaskStreamFrame, TaskStreamSubscription } from "@/lib/shell-bridge";
+import type { AgentSessionViewSync } from "@/state/queries/agent-session-view-sync";
 import type { TaskViewSync } from "@/state/queries/task-view-sync";
 import { createTaskStreamController } from "./task-stream-controller";
 
@@ -62,6 +63,9 @@ const createHarness = ({
     reconcileStreamSnapshot: mock(async () => {}),
     ...taskViewSyncOverrides,
   };
+  const agentSessionViewSync: AgentSessionViewSync = {
+    reconcileExternalEvent: mock(async () => {}),
+  };
   const transport = {
     subscribeTaskStream: mock(async (input, listener, onTerminalFailure) => {
       const record: SubscriptionRecord = {
@@ -87,12 +91,14 @@ const createHarness = ({
     transport,
     metadata,
     taskViewSync,
+    agentSessionViewSync,
     getActiveRepoPath,
     onDegraded,
   });
 
   return {
     controller,
+    agentSessionViewSync,
     metadata,
     onDegraded,
     records,
@@ -106,6 +112,24 @@ const createHarness = ({
 };
 
 describe("task stream controller recovery", () => {
+  test("applies task and session views before acknowledging a change", async () => {
+    const sessionRefresh = deferred<void>();
+    const harness = createHarness();
+    harness.agentSessionViewSync.reconcileExternalEvent = mock(async () => sessionRefresh.promise);
+
+    await harness.controller.start();
+    harness.emit(0, { type: "change", cursor: cursor(0), event: event("task-1") });
+    await flush();
+
+    expect(harness.taskViewSync.reconcileExternalEvent).toHaveBeenCalledTimes(1);
+    expect(harness.records[0]?.acknowledge).not.toHaveBeenCalled();
+
+    sessionRefresh.resolve();
+    await flush();
+
+    expect(harness.records[0]?.acknowledge).toHaveBeenCalledWith(cursor(0));
+  });
+
   test("application failure closes the subscription, recovers from a snapshot, and resumes", async () => {
     const applicationFailure = new Error("upper failed");
     let applications = 0;
@@ -372,6 +396,9 @@ describe("task stream controller recovery", () => {
         refreshAfterLocalMutation: async () => {},
         reconcileExternalEvent: async () => {},
         reconcileStreamSnapshot: async () => {},
+      },
+      agentSessionViewSync: {
+        reconcileExternalEvent: async () => {},
       },
       getActiveRepoPath: () => "/repo",
       onDegraded: () => {},

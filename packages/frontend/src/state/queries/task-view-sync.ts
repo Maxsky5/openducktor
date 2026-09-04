@@ -1,8 +1,7 @@
 import type { ExternalTaskSyncEvent, SettingsSnapshot, TaskCard } from "@openducktor/contracts";
-import { isCancelledError, type QueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { hostClient as host } from "@/lib/host-client";
-import { refreshAgentSessionLists } from "./agent-sessions";
 import { resolveLatestDocumentPayload } from "./document-utils";
 import { documentQueryKeys, type TaskDocument, type TaskDocumentSection } from "./documents";
 import { invalidateRepoTaskQueries, taskQueryKeys } from "./tasks";
@@ -11,7 +10,6 @@ import { workspaceQueryKeys } from "./workspace";
 export type TaskViewSyncPorts = {
   loadSettings: () => Promise<SettingsSnapshot>;
   listTasks: (repoPath: string, doneVisibleDays?: number) => Promise<TaskCard[]>;
-  refreshAgentSessions: (repoPath: string) => Promise<void>;
   loadFreshDocument: (
     repoPath: string,
     taskId: string,
@@ -34,8 +32,6 @@ export type TaskViewSync = {
   ) => Promise<void>;
   reconcileStreamSnapshot: (activeRepoPath: string | null) => Promise<void>;
 };
-
-const isCancellation = (cause: unknown): boolean => isCancelledError(cause);
 
 const toEventChanges = (event: ExternalTaskSyncEvent) =>
   event.kind === "external_task_created"
@@ -78,11 +74,7 @@ export const createTaskViewSync = ({
   queryClient: QueryClient;
   ports: TaskViewSyncPorts;
 }): TaskViewSync => {
-  type ActiveRefresh = {
-    promise: Promise<void>;
-    successor: Promise<void> | null;
-  };
-  const activeRefreshes = new Map<string, ActiveRefresh>();
+  const repoRefreshes = new Map<string, Promise<void>>();
 
   const loadSettings = async (): Promise<SettingsSnapshot> => {
     const queryKey = workspaceQueryKeys.settingsSnapshot();
@@ -137,15 +129,7 @@ export const createTaskViewSync = ({
     if (!taskData) {
       throw new Error(`Task snapshot refresh for '${repoPath}' did not populate task data.`);
     }
-    try {
-      return await retainExistingTaskIds(repoPath, taskData.tasks, taskIds);
-    } catch (error) {
-      if (!isCancellation(error)) throw error;
-      const successor = activeRefreshes.get(repoPath)?.promise;
-      if (!successor) throw error;
-      await successor;
-      return retainExistingSnapshotTaskIds(repoPath, doneVisibleDays, taskIds);
-    }
+    return retainExistingTaskIds(repoPath, taskData.tasks, taskIds);
   };
 
   const refreshDocumentEntry = async (
@@ -173,20 +157,7 @@ export const createTaskViewSync = ({
   const refreshSnapshotDocumentEntries = async (
     repoPath: string,
     entries: ReturnType<typeof cachedDocumentEntries>,
-  ): Promise<void> => {
-    await Promise.all(
-      entries.map(async (entry) => {
-        try {
-          await refreshDocumentEntry(repoPath, entry);
-        } catch (error) {
-          if (!isCancellation(error)) throw error;
-          const successor = activeRefreshes.get(repoPath)?.promise;
-          if (!successor) throw error;
-          await successor;
-        }
-      }),
-    );
-  };
+  ): Promise<void> => refreshDocumentEntries(repoPath, entries);
 
   const refreshDocuments = async (repoPath: string, taskIds: string[]): Promise<void> => {
     const taskIdSet = new Set(taskIds);
@@ -209,9 +180,6 @@ export const createTaskViewSync = ({
     }
     await Promise.all(cancellations);
   };
-
-  const cancelAllDocuments = (): Promise<void> =>
-    queryClient.cancelQueries({ queryKey: documentQueryKeys.all, exact: false }, { silent: true });
 
   const cancelRepoTaskQueries = (repoPath: string): Promise<void> =>
     queryClient.cancelQueries(
@@ -261,109 +229,54 @@ export const createTaskViewSync = ({
     await Promise.all([...new Set(variants)].map((days) => fetchTasks(repoPath, days)));
   };
 
-  const runActive = (
-    repoPath: string,
-    operation: (joinWinner: () => Promise<void>) => Promise<void>,
-  ) => {
-    let resolve!: () => void;
-    let reject!: (cause: unknown) => void;
-    const current = new Promise<void>((nextResolve, nextReject) => {
-      resolve = nextResolve;
-      reject = nextReject;
-    });
-    const activeRefresh: ActiveRefresh = { promise: current, successor: null };
-    const predecessor = activeRefreshes.get(repoPath);
-    if (predecessor) {
-      predecessor.successor = current;
-    }
-    activeRefreshes.set(repoPath, activeRefresh);
-    let joinedWinner = false;
-    const joinWinner = async (): Promise<void> => {
-      const successor = activeRefresh.successor;
-      if (!successor) {
-        throw new Error(
-          `Task view refresh for '${repoPath}' was cancelled without a superseding refresh.`,
-        );
+  const runForRepo = (repoPath: string, operation: () => Promise<void>): Promise<void> => {
+    const previous = repoRefreshes.get(repoPath) ?? Promise.resolve();
+    let current!: Promise<void>;
+    current = previous.then(operation, operation).finally(() => {
+      if (repoRefreshes.get(repoPath) === current) {
+        repoRefreshes.delete(repoPath);
       }
-      joinedWinner = true;
-      await successor;
-    };
-    void operation(joinWinner)
-      .then(
-        async () => {
-          try {
-            if (!joinedWinner && activeRefreshes.get(repoPath) !== activeRefresh) {
-              await joinWinner();
-            }
-            resolve();
-          } catch (winnerError) {
-            reject(winnerError);
-          }
-        },
-        async (error) => {
-          if (activeRefreshes.get(repoPath) !== activeRefresh) {
-            try {
-              await joinWinner();
-              resolve();
-            } catch (winnerError) {
-              reject(winnerError);
-            }
-            return;
-          }
-          reject(error);
-        },
-      )
-      .finally(() => {
-        if (activeRefreshes.get(repoPath) === activeRefresh) {
-          activeRefreshes.delete(repoPath);
-        }
-      });
+    });
+    repoRefreshes.set(repoPath, current);
     return current;
   };
 
-  const refreshActive = (
-    repoPath: string,
-    options: {
-      impact: LocalMutationImpact;
-      doneVisibleDays?: number;
-      refreshKanban: boolean;
-      refreshDocumentsFor?: string[];
-      prepare?: () => Promise<void>;
-    },
-  ): Promise<void> =>
-    runActive(repoPath, async (joinWinner) => {
-      try {
-        await options.prepare?.();
-        const doneVisibleDays =
-          options.doneVisibleDays ?? (await loadSettings()).kanban.doneVisibleDays;
-        if (options.impact.kind === "remove-documents") {
-          removeDocuments(repoPath, options.impact.taskIds);
-        }
-        await cancelRepoTaskQueries(repoPath);
-        await invalidateRepoTaskQueries(queryClient, repoPath);
-        const tasks = await fetchTasks(repoPath, doneVisibleDays);
-        if (options.impact.kind === "refresh-documents") {
-          await refreshDocuments(repoPath, options.impact.taskIds);
-        }
-        if (options.refreshDocumentsFor) {
-          const existingTaskIds = await retainExistingTaskIds(
-            repoPath,
-            tasks,
-            options.refreshDocumentsFor,
-          );
-          await refreshDocuments(repoPath, existingTaskIds);
-        }
-        if (options.refreshKanban) {
-          await refreshCachedKanban(repoPath, doneVisibleDays);
-        }
-      } catch (error) {
-        if (isCancellation(error)) {
-          await joinWinner();
-          return;
-        }
-        throw error;
-      }
-    });
+  type RefreshOptions = {
+    impact: LocalMutationImpact;
+    doneVisibleDays?: number;
+    refreshKanban: boolean;
+    refreshDocumentsFor?: string[];
+    prepare?: () => Promise<void>;
+  };
+
+  const refreshActiveNow = async (repoPath: string, options: RefreshOptions): Promise<void> => {
+    await options.prepare?.();
+    const doneVisibleDays =
+      options.doneVisibleDays ?? (await loadSettings()).kanban.doneVisibleDays;
+    if (options.impact.kind === "remove-documents") {
+      removeDocuments(repoPath, options.impact.taskIds);
+    }
+    await cancelRepoTaskQueries(repoPath);
+    await invalidateRepoTaskQueries(queryClient, repoPath);
+    const tasks = await fetchTasks(repoPath, doneVisibleDays);
+    if (options.impact.kind === "refresh-documents") {
+      await refreshDocuments(repoPath, options.impact.taskIds);
+    }
+    if (options.refreshDocumentsFor) {
+      const existingTaskIds = await retainExistingTaskIds(
+        repoPath,
+        tasks,
+        options.refreshDocumentsFor,
+      );
+      await refreshDocuments(repoPath, existingTaskIds);
+    }
+    if (options.refreshKanban) {
+      await refreshCachedKanban(repoPath, doneVisibleDays);
+    }
+  };
+
+  const refreshActive = (repoPath: string, options: RefreshOptions): Promise<void> =>
+    runForRepo(repoPath, () => refreshActiveNow(repoPath, options));
 
   return {
     loadWorkspace: async (repoPath) => {
@@ -376,7 +289,6 @@ export const createTaskViewSync = ({
       }
     },
     refreshManually: (repoPath) =>
-      activeRefreshes.get(repoPath)?.promise ??
       refreshActive(repoPath, {
         impact: { kind: "task-list-only" },
         refreshKanban: true,
@@ -394,11 +306,10 @@ export const createTaskViewSync = ({
       }
       const affectedTaskIds = [...new Set([...taskIds, ...removedTaskIds])];
       if (activeRepoPath !== event.repoPath) {
-        await runActive(event.repoPath, async () => {
+        await runForRepo(event.repoPath, async () => {
           await Promise.all([
             cancelDocuments(event.repoPath),
             cancelRepoTaskQueries(event.repoPath),
-            refreshAgentSessionLists(queryClient, event.repoPath, retainedTaskIds),
           ]);
           removeDocuments(event.repoPath, removedTaskIds);
           await Promise.all([
@@ -408,25 +319,19 @@ export const createTaskViewSync = ({
         });
         return;
       }
-      let sessionOwnershipChanged = false;
       await refreshActive(event.repoPath, {
         impact: { kind: "task-list-only" },
         refreshKanban: false,
         refreshDocumentsFor: retainedTaskIds,
         prepare: async () => {
-          const [, , ownershipChanged] = await Promise.all([
+          await Promise.all([
             cancelDocuments(event.repoPath, affectedTaskIds),
             cancelRepoTaskQueries(event.repoPath),
-            refreshAgentSessionLists(queryClient, event.repoPath, retainedTaskIds),
           ]);
-          sessionOwnershipChanged = ownershipChanged;
           removeDocuments(event.repoPath, removedTaskIds);
           await invalidateDocuments(event.repoPath, retainedTaskIds);
         },
       });
-      if (sessionOwnershipChanged) {
-        await ports.refreshAgentSessions(event.repoPath);
-      }
     },
     reconcileStreamSnapshot: async (activeRepoPath) => {
       const activeDocumentEntries = activeRepoPath
@@ -441,30 +346,45 @@ export const createTaskViewSync = ({
       const taskQueries = queryClient
         .getQueryCache()
         .findAll({ queryKey: taskQueryKeys.all, exact: false });
-      const repos = new Set(
-        taskQueries.flatMap((query) => {
+      const documentQueries = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: documentQueryKeys.all, exact: false });
+      const repos = new Set<string>([
+        ...(activeRepoPath ? [activeRepoPath] : []),
+        ...taskQueries.flatMap((query) => {
           const repoPathResult = z.string().safeParse(query.queryKey[2]);
           return repoPathResult.success ? [repoPathResult.data] : [];
         }),
-      );
-      const inactiveRepos = [...repos].filter((repoPath) => repoPath !== activeRepoPath);
+        ...documentQueries.flatMap((query) => {
+          const repoPathResult = z.string().safeParse(query.queryKey[2]);
+          return repoPathResult.success ? [repoPathResult.data] : [];
+        }),
+      ]);
       const doneVisibleDays = activeRepoPath ? (await loadSettings()).kanban.doneVisibleDays : null;
-      const prepareSnapshotCaches = async (): Promise<void> => {
-        await Promise.all([cancelAllDocuments(), ...inactiveRepos.map(cancelRepoTaskQueries)]);
-        await Promise.all([
-          ...inactiveRepos.map((repoPath) => invalidateRepoTaskQueries(queryClient, repoPath)),
-          queryClient.invalidateQueries({
-            queryKey: documentQueryKeys.all,
-            exact: false,
-            refetchType: "none",
-          }),
-        ]);
-      };
-      if (activeRepoPath && doneVisibleDays !== null) {
-        await refreshActive(activeRepoPath, {
+      const invalidateInactiveRepo = (repoPath: string): Promise<void> =>
+        runForRepo(repoPath, async () => {
+          await Promise.all([cancelDocuments(repoPath), cancelRepoTaskQueries(repoPath)]);
+          await Promise.all([
+            invalidateRepoTaskQueries(queryClient, repoPath),
+            invalidateDocuments(repoPath),
+          ]);
+        });
+      const inactiveRefreshes: Promise<void>[] = [];
+      for (const repoPath of repos) {
+        if (repoPath !== activeRepoPath) {
+          inactiveRefreshes.push(invalidateInactiveRepo(repoPath));
+        }
+      }
+      if (!activeRepoPath || doneVisibleDays === null) {
+        await Promise.all(inactiveRefreshes);
+        return;
+      }
+      const activeRefresh = runForRepo(activeRepoPath, async () => {
+        await cancelDocuments(activeRepoPath);
+        await invalidateDocuments(activeRepoPath);
+        await refreshActiveNow(activeRepoPath, {
           doneVisibleDays,
           impact: { kind: "task-list-only" },
-          prepare: prepareSnapshotCaches,
           refreshKanban: false,
         });
         const retainedTaskIds = new Set(
@@ -478,9 +398,8 @@ export const createTaskViewSync = ({
           activeRepoPath,
           activeDocumentEntries.filter((entry) => retainedTaskIds.has(entry.taskId)),
         );
-      } else {
-        await prepareSnapshotCaches();
-      }
+      });
+      await Promise.all([activeRefresh, ...inactiveRefreshes]);
     },
   };
 };
@@ -491,7 +410,6 @@ const createProductionTaskViewSync = (queryClient: QueryClient): TaskViewSync =>
     ports: {
       loadSettings: () => host.workspaceGetSettingsSnapshot(),
       listTasks: (repoPath, doneVisibleDays) => host.tasksList(repoPath, doneVisibleDays),
-      refreshAgentSessions: (repoPath) => host.agentSessionLiveRefresh({ repoPath }),
       loadFreshDocument: (repoPath, taskId, section) =>
         host.taskDocumentGetFresh(repoPath, taskId, section),
     },
