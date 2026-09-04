@@ -101,10 +101,7 @@ export const createTaskViewSync = ({
     return taskData.tasks;
   };
 
-  const retainVisibleTaskIds = (visibleTasks: TaskCard[], taskIds: string[]): string[] => {
-    const visibleTaskIds = new Set(visibleTasks.map((task) => task.id));
-    return taskIds.filter((taskId) => visibleTaskIds.has(taskId));
-  };
+  const toTaskIdSet = (tasks: TaskCard[]): Set<string> => new Set(tasks.map((task) => task.id));
 
   const refreshDocumentEntry = async (
     repoPath: string,
@@ -221,8 +218,11 @@ export const createTaskViewSync = ({
       await refreshDocuments(repoPath, options.impact.taskIds);
     }
     if (options.refreshDocumentsFor) {
-      const visibleTaskIds = retainVisibleTaskIds(tasks, options.refreshDocumentsFor);
-      await refreshDocuments(repoPath, visibleTaskIds);
+      const visibleTaskIds = toTaskIdSet(tasks);
+      await refreshDocuments(
+        repoPath,
+        options.refreshDocumentsFor.filter((taskId) => visibleTaskIds.has(taskId)),
+      );
     }
     return tasks;
   };
@@ -335,15 +335,10 @@ export const createTaskViewSync = ({
           impact: { kind: "task-list-only" },
         });
         activeTaskIds = tasks.map((task) => task.id);
-        const retainedTaskIds = new Set(
-          retainVisibleTaskIds(
-            tasks,
-            activeDocumentEntries.map((entry) => entry.taskId),
-          ),
-        );
+        const visibleTaskIds = toTaskIdSet(tasks);
         await refreshSnapshotDocumentEntries(
           activeRepoPath,
-          activeDocumentEntries.filter((entry) => retainedTaskIds.has(entry.taskId)),
+          activeDocumentEntries.filter((entry) => visibleTaskIds.has(entry.taskId)),
         );
       });
       await Promise.all([activeRefresh, ...inactiveRefreshes]);
