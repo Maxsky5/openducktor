@@ -24,6 +24,7 @@ export type TaskStreamControllerFactory = (input: {
   queryClient: QueryClient;
   getActiveRepoPath: () => string | null;
   onDegraded: (cause: unknown) => void;
+  onSnapshotFinished: (repoPath: string | null) => void;
   onSnapshotStarted: (repoPath: string | null) => void;
 }) => TaskStreamController;
 
@@ -124,6 +125,11 @@ export function useAppLifecycle({
           streamSnapshotReposRef.current.add(repoPath);
         }
       },
+      onSnapshotFinished: (repoPath) => {
+        if (repoPath) {
+          streamSnapshotReposRef.current.delete(repoPath);
+        }
+      },
     });
     void controller.start().then(
       () => decideTaskLoad(false),
@@ -158,9 +164,6 @@ export function useAppLifecycle({
       loadWorkspaceTasks: async (repoPath) => {
         const streamUnavailable = await shouldLoadWorkspaceTasks;
         const taskQueryState = queryClient.getQueryState(taskQueryKeys.repoData(repoPath));
-        if (taskQueryState?.status === "success") {
-          streamSnapshotReposRef.current.delete(repoPath);
-        }
         const streamOwnsRepo = streamSnapshotReposRef.current.has(repoPath);
         const queryOwnsRepo =
           taskQueryState?.status === "success" || taskQueryState?.fetchStatus === "fetching";

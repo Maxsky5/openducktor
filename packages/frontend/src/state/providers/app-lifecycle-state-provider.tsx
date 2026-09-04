@@ -20,7 +20,7 @@ const createProductionTaskStreamController =
   (
     removeTaskSessions: (repoPath: string, taskIds: string[]) => void,
   ): TaskStreamControllerFactory =>
-  ({ queryClient, getActiveRepoPath, onDegraded, onSnapshotStarted }) =>
+  ({ queryClient, getActiveRepoPath, onDegraded, onSnapshotFinished, onSnapshotStarted }) =>
     createTaskStreamController({
       transport: hostBridge,
       metadata: hostClient,
@@ -33,6 +33,7 @@ const createProductionTaskStreamController =
       }),
       getActiveRepoPath,
       onDegraded,
+      onSnapshotFinished,
       onSnapshotStarted,
     });
 

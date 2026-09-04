@@ -145,12 +145,17 @@ describe("useAppLifecycle task stream", () => {
   test("loads tasks when prior snapshot data is no longer cached", async () => {
     const loadWorkspaceTasks = mock(async () => {});
     const factoryState: FactoryStateContract = { queryClient: null };
-    const factory: TaskStreamControllerFactory = ({ queryClient, onSnapshotStarted }) => {
+    const factory: TaskStreamControllerFactory = ({
+      queryClient,
+      onSnapshotFinished,
+      onSnapshotStarted,
+    }) => {
       factoryState.queryClient = queryClient;
       return {
         start: async () => {
           onSnapshotStarted("/repo-a");
           queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
+          onSnapshotFinished("/repo-a");
         },
         stop: async () => {},
       };

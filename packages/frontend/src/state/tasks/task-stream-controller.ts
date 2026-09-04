@@ -39,6 +39,7 @@ export const createTaskStreamController = ({
   agentSessionViewSync,
   getActiveRepoPath,
   onDegraded,
+  onSnapshotFinished,
   onSnapshotStarted,
 }: {
   transport: TaskStreamTransport;
@@ -47,6 +48,7 @@ export const createTaskStreamController = ({
   agentSessionViewSync: AgentSessionViewSync;
   getActiveRepoPath: () => string | null;
   onDegraded: (cause: unknown) => void;
+  onSnapshotFinished?: (repoPath: string | null) => void;
   onSnapshotStarted?: (repoPath: string | null) => void;
 }): TaskStreamController => {
   let current: OwnedSubscription | null = null;
@@ -158,8 +160,12 @@ export const createTaskStreamController = ({
     metadata.invalidateAllTaskMetadata();
     const activeRepoPath = getActiveRepoPath();
     onSnapshotStarted?.(activeRepoPath);
-    const taskIds = await taskViewSync.reconcileStreamSnapshot(activeRepoPath);
-    await agentSessionViewSync.reconcileStreamSnapshot(activeRepoPath, taskIds);
+    try {
+      const taskIds = await taskViewSync.reconcileStreamSnapshot(activeRepoPath);
+      await agentSessionViewSync.reconcileStreamSnapshot(activeRepoPath, taskIds);
+    } finally {
+      onSnapshotFinished?.(activeRepoPath);
+    }
     if (!isActive(owner, frameGeneration)) return false;
     processedCursor = frame.cursor;
     return acknowledge(owner, frame.cursor, frameGeneration);
