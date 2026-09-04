@@ -24,7 +24,7 @@ export function SettingsSystemSection({
   const descriptionId = useId();
   const preferredToolId = system.preferredOpenInToolId;
   const options = [
-    { value: "default", label: "Automatic" },
+    { value: "default", label: "First available tool" },
     ...(toolsQuery.data ?? []).map(({ toolId }) => ({
       value: toolId,
       label: getOpenInToolLabel(toolId),
@@ -34,7 +34,9 @@ export function SettingsSystemSection({
     preferredToolId !== undefined &&
     toolsQuery.isSuccess &&
     !toolsQuery.data.some(({ toolId }) => toolId === preferredToolId);
-  const selectedLabel = preferredToolId ? getOpenInToolLabel(preferredToolId) : "Automatic";
+  const selectedLabel = preferredToolId
+    ? getOpenInToolLabel(preferredToolId)
+    : "First available tool";
 
   return (
     <div className="grid gap-4 p-4">
@@ -48,8 +50,7 @@ export function SettingsSystemSection({
         <div className="grid gap-2">
           <Label id={labelId}>Preferred Open In tool</Label>
           <p id={descriptionId} className="text-xs text-muted-foreground">
-            Automatic uses the first available tool. Opening another tool does not change your
-            preference.
+            The tool selected by default in Agent Studio.
           </p>
           {unavailablePreference ? (
             <p className="text-xs text-muted-foreground">

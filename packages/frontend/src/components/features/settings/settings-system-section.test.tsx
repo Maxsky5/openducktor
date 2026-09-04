@@ -38,7 +38,7 @@ describe("System settings", () => {
       name: "Preferred Open In tool",
     });
     await waitFor(() => expect(trigger.disabled).toBe(false));
-    expect(trigger.textContent).toContain("Automatic");
+    expect(trigger.textContent).toContain("First available tool");
     await act(async () => fireEvent.click(trigger));
     expect(screen.queryByText("Cursor")).toBeNull();
     await act(async () => fireEvent.click(await screen.findByText("Zed")));
@@ -47,7 +47,7 @@ describe("System settings", () => {
       fireEvent.click(screen.getByRole("button", { name: "Clear preference" })),
     );
     expect(screen.getByRole("status").textContent).toBe("{}");
-    expect(trigger.textContent).toContain("Automatic");
+    expect(trigger.textContent).toContain("First available tool");
   });
 
   test("shows an unavailable saved tool and allows clearing it", async () => {
