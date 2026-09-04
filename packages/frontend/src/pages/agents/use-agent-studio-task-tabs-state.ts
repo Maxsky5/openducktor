@@ -33,18 +33,16 @@ export function useTaskTabState({
   isLoadingTasks: boolean;
 }) {
   const [draft, setDraft] = useState<TaskTabDraft | null>(null);
-  const useDraft = Boolean(
-    activeWorkspaceId &&
-    loadedAgentStudioState &&
-    agentStudioStateLoadKey !== null &&
-    draft?.workspaceId === activeWorkspaceId &&
-    draft.loadKey === agentStudioStateLoadKey,
-  );
   const hasLoadedState = Boolean(
     activeWorkspaceId &&
     loadedAgentStudioState &&
     agentStudioStateLoadKey !== null &&
     agentStudioState,
+  );
+  const useDraft = Boolean(
+    hasLoadedState &&
+    draft?.workspaceId === activeWorkspaceId &&
+    draft.loadKey === agentStudioStateLoadKey,
   );
 
   const state = useMemo<TaskTabState>(() => {

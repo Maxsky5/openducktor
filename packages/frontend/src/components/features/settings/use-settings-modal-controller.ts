@@ -570,16 +570,15 @@ const useCodexDangerState = ({
     () => (open && draft ? buildNewCodexDangerousSelectionKey({ baseline, draft }) : ""),
     [baseline, draft, open],
   );
-  const [choice, setChoice] = useState({ key, acknowledged: false });
-  if (choice.key !== key) {
-    setChoice({ key, acknowledged: false });
+  const [acknowledgedKey, setAcknowledgedKey] = useState("");
+  if (acknowledgedKey && acknowledgedKey !== key) {
+    setAcknowledgedKey("");
   }
 
   const requiresCodexDangerAcknowledgement = key !== "";
-  const isCodexDangerAcknowledged =
-    requiresCodexDangerAcknowledgement && choice.key === key && choice.acknowledged;
+  const isCodexDangerAcknowledged = requiresCodexDangerAcknowledgement && acknowledgedKey === key;
   const setCodexDangerAcknowledged = useCallback(
-    (acknowledged: boolean): void => setChoice({ key, acknowledged }),
+    (acknowledged: boolean): void => setAcknowledgedKey(acknowledged ? key : ""),
     [key],
   );
 
