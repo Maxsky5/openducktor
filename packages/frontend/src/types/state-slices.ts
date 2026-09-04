@@ -134,6 +134,7 @@ export type RepoRuntimeHealthContextValue = {
 };
 
 export type TasksStateContextValue = {
+  hasCurrentTaskSnapshot: boolean;
   isForegroundLoadingTasks: boolean;
   isRefreshingTasksInBackground: boolean;
   isLoadingTasks: boolean;

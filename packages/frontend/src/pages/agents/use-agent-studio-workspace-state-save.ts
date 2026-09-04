@@ -1,6 +1,6 @@
 import type { RepoConfig, WorkspaceAgentStudioState } from "@openducktor/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { host } from "@/state/operations/host";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 
@@ -35,15 +35,24 @@ export function useAgentStudioWorkspaceStateSave({
   const queryClient = useQueryClient();
   const lastSaveRef = useRef<{ workspaceId: string; key: string } | null>(null);
   const [failure, setFailure] = useState<SaveFailure | null>(null);
+  const loadedKey = loadedState ? toStateKey(loadedState) : null;
+  const nextKey = toStateKey(state);
+  const latestWantedRef = useRef({ workspaceId, key: nextKey });
+  useLayoutEffect(() => {
+    latestWantedRef.current = { workspaceId, key: nextKey };
+  }, [nextKey, workspaceId]);
   const { mutate } = useMutation({
     mutationFn: (request: SaveRequest) =>
       hostClient.workspaceReplaceAgentStudioState(request.workspaceId, request.state),
     scope: { id: `agent-studio-workspace-state:${workspaceId ?? "inactive"}` },
     onSuccess: (repoConfig, request) => {
-      queryClient.setQueryData<RepoConfig>(
-        workspaceQueryKeys.repoConfig(request.workspaceId),
-        repoConfig,
-      );
+      const latestWanted = latestWantedRef.current;
+      if (latestWanted.workspaceId === request.workspaceId && latestWanted.key === request.key) {
+        queryClient.setQueryData<RepoConfig>(
+          workspaceQueryKeys.repoConfig(request.workspaceId),
+          repoConfig,
+        );
+      }
       setFailure((current) => (current?.request === request ? null : current));
     },
     onError: (cause, request) => {
@@ -53,8 +62,6 @@ export function useAgentStudioWorkspaceStateSave({
       });
     },
   });
-  const loadedKey = loadedState ? toStateKey(loadedState) : null;
-  const nextKey = toStateKey(state);
   const saveFailedForCurrentState = Boolean(
     failure &&
     failure.request.workspaceId === workspaceId &&
@@ -67,11 +74,11 @@ export function useAgentStudioWorkspaceStateSave({
     if (!enabled || !workspaceId || !loadedState) {
       return;
     }
-    if (loadedKey === nextKey) {
-      return;
-    }
     const lastSave = lastSaveRef.current;
     if (lastSave?.workspaceId === workspaceId && lastSave.key === nextKey) {
+      return;
+    }
+    if (loadedKey === nextKey && lastSave?.workspaceId !== workspaceId) {
       return;
     }
 

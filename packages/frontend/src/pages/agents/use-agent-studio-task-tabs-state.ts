@@ -21,7 +21,7 @@ export function useTaskTabState({
   taskId,
   selectedTask,
   tasks,
-  isLoadingTasks,
+  canPruneTaskIds,
 }: {
   activeWorkspaceId: string | null;
   loadedAgentStudioState: WorkspaceAgentStudioState | null;
@@ -30,7 +30,7 @@ export function useTaskTabState({
   taskId: string;
   selectedTask: TaskCard | null;
   tasks: TaskCard[];
-  isLoadingTasks: boolean;
+  canPruneTaskIds: boolean;
 }) {
   const [draft, setDraft] = useState<TaskTabDraft | null>(null);
   const hasLoadedState = Boolean(
@@ -57,9 +57,9 @@ export function useTaskTabState({
             openTaskIds: agentStudioState.openTaskIds,
             activeTaskId: agentStudioState.activeTask?.taskId ?? null,
           };
-    const taskIds = isLoadingTasks
-      ? baseState.openTaskIds
-      : pruneAgentStudioTaskIds(baseState.openTaskIds, tasks);
+    const taskIds = canPruneTaskIds
+      ? pruneAgentStudioTaskIds(baseState.openTaskIds, tasks)
+      : baseState.openTaskIds;
     const hasValidRouteTask = Boolean(taskId && selectedTask && selectedTask.status !== "closed");
     const openTaskIds = hasValidRouteTask ? ensureActiveTaskTab(taskIds, taskId) : taskIds;
 
@@ -70,7 +70,7 @@ export function useTaskTabState({
   }, [
     agentStudioState,
     draft,
-    isLoadingTasks,
+    canPruneTaskIds,
     hasLoadedState,
     selectedTask,
     taskId,

@@ -31,6 +31,7 @@ type UseAgentStudioSelectionControllerArgs = {
   isRepoNavigationBoundaryPending: boolean;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
+  canPruneTaskIds: boolean;
   sessions: AgentSessionSummary[];
   taskIdParam: string;
   sessionExternalIdParam: string | null;
@@ -84,6 +85,7 @@ export function useAgentStudioSelectionController({
   isRepoNavigationBoundaryPending,
   tasks,
   isLoadingTasks,
+  canPruneTaskIds,
   sessions,
   taskIdParam,
   sessionExternalIdParam,
@@ -173,7 +175,7 @@ export function useAgentStudioSelectionController({
     taskId: navigationBase.taskId,
     selectedTask: navigationBase.selectedTask,
     tasks,
-    isLoadingTasks,
+    canPruneTaskIds,
     latestSessionByTaskId,
     activeSessionByTaskId,
     selectAgentStudioSelection,

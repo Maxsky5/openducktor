@@ -217,6 +217,7 @@ let checksState = {
   refreshChecks: async () => undefined,
 };
 let tasksState: TasksStateContextValue = {
+  hasCurrentTaskSnapshot: true,
   isForegroundLoadingTasks: false,
   isRefreshingTasksInBackground: false,
   isLoadingTasks: false,
@@ -613,6 +614,7 @@ beforeEach(async () => {
     refreshChecks: async () => undefined,
   };
   tasksState = {
+    hasCurrentTaskSnapshot: true,
     isForegroundLoadingTasks: false,
     isRefreshingTasksInBackground: false,
     isLoadingTasks: false,

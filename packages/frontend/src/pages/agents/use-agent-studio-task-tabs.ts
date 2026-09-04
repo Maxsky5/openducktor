@@ -22,7 +22,7 @@ export function useAgentStudioTaskTabs(args: {
   taskId: string;
   selectedTask: TaskCard | null;
   tasks: TaskCard[];
-  isLoadingTasks: boolean;
+  canPruneTaskIds: boolean;
   latestSessionByTaskId: Map<string, AgentSessionSummary>;
   activeSessionByTaskId?: Map<string, AgentSessionSummary>;
   selectAgentStudioSelection: SelectAgentStudioSelection;
@@ -36,7 +36,7 @@ export function useAgentStudioTaskTabs(args: {
     taskId,
     selectedTask,
     tasks,
-    isLoadingTasks,
+    canPruneTaskIds,
     latestSessionByTaskId,
     activeSessionByTaskId,
     selectAgentStudioSelection,
@@ -63,7 +63,7 @@ export function useAgentStudioTaskTabs(args: {
       taskId: taskIdForTabs,
       selectedTask,
       tasks,
-      isLoadingTasks,
+      canPruneTaskIds,
     });
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({

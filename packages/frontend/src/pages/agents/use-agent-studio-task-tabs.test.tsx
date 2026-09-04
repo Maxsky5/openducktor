@@ -25,7 +25,7 @@ const withDefaults = (overrides: Partial<HookArgs> = {}): HookArgs => {
     taskId: "",
     selectedTask: null,
     tasks: [],
-    isLoadingTasks: false,
+    canPruneTaskIds: true,
     latestSessionByTaskId: new Map(),
     selectAgentStudioSelection: () => {},
     ...overrides,

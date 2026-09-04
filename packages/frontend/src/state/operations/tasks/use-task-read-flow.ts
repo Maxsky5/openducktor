@@ -15,6 +15,7 @@ type TaskToastDedupeRef = MutableRefObject<{ repoPath: string; description: stri
 
 export type UseTaskReadFlowResult = {
   tasks: TaskCard[];
+  hasCurrentTaskSnapshot: boolean;
   isForegroundLoadingTasks: boolean;
   isRefreshingTasksInBackground: boolean;
   isLoadingTasks: boolean;
@@ -76,6 +77,7 @@ export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTas
     isSettingsLoadingForActiveRepo: readModel.isSettingsLoadingForActiveRepo,
     isTaskQueryLoadingForActiveRepo: readModel.isTaskQueryLoadingForActiveRepo,
     isTaskQueryFetchingForActiveRepo: readModel.isTaskQueryFetchingForActiveRepo,
+    isTaskQuerySuccessForActiveRepo: readModel.isTaskQuerySuccessForActiveRepo,
   });
 
   return {

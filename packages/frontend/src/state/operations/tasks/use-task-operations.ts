@@ -76,6 +76,7 @@ export function useTaskOperations({
 
   return {
     tasks: taskReadFlow.tasks,
+    hasCurrentTaskSnapshot: taskReadFlow.hasCurrentTaskSnapshot,
     isForegroundLoadingTasks: taskReadFlow.isForegroundLoadingTasks,
     isRefreshingTasksInBackground: taskReadFlow.isRefreshingTasksInBackground,
     isLoadingTasks: taskReadFlow.isLoadingTasks,

@@ -279,6 +279,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
     isRepoNavigationBoundaryPending: false,
     tasks: [createTask("task-1"), createTask("task-2")],
     isLoadingTasks: false,
+    canPruneTaskIds: true,
     sessions: [],
     taskIdParam: "task-1",
     sessionExternalIdParam: null,

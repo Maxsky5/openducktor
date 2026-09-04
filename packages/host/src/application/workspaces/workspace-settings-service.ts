@@ -7,11 +7,11 @@ import {
   repoConfigSchema,
   settingsSnapshotSaveInputSchema,
   themeSchema,
-  workspaceAgentStudioStateSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import { buildAgentStudioStateUpdate } from "./workspace-agent-studio-state";
 import {
   buildMergedRepoConfig,
   ensureRepoPathAvailable,
@@ -215,35 +215,8 @@ const createUnserializedWorkspaceSettingsService = (
   replaceAgentStudioState(workspaceId, rawState) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
-      const existing = yield* Effect.try({
-        try: () => requireConfiguredWorkspace(config, workspaceId),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-      const nextRepoConfig = yield* Effect.try({
-        try: () =>
-          repoConfigSchema.parse({
-            ...existing,
-            agentStudioState: workspaceAgentStudioStateSchema.parse(rawState),
-          }),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-      const nextConfig = yield* Effect.try({
-        try: () =>
-          globalConfigSchema.parse({
-            ...config,
-            workspaces: {
-              ...config.workspaces,
-              [workspaceId]: nextRepoConfig,
-            },
-          }),
+      const update = yield* Effect.try({
+        try: () => buildAgentStudioStateUpdate(config, workspaceId, rawState),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -251,8 +224,8 @@ const createUnserializedWorkspaceSettingsService = (
           }),
       });
 
-      yield* settingsConfig.writeConfig(nextConfig);
-      return nextRepoConfig;
+      yield* settingsConfig.writeConfig(update.config);
+      return update.repoConfig;
     });
   },
   updateRepoConfig(workspaceId, update) {

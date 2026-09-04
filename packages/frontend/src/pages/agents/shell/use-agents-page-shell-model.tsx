@@ -60,6 +60,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       activeWorkspaceId,
     });
   const {
+    hasCurrentTaskSnapshot,
     isForegroundLoadingTasks,
     tasks,
     syncPullRequests,
@@ -98,6 +99,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     activeWorkspaceId,
     workspaceRepoPath,
     tasks,
+    hasCurrentTaskSnapshot,
     isForegroundLoadingTasks,
     sessions,
     repoSettings,

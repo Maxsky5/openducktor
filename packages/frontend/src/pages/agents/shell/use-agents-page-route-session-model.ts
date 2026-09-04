@@ -20,6 +20,7 @@ type UseAgentsPageRouteSessionModelArgs = {
   activeWorkspaceId: string | null;
   workspaceRepoPath: string | null;
   tasks: Parameters<typeof useAgentStudioSelectionController>[0]["tasks"];
+  hasCurrentTaskSnapshot: boolean;
   isForegroundLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
   repoSettings: RepoSettingsInput | null;
@@ -39,6 +40,7 @@ export function useAgentsPageRouteSessionModel({
   activeWorkspaceId,
   workspaceRepoPath,
   tasks,
+  hasCurrentTaskSnapshot,
   isForegroundLoadingTasks,
   sessions,
   repoSettings,
@@ -60,6 +62,7 @@ export function useAgentsPageRouteSessionModel({
     activeWorkspaceId,
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,
+    hasCurrentTaskSnapshot,
     sessions,
     sessionReadModelLoadState,
   });
@@ -107,6 +110,7 @@ export function useAgentsPageRouteSessionModel({
       requestContextTransition: taskExecutionFilePreview.requestContextTransition,
     });
   const selectAgentStudioSelection: SelectAgentStudioSelection = applyAgentStudioSelection;
+  const canPruneTaskIds = hasCurrentTaskSnapshot && !isForegroundLoadingTasks;
 
   const selection = useAgentStudioSelectionController({
     activeWorkspaceId,
@@ -117,6 +121,7 @@ export function useAgentsPageRouteSessionModel({
     isRepoNavigationBoundaryPending,
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,
+    canPruneTaskIds,
     sessions,
     taskIdParam,
     sessionExternalIdParam,

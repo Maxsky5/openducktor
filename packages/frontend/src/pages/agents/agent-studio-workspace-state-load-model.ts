@@ -19,6 +19,7 @@ export const buildAgentStudioStateLoad = ({
   isQueryFetching,
   tasks,
   isLoadingTasks,
+  hasCurrentTaskSnapshot,
   sessions,
   sessionReadModelLoadState,
 }: {
@@ -29,6 +30,7 @@ export const buildAgentStudioStateLoad = ({
   isQueryFetching: boolean;
   tasks: readonly TaskCard[];
   isLoadingTasks: boolean;
+  hasCurrentTaskSnapshot: boolean;
   sessions: readonly AgentSessionSummary[];
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
 }): AgentStudioWorkspaceStateLoadModel => {
@@ -40,21 +42,24 @@ export const buildAgentStudioStateLoad = ({
     sessionReadModelLoadState.kind !== "ready" &&
     sessionReadModelLoadState.kind !== "failed",
   );
-  const agentStudioState =
-    loadedAgentStudioState && !isLoadingTasks && !waitsForSessions
+  let agentStudioState: WorkspaceAgentStudioState | null = null;
+  if (loadedAgentStudioState && !isLoadingTasks && !waitsForSessions) {
+    agentStudioState = hasCurrentTaskSnapshot
       ? buildAgentStudioReadState({
           state: loadedAgentStudioState,
           tasks,
           sessions,
           sessionsReady: sessionReadModelLoadState.kind === "ready",
         })
-      : null;
+      : loadedAgentStudioState;
+  }
   const isLoading = isQueryPending || isQueryFetching || isLoadingTasks || waitsForSessions;
   const canSave =
     activeWorkspaceId !== null &&
     agentStudioState !== null &&
     !isLoading &&
     !error &&
+    hasCurrentTaskSnapshot &&
     sessionReadModelLoadState.kind === "ready";
 
   return {

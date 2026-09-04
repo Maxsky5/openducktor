@@ -321,6 +321,7 @@ const createTasksStateValue = (
     "tasks" | "pendingMergedPullRequest" | "linkingMergedPullRequestTaskId"
   >,
 ): TasksStateContextValue => ({
+  hasCurrentTaskSnapshot: true,
   isForegroundLoadingTasks: false,
   isRefreshingTasksInBackground: false,
   tasks: renderState.tasks,

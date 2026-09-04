@@ -2,6 +2,8 @@ import { describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, WorkspaceAgentStudioState } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { createQueryClient } from "@/lib/query-client";
+import { workspaceQueryKeys } from "@/state/queries/workspace";
 import {
   createHookHarness as createSharedHookHarness,
   createDeferred,
@@ -82,6 +84,101 @@ describe("useAgentStudioWorkspaceStateSave", () => {
     await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
 
     expect(workspaceReplaceAgentStudioState).toHaveBeenCalledWith("repo-a", nextState);
+    await harness.unmount();
+  });
+
+  test("saves a change back to the loaded snapshot after an older save", async () => {
+    const loadedState = { openTaskIds: ["task-1"] };
+    const pendingState = { openTaskIds: ["task-1", "task-2"] };
+    const pendingSave = createDeferred<RepoConfig>();
+    const workspaceReplaceAgentStudioState = mock(
+      async (_workspaceId: string, state: WorkspaceAgentStudioState) => {
+        if (state === pendingState) {
+          return pendingSave.promise;
+        }
+        return createRepoConfig(state);
+      },
+    );
+    const hostClient = { workspaceReplaceAgentStudioState };
+    const harness = createHookHarness({
+      workspaceId: "repo-a",
+      loadedState,
+      state: pendingState,
+      enabled: true,
+      hostClient,
+    });
+
+    await harness.mount();
+    await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
+    await harness.update({
+      workspaceId: "repo-a",
+      loadedState,
+      state: loadedState,
+      enabled: true,
+      hostClient,
+    });
+    await harness.run(async () => {
+      pendingSave.resolve(createRepoConfig(pendingState));
+      await pendingSave.promise;
+    });
+    await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 2);
+
+    expect(workspaceReplaceAgentStudioState.mock.calls[1]).toEqual(["repo-a", loadedState]);
+    await harness.unmount();
+  });
+
+  test("does not publish an older save while a newer snapshot waits", async () => {
+    const loadedState = { openTaskIds: ["task-1"] };
+    const pendingState = { openTaskIds: ["task-1", "task-2"] };
+    const nextState = { openTaskIds: ["task-1", "task-3"] };
+    const pendingSave = createDeferred<RepoConfig>();
+    const nextSave = createDeferred<RepoConfig>();
+    const workspaceReplaceAgentStudioState = mock(
+      async (_workspaceId: string, state: WorkspaceAgentStudioState) =>
+        state === pendingState ? pendingSave.promise : nextSave.promise,
+    );
+    const hostClient = { workspaceReplaceAgentStudioState };
+    const queryClient = createQueryClient();
+    const queryKey = workspaceQueryKeys.repoConfig("repo-a");
+    queryClient.setQueryData(queryKey, createRepoConfig(loadedState));
+    const harness = createSharedHookHarness(
+      useAgentStudioWorkspaceStateSave,
+      {
+        workspaceId: "repo-a",
+        loadedState,
+        state: pendingState,
+        enabled: true,
+        hostClient,
+      },
+      { queryClient },
+    );
+
+    await harness.mount();
+    await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
+    await harness.update({
+      workspaceId: "repo-a",
+      loadedState,
+      state: nextState,
+      enabled: true,
+      hostClient,
+    });
+    await harness.run(async () => {
+      pendingSave.resolve(createRepoConfig(pendingState));
+      await pendingSave.promise;
+    });
+    await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 2);
+
+    expect(queryClient.getQueryData<RepoConfig>(queryKey)?.agentStudioState).toEqual(loadedState);
+
+    await harness.run(async () => {
+      nextSave.resolve(createRepoConfig(nextState));
+      await nextSave.promise;
+    });
+    await harness.waitFor(
+      () =>
+        queryClient.getQueryData<RepoConfig>(queryKey)?.agentStudioState.openTaskIds.at(-1) ===
+        "task-3",
+    );
     await harness.unmount();
   });
 

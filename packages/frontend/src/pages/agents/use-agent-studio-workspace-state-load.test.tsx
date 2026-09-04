@@ -57,7 +57,7 @@ const useWorkspaceRestore = (args: LoadHookArgs) => {
     searchParams: emptySearchParams,
     setSearchParams: () => {},
   });
-  const selectedTask = tasks.find((task) => task.id === navigation.taskIdParam) ?? null;
+  const selectedTask = args.tasks.find((task) => task.id === navigation.taskIdParam) ?? null;
   const tabs = useAgentStudioTaskTabs({
     activeWorkspaceId: args.activeWorkspaceId,
     loadedAgentStudioState: load.loadedAgentStudioState,
@@ -66,8 +66,8 @@ const useWorkspaceRestore = (args: LoadHookArgs) => {
     isRepoNavigationBoundaryPending: navigation.isRepoNavigationBoundaryPending,
     taskId: navigation.taskIdParam,
     selectedTask,
-    tasks,
-    isLoadingTasks: args.isLoadingTasks,
+    tasks: args.tasks,
+    canPruneTaskIds: args.hasCurrentTaskSnapshot && !args.isLoadingTasks,
     latestSessionByTaskId: new Map(),
     selectAgentStudioSelection: () => {},
   });
@@ -86,6 +86,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       activeWorkspaceId: "repo-a",
       tasks,
       isLoadingTasks: false,
+      hasCurrentTaskSnapshot: true,
       sessions: [],
       sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
       hostClient: { workspaceGetRepoConfig },
@@ -124,6 +125,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       activeWorkspaceId: "repo-a",
       tasks,
       isLoadingTasks: false,
+      hasCurrentTaskSnapshot: true,
       sessions: [],
       sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
         "/repo-a",
@@ -173,6 +175,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       activeWorkspaceId: "repo-a",
       tasks,
       isLoadingTasks: false,
+      hasCurrentTaskSnapshot: true,
       sessions: [],
       sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
         "/repo-a",
@@ -228,6 +231,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       activeWorkspaceId: "repo-a",
       tasks,
       isLoadingTasks: false,
+      hasCurrentTaskSnapshot: true,
       sessions: [],
       sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
         "/repo-a",
@@ -267,6 +271,37 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       externalSessionId: "session-saved",
     });
     expect(harness.getLatest().canSave).toBe(true);
+    await harness.unmount();
+  });
+
+  test("keeps saved task ids until the task snapshot is current", async () => {
+    const savedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1", "task-2"],
+      activeTask: { taskId: "task-2", role: "build" },
+    };
+    const workspaceGetRepoConfig = mock(async () => createRepoConfig(savedState));
+    const staleArgs: LoadHookArgs & { hasCurrentTaskSnapshot: boolean } = {
+      activeWorkspaceId: "repo-a",
+      tasks: tasks.slice(0, 1),
+      isLoadingTasks: false,
+      hasCurrentTaskSnapshot: false,
+      sessions: [],
+      sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
+      hostClient: { workspaceGetRepoConfig },
+    };
+    const harness = createSharedHookHarness(useWorkspaceRestore, staleArgs);
+
+    await harness.mount();
+    await harness.waitFor((result) => result.load.loadedAgentStudioState !== null);
+
+    expect(harness.getLatest().load.agentStudioState).toEqual(savedState);
+    expect(harness.getLatest().tabs.tabTaskIds).toEqual(["task-1", "task-2"]);
+    expect(harness.getLatest().load.canSave).toBe(false);
+
+    await harness.update({ ...staleArgs, hasCurrentTaskSnapshot: true });
+    expect(harness.getLatest().load.agentStudioState).toEqual({ openTaskIds: ["task-1"] });
+    expect(harness.getLatest().tabs.tabTaskIds).toEqual(["task-1"]);
+    expect(harness.getLatest().load.canSave).toBe(true);
     await harness.unmount();
   });
 });
