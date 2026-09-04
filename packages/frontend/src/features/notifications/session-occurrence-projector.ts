@@ -27,6 +27,7 @@ type SessionProjection = {
   errorNotified: boolean;
   idleNotified: boolean;
   isSubagent: boolean;
+  lastAssistantMessage: { id: string; text: string } | null;
   pendingApprovals: Set<string>;
   pendingQuestions: Set<string>;
   running: boolean;
@@ -46,6 +47,7 @@ const createProjection = (
   errorNotified: false,
   idleNotified: false,
   isSubagent: snapshot.parentExternalSessionId !== undefined,
+  lastAssistantMessage: null,
   pendingApprovals: new Set(snapshot.pendingApprovals.map(pendingInputIdentity)),
   pendingQuestions: new Set(snapshot.pendingQuestions.map(pendingInputIdentity)),
   running: snapshot.activity === "running",
@@ -55,6 +57,9 @@ const createProjection = (
 const isExpectedUserStop = (
   event: Extract<AgentSessionTranscriptEvent, { type: "session_finished" }>,
 ): boolean => event.message.trim().toLowerCase() === "session stopped";
+
+const toNotificationStatus = (message: string): string =>
+  message.trim().replace(/\s+/g, " ").slice(0, 240);
 
 export const createSessionOccurrenceProjector = ({
   repositoryLabel,
@@ -110,6 +115,7 @@ export const createSessionOccurrenceProjector = ({
     projection.running = true;
     projection.errorNotified = false;
     projection.idleNotified = false;
+    projection.lastAssistantMessage = null;
   };
 
   const finishIdleCycle = (projection: SessionProjection): NotificationOccurrence[] => {
@@ -122,7 +128,7 @@ export const createSessionOccurrenceProjector = ({
       sessionOccurrence(projection, {
         kind: "agent.session_idle",
         suffix: `cycle-${projection.cycle}`,
-        status: "Agent Session is idle.",
+        status: projection.lastAssistantMessage?.text ?? "Agent Session is idle.",
         navigationTarget: { type: "agent_session", ...sessionTarget(projection) },
       }),
     ];
@@ -233,6 +239,21 @@ export const createSessionOccurrenceProjector = ({
       return [];
     }
 
+    if (event.type === "assistant_message") {
+      const message = toNotificationStatus(event.message);
+      if (projection.running && message) {
+        projection.lastAssistantMessage = { id: event.messageId, text: message };
+      }
+      return [];
+    }
+    if (
+      event.type === "transcript_retracted" &&
+      projection.lastAssistantMessage &&
+      event.messageIds.includes(projection.lastAssistantMessage.id)
+    ) {
+      projection.lastAssistantMessage = null;
+      return [];
+    }
     if (event.type === "session_status") {
       if (event.status.type === "idle") {
         return finishIdleCycle(projection);

@@ -221,6 +221,131 @@ describe("session occurrence projector", () => {
     ]);
   });
 
+  test("uses the last completed assistant message in idle notification copy", () => {
+    const projector = createProjector();
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "session_upsert",
+      session: snapshot({ activity: "running" }),
+    });
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "assistant_message",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:01:00.000Z",
+        messageId: "message-1",
+        message: "  Work is complete.\n\nThe checks pass.  ",
+      }),
+    });
+
+    const [occurrence] = projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "session_idle",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:01:01.000Z",
+      }),
+    });
+
+    expect(occurrence).toBeDefined();
+    if (!occurrence) throw new Error("Expected an idle notification occurrence.");
+    expect(buildNotificationCopy(occurrence).body).toBe(
+      "Repo - Build notifications - Builder - Work is complete. The checks pass.",
+    );
+  });
+
+  test("does not use a retracted assistant message in idle notification copy", () => {
+    const projector = createProjector();
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    projector.accept({
+      type: "session_upsert",
+      session: snapshot({ activity: "running" }),
+    });
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "assistant_message",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:01:00.000Z",
+        messageId: "message-1",
+        message: "Superseded response",
+      }),
+    });
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "transcript_retracted",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:01:01.000Z",
+        messageIds: ["message-1"],
+      }),
+    });
+
+    const [occurrence] = projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "session_idle",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:01:02.000Z",
+      }),
+    });
+
+    expect(occurrence).toMatchObject({ status: "Agent Session is idle." });
+  });
+
+  test("does not reuse assistant text from a prior running cycle", () => {
+    const projector = createProjector();
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ activity: "running" })],
+    });
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "assistant_message",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:01:00.000Z",
+        messageId: "message-1",
+        message: "First cycle response",
+      }),
+    });
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "session_idle",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:01:01.000Z",
+      }),
+    });
+
+    projector.accept({
+      type: "session_upsert",
+      session: snapshot({ activity: "running" }),
+    });
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "assistant_message",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:02:00.000Z",
+        messageId: "message-2",
+        message: "   ",
+      }),
+    });
+    const [occurrence] = projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "session_idle",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:02:01.000Z",
+      }),
+    });
+
+    expect(occurrence).toMatchObject({ status: "Agent Session is idle." });
+  });
+
   test("emits idle only after observed running and excludes retry, output, and user stop", () => {
     const projector = createProjector();
     projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
