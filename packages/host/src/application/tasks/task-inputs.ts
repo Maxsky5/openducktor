@@ -23,9 +23,11 @@ export type ListTasksInput = RepoPathInput & {
   doneVisibleDays?: number;
 };
 
-export type ListAgentSessionsForTasksInput = RepoPathInput & {
+export type TaskIdsInput = RepoPathInput & {
   taskIds: string[];
 };
+
+export type ListAgentSessionsForTasksInput = TaskIdsInput;
 
 export type AgentSessionUpsertInput = TaskIdInput & {
   session: AgentSessionRecord;

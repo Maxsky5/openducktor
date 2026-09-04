@@ -10,7 +10,6 @@ import {
   parseDeleteTaskInput,
   parseDirectMergeInput,
   parseListAgentSessionsForTasksInput,
-  parseListTasksInput,
   parseMarkdownDocumentInput,
   parseOptionalNoteInput,
   parsePullRequestLinkMergedInput,
@@ -19,6 +18,7 @@ import {
   parseRepoPathInput,
   parseSetPlanInput,
   parseTaskIdInput,
+  parseTaskIdsInput,
   parseTaskSessionBootstrapFinalizeInput,
   parseTaskSessionBootstrapPrepareInput,
   parseTaskStopImpactInput,
@@ -68,6 +68,8 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
     task_direct_merge: (args) => taskService.directMerge(parseDirectMergeInput(args)),
     task_direct_merge_complete: (args) =>
       taskService.completeDirectMerge(parseTaskIdInput(args, "task_direct_merge_complete input")),
+    task_ids_existing: (args) =>
+      taskService.findExistingTaskIds(parseTaskIdsInput(args, "task_ids_existing input")),
     task_pull_request_link_merged: (args) =>
       taskService.linkMergedPullRequest(parsePullRequestLinkMergedInput(args)),
     task_pull_request_unlink: (args) =>
@@ -99,5 +101,5 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.saveSpecDocument(
         parseMarkdownDocumentInput(args, "spec_save_document input", "spec"),
       ),
-    tasks_list: (args) => taskService.listTasks(parseListTasksInput(args)),
+    tasks_list: (args) => taskService.listKanbanTasks(parseRepoPathInput(args, "tasks_list input")),
   }) satisfies HostCommandHandlerDefinitions;

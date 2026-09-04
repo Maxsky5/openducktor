@@ -1,6 +1,9 @@
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { createDefaultGlobalConfig } from "../../config/global-config";
+import { HostOperationError, HostResourceError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
+import { toSettingsSnapshot } from "../workspaces/workspace-settings-model";
 import {
   createAgentSessionRecord,
   createAgentSessionSettingsConfig,
@@ -12,6 +15,62 @@ import {
 } from "./test-support/task-workflow-harness";
 
 describe("createTaskService list and session reads", () => {
+  test("loads Kanban tasks with the host-owned closed-task retention setting", async () => {
+    const calls: Array<{ repoPath: string; doneVisibleDays?: number }> = [];
+    const taskStore: TaskStorePort = {
+      listTasks(input) {
+        calls.push(input);
+        return Effect.succeed([]);
+      },
+    };
+    const settings = toSettingsSnapshot({
+      ...createDefaultGlobalConfig(),
+      kanban: { doneVisibleDays: 7, emptyColumnDisplay: "show" },
+    });
+    const workspaceSettingsService = createWorkspaceSettingsServiceTestDouble({
+      getSettingsSnapshot: () => Effect.succeed(settings),
+    });
+    const service = createTaskService({ taskStore, workspaceSettingsService });
+
+    await expect(
+      Effect.runPromise(service.listKanbanTasks({ repoPath: "/repo" })),
+    ).resolves.toEqual([]);
+    expect(calls).toEqual([{ repoPath: "/repo", doneVisibleDays: 7 }]);
+  });
+
+  test("checks only requested task IDs when hidden tasks need existence checks", async () => {
+    const calls: Array<{ repoPath: string; taskId: string }> = [];
+    const taskStore: TaskStorePort = {
+      getTask(input) {
+        calls.push(input);
+        return input.taskId === "missing-task"
+          ? Effect.fail(
+              new HostResourceError({
+                resource: "task",
+                operation: "sqliteTaskRepository.getTask",
+                message: "Task not found: missing-task",
+              }),
+            )
+          : Effect.succeed(task({ id: input.taskId }));
+      },
+    };
+    const service = createTaskService({ taskStore });
+
+    await expect(
+      Effect.runPromise(
+        service.findExistingTaskIds({
+          repoPath: "/repo",
+          taskIds: ["task-2", "missing-task", "task-1"],
+        }),
+      ),
+    ).resolves.toEqual(["task-2", "task-1"]);
+    expect(calls).toEqual([
+      { repoPath: "/repo", taskId: "task-2" },
+      { repoPath: "/repo", taskId: "missing-task" },
+      { repoPath: "/repo", taskId: "task-1" },
+    ]);
+  });
+
   test("preserves typed task asset failures from task mutations", async () => {
     const failure = new TaskAssetError({
       operation: "create",
@@ -359,8 +418,8 @@ describe("createTaskService list and session reads", () => {
       await import("../../interface/commands/task-command-handlers");
     const service = createTaskService({ taskStore });
     const handlers = createTaskCommandHandlers(service);
-    expect(() => handlers.tasks_list?.({ repoPath: "/repo", doneVisibleDays: -1 })).toThrow(
-      "doneVisibleDays must be greater than or equal to 0.",
+    expect(() => handlers.task_ids_existing?.({ repoPath: "/repo", taskIds: [null] })).toThrow(
+      "taskIds[0] must be a string.",
     );
   });
   test("loads task metadata through the task store", async () => {

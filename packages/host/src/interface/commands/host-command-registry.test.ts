@@ -16,6 +16,7 @@ describe("HOST_COMMAND_NAMES", () => {
   test("parses known commands and rejects unknown commands", () => {
     expect(isHostCommandName("tasks_list")).toBe(true);
     expect(parseHostCommandName("tasks_list")).toBe("tasks_list");
+    expect(isHostCommandName("task_ids_existing")).toBe(true);
     expect(isHostCommandName("missing_command")).toBe(false);
     expect(() => parseHostCommandName("missing_command")).toThrow(
       "Unknown OpenDucktor host command: missing_command",

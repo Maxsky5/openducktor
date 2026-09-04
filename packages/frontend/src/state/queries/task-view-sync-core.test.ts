@@ -18,6 +18,7 @@ const settings: SettingsSnapshot = createSettingsSnapshotFixture({
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
   loadSettings: async () => settings,
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
+  findExistingTaskIds: async () => [],
   loadFreshDocument: async () => ({ markdown: "# Fresh", updatedAt: "2026-04-10T13:10:00.000Z" }),
   ...overrides,
 });
@@ -221,17 +222,15 @@ describe("TaskViewSync", () => {
   });
 
   test("refreshes cached documents for existing tasks hidden from the kanban list", async () => {
-    const listTasks = mock(
-      async (_repoPath: string, requestedDoneVisibleDays?: number): Promise<TaskCard[]> =>
-        requestedDoneVisibleDays === undefined
-          ? [createTaskCardFixture({ id: "task-1", status: "closed" })]
-          : [],
-    );
+    const listTasks = mock(async (): Promise<TaskCard[]> => []);
+    const findExistingTaskIds = mock(async () => ["task-1"]);
     const loadFreshDocument = mock(async () => ({
       markdown: "# Updated hidden task",
       updatedAt: "2026-04-10T13:10:00.000Z",
     }));
-    const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
+    const { queryClient, sync } = createSync(
+      createPorts({ listTasks, findExistingTaskIds, loadFreshDocument }),
+    );
     queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
       markdown: "# Stale",
       updatedAt: null,
@@ -250,7 +249,8 @@ describe("TaskViewSync", () => {
     );
 
     expect(listTasks).toHaveBeenCalledWith("/repo", doneVisibleDays);
-    expect(listTasks).toHaveBeenCalledWith("/repo", undefined);
+    expect(listTasks).toHaveBeenCalledTimes(1);
+    expect(findExistingTaskIds).toHaveBeenCalledWith("/repo", ["task-1"]);
     expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
   });
 
@@ -403,17 +403,15 @@ describe("TaskViewSync", () => {
   });
 
   test("refreshes active snapshot documents for existing tasks hidden from the kanban list", async () => {
-    const listTasks = mock(
-      async (_repoPath: string, requestedDoneVisibleDays?: number): Promise<TaskCard[]> =>
-        requestedDoneVisibleDays === undefined
-          ? [createTaskCardFixture({ id: "task-1", status: "closed" })]
-          : [],
-    );
+    const listTasks = mock(async (): Promise<TaskCard[]> => []);
+    const findExistingTaskIds = mock(async () => ["task-1"]);
     const loadFreshDocument = mock(async () => ({
       markdown: "# Updated hidden task",
       updatedAt: "2026-04-10T13:10:00.000Z",
     }));
-    const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
+    const { queryClient, sync } = createSync(
+      createPorts({ listTasks, findExistingTaskIds, loadFreshDocument }),
+    );
     const documentKey = documentQueryKeys.spec("/repo", "task-1");
     queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
     const unsubscribe = observeDocument(queryClient, documentKey);
@@ -422,7 +420,8 @@ describe("TaskViewSync", () => {
       await sync.reconcileStreamSnapshot("/repo");
 
       expect(listTasks).toHaveBeenCalledWith("/repo", doneVisibleDays);
-      expect(listTasks).toHaveBeenCalledWith("/repo", undefined);
+      expect(listTasks).toHaveBeenCalledTimes(1);
+      expect(findExistingTaskIds).toHaveBeenCalledWith("/repo", ["task-1"]);
       expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
     } finally {
       unsubscribe();

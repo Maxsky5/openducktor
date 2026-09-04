@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { HostDependencyError } from "../../../effect/host-errors";
 import { requireAgentSessionDependencies } from "../support/required-task-dependencies";
 import {
   enrichTasks,
@@ -13,6 +14,8 @@ export const createTaskQueryUseCases = ({
 }: CreateTaskServiceInput): Pick<
   TaskService,
   | "listTasks"
+  | "listKanbanTasks"
+  | "findExistingTaskIds"
   | "getTaskMetadata"
   | "agentSessionsList"
   | "agentSessionDelete"
@@ -25,6 +28,42 @@ export const createTaskQueryUseCases = ({
       const tasks = yield* taskStore.listTasks(input);
 
       return enrichTasks(tasks);
+    });
+  },
+
+  listKanbanTasks(input) {
+    return Effect.gen(function* () {
+      if (!workspaceSettingsService) {
+        return yield* Effect.fail(
+          new HostDependencyError({
+            dependency: "workspaceSettingsService",
+            operation: "tasks_list",
+            message: "Workspace settings service is required for tasks_list.",
+          }),
+        );
+      }
+      const settings = yield* workspaceSettingsService.getSettingsSnapshot();
+      const tasks = yield* taskStore.listTasks({
+        ...input,
+        doneVisibleDays: settings.kanban.doneVisibleDays,
+      });
+
+      return enrichTasks(tasks);
+    });
+  },
+
+  findExistingTaskIds({ repoPath, taskIds }) {
+    return Effect.gen(function* () {
+      const existingTaskIds = yield* Effect.forEach(taskIds, (taskId) =>
+        taskStore.getTask({ repoPath, taskId }).pipe(
+          Effect.map((): string | null => taskId),
+          Effect.catchTag("HostResourceError", (failure) =>
+            failure.resource === "task" ? Effect.succeed(null) : Effect.fail(failure),
+          ),
+        ),
+      );
+
+      return existingTaskIds.filter((taskId): taskId is string => taskId !== null);
     });
   },
 

@@ -35,7 +35,7 @@ Read [ADR 0002](adr/0002-use-effect-in-the-typescript-host.md) and [the TanStack
 ## List tasks for the Kanban board
 
 1. `useTaskQueryReadModel` reads `repoTaskDataQueryOptions`. Manual and event refreshes call `refreshRepoTaskViewsFromQuery`.
-2. `repoTaskDataQueryOptions` calls `host.tasksList(repoPath, doneVisibleDays)` and builds visible rows.
+2. `repoTaskDataQueryOptions` calls `host.tasksList(repoPath)`. The host reads `kanban.doneVisibleDays`, and SQLite filters old closed tasks before it builds task rows.
 3. `packages/frontend/src/lib/host-client.ts` delegates to the active shell bridge.
 4. `packages/host-client/src/task-client.ts` maps the call to `tasks_list`.
 5. The shell calls the host command router.

@@ -338,7 +338,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      listTasks(input) {
+      listKanbanTasks(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "tasks_list", input });
@@ -350,6 +350,12 @@ describe("createTaskCommandHandlers", () => {
               message: cause instanceof Error ? cause.message : String(cause),
               cause: cause,
             }),
+        });
+      },
+      findExistingTaskIds(input) {
+        return Effect.sync(() => {
+          calls.push({ command: "task_ids_existing", input });
+          return input.taskIds;
         });
       },
       getTaskMetadata(input) {
@@ -584,6 +590,11 @@ describe("createTaskCommandHandlers", () => {
     await expect(runHandler(handlers.tasks_list?.({ repoPath: "/repo" }))).resolves.toEqual([]);
     await expect(
       runHandler(
+        handlers.task_ids_existing?.({ repoPath: "/repo", taskIds: ["task-2", "task-2"] }),
+      ),
+    ).resolves.toEqual(["task-2"]);
+    await expect(
+      runHandler(
         handlers.task_create?.({
           repoPath: "/repo",
           input: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
@@ -771,6 +782,7 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBeDefined();
     expect(calls).toEqual([
       { command: "tasks_list", input: { repoPath: "/repo" } },
+      { command: "task_ids_existing", input: { repoPath: "/repo", taskIds: ["task-2"] } },
       {
         command: "task_create",
         input: {

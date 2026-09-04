@@ -9,7 +9,8 @@ import { workspaceQueryKeys } from "./workspace";
 
 export type TaskViewSyncPorts = {
   loadSettings: () => Promise<SettingsSnapshot>;
-  listTasks: (repoPath: string, doneVisibleDays?: number) => Promise<TaskCard[]>;
+  listTasks: (repoPath: string, doneVisibleDays: number) => Promise<TaskCard[]>;
+  findExistingTaskIds: (repoPath: string, taskIds: string[]) => Promise<string[]>;
   loadFreshDocument: (
     repoPath: string,
     taskId: string,
@@ -91,11 +92,8 @@ export const createTaskViewSync = ({
     return queryClient.fetchQuery({ queryKey, queryFn: ports.loadSettings, staleTime: 0 });
   };
 
-  const fetchTasks = async (repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> => {
-    const queryKey =
-      doneVisibleDays === undefined
-        ? taskQueryKeys.unfilteredRepoData(repoPath)
-        : taskQueryKeys.repoData(repoPath, doneVisibleDays);
+  const fetchTasks = async (repoPath: string, doneVisibleDays: number): Promise<TaskCard[]> => {
+    const queryKey = taskQueryKeys.repoData(repoPath, doneVisibleDays);
     const taskData = await queryClient.fetchQuery({
       queryKey,
       queryFn: async () => ({ tasks: await ports.listTasks(repoPath, doneVisibleDays) }),
@@ -110,12 +108,16 @@ export const createTaskViewSync = ({
     taskIds: string[],
   ): Promise<string[]> => {
     const visibleTaskIds = new Set(visibleTasks.map((task) => task.id));
-    if (taskIds.every((taskId) => visibleTaskIds.has(taskId))) {
+    const missingTaskIds = taskIds.filter((taskId) => !visibleTaskIds.has(taskId));
+    if (missingTaskIds.length === 0) {
       return taskIds;
     }
-    const allTasks = await fetchTasks(repoPath);
-    const existingTaskIds = new Set(allTasks.map((task) => task.id));
-    return taskIds.filter((taskId) => existingTaskIds.has(taskId));
+    const existingHiddenTaskIds = new Set(
+      await ports.findExistingTaskIds(repoPath, missingTaskIds),
+    );
+    return taskIds.filter(
+      (taskId) => visibleTaskIds.has(taskId) || existingHiddenTaskIds.has(taskId),
+    );
   };
 
   const retainExistingSnapshotTaskIds = async (
@@ -409,7 +411,8 @@ const createProductionTaskViewSync = (queryClient: QueryClient): TaskViewSync =>
     queryClient,
     ports: {
       loadSettings: () => host.workspaceGetSettingsSnapshot(),
-      listTasks: (repoPath, doneVisibleDays) => host.tasksList(repoPath, doneVisibleDays),
+      listTasks: (repoPath) => host.tasksList(repoPath),
+      findExistingTaskIds: (repoPath, taskIds) => host.findExistingTaskIds(repoPath, taskIds),
       loadFreshDocument: (repoPath, taskId, section) =>
         host.taskDocumentGetFresh(repoPath, taskId, section),
     },

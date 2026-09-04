@@ -89,6 +89,7 @@ export const HOST_COMMAND_NAMES = [
   "task_delete",
   "task_direct_merge",
   "task_direct_merge_complete",
+  "task_ids_existing",
   "task_metadata_get",
   "task_pull_request_detect",
   "task_pull_request_link_merged",
