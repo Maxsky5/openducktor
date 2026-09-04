@@ -246,6 +246,7 @@ describe("electron shell bridge", () => {
     });
     const reconcileStreamSnapshot = mock(async () => {});
     const reconcileAgentSessionExternalEvent = mock(async () => {});
+    const reconcileAgentSessionStreamSnapshot = mock(async () => {});
     const invalidateAllTaskMetadata = mock(() => {});
     const controller = createTaskStreamController({
       transport: {
@@ -274,6 +275,7 @@ describe("electron shell bridge", () => {
       },
       agentSessionViewSync: {
         reconcileExternalEvent: reconcileAgentSessionExternalEvent,
+        reconcileStreamSnapshot: reconcileAgentSessionStreamSnapshot,
       },
       getActiveRepoPath: () => "/repo",
       onDegraded: (error) => failures.push(error),
@@ -297,6 +299,7 @@ describe("electron shell bridge", () => {
     expect(reconcileExternalEvent).toHaveBeenCalledTimes(1);
     expect(reconcileAgentSessionExternalEvent).toHaveBeenCalledWith(taskStreamEvent(1));
     expect(reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
+    expect(reconcileAgentSessionStreamSnapshot).toHaveBeenCalledWith("/repo");
     expect(invalidateAllTaskMetadata).toHaveBeenCalledTimes(1);
     expect(acknowledgements).toEqual([taskStreamCursor(0), taskStreamCursor(257)]);
     expect(failures).toEqual([]);

@@ -65,6 +65,7 @@ const createHarness = ({
   };
   const agentSessionViewSync: AgentSessionViewSync = {
     reconcileExternalEvent: mock(async () => {}),
+    reconcileStreamSnapshot: mock(async () => {}),
   };
   const transport = {
     subscribeTaskStream: mock(async (input, listener, onTerminalFailure) => {
@@ -157,6 +158,7 @@ describe("task stream controller recovery", () => {
     await flush();
 
     expect(harness.taskViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
+    expect(harness.agentSessionViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
     expect(harness.records[1]?.acknowledge.mock.calls).toEqual([[cursor(7)], [cursor(8)]]);
     expect(applications).toBe(2);
   });
@@ -399,6 +401,7 @@ describe("task stream controller recovery", () => {
       },
       agentSessionViewSync: {
         reconcileExternalEvent: async () => {},
+        reconcileStreamSnapshot: async () => {},
       },
       getActiveRepoPath: () => "/repo",
       onDegraded: () => {},

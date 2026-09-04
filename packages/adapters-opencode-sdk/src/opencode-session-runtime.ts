@@ -231,6 +231,13 @@ export const createPrepareOpencodeSessionRuntime = (
     };
 
     const syncEventSessions = async (sources: OpencodeRuntimeSnapshotSource[]): Promise<void> => {
+      const sourceIds = new Set(sources.map((source) => source.externalSessionId));
+      // oxlint-disable-next-line unicorn/no-useless-spread -- release mutates eventSessions
+      for (const session of [...eventSessions.values()]) {
+        if (!sourceIds.has(session.externalSessionId)) {
+          await releaseSessionRuntime(session, eventSessions, runtimeEventTransports);
+        }
+      }
       for (const source of sources) {
         const existing = eventSessions.get(source.externalSessionId);
         if (existing?.input.workingDirectory === source.workingDirectory) {
@@ -323,6 +330,10 @@ export const createPrepareOpencodeSessionRuntime = (
           lifecycleEvent.parentExternalSessionId,
         )
       ) {
+        const session = eventSessions.get(lifecycleEvent.externalSessionId);
+        if (session) {
+          await releaseSessionRuntime(session, eventSessions, runtimeEventTransports);
+        }
         await emitSignal({
           type: "session_removed",
           externalSessionId: lifecycleEvent.externalSessionId,

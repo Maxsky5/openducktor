@@ -154,7 +154,9 @@ export const createTaskStreamController = ({
     frameGeneration: number,
   ): Promise<boolean> => {
     metadata.invalidateAllTaskMetadata();
-    await taskViewSync.reconcileStreamSnapshot(getActiveRepoPath());
+    const activeRepoPath = getActiveRepoPath();
+    await taskViewSync.reconcileStreamSnapshot(activeRepoPath);
+    await agentSessionViewSync.reconcileStreamSnapshot(activeRepoPath);
     if (!isActive(owner, frameGeneration)) return false;
     processedCursor = frame.cursor;
     return acknowledge(owner, frame.cursor, frameGeneration);

@@ -192,32 +192,44 @@ export const createTaskWorkflowSessionControlService = ({
       const summary = yield* runtime.startSession(input);
       return yield* storeControlResult(tasks, runtime, input, summary, "stop");
     }),
-  resumeSession: (input) =>
-    Effect.gen(function* () {
-      const storedSession =
-        input.sessionScope.kind === "workflow"
-          ? yield* readStoredWorkflowSession(
-              tasks,
-              {
-                repoPath: input.repoPath,
-                runtimeKind: input.runtimeKind,
-                workingDirectory: input.workingDirectory,
-                externalSessionId: input.externalSessionId,
-                sessionScope: input.sessionScope,
-              },
-              "read-resume",
-            )
-          : null;
-      const summary = yield* runtime.resumeSession(input);
-      return yield* storeControlResult(
-        tasks,
-        runtime,
-        input,
-        summary,
-        "release",
-        storedSession?.selectedModel,
-      );
-    }),
+  resumeSession: (input) => {
+    if (input.sessionScope.kind !== "workflow") {
+      return runtime.resumeSession(input);
+    }
+    const scope = input.sessionScope;
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const repoPath = yield* canonicalizeRepoPath(input.repoPath);
+        yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "resume session");
+        const stored = yield* readStoredWorkflowSession(
+          tasks,
+          {
+            repoPath,
+            runtimeKind: input.runtimeKind,
+            workingDirectory: input.workingDirectory,
+            externalSessionId: input.externalSessionId,
+            sessionScope: scope,
+          },
+          "read-resume",
+        );
+        const runtimeInput = {
+          ...input,
+          repoPath,
+          runtimeKind: stored.runtimeKind,
+          workingDirectory: stored.workingDirectory,
+        };
+        const summary = yield* runtime.resumeSession(runtimeInput);
+        return yield* storeControlResult(
+          tasks,
+          runtime,
+          runtimeInput,
+          summary,
+          "release",
+          stored.selectedModel,
+        );
+      }),
+    );
+  },
   forkSession: (input) =>
     Effect.gen(function* () {
       const summary = yield* runtime.forkSession(input);

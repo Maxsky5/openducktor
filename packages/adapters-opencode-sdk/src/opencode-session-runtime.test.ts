@@ -548,6 +548,22 @@ describe("OpenCode session runtime connection", () => {
       },
     });
     expect(signals).toEqual([{ type: "session_removed", externalSessionId: "child-session" }]);
+
+    const childInput = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      runtimePolicy: { kind: "opencode" as const },
+      workingDirectory: "/repo",
+      externalSessionId: "child-session",
+      sessionScope: { kind: "repository" as const },
+    };
+    await prepared.connection.resumeSession(childInput);
+    expect(harness.callOrder.filter((call) => call === "get:child-session")).toHaveLength(1);
+
+    harness.setExternalSessionIds(["session-1"]);
+    await prepared.connection.readSessionSources();
+    await prepared.connection.resumeSession(childInput);
+    expect(harness.callOrder.filter((call) => call === "get:child-session")).toHaveLength(2);
     await prepared.release();
   });
 

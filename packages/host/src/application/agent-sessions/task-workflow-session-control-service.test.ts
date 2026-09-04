@@ -552,6 +552,53 @@ describe("createTaskWorkflowSessionControlService", () => {
     expect(runtimeCalls).toBe(0);
   });
 
+  test("does not resume a workflow session while another task lifecycle change runs", async () => {
+    let runtimeCalls = 0;
+    const taskLifecycle = createTaskSessionBootstrapCoordinator();
+    const service = createTaskWorkflowSessionControlService({
+      canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      runtime: {
+        startSession: () => Effect.dieMessage("unexpected start"),
+        resumeSession: () =>
+          Effect.sync(() => {
+            runtimeCalls += 1;
+            return summary;
+          }),
+        forkSession: () => Effect.dieMessage("unexpected fork"),
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () => Effect.dieMessage("unexpected stop"),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () =>
+          Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
+        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+      },
+      taskLifecycle,
+    });
+
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* taskLifecycle.acquireLifecycle("/repo", ["task-1"], "reset task");
+          return yield* Effect.either(
+            service.resumeSession({
+              repoPath: "/repo",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+              externalSessionId: "session-1",
+              sessionScope: workflowStart.sessionScope,
+            }),
+          );
+        }),
+      ),
+    );
+
+    expect(result._tag).toBe("Left");
+    expect(runtimeCalls).toBe(0);
+  });
+
   test("holds the task lifecycle gate until the model record is stored", async () => {
     const taskLifecycle = createTaskSessionBootstrapCoordinator();
     let resetWasBlocked = false;
