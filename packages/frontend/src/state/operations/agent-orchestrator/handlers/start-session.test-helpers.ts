@@ -24,7 +24,6 @@ import type {
   AgentSessionState as BaseAgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import type { RuntimeInfo } from "../runtime/runtime";
 import { createSessionMessagesState } from "../support/messages";
 import { createTaskCardFixture } from "../test-utils";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
@@ -148,9 +147,14 @@ export const sessionFixture = (
   ...overrides,
 });
 
-const ensureRuntimeWithKind = async (
-  ...args: Parameters<StartSessionDependencies["runtime"]["ensureRuntime"]>
-): Promise<RuntimeInfo> => {
+type LegacyEnsureRuntime = (
+  repoPath: string,
+  taskId: string,
+  role: AgentSessionRecord["role"],
+  options?: { runtimeKind?: AgentSessionRecord["runtimeKind"]; targetWorkingDirectory?: string },
+) => Promise<{ runtimeKind: AgentSessionRecord["runtimeKind"]; workingDirectory: string }>;
+
+const ensureRuntimeWithKind: LegacyEnsureRuntime = async (...args) => {
   const [, , , options] = args;
   const runtimeKind = options?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
   const workingDirectory = options?.targetWorkingDirectory ?? "/tmp/repo";
@@ -179,9 +183,12 @@ export type FlatStartSessionDependencies = Omit<
       "loadAgentSessionHistory" | "sessionStartGateRef" | "readSessionSnapshot"
     >
   > &
-  Omit<StartSessionDependencies["runtime"], "canonicalizePath"> &
-  Partial<Pick<StartSessionDependencies["runtime"], "canonicalizePath">> &
-  StartSessionDependencies["task"] &
+  Omit<StartSessionDependencies["runtime"], "canonicalizePath" | "startWorkflowSession"> &
+  Partial<
+    Pick<StartSessionDependencies["runtime"], "canonicalizePath" | "startWorkflowSession">
+  > & {
+    ensureRuntime?: LegacyEnsureRuntime;
+  } & StartSessionDependencies["task"] &
   StartSessionDependencies["model"];
 
 export const toStartSessionDependencies = (
@@ -209,7 +216,30 @@ export const toStartSessionDependencies = (
     runtime: {
       adapter: deps.adapter,
       canonicalizePath: deps.canonicalizePath ?? (async (path) => path),
-      ensureRuntime: deps.ensureRuntime ?? ensureRuntimeWithKind,
+      startWorkflowSession:
+        deps.startWorkflowSession ??
+        (async (input) => {
+          const runtimeOptions: NonNullable<Parameters<LegacyEnsureRuntime>[3]> = {
+            runtimeKind: input.runtimeKind,
+          };
+          if (input.targetWorkingDirectory) {
+            runtimeOptions.targetWorkingDirectory = input.targetWorkingDirectory;
+          }
+          const runtime = await (deps.ensureRuntime ?? ensureRuntimeWithKind)(
+            input.repoPath,
+            input.sessionScope.taskId,
+            input.sessionScope.role,
+            runtimeOptions,
+          );
+          return deps.adapter.startSession({
+            repoPath: input.repoPath,
+            runtimeKind: runtime.runtimeKind,
+            workingDirectory: runtime.workingDirectory,
+            sessionScope: input.sessionScope,
+            systemPrompt: input.systemPrompt,
+            model: input.model,
+          });
+        }),
     },
     task: {
       taskRef: deps.taskRef,

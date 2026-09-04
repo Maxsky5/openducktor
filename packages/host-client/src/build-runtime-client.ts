@@ -1,5 +1,4 @@
 import {
-  type AgentRole,
   type AgentSessionStopTarget,
   agentSessionStopTargetSchema,
   type BuildSessionBootstrap,
@@ -34,7 +33,6 @@ import {
   type TaskCard,
   type TaskDirectMergeInput,
   type TaskDirectMergeResult,
-  type TaskSessionBootstrap,
   type TaskStoreCheck,
   type TaskWorktreeSummary,
   taskApprovalContextLoadResultSchema,
@@ -42,7 +40,6 @@ import {
   taskDirectMergeInputSchema,
   taskDirectMergeResultSchema,
   taskPullRequestDetectResultSchema,
-  taskSessionBootstrapSchema,
   taskStoreCheckSchema,
   taskWorktreeSummarySchema,
 } from "@openducktor/contracts";
@@ -64,14 +61,6 @@ type RuntimeEnsureErrorInit = {
 type NormalizedRuntimeEnsureFailure = RuntimeEnsureErrorInit & {
   message: string;
   cause?: unknown;
-};
-
-type TaskSessionBootstrapPrepareArgs = {
-  repoPath: string;
-  taskId: string;
-  role: AgentRole;
-  runtimeKind: RuntimeKind;
-  targetWorkingDirectory?: string;
 };
 
 class RuntimeEnsureError extends Error {
@@ -284,36 +273,6 @@ const buildStart = async (
   runtimeKind: RuntimeKind,
 ): Promise<BuildSessionBootstrap> => {
   return invokeFn("build_start", { repoPath, taskId, runtimeKind }, buildSessionBootstrapSchema);
-};
-
-const taskSessionBootstrapPrepare = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-  taskId: string,
-  role: AgentRole,
-  runtimeKind: RuntimeKind,
-  targetWorkingDirectory?: string,
-): Promise<TaskSessionBootstrap> => {
-  const args: TaskSessionBootstrapPrepareArgs = {
-    repoPath,
-    taskId,
-    role,
-    runtimeKind,
-  };
-  if (targetWorkingDirectory) {
-    args.targetWorkingDirectory = targetWorkingDirectory;
-  }
-  return invokeFn("task_session_bootstrap_prepare", args, taskSessionBootstrapSchema);
-};
-
-const finalizeTaskSessionBootstrap = async (
-  invokeFn: InvokeFn,
-  command: "task_session_bootstrap_complete" | "task_session_bootstrap_abort",
-  repoPath: string,
-  taskId: string,
-  bootstrapId: string,
-): Promise<void> => {
-  await invokeFn(command, { repoPath, taskId, bootstrapId }, booleanResultSchema);
 };
 
 const devServerGetState = async (
@@ -572,51 +531,6 @@ export class HostAgentClient {
     runtimeKind: RuntimeKind,
   ): Promise<BuildSessionBootstrap> {
     return buildStart(this.invokeFn, repoPath, taskId, runtimeKind);
-  }
-
-  async taskSessionBootstrapPrepare(
-    repoPath: string,
-    taskId: string,
-    role: AgentRole,
-    runtimeKind: RuntimeKind,
-    targetWorkingDirectory?: string,
-  ): Promise<TaskSessionBootstrap> {
-    return taskSessionBootstrapPrepare(
-      this.invokeFn,
-      repoPath,
-      taskId,
-      role,
-      runtimeKind,
-      targetWorkingDirectory,
-    );
-  }
-
-  async taskSessionBootstrapComplete(
-    repoPath: string,
-    taskId: string,
-    bootstrapId: string,
-  ): Promise<void> {
-    return finalizeTaskSessionBootstrap(
-      this.invokeFn,
-      "task_session_bootstrap_complete",
-      repoPath,
-      taskId,
-      bootstrapId,
-    );
-  }
-
-  async taskSessionBootstrapAbort(
-    repoPath: string,
-    taskId: string,
-    bootstrapId: string,
-  ): Promise<void> {
-    return finalizeTaskSessionBootstrap(
-      this.invokeFn,
-      "task_session_bootstrap_abort",
-      repoPath,
-      taskId,
-      bootstrapId,
-    );
   }
 
   async devServerGetState(repoPath: string, taskId: string): Promise<DevServerGroupState> {

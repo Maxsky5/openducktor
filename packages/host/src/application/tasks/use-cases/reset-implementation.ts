@@ -36,7 +36,7 @@ export const createTaskImplementationResetUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-  taskSessionBootstrapCoordinator: coordinator,
+  taskSessionLifecycleCoordinator: coordinator,
 }: TaskServiceUseCaseInput) => ({
   resetImplementation(input: Parameters<TaskService["resetImplementation"]>[0]) {
     return Effect.gen(function* () {

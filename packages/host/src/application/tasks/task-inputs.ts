@@ -1,5 +1,4 @@
 import type {
-  AgentRole,
   AgentSessionIdentity,
   AgentSessionRecord,
   PlanSubtaskInput,
@@ -90,15 +89,6 @@ export type SetPlanInput = TaskIdInput & {
 
 export type BuildStartInput = TaskIdInput & {
   runtimeKind: string;
-};
-
-export type TaskSessionBootstrapPrepareInput = BuildStartInput & {
-  role: AgentRole;
-  targetWorkingDirectory?: string;
-};
-
-export type TaskSessionBootstrapFinalizeInput = TaskIdInput & {
-  bootstrapId: string;
 };
 
 export type BuildBlockedInput = TaskIdInput & {

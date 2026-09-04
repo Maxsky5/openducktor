@@ -28,7 +28,7 @@ import {
   type CreateTaskServiceInput,
   createTaskService as createProductionTaskService,
 } from "./task-service";
-import { createTaskSessionBootstrapCoordinator } from "./worktrees/task-session-bootstrap-coordinator";
+import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 
 const run = <A>(effect: Effect.Effect<A, unknown>): Promise<A> => Effect.runPromise(effect);
@@ -660,13 +660,13 @@ describe("TaskService.closeTask", () => {
           return createMetadata();
         }),
     } satisfies TaskStorePort;
-    const taskSessionBootstrapCoordinator = createTaskSessionBootstrapCoordinator();
+    const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
     const service = createTaskService({
       taskStore,
       devServerService: createDevServerService(),
       gitPort: createGitPort({}),
       settingsConfig: createSettingsConfig(),
-      taskSessionBootstrapCoordinator,
+      taskSessionLifecycleCoordinator,
       taskWorktreeService: createTaskWorktreeService(null),
       workspaceSettingsService: createWorkspaceSettingsService(),
       worktreeFiles: createWorktreeFiles(),
@@ -674,25 +674,21 @@ describe("TaskService.closeTask", () => {
 
     const closing = run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
     await metadataRead;
-    const bootstrap = await run(
+    const lifecycle = await run(
       Effect.either(
-        taskSessionBootstrapCoordinator.acquireBootstrap("/repo", "task-1", "bootstrap-1", "build"),
+        Effect.scoped(
+          taskSessionLifecycleCoordinator.acquireLifecycle(
+            "/repo",
+            ["task-1"],
+            "start workflow session",
+          ),
+        ),
       ),
     );
-    if (bootstrap._tag === "Right") {
-      await run(
-        taskSessionBootstrapCoordinator.finishBootstrap(
-          "/repo",
-          "task-1",
-          "bootstrap-1",
-          "completed",
-        ),
-      );
-    }
     releaseMetadataRead();
     await closing;
 
-    expect(bootstrap._tag).toBe("Left");
+    expect(lifecycle._tag).toBe("Left");
   });
 
   test("guards and cleans legacy Planner worktrees", async () => {

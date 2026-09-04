@@ -35,7 +35,12 @@ const controlSummary = (
   status: "idle" as const,
 });
 
-const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve"]) => {
+const createHarness = async (
+  resolveAttachment?: LocalAttachmentService["resolve"],
+  startWorkflowSession: Parameters<
+    typeof createAgentSessionLiveCommandHandlers
+  >[0]["startWorkflowSession"] = () => Effect.dieMessage("unexpected workflow session start"),
+) => {
   const envelopes: AgentSessionLiveEnvelope[] = [];
   const snapshots: AgentSessionLiveSnapshot[] = [];
   const attachmentResolutions: string[] = [];
@@ -142,7 +147,13 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
     forks,
     resumes,
     router: createEffectHostCommandRouter({
-      handlers: createAgentSessionLiveCommandHandlers(service, attachmentResolver),
+      handlers: createAgentSessionLiveCommandHandlers(
+        {
+          ...service,
+          startWorkflowSession,
+        },
+        attachmentResolver,
+      ),
     }),
     sends,
     starts,
@@ -150,6 +161,36 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
 };
 
 describe("createAgentSessionLiveCommandHandlers", () => {
+  test("routes one strict host-owned workflow start command", async () => {
+    const inputs: unknown[] = [];
+    const { router } = await createHarness(undefined, (input) =>
+      Effect.sync(() => {
+        inputs.push(input);
+        return controlSummary(
+          {
+            runtimeKind: input.runtimeKind,
+            workingDirectory: "/repo/worktree",
+            sessionScope: input.sessionScope,
+          },
+          "workflow-1",
+        );
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        router.invoke("agent_session_workflow_start", {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: "Build the feature",
+          model: { providerId: "openai", modelId: "gpt-5" },
+        }),
+      ),
+    ).resolves.toMatchObject({ externalSessionId: "workflow-1" });
+    expect(inputs).toHaveLength(1);
+  });
+
   test("routes live session diff reads to the owning adapter", async () => {
     const { diffLoads, router } = await createHarness();
     await Effect.runPromise(router.invoke("agent_session_control_start", { ...startInput }));

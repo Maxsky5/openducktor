@@ -8,12 +8,35 @@ import {
   agentSessionControlSummarySchema,
   agentSessionControlUpdateModelInputSchema,
   agentSessionModelSettingsSchema,
+  agentWorkflowSessionStartInputSchema,
 } from "./agent-session-control-schemas";
 
 const workflowScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
 const repositoryScope = { kind: "repository" as const };
 
 describe("agent session control contracts", () => {
+  test("parses one host-owned workflow start request without a working directory", () => {
+    expect(
+      agentWorkflowSessionStartInputSchema.parse({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        sessionScope: workflowScope,
+        systemPrompt: "Build the feature",
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).toMatchObject({ sessionScope: workflowScope, runtimeKind: "opencode" });
+    expect(() =>
+      agentWorkflowSessionStartInputSchema.parse({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/task",
+        sessionScope: workflowScope,
+        systemPrompt: "Build the feature",
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).toThrow();
+  });
+
   test("parses a strict normalized start command", () => {
     expect(
       agentSessionControlStartInputSchema.parse({

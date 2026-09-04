@@ -9,7 +9,7 @@ import {
   type OpenCodeMcpBridgeConnectionResolver,
 } from "../../adapters/opencode/opencode-workspace-runtime-starter";
 import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
-import type { TaskSessionBootstrapCoordinator } from "../../application/tasks/worktrees/task-session-bootstrap-coordinator";
+import type { TaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
 import { toHostOperationError } from "../../effect/host-errors";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
@@ -22,7 +22,7 @@ export type CreateOpenCodeRuntimeCompositionInput = {
   resolveMcpBridgeConnection: OpenCodeMcpBridgeConnectionResolver;
   runtimeDistribution: HostRuntimeDistribution;
   settingsConfig: SettingsConfigPort;
-  taskSessionBootstrapCoordinator: TaskSessionBootstrapCoordinator;
+  taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
   toolDiscovery: ToolDiscoveryPort;
 };
 
@@ -32,12 +32,12 @@ export const createOpenCodeRuntimeComposition = ({
   resolveMcpBridgeConnection,
   runtimeDistribution,
   settingsConfig,
-  taskSessionBootstrapCoordinator,
+  taskSessionLifecycleCoordinator,
   toolDiscovery,
 }: CreateOpenCodeRuntimeCompositionInput): RuntimeWorkspaceStarterPort => {
   const readDirectory: ReadOpencodeDirectory = (directory, read) =>
     Effect.runPromise(
-      taskSessionBootstrapCoordinator.runWorktreeRead(
+      taskSessionLifecycleCoordinator.runWorktreeRead(
         directory,
         Effect.gen(function* () {
           if (!(yield* settingsConfig.pathExists(directory))) {

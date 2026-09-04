@@ -3,7 +3,7 @@ import { Effect, type Scope } from "effect";
 import { HostDependencyError, type HostOperationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { TaskStoreError, TaskStorePort } from "../../../ports/task-repository-ports";
-import type { TaskSessionBootstrapCoordinator } from "../worktrees/task-session-bootstrap-coordinator";
+import type { TaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
 
 type TaskClosureStore = Pick<TaskStorePort, "transitionTask">;
 
@@ -13,7 +13,7 @@ export const completeTaskClosure = <CleanupError>({
   operation,
   repoPath,
   taskId,
-  taskSessionBootstrapCoordinator,
+  taskSessionLifecycleCoordinator,
   taskStore,
 }: {
   cleanup: Effect.Effect<void, CleanupError, Scope.Scope>;
@@ -21,7 +21,7 @@ export const completeTaskClosure = <CleanupError>({
   operation: string;
   repoPath: string;
   taskId: string;
-  taskSessionBootstrapCoordinator: TaskSessionBootstrapCoordinator | undefined;
+  taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator | undefined;
   taskStore: TaskClosureStore;
 }): Effect.Effect<
   TaskCard,
@@ -38,17 +38,17 @@ export const completeTaskClosure = <CleanupError>({
           }),
         );
       }
-      if (!taskSessionBootstrapCoordinator) {
+      if (!taskSessionLifecycleCoordinator) {
         return yield* Effect.fail(
           new HostDependencyError({
-            dependency: "taskSessionBootstrapCoordinator",
+            dependency: "taskSessionLifecycleCoordinator",
             operation,
             message: `Task session bootstrap coordinator is required to ${operation}.`,
           }),
         );
       }
       const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath);
-      yield* taskSessionBootstrapCoordinator.acquireLifecycle(
+      yield* taskSessionLifecycleCoordinator.acquireLifecycle(
         canonicalRepoPath,
         [taskId],
         operation,

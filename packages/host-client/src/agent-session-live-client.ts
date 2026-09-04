@@ -18,6 +18,7 @@ import {
   type AgentSessionLiveReplyApprovalInput,
   type AgentSessionLiveReplyQuestionInput,
   type AgentSessionLiveSnapshot,
+  type AgentWorkflowSessionStartInput,
   type FileDiff,
   acceptedAgentUserMessageSchema,
   agentSessionContextUsageSchema,
@@ -39,6 +40,7 @@ import {
   agentSessionLiveReplyApprovalInputSchema,
   agentSessionLiveReplyQuestionInputSchema,
   agentSessionLiveSnapshotSchema,
+  agentWorkflowSessionStartInputSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, voidResultSchema } from "./invoke-utils";
@@ -52,6 +54,16 @@ export class HostAgentSessionLiveClient {
     return this.invokeFn(
       "agent_session_control_start",
       agentSessionControlStartInputSchema.parse(input),
+      agentSessionControlSummarySchema,
+    );
+  }
+
+  async agentSessionWorkflowStart(
+    input: AgentWorkflowSessionStartInput,
+  ): Promise<AgentSessionControlSummary> {
+    return this.invokeFn(
+      "agent_session_workflow_start",
+      agentWorkflowSessionStartInputSchema.parse(input),
       agentSessionControlSummarySchema,
     );
   }

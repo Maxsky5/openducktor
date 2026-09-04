@@ -32,7 +32,7 @@ export const createTaskDeleteUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-  taskSessionBootstrapCoordinator,
+  taskSessionLifecycleCoordinator,
 }: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "deleteTask"> => ({
   deleteTask(input) {
     return Effect.gen(function* () {
@@ -46,7 +46,7 @@ export const createTaskDeleteUseCase = ({
         ),
       );
       const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
-      yield* taskSessionBootstrapCoordinator.acquireLifecycle(
+      yield* taskSessionLifecycleCoordinator.acquireLifecycle(
         canonicalInputRepo,
         [taskId],
         "delete tasks",
@@ -83,7 +83,7 @@ export const createTaskDeleteUseCase = ({
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const additionalTaskIds = targetTaskIds.filter((targetTaskId) => targetTaskId !== taskId);
       if (additionalTaskIds.length > 0) {
-        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
+        yield* taskSessionLifecycleCoordinator.acquireLifecycle(
           canonicalInputRepo,
           additionalTaskIds,
           "delete tasks",
@@ -127,7 +127,7 @@ export const createTaskDeleteUseCase = ({
         branchPrefix,
         targetTaskSessions,
       );
-      yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
+      yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle(worktreePaths);
       const branchNames = yield* collectRelatedTaskBranches(
         dependencies.gitPort,
         effectiveRepoPath,

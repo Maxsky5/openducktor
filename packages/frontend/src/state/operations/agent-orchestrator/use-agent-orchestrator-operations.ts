@@ -28,7 +28,6 @@ import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-st
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
 import {
   createEnsureExistingSessionRuntime,
-  createEnsureRuntime,
   loadRepoPromptOverrides,
   loadTaskDocuments,
 } from "./runtime/runtime";
@@ -213,17 +212,6 @@ export function useAgentOrchestratorOperations({
     queryClient,
     sessionReadPort: hostPort,
   });
-  const ensureRuntime = useMemo(
-    () =>
-      createEnsureRuntime({
-        refreshTaskData,
-        queryClient,
-        hostClient: {
-          ...runtimeHostPort,
-        },
-      }),
-    [queryClient, refreshTaskData, runtimeHostPort],
-  );
   const ensureExistingSessionRuntime = useMemo(
     () => createEnsureExistingSessionRuntime(runtimeHostPort),
     [runtimeHostPort],
@@ -243,7 +231,7 @@ export function useAgentOrchestratorOperations({
         sessionTurnState,
         updateSession,
         canonicalizePath: runtimeHostPort.gitCanonicalizePath,
-        ensureRuntime,
+        startWorkflowSession: runtimeHostPort.agentSessionWorkflowStart,
         ensureExistingSessionRuntime,
         loadTaskDocuments: (repoPath, taskId) =>
           loadTaskDocuments(repoPath, taskId, hostPort.taskMetadataGetFresh),
@@ -259,7 +247,6 @@ export function useAgentOrchestratorOperations({
     [
       agentEngine,
       currentWorkspaceRepoPathRef,
-      ensureRuntime,
       ensureExistingSessionRuntime,
       hostPort,
       invalidateSessionStopQueries,

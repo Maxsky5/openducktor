@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { createTaskSessionBootstrapCoordinator } from "./task-session-bootstrap-coordinator";
+import { createTaskSessionLifecycleCoordinator } from "./task-session-lifecycle-coordinator";
 
 test("worktree lifecycle waits for active reads and blocks new reads", async () => {
-  const coordinator = createTaskSessionBootstrapCoordinator();
+  const coordinator = createTaskSessionLifecycleCoordinator();
   const events: string[] = [];
   let finishRead = () => {};
   let finishLifecycle = () => {};
@@ -67,24 +67,27 @@ test("worktree lifecycle waits for active reads and blocks new reads", async () 
   ]);
 });
 
-test("bootstrap lock does not block reads after worktree setup", async () => {
-  const coordinator = createTaskSessionBootstrapCoordinator();
-  const events: string[] = [];
+test("task lifecycle guard rejects overlap and releases at scope exit", async () => {
+  const coordinator = createTaskSessionLifecycleCoordinator();
+  let overlapFailed = false;
 
-  await Effect.runPromise(coordinator.acquireBootstrap("/repo", "task-1", "bootstrap-1", "build"));
-  const read = Effect.runPromise(
-    coordinator.runWorktreeRead(
-      "/repo/task-1",
-      Effect.sync(() => events.push("read")),
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* coordinator.acquireLifecycle("/repo", ["task-1"], "start workflow session");
+        overlapFailed = yield* coordinator.acquireLifecycle("/repo", ["task-1"], "close task").pipe(
+          Effect.scoped,
+          Effect.either,
+          Effect.map((result) => result._tag === "Left"),
+        );
+      }),
     ),
   );
-  try {
-    await Promise.resolve();
-    expect(events).toEqual(["read"]);
-  } finally {
-    await Effect.runPromise(
-      coordinator.finishBootstrap("/repo", "task-1", "bootstrap-1", "completed"),
-    );
-    await read;
-  }
+
+  expect(overlapFailed).toBe(true);
+  await expect(
+    Effect.runPromise(
+      Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "close task")),
+    ),
+  ).resolves.toBeUndefined();
 });

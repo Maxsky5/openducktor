@@ -15,10 +15,7 @@ import type {
 import { STALE_START_ERROR } from "./start-session-constants";
 import { executeReuseStart } from "./start-session-reuse-strategy";
 import { resolveStartTask } from "./start-session-policies";
-import {
-  rollbackBootstrapAfterStartFailure,
-  stopStoredWorkflowSessionAfterLaunchFailure,
-} from "./start-session-rollback";
+import { stopStoredWorkflowSessionAfterLaunchFailure } from "./start-session-rollback";
 import { serializeSelectedModelKey } from "./start-session-runtime";
 import {
   registerWorkflowSessionLaunch,
@@ -52,6 +49,7 @@ export const createStartAgentSession = ({
 }: StartSessionDependencies) => {
   const executePreparedLaunch = createExecutePreparedSessionLaunch({
     adapter: runtime.adapter,
+    startWorkflowSession: runtime.startWorkflowSession,
     loadSettingsSnapshot: model.loadSettingsSnapshot,
     repoEpochRef: repo.repoEpochRef,
     currentWorkspaceRepoPathRef: repo.currentWorkspaceRepoPathRef,
@@ -132,50 +130,29 @@ export const createStartAgentSession = ({
                 deps,
               });
 
-        let registrationStarted = false;
-        try {
-          const result: PreparedSessionLaunchResult = await executePreparedLaunch({
-            launch: prepared.launch,
-            register: async (registrationInput) => {
-              registrationStarted = true;
-              await registerWorkflowSessionLaunch({
-                ...registrationInput,
-                bootstrap: prepared.bootstrap,
-                ctx: startCtx,
-                deps: { session, runtime, task },
-              });
-            },
-            rollback: async (rollbackInput) => {
-              registrationStarted = true;
-              const cleanupInput: Parameters<
-                typeof stopStoredWorkflowSessionAfterLaunchFailure
-              >[0] = {
-                message: rollbackInput.message,
-                cause: rollbackInput.cause,
-                startedCtx: { ...startCtx, summary: rollbackInput.summary },
-                identity: rollbackInput.identity,
-                readSessionSnapshot: session.readSessionSnapshot,
-                replaceSession: session.replaceSession,
-                clearSessionObservationState: session.clearSessionObservationState,
-                runtime,
-                stopReason: rollbackInput.stopReason,
-              };
-              if (rollbackInput.finishBootstrap && prepared.bootstrap) {
-                cleanupInput.bootstrapToComplete = prepared.bootstrap;
-              }
-              return stopStoredWorkflowSessionAfterLaunchFailure(cleanupInput);
-            },
-          });
-          return toAgentSessionIdentity(result.summary);
-        } catch (cause) {
-          if (registrationStarted || !prepared.bootstrap) {
-            throw cause;
-          }
-          return rollbackBootstrapAfterStartFailure({
-            cause,
-            bootstrap: prepared.bootstrap,
-          });
-        }
+        const result: PreparedSessionLaunchResult = await executePreparedLaunch({
+          launch: prepared.launch,
+          register: async (registrationInput) => {
+            await registerWorkflowSessionLaunch({
+              ...registrationInput,
+              ctx: startCtx,
+              deps: { session, runtime, task },
+            });
+          },
+          rollback: async (rollbackInput) =>
+            stopStoredWorkflowSessionAfterLaunchFailure({
+              message: rollbackInput.message,
+              cause: rollbackInput.cause,
+              startedCtx: { ...startCtx, summary: rollbackInput.summary },
+              identity: rollbackInput.identity,
+              readSessionSnapshot: session.readSessionSnapshot,
+              replaceSession: session.replaceSession,
+              clearSessionObservationState: session.clearSessionObservationState,
+              runtime,
+              stopReason: rollbackInput.stopReason,
+            }),
+        });
+        return toAgentSessionIdentity(result.summary);
       },
       gateMode,
       executionKey,

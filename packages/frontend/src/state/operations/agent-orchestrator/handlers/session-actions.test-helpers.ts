@@ -77,12 +77,14 @@ type SessionActionDependencies = Parameters<typeof createAgentSessionActions>[0]
 export type SessionActionTestOverrides = Omit<Partial<SessionActionDependencies>, "adapter"> & {
   adapter?: AgentEnginePort | OpencodeSdkAdapter;
   sessionsRef?: { current: AgentSessionCollection };
+  ensureRuntime?: () => Promise<{ runtimeKind: "opencode"; workingDirectory: string }>;
 };
 
 export const createSessionActions = (overrides: SessionActionTestOverrides = {}) => {
   const {
     adapter: adapterOverride,
     sessionsRef: overrideSessionsRef,
+    ensureRuntime,
     ...actionOverrides
   } = overrides;
   const adapterCandidate = adapterOverride ?? new OpencodeSdkAdapter();
@@ -121,11 +123,20 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
       return nextSession;
     },
     canonicalizePath: async (path) => path,
-    ensureRuntime: async () => ({
-      kind: "opencode",
-      runtimeKind: "opencode",
-      workingDirectory: "/tmp/repo",
-    }),
+    startWorkflowSession: async (input) => {
+      const runtime = await (
+        ensureRuntime ??
+        (async () => ({ runtimeKind: "opencode" as const, workingDirectory: "/tmp/repo" }))
+      )();
+      return adapter.startSession({
+        repoPath: input.repoPath,
+        runtimeKind: runtime.runtimeKind,
+        workingDirectory: runtime.workingDirectory,
+        sessionScope: input.sessionScope,
+        systemPrompt: input.systemPrompt,
+        model: input.model,
+      });
+    },
     ensureExistingSessionRuntime: async () => {},
     loadTaskDocuments: async () => ({
       specMarkdown: "",

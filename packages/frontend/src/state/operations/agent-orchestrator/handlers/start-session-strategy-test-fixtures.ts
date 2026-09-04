@@ -64,8 +64,8 @@ export const createRuntimeDependenciesFixture = (
 ): RuntimeDependencies => ({
   adapter: new OpencodeSdkAdapter(),
   canonicalizePath: async (path) => path,
-  ensureRuntime: async () => {
-    throw new Error("should not resolve runtime");
+  startWorkflowSession: async () => {
+    throw new Error("should not start workflow session");
   },
   ...overrides,
 });

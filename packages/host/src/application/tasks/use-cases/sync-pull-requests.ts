@@ -19,7 +19,7 @@ export const createTaskPullRequestSyncUseCases = ({
   gitProviderResolver,
   taskStore,
   settingsConfig,
-  taskSessionBootstrapCoordinator,
+  taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
   worktreeFiles,
@@ -119,7 +119,7 @@ export const createTaskPullRequestSyncUseCases = ({
               operation: "sync merged pull request",
               repoPath: effectiveRepoPath,
               taskId: task.id,
-              taskSessionBootstrapCoordinator,
+              taskSessionLifecycleCoordinator,
               taskStore,
             });
           } else if (!pullRequestRecordsMatch(updated.record, pullRequest)) {

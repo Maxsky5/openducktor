@@ -18,8 +18,6 @@ import {
   parseRepoPathInput,
   parseSetPlanInput,
   parseTaskIdInput,
-  parseTaskSessionBootstrapFinalizeInput,
-  parseTaskSessionBootstrapPrepareInput,
   parseTaskStopImpactInput,
   parseTransitionTaskInput,
   parseUpdateTaskInput,
@@ -38,16 +36,6 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
     build_resumed: (args) =>
       taskService.buildResumed(parseTaskIdInput(args, "build_resumed input")),
     build_start: (args) => taskService.buildStart(parseBuildStartInput(args)),
-    task_session_bootstrap_prepare: (args) =>
-      taskService.taskSessionBootstrapPrepare(parseTaskSessionBootstrapPrepareInput(args)),
-    task_session_bootstrap_complete: (args) =>
-      taskService.taskSessionBootstrapComplete(
-        parseTaskSessionBootstrapFinalizeInput(args, "task_session_bootstrap_complete input"),
-      ),
-    task_session_bootstrap_abort: (args) =>
-      taskService.taskSessionBootstrapAbort(
-        parseTaskSessionBootstrapFinalizeInput(args, "task_session_bootstrap_abort input"),
-      ),
     human_approve: (args) =>
       taskService.humanApprove(parseTaskIdInput(args, "human_approve input")),
     human_request_changes: (args) =>

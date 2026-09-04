@@ -281,14 +281,16 @@ describe("use-agent-orchestrator-operations session state", () => {
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    const taskSessionBootstrapPrepare = async (
-      _repoPath: string,
-      _taskId: string,
-      role: "spec" | "planner" | "build" | "qa",
-      runtimeKind: "opencode" | "codex",
-    ) => {
+    const agentSessionWorkflowStart: typeof host.agentSessionWorkflowStart = async (input) => {
       buildStartCalls += 1;
-      return { ...buildBootstrapFixture, bootstrapId: "bootstrap-latest", role, runtimeKind };
+      startWorkingDirectory = buildBootstrapFixture.workingDirectory;
+      return {
+        externalSessionId: "external-updated-runs",
+        runtimeKind: input.runtimeKind,
+        workingDirectory: buildBootstrapFixture.workingDirectory,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        status: "idle",
+      };
     };
     host.workspaceGetRepoConfig = async () => ({
       workspaceId: "repo",
@@ -335,7 +337,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         {
           agentSessionsList: async () => [],
         },
-        { taskSessionBootstrapPrepare },
+        { agentSessionWorkflowStart },
       ),
     });
 

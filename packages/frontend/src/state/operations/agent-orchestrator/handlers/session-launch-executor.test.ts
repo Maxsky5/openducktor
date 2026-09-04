@@ -98,6 +98,15 @@ const createExecutorHarness = () => {
     removeSession: (identity: AgentSessionIdentity) => void;
   } = {
     adapter,
+    startWorkflowSession: async (input) =>
+      adapter.startSession({
+        repoPath: input.repoPath,
+        runtimeKind: input.runtimeKind,
+        workingDirectory: input.targetWorkingDirectory ?? "/tmp/repo/worktree",
+        sessionScope: input.sessionScope,
+        systemPrompt: input.systemPrompt,
+        model: input.model,
+      }),
     replaceSession: (session) => {
       calls.replaceSession.push(session);
       sessionsRef.current = replaceAgentSession(sessionsRef.current, session);
@@ -137,15 +146,13 @@ const createExecutorHarness = () => {
           `${rollbackInput.message} Failed to stop stale started session '${rollbackInput.identity.externalSessionId}': ${cause}`,
         );
       }
-      if (!rollbackInput.finishBootstrap) {
-        try {
-          deps.removeSession(rollbackInput.identity);
-        } catch (error) {
-          const cause = error instanceof Error ? error.message : String(error);
-          throw new Error(
-            `${rollbackInput.message} The stale started session '${rollbackInput.identity.externalSessionId}' was finalized but its local registration could not be removed: ${cause}`,
-          );
-        }
+      try {
+        deps.removeSession(rollbackInput.identity);
+      } catch (error) {
+        const cause = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `${rollbackInput.message} The stale started session '${rollbackInput.identity.externalSessionId}' was finalized but its local registration could not be removed: ${cause}`,
+        );
       }
       throw new Error(rollbackInput.message, { cause: rollbackInput.cause });
     };
@@ -159,7 +166,10 @@ const createExecutorHarness = () => {
   return { calls, deps, execute, repoEpochRef, currentWorkspaceRepoPathRef, sessionsRef };
 };
 
-const repositoryStartLaunch = (): PreparedSessionLaunch => ({
+const repositoryStartLaunch = (): Extract<
+  PreparedSessionLaunch,
+  { mode: "start"; workingDirectory: string }
+> => ({
   mode: "start",
   repoPath: REPO_PATH,
   runtimeKind: "opencode",
@@ -185,7 +195,6 @@ const workflowStartLaunch = (): PreparedSessionLaunch => ({
   mode: "start",
   repoPath: REPO_PATH,
   runtimeKind: "opencode",
-  workingDirectory: "/tmp/repo/worktree",
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   systemPrompt: "Workflow prompt",
   selectedModel: WORKFLOW_MODEL,

@@ -1,6 +1,8 @@
 import {
   type AgentSessionControlSendInput,
   type AgentSessionUserMessagePart,
+  type AgentSessionControlSummary,
+  type AgentWorkflowSessionStartInput,
   agentSessionControlForkInputSchema,
   agentSessionControlReleaseInputSchema,
   agentSessionControlResumeInputSchema,
@@ -15,15 +17,17 @@ import {
   agentSessionLiveRefreshInputSchema,
   agentSessionLiveReplyApprovalInputSchema,
   agentSessionLiveReplyQuestionInputSchema,
+  agentWorkflowSessionStartInputSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { z } from "zod";
 import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import type { TaskServiceError } from "../../application/tasks/task-service";
 import type {
   LocalAttachmentService,
   LocalAttachmentServiceError,
 } from "../../application/attachments/local-attachment-service";
-import { HostValidationError } from "../../effect/host-errors";
+import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import type { HostCommandArgs } from "./command-inputs";
 
@@ -44,6 +48,11 @@ const parseCommandInput = <Output>(
   });
 
 type LocalAttachmentResolver = Pick<LocalAttachmentService, "resolve">;
+type AgentSessionCommandService = AgentSessionLiveStateService & {
+  startWorkflowSession: (
+    input: AgentWorkflowSessionStartInput,
+  ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
+};
 
 const resolveSendInputPart = (
   part: AgentSessionUserMessagePart,
@@ -69,7 +78,7 @@ const resolveSendInputAttachments = (
   );
 
 export const createAgentSessionLiveCommandHandlers = (
-  service: AgentSessionLiveStateService,
+  service: AgentSessionCommandService,
   attachmentResolver: LocalAttachmentResolver,
 ) =>
   ({
@@ -118,6 +127,12 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_control_update_model",
       ).pipe(Effect.flatMap(service.updateSessionModel)),
+    agent_session_workflow_start: (args) =>
+      parseCommandInput(
+        agentWorkflowSessionStartInputSchema,
+        args,
+        "agent_session_workflow_start",
+      ).pipe(Effect.flatMap(service.startWorkflowSession)),
     agent_session_live_refresh: (args) =>
       parseCommandInput(
         agentSessionLiveRefreshInputSchema,

@@ -1,5 +1,4 @@
 import {
-  agentRoleSchema,
   planSubtaskInputSchema,
   pullRequestSchema,
   taskAssetDescriptionMutationSchema,
@@ -27,8 +26,6 @@ import type {
   RepoPathInput,
   SetPlanInput,
   TaskIdInput,
-  TaskSessionBootstrapFinalizeInput,
-  TaskSessionBootstrapPrepareInput,
   TransitionTaskInput,
   UpdateTaskInput,
 } from "../../application/tasks/task-inputs";
@@ -298,48 +295,6 @@ export const parseBuildStartInput = (input: HostCommandArgs): BuildStartInput =>
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     runtimeKind: readRequiredString(record, "runtimeKind"),
-  };
-};
-
-export const parseTaskSessionBootstrapPrepareInput = (
-  input: HostCommandArgs,
-): TaskSessionBootstrapPrepareInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "task_session_bootstrap_prepare input",
-  );
-  const parsedRole = agentRoleSchema.safeParse(record.role);
-  if (!parsedRole.success) {
-    throw new HostValidationError({
-      field: "role",
-      message: "A supported agent role is required.",
-    });
-  }
-  const parsedTargetWorkingDirectory = z.string().safeParse(record.targetWorkingDirectory);
-  const targetWorkingDirectory = parsedTargetWorkingDirectory.success
-    ? parsedTargetWorkingDirectory.data.trim() || undefined
-    : undefined;
-  const result: TaskSessionBootstrapPrepareInput = {
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    runtimeKind: readRequiredString(record, "runtimeKind"),
-    role: parsedRole.data,
-  };
-  if (targetWorkingDirectory) {
-    result.targetWorkingDirectory = targetWorkingDirectory;
-  }
-  return result;
-};
-
-export const parseTaskSessionBootstrapFinalizeInput = (
-  input: HostCommandArgs,
-  label: string,
-): TaskSessionBootstrapFinalizeInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
-  return {
-    repoPath: readRequiredString(record, "repoPath"),
-    taskId: readRequiredString(record, "taskId"),
-    bootstrapId: readRequiredString(record, "bootstrapId"),
   };
 };
 

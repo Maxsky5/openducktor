@@ -54,14 +54,13 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
         runtimeList: async () => [createWorktreeRuntimeFixture()],
         runtimeEnsure,
         runtimeRequire: runtimeEnsure,
-        taskSessionBootstrapPrepare: async (_repoPath, _taskId, role, runtimeKind) => ({
-          bootstrapId: "bootstrap-1",
-          role,
-          runtimeKind,
+        agentSessionWorkflowStart: async (input) => ({
+          externalSessionId: "session-1",
+          runtimeKind: input.runtimeKind,
           workingDirectory: "/tmp/repo/worktree",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          status: "idle",
         }),
-        taskSessionBootstrapComplete: async () => undefined,
-        taskSessionBootstrapAbort: async () => undefined,
       },
     }),
   );

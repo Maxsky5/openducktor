@@ -9,11 +9,12 @@ import type {
   AgentSessionModelSettings,
   AgentSessionRecord,
   AgentSessionWorkflowScope,
+  AgentWorkflowSessionStartInput,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { TaskService } from "../tasks/task-service";
+import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import { validateTaskSessionWorkflowAvailable } from "../tasks/support/task-session-workflow-validation";
-import type { TaskSessionBootstrapCoordinator } from "../tasks/worktrees/task-session-bootstrap-coordinator";
+import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import {
   type HostError,
   HostOperationError,
@@ -22,8 +23,10 @@ import {
 } from "../../effect/host-errors";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { TaskSessionStartPreparationService } from "../tasks/worktrees/task-session-start-preparation-service";
+import { createStartTaskWorkflowSession } from "./task-workflow-session-start";
 
-type RuntimeControl = Pick<
+export type RuntimeControl = Pick<
   AgentSessionLiveStateService,
   | "startSession"
   | "resumeSession"
@@ -34,19 +37,20 @@ type RuntimeControl = Pick<
   | "releaseSession"
 >;
 
-type TaskSessions = Pick<
+export type TaskSessions = Pick<
   TaskService,
-  "agentSessionsList" | "agentSessionUpsert" | "agentSessionUpdateModel"
+  "agentSessionsList" | "agentSessionUpsert" | "agentSessionUpdateModel" | "transitionTask"
 >;
 type TaskReader = Pick<TaskStorePort, "getTask">;
 
-type TaskLifecycle = Pick<TaskSessionBootstrapCoordinator, "acquireLifecycle">;
-type CanonicalizeRepoPath = (repoPath: string) => Effect.Effect<string, HostError>;
+export type TaskLifecycle = Pick<TaskSessionLifecycleCoordinator, "acquireLifecycle">;
+export type CanonicalizeRepoPath = (repoPath: string) => Effect.Effect<string, HostError>;
 type StoredWorkflowSessionRef = AgentSessionLiveRef & {
   sessionScope: AgentSessionWorkflowScope;
 };
 
 type ControlledLaunchInput =
+  | AgentWorkflowSessionStartInput
   | AgentSessionControlStartInput
   | AgentSessionControlResumeInput
   | AgentSessionControlForkInput;
@@ -187,19 +191,32 @@ export const createTaskWorkflowSessionControlService = ({
   taskReader,
   tasks,
   taskLifecycle,
+  taskSessionStart,
 }: {
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtime: RuntimeControl;
   taskReader: TaskReader;
   tasks: TaskSessions;
   taskLifecycle: TaskLifecycle;
-}): RuntimeControl => ({
+  taskSessionStart: TaskSessionStartPreparationService;
+}): RuntimeControl & {
+  startWorkflowSession: (
+    input: AgentWorkflowSessionStartInput,
+  ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
+} => ({
   ...runtime,
   startSession: (input) =>
     Effect.gen(function* () {
       const summary = yield* runtime.startSession(input);
       return yield* storeControlResult(tasks, runtime, input, summary, "stop");
     }),
+  startWorkflowSession: createStartTaskWorkflowSession({
+    canonicalizeRepoPath,
+    runtime,
+    tasks,
+    taskLifecycle,
+    taskSessionStart,
+  }),
   resumeSession: (input) => {
     if (input.sessionScope.kind !== "workflow") {
       return runtime.resumeSession(input);

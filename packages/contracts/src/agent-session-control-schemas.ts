@@ -5,6 +5,7 @@ import {
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
   agentSessionScopeSchema,
+  agentSessionWorkflowScopeSchema,
 } from "./agent-session-schemas";
 import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandDescriptorSchema } from "./slash-command-schemas";
@@ -81,6 +82,18 @@ export const agentSessionControlStartInputSchema = z
   })
   .strict();
 export type AgentSessionControlStartInput = z.infer<typeof agentSessionControlStartInputSchema>;
+
+export const agentWorkflowSessionStartInputSchema = z
+  .object({
+    repoPath: nonEmptyStringSchema,
+    runtimeKind: runtimeKindSchema,
+    sessionScope: agentSessionWorkflowScopeSchema,
+    systemPrompt: z.string(),
+    model: agentModelSelectionSchema,
+    targetWorkingDirectory: nonEmptyStringSchema.optional(),
+  })
+  .strict();
+export type AgentWorkflowSessionStartInput = z.infer<typeof agentWorkflowSessionStartInputSchema>;
 
 export const agentSessionControlResumeInputSchema = agentSessionLiveRefSchema
   .extend({
