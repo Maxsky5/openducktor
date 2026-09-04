@@ -18,6 +18,7 @@ export type UseTaskOperationsArgs = {
 
 export type UseTaskOperationsResult = {
   tasks: TaskCard[];
+  tasksAreCurrent: boolean;
   isForegroundLoadingTasks: boolean;
   isRefreshingTasksInBackground: boolean;
   isLoadingTasks: boolean;

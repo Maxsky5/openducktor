@@ -1,10 +1,6 @@
-import { agentRoleValues } from "@openducktor/contracts";
+import { agentRoleValues, type WorkspaceAgentStudioState } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { errorMessage } from "@/lib/errors";
-import { z } from "zod";
 
-const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
-const AGENT_STUDIO_TABS_STORAGE_PREFIX = "openducktor:agent-studio:tabs";
 const AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY = "openducktor:agent-studio:right-panel";
 
 export const AGENT_STUDIO_QUERY_KEYS = {
@@ -27,12 +23,6 @@ const AGENT_STUDIO_MANAGED_URL_QUERY_KEYS = [
   ...LEGACY_AGENT_STUDIO_QUERY_KEYS,
 ] as const;
 
-const AGENT_STUDIO_PERSISTED_CONTEXT_KEYS = {
-  taskId: "taskId",
-  role: "role",
-  sessionExternalId: "sessionExternalId",
-} as const;
-
 export type AgentStudioQueryKey =
   (typeof AGENT_STUDIO_QUERY_KEYS)[keyof typeof AGENT_STUDIO_QUERY_KEYS];
 
@@ -50,19 +40,7 @@ type AgentStudioSessionSelectionQueryParams = {
   role: AgentRole;
 };
 
-export type PersistedAgentStudioContext = {
-  taskId?: string;
-  role?: AgentRole;
-  sessionExternalId?: string;
-};
-
 const AGENT_ROLE_SET = new Set<string>(agentRoleValues);
-const persistedAgentStudioContextSchema = z.object({
-  taskId: z.string().optional(),
-  role: z.string().optional(),
-  sessionExternalId: z.string().optional(),
-});
-type ParsedPersistedAgentStudioContext = z.output<typeof persistedAgentStudioContextSchema>;
 
 const isRole = (value: string | null): value is AgentRole =>
   value != null && AGENT_ROLE_SET.has(value);
@@ -192,55 +170,17 @@ export const hasAgentStudioNavigationSelection = (
   return Boolean(navigation.taskId || navigation.sessionExternalId || navigation.role);
 };
 
-export const parsePersistedContext = (raw: string): PersistedAgentStudioContext => {
-  let parsed: ParsedPersistedAgentStudioContext;
-  try {
-    parsed = persistedAgentStudioContextSchema.parse(JSON.parse(raw));
-  } catch (cause) {
-    throw new Error(`Failed to parse persisted agent studio context: ${errorMessage(cause)}`, {
-      cause,
-    });
-  }
-
-  const taskId = parsePersistedContextString(parsed, AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.taskId);
-  const roleValue = parsePersistedContextString(parsed, AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.role);
-  const role: AgentRole | undefined = roleValue
-    ? (() => {
-        if (!isRole(roleValue)) {
-          throw new Error(
-            `Failed to parse persisted agent studio context: invalid role "${roleValue}".`,
-          );
-        }
-        return roleValue;
-      })()
-    : undefined;
-  const sessionExternalId = parsePersistedContextString(
-    parsed,
-    AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionExternalId,
-  );
-  const persistedContext: PersistedAgentStudioContext = {};
-  if (taskId) {
-    persistedContext.taskId = taskId;
-  }
-  if (role) {
-    persistedContext.role = role;
-  }
-  if (sessionExternalId) {
-    persistedContext.sessionExternalId = sessionExternalId;
-  }
-  return persistedContext;
-};
-
-export const restoreNavigationFromPersistedContext = (
+export const restoreNavigationFromWorkspaceState = (
   current: AgentStudioNavigationState,
-  persisted: PersistedAgentStudioContext,
+  state: WorkspaceAgentStudioState,
 ): AgentStudioNavigationState => {
-  const role = current.role ?? persisted.role ?? null;
-  const taskId = current.taskId || persisted.taskId || "";
+  const activeTask = state.activeTask;
+  const role = current.role ?? activeTask?.role ?? null;
+  const taskId = current.taskId || activeTask?.taskId || "";
   const sessionExternalId =
     current.sessionExternalId ??
-    (!current.taskId || persisted.taskId === current.taskId
-      ? (persisted.sessionExternalId ?? null)
+    (!current.taskId || activeTask?.taskId === current.taskId
+      ? (activeTask?.externalSessionId ?? null)
       : null);
 
   return {
@@ -251,34 +191,4 @@ export const restoreNavigationFromPersistedContext = (
   };
 };
 
-export const serializePersistedContext = (navigation: AgentStudioNavigationState): string => {
-  const payload = {
-    [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.taskId]: navigation.taskId || undefined,
-    [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.role]: navigation.role ?? undefined,
-    [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.sessionExternalId]:
-      navigation.sessionExternalId || undefined,
-  };
-
-  return JSON.stringify(payload);
-};
-
-export const toContextStorageKey = (workspaceId: string): string =>
-  `${AGENT_STUDIO_CONTEXT_STORAGE_PREFIX}:${workspaceId}`;
-
-export const toTabsStorageKey = (workspaceId: string): string =>
-  `${AGENT_STUDIO_TABS_STORAGE_PREFIX}:${workspaceId}`;
-
 export const toRightPanelStorageKey = (): string => AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY;
-
-const parsePersistedContextString = (
-  parsed: ParsedPersistedAgentStudioContext,
-  key: (typeof AGENT_STUDIO_PERSISTED_CONTEXT_KEYS)[keyof typeof AGENT_STUDIO_PERSISTED_CONTEXT_KEYS],
-): string | undefined => {
-  const value = parsed[key];
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-};

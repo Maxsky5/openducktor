@@ -321,6 +321,7 @@ const createTasksStateValue = (
     "tasks" | "pendingMergedPullRequest" | "linkingMergedPullRequestTaskId"
   >,
 ): TasksStateContextValue => ({
+  tasksAreCurrent: true,
   isForegroundLoadingTasks: false,
   isRefreshingTasksInBackground: false,
   tasks: renderState.tasks,
@@ -394,6 +395,7 @@ function createRepoConfigFixture(promptOverrides: RepoPromptOverrides = {}): Rep
     devServers: [],
     worktreeCopyPaths: [],
     promptOverrides,
+    agentStudioState: { openTaskIds: [] },
     agentDefaults: {
       spec: {
         runtimeKind: "opencode",

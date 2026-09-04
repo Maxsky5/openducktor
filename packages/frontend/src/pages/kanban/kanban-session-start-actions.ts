@@ -8,7 +8,6 @@ import type {
 } from "@/features/session-start";
 import { sessionStartPostActionErrorTitle } from "@/features/session-start";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { addTaskToPersistedAgentStudioTabs } from "../agents/agent-studio-task-tabs-storage";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { renderSessionStartedToastAction } from "./session-started-toast-action";
 
@@ -20,6 +19,7 @@ type StartKanbanSessionFlowInput = {
   tasks: TaskCard[];
   roleLabels: Record<AgentRole, string>;
   workspaceId: string | null;
+  saveAgentStudioTab: (taskId: string) => Promise<void>;
   runSessionStartWorkflow: RunSessionStartWorkflow;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
@@ -43,6 +43,7 @@ export const startKanbanSessionFlow = async ({
   tasks,
   roleLabels,
   workspaceId,
+  saveAgentStudioTab,
   runSessionStartWorkflow,
   humanRequestChangesTask,
   setTaskTargetBranch,
@@ -76,14 +77,11 @@ export const startKanbanSessionFlow = async ({
         });
       } else {
         try {
-          addTaskToPersistedAgentStudioTabs({
-            workspaceId,
-            taskId: request.taskId,
-            tasks,
-          });
+          await saveAgentStudioTab(request.taskId);
         } catch (error) {
           toast.warning("Session started, but Agent Studio tab could not be saved.", {
-            description: error instanceof Error ? error.message : "Unable to update tab storage.",
+            description:
+              error instanceof Error ? error.message : "Unable to update Agent Studio state.",
           });
         }
       }

@@ -28,6 +28,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     devServers: [],
     worktreeCopyPaths: [],
     promptOverrides: {},
+    agentStudioState: { openTaskIds: [] },
     agentDefaults: {},
   };
   const runtimeEnsure: typeof host.runtimeEnsure = async (repoPath, runtimeKind) => ({

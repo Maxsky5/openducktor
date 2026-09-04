@@ -129,6 +129,7 @@ const createActivityStore = (
 let currentVisibleTasks: TasksStateContextValue["tasks"] = [];
 
 const createTasksStateValue = (): TasksStateContextValue => ({
+  tasksAreCurrent: true,
   isForegroundLoadingTasks: false,
   isRefreshingTasksInBackground: false,
   tasks: currentVisibleTasks,

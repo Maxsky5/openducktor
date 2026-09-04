@@ -1,4 +1,4 @@
-import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsRepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -19,7 +19,7 @@ type SettingsModalSnapshotState = {
   selectedWorkspaceId: string | null;
   setSelectedWorkspaceId: (next: string) => void;
   workspaceIds: string[];
-  selectedRepoConfig: RepoConfig | null;
+  selectedRepoConfig: SettingsRepoConfig | null;
   isLoadingSettings: boolean;
   settingsError: string | null;
   clearSettingsError: () => void;

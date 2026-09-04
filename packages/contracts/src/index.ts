@@ -69,3 +69,4 @@ export * from "./task-asset-schemas";
 export * from "./task-schemas";
 export * from "./terminal-protocol";
 export * from "./terminal-schemas";
+export * from "./workspace-agent-studio-state-schemas";

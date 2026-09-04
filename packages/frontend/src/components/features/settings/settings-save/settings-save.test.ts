@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   agentPromptTemplateIdValues,
-  type RepoConfig,
+  type SettingsRepoConfig,
   type RepoPromptOverrides,
 } from "@openducktor/contracts";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -10,7 +10,7 @@ import { preparePromptOverridesForSave } from "./prompt-overrides";
 import { prepareRepoConfigForSave } from "./repo-config";
 import { prepareSettingsSnapshotForSave } from "./settings-snapshot";
 
-const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
+const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): SettingsRepoConfig => ({
   workspaceId: "repo-a",
   workspaceName: "Repo A",
   repoPath: "/repo-a",

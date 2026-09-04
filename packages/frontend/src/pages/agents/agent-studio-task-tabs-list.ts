@@ -49,7 +49,8 @@ export const resolveFallbackTaskId = (params: {
 };
 
 export const getAvailableTabTasks = (tasks: TaskCard[], tabTaskIds: string[]): TaskCard[] => {
-  return tasks.filter((task) => !tabTaskIds.includes(task.id));
+  const openTaskIds = new Set(tabTaskIds);
+  return tasks.filter((task) => !openTaskIds.has(task.id));
 };
 
 export const closeTaskTab = (params: {

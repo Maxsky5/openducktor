@@ -8,12 +8,24 @@ const getLoadingState = (overrides: Partial<Parameters<typeof getTaskReadLoading
     isSettingsLoadingForActiveRepo: false,
     isTaskQueryLoadingForActiveRepo: false,
     isTaskQueryFetchingForActiveRepo: false,
+    isTaskQuerySuccessForActiveRepo: true,
     ...overrides,
   });
 
 describe("task read loading state", () => {
+  test("marks only an idle successful task query as current", () => {
+    expect(getLoadingState()).toMatchObject({ tasksAreCurrent: true });
+    expect(getLoadingState({ isTaskQueryFetchingForActiveRepo: true })).toMatchObject({
+      tasksAreCurrent: false,
+    });
+    expect(getLoadingState({ isTaskQuerySuccessForActiveRepo: false })).toMatchObject({
+      tasksAreCurrent: false,
+    });
+  });
+
   test("treats a manual refresh as foreground loading", () => {
     expect(getLoadingState({ isManualLoadingTasks: true })).toEqual({
+      tasksAreCurrent: false,
       isForegroundLoadingTasks: true,
       isRefreshingTasksInBackground: false,
       isLoadingTasks: true,
@@ -22,6 +34,7 @@ describe("task read loading state", () => {
 
   test("treats pending settings as foreground loading", () => {
     expect(getLoadingState({ isSettingsLoadingForActiveRepo: true })).toEqual({
+      tasksAreCurrent: false,
       isForegroundLoadingTasks: true,
       isRefreshingTasksInBackground: false,
       isLoadingTasks: true,
@@ -30,6 +43,7 @@ describe("task read loading state", () => {
 
   test("treats an initial active task query as foreground loading", () => {
     expect(getLoadingState({ isTaskQueryLoadingForActiveRepo: true })).toEqual({
+      tasksAreCurrent: false,
       isForegroundLoadingTasks: true,
       isRefreshingTasksInBackground: false,
       isLoadingTasks: true,
@@ -38,6 +52,7 @@ describe("task read loading state", () => {
 
   test("treats active query fetching without a foreground condition as background refreshing", () => {
     expect(getLoadingState({ isTaskQueryFetchingForActiveRepo: true })).toEqual({
+      tasksAreCurrent: false,
       isForegroundLoadingTasks: false,
       isRefreshingTasksInBackground: true,
       isLoadingTasks: false,
@@ -53,6 +68,7 @@ describe("task read loading state", () => {
       expect(
         getLoadingState({ ...foregroundCondition, isTaskQueryFetchingForActiveRepo: true }),
       ).toEqual({
+        tasksAreCurrent: false,
         isForegroundLoadingTasks: true,
         isRefreshingTasksInBackground: false,
         isLoadingTasks: true,
@@ -62,6 +78,7 @@ describe("task read loading state", () => {
 
   test("reports neither loading state while idle or disabled without an active repo", () => {
     expect(getLoadingState()).toEqual({
+      tasksAreCurrent: true,
       isForegroundLoadingTasks: false,
       isRefreshingTasksInBackground: false,
       isLoadingTasks: false,
@@ -75,6 +92,7 @@ describe("task read loading state", () => {
         isTaskQueryFetchingForActiveRepo: true,
       }),
     ).toEqual({
+      tasksAreCurrent: false,
       isForegroundLoadingTasks: false,
       isRefreshingTasksInBackground: false,
       isLoadingTasks: false,

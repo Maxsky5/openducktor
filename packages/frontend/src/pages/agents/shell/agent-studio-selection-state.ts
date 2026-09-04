@@ -39,19 +39,19 @@ export const agentStudioSelectionQueryKey = (selection: AgentStudioSelectionStat
   ].join("\u001f");
 
 export const createAgentStudioRouteSelectionState = ({
-  isRepoNavigationBoundaryPending,
+  isWorkspaceRestorePending,
   taskIdParam,
   sessionExternalIdParam,
   hasExplicitRoleParam,
   roleFromQuery,
 }: {
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   taskIdParam: string;
   sessionExternalIdParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
 }): AgentStudioSelectionState => {
-  if (isRepoNavigationBoundaryPending) {
+  if (isWorkspaceRestorePending) {
     return emptyAgentStudioSelectionState();
   }
 

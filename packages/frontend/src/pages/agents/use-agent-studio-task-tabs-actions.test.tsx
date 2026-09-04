@@ -6,34 +6,30 @@ import { useTaskTabActions } from "./use-agent-studio-task-tabs-actions";
 
 enableReactActEnvironment();
 
-type HookArgs = Omit<
-  Parameters<typeof useTaskTabActions>[0],
-  "tabTaskIds" | "setOpenTaskTabs" | "setPersistedActiveTaskId"
-> & {
+type HookArgs = Omit<Parameters<typeof useTaskTabActions>[0], "tabTaskIds" | "setTaskTabState"> & {
   initialOpenTaskTabs: string[];
   initialPersistedActiveTaskId?: string | null;
 };
 
 const useTaskTabActionsHarness = (props: HookArgs) => {
-  const [openTaskTabs, setOpenTaskTabs] = useState(props.initialOpenTaskTabs);
-  const [persistedActiveTaskId, setPersistedActiveTaskId] = useState(
-    props.initialPersistedActiveTaskId ?? null,
-  );
+  const [taskTabState, setTaskTabState] = useState({
+    openTaskIds: props.initialOpenTaskTabs,
+    activeTaskId: props.initialPersistedActiveTaskId ?? null,
+  });
 
   const actions = useTaskTabActions({
-    tabTaskIds: openTaskTabs,
+    tabTaskIds: taskTabState.openTaskIds,
     activeTaskTabId: props.activeTaskTabId,
     clearTaskSelection: props.clearTaskSelection,
     selectTask: props.selectTask,
     handleSelectTab: props.handleSelectTab,
-    setOpenTaskTabs,
-    setPersistedActiveTaskId,
+    setTaskTabState,
   });
 
   return {
     ...actions,
-    openTaskTabs,
-    persistedActiveTaskId,
+    openTaskTabs: taskTabState.openTaskIds,
+    persistedActiveTaskId: taskTabState.activeTaskId,
   };
 };
 

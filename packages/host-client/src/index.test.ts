@@ -272,6 +272,7 @@ describe("HostClient", () => {
       "workspaceSaveRepoSettings",
       "workspaceUpdateRepoHooks",
       "workspaceGetRepoConfig",
+      "workspaceReplaceAgentStudioState",
       "workspaceGetSettingsSnapshot",
       "workspaceUpdateAgentModelFavorites",
       "workspaceUpdateGlobalGitConfig",
@@ -1093,6 +1094,55 @@ describe("HostClient", () => {
       {
         command: "workspace_get_settings_snapshot",
         args: undefined,
+      },
+    ]);
+  });
+
+  test("workspaceReplaceAgentStudioState uses the narrow IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "workspace_replace_agent_studio_state") {
+        return {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          defaultRuntimeKind: "opencode",
+          agentStudioState: {
+            openTaskIds: ["task-1"],
+            activeTask: {
+              taskId: "task-1",
+              role: "build",
+              externalSessionId: "session-1",
+            },
+          },
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const result = await client.workspaceReplaceAgentStudioState("repo", {
+      openTaskIds: ["task-1"],
+      activeTask: {
+        taskId: "task-1",
+        role: "build",
+        externalSessionId: "session-1",
+      },
+    });
+
+    expect(result.agentStudioState.activeTask?.externalSessionId).toBe("session-1");
+    expect(calls).toEqual([
+      {
+        command: "workspace_replace_agent_studio_state",
+        args: {
+          workspaceId: "repo",
+          state: {
+            openTaskIds: ["task-1"],
+            activeTask: {
+              taskId: "task-1",
+              role: "build",
+              externalSessionId: "session-1",
+            },
+          },
+        },
       },
     ]);
   });

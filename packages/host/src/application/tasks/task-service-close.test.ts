@@ -92,6 +92,7 @@ const repoConfig: RepoConfig = {
   worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
+  agentStudioState: { openTaskIds: [] },
 };
 
 const createMetadata = (agentSessions: AgentSessionRecord[] = []): TaskMetadataPayload => ({

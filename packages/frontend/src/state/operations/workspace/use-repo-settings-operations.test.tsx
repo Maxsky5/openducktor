@@ -100,6 +100,7 @@ const createRepoConfig = (): Awaited<ReturnType<typeof host.workspaceGetRepoConf
   devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
   worktreeCopyPaths: [],
   promptOverrides: {},
+  agentStudioState: { openTaskIds: [] },
   agentDefaults: {
     spec: { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" },
     build: {

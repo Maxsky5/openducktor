@@ -116,6 +116,7 @@ export const HOST_COMMAND_NAMES = [
   "workspace_get_settings_snapshot",
   "workspace_list",
   "workspace_reorder",
+  "workspace_replace_agent_studio_state",
   "workspace_resolve_local_attachment_path",
   "workspace_save_repo_settings",
   "workspace_save_settings_snapshot",

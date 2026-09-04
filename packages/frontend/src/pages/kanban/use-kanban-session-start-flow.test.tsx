@@ -23,7 +23,6 @@ import { host } from "@/state/operations/shared/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { parsePersistedTaskTabs } from "../agents/agent-studio-task-tabs-storage";
 import {
   createAgentSessionSummaryFixture,
   createChecksStateContextValue,
@@ -33,7 +32,6 @@ import {
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
-import { toTabsStorageKey } from "../agents/query-sync/agent-studio-navigation";
 import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
 
 enableReactActEnvironment();
@@ -206,6 +204,7 @@ const createRepoConfigFixture = (): RepoConfig => ({
   devServers: [],
   worktreeCopyPaths: [],
   promptOverrides: {},
+  agentStudioState: { openTaskIds: [] },
   agentDefaults: {
     spec: undefined,
     planner: undefined,
@@ -301,15 +300,30 @@ describe("resolveBuildContinuationLaunchAction", () => {
 
 describe("useKanbanSessionStartFlow", () => {
   const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
+  const originalWorkspaceReplaceAgentStudioState = host.workspaceReplaceAgentStudioState;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+  let repoConfig = createRepoConfigFixture();
+  const replaceAgentStudioState = mock(
+    async (
+      _workspaceId: string,
+      agentStudioState: RepoConfig["agentStudioState"],
+    ): Promise<RepoConfig> => {
+      repoConfig = { ...repoConfig, agentStudioState };
+      return repoConfig;
+    },
+  );
 
   beforeEach(() => {
-    host.workspaceGetRepoConfig = async () => createRepoConfigFixture();
+    repoConfig = createRepoConfigFixture();
+    replaceAgentStudioState.mockClear();
+    host.workspaceGetRepoConfig = async () => repoConfig;
+    host.workspaceReplaceAgentStudioState = replaceAgentStudioState;
     host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
   });
 
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
+    host.workspaceReplaceAgentStudioState = originalWorkspaceReplaceAgentStudioState;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
@@ -657,8 +671,6 @@ describe("useKanbanSessionStartFlow", () => {
   test("background start adds one Agent Studio task tab when setting is enabled", async () => {
     const toastSuccess = mock(() => "toast-id");
     const toastSuccessSpy = spyOn(toast, "success").mockImplementation(toastSuccess);
-    const storageKey = toTabsStorageKey("workspace-1");
-    globalThis.localStorage.removeItem(storageKey);
     const navigate = mock(() => {});
     const args = createBaseArgs();
     args.navigate = navigate;
@@ -684,9 +696,8 @@ describe("useKanbanSessionStartFlow", () => {
         await Promise.resolve();
       });
 
-      expect(parsePersistedTaskTabs(globalThis.localStorage.getItem(storageKey))).toEqual({
-        tabs: ["TASK-1"],
-        activeTaskId: null,
+      expect(replaceAgentStudioState).toHaveBeenCalledWith("workspace-1", {
+        openTaskIds: ["TASK-1"],
       });
       expect(navigate).not.toHaveBeenCalled();
       expect(toastSuccess).toHaveBeenCalled();
@@ -704,19 +715,14 @@ describe("useKanbanSessionStartFlow", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(parsePersistedTaskTabs(globalThis.localStorage.getItem(storageKey)).tabs).toEqual([
-        "TASK-1",
-      ]);
+      expect(replaceAgentStudioState).toHaveBeenCalledTimes(1);
     } finally {
-      globalThis.localStorage.removeItem(storageKey);
       toastSuccessSpy.mockRestore();
       await harness.unmount();
     }
   });
 
   test("background start does not add Agent Studio task tab when setting is disabled", async () => {
-    const storageKey = toTabsStorageKey("workspace-1");
-    globalThis.localStorage.removeItem(storageKey);
     const args = createBaseArgs();
     args.repoSettings = createDefaultRepoSettings();
     args.openAgentStudioTabOnBackgroundSessionStart = false;
@@ -739,9 +745,8 @@ describe("useKanbanSessionStartFlow", () => {
         await Promise.resolve();
       });
 
-      expect(globalThis.localStorage.getItem(storageKey)).toBeNull();
+      expect(replaceAgentStudioState).not.toHaveBeenCalled();
     } finally {
-      globalThis.localStorage.removeItem(storageKey);
       await harness.unmount();
     }
   });

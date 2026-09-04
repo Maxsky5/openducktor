@@ -1,4 +1,5 @@
 import { LoaderCircle, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { memo, type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import { DiagnosticsPanel } from "@/components/features/diagnostics";
@@ -16,12 +17,14 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { OnboardingPage } from "@/pages/onboarding/onboarding-page";
 import { useActiveWorkspace, useWorkspacePresence } from "@/state/app-state-provider";
+import { repoConfigQueryOptions } from "@/state/queries/workspace";
 import { useShellAgentActivity } from "@/state/queries/use-shell-agent-activity";
 
 type AppShellSidebarPreference = "opened" | "collapsed";
 
 const APP_SHELL_LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
 const DEFAULT_APP_SHELL_SIDEBAR_PREFERENCE: AppShellSidebarPreference = "opened";
+const NO_ACTIVE_WORKSPACE_ID = "__no_active_workspace__";
 
 const isAppShellSidebarPreference = (value: string | null): value is AppShellSidebarPreference =>
   value === "opened" || value === "collapsed";
@@ -60,6 +63,12 @@ const persistLeftSidebarPreference = (preference: AppShellSidebarPreference): vo
 
 const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   const activeWorkspace = useActiveWorkspace();
+  useQuery({
+    ...repoConfigQueryOptions(activeWorkspace?.workspaceId ?? NO_ACTIVE_WORKSPACE_ID),
+    enabled: activeWorkspace !== null,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  });
   const [isRepositoryModalOpen, setRepositoryModalOpen] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(
     () => readPersistedLeftSidebarPreference() === "opened",

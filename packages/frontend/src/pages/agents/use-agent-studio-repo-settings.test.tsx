@@ -25,6 +25,7 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   devServers: [],
   worktreeCopyPaths: [],
   promptOverrides: {},
+  agentStudioState: { openTaskIds: [] },
   agentDefaults: {},
   ...overrides,
 });

@@ -395,19 +395,6 @@ describe("useAgentStudioTerminals", () => {
       label: "Shell 2",
       createdAt: "2026-07-13T00:01:00.000Z",
     };
-    localStorage.setItem(
-      "openducktor:agent-studio-terminals:/repo:task-a",
-      JSON.stringify({
-        hostInstanceId: "host-1",
-        visible: true,
-        activeTerminalId: secondTerminal.terminalId,
-        terminals: [firstTerminal, secondTerminal].map((terminal) => ({
-          terminalId: terminal.terminalId,
-          label: terminal.label,
-          initialWorkingDir: terminal.initialWorkingDir,
-        })),
-      }),
-    );
     const baseDependencies = createTerminalTestDependencies();
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
@@ -452,7 +439,6 @@ describe("useAgentStudioTerminals", () => {
         },
         { timeout: 2_000 },
       );
-      expect(localStorage.getItem("openducktor:agent-studio-terminals:/repo:task-a")).toBeNull();
     } finally {
       view.unmount();
     }

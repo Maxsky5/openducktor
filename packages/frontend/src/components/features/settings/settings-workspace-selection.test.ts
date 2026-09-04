@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsRepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { chooseInitialSettingsWorkspaceId } from "./settings-workspace-selection";
 
-const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
+const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): SettingsRepoConfig => ({
   workspaceId: "repo-a",
   workspaceName: "Repo A",
   repoPath: "/repo-a",

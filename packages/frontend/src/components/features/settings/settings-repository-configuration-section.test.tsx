@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { GitBranch, RepoConfig } from "@openducktor/contracts";
+import type { GitBranch, SettingsRepoConfig } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -7,7 +7,7 @@ import { RepositoryConfigurationSection } from "./settings-repository-configurat
 
 enableReactActEnvironment();
 
-const repoConfig: RepoConfig = {
+const repoConfig: SettingsRepoConfig = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
@@ -25,10 +25,12 @@ const repoConfig: RepoConfig = {
 
 describe("RepositoryConfigurationSection", () => {
   test("keeps repository identity and branch fields without rendering script controls", () => {
-    const updaters: Array<(current: RepoConfig) => RepoConfig> = [];
-    const onUpdateSelectedRepoConfig = mock((updater: (current: RepoConfig) => RepoConfig) => {
-      updaters.push(updater);
-    });
+    const updaters: Array<(current: SettingsRepoConfig) => SettingsRepoConfig> = [];
+    const onUpdateSelectedRepoConfig = mock(
+      (updater: (current: SettingsRepoConfig) => SettingsRepoConfig) => {
+        updaters.push(updater);
+      },
+    );
     const rendered = render(
       createElement(RepositoryConfigurationSection, {
         selectedRepoConfig: repoConfig,

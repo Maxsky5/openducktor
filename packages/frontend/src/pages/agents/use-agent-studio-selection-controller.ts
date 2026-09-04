@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { TaskCard, WorkspaceAgentStudioState } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
 import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
@@ -24,10 +24,14 @@ import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
   activeWorkspaceId: string | null;
+  loadedAgentStudioState: WorkspaceAgentStudioState | null;
+  agentStudioStateLoadKey: string | null;
+  agentStudioState: WorkspaceAgentStudioState | null;
   workspaceRepoPath: string | null;
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
+  tasksAreCurrent: boolean;
   sessions: AgentSessionSummary[];
   taskIdParam: string;
   sessionExternalIdParam: string | null;
@@ -57,6 +61,7 @@ export type AgentStudioSelectionControllerResult = {
   queryUpdate: ReturnType<typeof resolveAgentStudioNavigationState>["queryUpdate"];
   isLoadingTasks: boolean;
   activeTaskTabId: string;
+  loadedStateWorkspaceId: string | null;
   tabTaskIds: string[];
   availableTabTasks: TaskCard[];
   taskTabs: ReturnType<typeof useAgentStudioTaskTabs>["taskTabs"];
@@ -73,10 +78,14 @@ export type AgentStudioSelectionControllerResult = {
 
 export function useAgentStudioSelectionController({
   activeWorkspaceId,
+  loadedAgentStudioState,
+  agentStudioStateLoadKey,
+  agentStudioState,
   workspaceRepoPath,
-  isRepoNavigationBoundaryPending,
+  isWorkspaceRestorePending,
   tasks,
   isLoadingTasks,
+  tasksAreCurrent,
   sessions,
   taskIdParam,
   sessionExternalIdParam,
@@ -93,7 +102,7 @@ export function useAgentStudioSelectionController({
   const navigationBase = useMemo(
     () =>
       resolveAgentStudioNavigationState({
-        isRepoNavigationBoundaryPending,
+        isWorkspaceRestorePending,
         isLoadingTasks,
         sessionReadModelLoadState,
         tasks,
@@ -108,7 +117,7 @@ export function useAgentStudioSelectionController({
     [
       hasExplicitRoleParam,
       isLoadingTasks,
-      isRepoNavigationBoundaryPending,
+      isWorkspaceRestorePending,
       roleFromQuery,
       selectionState,
       sessionExternalIdParam,
@@ -156,13 +165,18 @@ export function useAgentStudioSelectionController({
     handleCreateTab,
     handleCloseTab,
     handleReorderTab,
+    loadedStateWorkspaceId,
   } = useAgentStudioTaskTabs({
     activeWorkspaceId,
-    isRepoNavigationBoundaryPending,
+    loadedAgentStudioState,
+    agentStudioStateLoadKey,
+    agentStudioState,
+    isWorkspaceRestorePending,
     taskId: navigationBase.taskId,
+    routeTaskId: taskIdParam,
     selectedTask: navigationBase.selectedTask,
     tasks,
-    isLoadingTasks,
+    tasksAreCurrent,
     latestSessionByTaskId,
     activeSessionByTaskId,
     selectAgentStudioSelection,
@@ -173,7 +187,7 @@ export function useAgentStudioSelectionController({
       return navigationBase;
     }
     return resolveAgentStudioNavigationState({
-      isRepoNavigationBoundaryPending,
+      isWorkspaceRestorePending,
       isLoadingTasks,
       sessionReadModelLoadState,
       tasks,
@@ -189,7 +203,7 @@ export function useAgentStudioSelectionController({
     activeTaskTabId,
     hasExplicitRoleParam,
     isLoadingTasks,
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     navigationBase,
     roleFromQuery,
     selectionState,
@@ -251,6 +265,7 @@ export function useAgentStudioSelectionController({
       queryUpdate: navigationState.queryUpdate,
       isLoadingTasks,
       activeTaskTabId,
+      loadedStateWorkspaceId,
       tabTaskIds,
       availableTabTasks,
       taskTabs,
@@ -276,6 +291,7 @@ export function useAgentStudioSelectionController({
       isActiveTaskReady,
       isLoadingTasks,
       navigationState,
+      loadedStateWorkspaceId,
       selectedSessionViewWithContextError,
       sessions,
       taskTabs,

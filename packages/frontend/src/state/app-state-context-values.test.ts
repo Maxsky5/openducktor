@@ -77,6 +77,7 @@ describe("app-state-context-values", () => {
       refreshChecks: async () => {},
     };
     const tasksValue: TasksStateContextValue = {
+      tasksAreCurrent: true,
       isForegroundLoadingTasks: false,
       isRefreshingTasksInBackground: false,
       isLoadingTasks: false,

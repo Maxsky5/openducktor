@@ -1,7 +1,7 @@
 import type {
   AgentRuntimes,
   GlobalGitConfig,
-  RepoConfig,
+  SettingsRepoConfig,
   RepoPromptOverrides,
   ReusablePrompt,
   SettingsSnapshot,
@@ -16,7 +16,7 @@ type UseSettingsModalDraftActionsArgs = {
 };
 
 export type SettingsModalDraftActions = {
-  updateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
+  updateSelectedRepoConfig: (updater: (current: SettingsRepoConfig) => SettingsRepoConfig) => void;
   updateGlobalGitConfig: (updater: (current: GlobalGitConfig) => GlobalGitConfig) => void;
   updateGlobalChatSettings: (
     updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"],
@@ -73,7 +73,7 @@ export const useSettingsModalDraftActions = ({
   );
 
   const updateSelectedRepoConfig = useCallback(
-    (updater: (current: RepoConfig) => RepoConfig): void => {
+    (updater: (current: SettingsRepoConfig) => SettingsRepoConfig): void => {
       setSnapshotDraft((current) => {
         if (!current || !selectedWorkspaceId) {
           return current;

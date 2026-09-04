@@ -266,12 +266,20 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
 const noopSelectAgentStudioSelection: SelectAgentStudioSelection = () => {};
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
+  const { loadedAgentStudioState, agentStudioStateLoadKey, selectionState, ...argOverrides } =
+    overrides;
+  const agentStudioState = argOverrides.agentStudioState ?? null;
+  const loadedState = loadedAgentStudioState ?? agentStudioState;
   const baseArgs: Omit<HookArgs, "selectionState"> = {
     activeWorkspaceId: null,
+    loadedAgentStudioState: loadedState,
+    agentStudioStateLoadKey: agentStudioStateLoadKey ?? (loadedState === null ? null : "1:1"),
+    agentStudioState,
     workspaceRepoPath: null,
-    isRepoNavigationBoundaryPending: false,
+    isWorkspaceRestorePending: false,
     tasks: [createTask("task-1"), createTask("task-2")],
     isLoadingTasks: false,
+    tasksAreCurrent: true,
     sessions: [],
     taskIdParam: "task-1",
     sessionExternalIdParam: null,
@@ -280,14 +288,14 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
     repoSettings,
     isLoadingRepoSettings: false,
     selectAgentStudioSelection: noopSelectAgentStudioSelection,
-    ...overrides,
+    ...argOverrides,
   };
   return {
     ...baseArgs,
     selectionState:
-      overrides.selectionState ??
+      selectionState ??
       createAgentStudioRouteSelectionState({
-        isRepoNavigationBoundaryPending: baseArgs.isRepoNavigationBoundaryPending,
+        isWorkspaceRestorePending: baseArgs.isWorkspaceRestorePending,
         taskIdParam: baseArgs.taskIdParam,
         sessionExternalIdParam: baseArgs.sessionExternalIdParam,
         hasExplicitRoleParam: baseArgs.hasExplicitRoleParam,
@@ -1463,7 +1471,7 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("suppresses stale query task and session selection while repo boundary reset is pending", async () => {
+  test("hides stale query state while workspace restore is pending", async () => {
     const loadRepoRuntimeCatalog = mock(async () => emptyCatalog);
     const readSessionTodos = mock(async () => []);
     const staleSession = createSession("task-1", "session-1", {
@@ -1474,7 +1482,7 @@ describe("useAgentStudioSelectionController", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
-        isRepoNavigationBoundaryPending: true,
+        isWorkspaceRestorePending: true,
         sessions: [staleSession],
         taskIdParam: "task-1",
         sessionExternalIdParam: sessionExternalIdParam(staleSession),
@@ -1606,6 +1614,9 @@ describe("useAgentStudioSelectionController", () => {
 
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspaceId,
+        agentStudioState: { openTaskIds: ["task-1"] },
+        workspaceRepoPath,
         sessions: [olderRunningSession, newerIdleSession],
         taskIdParam: "task-1",
         hasExplicitRoleParam: false,
@@ -1649,6 +1660,9 @@ describe("useAgentStudioSelectionController", () => {
 
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspaceId,
+        agentStudioState: { openTaskIds: ["task-1"] },
+        workspaceRepoPath,
         sessions: [waitingSession, newerIdleSession],
         taskIdParam: "task-1",
         hasExplicitRoleParam: false,
@@ -1675,6 +1689,9 @@ describe("useAgentStudioSelectionController", () => {
 
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspaceId,
+        agentStudioState: { openTaskIds: ["task-1"] },
+        workspaceRepoPath,
         sessions: [idleSession],
         taskIdParam: "task-1",
         hasExplicitRoleParam: false,

@@ -15,6 +15,48 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useNavigationUrlSync, initialProps);
 
 describe("useNavigationUrlSync", () => {
+  test("starts from caller state and writes it to the URL once", async () => {
+    const calls: SearchParamsCall[] = [];
+    const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
+      calls.push([nextInit, navigateOptions]);
+    };
+    const harness = createHookHarness({
+      initialNavigation: {
+        taskId: "task-1",
+        sessionExternalId: "session-1",
+        role: "planner",
+      },
+      locationKey: "location-1",
+      navigationType: "REPLACE",
+      searchParams: new URLSearchParams(),
+      setSearchParams,
+    });
+
+    await harness.mount();
+    await harness.update({
+      initialNavigation: {
+        taskId: "task-1",
+        sessionExternalId: "session-1",
+        role: "planner",
+      },
+      locationKey: "location-1",
+      navigationType: "REPLACE",
+      searchParams: new URLSearchParams(),
+      setSearchParams,
+    });
+
+    expect(harness.getLatest().navigation).toEqual({
+      taskId: "task-1",
+      sessionExternalId: "session-1",
+      role: "planner",
+    });
+    expect(calls).toHaveLength(1);
+    const [next, options] = calls[0] ?? [];
+    expect(next?.toString()).toBe("task=task-1&session=session-1&agent=planner");
+    expect(options).toEqual({ replace: true });
+    await harness.unmount();
+  });
+
   test("parses initial search params and syncs navigation updates back into the URL", async () => {
     const calls: SearchParamsCall[] = [];
     const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {

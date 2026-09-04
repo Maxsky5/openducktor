@@ -180,9 +180,6 @@ export function useRepoSettingsOperations({
         exact: true,
       });
       const normalizedSnapshot = await loadSettingsSnapshotFromQuery(queryClient);
-      for (const [workspaceId, repoConfig] of Object.entries(normalizedSnapshot.workspaces)) {
-        queryClient.setQueryData(workspaceQueryKeys.repoConfig(workspaceId), repoConfig);
-      }
       await queryClient.invalidateQueries({
         queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
       });

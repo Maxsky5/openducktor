@@ -1,16 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { useState } from "react";
+import type { WorkspaceAgentStudioState } from "@openducktor/contracts";
 import type { SetURLSearchParams } from "react-router";
-import {
-  createMemoryStorage,
-  seedWorkspaceNavigationContexts,
-  withMockedLocalStorage,
-} from "./agent-studio-repo-persistence-test-utils";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { toContextStorageKey } from "./agents-page-selection";
 import { useAgentStudioQuerySync } from "./query-sync/use-agent-studio-query-sync";
 
 enableReactActEnvironment();
@@ -18,482 +12,150 @@ enableReactActEnvironment();
 type HookArgs = Parameters<typeof useAgentStudioQuerySync>[0];
 type SearchParamsCall = Parameters<SetURLSearchParams>;
 
-const sessionExternalIdParam = (sessionExternalId: string) => sessionExternalId;
-
-type StatefulQuerySyncArgs = {
-  activeWorkspaceId: string | null;
-  initialSearchParams: string;
-};
-
-type HookArgsWithDefaults = {
-  activeWorkspaceId: string | null;
-  locationKey: string;
-  navigationType: HookArgs["navigationType"];
-  searchParams: HookArgs["searchParams"];
-  setSearchParams: HookArgs["setSearchParams"];
-};
-
-const normalizeHookArgs = ({
-  activeWorkspaceId,
-  locationKey,
-  navigationType,
-  searchParams,
-  setSearchParams,
-}: HookArgsWithDefaults): HookArgs => ({
-  activeWorkspaceId,
-  locationKey,
-  navigationType,
-  searchParams,
-  setSearchParams,
-});
-
-const createHookHarness = (initialProps: HookArgsWithDefaults) =>
-  createSharedHookHarness(
-    (props: HookArgsWithDefaults) => useAgentStudioQuerySync(normalizeHookArgs(props)),
-    initialProps,
-  );
-
-const createStatefulQuerySyncHarness = (initialProps: StatefulQuerySyncArgs) =>
-  createSharedHookHarness(({ activeWorkspaceId, initialSearchParams }: StatefulQuerySyncArgs) => {
-    const [searchParams, setSearchParamsState] = useState(
-      () => new URLSearchParams(initialSearchParams),
-    );
-    const setSearchParams: SetURLSearchParams = (nextInit) => {
-      if (nextInit instanceof URLSearchParams) {
-        setSearchParamsState(new URLSearchParams(nextInit));
-        return;
-      }
-
-      throw new Error("Expected URLSearchParams update in test harness");
-    };
-
-    return useAgentStudioQuerySync(
-      normalizeHookArgs({
-        activeWorkspaceId,
-        locationKey: "stateful-location",
-        navigationType: "REPLACE",
-        searchParams,
-        setSearchParams,
-      }),
-    );
-  }, initialProps);
-
-const withQuerySyncDefaults = (
-  overrides: Partial<HookArgsWithDefaults> & Pick<HookArgsWithDefaults, "activeWorkspaceId">,
-): HookArgsWithDefaults => ({
+const withDefaults = (
+  overrides: Partial<HookArgs> & Pick<HookArgs, "activeWorkspaceId">,
+): HookArgs => ({
+  agentStudioState: null,
+  isLoadingAgentStudioState: false,
+  agentStudioStateError: null,
+  retryAgentStudioStateLoad: () => {},
   locationKey: "location-1",
   navigationType: "REPLACE",
-  searchParams: new URLSearchParams(""),
+  searchParams: new URLSearchParams(),
   setSearchParams: () => {},
   ...overrides,
 });
 
+const createHookHarness = (initialProps: HookArgs) =>
+  createSharedHookHarness(useAgentStudioQuerySync, initialProps);
+
 describe("useAgentStudioQuerySync", () => {
-  test("parses initial search params and syncs updates through a root-owned URL effect", async () => {
+  test("parses URL state and writes query updates", async () => {
     const calls: SearchParamsCall[] = [];
     const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
       calls.push([nextInit, navigateOptions]);
     };
-
-    const harness = createHookHarness({
-      activeWorkspaceId: null,
-      locationKey: "location-1",
-      navigationType: "REPLACE",
-      searchParams: new URLSearchParams("task=task-1&agent=build"),
-      setSearchParams,
-    });
-
-    await harness.mount();
-    const state = harness.getLatest();
-    expect(state.taskIdParam).toBe("task-1");
-    expect(state.roleFromQuery).toBe("build");
-
-    await harness.run((latest) => {
-      latest.updateQuery({ session: "session-1" });
-    });
-
-    const lastCall = calls[calls.length - 1];
-    if (!lastCall) {
-      throw new Error("Expected setSearchParams to be called");
-    }
-    const [next, options] = lastCall;
-    if (!(next instanceof URLSearchParams)) {
-      throw new Error("Expected URLSearchParams");
-    }
-    expect(next.get("task")).toBe("task-1");
-    expect(next.get("session")).toBe("session-1");
-    expect(next.get("agent")).toBe("build");
-
-    expect(next.get("autostart")).toBeNull();
-    expect(next.get("start")).toBeNull();
-    expect(options).toEqual({ replace: true });
-
-    await harness.unmount();
-  });
-
-  test("syncs navigation state when URL search params change externally", async () => {
-    const calls: SearchParamsCall[] = [];
-    const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
-      calls.push([nextInit, navigateOptions]);
-    };
-
-    const harness = createHookHarness({
-      activeWorkspaceId: null,
-      locationKey: "location-1",
-      navigationType: "REPLACE",
-      searchParams: new URLSearchParams("task=task-1&agent=spec"),
-      setSearchParams,
-    });
+    const harness = createHookHarness(
+      withDefaults({
+        activeWorkspaceId: null,
+        searchParams: new URLSearchParams("task=task-1&agent=build"),
+        setSearchParams,
+      }),
+    );
 
     await harness.mount();
     expect(harness.getLatest().taskIdParam).toBe("task-1");
-    expect(harness.getLatest().roleFromQuery).toBe("spec");
-    expect(calls).toHaveLength(0);
+    expect(harness.getLatest().roleFromQuery).toBe("build");
+    await harness.run((state) => state.updateQuery({ session: "session-1" }));
 
-    await harness.update({
-      activeWorkspaceId: null,
-      locationKey: "location-2",
-      navigationType: "POP",
-      searchParams: new URLSearchParams("task=task-2&session=session-2&agent=planner"),
-      setSearchParams,
-    });
-
-    const latest = harness.getLatest();
-    expect(latest.taskIdParam).toBe("task-2");
-    expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-2"));
-    expect(latest.roleFromQuery).toBe("planner");
-
-    expect(calls).toHaveLength(0);
-
+    const lastCall = calls.at(-1);
+    if (!lastCall || !(lastCall[0] instanceof URLSearchParams)) {
+      throw new Error("Expected a URLSearchParams update.");
+    }
+    expect(lastCall[0].toString()).toBe("task=task-1&session=session-1&agent=build");
+    expect(lastCall[1]).toEqual({ replace: true });
     await harness.unmount();
   });
 
-  test("reapplies a sidebar session when a new location keeps the same URL", async () => {
-    const searchParams = new URLSearchParams("task=task-1&session=session-1&agent=build");
+  test("accepts a new external URL location", async () => {
     const setSearchParams: SetURLSearchParams = () => {};
-    const initialProps: HookArgsWithDefaults = {
-      activeWorkspaceId: null,
-      locationKey: "sidebar-location-1",
-      navigationType: "PUSH",
-      searchParams,
-      setSearchParams,
-    };
-    const harness = createHookHarness(initialProps);
+    const harness = createHookHarness(
+      withDefaults({
+        activeWorkspaceId: null,
+        searchParams: new URLSearchParams("task=task-1&agent=spec"),
+        setSearchParams,
+      }),
+    );
 
     await harness.mount();
-    await harness.run((state) => {
-      state.updateQuery({ session: "session-2" });
-    });
+    await harness.update(
+      withDefaults({
+        activeWorkspaceId: null,
+        locationKey: "location-2",
+        navigationType: "POP",
+        searchParams: new URLSearchParams("task=task-2&session=session-2&agent=planner"),
+        setSearchParams,
+      }),
+    );
+
+    expect(harness.getLatest().taskIdParam).toBe("task-2");
     expect(harness.getLatest().sessionExternalIdParam).toBe("session-2");
-
-    await harness.update({
-      ...initialProps,
-      locationKey: "sidebar-location-2",
-    });
-
-    expect(harness.getLatest().sessionExternalIdParam).toBe("session-1");
+    expect(harness.getLatest().roleFromQuery).toBe("planner");
     await harness.unmount();
   });
 
-  test("restores persisted repo context when no explicit task context exists", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    const calls: SearchParamsCall[] = [];
-    const setSearchParams: SetURLSearchParams = (nextInit, navigateOptions) => {
-      calls.push([nextInit, navigateOptions]);
+  test("restores task, role, and external session from workspace state", async () => {
+    const state: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-saved"],
+      activeTask: {
+        taskId: "task-saved",
+        role: "qa",
+        externalSessionId: "session-saved",
+      },
     };
+    const harness = createHookHarness(
+      withDefaults({ activeWorkspaceId: "repo-a", agentStudioState: state }),
+    );
 
-    try {
-      memoryStorage.setItem(
-        toContextStorageKey("workspace-repo"),
-        JSON.stringify({
-          taskId: "task-from-context",
-          role: "planner",
-          sessionExternalId: "session-from-context",
-        }),
-      );
+    await harness.mount();
+    await harness.waitFor((result) => result.isWorkspaceStateLoaded);
 
-      const harness = createHookHarness(
-        withQuerySyncDefaults({
-          activeWorkspaceId: "workspace-repo",
-          navigationType: "REPLACE",
-          searchParams: new URLSearchParams(""),
-          setSearchParams,
-        }),
-      );
-
-      await harness.mount();
-      await harness.waitFor((state) => state.taskIdParam === "task-from-context");
-
-      const latest = harness.getLatest();
-      expect(latest.taskIdParam).toBe("task-from-context");
-      expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-from-context"));
-      expect(latest.roleFromQuery).toBe("planner");
-
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
+    expect(harness.getLatest().taskIdParam).toBe("task-saved");
+    expect(harness.getLatest().sessionExternalIdParam).toBe("session-saved");
+    expect(harness.getLatest().roleFromQuery).toBe("qa");
+    await harness.unmount();
   });
 
-  test("surfaces retryable persistence error for malformed repo context", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
+  test("keeps a direct route active while workspace state loads", async () => {
+    const route = new URLSearchParams("task=task-url&session=session-url&agent=build");
+    const harness = createHookHarness(
+      withDefaults({
+        activeWorkspaceId: "repo-a",
+        isLoadingAgentStudioState: true,
+        searchParams: route,
+      }),
+    );
 
-    try {
-      memoryStorage.setItem(toContextStorageKey("workspace-repo"), "{not-json");
+    await harness.mount();
 
-      const harness = createHookHarness(
-        withQuerySyncDefaults({
-          activeWorkspaceId: "workspace-repo",
-          navigationType: "REPLACE",
-          searchParams: new URLSearchParams(""),
-          setSearchParams: () => {},
-        }),
-      );
+    expect(harness.getLatest().isWorkspaceRestorePending).toBeFalse();
+    expect(harness.getLatest().taskIdParam).toBe("task-url");
 
-      await harness.mount();
-      await harness.waitFor(
-        (state) =>
-          state.navigationPersistenceError?.message.includes(
-            "Failed to parse persisted agent studio context",
-          ) === true,
-      );
+    await harness.update(
+      withDefaults({
+        activeWorkspaceId: "repo-a",
+        agentStudioState: {
+          openTaskIds: ["task-saved"],
+          activeTask: { taskId: "task-saved", role: "qa" },
+        },
+        searchParams: route,
+      }),
+    );
+    await harness.waitFor((result) => result.isWorkspaceStateLoaded);
 
-      expect(harness.getLatest().taskIdParam).toBe("");
-
-      memoryStorage.setItem(
-        toContextStorageKey("workspace-repo"),
-        JSON.stringify({
-          taskId: "task-from-context",
-          role: "planner",
-          sessionExternalId: "session-from-context",
-        }),
-      );
-
-      await harness.run((latest) => {
-        latest.retryNavigationPersistence();
-      });
-      await harness.waitFor((state) => state.taskIdParam === "task-from-context");
-
-      expect(harness.getLatest().navigationPersistenceError).toBeNull();
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
+    expect(harness.getLatest().taskIdParam).toBe("task-url");
+    expect(harness.getLatest().sessionExternalIdParam).toBe("session-url");
+    expect(harness.getLatest().roleFromQuery).toBe("build");
+    await harness.unmount();
   });
 
-  test("does not override explicit task/session from URL with persisted context", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
+  test("keeps direct-link URL parameters authoritative", async () => {
+    const harness = createHookHarness(
+      withDefaults({
+        activeWorkspaceId: "repo-a",
+        agentStudioState: {
+          openTaskIds: ["task-saved"],
+          activeTask: { taskId: "task-saved", role: "qa" },
+        },
+        searchParams: new URLSearchParams("task=task-url&session=session-url&agent=build"),
+      }),
+    );
 
-    try {
-      memoryStorage.setItem(
-        toContextStorageKey("/repo"),
-        JSON.stringify({
-          taskId: "task-from-context",
-          role: "build",
-          sessionExternalId: "session-from-context",
-        }),
-      );
-
-      const harness = createHookHarness(
-        withQuerySyncDefaults({
-          activeWorkspaceId: "workspace-repo",
-          navigationType: "REPLACE",
-          searchParams: new URLSearchParams(
-            "task=task-from-url&session=session-from-url&agent=spec",
-          ),
-          setSearchParams: () => {},
-        }),
-      );
-
-      await harness.mount();
-      const latest = harness.getLatest();
-      expect(latest.taskIdParam).toBe("task-from-url");
-      expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-from-url"));
-      expect(latest.roleFromQuery).toBe("spec");
-      expect(latest.hasExplicitRoleParam).toBe(true);
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
-  });
-
-  test("clears stale URL authority on repo switch before restoring the next repo context", async () => {
-    const memoryStorage = createMemoryStorage();
-    await withMockedLocalStorage(memoryStorage, async () => {
-      memoryStorage.setItem(
-        toContextStorageKey("workspace-repo-b"),
-        JSON.stringify({
-          taskId: "task-from-repo-b",
-          role: "planner",
-          sessionExternalId: "session-from-repo-b",
-        }),
-      );
-
-      const harness = createStatefulQuerySyncHarness({
-        activeWorkspaceId: "workspace-repo-a",
-        initialSearchParams: "task=task-from-repo-a&session=session-from-repo-a&agent=build",
-      });
-
-      await harness.mount();
-
-      await harness.update({
-        activeWorkspaceId: "workspace-repo-b",
-        initialSearchParams: "task=task-from-repo-a&session=session-from-repo-a&agent=build",
-      });
-
-      await harness.waitFor((state) => state.taskIdParam === "task-from-repo-b");
-
-      const latest = harness.getLatest();
-      expect(latest.isRepoNavigationBoundaryPending).toBeFalse();
-      expect(latest.taskIdParam).toBe("task-from-repo-b");
-      expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-from-repo-b"));
-      expect(latest.roleFromQuery).toBe("planner");
-
-      await harness.unmount();
-    });
-  });
-
-  test("restores repo-scoped URL context when switching back to a previous repository", async () => {
-    const memoryStorage = createMemoryStorage();
-    await withMockedLocalStorage(memoryStorage, async () => {
-      seedWorkspaceNavigationContexts(memoryStorage, {
-        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionExternalId: "session-a" },
-        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionExternalId: "session-b" },
-      });
-
-      const harness = createStatefulQuerySyncHarness({
-        activeWorkspaceId: "workspace-repo-a",
-        initialSearchParams: "",
-      });
-
-      await harness.mount();
-      await harness.waitFor((state) => state.taskIdParam === "task-a");
-
-      await harness.update({
-        activeWorkspaceId: "workspace-repo-b",
-        initialSearchParams: "",
-      });
-      await harness.waitFor((state) => state.taskIdParam === "task-b");
-
-      await harness.update({
-        activeWorkspaceId: "workspace-repo-a",
-        initialSearchParams: "",
-      });
-      await harness.waitFor((state) => state.taskIdParam === "task-a");
-
-      const latest = harness.getLatest();
-      expect(latest.taskIdParam).toBe("task-a");
-      expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-a"));
-      expect(latest.roleFromQuery).toBe("spec");
-
-      await harness.unmount();
-    });
-  });
-
-  test("rapid repo changes keep the final repository context authoritative", async () => {
-    const memoryStorage = createMemoryStorage();
-    await withMockedLocalStorage(memoryStorage, async () => {
-      seedWorkspaceNavigationContexts(memoryStorage, {
-        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionExternalId: "session-a" },
-        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionExternalId: "session-b" },
-      });
-
-      const harness = createStatefulQuerySyncHarness({
-        activeWorkspaceId: "workspace-repo-a",
-        initialSearchParams: "",
-      });
-
-      await harness.mount();
-      await harness.waitFor((state) => state.taskIdParam === "task-a");
-
-      await harness.update({
-        activeWorkspaceId: "workspace-repo-b",
-        initialSearchParams: "",
-      });
-      await harness.update({
-        activeWorkspaceId: "workspace-repo-a",
-        initialSearchParams: "",
-      });
-      await harness.waitFor((state) => state.taskIdParam === "task-a");
-
-      const latest = harness.getLatest();
-      expect(latest.taskIdParam).toBe("task-a");
-      expect(latest.sessionExternalIdParam).toEqual(sessionExternalIdParam("session-a"));
-      expect(latest.roleFromQuery).toBe("spec");
-
-      await harness.unmount();
-    });
-  });
-
-  test("flushes pending context persistence on unmount cleanup", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      const harness = createHookHarness(
-        withQuerySyncDefaults({
-          activeWorkspaceId: "workspace-repo",
-          navigationType: "REPLACE",
-          searchParams: new URLSearchParams("agent=spec"),
-          setSearchParams: () => {},
-        }),
-      );
-
-      await harness.mount();
-      await harness.run((state) => {
-        state.updateQuery({ task: "task-from-cleanup", session: "session-from-cleanup" });
-      });
-
-      await harness.unmount();
-
-      const stored = memoryStorage.getItem(toContextStorageKey("workspace-repo"));
-      if (!stored) {
-        throw new Error("Expected persisted context payload after unmount cleanup");
-      }
-
-      const parsed: {
-        taskId?: string;
-        sessionExternalId?: string;
-        role?: string;
-      } = JSON.parse(stored);
-
-      expect(parsed.taskId).toBe("task-from-cleanup");
-      expect(parsed.sessionExternalId).toBe("session-from-cleanup");
-      expect(parsed.role).toBe("spec");
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
+    await harness.mount();
+    await harness.waitFor((result) => result.isWorkspaceStateLoaded);
+    expect(harness.getLatest().taskIdParam).toBe("task-url");
+    expect(harness.getLatest().sessionExternalIdParam).toBe("session-url");
+    expect(harness.getLatest().roleFromQuery).toBe("build");
+    await harness.unmount();
   });
 });

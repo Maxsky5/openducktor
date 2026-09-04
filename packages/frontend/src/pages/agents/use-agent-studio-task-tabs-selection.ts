@@ -1,18 +1,17 @@
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { ensureActiveTaskTab, resolveFallbackTaskId } from "./agent-studio-task-tabs-list";
-
-type SetState<T> = Dispatch<SetStateAction<T>>;
+import type { TaskTabState } from "./use-agent-studio-task-tabs-state";
 
 type UseTaskTabSelectionArgs = {
   activeWorkspaceId: string | null;
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   taskId: string;
-  openTaskTabs: string[];
+  routeTaskId: string;
+  tabTaskIds: string[];
   persistedActiveTaskId: string | null;
-  loadedTabsStorageWorkspaceId: string | null;
+  loadedStateWorkspaceId: string | null;
   selectTask: (taskId: string) => void;
-  setOpenTaskTabs: SetState<string[]>;
-  setPersistedActiveTaskId: SetState<string | null>;
+  setTaskTabState: (state: TaskTabState) => void;
 };
 
 type UseTaskTabSelectionResult = {
@@ -24,20 +23,15 @@ type UseTaskTabSelectionResult = {
 export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSelectionResult {
   const {
     activeWorkspaceId,
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     taskId,
-    openTaskTabs,
+    routeTaskId,
+    tabTaskIds,
     persistedActiveTaskId,
-    loadedTabsStorageWorkspaceId,
+    loadedStateWorkspaceId,
     selectTask,
-    setOpenTaskTabs,
-    setPersistedActiveTaskId,
+    setTaskTabState,
   } = args;
-
-  const tabTaskIds = useMemo(
-    () => ensureActiveTaskTab(openTaskTabs, taskId),
-    [openTaskTabs, taskId],
-  );
   const appliedFallbackKeyRef = useRef<string | null>(null);
 
   const activeTaskTabId = useMemo(() => {
@@ -53,12 +47,12 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
   useEffect(() => {
     if (
       !activeWorkspaceId ||
-      loadedTabsStorageWorkspaceId !== activeWorkspaceId ||
-      isRepoNavigationBoundaryPending
+      loadedStateWorkspaceId !== activeWorkspaceId ||
+      isWorkspaceRestorePending
     ) {
       return;
     }
-    if (taskId || tabTaskIds.length === 0) {
+    if (taskId || routeTaskId || tabTaskIds.length === 0) {
       return;
     }
     const fallbackTaskId = resolveFallbackTaskId({
@@ -76,19 +70,20 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     selectTask(fallbackTaskId);
   }, [
     activeWorkspaceId,
-    isRepoNavigationBoundaryPending,
+    isWorkspaceRestorePending,
     persistedActiveTaskId,
+    routeTaskId,
     selectTask,
     tabTaskIds,
-    loadedTabsStorageWorkspaceId,
+    loadedStateWorkspaceId,
     taskId,
   ]);
 
   useEffect(() => {
-    if (!activeWorkspaceId || taskId || isRepoNavigationBoundaryPending) {
+    if (!activeWorkspaceId || taskId || isWorkspaceRestorePending) {
       appliedFallbackKeyRef.current = null;
     }
-  }, [activeWorkspaceId, isRepoNavigationBoundaryPending, taskId]);
+  }, [activeWorkspaceId, isWorkspaceRestorePending, taskId]);
 
   const handleSelectTab = useCallback(
     (nextTaskId: string): void => {
@@ -99,16 +94,13 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
         return;
       }
 
-      setOpenTaskTabs((current) => {
-        if (current.includes(nextTaskId)) {
-          return current;
-        }
-        return [...current, nextTaskId];
+      setTaskTabState({
+        openTaskIds: ensureActiveTaskTab(tabTaskIds, nextTaskId),
+        activeTaskId: nextTaskId,
       });
-      setPersistedActiveTaskId(nextTaskId);
       selectTask(nextTaskId);
     },
-    [activeTaskTabId, selectTask, setOpenTaskTabs, setPersistedActiveTaskId],
+    [activeTaskTabId, selectTask, setTaskTabState, tabTaskIds],
   );
 
   return {

@@ -1,4 +1,4 @@
-import type { RepoConfig } from "@openducktor/contracts";
+import type { SettingsRepoConfig } from "@openducktor/contracts";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { type ReactElement, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import {
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
 
 type RepositoryScriptsSectionProps = {
-  selectedRepoConfig: RepoConfig;
+  selectedRepoConfig: SettingsRepoConfig;
   selectedRepoDevServerValidationErrors?: Record<string, { name?: string; command?: string }>;
   validationState?: {
     showDevServerValidationErrors?: boolean;
@@ -23,7 +23,9 @@ type RepositoryScriptsSectionProps = {
   };
   focusRequest?: SettingsContentFocusRequest | null | undefined;
   onFocusRequestHandled?: ((request: SettingsContentFocusRequest) => void) | undefined;
-  onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
+  onUpdateSelectedRepoConfig: (
+    updater: (current: SettingsRepoConfig) => SettingsRepoConfig,
+  ) => void;
 };
 
 type UpdateSelectedRepoConfig = RepositoryScriptsSectionProps["onUpdateSelectedRepoConfig"];
@@ -145,7 +147,7 @@ function RepositoryDevServersSection({
   onUpdateSelectedRepoConfig,
 }: {
   devServerValidationErrors: Record<string, { name?: string; command?: string }>;
-  devServers: RepoConfig["devServers"];
+  devServers: SettingsRepoConfig["devServers"];
   isDisabled: boolean;
   onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
@@ -229,7 +231,7 @@ function RepositoryDevServerRow({
   onUpdateSelectedRepoConfig,
   validationErrors,
 }: {
-  devServer: RepoConfig["devServers"][number];
+  devServer: SettingsRepoConfig["devServers"][number];
   index: number;
   isDisabled: boolean;
   isLastRow: boolean;

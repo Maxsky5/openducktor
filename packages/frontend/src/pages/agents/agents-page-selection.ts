@@ -20,11 +20,7 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
-export {
-  toContextStorageKey,
-  toRightPanelStorageKey,
-  toTabsStorageKey,
-} from "./query-sync/agent-studio-navigation";
+export { toRightPanelStorageKey } from "./query-sync/agent-studio-navigation";
 
 const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
 
@@ -250,21 +246,21 @@ export type AgentStudioRouteSessionResolution =
   | { kind: "failed"; sessionExternalId: string; message: string };
 
 export const resolveAgentStudioRouteSession = ({
-  isRepoNavigationBoundaryPending,
+  isWorkspaceRestorePending,
   isLoadingTasks,
   sessionReadModelLoadState,
   sessions,
   taskId,
   sessionExternalId,
 }: {
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   isLoadingTasks: boolean;
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
   sessions: AgentSessionSummary[];
   taskId: string;
   sessionExternalId: string | null;
 }): AgentStudioRouteSessionResolution => {
-  if (isRepoNavigationBoundaryPending || !sessionExternalId) {
+  if (isWorkspaceRestorePending || !sessionExternalId) {
     return { kind: "none" };
   }
 

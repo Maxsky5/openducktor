@@ -78,7 +78,7 @@ type QuerySyncState = {
   hasExplicitRoleParam: boolean;
   roleFromQuery: "planner";
   launchActionId: "planner_initial";
-  isRepoNavigationBoundaryPending: boolean;
+  isWorkspaceRestorePending: boolean;
   navigationPersistenceError: Error | null;
   retryNavigationPersistence: typeof retryNavigationPersistence;
   updateQuery: typeof updateQuery;
@@ -125,6 +125,7 @@ type SelectionState = {
     isTaskReady: boolean;
   };
   activeTaskTabId: string;
+  loadedStateWorkspaceId: string | null;
   taskTabs: [];
   tabTaskIds: string[];
   availableTabTasks: (typeof task)[];
@@ -216,6 +217,7 @@ let checksState = {
   refreshChecks: async () => undefined,
 };
 let tasksState: TasksStateContextValue = {
+  tasksAreCurrent: true,
   isForegroundLoadingTasks: false,
   isRefreshingTasksInBackground: false,
   isLoadingTasks: false,
@@ -270,7 +272,7 @@ let querySyncState: QuerySyncState = {
   hasExplicitRoleParam: false,
   roleFromQuery: "planner" as const,
   launchActionId: "planner_initial" as const,
-  isRepoNavigationBoundaryPending: false,
+  isWorkspaceRestorePending: false,
   navigationPersistenceError: new Error("navigation failed"),
   retryNavigationPersistence,
   updateQuery,
@@ -317,6 +319,7 @@ let selectionState: SelectionState = {
     isTaskReady: true,
   },
   activeTaskTabId: "task-1",
+  loadedStateWorkspaceId: "workspace-repo",
   taskTabs: [],
   tabTaskIds: ["task-1"],
   availableTabTasks: [task],
@@ -611,6 +614,7 @@ beforeEach(async () => {
     refreshChecks: async () => undefined,
   };
   tasksState = {
+    tasksAreCurrent: true,
     isForegroundLoadingTasks: false,
     isRefreshingTasksInBackground: false,
     isLoadingTasks: false,
@@ -662,7 +666,7 @@ beforeEach(async () => {
     hasExplicitRoleParam: false,
     roleFromQuery: "planner",
     launchActionId: "planner_initial",
-    isRepoNavigationBoundaryPending: false,
+    isWorkspaceRestorePending: false,
     navigationPersistenceError: new Error("navigation failed"),
     retryNavigationPersistence,
     updateQuery,
@@ -708,6 +712,7 @@ beforeEach(async () => {
       isTaskReady: true,
     },
     activeTaskTabId: "task-1",
+    loadedStateWorkspaceId: "workspace-repo",
     taskTabs: [],
     tabTaskIds: ["task-1"],
     availableTabTasks: [task],
@@ -877,10 +882,10 @@ describe("useAgentsPageShellModel", () => {
     }
   });
 
-  test("keeps the shell stable while repo-boundary reset clears stale Agent Studio selection", async () => {
+  test("keeps the shell stable while workspace restore clears stale selection", async () => {
     querySyncState = {
       ...querySyncState,
-      isRepoNavigationBoundaryPending: true,
+      isWorkspaceRestorePending: true,
     };
     selectionState = {
       ...selectionState,

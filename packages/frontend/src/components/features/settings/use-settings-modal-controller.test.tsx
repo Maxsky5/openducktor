@@ -826,6 +826,42 @@ describe("useSettingsModalController", () => {
     }
   });
 
+  test("requires a new Codex danger acknowledgement after reopen", async () => {
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      const addDangerousSetting = (state: ReturnType<typeof harness.getLatest>): void => {
+        state.updateAgentRuntimes((agentRuntimes) => ({
+          ...agentRuntimes,
+          codex: {
+            ...agentRuntimes.codex,
+            defaults: {
+              ...agentRuntimes.codex.defaults,
+              approvalPolicy: "never",
+            },
+          },
+        }));
+      };
+
+      await harness.run(addDangerousSetting);
+      await harness.run((state) => state.setCodexDangerAcknowledged(true));
+      expect(harness.getLatest().isCodexDangerAcknowledged).toBe(true);
+
+      await harness.update({ isOpen: false, shouldLoad: false });
+      await harness.update({ isOpen: true, shouldLoad: false });
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+      await harness.run(addDangerousSetting);
+
+      expect(harness.getLatest().isCodexDangerAcknowledged).toBe(false);
+      expect(harness.getLatest().hasUnacknowledgedCodexDangerousSettings).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("does not require Codex danger acknowledgement for already persisted risky settings", async () => {
     settingsSnapshotFactory = () => ({
       ...createSettingsSnapshot(),

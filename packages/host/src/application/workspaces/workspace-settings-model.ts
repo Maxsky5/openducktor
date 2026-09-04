@@ -49,6 +49,10 @@ export type WorkspaceSettingsService = {
   ): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
   getRepoConfig(workspaceId: string): Effect.Effect<RepoConfig, WorkspaceSettingsError>;
   getRepoConfigByRepoPath(repoPath: string): Effect.Effect<RepoConfig, WorkspaceSettingsError>;
+  replaceAgentStudioState(
+    workspaceId: string,
+    state: RepoConfig["agentStudioState"],
+  ): Effect.Effect<RepoConfig, WorkspaceSettingsError>;
   updateRepoConfig(
     workspaceId: string,
     update: WorkspaceRepoConfigInput,
@@ -375,7 +379,7 @@ export const buildMergedRepoConfig = (
 export const normalizeSnapshotWorkspaces = (
   settingsConfig: SettingsConfigPort,
   config: LoadedGlobalConfig,
-  snapshotWorkspaces: Record<string, RepoConfig>,
+  snapshotWorkspaces: SettingsSnapshotSaveInput["workspaces"],
 ) =>
   Effect.gen(function* () {
     const nextWorkspaces = { ...config.workspaces } satisfies Record<string, RepoConfig>;
@@ -391,9 +395,19 @@ export const normalizeSnapshotWorkspaces = (
       delete nextWorkspaces[workspaceId];
     }
     for (const [workspaceId, repoConfig] of Object.entries(snapshotWorkspaces)) {
+      const existingRepoConfig = config.workspaces[workspaceId];
+      if (!existingRepoConfig) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Workspace not found in config: ${workspaceId}. Add/select the workspace before updating configuration.`,
+            field: "workspaceId",
+          }),
+        );
+      }
       const normalizedRepoConfig = yield* validateAndNormalizeRepoConfig(settingsConfig, {
         ...repoConfig,
         workspaceId,
+        agentStudioState: existingRepoConfig.agentStudioState,
       });
       const conflictingWorkspaceId = Object.entries(nextWorkspaces).find(
         ([, workspace]) => workspace.repoPath === normalizedRepoConfig.repoPath,

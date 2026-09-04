@@ -20,6 +20,7 @@ export type TaskQueryReadModel = {
   isSettingsLoadingForActiveRepo: boolean;
   isTaskQueryLoadingForActiveRepo: boolean;
   isTaskQueryFetchingForActiveRepo: boolean;
+  isTaskQuerySuccessForActiveRepo: boolean;
 };
 
 export function useTaskQueryReadModel({
@@ -72,5 +73,7 @@ export function useTaskQueryReadModel({
     isTaskQueryLoadingForActiveRepo:
       activeRepoPath !== null && doneVisibleDays !== null && repoTaskDataQuery.isPending,
     isTaskQueryFetchingForActiveRepo: activeRepoPath !== null && repoTaskDataQuery.isFetching,
+    isTaskQuerySuccessForActiveRepo:
+      activeRepoPath !== null && doneVisibleDays !== null && repoTaskDataQuery.isSuccess,
   };
 }

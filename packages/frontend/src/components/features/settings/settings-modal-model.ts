@@ -1,7 +1,7 @@
 import {
   type AgentPromptTemplateId,
   agentPromptTemplateIdValues,
-  type RepoConfig,
+  type SettingsRepoConfig,
   type RepoPromptOverrides,
   type RuntimeDescriptor,
   type RuntimeKind,
@@ -153,7 +153,7 @@ export const resolveRepoAgentDefaultRuntimeKind = ({
   runtimeDefinitions,
   role,
 }: {
-  selectedRepoConfig: RepoConfig;
+  selectedRepoConfig: SettingsRepoConfig;
   runtimeDefinitions: RuntimeDescriptor[];
   role: RepoDefaultRole;
 }): RuntimeKind | null => {
@@ -167,7 +167,7 @@ export const resolveRepoAgentDefaultRuntimeKind = ({
 };
 
 export const getNeededCatalogRuntimeKinds = (
-  selectedRepoConfig: RepoConfig | null,
+  selectedRepoConfig: SettingsRepoConfig | null,
   runtimeDefinitions: RuntimeDescriptor[],
 ): RuntimeKind[] => {
   if (!selectedRepoConfig || runtimeDefinitions.length === 0) {

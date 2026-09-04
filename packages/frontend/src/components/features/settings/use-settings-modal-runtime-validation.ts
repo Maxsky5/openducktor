@@ -1,5 +1,5 @@
 import type {
-  RepoConfig,
+  SettingsRepoConfig,
   RuntimeDescriptor,
   RuntimeKind,
   SettingsSnapshot,
@@ -36,7 +36,7 @@ const buildRepoRuntimeAvailabilityErrors = ({
 }: {
   allRuntimeDefinitions: RuntimeDescriptor[];
   availableRuntimeDefinitions: RuntimeDescriptor[];
-  repoConfig: RepoConfig;
+  repoConfig: SettingsRepoConfig;
 }): string[] => {
   const errors: string[] = [];
   const availableKinds = new Set(availableRuntimeDefinitions.map(({ kind }) => kind));

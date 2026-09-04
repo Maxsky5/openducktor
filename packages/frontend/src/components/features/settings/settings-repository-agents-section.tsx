@@ -1,4 +1,4 @@
-import type { RepoConfig, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeDescriptor, RuntimeKind, SettingsRepoConfig } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ReactElement } from "react";
 import { AgentRuntimeCombobox, toPrimaryAgentOptions } from "@/components/features/agents";
@@ -28,7 +28,7 @@ import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runti
 import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
 
 type RepositoryAgentsSectionProps = {
-  selectedRepoConfig: RepoConfig | null;
+  selectedRepoConfig: SettingsRepoConfig | null;
   availableRuntimeDefinitions: RuntimeDescriptor[];
   catalogResources: RuntimeModelCatalogQueryResource[];
   favoriteState: ModelPickerFavoriteState;
@@ -42,7 +42,9 @@ type RepositoryAgentsSectionProps = {
   runtimeAvailabilityErrors: string[];
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
-  onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
+  onUpdateSelectedRepoConfig: (
+    updater: (current: SettingsRepoConfig) => SettingsRepoConfig,
+  ) => void;
   onUpdateSelectedRepoAgentDefault: (
     role: "spec" | "planner" | "build" | "qa",
     field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
@@ -84,7 +86,7 @@ const buildRepositoryAgentRoleViewModel = ({
   getCatalogForRuntime,
   isCatalogLoadingForRuntime,
 }: {
-  selectedRepoConfig: RepoConfig;
+  selectedRepoConfig: SettingsRepoConfig;
   runtimeDefinitions: RuntimeDescriptor[];
   role: "spec" | "planner" | "build" | "qa";
   getCatalogForRuntime: (runtimeKind: RuntimeKind) => AgentModelCatalog | null;
@@ -116,7 +118,7 @@ const findMissingRoleLabels = ({
   selectedRepoConfig,
   runtimeDefinitions,
 }: {
-  selectedRepoConfig: RepoConfig;
+  selectedRepoConfig: SettingsRepoConfig;
   runtimeDefinitions: RuntimeDescriptor[];
 }): string[] =>
   ROLE_DEFAULTS.reduce<string[]>((labels, { role, label }) => {

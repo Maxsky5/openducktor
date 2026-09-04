@@ -3,6 +3,7 @@ import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { type AgentRole, agentRoleSchema } from "./agent-workflow-schemas";
 import { gitTargetBranchSchema, globalGitConfigSchema, repoGitConfigSchema } from "./git-schemas";
 import { repoPromptOverridesSchema } from "./prompt-schemas";
+import { workspaceAgentStudioStateSchema } from "./workspace-agent-studio-state-schemas";
 
 export const DEFAULT_BRANCH_PREFIX = "odt";
 export const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -415,8 +416,12 @@ export const repoConfigSchema = z.object({
     build: undefined,
     qa: undefined,
   }),
+  agentStudioState: workspaceAgentStudioStateSchema,
 });
 export type RepoConfig = z.infer<typeof repoConfigSchema>;
+
+export const settingsRepoConfigSchema = repoConfigSchema.omit({ agentStudioState: true });
+export type SettingsRepoConfig = z.infer<typeof settingsRepoConfigSchema>;
 
 export const workspaceRepoHooksInputSchema = repoHooksSchema.partial();
 export type WorkspaceRepoHooksInput = z.output<typeof workspaceRepoHooksInputSchema>;
@@ -669,7 +674,7 @@ export const settingsSnapshotSchema = z.object({
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
   agentRuntimes: agentRuntimesSchema,
   agentModelFavorites: agentModelFavoritesSchema,
-  workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
+  workspaces: z.record(workspaceIdSchema, settingsRepoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
 });
 type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
@@ -691,7 +696,7 @@ export const settingsSnapshotSaveInputSchema = z.object({
   autopilot: autopilotSettingsSchema,
   agentRuntimes: agentRuntimesSchema.removeDefault(),
   agentModelFavorites: settingsSnapshotSaveAgentModelFavoritesSchema,
-  workspaces: z.record(workspaceIdSchema, repoConfigSchema),
+  workspaces: z.record(workspaceIdSchema, settingsRepoConfigSchema),
   globalPromptOverrides: repoPromptOverridesSchema,
 });
 export type SettingsSnapshotSaveInput = z.infer<typeof settingsSnapshotSaveInputSchema>;

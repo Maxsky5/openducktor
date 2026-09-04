@@ -11,6 +11,7 @@ import {
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import { buildAgentStudioStateUpdate } from "./workspace-agent-studio-state";
 import {
   buildMergedRepoConfig,
   ensureRepoPathAvailable,
@@ -46,6 +47,8 @@ const withSerializedConfigWrites = (
     addWorkspace: (input) => serialize(service.addWorkspace(input)),
     selectWorkspace: (workspaceId) => serialize(service.selectWorkspace(workspaceId)),
     reorderWorkspaces: (workspaceOrder) => serialize(service.reorderWorkspaces(workspaceOrder)),
+    replaceAgentStudioState: (workspaceId, state) =>
+      serialize(service.replaceAgentStudioState(workspaceId, state)),
     updateRepoConfig: (workspaceId, update) =>
       serialize(service.updateRepoConfig(workspaceId, update)),
     saveRepoSettings: (workspaceId, settings) =>
@@ -207,6 +210,22 @@ const createUnserializedWorkspaceSettingsService = (
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
       return yield* findRepoConfigByRepoPath(settingsConfig, config, rawRepoPath);
+    });
+  },
+  replaceAgentStudioState(workspaceId, rawState) {
+    return Effect.gen(function* () {
+      const config = yield* loadGlobalConfig(settingsConfig);
+      const update = yield* Effect.try({
+        try: () => buildAgentStudioStateUpdate(config, workspaceId, rawState),
+        catch: (cause) =>
+          new HostValidationError({
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+
+      yield* settingsConfig.writeConfig(update.config);
+      return update.repoConfig;
     });
   },
   updateRepoConfig(workspaceId, update) {

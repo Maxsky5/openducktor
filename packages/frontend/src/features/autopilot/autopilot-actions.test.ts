@@ -77,6 +77,7 @@ const createRepoConfig = (): RepoConfig => ({
   devServers: [],
   worktreeCopyPaths: [],
   promptOverrides: {},
+  agentStudioState: { openTaskIds: [] },
   agentDefaults: {
     spec: undefined,
     planner: {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { RepoConfig } from "@openducktor/contracts";
+import type { SettingsRepoConfig } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, type ReactNode, useEffect, useState } from "react";
@@ -11,7 +11,7 @@ import { resolveFolderPickerInitialPath } from "./settings-repository-configurat
 
 enableReactActEnvironment();
 
-const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
+const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): SettingsRepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",

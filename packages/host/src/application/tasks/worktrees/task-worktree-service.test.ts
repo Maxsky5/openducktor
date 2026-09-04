@@ -21,6 +21,7 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   worktreeCopyPaths: [],
   promptOverrides: {},
   agentDefaults: {},
+  agentStudioState: { openTaskIds: [] },
   ...overrides,
 });
 const createWorkspaceSettingsService = (config: RepoConfig): WorkspaceSettingsService =>

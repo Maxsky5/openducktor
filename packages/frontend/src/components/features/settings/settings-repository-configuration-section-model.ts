@@ -1,7 +1,7 @@
-import type { RepoConfig } from "@openducktor/contracts";
+import type { SettingsRepoConfig } from "@openducktor/contracts";
 
 export function resolveFolderPickerInitialPath(
-  selectedRepoConfig: RepoConfig,
+  selectedRepoConfig: SettingsRepoConfig,
   selectedRepoEffectiveWorktreeBasePath: string | null,
 ): string | undefined {
   const configuredPath = selectedRepoConfig.worktreeBasePath?.trim();

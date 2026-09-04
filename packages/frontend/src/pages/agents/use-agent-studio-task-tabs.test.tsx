@@ -1,18 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import type { WorkspaceAgentStudioState } from "@openducktor/contracts";
 import {
-  createMemoryStorage,
-  seedWorkspaceTaskTabs,
-  type TestStorageLike,
-  withMockedLocalStorage,
-} from "./agent-studio-repo-persistence-test-utils";
-import { parsePersistedTaskTabs, toPersistedTaskTabs } from "./agent-studio-task-tabs-storage";
-import {
-  createAgentSessionSummaryFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { toTabsStorageKey } from "./agents-page-selection";
 import type { AgentStudioSelectionState } from "./shell/agent-studio-selection-state";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
@@ -20,870 +12,194 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioTaskTabs>[0];
 
-const createThrowingStorage = (args: {
-  throwOnGetItem?: boolean;
-  throwOnSetItem?: boolean;
-  message?: string;
-}): TestStorageLike => {
-  const store = new Map<string, string>();
-  const message = args.message ?? "storage unavailable";
+const createTask = (id: string, status: "open" | "closed" = "open") =>
+  createTaskCardFixture({ id, title: id, status });
+
+const withDefaults = (overrides: Partial<HookArgs> = {}): HookArgs => {
+  const agentStudioState = overrides.agentStudioState ?? { openTaskIds: [] };
   return {
-    getItem: (key) => {
-      if (args.throwOnGetItem) {
-        throw new Error(message);
-      }
-      return store.get(key) ?? null;
-    },
-    setItem: (key, value) => {
-      if (args.throwOnSetItem) {
-        throw new Error(message);
-      }
-      store.set(key, value);
-    },
-    removeItem: (key) => {
-      store.delete(key);
-    },
-    clear: () => {
-      store.clear();
-    },
-    key: (index) => Array.from(store.keys())[index] ?? null,
-    get length() {
-      return store.size;
-    },
+    activeWorkspaceId: "repo-a",
+    loadedAgentStudioState: overrides.loadedAgentStudioState ?? agentStudioState,
+    agentStudioStateLoadKey: overrides.agentStudioStateLoadKey ?? "1:1",
+    agentStudioState,
+    taskId: "",
+    routeTaskId: overrides.taskId ?? "",
+    selectedTask: null,
+    tasks: [],
+    tasksAreCurrent: true,
+    latestSessionByTaskId: new Map(),
+    selectAgentStudioSelection: () => {},
+    ...overrides,
   };
 };
 
-const createTask = (id: string) => createTaskCardFixture({ id, title: id });
-
-const createSession = (taskId: string, externalSessionId: string) =>
-  createAgentSessionSummaryFixture({
-    externalSessionId: `ext-${externalSessionId}`,
-    sessionAssociation: { kind: "workflow", taskId: taskId, role: "spec" },
-  });
-
-const taskSelection = (taskId: string): AgentStudioSelectionState => ({
-  taskId,
-  sessionExternalId: null,
-  sessionIdentity: null,
-  role: "spec",
-  hasExplicitRoleSelection: false,
-  keepSessionless: false,
-});
-
-const useTaskTabsHarness = (props: HookArgs) => useAgentStudioTaskTabs(props);
-
 const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useTaskTabsHarness, initialProps);
-
-const withWorkspaceId = (
-  overrides: Partial<HookArgs> & Pick<HookArgs, "activeWorkspaceId">,
-): HookArgs => ({
-  taskId: "",
-  selectedTask: null,
-  tasks: [],
-  isLoadingTasks: false,
-  latestSessionByTaskId: new Map(),
-  selectAgentStudioSelection: () => {},
-  ...overrides,
-});
+  createSharedHookHarness(useAgentStudioTaskTabs, initialProps);
 
 describe("useAgentStudioTaskTabs", () => {
-  test("loads persisted task tabs from localStorage", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      const persistedValue = toPersistedTaskTabs({
-        tabs: ["task-1", "task-2"],
-        activeTaskId: "task-1",
-      });
-      memoryStorage.setItem(toTabsStorageKey("workspace-repo"), persistedValue);
-
-      const updateCalls: AgentStudioSelectionState[] = [];
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "task-1",
-          selectedTask: createTask("task-1"),
-          tasks: [createTask("task-1"), createTask("task-2")],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map(),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-
-      await harness.mount();
-
-      expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
-      expect(harness.getLatest().taskTabs).toHaveLength(2);
-      expect(updateCalls).toHaveLength(0);
-
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
-  });
-
-  test("selecting a tab keeps navigation task-scoped without pinning a session", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      const taskOne = createTask("task-1");
-      const taskTwo = createTask("task-2");
-      const latestSession = createSession("task-2", "session-2");
-      const updateCalls: AgentStudioSelectionState[] = [];
-
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "task-1",
-          selectedTask: taskOne,
-          tasks: [taskOne, taskTwo],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map([["task-2", latestSession]]),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-
-      await harness.mount();
-      await harness.run((state) => {
-        state.handleSelectTab("task-2");
-      });
-
-      const lastUpdate = updateCalls[updateCalls.length - 1];
-      expect(lastUpdate).toEqual(taskSelection("task-2"));
-
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
-  });
-
-  test("selecting a tab does not manufacture session authority for review tasks", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      const taskOne = createTask("task-1");
-      const taskTwo = createTask("task-2");
-      const runningBuildSession = createAgentSessionSummaryFixture({
-        externalSessionId: "ext-session-build",
-        sessionAssociation: { kind: "workflow", taskId: "task-2", role: "build" },
-
-        status: "running",
-        startedAt: "2026-02-22T09:00:00.000Z",
-      });
-      const newerIdleSession = createAgentSessionSummaryFixture({
-        externalSessionId: "ext-session-newer",
-        sessionAssociation: { kind: "workflow", taskId: "task-2", role: "qa" },
-
-        status: "idle",
-        startedAt: "2026-02-22T10:00:00.000Z",
-      });
-      const updateCalls: AgentStudioSelectionState[] = [];
-
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "task-1",
-          selectedTask: taskOne,
-          tasks: [taskOne, taskTwo],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map([["task-2", newerIdleSession]]),
-          activeSessionByTaskId: new Map([["task-2", runningBuildSession]]),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-
-      await harness.mount();
-      await harness.run((state) => {
-        state.handleSelectTab("task-2");
-      });
-
-      expect(updateCalls[updateCalls.length - 1]).toEqual(taskSelection("task-2"));
-
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
-  });
-
-  test("explicit URL task takes precedence over persisted tab when there is no local switch intent", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      memoryStorage.setItem(
-        toTabsStorageKey("workspace-repo"),
-        toPersistedTaskTabs({
-          tabs: ["task-1", "task-2"],
-          activeTaskId: "task-2",
-        }),
-      );
-
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "task-1",
-          selectedTask: createTask("task-1"),
-          tasks: [createTask("task-1"), createTask("task-2")],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map(),
-          selectAgentStudioSelection: () => {},
-        }),
-      );
-
-      await harness.mount();
-      expect(harness.getLatest().activeTaskTabId).toBe("task-1");
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
-  });
-
-  test("closing the UI-active tab uses activeTaskTabId even when URL task differs", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      memoryStorage.setItem(
-        toTabsStorageKey("workspace-repo"),
-        toPersistedTaskTabs({
-          tabs: ["task-1", "task-2"],
-          activeTaskId: "task-2",
-        }),
-      );
-
-      const taskOne = createTask("task-1");
-      const taskTwo = createTask("task-2");
-      const updateCalls: AgentStudioSelectionState[] = [];
-
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "task-1",
-          selectedTask: taskOne,
-          tasks: [taskOne, taskTwo],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map([["task-1", createSession("task-1", "session-1")]]),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-
-      await harness.mount();
-      expect(harness.getLatest().activeTaskTabId).toBe("task-1");
-
-      await harness.run((state) => {
-        state.handleSelectTab("task-2");
-      });
-      expect(updateCalls[updateCalls.length - 1]).toEqual(taskSelection("task-2"));
-
-      await harness.update(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "task-2",
-          selectedTask: taskTwo,
-          tasks: [taskOne, taskTwo],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map([["task-1", createSession("task-1", "session-1")]]),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-      expect(harness.getLatest().activeTaskTabId).toBe("task-2");
-
-      await harness.run((state) => {
-        state.handleCloseTab("task-2");
-      });
-
-      const lastUpdate = updateCalls[updateCalls.length - 1];
-      expect(lastUpdate).toEqual(taskSelection("task-1"));
-      await harness.update(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "task-1",
-          selectedTask: taskOne,
-          tasks: [taskOne, taskTwo],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map([["task-1", createSession("task-1", "session-1")]]),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-
-      expect(harness.getLatest().tabTaskIds).toEqual(["task-1"]);
-
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
-  });
-
-  test("reordering tabs updates persisted order without changing the active task", async () => {
-    const memoryStorage = createMemoryStorage();
-    await withMockedLocalStorage(memoryStorage, async () => {
-      seedWorkspaceTaskTabs(memoryStorage, {
-        "workspace-repo": {
-          tabs: ["task-1", "task-2", "task-3"],
-          activeTaskId: "task-2",
-        },
-      });
-
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "task-2",
-          selectedTask: createTask("task-2"),
-          tasks: [createTask("task-1"), createTask("task-2"), createTask("task-3")],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map(),
-          selectAgentStudioSelection: () => {},
-        }),
-      );
-
-      await harness.mount();
-      await harness.run((state) => {
-        state.handleReorderTab("task-3", "task-1", "before");
-      });
-
-      expect(harness.getLatest().tabTaskIds).toEqual(["task-3", "task-1", "task-2"]);
-      expect(harness.getLatest().activeTaskTabId).toBe("task-2");
-      expect(
-        parsePersistedTaskTabs(memoryStorage.getItem(toTabsStorageKey("workspace-repo"))),
-      ).toEqual({
-        tabs: ["task-3", "task-1", "task-2"],
-        activeTaskId: "task-2",
-      });
-
-      await harness.unmount();
-    });
-  });
-
-  test("routes fallback tab after storage is loaded when URL task is empty", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      memoryStorage.setItem(
-        toTabsStorageKey("workspace-repo"),
-        toPersistedTaskTabs({
-          tabs: ["task-2"],
-          activeTaskId: "task-2",
-        }),
-      );
-
-      const latestSession = createSession("task-2", "session-2");
-      const updateCalls: AgentStudioSelectionState[] = [];
-
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "",
-          selectedTask: null,
-          tasks: [createTask("task-1"), createTask("task-2")],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map([["task-2", latestSession]]),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-
-      await harness.mount();
-      await harness.waitFor(() => updateCalls.length > 0);
-
-      expect(updateCalls).toHaveLength(1);
-      expect(updateCalls[0]).toEqual(taskSelection("task-2"));
-
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
-  });
-
-  test("applies fallback routing only once for an unchanged fallback target", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      memoryStorage.setItem(
-        toTabsStorageKey("workspace-repo"),
-        toPersistedTaskTabs({
-          tabs: ["task-2"],
-          activeTaskId: "task-2",
-        }),
-      );
-
-      const updateCalls: AgentStudioSelectionState[] = [];
-      const latestSession = createSession("task-2", "session-2");
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "",
-          selectedTask: null,
-          tasks: [createTask("task-2")],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map([["task-2", latestSession]]),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-
-      await harness.mount();
-      await harness.waitFor(() => updateCalls.length === 1);
-
-      await harness.update({
-        activeWorkspaceId: "workspace-repo",
-        taskId: "",
-        selectedTask: null,
-        tasks: [createTask("task-2")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-2", latestSession]]),
-        selectAgentStudioSelection: (updates) => {
-          updateCalls.push(updates);
-        },
-      });
-
-      await harness.update({
-        activeWorkspaceId: "workspace-repo",
-        taskId: "",
-        selectedTask: null,
-        tasks: [createTask("task-2")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-2", latestSession]]),
-        selectAgentStudioSelection: (updates) => {
-          updateCalls.push(updates);
-        },
-      });
-
-      expect(updateCalls).toHaveLength(1);
-
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
-  });
-
-  test("does not route stale fallback tab while switching repos", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      memoryStorage.setItem(
-        toTabsStorageKey("workspace-repo-b"),
-        toPersistedTaskTabs({
-          tabs: ["task-b"],
-          activeTaskId: "task-b",
-        }),
-      );
-
-      const updateCalls: AgentStudioSelectionState[] = [];
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo-a",
-          taskId: "task-a",
-          selectedTask: createTask("task-a"),
-          tasks: [createTask("task-a")],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map(),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-
-      await harness.mount();
-      expect(updateCalls).toHaveLength(0);
-
-      const repoBSession = createSession("task-b", "session-b");
-      await harness.update({
-        activeWorkspaceId: "workspace-repo-b",
-        taskId: "",
-        selectedTask: null,
-        tasks: [createTask("task-b")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-b", repoBSession]]),
-        selectAgentStudioSelection: (updates) => {
-          updateCalls.push(updates);
-        },
-      });
-
-      await harness.waitFor(() => updateCalls.length > 0);
-
-      expect(updateCalls[0]).toEqual(taskSelection("task-b"));
-      expect(updateCalls.some((call) => call.taskId === "task-a")).toBeFalse();
-
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
-  });
-
-  test("suppresses fallback routing while repo navigation boundary is pending", async () => {
-    const memoryStorage = createMemoryStorage();
-    await withMockedLocalStorage(memoryStorage, async () => {
-      memoryStorage.setItem(
-        toTabsStorageKey("workspace-repo-b"),
-        toPersistedTaskTabs({
-          tabs: ["task-b"],
-          activeTaskId: "task-b",
-        }),
-      );
-
-      const updateCalls: AgentStudioSelectionState[] = [];
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo-b",
-          isRepoNavigationBoundaryPending: true,
-          taskId: "",
-          selectedTask: null,
-          tasks: [createTask("task-b")],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map([["task-b", createSession("task-b", "session-b")]]),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-
-      await harness.mount();
-
-      expect(updateCalls).toHaveLength(0);
-      expect(harness.getLatest().activeTaskTabId).toBe("task-b");
-
-      await harness.unmount();
-    });
-  });
-
-  test("restores repo-scoped fallback tabs when switching away and back", async () => {
-    const memoryStorage = createMemoryStorage();
-    await withMockedLocalStorage(memoryStorage, async () => {
-      seedWorkspaceTaskTabs(memoryStorage, {
-        "workspace-repo-a": { tabs: ["task-a"], activeTaskId: "task-a" },
-        "workspace-repo-b": { tabs: ["task-b"], activeTaskId: "task-b" },
-      });
-
-      const updateCalls: AgentStudioSelectionState[] = [];
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo-a",
-          taskId: "",
-          selectedTask: null,
-          tasks: [createTask("task-a")],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map([["task-a", createSession("task-a", "session-a")]]),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-
-      await harness.mount();
-      await harness.waitFor(() => updateCalls.length === 1);
-
-      await harness.update({
-        activeWorkspaceId: "workspace-repo-b",
-        taskId: "",
-        selectedTask: null,
-        tasks: [createTask("task-b")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-b", createSession("task-b", "session-b")]]),
-        selectAgentStudioSelection: (updates) => {
-          updateCalls.push(updates);
-        },
-      });
-      await harness.waitFor(() => updateCalls.length === 2);
-
-      await harness.update({
-        activeWorkspaceId: "workspace-repo-a",
-        taskId: "",
-        selectedTask: null,
-        tasks: [createTask("task-a")],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-a", createSession("task-a", "session-a-2")]]),
-        selectAgentStudioSelection: (updates) => {
-          updateCalls.push(updates);
-        },
-      });
-      await harness.waitFor(() => updateCalls.length === 3);
-
-      expect(updateCalls.map((call) => call.taskId)).toEqual(["task-a", "task-b", "task-a"]);
-
-      await harness.unmount();
-    });
-  });
-
-  test("removes a task tab when the selected task becomes closed and routes to the first remaining tab", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
-    });
-
-    try {
-      memoryStorage.setItem(
-        toTabsStorageKey("workspace-repo"),
-        toPersistedTaskTabs({
-          tabs: ["task-1", "task-2"],
-          activeTaskId: "task-2",
-        }),
-      );
-
-      const taskOne = createTask("task-1");
-      const taskTwo = createTask("task-2");
-      const latestSession = createSession("task-1", "session-1");
-      const updateCalls: AgentStudioSelectionState[] = [];
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "task-2",
-          selectedTask: taskTwo,
-          tasks: [taskOne, taskTwo],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map([["task-1", latestSession]]),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
-
-      await harness.mount();
-      expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
-
-      await harness.update({
-        activeWorkspaceId: "workspace-repo",
+  test("restores order and active task from workspace state", async () => {
+    const state: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-2", "task-1"],
+      activeTask: { taskId: "task-2", role: "build" },
+    };
+    const harness = createHookHarness(
+      withDefaults({
+        agentStudioState: state,
         taskId: "task-2",
-        selectedTask: createTaskCardFixture({
-          id: "task-2",
-          title: "task-2",
-          status: "closed",
-        }),
-        tasks: [
-          taskOne,
-          createTaskCardFixture({
-            id: "task-2",
-            title: "task-2",
-            status: "closed",
-          }),
-        ],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map([["task-1", latestSession]]),
-        selectAgentStudioSelection: (updates) => {
-          updateCalls.push(updates);
-        },
-      });
+        selectedTask: createTask("task-2"),
+        tasks: [createTask("task-1"), createTask("task-2")],
+      }),
+    );
 
-      await harness.waitFor(() => updateCalls.length > 0);
+    await harness.mount();
+    await harness.waitFor((result) => result.loadedStateWorkspaceId === "repo-a");
 
-      expect(harness.getLatest().tabTaskIds).toEqual(["task-1"]);
-      expect(harness.getLatest().activeTaskTabId).toBe("task-1");
-      expect(updateCalls[0]).toEqual(taskSelection("task-1"));
-
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
+    expect(harness.getLatest().tabTaskIds).toEqual(["task-2", "task-1"]);
+    expect(harness.getLatest().activeTaskTabId).toBe("task-2");
+    await harness.unmount();
   });
 
-  test("clearing active repo skips fallback routing and resets tabs", async () => {
-    const memoryStorage = createMemoryStorage();
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: memoryStorage,
+  test("filters unknown and closed task ids and deduplicates in first-seen order", async () => {
+    const harness = createHookHarness(
+      withDefaults({
+        agentStudioState: {
+          openTaskIds: ["unknown", "task-2", "task-1", "task-2", "closed"],
+          activeTask: { taskId: "task-2" },
+        },
+        taskId: "task-2",
+        selectedTask: createTask("task-2"),
+        tasks: [createTask("task-1"), createTask("task-2"), createTask("closed", "closed")],
+      }),
+    );
+
+    await harness.mount();
+    await harness.waitFor((result) => result.tabTaskIds.length === 2);
+    expect(harness.getLatest().tabTaskIds).toEqual(["task-2", "task-1"]);
+    await harness.unmount();
+  });
+
+  test("adds a valid direct-link task without replacing saved order", async () => {
+    const harness = createHookHarness(
+      withDefaults({
+        agentStudioState: { openTaskIds: ["task-1"] },
+        taskId: "task-2",
+        selectedTask: createTask("task-2"),
+        tasks: [createTask("task-1"), createTask("task-2")],
+      }),
+    );
+
+    await harness.mount();
+    await harness.waitFor((result) => result.tabTaskIds.length === 2);
+    expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
+    expect(harness.getLatest().activeTaskTabId).toBe("task-2");
+    await harness.unmount();
+  });
+
+  test("shows a direct-link task before workspace state loads", async () => {
+    const task = createTask("task-2");
+    const harness = createHookHarness({
+      activeWorkspaceId: "repo-a",
+      loadedAgentStudioState: null,
+      agentStudioStateLoadKey: null,
+      agentStudioState: null,
+      taskId: "task-2",
+      routeTaskId: "task-2",
+      selectedTask: task,
+      tasks: [task],
+      tasksAreCurrent: true,
+      latestSessionByTaskId: new Map(),
+      selectAgentStudioSelection: () => {},
     });
 
-    try {
-      memoryStorage.setItem(
-        toTabsStorageKey("workspace-repo"),
-        toPersistedTaskTabs({
-          tabs: ["task-1"],
-          activeTaskId: "task-1",
-        }),
-      );
+    await harness.mount();
 
-      const updateCalls: AgentStudioSelectionState[] = [];
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "",
-          selectedTask: null,
-          tasks: [createTask("task-1")],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map(),
-          selectAgentStudioSelection: (updates) => {
-            updateCalls.push(updates);
-          },
-        }),
-      );
+    expect(harness.getLatest().tabTaskIds).toEqual(["task-2"]);
+    expect(harness.getLatest().activeTaskTabId).toBe("task-2");
+    await harness.unmount();
+  });
 
-      await harness.mount();
-      await harness.waitFor(() => updateCalls.length > 0);
-      updateCalls.length = 0;
+  test("selects tabs with task-only navigation", async () => {
+    const selections: AgentStudioSelectionState[] = [];
+    const harness = createHookHarness(
+      withDefaults({
+        agentStudioState: {
+          openTaskIds: ["task-1", "task-2"],
+          activeTask: { taskId: "task-1" },
+        },
+        taskId: "task-1",
+        selectedTask: createTask("task-1"),
+        tasks: [createTask("task-1"), createTask("task-2")],
+        selectAgentStudioSelection: (selection) => selections.push(selection),
+      }),
+    );
 
-      await harness.update({
-        activeWorkspaceId: null,
+    await harness.mount();
+    await harness.waitFor((result) => result.loadedStateWorkspaceId === "repo-a");
+    await harness.run((result) => result.handleSelectTab("task-2"));
+
+    expect(selections.at(-1)).toMatchObject({
+      taskId: "task-2",
+      sessionExternalId: null,
+      sessionIdentity: null,
+    });
+    await harness.unmount();
+  });
+
+  test("keeps a local tab draft when the same workspace snapshot reloads", async () => {
+    const loadedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1"],
+      activeTask: { taskId: "task-1" },
+    };
+    const allTasks = [createTask("task-1"), createTask("task-2")];
+    const harness = createHookHarness(
+      withDefaults({
+        loadedAgentStudioState: loadedState,
+        agentStudioStateLoadKey: "1:1",
+        agentStudioState: loadedState,
+        taskId: "task-1",
+        selectedTask: allTasks[0] ?? null,
+        tasks: allTasks,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((result) => result.handleSelectTab("task-2"));
+    expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
+
+    await harness.update(
+      withDefaults({
+        loadedAgentStudioState: loadedState,
+        agentStudioStateLoadKey: "1:1",
+        agentStudioState: loadedState,
         taskId: "",
         selectedTask: null,
-        tasks: [],
-        isLoadingTasks: false,
-        latestSessionByTaskId: new Map(),
-        selectAgentStudioSelection: (updates) => {
-          updateCalls.push(updates);
-        },
-      });
+        tasks: allTasks,
+      }),
+    );
 
-      expect(updateCalls).toHaveLength(0);
-      expect(harness.getLatest().tabTaskIds).toEqual([]);
-
-      await harness.unmount();
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
+    expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
+    expect(harness.getLatest().activeTaskTabId).toBe("task-2");
+    await harness.unmount();
   });
 
-  test("throws actionable error when task tabs storage read fails", async () => {
-    const throwingStorage = createThrowingStorage({
-      throwOnGetItem: true,
-      message: "read blocked",
-    });
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: throwingStorage,
-    });
+  test("clears tabs when the active workspace is removed", async () => {
+    const harness = createHookHarness(
+      withDefaults({
+        agentStudioState: { openTaskIds: ["task-1"] },
+        taskId: "task-1",
+        selectedTask: createTask("task-1"),
+        tasks: [createTask("task-1")],
+      }),
+    );
 
-    try {
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "",
-          selectedTask: null,
-          tasks: [createTask("task-1")],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map(),
-          selectAgentStudioSelection: () => {},
-        }),
-      );
+    await harness.mount();
+    await harness.waitFor((result) => result.tabTaskIds.length === 1);
+    await harness.update(
+      withDefaults({ activeWorkspaceId: null, agentStudioState: null, tasks: [] }),
+    );
+    await harness.waitFor((result) => result.tabTaskIds.length === 0);
 
-      await expect(harness.mount()).rejects.toThrow(
-        `Failed to read agent studio task tabs storage key "${toTabsStorageKey("workspace-repo")}": read blocked`,
-      );
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
-  });
-
-  test("throws actionable error when task tabs storage persistence fails", async () => {
-    const throwingStorage = createThrowingStorage({
-      throwOnSetItem: true,
-      message: "write blocked",
-    });
-    const originalStorage = globalThis.localStorage;
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      value: throwingStorage,
-    });
-
-    try {
-      const harness = createHookHarness(
-        withWorkspaceId({
-          activeWorkspaceId: "workspace-repo",
-          taskId: "task-1",
-          selectedTask: createTask("task-1"),
-          tasks: [createTask("task-1")],
-          isLoadingTasks: false,
-          latestSessionByTaskId: new Map(),
-          selectAgentStudioSelection: () => {},
-        }),
-      );
-
-      await expect(harness.mount()).rejects.toThrow(
-        `Failed to persist agent studio task tabs storage key "${toTabsStorageKey("workspace-repo")}": write blocked`,
-      );
-    } finally {
-      Object.defineProperty(globalThis, "localStorage", {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
+    expect(harness.getLatest().loadedStateWorkspaceId).toBeNull();
+    await harness.unmount();
   });
 });

@@ -11,6 +11,7 @@ import {
 } from "./agent-studio-navigation";
 
 type UseNavigationUrlSyncArgs = {
+  initialNavigation?: AgentStudioNavigationState;
   locationKey: string;
   navigationType: "POP" | "PUSH" | "REPLACE";
   searchParams: URLSearchParams;
@@ -24,19 +25,28 @@ type UseNavigationUrlSyncResult = {
 };
 
 export function useNavigationUrlSync({
+  initialNavigation,
   locationKey,
   navigationType,
   searchParams,
   setSearchParams,
 }: UseNavigationUrlSyncArgs): UseNavigationUrlSyncResult {
   const syncingFromSearchParamsRef = useRef(false);
+  const [initialSearchNavigation] = useState(() =>
+    parseNavigationStateFromSearchParams(searchParams),
+  );
+  const [initialSearchParamsKey] = useState(() => toCanonicalSearchParamsKey(searchParams));
+  const waitsForInitialWriteRef = useRef(
+    initialNavigation !== undefined &&
+      !isSameNavigationState(initialNavigation, initialSearchNavigation),
+  );
   const latestSearchParamsRef = useRef<URLSearchParams | null>(null);
   if (latestSearchParamsRef.current === null) {
     latestSearchParamsRef.current = new URLSearchParams(searchParams);
   }
   const pendingSearchParamWritesRef = useRef<string[]>([]);
-  const [navigation, setNavigation] = useState<AgentStudioNavigationState>(() =>
-    parseNavigationStateFromSearchParams(searchParams),
+  const [navigation, setNavigation] = useState<AgentStudioNavigationState>(
+    () => initialNavigation ?? initialSearchNavigation,
   );
 
   const updateQuery = useCallback((updates: AgentStudioQueryUpdate): void => {
@@ -45,6 +55,11 @@ export function useNavigationUrlSync({
 
   useEffect(() => {
     const currentSearchParamsKey = toCanonicalSearchParamsKey(searchParams);
+    if (waitsForInitialWriteRef.current && currentSearchParamsKey === initialSearchParamsKey) {
+      return;
+    }
+    waitsForInitialWriteRef.current = false;
+
     const pendingWriteIndex =
       navigationType === "POP"
         ? -1
@@ -69,7 +84,7 @@ export function useNavigationUrlSync({
       syncingFromSearchParamsRef.current = true;
       return parsed;
     });
-  }, [locationKey, navigationType, searchParams]);
+  }, [initialSearchParamsKey, locationKey, navigationType, searchParams]);
 
   useEffect(() => {
     if (syncingFromSearchParamsRef.current) {

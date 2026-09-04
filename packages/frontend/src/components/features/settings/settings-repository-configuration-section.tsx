@@ -1,4 +1,4 @@
-import type { GitBranch, RepoConfig } from "@openducktor/contracts";
+import type { GitBranch, SettingsRepoConfig } from "@openducktor/contracts";
 import { FolderOpen } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
@@ -11,7 +11,7 @@ import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-b
 import { resolveFolderPickerInitialPath } from "./settings-repository-configuration-section-model";
 
 type RepositoryConfigurationSectionProps = {
-  selectedRepoConfig: RepoConfig | null;
+  selectedRepoConfig: SettingsRepoConfig | null;
   selectedRepoEffectiveWorktreeBasePath: string | null;
   selectedRepoBranches: GitBranch[];
   selectedRepoBranchesError: string | null;
@@ -21,7 +21,9 @@ type RepositoryConfigurationSectionProps = {
     isLoadingSelectedRepoBranches: boolean;
   };
   onRetrySelectedRepoBranchesLoad: () => void;
-  onUpdateSelectedRepoConfig: (updater: (current: RepoConfig) => RepoConfig) => void;
+  onUpdateSelectedRepoConfig: (
+    updater: (current: SettingsRepoConfig) => SettingsRepoConfig,
+  ) => void;
 };
 
 type UpdateSelectedRepoConfig = RepositoryConfigurationSectionProps["onUpdateSelectedRepoConfig"];
@@ -165,7 +167,7 @@ function RepositoryWorkspaceIdentitySection({
   onUpdateSelectedRepoConfig,
 }: {
   isDisabled: boolean;
-  selectedRepoConfig: RepoConfig;
+  selectedRepoConfig: SettingsRepoConfig;
   onPickRepoPath: () => void;
   onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
@@ -232,7 +234,7 @@ function RepositoryWorktreeBasePathSection({
   onUpdateSelectedRepoConfig,
 }: {
   isDisabled: boolean;
-  selectedRepoConfig: RepoConfig;
+  selectedRepoConfig: SettingsRepoConfig;
   selectedRepoEffectiveWorktreeBasePath: string | null;
   onPickWorktreeBasePath: () => void;
   onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
