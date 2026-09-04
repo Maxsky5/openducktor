@@ -94,6 +94,28 @@ describe("useAgentStudioTaskTabs", () => {
     await harness.unmount();
   });
 
+  test("shows a direct-link task before workspace state loads", async () => {
+    const task = createTask("task-2");
+    const harness = createHookHarness({
+      activeWorkspaceId: "repo-a",
+      loadedAgentStudioState: null,
+      agentStudioStateLoadKey: null,
+      agentStudioState: null,
+      taskId: "task-2",
+      selectedTask: task,
+      tasks: [task],
+      tasksAreCurrent: true,
+      latestSessionByTaskId: new Map(),
+      selectAgentStudioSelection: () => {},
+    });
+
+    await harness.mount();
+
+    expect(harness.getLatest().tabTaskIds).toEqual(["task-2"]);
+    expect(harness.getLatest().activeTaskTabId).toBe("task-2");
+    await harness.unmount();
+  });
+
   test("selects tabs with task-only navigation", async () => {
     const selections: AgentStudioSelectionState[] = [];
     const harness = createHookHarness(

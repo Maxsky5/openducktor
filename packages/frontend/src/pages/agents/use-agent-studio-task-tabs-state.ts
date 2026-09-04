@@ -46,8 +46,13 @@ export function useTaskTabState({
   );
 
   const state = useMemo<TaskTabState>(() => {
+    const hasValidRouteTask = Boolean(taskId && selectedTask && selectedTask.status !== "closed");
+
     if (!hasLoadedState || !agentStudioState) {
-      return { openTaskIds: [], activeTaskId: null };
+      return {
+        openTaskIds: hasValidRouteTask ? [taskId] : [],
+        activeTaskId: null,
+      };
     }
 
     const baseState =
@@ -60,7 +65,6 @@ export function useTaskTabState({
     const taskIds = tasksAreCurrent
       ? pruneAgentStudioTaskIds(baseState.openTaskIds, tasks)
       : baseState.openTaskIds;
-    const hasValidRouteTask = Boolean(taskId && selectedTask && selectedTask.status !== "closed");
     const openTaskIds = hasValidRouteTask ? ensureActiveTaskTab(taskIds, taskId) : taskIds;
 
     return {
