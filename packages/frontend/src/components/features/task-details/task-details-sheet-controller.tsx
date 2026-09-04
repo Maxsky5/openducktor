@@ -47,6 +47,7 @@ export function TaskDetailsSheetController({
   onCloseTask,
   onDetectPullRequest,
   gitProviderContext,
+  gitProviderReadError = null,
   onUnlinkPullRequest,
   detectingPullRequestTaskId,
   unlinkingPullRequestTaskId,
@@ -120,6 +121,7 @@ export function TaskDetailsSheetController({
       {...(onCloseTask ? { onCloseTask } : {})}
       {...(onDetectPullRequest ? { onDetectPullRequest } : {})}
       gitProviderContext={gitProviderContext}
+      gitProviderReadError={gitProviderReadError}
       {...(onUnlinkPullRequest ? { onUnlinkPullRequest } : {})}
       {...(detectingPullRequestTaskId !== undefined ? { detectingPullRequestTaskId } : {})}
       {...(unlinkingPullRequestTaskId !== undefined ? { unlinkingPullRequestTaskId } : {})}

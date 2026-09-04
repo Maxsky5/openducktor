@@ -36,6 +36,24 @@ describe("TaskDetailsSheetHeader", () => {
     expect(html).toContain("Sign in to GitHub CLI.");
   });
 
+  test("disables Detect PR and shows the provider read error", () => {
+    const task = createTaskCardFixture({ id: "TASK-3", status: "human_review" });
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        gitProviderContext: createGitProviderContextFixture(),
+        gitProviderReadError: "Could not load the current Git provider: connection failed",
+        onDetectPullRequest: () => {},
+      }),
+    );
+
+    expect(html).toContain("task-details-detect-pr-button");
+    expect(html).toContain("disabled");
+    expect(html).toContain("Could not load the current Git provider: connection failed");
+  });
+
   test("renders qa rejected badge for qa-rework tasks", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",

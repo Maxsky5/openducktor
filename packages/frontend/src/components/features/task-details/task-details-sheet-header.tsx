@@ -17,6 +17,7 @@ type TaskDetailsSheetHeaderProps = {
   taskLabels: string[];
   onDetectPullRequest?: () => void;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
   onUnlinkPullRequest?: () => void;
   isDetectingPullRequest?: boolean;
   isUnlinkingPullRequest?: boolean;
@@ -28,13 +29,15 @@ export function TaskDetailsSheetHeader({
   taskLabels,
   onDetectPullRequest,
   gitProviderContext,
+  gitProviderReadError = null,
   onUnlinkPullRequest,
   isDetectingPullRequest = false,
   isUnlinkingPullRequest = false,
 }: TaskDetailsSheetHeaderProps): ReactElement {
   const isEpic = task.issueType === "epic";
   const qaRejected = isQaRejectedTask(task);
-  const detectPullRequestDisabledReason = pullRequestHealthError(gitProviderContext);
+  const detectPullRequestDisabledReason =
+    gitProviderReadError ?? pullRequestHealthError(gitProviderContext);
   const supportsPullRequests =
     gitProviderContext?.descriptor.capabilities.supportsPullRequests === true;
   const showDetectPullRequest =

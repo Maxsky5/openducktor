@@ -44,6 +44,7 @@ type BuildWorkflowModelContextArgs = {
   hasActiveGitConflict: boolean;
   roleLabelByRole: Record<AgentRole, string>;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
 };
 
 const isTaskAwaitingHumanFeedback = (task: TaskCard | null): boolean => {
@@ -73,6 +74,7 @@ export const buildWorkflowModelContext = ({
   hasActiveGitConflict,
   roleLabelByRole,
   gitProviderContext,
+  gitProviderReadError = null,
 }: BuildWorkflowModelContextArgs): WorkflowModelContext => {
   const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
   const roleWorkflowsByTask = buildRoleWorkflowMapForTask(selectedTask);
@@ -118,6 +120,7 @@ export const buildWorkflowModelContext = ({
     createSessionDisabled,
     hasActiveGitConflict,
     gitProviderContext,
+    gitProviderReadError,
   });
 
   return {

@@ -6,6 +6,7 @@ import {
   DEFAULT_GENERAL_SETTINGS,
   DEFAULT_KANBAN_SETTINGS,
   GITHUB_PROVIDER_DESCRIPTOR,
+  repositoryGitProviderContextSchema,
   type RepositoryGitProviderContext,
   type SettingsSnapshot,
   type TaskCard,
@@ -181,7 +182,7 @@ export const createGitProviderContextFixture = ({
       ...BASE_GIT_PROVIDER_CONTEXT_FIXTURE.descriptor,
       capabilities: {
         supportsPullRequests,
-        supportsPullRequestReview,
+        supportsPullRequestReview: supportsPullRequests && supportsPullRequestReview,
       },
     },
     config: {
@@ -199,7 +200,7 @@ export const createGitProviderContextFixture = ({
     },
   } satisfies NonNullable<RepositoryGitProviderContext>;
 
-  return structuredClone(context);
+  return repositoryGitProviderContextSchema.unwrap().parse(context);
 };
 
 export const createChatSettingsFixture = (

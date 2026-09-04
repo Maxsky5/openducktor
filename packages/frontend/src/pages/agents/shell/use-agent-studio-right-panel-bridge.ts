@@ -31,6 +31,7 @@ type UseAgentStudioRightPanelBridgeArgs = {
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
   gitProviderContext?: UseAgentsPageRightPanelModelArgs["gitProviderContext"];
+  gitProviderReadError?: UseAgentsPageRightPanelModelArgs["gitProviderReadError"];
   onResolveGitConflict: UseAgentsPageRightPanelModelArgs["onResolveGitConflict"];
   onGitConflictQuickActionContextChange: (
     context: AgentStudioGitConflictQuickActionContext | null,
@@ -56,6 +57,7 @@ export type AgentStudioRightPanelRuntimeModel = {
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
   gitProviderContext?: UseAgentsPageRightPanelModelArgs["gitProviderContext"];
+  gitProviderReadError: string | null;
   onResolveGitConflict: UseAgentsPageRightPanelModelArgs["onResolveGitConflict"];
   onGitConflictQuickActionContextChange: NonNullable<
     UseAgentsPageRightPanelModelArgs["onGitConflictQuickActionContextChange"]
@@ -97,6 +99,7 @@ type BuildAgentStudioRightPanelBridgeModelArgs = Omit<
   isPanelOpen: AgentStudioRightPanelPanelState["isPanelOpen"];
   onActiveTabChange: AgentStudioRightPanelPanelState["onActiveTabChange"];
   pullRequestReviewUnavailableReason: AgentStudioRightPanelPanelState["pullRequestReviewUnavailableReason"];
+  gitProviderReadError: string | null;
 };
 
 function buildAgentStudioRightPanelBridgeModel({
@@ -118,6 +121,7 @@ function buildAgentStudioRightPanelBridgeModel({
   detectingPullRequestTaskId,
   onDetectPullRequest,
   gitProviderContext,
+  gitProviderReadError,
   onResolveGitConflict,
   onGitConflictQuickActionContextChange,
 }: BuildAgentStudioRightPanelBridgeModelArgs): AgentStudioRightPanelBridgeModel {
@@ -149,6 +153,7 @@ function buildAgentStudioRightPanelBridgeModel({
       detectingPullRequestTaskId,
       onDetectPullRequest,
       gitProviderContext,
+      gitProviderReadError,
       onResolveGitConflict,
       onGitConflictQuickActionContextChange,
     },
@@ -170,6 +175,7 @@ export function useAgentStudioRightPanelBridge({
   detectingPullRequestTaskId,
   onDetectPullRequest,
   gitProviderContext,
+  gitProviderReadError = null,
   onResolveGitConflict,
   onGitConflictQuickActionContextChange,
 }: UseAgentStudioRightPanelBridgeArgs): AgentStudioRightPanelShellModel {
@@ -204,6 +210,7 @@ export function useAgentStudioRightPanelBridge({
       detectingPullRequestTaskId,
       onDetectPullRequest,
       gitProviderContext,
+      gitProviderReadError,
       onResolveGitConflict,
       onGitConflictQuickActionContextChange,
     });
@@ -218,6 +225,7 @@ export function useAgentStudioRightPanelBridge({
     onClearSelectedFile,
     onDetectPullRequest,
     gitProviderContext,
+    gitProviderReadError,
     onSelectFile,
     onActiveTabChange,
     pullRequestReviewUnavailableReason,

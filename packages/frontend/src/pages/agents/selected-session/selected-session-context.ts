@@ -89,6 +89,7 @@ export type AgentStudioSelectedSessionContextInput = {
   };
   roleLabelByRole: Record<AgentRole, string>;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
 };
 
 const resolvePendingInputChildSession = (
@@ -157,6 +158,7 @@ export const buildAgentStudioSelectedSessionContext = ({
   sessionActions,
   roleLabelByRole,
   gitProviderContext,
+  gitProviderReadError = null,
 }: AgentStudioSelectedSessionContextInput): AgentStudioSelectedSessionContext => {
   const { identity: selectedSessionIdentity, loadedSession } = selectedSession;
   const workflow = buildWorkflowModelContext({
@@ -168,6 +170,7 @@ export const buildAgentStudioSelectedSessionContext = ({
     hasActiveGitConflict,
     roleLabelByRole,
     gitProviderContext,
+    gitProviderReadError,
   });
   const activeDocument = taskId
     ? buildActiveDocumentForRole({

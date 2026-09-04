@@ -449,6 +449,7 @@ let lastOrchestrationSelectionSource: OrchestrationShellArgs["routeSession"]["se
   null;
 let lastOrchestrationSelectionLoadingTasks: boolean | null = null;
 let lastOrchestrationSelection: OrchestrationSelection | null = null;
+let lastOrchestrationGitProviderReadError: string | null = null;
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const syncAgentSessionsStore = (): void => {
@@ -565,7 +566,13 @@ const registerModuleMocks = (): void => {
       () => repoSettingsState,
     ),
     spyOn(orchestrationShellModule, "useAgentsPageOrchestrationShellModel").mockImplementation(
-      ({ activeWorkspaceId, isForegroundLoadingTasks, routeSession }: OrchestrationShellArgs) => {
+      ({
+        activeWorkspaceId,
+        gitProviderReadError,
+        isForegroundLoadingTasks,
+        routeSession,
+      }: OrchestrationShellArgs) => {
+        lastOrchestrationGitProviderReadError = gitProviderReadError;
         if (
           lastOrchestrationSelectionSource !== routeSession.selection ||
           lastOrchestrationSelectionLoadingTasks !== isForegroundLoadingTasks
@@ -784,6 +791,7 @@ beforeEach(async () => {
   lastOrchestrationSelectionSource = null;
   lastOrchestrationSelectionLoadingTasks = null;
   lastOrchestrationSelection = null;
+  lastOrchestrationGitProviderReadError = null;
 });
 
 afterEach(() => {
@@ -797,6 +805,28 @@ const createHookHarness = () =>
   });
 
 describe("useAgentsPageShellModel", () => {
+  test("passes provider read errors to each Pull Request action model", async () => {
+    repoSettingsState = {
+      ...repoSettingsState,
+      gitProviderContextError: new Error("connection failed"),
+    };
+    const harness = createHookHarness();
+
+    try {
+      await harness.mount();
+
+      const error = "Could not load the current Git provider: connection failed";
+      expect(lastOrchestrationGitProviderReadError).toBe(error);
+      expect(harness.getLatest().rightPanelBridge?.rightPanel.gitProviderReadError).toBe(error);
+      expect(
+        harness.getLatest().modalContent.taskDetailsLauncher.taskDetailsSheetProps
+          .gitProviderReadError,
+      ).toBe(error);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("surfaces hook state and wires modal/controller models", async () => {
     tasksState = {
       ...tasksState,

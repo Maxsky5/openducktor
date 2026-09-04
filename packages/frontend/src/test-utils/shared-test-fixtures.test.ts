@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_CHAT_SETTINGS } from "@openducktor/contracts";
+import { DEFAULT_CHAT_SETTINGS, repositoryGitProviderContextSchema } from "@openducktor/contracts";
 import {
   createSessionMessagesState,
   getSessionMessageCount,
@@ -77,6 +77,16 @@ describe("shared test fixtures", () => {
       account: null,
       repositoryMappingValid: false,
     });
+  });
+
+  test("createGitProviderContextFixture keeps capabilities valid", () => {
+    const context = createGitProviderContextFixture({ supportsPullRequests: false });
+
+    expect(context.descriptor.capabilities).toEqual({
+      supportsPullRequests: false,
+      supportsPullRequestReview: false,
+    });
+    expect(repositoryGitProviderContextSchema.parse(context)).toEqual(context);
   });
 
   test("createAgentSessionFixture returns isolated nested objects", () => {

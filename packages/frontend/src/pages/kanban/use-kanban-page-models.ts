@@ -7,6 +7,7 @@ import type { GitConflict } from "@/features/agent-studio-git";
 import { useGitConflictResolution } from "@/features/git-conflict-resolution";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
+import { gitProviderReadError } from "@/lib/git-provider-health";
 import {
   useAgentOperations,
   useAgentSessionSummaries,
@@ -70,6 +71,7 @@ export function useKanbanPageModels({
       activeRepoPath: workspaceRepoPath,
       activeWorkspaceId,
     });
+  const providerReadError = gitProviderReadError(gitProviderContextError);
   const { startAgentSession, sendAgentMessage } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
   const {
@@ -361,6 +363,7 @@ export function useKanbanPageModels({
       onCloseTask: closeTask,
       onDetectPullRequest,
       gitProviderContext,
+      gitProviderReadError: providerReadError,
       onUnlinkPullRequest,
       detectingPullRequestTaskId,
       unlinkingPullRequestTaskId,

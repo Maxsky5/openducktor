@@ -17,6 +17,7 @@ type UseAgentsPageOrchestrationShellModelArgs = {
   >[0]["runtimeDefinitions"];
   repoSettings: RepoSettingsInput | null;
   gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderReadError: string | null;
   workspaceRepoPath: string | null;
   isForegroundLoadingTasks: boolean;
   routeSession: AgentsPageRouteSessionModel;
@@ -55,6 +56,7 @@ export function useAgentsPageOrchestrationShellModel({
   runtimeDefinitions,
   repoSettings,
   gitProviderContext,
+  gitProviderReadError,
   workspaceRepoPath,
   isForegroundLoadingTasks,
   routeSession,
@@ -102,6 +104,7 @@ export function useAgentsPageOrchestrationShellModel({
     runtimeDefinitions,
     repoSettings,
     gitProviderContext,
+    gitProviderReadError,
     workspaceRepoPath,
     selection: orchestrationSelection,
     taskExecutionFilePreview: routeSession.taskExecutionFilePreview,

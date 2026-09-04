@@ -107,7 +107,6 @@ export const resolveTaskApprovalWorkflowTransition = (
 export const resolveTaskApprovalOpenMode = (args: {
   gitProviderContext: RepositoryGitProviderContext;
   requestedMode: TaskApprovalMode | undefined;
-  task: Pick<TaskCard, "availableActions" | "pullRequest" | "status"> | undefined;
 }): TaskApprovalMode => {
   if (args.requestedMode === "direct_merge") {
     return args.requestedMode;
@@ -121,13 +120,6 @@ export const resolveTaskApprovalOpenMode = (args: {
 
   if (args.requestedMode === "pull_request") {
     return args.requestedMode;
-  }
-
-  if (args.task) {
-    const transition = resolveTaskApprovalWorkflowTransition(args.task, "approve");
-    if (transition.kind === "approved" && transition.completionPath === "pull_request") {
-      return "pull_request";
-    }
   }
 
   return "pull_request";

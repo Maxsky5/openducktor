@@ -59,6 +59,7 @@ type UseAgentStudioOrchestrationControllerArgs = {
   runtimeDefinitions: RuntimeDescriptor[];
   repoSettings: RepoSettingsInput | null;
   gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderReadError: string | null;
   workspaceRepoPath: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   taskExecutionFilePreview: UseTaskExecutionFilePreviewControllerResult;
@@ -69,9 +70,11 @@ type UseAgentStudioOrchestrationControllerArgs = {
 
 export const resolvePullRequestReviewAvailability = ({
   gitProviderContext,
+  gitProviderReadError,
   linkedPullRequest,
 }: {
   gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
   linkedPullRequest: PullRequest | undefined;
 }) => {
   const supportsPullRequestReview =
@@ -79,11 +82,14 @@ export const resolvePullRequestReviewAvailability = ({
   const hasLinkedPullRequest =
     linkedPullRequest !== undefined &&
     linkedPullRequest.providerId === gitProviderContext?.config.id;
-  const unavailableReason =
-    supportsPullRequestReview && gitProviderContext.health.available === false
-      ? (gitProviderContext.health.reason ??
-        `${gitProviderContext.descriptor.label} is not available for Pull Request review.`)
-      : null;
+  let unavailableReason: string | null = null;
+  if (supportsPullRequestReview && gitProviderReadError) {
+    unavailableReason = gitProviderReadError;
+  } else if (supportsPullRequestReview && gitProviderContext.health.available === false) {
+    unavailableReason =
+      gitProviderContext.health.reason ??
+      `${gitProviderContext.descriptor.label} is not available for Pull Request review.`;
+  }
   return { supportsPullRequestReview, hasLinkedPullRequest, unavailableReason };
 };
 
@@ -227,6 +233,7 @@ export function useAgentStudioOrchestrationController({
   runtimeDefinitions,
   repoSettings,
   gitProviderContext,
+  gitProviderReadError,
   workspaceRepoPath,
   selection,
   taskExecutionFilePreview,
@@ -393,11 +400,13 @@ export function useAgentStudioOrchestrationController({
         },
         roleLabelByRole,
         gitProviderContext,
+        gitProviderReadError,
       }),
     [
       approvalReplyErrorByRequestId,
       hasActiveGitConflict,
       gitProviderContext,
+      gitProviderReadError,
       isSessionWorking,
       isSubmittingApprovalByRequestId,
       isSubmittingQuestionByRequestId,
@@ -497,6 +506,7 @@ export function useAgentStudioOrchestrationController({
     unavailableReason: pullRequestReviewUnavailableReason,
   } = resolvePullRequestReviewAvailability({
     gitProviderContext,
+    gitProviderReadError,
     linkedPullRequest: view.selectedTask?.pullRequest,
   });
   const rightPanel = useAgentStudioRightPanel({

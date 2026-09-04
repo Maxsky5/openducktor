@@ -138,6 +138,7 @@ export type KanbanPageTaskDetailsControllerModel = {
   onCloseTask: (taskId: string) => Promise<void>;
   onDetectPullRequest: (taskId: string) => void;
   gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderReadError: string | null;
   onUnlinkPullRequest: (taskId: string) => void;
   detectingPullRequestTaskId: string | null;
   unlinkingPullRequestTaskId: string | null;

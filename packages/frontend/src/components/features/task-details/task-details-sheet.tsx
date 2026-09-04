@@ -82,6 +82,7 @@ export function TaskDetailsSheet({
   onCloseTask,
   onDetectPullRequest,
   gitProviderContext,
+  gitProviderReadError = null,
   onUnlinkPullRequest,
   detectingPullRequestTaskId = null,
   unlinkingPullRequestTaskId = null,
@@ -171,6 +172,7 @@ export function TaskDetailsSheet({
             subtasksCount={viewModel.subtasks.length}
             taskLabels={viewModel.taskLabels}
             gitProviderContext={gitProviderContext}
+            gitProviderReadError={gitProviderReadError}
             {...(onDetectPullRequest && canDetectPullRequestForTask
               ? {
                   onDetectPullRequest: () => onDetectPullRequest(task.id),

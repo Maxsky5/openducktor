@@ -194,83 +194,37 @@ describe("resolveTaskApprovalOpenMode", () => {
       name: "keeps an explicit requested mode",
       requestedMode: "direct_merge" as const,
       gitProviderContext: createGitProviderContextFixture(),
-      task: task({
-        status: "human_review",
-        availableActions: ["human_approve"],
-        pullRequest: {
-          providerId: "github",
-          number: 42,
-          url: "https://github.com/openai/openducktor/pull/42",
-          state: "open",
-          createdAt: "2026-05-28T12:00:00.000Z",
-          updatedAt: "2026-05-28T12:00:00.000Z",
-        },
-      }),
       expected: "direct_merge" as const,
     },
     {
-      name: "defaults PR-linked approval to pull request mode",
+      name: "defaults to Pull Request mode when the provider supports it",
       requestedMode: undefined,
       gitProviderContext: createGitProviderContextFixture(),
-      task: task({
-        status: "human_review",
-        availableActions: ["human_approve"],
-        pullRequest: {
-          providerId: "github",
-          number: 42,
-          url: "https://github.com/openai/openducktor/pull/42",
-          state: "open",
-          createdAt: "2026-05-28T12:00:00.000Z",
-          updatedAt: "2026-05-28T12:00:00.000Z",
-        },
-      }),
-      expected: "pull_request" as const,
-    },
-    {
-      name: "uses provider capability when there is no PR-linked approval",
-      requestedMode: undefined,
-      gitProviderContext: createGitProviderContextFixture(),
-      task: task({ status: "human_review", availableActions: ["human_approve"] }),
       expected: "pull_request" as const,
     },
     {
       name: "keeps Pull Request mode when health is unavailable",
       requestedMode: undefined,
       gitProviderContext: createGitProviderContextFixture({ available: false }),
-      task: task({
-        status: "blocked",
-        availableActions: ["open_builder"],
-        pullRequest: {
-          providerId: "github",
-          number: 42,
-          url: "https://github.com/openai/openducktor/pull/42",
-          state: "open",
-          createdAt: "2026-05-28T12:00:00.000Z",
-          updatedAt: "2026-05-28T12:00:00.000Z",
-        },
-      }),
       expected: "pull_request" as const,
     },
     {
-      name: "falls back to direct merge when task data is unavailable",
+      name: "falls back to direct merge when no provider is configured",
       requestedMode: undefined,
       gitProviderContext: null,
-      task: undefined,
       expected: "direct_merge" as const,
     },
     {
       name: "falls back to direct merge when Pull Requests are unsupported",
       requestedMode: undefined,
       gitProviderContext: createGitProviderContextFixture({ supportsPullRequests: false }),
-      task: task({ status: "blocked", availableActions: ["open_builder"] }),
       expected: "direct_merge" as const,
     },
-  ])("$name", ({ gitProviderContext, expected, requestedMode, task: taskFixture }) => {
+  ])("$name", ({ gitProviderContext, expected, requestedMode }) => {
     expect(
       resolveTaskApprovalOpenMode({
         gitProviderContext,
         requestedMode,
-        task: taskFixture,
       }),
     ).toBe(expected);
   });

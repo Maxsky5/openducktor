@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
+import { gitProviderReadError } from "@/lib/git-provider-health";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
@@ -67,6 +68,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     activeRepoPath: workspaceRepoPath,
     activeWorkspaceId,
   });
+  const providerReadError = gitProviderReadError(gitProviderContextError);
   const {
     tasksAreCurrent,
     isForegroundLoadingTasks,
@@ -128,6 +130,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     cancelLinkMergedPullRequest,
     unlinkPullRequest,
     gitProviderContext,
+    gitProviderReadError: providerReadError,
   });
 
   const {
@@ -141,6 +144,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     runtimeDefinitions,
     repoSettings,
     gitProviderContext,
+    gitProviderReadError: providerReadError,
     workspaceRepoPath,
     isForegroundLoadingTasks,
     routeSession,
@@ -184,6 +188,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       detectingPullRequestTaskId,
       onDetectPullRequest: taskActions.onDetectPullRequest,
       gitProviderContext,
+      gitProviderReadError: providerReadError,
       onResolveGitConflict: handleResolveRebaseConflict,
       onGitConflictQuickActionContextChange,
     });

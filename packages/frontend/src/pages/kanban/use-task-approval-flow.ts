@@ -147,7 +147,6 @@ export function useTaskApprovalFlow({
         const effectiveMode = resolveTaskApprovalOpenMode({
           gitProviderContext: resolvedGitProviderContext,
           requestedMode: options?.mode,
-          task,
         });
         dispatch({
           type: "open_loading",

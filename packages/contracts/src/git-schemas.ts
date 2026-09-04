@@ -188,6 +188,29 @@ export const repositoryGitProviderContextSchema = z
     health: gitProviderHealthSchema,
   })
   .strict()
+  .superRefine((provider, context) => {
+    if (provider.config.id !== provider.descriptor.id) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Configured provider id must match the descriptor id.",
+        path: ["config", "id"],
+      });
+    }
+    if (provider.health.providerId !== provider.descriptor.id) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Health provider id must match the descriptor id.",
+        path: ["health", "providerId"],
+      });
+    }
+    if (provider.health.enabled !== provider.config.enabled) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Health and configuration must use the same enabled value.",
+        path: ["health", "enabled"],
+      });
+    }
+  })
   .nullable();
 export type RepositoryGitProviderContext = z.infer<typeof repositoryGitProviderContextSchema>;
 

@@ -8,6 +8,26 @@ import {
 } from "./git-schemas";
 import { GITHUB_PROVIDER_DESCRIPTOR } from "./git-provider-descriptors";
 
+const providerContext = () => ({
+  descriptor: GITHUB_PROVIDER_DESCRIPTOR,
+  config: {
+    id: "github",
+    enabled: false,
+    autoDetected: false,
+  },
+  health: {
+    providerId: "github",
+    enabled: false,
+    available: false,
+    reason: "GitHub provider is not enabled for this repository.",
+    executablePath: null,
+    version: null,
+    authenticated: false,
+    account: null,
+    repositoryMappingValid: null,
+  },
+});
+
 describe("Git provider descriptors", () => {
   test("exports the GitHub Pull Request capability contract", () => {
     expect(GITHUB_PROVIDER_DESCRIPTOR).toEqual({
@@ -69,27 +89,37 @@ describe("Git provider descriptors", () => {
   });
 
   test("keeps provider support, configuration, and health as separate context fields", () => {
-    const context = {
-      descriptor: GITHUB_PROVIDER_DESCRIPTOR,
-      config: {
-        id: "github",
-        enabled: false,
-        autoDetected: false,
-      },
-      health: {
-        providerId: "github",
-        enabled: false,
-        available: false,
-        reason: "GitHub provider is not enabled for this repository.",
-        executablePath: null,
-        version: null,
-        authenticated: false,
-        account: null,
-        repositoryMappingValid: null,
-      },
-    };
+    const context = providerContext();
 
     expect(repositoryGitProviderContextSchema.parse(context)).toEqual(context);
     expect(repositoryGitProviderContextSchema.parse(null)).toBeNull();
+  });
+
+  test("rejects a context whose provider ids do not match", () => {
+    const context = providerContext();
+
+    expect(
+      repositoryGitProviderContextSchema.safeParse({
+        ...context,
+        config: { ...context.config, id: "fake" },
+      }).success,
+    ).toBe(false);
+    expect(
+      repositoryGitProviderContextSchema.safeParse({
+        ...context,
+        health: { ...context.health, providerId: "fake" },
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects a context whose enabled values do not match", () => {
+    const context = providerContext();
+
+    expect(
+      repositoryGitProviderContextSchema.safeParse({
+        ...context,
+        health: { ...context.health, enabled: true },
+      }).success,
+    ).toBe(false);
   });
 });

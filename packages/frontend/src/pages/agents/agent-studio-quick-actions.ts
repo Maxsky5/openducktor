@@ -156,6 +156,7 @@ export const buildAgentStudioQuickActions = (params: {
   createSessionDisabled: boolean;
   hasActiveGitConflict?: boolean;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
 }): AgentStudioQuickActionOption[] => {
   const task = params.selectedTask;
   if (!task) {
@@ -247,6 +248,7 @@ export const buildAgentStudioQuickActions = (params: {
     });
     const hasBuilderSource = builderSessionOptions.length > 0;
     const pullRequestDisabledReason =
+      params.gitProviderReadError ??
       pullRequestHealthError(params.gitProviderContext) ??
       disabledReason ??
       (hasBuilderSource ? null : "Requires an existing Builder session.");

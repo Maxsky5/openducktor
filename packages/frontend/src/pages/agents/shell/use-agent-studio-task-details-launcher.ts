@@ -19,6 +19,7 @@ type UseAgentStudioTaskDetailsLauncherArgs = {
   onDetectPullRequest: (taskId: string) => void;
   onUnlinkPullRequest: (taskId: string) => void;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
 };
 
 export type AgentStudioTaskDetailsSheetProps = Omit<
@@ -45,6 +46,7 @@ export function useAgentStudioTaskDetailsLauncher({
   onDetectPullRequest,
   onUnlinkPullRequest,
   gitProviderContext,
+  gitProviderReadError = null,
 }: UseAgentStudioTaskDetailsLauncherArgs): AgentStudioTaskDetailsLauncherModel {
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
 
@@ -65,6 +67,7 @@ export function useAgentStudioTaskDetailsLauncher({
       workflowActionsEnabled: false,
       onDetectPullRequest,
       gitProviderContext,
+      gitProviderReadError,
       onUnlinkPullRequest,
       detectingPullRequestTaskId,
       unlinkingPullRequestTaskId,
@@ -73,6 +76,7 @@ export function useAgentStudioTaskDetailsLauncher({
       activeWorkspace,
       detectingPullRequestTaskId,
       gitProviderContext,
+      gitProviderReadError,
       onDetectPullRequest,
       onUnlinkPullRequest,
       tasks,

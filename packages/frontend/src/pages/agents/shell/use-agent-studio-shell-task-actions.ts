@@ -25,6 +25,7 @@ type UseAgentStudioShellTaskActionsArgs = {
   cancelLinkMergedPullRequest: ReturnType<typeof useTasksState>["cancelLinkMergedPullRequest"];
   unlinkPullRequest: ReturnType<typeof useTasksState>["unlinkPullRequest"];
   gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
 };
 
 export type AgentStudioShellTaskActionsModel = {
@@ -46,6 +47,7 @@ export function useAgentStudioShellTaskActions({
   cancelLinkMergedPullRequest,
   unlinkPullRequest,
   gitProviderContext,
+  gitProviderReadError = null,
 }: UseAgentStudioShellTaskActionsArgs): AgentStudioShellTaskActionsModel {
   const onDetectPullRequest = useCallback(
     (taskId: string): void => {
@@ -78,6 +80,7 @@ export function useAgentStudioShellTaskActions({
     onDetectPullRequest,
     onUnlinkPullRequest,
     gitProviderContext,
+    gitProviderReadError,
   });
 
   const mergedPullRequestModal = useAgentStudioPullRequestModalModel({
