@@ -2,11 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
-import type { GitProviderResolver } from "../../git/git-provider-resolver";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
-import { requireApprovalContextDependencies } from "./required-provider-task-dependencies";
+import { requireApprovalContextDependencies } from "./approval-context-dependencies";
 import {
   requireDirectMergeDependencies,
   requireLinkMergedPullRequestDependencies,
@@ -18,9 +17,8 @@ const dependencyStub = <Dependency>(): Dependency => {
 };
 
 describe("provider-neutral task dependency gates", () => {
-  test("approval context requires only Git and provider-neutral services", () => {
+  test("approval context does not require a Git provider", () => {
     const gitPort = dependencyStub<GitPort>();
-    const gitProviderResolver = dependencyStub<GitProviderResolver>();
     const settingsConfig = dependencyStub<SettingsConfigPort>();
     const taskWorktreeService = dependencyStub<TaskWorktreeService>();
     const workspaceSettingsService = dependencyStub<WorkspaceSettingsService>();
@@ -28,14 +26,12 @@ describe("provider-neutral task dependency gates", () => {
     expect(
       requireApprovalContextDependencies({
         gitPort,
-        gitProviderResolver,
         settingsConfig,
         taskWorktreeService,
         workspaceSettingsService,
       }),
     ).toEqual({
       gitPort,
-      gitProviderResolver,
       settingsConfig,
       taskWorktreeService,
       workspaceSettingsService,

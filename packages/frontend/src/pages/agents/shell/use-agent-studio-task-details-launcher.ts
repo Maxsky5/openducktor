@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, RepositoryGitProviderContext } from "@openducktor/contracts";
 import { type ComponentProps, type RefObject, useCallback, useMemo, useRef } from "react";
 import type {
   ActiveTaskSessionContextByTaskId,
@@ -18,6 +18,7 @@ type UseAgentStudioTaskDetailsLauncherArgs = {
   unlinkingPullRequestTaskId: ReturnType<typeof useTasksState>["unlinkingPullRequestTaskId"];
   onDetectPullRequest: (taskId: string) => void;
   onUnlinkPullRequest: (taskId: string) => void;
+  gitProviderContext?: RepositoryGitProviderContext | undefined;
 };
 
 export type AgentStudioTaskDetailsSheetProps = Omit<
@@ -43,6 +44,7 @@ export function useAgentStudioTaskDetailsLauncher({
   unlinkingPullRequestTaskId,
   onDetectPullRequest,
   onUnlinkPullRequest,
+  gitProviderContext,
 }: UseAgentStudioTaskDetailsLauncherArgs): AgentStudioTaskDetailsLauncherModel {
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
 
@@ -62,6 +64,7 @@ export function useAgentStudioTaskDetailsLauncher({
       activeTaskSessionContextByTaskId: EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID,
       workflowActionsEnabled: false,
       onDetectPullRequest,
+      gitProviderContext,
       onUnlinkPullRequest,
       detectingPullRequestTaskId,
       unlinkingPullRequestTaskId,
@@ -69,6 +72,7 @@ export function useAgentStudioTaskDetailsLauncher({
     [
       activeWorkspace,
       detectingPullRequestTaskId,
+      gitProviderContext,
       onDetectPullRequest,
       onUnlinkPullRequest,
       tasks,

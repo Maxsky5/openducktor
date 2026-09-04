@@ -213,6 +213,7 @@ export function SettingsModalContent({
       <SettingsAutopilotSection
         autopilot={snapshotDraft.autopilot}
         disabled={isInteractionDisabled}
+        repoPath={controller.selectedWorkspace?.repoPath ?? null}
         onUpdateAutopilot={updateGlobalAutopilotSettings}
       />
     );

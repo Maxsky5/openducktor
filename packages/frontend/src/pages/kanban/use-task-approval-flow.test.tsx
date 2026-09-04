@@ -293,7 +293,6 @@ const createTaskApprovalContextFixture = (
   pullRequest: undefined,
   directMerge: undefined,
   suggestedSquashCommitMessage: undefined,
-  providers: [],
   ...overrides,
 });
 
@@ -786,14 +785,6 @@ describe("useTaskApprovalFlow", () => {
     pendingApprovalContext.resolve(
       createReadyTaskApprovalContextResult({
         publishTarget: undefined,
-        providers: [
-          {
-            providerId: "github",
-            enabled: true,
-            available: true,
-            reason: undefined,
-          },
-        ],
       }),
     );
 
@@ -1288,7 +1279,6 @@ describe("useTaskApprovalFlow", () => {
         taskId: "TASK-2",
         defaultMergeMethod: "rebase",
         hasUncommittedChanges: false,
-        providers: [],
       }),
     );
 
@@ -1847,18 +1837,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("creates a pull request manually, refreshes tasks, and closes the modal", async () => {
     const refreshTasksMock = mock(async () => {});
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({
-        providers: [
-          {
-            providerId: "github",
-            enabled: true,
-            available: true,
-            reason: undefined,
-          },
-        ],
-      }),
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(createReadyTaskApprovalContextResult());
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -1929,18 +1908,7 @@ describe("useTaskApprovalFlow", () => {
     const requestPullRequestGenerationMock = mock(
       async () => requestPullRequestGenerationDeferred.promise,
     );
-    taskApprovalContextGetMock.mockResolvedValue(
-      createReadyTaskApprovalContextResult({
-        providers: [
-          {
-            providerId: "github",
-            enabled: true,
-            available: true,
-            reason: undefined,
-          },
-        ],
-      }),
-    );
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
@@ -1997,18 +1965,7 @@ describe("useTaskApprovalFlow", () => {
 
   test("keeps the approval modal open when AI pull request generation is cancelled", async () => {
     const requestPullRequestGenerationMock = mock(async () => undefined);
-    taskApprovalContextGetMock.mockResolvedValue(
-      createReadyTaskApprovalContextResult({
-        providers: [
-          {
-            providerId: "github",
-            enabled: true,
-            available: true,
-            reason: undefined,
-          },
-        ],
-      }),
-    );
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
 
     const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
 
@@ -2071,14 +2028,6 @@ describe("useTaskApprovalFlow", () => {
       if (taskId === "TASK-1") {
         return createReadyTaskApprovalContextResult({
           taskId,
-          providers: [
-            {
-              providerId: "github",
-              enabled: true,
-              available: true,
-              reason: undefined,
-            },
-          ],
         });
       }
 
@@ -2148,7 +2097,6 @@ describe("useTaskApprovalFlow", () => {
     secondApprovalContext.resolve(
       createReadyTaskApprovalContextResult({
         taskId: "TASK-2",
-        providers: [],
       }),
     );
 
@@ -2167,18 +2115,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("keeps the modal open when pull request generation cannot start", async () => {
-    taskApprovalContextGetMock.mockResolvedValue(
-      createReadyTaskApprovalContextResult({
-        providers: [
-          {
-            providerId: "github",
-            enabled: true,
-            available: true,
-            reason: undefined,
-          },
-        ],
-      }),
-    );
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
     const requestPullRequestGenerationMock = mock(async () => {
       throw new Error("Generation crashed");
     });

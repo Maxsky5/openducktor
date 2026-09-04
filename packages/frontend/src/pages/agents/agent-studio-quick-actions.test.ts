@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { TaskAction } from "@openducktor/contracts";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import {
   buildAgentStudioQuickActions,
   selectPrimaryAgentStudioQuickAction,
@@ -23,6 +24,52 @@ const buildPullRequest = () => ({
 });
 
 describe("agent-studio-quick-actions", () => {
+  const buildPrActionArgs = (): Parameters<typeof buildAgentStudioQuickActions>[0] => {
+    const task = buildTask({
+      id: "task-1",
+      status: "human_review",
+      availableActions: ["human_request_changes"],
+      agentWorkflows: {
+        spec: { required: true, canSkip: false, available: true, completed: true },
+        planner: { required: true, canSkip: false, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: true },
+        qa: { required: true, canSkip: false, available: true, completed: true },
+      },
+    });
+    const builderSession = buildSession({
+      sessionAssociation: { kind: "workflow", taskId: task.id, role: "build" },
+    });
+    return {
+      selectedTask: task,
+      sessionsForTask: [builderSession],
+      roleEnabledByTask: buildRoleEnabledMapForTask(task),
+      createSessionDisabled: false,
+    };
+  };
+
+  test("hides unsupported Pull Request generation", () => {
+    const actions = buildAgentStudioQuickActions({
+      ...buildPrActionArgs(),
+      gitProviderContext: null,
+    });
+    expect(
+      actions.some((option) => option.launchActionId === "build_pull_request_generation"),
+    ).toBe(false);
+  });
+
+  test("disables Pull Request generation when provider health blocks use", () => {
+    const actions = buildAgentStudioQuickActions({
+      ...buildPrActionArgs(),
+      gitProviderContext: createGitProviderContextFixture(false),
+    });
+    expect(
+      actions.find((option) => option.launchActionId === "build_pull_request_generation"),
+    ).toMatchObject({
+      disabled: true,
+      disabledReason: "Sign in to GitHub CLI.",
+    });
+  });
+
   test("builds quick actions from backend actions, role workflows, and builder sessions", () => {
     const task = buildTask({
       id: "task-1",
@@ -129,6 +176,7 @@ describe("agent-studio-quick-actions", () => {
       sessionsForTask: [humanReviewBuilderSession],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
       createSessionDisabled: false,
+      gitProviderContext: createGitProviderContextFixture(),
     });
     expect(selectPrimaryAgentStudioQuickAction(humanReviewOptions)).toMatchObject({
       launchActionId: "build_pull_request_generation",
@@ -168,6 +216,7 @@ describe("agent-studio-quick-actions", () => {
       ],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTaskWithPullRequest),
       createSessionDisabled: false,
+      gitProviderContext: createGitProviderContextFixture(),
     });
 
     expect(selectPrimaryAgentStudioQuickAction(humanReviewWithPullRequestOptions)).toMatchObject({
@@ -428,6 +477,7 @@ describe("agent-studio-quick-actions", () => {
       sessionsForTask: [humanReviewBuilderSession],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
       createSessionDisabled: false,
+      gitProviderContext: createGitProviderContextFixture(),
     });
 
     expect(humanReviewOptions).toContainEqual(
@@ -457,6 +507,7 @@ describe("agent-studio-quick-actions", () => {
       sessionsForTask: [],
       roleEnabledByTask: buildRoleEnabledMapForTask(task),
       createSessionDisabled: false,
+      gitProviderContext: createGitProviderContextFixture(),
     });
 
     expect(options[0]).toMatchObject({

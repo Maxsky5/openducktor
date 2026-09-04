@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
 import { Link2, Sparkles, Unlink } from "lucide-react";
 import type { ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
@@ -7,6 +7,7 @@ import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
+import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { canUnlinkTaskPullRequest, statusBadgeClassName, statusLabel } from "@/lib/task-display";
 import { isQaRejectedTask } from "@/lib/task-qa";
 
@@ -15,6 +16,7 @@ type TaskDetailsSheetHeaderProps = {
   subtasksCount: number;
   taskLabels: string[];
   onDetectPullRequest?: () => void;
+  gitProviderContext?: RepositoryGitProviderContext | undefined;
   onUnlinkPullRequest?: () => void;
   isDetectingPullRequest?: boolean;
   isUnlinkingPullRequest?: boolean;
@@ -25,16 +27,25 @@ export function TaskDetailsSheetHeader({
   subtasksCount,
   taskLabels,
   onDetectPullRequest,
+  gitProviderContext,
   onUnlinkPullRequest,
   isDetectingPullRequest = false,
   isUnlinkingPullRequest = false,
 }: TaskDetailsSheetHeaderProps): ReactElement {
   const isEpic = task.issueType === "epic";
   const qaRejected = isQaRejectedTask(task);
+  const detectPullRequestDisabledReason = pullRequestHealthError(gitProviderContext);
+  const supportsPullRequests =
+    gitProviderContext?.descriptor.capabilities.supportsPullRequests === true;
   const showDetectPullRequest =
-    task.pullRequest == null && canUnlinkTaskPullRequest(task.status) && onDetectPullRequest;
+    supportsPullRequests &&
+    task.pullRequest == null &&
+    canUnlinkTaskPullRequest(task.status) &&
+    onDetectPullRequest !== undefined;
   const showUnlinkPullRequest =
-    task.pullRequest != null && canUnlinkTaskPullRequest(task.status) && onUnlinkPullRequest;
+    task.pullRequest != null &&
+    canUnlinkTaskPullRequest(task.status) &&
+    onUnlinkPullRequest !== undefined;
   const showPullRequestActions = showDetectPullRequest || showUnlinkPullRequest;
   const aiReviewBadge = task.aiReviewEnabled ? (
     <Badge
@@ -92,18 +103,25 @@ export function TaskDetailsSheetHeader({
         {showPullRequestActions ? (
           <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-1 sm:w-auto">
             {showDetectPullRequest ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="font-semibold text-muted-foreground hover:text-foreground"
-                onClick={onDetectPullRequest}
-                disabled={isDetectingPullRequest}
-                data-testid="task-details-detect-pr-button"
-              >
-                <Link2 data-icon="inline-start" />
-                {isDetectingPullRequest ? "Detecting PR" : "Detect PR"}
-              </Button>
+              <div className="flex flex-col items-end gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="font-semibold text-muted-foreground hover:text-foreground"
+                  onClick={onDetectPullRequest}
+                  disabled={isDetectingPullRequest || detectPullRequestDisabledReason !== null}
+                  data-testid="task-details-detect-pr-button"
+                >
+                  <Link2 data-icon="inline-start" />
+                  {isDetectingPullRequest ? "Detecting PR" : "Detect PR"}
+                </Button>
+                {detectPullRequestDisabledReason ? (
+                  <p className="max-w-72 text-right text-xs text-destructive">
+                    {detectPullRequestDisabledReason}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
             {showUnlinkPullRequest ? (
               <Button

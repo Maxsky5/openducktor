@@ -392,10 +392,12 @@ export function useAgentStudioOrchestrationController({
           onReplyApproval,
         },
         roleLabelByRole,
+        gitProviderContext,
       }),
     [
       approvalReplyErrorByRequestId,
       hasActiveGitConflict,
+      gitProviderContext,
       isSessionWorking,
       isSubmittingApprovalByRequestId,
       isSubmittingQuestionByRequestId,

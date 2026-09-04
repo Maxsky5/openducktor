@@ -36,7 +36,6 @@ const approvalContext = (overrides: Partial<TaskApprovalContext> = {}): TaskAppr
   pullRequest: undefined,
   directMerge: undefined,
   suggestedSquashCommitMessage: undefined,
-  providers: [],
   ...overrides,
 });
 

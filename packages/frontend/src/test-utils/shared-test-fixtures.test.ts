@@ -8,6 +8,7 @@ import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
   createChatSettingsFixture,
+  createGitProviderContextFixture,
   createSettingsSnapshotFixture,
   createTaskCardFixture,
   TEST_EXTERNAL_SESSION_IDS,
@@ -46,6 +47,14 @@ describe("shared test fixtures", () => {
     expect(second.documentSummary.qaReport.verdict).toBe("not_reviewed");
     expect(second.agentWorkflows.builder.completed).toBe(false);
     expect(second.availableActions).toEqual([]);
+  });
+
+  test("createGitProviderContextFixture returns isolated nested objects", () => {
+    const first = createGitProviderContextFixture();
+    const second = createGitProviderContextFixture();
+
+    first.descriptor.capabilities.supportsPullRequests = false;
+    expect(second.descriptor.capabilities.supportsPullRequests).toBe(true);
   });
 
   test("createAgentSessionFixture returns isolated nested objects", () => {

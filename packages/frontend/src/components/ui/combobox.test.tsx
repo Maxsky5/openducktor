@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -126,6 +126,34 @@ describe("Combobox", () => {
     });
 
     expect(screen.getByText("TASK-123")).toBeTruthy();
+  });
+
+  test("does not select a disabled option", async () => {
+    const onValueChange = mock(() => {});
+
+    render(
+      <Combobox
+        value="ready"
+        options={[
+          { value: "ready", label: "Ready" },
+          { value: "blocked", label: "Blocked", disabled: true },
+        ]}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button"));
+    });
+
+    const blockedOption = screen.getByRole("option", { name: "Blocked" });
+    expect(blockedOption.getAttribute("aria-disabled")).toBe("true");
+
+    await act(async () => {
+      fireEvent.click(blockedOption);
+    });
+
+    expect(onValueChange).not.toHaveBeenCalled();
   });
 
   test("resets the result list scroll to the top when the query changes", async () => {

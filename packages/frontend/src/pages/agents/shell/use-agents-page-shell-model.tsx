@@ -127,6 +127,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     linkMergedPullRequest,
     cancelLinkMergedPullRequest,
     unlinkPullRequest,
+    gitProviderContext,
   });
 
   const {
@@ -182,6 +183,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest: taskActions.onDetectPullRequest,
+      gitProviderContext,
       onResolveGitConflict: handleResolveRebaseConflict,
       onGitConflictQuickActionContextChange,
     });

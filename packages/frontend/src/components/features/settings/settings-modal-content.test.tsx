@@ -598,19 +598,23 @@ describe("settings modal content", () => {
     const controller = createMockController(snapshot);
 
     const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "autopilot",
-        repositorySection: "configuration",
-        globalPromptRoleTab: "shared",
-        repoPromptRoleTab: "shared",
-        selectedReusablePromptId: null,
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptRoleTabChange: () => {},
-        onRepoPromptRoleTabChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, {
+          section: "autopilot",
+          repositorySection: "configuration",
+          globalPromptRoleTab: "shared",
+          repoPromptRoleTab: "shared",
+          selectedReusablePromptId: null,
+          isInteractionDisabled: false,
+          controller,
+          onRepositorySectionChange: () => {},
+          onGlobalPromptRoleTabChange: () => {},
+          onRepoPromptRoleTabChange: () => {},
+          onSelectedReusablePromptIdChange: () => {},
+        }),
+      ),
     );
 
     expect(html).toContain("Autopilot");

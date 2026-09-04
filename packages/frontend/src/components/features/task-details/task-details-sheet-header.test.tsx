@@ -2,9 +2,40 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
+import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import { TaskDetailsSheetHeader } from "./task-details-sheet-header";
 
 describe("TaskDetailsSheetHeader", () => {
+  test("hides Detect PR without provider support", () => {
+    const task = createTaskCardFixture({ id: "TASK-3", status: "human_review" });
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        gitProviderContext: null,
+        onDetectPullRequest: () => {},
+      }),
+    );
+    expect(html).not.toContain("task-details-detect-pr-button");
+  });
+
+  test("disables Detect PR and shows the provider health error", () => {
+    const task = createTaskCardFixture({ id: "TASK-3", status: "human_review" });
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        gitProviderContext: createGitProviderContextFixture(false),
+        onDetectPullRequest: () => {},
+      }),
+    );
+    expect(html).toContain("task-details-detect-pr-button");
+    expect(html).toContain("disabled");
+    expect(html).toContain("Sign in to GitHub CLI.");
+  });
+
   test("renders qa rejected badge for qa-rework tasks", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
@@ -67,6 +98,7 @@ describe("TaskDetailsSheetHeader", () => {
         task,
         subtasksCount: 0,
         taskLabels: [],
+        gitProviderContext: createGitProviderContextFixture(),
         onDetectPullRequest: () => {},
       }),
     );
@@ -97,6 +129,7 @@ describe("TaskDetailsSheetHeader", () => {
         task,
         subtasksCount: 0,
         taskLabels: [],
+        gitProviderContext: createGitProviderContextFixture(),
         onDetectPullRequest: () => {},
         onUnlinkPullRequest: () => {},
       }),
@@ -179,6 +212,7 @@ describe("TaskDetailsSheetHeader", () => {
         task,
         subtasksCount: 0,
         taskLabels: [],
+        gitProviderContext: createGitProviderContextFixture(),
         onDetectPullRequest: () => {},
         isDetectingPullRequest: true,
       }),

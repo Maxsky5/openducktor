@@ -264,6 +264,7 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
           isPushing={model.isPushing ?? false}
           isRebasing={model.isRebasing ?? false}
           isDetectingPullRequest={model.isDetectingPullRequest ?? false}
+          detectPullRequestDisabledReason={model.detectPullRequestDisabledReason ?? null}
           isGitActionsLocked={model.isGitActionsLocked ?? false}
           gitActionsLockReason={model.gitActionsLockReason ?? null}
           showLockReasonBanner={!hasGitConflict && (model.showLockReasonBanner ?? true)}

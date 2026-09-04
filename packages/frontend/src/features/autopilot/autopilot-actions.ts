@@ -17,8 +17,10 @@ import {
 } from "@/features/session-start/session-start-selection";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
+import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
 import { loadRepoConfigFromQuery, toRepoSettingsInput } from "@/state/queries/workspace";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -70,6 +72,27 @@ type SkippedAutopilotStart = {
 type AutopilotStartResolution = ResolvedAutopilotStart | SkippedAutopilotStart;
 
 const ROLE_LABELS = AGENT_ROLE_LABELS;
+
+const getPullRequestStartError = async ({
+  actionId,
+  activeWorkspace,
+  queryClient,
+}: Pick<ExecuteAutopilotActionArgs, "actionId" | "activeWorkspace" | "queryClient">): Promise<
+  string | null
+> => {
+  if (actionId !== "startGeneratePullRequest") {
+    return null;
+  }
+
+  const context = await queryClient.fetchQuery(
+    repositoryGitProviderContextQueryOptions(activeWorkspace.repoPath),
+  );
+  if (!context?.descriptor.capabilities.supportsPullRequests) {
+    return "The current Git provider does not support Pull Requests.";
+  }
+
+  return pullRequestHealthError(context);
+};
 
 const findLatestSessionRecordByRole = (
   sessions: AgentSessionRecord[],
@@ -295,6 +318,18 @@ export const executeAutopilotAction = async ({
   const action = AUTOPILOT_ACTION_DEFINITIONS[actionId];
 
   try {
+    const pullRequestError = await getPullRequestStartError({
+      actionId,
+      activeWorkspace,
+      queryClient,
+    });
+    if (pullRequestError) {
+      return {
+        kind: "skipped",
+        message: pullRequestError,
+      };
+    }
+
     const startResolution = await resolveAutopilotStart({
       activeWorkspace,
       action,

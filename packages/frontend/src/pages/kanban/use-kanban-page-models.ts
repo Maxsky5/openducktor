@@ -65,7 +65,7 @@ export function useKanbanPageModels({
   const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { loadGitProviderContext, repoSettings } = useAgentStudioRepoSettings({
+  const { gitProviderContext, loadGitProviderContext, repoSettings } = useAgentStudioRepoSettings({
     activeRepoPath: workspaceRepoPath,
     activeWorkspaceId,
   });
@@ -357,6 +357,7 @@ export function useKanbanPageModels({
       onResetTask,
       onCloseTask: closeTask,
       onDetectPullRequest,
+      gitProviderContext,
       onUnlinkPullRequest,
       detectingPullRequestTaskId,
       unlinkingPullRequestTaskId,

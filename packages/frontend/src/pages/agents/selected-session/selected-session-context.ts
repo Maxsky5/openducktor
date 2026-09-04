@@ -1,4 +1,8 @@
-import type { RuntimeApprovalReplyOutcome, TaskCard } from "@openducktor/contracts";
+import type {
+  RepositoryGitProviderContext,
+  RuntimeApprovalReplyOutcome,
+  TaskCard,
+} from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskExecutionDocument } from "@/components/features/agents";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -84,6 +88,7 @@ export type AgentStudioSelectedSessionContextInput = {
     onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
   };
   roleLabelByRole: Record<AgentRole, string>;
+  gitProviderContext?: RepositoryGitProviderContext | undefined;
 };
 
 const resolvePendingInputChildSession = (
@@ -151,6 +156,7 @@ export const buildAgentStudioSelectedSessionContext = ({
   documents,
   sessionActions,
   roleLabelByRole,
+  gitProviderContext,
 }: AgentStudioSelectedSessionContextInput): AgentStudioSelectedSessionContext => {
   const { identity: selectedSessionIdentity, loadedSession } = selectedSession;
   const workflow = buildWorkflowModelContext({
@@ -161,6 +167,7 @@ export const buildAgentStudioSelectedSessionContext = ({
     isSessionWorking: sessionActions.isSessionWorking,
     hasActiveGitConflict,
     roleLabelByRole,
+    gitProviderContext,
   });
   const activeDocument = taskId
     ? buildActiveDocumentForRole({

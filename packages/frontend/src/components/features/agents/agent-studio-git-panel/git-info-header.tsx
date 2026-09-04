@@ -41,6 +41,7 @@ type GitInfoHeaderProps = Pick<
   | "isPushing"
   | "isRebasing"
   | "isDetectingPullRequest"
+  | "detectPullRequestDisabledReason"
   | "isGitActionsLocked"
   | "gitActionsLockReason"
   | "showLockReasonBanner"
@@ -379,6 +380,7 @@ type GitActionRowProps = {
     isPushing: boolean;
     isRepositoryMode: boolean;
     showDetectPullRequest: boolean;
+    detectPullRequestDisabledReason: string | null;
   };
   onDetectPullRequest?: (() => Promise<void> | void) | null | undefined;
   onRefresh: () => void;
@@ -417,6 +419,7 @@ function GitActionRow({
     isPushing,
     isRepositoryMode,
     showDetectPullRequest,
+    detectPullRequestDisabledReason,
   } = actionState;
   return (
     <div
@@ -493,19 +496,24 @@ function GitActionRow({
         />
       </div>
       {showDetectPullRequest ? (
-        <div className="inline-flex items-center px-1">
+        <div className="flex flex-col items-end gap-1 px-1">
           <Button
             type="button"
             variant="ghost"
             size="sm"
             className="text-muted-foreground hover:bg-muted hover:text-foreground"
             onClick={() => void onDetectPullRequest?.()}
-            disabled={Boolean(isDetectingPullRequest)}
+            disabled={Boolean(isDetectingPullRequest) || detectPullRequestDisabledReason !== null}
             data-testid="agent-studio-git-detect-pr-button"
           >
             <Link2 data-icon="inline-start" />
             {isDetectingPullRequest ? "Detecting PR" : "Detect PR"}
           </Button>
+          {detectPullRequestDisabledReason ? (
+            <p className="max-w-72 text-right text-xs text-destructive">
+              {detectPullRequestDisabledReason}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -602,6 +610,7 @@ export const GitInfoHeader = memo(function GitInfoHeader({
   isPushing,
   isRebasing,
   isDetectingPullRequest,
+  detectPullRequestDisabledReason,
   isGitActionsLocked,
   gitActionsLockReason,
   showLockReasonBanner,
@@ -730,6 +739,7 @@ export const GitInfoHeader = memo(function GitInfoHeader({
           isPushing: Boolean(isPushing),
           isRepositoryMode,
           showDetectPullRequest,
+          detectPullRequestDisabledReason: detectPullRequestDisabledReason ?? null,
         }}
         onDetectPullRequest={onDetectPullRequest}
         onRefresh={onRefresh}

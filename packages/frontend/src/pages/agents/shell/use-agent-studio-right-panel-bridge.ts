@@ -30,6 +30,7 @@ type UseAgentStudioRightPanelBridgeArgs = {
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
+  gitProviderContext?: UseAgentsPageRightPanelModelArgs["gitProviderContext"];
   onResolveGitConflict: UseAgentsPageRightPanelModelArgs["onResolveGitConflict"];
   onGitConflictQuickActionContextChange: (
     context: AgentStudioGitConflictQuickActionContext | null,
@@ -54,6 +55,7 @@ export type AgentStudioRightPanelRuntimeModel = {
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
+  gitProviderContext?: UseAgentsPageRightPanelModelArgs["gitProviderContext"];
   onResolveGitConflict: UseAgentsPageRightPanelModelArgs["onResolveGitConflict"];
   onGitConflictQuickActionContextChange: NonNullable<
     UseAgentsPageRightPanelModelArgs["onGitConflictQuickActionContextChange"]
@@ -115,6 +117,7 @@ function buildAgentStudioRightPanelBridgeModel({
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
+  gitProviderContext,
   onResolveGitConflict,
   onGitConflictQuickActionContextChange,
 }: BuildAgentStudioRightPanelBridgeModelArgs): AgentStudioRightPanelBridgeModel {
@@ -145,6 +148,7 @@ function buildAgentStudioRightPanelBridgeModel({
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest,
+      gitProviderContext,
       onResolveGitConflict,
       onGitConflictQuickActionContextChange,
     },
@@ -165,6 +169,7 @@ export function useAgentStudioRightPanelBridge({
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
+  gitProviderContext,
   onResolveGitConflict,
   onGitConflictQuickActionContextChange,
 }: UseAgentStudioRightPanelBridgeArgs): AgentStudioRightPanelShellModel {
@@ -198,6 +203,7 @@ export function useAgentStudioRightPanelBridge({
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest,
+      gitProviderContext,
       onResolveGitConflict,
       onGitConflictQuickActionContextChange,
     });
@@ -211,6 +217,7 @@ export function useAgentStudioRightPanelBridge({
     isPanelOpen,
     onClearSelectedFile,
     onDetectPullRequest,
+    gitProviderContext,
     onSelectFile,
     onActiveTabChange,
     pullRequestReviewUnavailableReason,

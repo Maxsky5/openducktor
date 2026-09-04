@@ -8,6 +8,7 @@ import {
   INVALID_TASK_TARGET_BRANCH_LABEL,
   resolveTaskTargetBranchState,
 } from "@/lib/target-branch";
+import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import { createTaskCardFixture } from "../agent-studio-test-utils";
 import {
   buildAgentsPageDiffModel,
@@ -345,6 +346,55 @@ describe("resolveBuildToolsOpenInTarget", () => {
 });
 
 describe("buildAgentsPageDiffModel", () => {
+  const createPullRequestDetectionArgs = () => ({
+    branches: [],
+    buildToolsSnapshot: {
+      diffData: createDiffData(),
+      gitPanelContextMode: "repository" as const,
+      openInTarget: { path: "/repo", disabledReason: null },
+      resolvedGitPanelBranch: "main",
+      targetBranchState: resolveTaskTargetBranchState({
+        taskTargetBranch: null,
+        taskTargetBranchError: null,
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+      }),
+    },
+    gitActions: createGitActions(),
+    selectedTask: createTaskCardFixture({
+      id: "task-24",
+      status: "human_review",
+      agentWorkflows: {
+        spec: { required: false, canSkip: true, available: true, completed: true },
+        planner: { required: false, canSkip: true, available: true, completed: true },
+        builder: { required: true, canSkip: false, available: true, completed: true },
+        qa: { required: false, canSkip: true, available: false, completed: true },
+      },
+    }),
+    detectingPullRequestTaskId: null,
+    onDetectPullRequest: () => {},
+  });
+
+  test("hides unsupported Pull Request detection", () => {
+    expect(
+      buildAgentsPageDiffModel({
+        ...createPullRequestDetectionArgs(),
+        gitProviderContext: null,
+      }).onDetectPullRequest,
+    ).toBeUndefined();
+  });
+
+  test("carries the provider health error for supported Pull Request detection", () => {
+    const common = {
+      ...createPullRequestDetectionArgs(),
+      gitProviderContext: createGitProviderContextFixture(false),
+    };
+
+    expect(buildAgentsPageDiffModel(common)).toMatchObject({
+      onDetectPullRequest: expect.any(Function),
+      detectPullRequestDisabledReason: "Sign in to GitHub CLI.",
+    });
+  });
+
   test("locks git actions from snapshot target-branch validation", () => {
     const validationError = "Invalid openducktor.targetBranch metadata: missing field `branch`.";
     const diffModel = buildAgentsPageDiffModel({

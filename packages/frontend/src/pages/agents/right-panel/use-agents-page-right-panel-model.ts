@@ -1,4 +1,8 @@
-import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
+import type {
+  GitBranch,
+  RepositoryGitProviderContext,
+  SystemOpenInToolId,
+} from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type {
@@ -9,6 +13,7 @@ import { toBranchSelectorOptions } from "@/components/features/repository/branch
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import type { GitConflict, GitDiffRefresh } from "@/features/agent-studio-git";
+import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
@@ -47,6 +52,7 @@ export type UseAgentsPageRightPanelModelArgs = {
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
+  gitProviderContext?: RepositoryGitProviderContext | undefined;
   onResolveGitConflict: Parameters<typeof useAgentStudioGitActions>[0]["onResolveGitConflict"];
   onGitConflictQuickActionContextChange?: (
     context: AgentStudioGitConflictQuickActionContext | null,
@@ -70,6 +76,7 @@ type BuildAgentsPageDiffModelArgs<GitActions extends object> = {
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
+  gitProviderContext?: RepositoryGitProviderContext | undefined;
   openDirectoryInTool?: (path: string, toolId: SystemOpenInToolId) => Promise<void>;
 };
 
@@ -78,6 +85,7 @@ type BuildAgentsPageDiffOptionalModel = {
   targetBranch?: BuildAgentsPageDiffModelSnapshot["targetBranchState"]["displayTargetBranch"];
   isDetectingPullRequest?: true;
   onDetectPullRequest?: () => void;
+  detectPullRequestDisabledReason?: string;
   isGitActionsLocked?: true;
   gitActionsLockReason?: string;
   showLockReasonBanner?: true;
@@ -108,15 +116,20 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
+  gitProviderContext,
   openDirectoryInTool = hostClient.systemOpenDirectoryInTool,
 }: BuildAgentsPageDiffModelArgs<GitActions>) {
   const { diffData, gitPanelContextMode, openInTarget, resolvedGitPanelBranch, targetBranchState } =
     buildToolsSnapshot;
   const targetBranchValidationError = targetBranchState.validationError;
   const pullRequestDetectionTask =
-    selectedTask && !selectedTask.pullRequest && canDetectTaskPullRequest(selectedTask)
+    gitProviderContext?.descriptor.capabilities.supportsPullRequests === true &&
+    selectedTask &&
+    !selectedTask.pullRequest &&
+    canDetectTaskPullRequest(selectedTask)
       ? selectedTask
       : null;
+  const detectPullRequestDisabledReason = pullRequestHealthError(gitProviderContext);
   let targetBranchUpdateModel = {};
   if (gitPanelContextMode === "worktree" && selectedTask && setTaskTargetBranch) {
     const configuredTargetBranch = canonicalTargetBranch(targetBranchState.effectiveTargetBranch);
@@ -158,6 +171,9 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
   }
   if (pullRequestDetectionTask) {
     optionalModel.onDetectPullRequest = () => onDetectPullRequest(pullRequestDetectionTask.id);
+    if (detectPullRequestDisabledReason) {
+      optionalModel.detectPullRequestDisabledReason = detectPullRequestDisabledReason;
+    }
   }
 
   return {
@@ -261,6 +277,7 @@ export function useAgentsPageRightPanelModel({
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
+  gitProviderContext,
   onResolveGitConflict,
   onGitConflictQuickActionContextChange,
 }: UseAgentsPageRightPanelModelArgs) {
@@ -340,6 +357,7 @@ export function useAgentsPageRightPanelModel({
       selectedTask: selectedView.selectedTask,
       detectingPullRequestTaskId,
       onDetectPullRequest,
+      gitProviderContext,
     };
     if (setTaskTargetBranch) {
       input.setTaskTargetBranch = setTaskTargetBranch;
@@ -350,6 +368,7 @@ export function useAgentsPageRightPanelModel({
     branches,
     gitActions,
     onDetectPullRequest,
+    gitProviderContext,
     detectingPullRequestTaskId,
     setTaskTargetBranch,
     selectedView.selectedTask,

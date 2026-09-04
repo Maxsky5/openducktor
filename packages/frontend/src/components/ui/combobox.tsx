@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 export type ComboboxOption = {
   value: string;
   label: string;
+  disabled?: boolean;
   searchText?: string;
   searchKeywords?: string[];
   description?: string;
@@ -172,6 +173,7 @@ function ComboboxOptionItem({
     <CommandItem
       value={option.value}
       keywords={getOptionFilterKeywords(option)}
+      disabled={option.disabled === true}
       onSelect={() => {
         onValueChange(option.value);
         onSelectComplete();

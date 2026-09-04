@@ -1605,7 +1605,6 @@ describe("KanbanPage session start modal flow", () => {
         defaultMergeMethod: "merge_commit",
         hasUncommittedChanges: false,
         uncommittedFileCount: 0,
-        providers: [],
       };
       let renderer: KanbanPageHarness | null = null;
 
