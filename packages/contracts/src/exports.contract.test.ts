@@ -8,6 +8,7 @@ import type {
   AgentRuntimeConfig,
   AgentRuntimeEvent,
   AgentRuntimes,
+  AgentRepositorySessionStartInput,
   AgentSessionActivity,
   AgentSessionAssociation,
   AgentSessionContextUsage,
@@ -353,6 +354,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionControlResumeInputSchema",
   "agentSessionControlSendInputSchema",
   "agentSessionControlStartInputSchema",
+  "agentRepositorySessionStartInputSchema",
   "agentSessionControlStopInputSchema",
   "agentSessionControlSummarySchema",
   "agentSessionControlUpdateModelInputSchema",
@@ -884,6 +886,7 @@ type ExportedTypeContract = {
   AgentRuntimeConfig: AgentRuntimeConfig;
   AgentRuntimeEvent: AgentRuntimeEvent;
   AgentRuntimes: AgentRuntimes;
+  AgentRepositorySessionStartInput: AgentRepositorySessionStartInput;
   AgentSessionActivity: AgentSessionActivity;
   AgentSessionAssociation: AgentSessionAssociation;
   AgentSessionContextUsage: AgentSessionContextUsage;

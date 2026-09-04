@@ -1,13 +1,14 @@
 import {
+  type AgentRepositorySessionStartInput,
   type AgentSessionControlSendInput,
   type AgentSessionUserMessagePart,
   type AgentSessionControlSummary,
   type AgentWorkflowSessionStartInput,
+  agentRepositorySessionStartInputSchema,
   agentSessionControlForkInputSchema,
   agentSessionControlReleaseInputSchema,
   agentSessionControlResumeInputSchema,
   agentSessionControlSendInputSchema,
-  agentSessionControlStartInputSchema,
   agentSessionControlStopInputSchema,
   agentSessionControlUpdateModelInputSchema,
   agentSessionLiveListInputSchema,
@@ -48,7 +49,10 @@ const parseCommandInput = <Output>(
   });
 
 type LocalAttachmentResolver = Pick<LocalAttachmentService, "resolve">;
-type AgentSessionCommandService = AgentSessionLiveStateService & {
+type AgentSessionCommandService = Omit<AgentSessionLiveStateService, "startSession"> & {
+  startSession: (
+    input: AgentRepositorySessionStartInput,
+  ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
   startWorkflowSession: (
     input: AgentWorkflowSessionStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
@@ -111,7 +115,7 @@ export const createAgentSessionLiveCommandHandlers = (
       ),
     agent_session_control_start: (args) =>
       parseCommandInput(
-        agentSessionControlStartInputSchema,
+        agentRepositorySessionStartInputSchema,
         args,
         "agent_session_control_start",
       ).pipe(Effect.flatMap(service.startSession)),

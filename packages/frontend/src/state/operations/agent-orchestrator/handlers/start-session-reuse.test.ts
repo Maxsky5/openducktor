@@ -15,6 +15,7 @@ import {
   persistedSessionRecord,
   setPersistedSessionListFixture,
   taskFixture,
+  workflowSessionStartSummary,
 } from "./start-session.test-helpers";
 
 interface SessionsRefContract {
@@ -49,12 +50,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
           startedAt: "2026-02-22T08:10:00.000Z",
         }),
       ]),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-2",
-        workingDirectory: "/tmp/repo",
-      }),
     });
 
     try {
@@ -95,12 +90,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
           startedAt: "2026-02-22T08:00:00.000Z",
         }),
       ]),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-2",
-        workingDirectory: "/tmp/repo",
-      }),
     });
 
     try {
@@ -131,22 +120,14 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       return [];
     };
 
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-fresh-build-session",
-        startedAt: "2026-02-22T08:20:00.000Z",
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
-    };
-
     const { start } = createStartSessionTestHarness({
-      adapter,
+      startWorkflowSession: async (input) => {
+        startCalls += 1;
+        return workflowSessionStartSummary(input, {
+          externalSessionId: "external-fresh-build-session",
+          startedAt: "2026-02-22T08:20:00.000Z",
+        });
+      },
       sessionsRef: createSessionsRef([
         sessionFixture({
           externalSessionId: "external-stale",
@@ -155,12 +136,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         }),
       ]),
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-2",
-        workingDirectory: "/tmp/repo/new-worktree",
-      }),
     });
 
     try {
@@ -177,7 +152,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       expect(startCalls).toBe(1);
       expect(persistedListCalls).toBe(0);
     } finally {
-      adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
@@ -199,12 +173,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         }),
       ]),
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
     });
 
     try {
@@ -249,12 +217,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
 
     const { start } = createStartSessionTestHarness({
       sessionsRef,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-2",
-        workingDirectory: "/tmp/repo",
-      }),
     });
 
     try {
@@ -320,12 +282,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         }),
       ]),
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-claude",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
     });
 
     try {
@@ -392,12 +348,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         }),
       ]),
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-2",
-        workingDirectory: "/tmp/repo",
-      }),
     });
 
     try {
@@ -424,20 +374,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     let startCalls = 0;
     let persistedListCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "fresh-ext",
-        startedAt: "2026-02-22T09:00:00.000Z",
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
-    };
-
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => {
       persistedListCalls += 1;
@@ -453,7 +389,13 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     };
 
     const { start } = createStartSessionTestHarness({
-      adapter,
+      startWorkflowSession: async (input) => {
+        startCalls += 1;
+        return workflowSessionStartSummary(input, {
+          externalSessionId: "fresh-ext",
+          startedAt: "2026-02-22T09:00:00.000Z",
+        });
+      },
       sessionsRef: createSessionsRef([
         sessionFixture({
           externalSessionId: "existing-build-ext",
@@ -461,11 +403,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
         }),
       ]),
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
     });
 
     try {
@@ -480,27 +417,12 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       expect(startCalls).toBe(1);
       expect(persistedListCalls).toBe(0);
     } finally {
-      adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
 
   test("does not reuse in-memory session from a different role", async () => {
     let startCalls = 0;
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "planner-ext",
-        startedAt: "2026-02-22T08:30:00.000Z",
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
-    };
 
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
@@ -516,14 +438,15 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     };
 
     const { start } = createStartSessionTestHarness({
-      adapter,
+      startWorkflowSession: async (input) => {
+        startCalls += 1;
+        return workflowSessionStartSummary(input, {
+          externalSessionId: "planner-ext",
+          startedAt: "2026-02-22T08:30:00.000Z",
+        });
+      },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
     });
 
     try {
@@ -538,7 +461,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       );
       expect(startCalls).toBe(1);
     } finally {
-      adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
@@ -646,12 +568,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-claude",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
       loadSourceSession: async () => {
         loadSourceSessionCalls += 1;
         const session = sessionFixture({
@@ -727,12 +643,6 @@ describe("agent-orchestrator/handlers/start-session reuse", () => {
     const { start } = createStartSessionTestHarness({
       adapter,
       sessionsRef,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-claude",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
       loadSourceSession: async () => {
         loadSourceSessionCalls += 1;
         const session = sessionFixture({

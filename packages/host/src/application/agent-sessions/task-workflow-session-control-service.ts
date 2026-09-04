@@ -1,9 +1,6 @@
 import type {
-  AgentSessionControlForkInput,
-  AgentSessionControlResumeInput,
+  AgentRepositorySessionStartInput,
   AgentSessionControlSendInput,
-  AgentSessionControlStartInput,
-  AgentSessionControlStopInput,
   AgentSessionControlSummary,
   AgentSessionLiveRef,
   AgentSessionModelSettings,
@@ -25,6 +22,7 @@ import type { AgentSessionLiveStateService } from "./agent-session-live-state-se
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { TaskSessionStartPreparationService } from "../tasks/worktrees/task-session-start-preparation-service";
 import { createStartTaskWorkflowSession } from "./task-workflow-session-start";
+import { storeWorkflowSession, toControlSessionRef } from "./task-workflow-session-storage";
 
 export type RuntimeControl = Pick<
   AgentSessionLiveStateService,
@@ -49,46 +47,10 @@ type StoredWorkflowSessionRef = AgentSessionLiveRef & {
   sessionScope: AgentSessionWorkflowScope;
 };
 
-type ControlledLaunchInput =
-  | AgentWorkflowSessionStartInput
-  | AgentSessionControlStartInput
-  | AgentSessionControlResumeInput
-  | AgentSessionControlForkInput;
-
-const storeWorkflowSession = (
-  tasks: TaskSessions,
-  input: ControlledLaunchInput,
-  summary: AgentSessionControlSummary,
-  selectedModel: AgentSessionRecord["selectedModel"] = null,
-) => {
-  if (input.sessionScope.kind !== "workflow") {
-    return Effect.void;
-  }
-  const scope = input.sessionScope;
-  return tasks
-    .agentSessionUpsert({
-      repoPath: input.repoPath,
-      taskId: scope.taskId,
-      session: {
-        externalSessionId: summary.externalSessionId,
-        role: scope.role,
-        startedAt: summary.startedAt,
-        runtimeKind: summary.runtimeKind,
-        workingDirectory: summary.workingDirectory,
-        selectedModel: input.model
-          ? { ...input.model, runtimeKind: summary.runtimeKind }
-          : selectedModel,
-      },
-    })
-    .pipe(
-      Effect.asVoid,
-      Effect.mapError((cause) =>
-        toHostOperationError(cause, "task-workflow-session.create", {
-          repoPath: input.repoPath,
-          taskId: scope.taskId,
-        }),
-      ),
-    );
+type ControlledWorkflowLaunchInput = {
+  repoPath: string;
+  sessionScope: AgentSessionWorkflowScope;
+  model: AgentWorkflowSessionStartInput["model"] | undefined;
 };
 
 const readStoredWorkflowSession = (
@@ -130,30 +92,28 @@ const readStoredWorkflowSession = (
   );
 };
 
-const controlSessionRef = (
-  repoPath: string,
-  summary: AgentSessionControlSummary,
-): AgentSessionControlStopInput => ({
-  repoPath,
-  runtimeKind: summary.runtimeKind,
-  workingDirectory: summary.workingDirectory,
-  externalSessionId: summary.externalSessionId,
-});
-
 const storeControlResult = (
   tasks: TaskSessions,
   runtime: RuntimeControl,
-  input: ControlledLaunchInput,
+  input: ControlledWorkflowLaunchInput,
   summary: AgentSessionControlSummary,
   cleanup: "release" | "stop",
   selectedModel?: AgentSessionRecord["selectedModel"],
 ) =>
   Effect.gen(function* () {
-    const stored = yield* Effect.either(storeWorkflowSession(tasks, input, summary, selectedModel));
+    const stored = yield* Effect.either(
+      storeWorkflowSession(tasks, {
+        repoPath: input.repoPath,
+        sessionScope: input.sessionScope,
+        model: input.model,
+        selectedModel,
+        summary,
+      }),
+    );
     if (stored._tag === "Right") {
       return summary;
     }
-    const ref = controlSessionRef(input.repoPath, summary);
+    const ref = toControlSessionRef(input.repoPath, summary);
     const cleaned = yield* Effect.either(
       cleanup === "release" ? runtime.releaseSession(ref) : runtime.stopSession(ref),
     );
@@ -199,17 +159,16 @@ export const createTaskWorkflowSessionControlService = ({
   tasks: TaskSessions;
   taskLifecycle: TaskLifecycle;
   taskSessionStart: TaskSessionStartPreparationService;
-}): RuntimeControl & {
+}): Omit<RuntimeControl, "startSession"> & {
+  startSession: (
+    input: AgentRepositorySessionStartInput,
+  ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
   startWorkflowSession: (
     input: AgentWorkflowSessionStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
 } => ({
   ...runtime,
-  startSession: (input) =>
-    Effect.gen(function* () {
-      const summary = yield* runtime.startSession(input);
-      return yield* storeControlResult(tasks, runtime, input, summary, "stop");
-    }),
+  startSession: (input) => runtime.startSession(input),
   startWorkflowSession: createStartTaskWorkflowSession({
     canonicalizeRepoPath,
     runtime,
@@ -247,7 +206,11 @@ export const createTaskWorkflowSessionControlService = ({
         return yield* storeControlResult(
           tasks,
           runtime,
-          runtimeInput,
+          {
+            repoPath,
+            sessionScope: scope,
+            model: input.model,
+          },
           summary,
           "release",
           stored.selectedModel,
@@ -291,7 +254,17 @@ export const createTaskWorkflowSessionControlService = ({
           workingDirectory: parent.workingDirectory,
         };
         const summary = yield* runtime.forkSession(runtimeInput);
-        return yield* storeControlResult(tasks, runtime, runtimeInput, summary, "stop");
+        return yield* storeControlResult(
+          tasks,
+          runtime,
+          {
+            repoPath,
+            sessionScope: scope,
+            model: input.model,
+          },
+          summary,
+          "stop",
+        );
       }),
     );
   },

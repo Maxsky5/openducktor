@@ -115,12 +115,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
     });
 
     try {
@@ -355,12 +349,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
       loadSourceSession: async ({ taskId }) => {
         loadSourceSessionCalls.push(taskId);
         return null;
@@ -471,12 +459,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
     });
 
     try {
@@ -538,12 +520,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
     });
 
     try {
@@ -662,12 +638,6 @@ describe("agent-orchestrator/handlers/start-session fork", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       currentWorkspaceRepoPathRef,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
     });
 
     try {

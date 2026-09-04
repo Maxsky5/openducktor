@@ -18,7 +18,7 @@ import { resolveStartTask } from "./start-session-policies";
 import { resolveLoadedSourceSession } from "./start-session-reuse-strategy";
 
 export type WorkflowPreparedLaunch = {
-  launch: Extract<PreparedSessionLaunch, { mode: "start" | "fork" }>;
+  launch: Extract<PreparedSessionLaunch, { mode: "workflow_start" | "fork" }>;
 };
 
 const toWorkflowAssociation = (ctx: StartSessionContext) =>
@@ -45,8 +45,8 @@ export const prepareWorkflowFreshLaunch = async ({
 
   const systemPrompt = await loadStartSystemPrompt({ ctx, taskCard, deps });
 
-  const launch: Extract<PreparedSessionLaunch, { mode: "start" }> = {
-    mode: "start",
+  const launch: Extract<PreparedSessionLaunch, { mode: "workflow_start" }> = {
+    mode: "workflow_start",
     repoPath: ctx.repoPath,
     runtimeKind: selectedModelRuntimeKind,
     sessionAssociation: toWorkflowAssociation(ctx),

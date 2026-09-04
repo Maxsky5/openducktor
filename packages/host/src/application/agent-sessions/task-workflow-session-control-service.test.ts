@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlSendInput,
-  AgentSessionControlStartInput,
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
   AgentSessionRecord,
+  AgentWorkflowSessionStartInput,
   TaskCard,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -33,10 +33,10 @@ const createTaskWorkflowSessionControlService = (input: TestControlServiceInput)
     },
   });
 
-const workflowStart: AgentSessionControlStartInput = {
+const workflowStart: AgentWorkflowSessionStartInput = {
   repoPath: "/repo",
   runtimeKind: "opencode",
-  workingDirectory: "/repo/worktree",
+  targetWorkingDirectory: "/repo/worktree",
   sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
   systemPrompt: "Build the feature",
   model: {
@@ -433,63 +433,6 @@ describe("createTaskWorkflowSessionControlService", () => {
     expect(calls).toEqual(["stop-runtime"]);
   });
 
-  test("stores a workflow session only from its runtime control result", async () => {
-    const calls: string[] = [];
-    const stored: Array<{
-      repoPath: string;
-      taskId: string;
-      session: AgentSessionRecord;
-    }> = [];
-    const service = createTaskWorkflowSessionControlService({
-      ...createControlDeps(),
-      runtime: {
-        startSession: () =>
-          Effect.sync(() => {
-            calls.push("runtime");
-            return summary;
-          }),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
-        sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: () => Effect.dieMessage("unexpected stop"),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
-      },
-      tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected list"),
-        agentSessionUpsert: (input) =>
-          Effect.sync(() => {
-            calls.push("store");
-            stored.push(input);
-            return true;
-          }),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
-      },
-    });
-
-    await Effect.runPromise(service.startSession(workflowStart));
-
-    expect(calls).toEqual(["runtime", "store"]);
-    expect(stored).toEqual([
-      {
-        repoPath: "/repo",
-        taskId: "task-1",
-        session: {
-          externalSessionId: "session-1",
-          role: "build",
-          startedAt: "2026-09-02T10:00:00.000Z",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-          },
-        },
-      },
-    ]);
-  });
-
   test("does not store a repository session", async () => {
     let storeCount = 0;
     const service = createTaskWorkflowSessionControlService({
@@ -516,8 +459,12 @@ describe("createTaskWorkflowSessionControlService", () => {
 
     await Effect.runPromise(
       service.startSession({
-        ...workflowStart,
+        repoPath: workflowStart.repoPath,
+        runtimeKind: workflowStart.runtimeKind,
+        workingDirectory: "/repo/worktree",
         sessionScope: { kind: "repository" },
+        systemPrompt: workflowStart.systemPrompt,
+        model: workflowStart.model,
       }),
     );
 
@@ -822,41 +769,6 @@ describe("createTaskWorkflowSessionControlService", () => {
 
     expect(result._tag).toBe("Left");
     expect(runtimeCalls).toBe(0);
-  });
-
-  test("stops a new runtime session when its task record cannot be stored", async () => {
-    const stopped: string[] = [];
-    const service = createTaskWorkflowSessionControlService({
-      ...createControlDeps(),
-      runtime: {
-        startSession: () => Effect.succeed(summary),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
-        sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: (input) =>
-          Effect.sync(() => {
-            stopped.push(input.externalSessionId);
-          }),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
-      },
-      tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected list"),
-        agentSessionUpsert: () =>
-          Effect.fail(
-            new HostOperationError({
-              operation: "task-session.store",
-              message: "task store unavailable",
-            }),
-          ),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
-      },
-    });
-
-    await expect(Effect.runPromise(service.startSession(workflowStart))).rejects.toThrow(
-      "task store unavailable",
-    );
-    expect(stopped).toEqual(["session-1"]);
   });
 
   test("updates a stored model only after the runtime accepts the workflow change", async () => {

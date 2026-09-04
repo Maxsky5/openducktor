@@ -12,6 +12,7 @@ import {
   BUILD_SELECTION,
   createStartSessionTestHarness,
   taskFixture,
+  workflowSessionStartSummary,
 } from "./start-session.test-helpers";
 
 interface SessionsRefContract {
@@ -60,16 +61,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     };
 
     const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
     const originalStopSession = adapter.stopSession;
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-created",
-      startedAt: "2026-02-22T08:00:10.000Z",
-      sessionAssociation: input.sessionScope,
-      status: "idle",
-    });
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
@@ -83,6 +75,8 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       currentWorkspaceRepoPathRef,
+      startWorkflowSession: async (input) =>
+        workflowSessionStartSummary(input, { externalSessionId: "external-created" }),
     });
 
     try {
@@ -99,7 +93,6 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       ]);
       expect(stopCalls).toBe(1);
     } finally {
-      adapter.startSession = originalStartSession;
       adapter.stopSession = originalStopSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
@@ -110,19 +103,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     let stopCalls = 0;
 
     const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
     const originalStopSession = adapter.stopSession;
-    adapter.startSession = async (input) => {
-      currentWorkspaceRepoPathRef.current = "/tmp/other";
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-created",
-        startedAt: "2026-02-22T08:00:10.000Z",
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
-    };
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
@@ -134,53 +115,9 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       adapter,
       taskRef: { current: [taskFixture] },
       currentWorkspaceRepoPathRef,
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        }),
-      ).rejects.toThrow("Workspace changed while starting session.");
-      expect(stopCalls).toBe(1);
-    } finally {
-      adapter.startSession = originalStartSession;
-      adapter.stopSession = originalStopSession;
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("aborts worktree bootstrap when the workspace becomes stale after runtime preparation", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
-    let abortCalls = 0;
-    let startCalls = 0;
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      return originalStartSession(input);
-    };
-
-    const { start } = createStartSessionTestHarness({
-      adapter,
-      taskRef: { current: [taskFixture] },
-      currentWorkspaceRepoPathRef,
-      ensureRuntime: async () => {
+      startWorkflowSession: async (input) => {
         currentWorkspaceRepoPathRef.current = "/tmp/other";
-        return {
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-          bootstrap: {
-            complete: async () => {},
-            abort: async () => {
-              abortCalls += 1;
-            },
-          },
-        };
+        return workflowSessionStartSummary(input, { externalSessionId: "external-created" });
       },
     });
 
@@ -193,10 +130,10 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
           selectedModel: BUILD_SELECTION,
         }),
       ).rejects.toThrow("Workspace changed while starting session.");
-      expect(abortCalls).toBe(1);
-      expect(startCalls).toBe(0);
+      expect(stopCalls).toBe(1);
     } finally {
-      adapter.startSession = originalStartSession;
+      adapter.stopSession = originalStopSession;
+      host.agentSessionsList = originalAgentSessionsList;
     }
   });
 
@@ -205,19 +142,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     let stopCalls = 0;
 
     const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
     const originalStopSession = adapter.stopSession;
-    adapter.startSession = async (input) => {
-      currentWorkspaceRepoPathRef.current = "/tmp/other";
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-created",
-        startedAt: "2026-02-22T08:00:10.000Z",
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
-    };
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
@@ -229,6 +154,10 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       adapter,
       taskRef: { current: [taskFixture] },
       currentWorkspaceRepoPathRef,
+      startWorkflowSession: async (input) => {
+        currentWorkspaceRepoPathRef.current = "/tmp/other";
+        return workflowSessionStartSummary(input, { externalSessionId: "external-created" });
+      },
     });
 
     try {
@@ -242,7 +171,6 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       ).rejects.toThrow("Workspace changed while starting session.");
       expect(stopCalls).toBe(1);
     } finally {
-      adapter.startSession = originalStartSession;
       adapter.stopSession = originalStopSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
@@ -252,19 +180,7 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
 
     const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
     const originalStopSession = adapter.stopSession;
-    adapter.startSession = async (input) => {
-      currentWorkspaceRepoPathRef.current = "/tmp/other";
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-created",
-        startedAt: "2026-02-22T08:00:10.000Z",
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
-    };
     adapter.stopSession = async () => {
       throw new Error("stop boom");
     };
@@ -276,6 +192,10 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
       adapter,
       taskRef: { current: [taskFixture] },
       currentWorkspaceRepoPathRef,
+      startWorkflowSession: async (input) => {
+        currentWorkspaceRepoPathRef.current = "/tmp/other";
+        return workflowSessionStartSummary(input, { externalSessionId: "external-created" });
+      },
     });
 
     try {
@@ -294,7 +214,6 @@ describe("agent-orchestrator/handlers/start-session stale workspace", () => {
         expect(String(calls[0]?.[1] ?? "")).toBe("start-session-stop-on-stale-after-start");
       });
     } finally {
-      adapter.startSession = originalStartSession;
       adapter.stopSession = originalStopSession;
       host.agentSessionsList = originalAgentSessionsList;
     }

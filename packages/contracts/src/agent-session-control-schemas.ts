@@ -4,6 +4,7 @@ import { agentUserMessageEventSchema } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
+  agentSessionRepositoryScopeSchema,
   agentSessionScopeSchema,
   agentSessionWorkflowScopeSchema,
 } from "./agent-session-schemas";
@@ -82,6 +83,13 @@ export const agentSessionControlStartInputSchema = z
   })
   .strict();
 export type AgentSessionControlStartInput = z.infer<typeof agentSessionControlStartInputSchema>;
+
+export const agentRepositorySessionStartInputSchema = agentSessionControlStartInputSchema.extend({
+  sessionScope: agentSessionRepositoryScopeSchema,
+});
+export type AgentRepositorySessionStartInput = z.infer<
+  typeof agentRepositorySessionStartInputSchema
+>;
 
 export const agentWorkflowSessionStartInputSchema = z
   .object({

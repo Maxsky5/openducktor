@@ -192,7 +192,7 @@ const WORKFLOW_MODEL = {
 };
 
 const workflowStartLaunch = (): PreparedSessionLaunch => ({
-  mode: "start",
+  mode: "workflow_start",
   repoPath: REPO_PATH,
   runtimeKind: "opencode",
   sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },

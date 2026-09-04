@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  AgentRepositorySessionStartInput,
   AgentSessionControlSendInput,
   AgentSessionControlStartInput,
   AgentSessionLiveEnvelope,
@@ -15,12 +16,12 @@ import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-l
 import { createEffectHostCommandRouter } from "../router/host-command-router";
 import { createAgentSessionLiveCommandHandlers } from "./agent-session-live-command-handlers";
 
-const startInput: AgentSessionControlStartInput = {
+const startInput: AgentRepositorySessionStartInput = {
   repoPath: "/repo",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
-  sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-  systemPrompt: "Build the feature",
+  sessionScope: { kind: "repository" },
+  systemPrompt: "Repository chat",
 };
 
 const controlSummary = (
@@ -242,6 +243,20 @@ describe("createAgentSessionLiveCommandHandlers", () => {
     ).resolves.toMatchObject({ externalSessionId: "fork-1" });
     expect(resumes).toEqual([resumeInput]);
     expect(forks).toEqual([forkInput]);
+  });
+
+  test("rejects workflow scope from the generic start command", async () => {
+    const { router, starts } = await createHarness();
+
+    await expect(
+      Effect.runPromise(
+        router.invoke("agent_session_control_start", {
+          ...startInput,
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(starts).toEqual([]);
   });
 
   test("rejects native routing fields before invoking an adapter", async () => {

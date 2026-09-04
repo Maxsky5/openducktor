@@ -3,6 +3,14 @@ import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { buildBranchName } from "../../../domain/task";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
+import type { GitPort } from "../../../ports/git-port";
+import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
+import type { SettingsConfigPort } from "../../../ports/settings-config-port";
+import type { SystemCommandPort } from "../../../ports/system-command-port";
+import type { TaskStorePort } from "../../../ports/task-repository-ports";
+import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
+import type { RuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
+import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import {
   requireBuildStartDependencies,
   requireDependencies,
@@ -15,8 +23,8 @@ import {
   type PreparedTaskWorktree,
   validateExistingGitTaskWorktree,
 } from "../support/task-worktree-start";
-import type { TaskStorePort } from "../../../ports/task-repository-ports";
-import type { CreateTaskServiceInput, TaskServiceError } from "../task-service";
+import type { TaskServiceError } from "../task-service";
+import type { TaskSessionLifecycleCoordinator } from "./task-session-lifecycle-coordinator";
 
 export type PreparedTaskSessionStart = {
   canonicalRepoPath: string;
@@ -29,7 +37,7 @@ export type PreparedTaskSessionStart = {
 };
 
 export type TaskSessionStartPreparationInput = {
-  repoPath: string;
+  canonicalRepoPath: string;
   taskId: string;
   role: AgentRole;
   runtimeKind: string;
@@ -39,6 +47,18 @@ export type TaskSessionStartPreparationInput = {
 export type TaskSessionStartPreparationService = ReturnType<
   typeof createTaskSessionStartPreparationService
 >;
+
+export type TaskSessionStartPreparationDependencies = {
+  gitPort?: GitPort;
+  taskStore: TaskStorePort;
+  settingsConfig?: SettingsConfigPort;
+  systemCommands?: SystemCommandPort;
+  workspaceSettingsService?: WorkspaceSettingsService;
+  runtimeDefinitionsService?: RuntimeDefinitionsService;
+  runtimeRegistry?: RuntimeRegistryPort;
+  worktreeFiles?: WorktreeFilePort;
+  taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
+};
 
 export const createTaskSessionStartPreparationService = ({
   gitPort,
@@ -50,19 +70,13 @@ export const createTaskSessionStartPreparationService = ({
   runtimeRegistry,
   worktreeFiles,
   taskSessionLifecycleCoordinator,
-}: CreateTaskServiceInput) => {
-  if (!taskSessionLifecycleCoordinator) {
-    throw new Error("Task lifecycle coordinator is required.");
-  }
-  const coordinator = taskSessionLifecycleCoordinator;
-
+}: TaskSessionStartPreparationDependencies) => {
   return {
     prepare(
       input: TaskSessionStartPreparationInput,
-      canonicalInputRepoPath: string,
     ): Effect.Effect<PreparedTaskSessionStart, TaskServiceError> {
       return Effect.gen(function* () {
-        const { runtimeKind, taskId, role } = input;
+        const { canonicalRepoPath: canonicalInputRepoPath, runtimeKind, taskId, role } = input;
         const dependencies = yield* requireDependencies(() =>
           requireBuildStartDependencies(
             gitPort,
@@ -158,7 +172,7 @@ export const createTaskSessionStartPreparationService = ({
             const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
             yield* Effect.scoped(
               Effect.gen(function* () {
-                yield* coordinator.acquireWorktreeLifecycle([worktreePath]);
+                yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([worktreePath]);
                 const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
                 if (exists) {
                   if (!(yield* dependencies.gitPort.isGitRepository(worktreePath))) {
@@ -189,7 +203,7 @@ export const createTaskSessionStartPreparationService = ({
                   );
                   cleanup = () =>
                     Effect.scoped(
-                      coordinator
+                      taskSessionLifecycleCoordinator
                         .acquireWorktreeLifecycle([worktreePath])
                         .pipe(Effect.zipRight(newWorktree.cleanup())),
                     );

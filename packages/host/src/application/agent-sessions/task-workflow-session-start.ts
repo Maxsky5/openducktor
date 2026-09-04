@@ -1,6 +1,5 @@
 import type {
   AgentSessionControlStartInput,
-  AgentSessionControlStopInput,
   AgentSessionControlSummary,
   AgentWorkflowSessionStartInput,
 } from "@openducktor/contracts";
@@ -18,37 +17,7 @@ import type {
   TaskLifecycle,
   TaskSessions,
 } from "./task-workflow-session-control-service";
-
-const controlSessionRef = (
-  repoPath: string,
-  summary: AgentSessionControlSummary,
-): AgentSessionControlStopInput => ({
-  repoPath,
-  runtimeKind: summary.runtimeKind,
-  workingDirectory: summary.workingDirectory,
-  externalSessionId: summary.externalSessionId,
-});
-
-const storeFreshWorkflowSession = (
-  tasks: TaskSessions,
-  input: AgentWorkflowSessionStartInput,
-  repoPath: string,
-  summary: AgentSessionControlSummary,
-) =>
-  tasks
-    .agentSessionUpsert({
-      repoPath,
-      taskId: input.sessionScope.taskId,
-      session: {
-        externalSessionId: summary.externalSessionId,
-        role: input.sessionScope.role,
-        startedAt: summary.startedAt,
-        runtimeKind: summary.runtimeKind,
-        workingDirectory: summary.workingDirectory,
-        selectedModel: { ...input.model, runtimeKind: summary.runtimeKind },
-      },
-    })
-    .pipe(Effect.asVoid);
+import { storeWorkflowSession, toControlSessionRef } from "./task-workflow-session-storage";
 
 export const createStartTaskWorkflowSession =
   ({
@@ -82,14 +51,14 @@ export const createStartTaskWorkflowSession =
               return;
             }
             if (summary) {
-              yield* runtime.stopSession(controlSessionRef(repoPath, summary));
+              yield* runtime.stopSession(toControlSessionRef(repoPath, summary));
             }
             yield* prepared.cleanup();
           });
 
         return yield* Effect.gen(function* () {
           const preparationInput: TaskSessionStartPreparationInput = {
-            repoPath,
+            canonicalRepoPath: repoPath,
             taskId: scope.taskId,
             role: scope.role,
             runtimeKind: input.runtimeKind,
@@ -97,7 +66,7 @@ export const createStartTaskWorkflowSession =
           if (input.targetWorkingDirectory) {
             preparationInput.targetWorkingDirectory = input.targetWorkingDirectory;
           }
-          prepared = yield* taskSessionStart.prepare(preparationInput, repoPath);
+          prepared = yield* taskSessionStart.prepare(preparationInput);
           const runtimeInput: AgentSessionControlStartInput = {
             repoPath,
             runtimeKind: prepared.runtimeKind,
@@ -124,11 +93,17 @@ export const createStartTaskWorkflowSession =
           summary = launched.right;
 
           const persisted = yield* Effect.either(
-            storeFreshWorkflowSession(tasks, input, repoPath, summary),
+            storeWorkflowSession(tasks, {
+              repoPath,
+              sessionScope: input.sessionScope,
+              model: input.model,
+              selectedModel: undefined,
+              summary,
+            }),
           );
           if (persisted._tag === "Left") {
             const stopped = yield* Effect.either(
-              runtime.stopSession(controlSessionRef(repoPath, summary)),
+              runtime.stopSession(toControlSessionRef(repoPath, summary)),
             );
             const cleanupError = stopped._tag === "Right" ? yield* prepared.cleanup() : "";
             if (stopped._tag === "Right" && !cleanupError) {
@@ -163,7 +138,7 @@ export const createStartTaskWorkflowSession =
           );
           if (completed._tag === "Left") {
             const stopped = yield* Effect.either(
-              runtime.stopSession(controlSessionRef(repoPath, summary)),
+              runtime.stopSession(toControlSessionRef(repoPath, summary)),
             );
             if (stopped._tag === "Right") {
               return yield* Effect.fail(completed.left);
@@ -185,7 +160,7 @@ export const createStartTaskWorkflowSession =
         }).pipe(
           Effect.onInterrupt(() =>
             (stored && summary
-              ? runtime.stopSession(controlSessionRef(repoPath, summary))
+              ? runtime.stopSession(toControlSessionRef(repoPath, summary))
               : cleanupUnstoredStart()
             ).pipe(Effect.orDie, Effect.asVoid),
           ),

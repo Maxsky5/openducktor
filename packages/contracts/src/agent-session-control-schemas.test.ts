@@ -8,6 +8,7 @@ import {
   agentSessionControlSummarySchema,
   agentSessionControlUpdateModelInputSchema,
   agentSessionModelSettingsSchema,
+  agentRepositorySessionStartInputSchema,
   agentWorkflowSessionStartInputSchema,
 } from "./agent-session-control-schemas";
 
@@ -63,6 +64,27 @@ describe("agent session control contracts", () => {
         systemPrompt: "Build the feature",
       }),
     ).toMatchObject({ runtimeKind: "codex", workingDirectory: "/repo/task" });
+  });
+
+  test("limits the public repository start command to repository scope", () => {
+    expect(
+      agentRepositorySessionStartInputSchema.safeParse({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        sessionScope: repositoryScope,
+        systemPrompt: "Repository chat",
+      }).success,
+    ).toBe(true);
+    expect(
+      agentRepositorySessionStartInputSchema.safeParse({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/task",
+        sessionScope: workflowScope,
+        systemPrompt: "Build the feature",
+      }).success,
+    ).toBe(false);
   });
 
   test("rejects runtime-native routing fields", () => {

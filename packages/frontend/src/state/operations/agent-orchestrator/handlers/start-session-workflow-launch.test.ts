@@ -146,7 +146,7 @@ describe("prepareWorkflowFreshLaunch", () => {
     });
 
     expect(prepared.launch).toMatchObject({
-      mode: "start",
+      mode: "workflow_start",
       repoPath: REPO_PATH,
       runtimeKind: "opencode",
       targetWorkingDirectory: "/tmp/repo/custom-worktree",

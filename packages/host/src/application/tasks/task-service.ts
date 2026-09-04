@@ -100,6 +100,7 @@ import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 import {
   createTaskSessionStartPreparationService,
   type PreparedTaskSessionStart,
+  type TaskSessionStartPreparationInput,
 } from "./worktrees/task-session-start-preparation-service";
 
 export type TaskServiceError =
@@ -361,10 +362,13 @@ const createTaskServiceImplementation = (
           let cleanup: PreparedTaskSessionStart["cleanup"] = () => Effect.succeed("");
           const completion = yield* Effect.either(
             Effect.gen(function* () {
-              prepared = yield* taskSessionStart.prepare(
-                { ...startInput, repoPath: canonicalRepoPath, role: "build" },
+              const preparationInput: TaskSessionStartPreparationInput = {
                 canonicalRepoPath,
-              );
+                taskId: startInput.taskId,
+                role: "build",
+                runtimeKind: startInput.runtimeKind,
+              };
+              prepared = yield* taskSessionStart.prepare(preparationInput);
               cleanup = prepared.cleanup;
               yield* taskSessionStart.complete(prepared, (transitionInput) =>
                 input.taskStore.transitionTask(transitionInput),

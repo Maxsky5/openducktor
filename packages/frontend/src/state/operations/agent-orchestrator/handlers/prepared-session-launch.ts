@@ -14,7 +14,7 @@ type PreparedSessionLaunchBase = {
 
 export type PreparedSessionLaunch =
   | (PreparedSessionLaunchBase & {
-      mode: "start";
+      mode: "workflow_start";
       sessionAssociation: AgentSessionWorkflowScope;
       systemPrompt: string;
       selectedModel: AgentModelSelection;

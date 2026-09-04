@@ -280,8 +280,8 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
     const originalBuildStart = host.buildStart;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
+    const originalWorkflowStart = host.agentSessionWorkflowStart;
 
-    const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
@@ -311,14 +311,13 @@ describe("use-agent-orchestrator-operations start and send", () => {
       workingDirectory: "/tmp/repo/worktree",
     });
 
-    OpencodeSdkAdapter.prototype.startSession = async (input) => {
+    host.agentSessionWorkflowStart = async (input) => {
       startCalls += 1;
       const summary = {
         runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
+        workingDirectory: input.targetWorkingDirectory ?? "/tmp/repo/worktree",
         externalSessionId: "external-in-memory",
         startedAt: "2026-02-22T08:00:00.000Z",
-        sessionAssociation: input.sessionScope,
         status: "idle",
       } as const;
       persistedSessions = [
@@ -408,8 +407,8 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
       host.buildStart = originalBuildStart;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
+      host.agentSessionWorkflowStart = originalWorkflowStart;
 
-      OpencodeSdkAdapter.prototype.startSession = originalStartSession;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
     }
@@ -420,14 +419,8 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let persistedBatchListCalls = 0;
     let persistedSingleListCalls = 0;
     let persistedSessions: Array<typeof persistedSessionFixture> = [];
-    const startDeferred = createDeferred<{
-      runtimeKind: "opencode";
-      workingDirectory: string;
-      externalSessionId: string;
-      startedAt: string;
-      sessionAssociation: { kind: "workflow"; taskId: string; role: "build" };
-      status: "idle";
-    }>();
+    const startDeferred =
+      createDeferred<Awaited<ReturnType<typeof host.agentSessionWorkflowStart>>>();
 
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
@@ -435,8 +428,8 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
     const originalBuildStart = host.buildStart;
+    const originalWorkflowStart = host.agentSessionWorkflowStart;
 
-    const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
@@ -467,7 +460,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     });
     host.buildStart = async () => buildBootstrapFixture;
 
-    OpencodeSdkAdapter.prototype.startSession = async () => {
+    host.agentSessionWorkflowStart = async () => {
       startCalls += 1;
       const summary = await startDeferred.promise;
       persistedSessions = [
@@ -529,7 +522,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
           workingDirectory: "/tmp/repo/worktree",
           externalSessionId: "external-concurrent",
           startedAt: "2026-02-22T08:00:00.000Z",
-          sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
           status: "idle",
         });
 
@@ -552,8 +544,8 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
       host.buildStart = originalBuildStart;
+      host.agentSessionWorkflowStart = originalWorkflowStart;
 
-      OpencodeSdkAdapter.prototype.startSession = originalStartSession;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
     }

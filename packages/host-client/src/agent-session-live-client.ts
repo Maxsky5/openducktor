@@ -1,11 +1,11 @@
 import {
   type AcceptedAgentUserMessage,
+  type AgentRepositorySessionStartInput,
   type AgentSessionContextUsage,
   type AgentSessionControlForkInput,
   type AgentSessionControlReleaseInput,
   type AgentSessionControlResumeInput,
   type AgentSessionControlSendInput,
-  type AgentSessionControlStartInput,
   type AgentSessionControlStopInput,
   type AgentSessionControlSummary,
   type AgentSessionControlUpdateModelInput,
@@ -26,7 +26,7 @@ import {
   agentSessionControlReleaseInputSchema,
   agentSessionControlResumeInputSchema,
   agentSessionControlSendInputSchema,
-  agentSessionControlStartInputSchema,
+  agentRepositorySessionStartInputSchema,
   agentSessionControlStopInputSchema,
   agentSessionControlSummarySchema,
   agentSessionControlUpdateModelInputSchema,
@@ -49,11 +49,11 @@ export class HostAgentSessionLiveClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
   async agentSessionControlStart(
-    input: AgentSessionControlStartInput,
+    input: AgentRepositorySessionStartInput,
   ): Promise<AgentSessionControlSummary> {
     return this.invokeFn(
       "agent_session_control_start",
-      agentSessionControlStartInputSchema.parse(input),
+      agentRepositorySessionStartInputSchema.parse(input),
       agentSessionControlSummarySchema,
     );
   }
