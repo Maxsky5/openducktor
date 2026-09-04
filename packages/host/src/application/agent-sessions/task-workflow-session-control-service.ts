@@ -1,6 +1,7 @@
 import type {
   AgentSessionControlForkInput,
   AgentSessionControlResumeInput,
+  AgentSessionControlSendInput,
   AgentSessionControlStartInput,
   AgentSessionControlStopInput,
   AgentSessionControlSummary,
@@ -25,6 +26,7 @@ type RuntimeControl = Pick<
   | "startSession"
   | "resumeSession"
   | "forkSession"
+  | "sendUserMessage"
   | "updateSessionModel"
   | "stopSession"
   | "releaseSession"
@@ -85,7 +87,7 @@ const storeWorkflowSession = (
 const readStoredWorkflowSession = (
   tasks: TaskSessions,
   input: StoredWorkflowSessionRef,
-  operation: "read-fork" | "read-resume" | "update-model",
+  operation: "read-fork" | "read-resume" | "send" | "update-model",
 ): Effect.Effect<AgentSessionRecord, HostError> => {
   const scope = input.sessionScope;
   return tasks.agentSessionsList({ repoPath: input.repoPath, taskId: scope.taskId }).pipe(
@@ -259,6 +261,41 @@ export const createTaskWorkflowSessionControlService = ({
         };
         const summary = yield* runtime.forkSession(runtimeInput);
         return yield* storeControlResult(tasks, runtime, runtimeInput, summary, "stop");
+      }),
+    );
+  },
+  sendUserMessage: (input) => {
+    if (input.sessionScope.kind !== "workflow") {
+      return runtime.sendUserMessage(input);
+    }
+    const scope = input.sessionScope;
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const repoPath = yield* canonicalizeRepoPath(input.repoPath);
+        yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "send session message");
+        const stored = yield* readStoredWorkflowSession(
+          tasks,
+          {
+            repoPath,
+            runtimeKind: input.runtimeKind,
+            workingDirectory: input.workingDirectory,
+            externalSessionId: input.externalSessionId,
+            sessionScope: scope,
+          },
+          "send",
+        );
+        const runtimeInput: AgentSessionControlSendInput = {
+          ...input,
+          repoPath,
+          runtimeKind: stored.runtimeKind,
+          workingDirectory: stored.workingDirectory,
+        };
+        if (stored.selectedModel) {
+          runtimeInput.model = stored.selectedModel;
+        } else {
+          delete runtimeInput.model;
+        }
+        return yield* runtime.sendUserMessage(runtimeInput);
       }),
     );
   },

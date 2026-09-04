@@ -90,6 +90,7 @@ export const mapProviderListToCatalog = (payload: ConfigProvidersResponse): Agen
         contextWindow: rawModel.limit.context,
         outputLimit: rawModel.limit.output,
         attachmentSupport,
+        liveSessionUpdates: { profile: false },
       };
     });
   });

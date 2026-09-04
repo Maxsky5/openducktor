@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  AcceptedAgentUserMessage,
+  AgentSessionControlSendInput,
   AgentSessionControlStartInput,
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
@@ -53,6 +55,33 @@ const workflowModelUpdate: AgentSessionControlUpdateModelInput = {
   model: { providerId: "openai", modelId: "gpt-5.1" },
 };
 
+const workflowSend: AgentSessionControlSendInput = {
+  repoPath: "/repo",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo/worktree",
+  externalSessionId: "session-1",
+  sessionScope: workflowStart.sessionScope,
+  parts: [{ kind: "text", text: "Continue" }],
+  model: {
+    runtimeKind: "opencode",
+    providerId: "openai",
+    modelId: "gpt-5",
+    profileId: "other-profile",
+  },
+};
+
+const acceptedUserMessage: AcceptedAgentUserMessage = {
+  type: "user_message",
+  externalSessionId: "session-1",
+  timestamp: "2026-09-02T10:01:00.000Z",
+  messageId: "message-1",
+  message: "Continue",
+  parts: [{ kind: "text", text: "Continue" }],
+  state: "queued",
+};
+
+const unexpectedSend = () => Effect.dieMessage("unexpected send");
+
 type ControlDeps = Parameters<typeof createTaskWorkflowSessionControlService>[0];
 
 const createModelUpdateService = ({
@@ -70,6 +99,7 @@ const createModelUpdateService = ({
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: () => Effect.dieMessage("unexpected resume"),
       forkSession: () => Effect.dieMessage("unexpected fork"),
+      sendUserMessage: unexpectedSend,
       updateSessionModel: updateRuntimeModel,
       stopSession: () => Effect.dieMessage("unexpected stop"),
       releaseSession: () => Effect.dieMessage("unexpected release"),
@@ -95,6 +125,7 @@ describe("createTaskWorkflowSessionControlService", () => {
           }),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
         stopSession: () => Effect.dieMessage("unexpected stop"),
         releaseSession: () => Effect.dieMessage("unexpected release"),
@@ -142,6 +173,7 @@ describe("createTaskWorkflowSessionControlService", () => {
         startSession: () => Effect.succeed(summary),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
         stopSession: () => Effect.dieMessage("unexpected stop"),
         releaseSession: () => Effect.dieMessage("unexpected release"),
@@ -176,6 +208,7 @@ describe("createTaskWorkflowSessionControlService", () => {
         resumeSession: (input) =>
           Effect.succeed({ ...summary, externalSessionId: input.externalSessionId }),
         forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
         stopSession: () => Effect.dieMessage("unexpected stop"),
         releaseSession: () => Effect.dieMessage("unexpected release"),
@@ -238,6 +271,7 @@ describe("createTaskWorkflowSessionControlService", () => {
             return summary;
           }),
         forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
         stopSession: () => Effect.dieMessage("unexpected stop"),
         releaseSession: () => Effect.dieMessage("unexpected release"),
@@ -276,6 +310,7 @@ describe("createTaskWorkflowSessionControlService", () => {
             runtimeCalls += 1;
             return { ...summary, externalSessionId: "fork-1" };
           }),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
         stopSession: () => Effect.dieMessage("unexpected stop"),
         releaseSession: () => Effect.dieMessage("unexpected release"),
@@ -303,6 +338,114 @@ describe("createTaskWorkflowSessionControlService", () => {
     expect(runtimeCalls).toBe(0);
   });
 
+  test("sends a workflow message through its stored session", async () => {
+    const runtimeInputs: AgentSessionControlSendInput[] = [];
+    const service = createTaskWorkflowSessionControlService({
+      canonicalizeRepoPath: () => Effect.succeed("/repo"),
+      runtime: {
+        startSession: () => Effect.dieMessage("unexpected start"),
+        resumeSession: () => Effect.dieMessage("unexpected resume"),
+        forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: (input) =>
+          Effect.sync(() => {
+            runtimeInputs.push(input);
+            return acceptedUserMessage;
+          }),
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () => Effect.dieMessage("unexpected stop"),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () =>
+          Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
+        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+      },
+      taskLifecycle: createTaskSessionBootstrapCoordinator(),
+    });
+
+    await expect(
+      Effect.runPromise(service.sendUserMessage({ ...workflowSend, repoPath: "/repo/." })),
+    ).resolves.toEqual(acceptedUserMessage);
+    expect(runtimeInputs).toEqual([
+      {
+        ...workflowSend,
+        repoPath: "/repo",
+        model: storedModel,
+      },
+    ]);
+  });
+
+  test("rejects a workflow message when the task does not own the session", async () => {
+    let runtimeCalls = 0;
+    const service = createTaskWorkflowSessionControlService({
+      ...createControlDeps(),
+      runtime: {
+        startSession: () => Effect.dieMessage("unexpected start"),
+        resumeSession: () => Effect.dieMessage("unexpected resume"),
+        forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: () =>
+          Effect.sync(() => {
+            runtimeCalls += 1;
+            return acceptedUserMessage;
+          }),
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () => Effect.dieMessage("unexpected stop"),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () => Effect.succeed([]),
+        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+      },
+    });
+
+    await expect(Effect.runPromise(service.sendUserMessage(workflowSend))).rejects.toThrow(
+      "Task 'task-1' does not own session 'session-1' for role 'build'.",
+    );
+    expect(runtimeCalls).toBe(0);
+  });
+
+  test("does not send a workflow message while another task lifecycle change runs", async () => {
+    let runtimeCalls = 0;
+    const taskLifecycle = createTaskSessionBootstrapCoordinator();
+    const service = createTaskWorkflowSessionControlService({
+      canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      runtime: {
+        startSession: () => Effect.dieMessage("unexpected start"),
+        resumeSession: () => Effect.dieMessage("unexpected resume"),
+        forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: () =>
+          Effect.sync(() => {
+            runtimeCalls += 1;
+            return acceptedUserMessage;
+          }),
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () => Effect.dieMessage("unexpected stop"),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () =>
+          Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
+        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+      },
+      taskLifecycle,
+    });
+
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* taskLifecycle.acquireLifecycle("/repo", ["task-1"], "reset task");
+          return yield* Effect.either(service.sendUserMessage(workflowSend));
+        }),
+      ),
+    );
+
+    expect(result._tag).toBe("Left");
+    expect(runtimeCalls).toBe(0);
+  });
+
   test("stops a new runtime session when its task record cannot be stored", async () => {
     const stopped: string[] = [];
     const service = createTaskWorkflowSessionControlService({
@@ -311,6 +454,7 @@ describe("createTaskWorkflowSessionControlService", () => {
         startSession: () => Effect.succeed(summary),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
         stopSession: (input) =>
           Effect.sync(() => {
@@ -348,6 +492,7 @@ describe("createTaskWorkflowSessionControlService", () => {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: (input) =>
           Effect.sync(() => {
             calls.push("runtime");
@@ -552,6 +697,7 @@ describe("createTaskWorkflowSessionControlService", () => {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
@@ -591,6 +737,7 @@ describe("createTaskWorkflowSessionControlService", () => {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
@@ -642,6 +789,7 @@ describe("createTaskWorkflowSessionControlService", () => {
             return summary;
           }),
         forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
         stopSession: () => Effect.dieMessage("unexpected stop"),
         releaseSession: () => Effect.dieMessage("unexpected release"),
@@ -689,6 +837,7 @@ describe("createTaskWorkflowSessionControlService", () => {
             runtimeCalls += 1;
             return { ...summary, externalSessionId: "fork-1" };
           }),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
         stopSession: () => Effect.dieMessage("unexpected stop"),
         releaseSession: () => Effect.dieMessage("unexpected release"),
@@ -734,6 +883,7 @@ describe("createTaskWorkflowSessionControlService", () => {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
         updateSessionModel: () =>
           Effect.scoped(taskLifecycle.acquireLifecycle("/repo", ["task-1"], "reset task")).pipe(
             Effect.either,
