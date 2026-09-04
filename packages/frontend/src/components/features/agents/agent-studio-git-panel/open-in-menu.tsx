@@ -161,6 +161,91 @@ export function OpenInMenu({
     return defaultButton;
   }
 
+  const renderMenuContent = (): ReactElement => {
+    if (settingsQuery.isError) {
+      return (
+        <div role="alert" className="grid gap-2 p-3 text-sm">
+          <p>Failed to load Open In preference: {errorMessage(settingsQuery.error)}</p>
+          <Button
+            variant="outline"
+            disabled={settingsQuery.isFetching}
+            onClick={() => void settingsQuery.refetch()}
+          >
+            Retry settings
+          </Button>
+        </div>
+      );
+    }
+
+    if (toolsQuery.isPending) {
+      return (
+        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" />
+          <span>Looking for supported apps…</span>
+        </div>
+      );
+    }
+
+    if (toolsQuery.isError) {
+      return (
+        <div className="space-y-3 p-3" data-testid="agent-studio-git-open-in-error">
+          <p className="text-sm text-foreground">Supported app discovery failed.</p>
+          <p className="text-[11px] text-muted-foreground">{errorMessage(toolsQuery.error)}</p>
+          <OpenInRefreshButton
+            isRefreshingTools={isRefreshingTools}
+            label="Retry"
+            onRefresh={() => {
+              void handleRefreshTools();
+            }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <ScrollArea className="max-h-80">
+        <div className="space-y-1 p-1">
+          {alternativeTools.map((tool) => {
+            const isPending = pendingToolId === tool.toolId;
+
+            return (
+              <Button
+                key={tool.toolId}
+                type="button"
+                variant="ghost"
+                className="h-auto w-full justify-start p-2 text-left text-sm"
+                onClick={() => {
+                  void handleOpenInTool(tool.toolId);
+                }}
+                disabled={pendingToolId !== null}
+                data-testid={`agent-studio-git-open-in-item-${tool.toolId}`}
+              >
+                <OpenInToolIcon tool={tool} />
+                <span className="min-w-0 flex-1 truncate">{getOpenInToolLabel(tool.toolId)}</span>
+                {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
+              </Button>
+            );
+          })}
+          {toolsQuery.data?.length === 0 ? (
+            <div
+              className="space-y-3 p-3 text-sm text-muted-foreground"
+              data-testid="agent-studio-git-open-in-empty"
+            >
+              <p>No supported Open In tools were found on this platform.</p>
+              <OpenInRefreshButton
+                isRefreshingTools={isRefreshingTools}
+                label="Refresh"
+                onRefresh={() => {
+                  void handleRefreshTools();
+                }}
+              />
+            </div>
+          ) : null}
+        </div>
+      </ScrollArea>
+    );
+  };
+
   return (
     <OpenInActionGroup>
       {defaultButton}
@@ -177,78 +262,7 @@ export function OpenInMenu({
             </p>
           </div>
 
-          {settingsQuery.isError ? (
-            <div role="alert" className="grid gap-2 p-3 text-sm">
-              <p>Failed to load Open In preference: {errorMessage(settingsQuery.error)}</p>
-              <Button
-                variant="outline"
-                disabled={settingsQuery.isFetching}
-                onClick={() => void settingsQuery.refetch()}
-              >
-                Retry settings
-              </Button>
-            </div>
-          ) : toolsQuery.isPending ? (
-            <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
-              <LoaderCircle className="size-4 animate-spin" />
-              <span>Looking for supported apps…</span>
-            </div>
-          ) : toolsQuery.isError ? (
-            <div className="space-y-3 p-3" data-testid="agent-studio-git-open-in-error">
-              <p className="text-sm text-foreground">Supported app discovery failed.</p>
-              <p className="text-[11px] text-muted-foreground">{errorMessage(toolsQuery.error)}</p>
-              <OpenInRefreshButton
-                isRefreshingTools={isRefreshingTools}
-                label="Retry"
-                onRefresh={() => {
-                  void handleRefreshTools();
-                }}
-              />
-            </div>
-          ) : (
-            <ScrollArea className="max-h-80">
-              <div className="space-y-1 p-1">
-                {alternativeTools.map((tool) => {
-                  const isPending = pendingToolId === tool.toolId;
-
-                  return (
-                    <Button
-                      key={tool.toolId}
-                      type="button"
-                      variant="ghost"
-                      className="h-auto w-full justify-start p-2 text-left text-sm"
-                      onClick={() => {
-                        void handleOpenInTool(tool.toolId);
-                      }}
-                      disabled={pendingToolId !== null}
-                      data-testid={`agent-studio-git-open-in-item-${tool.toolId}`}
-                    >
-                      <OpenInToolIcon tool={tool} />
-                      <span className="min-w-0 flex-1 truncate">
-                        {getOpenInToolLabel(tool.toolId)}
-                      </span>
-                      {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
-                    </Button>
-                  );
-                })}
-                {toolsQuery.data?.length === 0 ? (
-                  <div
-                    className="space-y-3 p-3 text-sm text-muted-foreground"
-                    data-testid="agent-studio-git-open-in-empty"
-                  >
-                    <p>No supported Open In tools were found on this platform.</p>
-                    <OpenInRefreshButton
-                      isRefreshingTools={isRefreshingTools}
-                      label="Refresh"
-                      onRefresh={() => {
-                        void handleRefreshTools();
-                      }}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            </ScrollArea>
-          )}
+          {renderMenuContent()}
         </OpenInMenuBody>
       </Popover>
     </OpenInActionGroup>
