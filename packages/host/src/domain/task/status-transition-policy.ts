@@ -91,11 +91,11 @@ export const allowsTransition = (task: TaskCard, from: TaskStatus, to: TaskStatu
   }
 
   if (from === "ai_review") {
-    return to === "in_progress" || to === "human_review" || to === "closed";
+    return to === "blocked" || to === "in_progress" || to === "human_review" || to === "closed";
   }
 
   if (from === "human_review") {
-    return to === "in_progress" || to === "closed";
+    return to === "blocked" || to === "in_progress" || to === "closed";
   }
 
   return false;

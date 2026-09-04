@@ -45,7 +45,7 @@ describe("task validation effects", () => {
   });
 
   test("blockBuildCompletionTask preserves transition policy errors", async () => {
-    const current = task({ issueType: "bug", status: "human_review" });
+    const current = task({ issueType: "bug", status: "closed" });
     const taskStore = {
       transitionTask() {
         return Effect.die("transition should not run");

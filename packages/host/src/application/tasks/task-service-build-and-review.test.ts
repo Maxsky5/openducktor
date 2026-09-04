@@ -61,6 +61,65 @@ const createQaOutcomeTaskStore = (fixture: {
 });
 
 describe("createTaskService build and review", () => {
+  test.each(["in_progress", "ai_review", "human_review", "blocked"] as const)(
+    "build_blocked accepts %s and preserves task documents",
+    async (status) => {
+      const current = task({
+        id: "task-1",
+        status,
+        documentSummary: {
+          spec: { has: true },
+          plan: { has: true },
+          qaReport: { has: true, verdict: "approved" },
+        },
+      });
+      const transitions: unknown[] = [];
+      const taskStore: TaskStorePort = {
+        listTasks: () => Effect.succeed([current]),
+        transitionTask: (input) => {
+          transitions.push(input);
+          return Effect.succeed({ ...current, status: "blocked" as const });
+        },
+      };
+      const result = await Effect.runPromise(
+        createTaskService({ taskStore }).buildBlocked({
+          repoPath: "/repo",
+          taskId: current.id,
+          reason: "Needs clarification",
+        }),
+      );
+      expect(result.status).toBe("blocked");
+      expect(result.documentSummary).toEqual(current.documentSummary);
+      expect(transitions).toEqual(
+        status === "blocked" ? [] : [{ repoPath: "/repo", taskId: current.id, status: "blocked" }],
+      );
+    },
+  );
+
+  test.each(["open", "spec_ready", "ready_for_dev", "closed"] as const)(
+    "build_blocked rejects %s without writing",
+    async (status) => {
+      const transitions: unknown[] = [];
+      const taskStore: TaskStorePort = {
+        listTasks: () => Effect.succeed([task({ id: "task-1", status })]),
+        transitionTask: (input) => {
+          transitions.push(input);
+          return Effect.succeed(task({ status: "blocked" }));
+        },
+      };
+      await expect(
+        Effect.runPromise(
+          createTaskService({ taskStore }).buildBlocked({
+            repoPath: "/repo",
+            taskId: "task-1",
+            reason: "Needs clarification",
+          }),
+        ),
+      ).rejects.toThrow(`Transition not allowed for task-1 (task): ${status} -> blocked`);
+      expect(transitions).toEqual([]);
+    },
+  );
+
   test("blocks a build after requiring a non-empty reason", async () => {
     const calls: unknown[] = [];
     const blockedTask = task({ id: "task-1", status: "blocked" });

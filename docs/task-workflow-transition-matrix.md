@@ -37,7 +37,8 @@ Human actions are `human_request_changes(taskId, note)` and `human_approve(taskI
 | `odt_set_plan` (epic with subtasks) | Same as epic plan. | Replacement requires all current direct children to be `open`, `spec_ready`, or `ready_for_dev`. | Same as epic plan. |
 | `odt_build_resumed` for `feature` or `epic` | `ready_for_dev`, `blocked` | Standard flow or blocked resume. | `in_progress` |
 | `odt_build_resumed` for `task` or `bug` | `open`, `spec_ready`, `ready_for_dev`, `blocked` | Optional short flow or blocked resume. | `in_progress` |
-| `odt_build_blocked` | `in_progress` | `reason` is present. | `blocked` |
+| `odt_build_blocked` | `in_progress`, `ai_review`, `human_review` | `reason` is not empty. | `blocked` |
+| `odt_build_blocked` | `blocked` | `reason` is not empty. Idempotent. No write runs. | Unchanged. |
 | `reset_implementation` | `in_progress`, `blocked`, `ai_review`, `human_review` | No live build or QA activity. Branch cleanup is safe. | `ready_for_dev`, `spec_ready`, or `open` from retained documents. |
 | `reset_task` | Any non-closed status. | No live role activity. Branch cleanup is safe. | `open` |
 | `odt_build_completed` | `in_progress`, `blocked` | QA is required and the latest result is not `approved`. | `ai_review` |

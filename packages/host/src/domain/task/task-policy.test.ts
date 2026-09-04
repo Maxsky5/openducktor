@@ -45,9 +45,9 @@ describe("task domain policy", () => {
   test("reports disallowed transitions with a stable policy code", () => {
     try {
       validateTransition(
-        task({ status: "human_review" }),
-        [task({ status: "human_review" })],
-        "human_review",
+        task({ status: "closed" }),
+        [task({ status: "closed" })],
+        "closed",
         "blocked",
       );
       throw new Error("Expected transition validation to fail.");
@@ -55,7 +55,7 @@ describe("task domain policy", () => {
       expect(error).toBeInstanceOf(TaskPolicyError);
       if (!(error instanceof TaskPolicyError)) throw error;
       expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
-      expect(error.message).toContain("human_review -> blocked");
+      expect(error.message).toContain("closed -> blocked");
     }
   });
 
