@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
+import { repoConfigSchema, type SettingsSnapshot } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { host } from "@/state/operations/host";
 import { useRepoSettingsOperations } from "@/state/operations/workspace/use-repo-settings-operations";
@@ -199,5 +199,140 @@ test("a late favorites callback preserves a newer preference", async () => {
     response.resolve(initial);
     await harness.unmount();
     host.workspaceGetSettingsSnapshot = original;
+  }
+});
+
+test("a late preference response keeps a workspace added to the settings cache", async () => {
+  const original = host.systemUpdatePreferredOpenInTool;
+  const initial = createSettingsSnapshotFixture();
+  const response = createDeferred<SettingsSnapshot>();
+  const started = createDeferred<void>();
+  host.systemUpdatePreferredOpenInTool = () => {
+    started.resolve();
+    return response.promise;
+  };
+  const harness = createHookHarness(useHarness, undefined, { wrapper: IsolatedQueryWrapper });
+  try {
+    await harness.mount();
+    const { queryClient, preference } = harness.getLatest();
+    const key = workspaceQueryKeys.settingsSnapshot();
+    queryClient.setQueryData(key, initial);
+    const write = preference.savePreference({ preferredOpenInToolId: "zed" });
+    await started.promise;
+    const added = createSettingsSnapshotFixture({
+      workspaces: {
+        added: repoConfigSchema.parse({
+          workspaceId: "added",
+          workspaceName: "Added",
+          repoPath: "/repos/added",
+          defaultRuntimeKind: "opencode",
+        }),
+      },
+    });
+    queryClient.setQueryData(key, added);
+    response.resolve({ ...initial, system: { preferredOpenInToolId: "zed" } });
+    await harness.run(async () => {
+      await write;
+    });
+    expect(queryClient.getQueryData<SettingsSnapshot>(key)).toEqual({
+      ...added,
+      system: { preferredOpenInToolId: "zed" },
+    });
+  } finally {
+    response.resolve(initial);
+    await harness.unmount();
+    host.systemUpdatePreferredOpenInTool = original;
+  }
+});
+
+for (const readFails of [false, true]) {
+  test(`an empty preference cache ${readFails ? "reports a failed settings read" : "loads current host settings"}`, async () => {
+    const originalWrite = host.systemUpdatePreferredOpenInTool;
+    const originalRead = host.workspaceGetSettingsSnapshot;
+    const old = createSettingsSnapshotFixture();
+    const current = createSettingsSnapshotFixture({
+      system: { preferredOpenInToolId: "cursor" },
+      workspaces: {
+        added: repoConfigSchema.parse({
+          workspaceId: "added",
+          workspaceName: "Added",
+          repoPath: "/repos/added",
+          defaultRuntimeKind: "opencode",
+        }),
+      },
+    });
+    host.systemUpdatePreferredOpenInTool = async (system) => ({ ...old, system });
+    host.workspaceGetSettingsSnapshot = async () => {
+      if (readFails) throw new Error("Settings read failed");
+      return current;
+    };
+    const harness = createHookHarness(useHarness, undefined, { wrapper: IsolatedQueryWrapper });
+    try {
+      await harness.mount();
+      await harness.run(async ({ preference }) => {
+        const write = preference.savePreference({ preferredOpenInToolId: "zed" });
+        if (readFails) {
+          await expect(write).rejects.toThrow("Settings read failed");
+        } else {
+          await write;
+        }
+      });
+      const cached = harness
+        .getLatest()
+        .queryClient.getQueryData<SettingsSnapshot>(workspaceQueryKeys.settingsSnapshot());
+      if (readFails) {
+        expect(cached).toBeUndefined();
+      } else {
+        expect(cached).toEqual(current);
+      }
+    } finally {
+      await harness.unmount();
+      host.systemUpdatePreferredOpenInTool = originalWrite;
+      host.workspaceGetSettingsSnapshot = originalRead;
+    }
+  });
+}
+
+test("a preference response refreshes settings invalidated by a workspace write", async () => {
+  const originalWrite = host.systemUpdatePreferredOpenInTool;
+  const originalRead = host.workspaceGetSettingsSnapshot;
+  const initial = createSettingsSnapshotFixture();
+  const current = createSettingsSnapshotFixture({
+    system: { preferredOpenInToolId: "zed" },
+    workspaces: {
+      added: repoConfigSchema.parse({
+        workspaceId: "added",
+        workspaceName: "Added",
+        repoPath: "/repos/added",
+        defaultRuntimeKind: "opencode",
+      }),
+    },
+  });
+  const response = createDeferred<SettingsSnapshot>();
+  const started = createDeferred<void>();
+  host.systemUpdatePreferredOpenInTool = () => {
+    started.resolve();
+    return response.promise;
+  };
+  host.workspaceGetSettingsSnapshot = async () => current;
+  const harness = createHookHarness(useHarness, undefined, { wrapper: IsolatedQueryWrapper });
+  try {
+    await harness.mount();
+    const { queryClient, preference } = harness.getLatest();
+    const key = workspaceQueryKeys.settingsSnapshot();
+    queryClient.setQueryData(key, initial);
+    const write = preference.savePreference({ preferredOpenInToolId: "zed" });
+    await started.promise;
+    await queryClient.invalidateQueries({ queryKey: key, exact: true, refetchType: "none" });
+    response.resolve({ ...initial, system: { preferredOpenInToolId: "zed" } });
+    await harness.run(async () => {
+      await write;
+    });
+    expect(queryClient.getQueryData<SettingsSnapshot>(key)).toEqual(current);
+  } finally {
+    response.resolve(initial);
+    await harness.unmount();
+    host.systemUpdatePreferredOpenInTool = originalWrite;
+    host.workspaceGetSettingsSnapshot = originalRead;
   }
 });
