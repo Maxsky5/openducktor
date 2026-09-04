@@ -5,6 +5,7 @@ type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseTaskTabSelectionArgs = {
   activeWorkspaceId: string | null;
+  isWorkspaceStateReady: boolean;
   isRepoNavigationBoundaryPending: boolean;
   taskId: string;
   openTaskTabs: string[];
@@ -24,6 +25,7 @@ type UseTaskTabSelectionResult = {
 export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSelectionResult {
   const {
     activeWorkspaceId,
+    isWorkspaceStateReady,
     isRepoNavigationBoundaryPending,
     taskId,
     openTaskTabs,
@@ -34,10 +36,12 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     setPersistedActiveTaskId,
   } = args;
 
-  const tabTaskIds = useMemo(
-    () => ensureActiveTaskTab(openTaskTabs, taskId),
-    [openTaskTabs, taskId],
-  );
+  const tabTaskIds = useMemo(() => {
+    if (!isWorkspaceStateReady) {
+      return [];
+    }
+    return ensureActiveTaskTab(openTaskTabs, taskId);
+  }, [isWorkspaceStateReady, openTaskTabs, taskId]);
   const appliedFallbackKeyRef = useRef<string | null>(null);
 
   const activeTaskTabId = useMemo(() => {

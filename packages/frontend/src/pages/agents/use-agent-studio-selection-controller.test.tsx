@@ -1607,6 +1607,9 @@ describe("useAgentStudioSelectionController", () => {
 
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspaceId,
+        agentStudioState: { openTaskIds: ["task-1"] },
+        workspaceRepoPath,
         sessions: [olderRunningSession, newerIdleSession],
         taskIdParam: "task-1",
         hasExplicitRoleParam: false,
@@ -1650,6 +1653,9 @@ describe("useAgentStudioSelectionController", () => {
 
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspaceId,
+        agentStudioState: { openTaskIds: ["task-1"] },
+        workspaceRepoPath,
         sessions: [waitingSession, newerIdleSession],
         taskIdParam: "task-1",
         hasExplicitRoleParam: false,
@@ -1676,6 +1682,9 @@ describe("useAgentStudioSelectionController", () => {
 
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspaceId,
+        agentStudioState: { openTaskIds: ["task-1"] },
+        workspaceRepoPath,
         sessions: [idleSession],
         taskIdParam: "task-1",
         hasExplicitRoleParam: false,

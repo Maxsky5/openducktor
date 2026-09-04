@@ -43,6 +43,10 @@ export function useAgentStudioTaskTabs(args: {
   const [persistedActiveTaskId, setPersistedActiveTaskId] = useState<string | null>(null);
   const [loadedStateWorkspaceId, setLoadedStateWorkspaceId] = useState<string | null>(null);
   const taskIdForTabs = selectedTask?.status === "closed" ? "" : taskId;
+  const isWorkspaceStateReady =
+    activeWorkspaceId !== null &&
+    agentStudioState !== null &&
+    loadedStateWorkspaceId === activeWorkspaceId;
 
   const selectableOpenTaskTabs = useMemo(() => {
     if (isLoadingTasks) {
@@ -76,6 +80,7 @@ export function useAgentStudioTaskTabs(args: {
 
   const { tabTaskIds, activeTaskTabId, handleSelectTab } = useTaskTabSelection({
     activeWorkspaceId,
+    isWorkspaceStateReady,
     isRepoNavigationBoundaryPending,
     taskId: taskIdForTabs,
     openTaskTabs: selectableOpenTaskTabs,

@@ -121,6 +121,72 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     await harness.unmount();
   });
 
+  test("hides prior workspace tabs until the next workspace snapshot loads", async () => {
+    const repoAState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1"],
+      activeTask: { taskId: "task-1", role: "build" },
+    };
+    const repoBState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-2", "task-1"],
+      activeTask: { taskId: "task-2", role: "qa" },
+    };
+    const repoBRead = createDeferred<RepoConfig>();
+    const workspaceGetRepoConfig = mock(async (workspaceId: string) => {
+      if (workspaceId === "repo-a") {
+        return createRepoConfig(repoAState);
+      }
+      return repoBRead.promise;
+    });
+    const queryClient = createQueryClient();
+    const repoAArgs: LoadHookArgs = {
+      activeWorkspaceId: "repo-a",
+      tasks,
+      isLoadingTasks: false,
+      sessions: [],
+      sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
+        "/repo-a",
+        "Session list unavailable",
+        "live-stream",
+      ),
+      hostClient: { workspaceGetRepoConfig },
+    };
+    const harness = createSharedHookHarness(useWorkspaceRestore, repoAArgs, { queryClient });
+
+    await harness.mount();
+    await harness.waitFor((result) => result.tabs.loadedStateWorkspaceId === "repo-a");
+    expect(harness.getLatest().tabs.tabTaskIds).toEqual(["task-1"]);
+    expect(harness.getLatest().tabs.activeTaskTabId).toBe("task-1");
+
+    await harness.update({
+      ...repoAArgs,
+      activeWorkspaceId: "repo-b",
+      sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
+        "/repo-b",
+        "Session list unavailable",
+        "live-stream",
+      ),
+    });
+    expect(workspaceGetRepoConfig).toHaveBeenCalledTimes(2);
+    expect(harness.getLatest().load.agentStudioState).toBeNull();
+    expect(harness.getLatest().tabs.tabTaskIds).toEqual([]);
+    expect(harness.getLatest().tabs.activeTaskTabId).toBe("");
+
+    await harness.run(async () => {
+      repoBRead.resolve({
+        ...createRepoConfig(repoBState),
+        workspaceId: "repo-b",
+        workspaceName: "Repo B",
+        repoPath: "/repo-b",
+      });
+      await repoBRead.promise;
+    });
+    await harness.waitFor((result) => result.tabs.loadedStateWorkspaceId === "repo-b");
+
+    expect(harness.getLatest().tabs.tabTaskIds).toEqual(["task-2", "task-1"]);
+    expect(harness.getLatest().tabs.activeTaskTabId).toBe("task-2");
+    await harness.unmount();
+  });
+
   test("preserves the saved session through read failure and enables persistence after recovery", async () => {
     const savedState: WorkspaceAgentStudioState = {
       openTaskIds: ["task-1"],
