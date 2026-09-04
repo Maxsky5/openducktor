@@ -1,9 +1,8 @@
 import type {
-  AgentRole,
-  AgentSessionAssociation,
   AgentSessionLiveEnvelope,
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
+  AgentSessionWorkflowScope,
   NotificationNavigationTarget,
   NotificationOccurrence,
   NotificationSessionIdentity,
@@ -18,11 +17,12 @@ type NotificationTaskIdentity = {
 
 type CreateSessionOccurrenceProjectorOptions = {
   repositoryLabel: string;
+  resolveAssociation(ref: AgentSessionLiveSnapshot["ref"]): AgentSessionWorkflowScope | null;
   resolveTask(taskId: string): NotificationTaskIdentity | null;
 };
 
 type SessionProjection = {
-  association: AgentSessionAssociation;
+  association: AgentSessionWorkflowScope;
   cycle: number;
   errorNotified: boolean;
   idleNotified: boolean;
@@ -37,14 +37,11 @@ const toSessionIdentity = (ref: AgentSessionLiveSnapshot["ref"]): NotificationSe
   externalSessionId: ref.externalSessionId,
 });
 
-const taskIdForAssociation = (association: AgentSessionAssociation): string | undefined =>
-  association.kind === "workflow" ? association.taskId : undefined;
-
-const roleForAssociation = (association: AgentSessionAssociation): AgentRole | undefined =>
-  association.kind === "workflow" ? association.role : undefined;
-
-const createProjection = (snapshot: AgentSessionLiveSnapshot): SessionProjection => ({
-  association: snapshot.sessionAssociation,
+const createProjection = (
+  snapshot: AgentSessionLiveSnapshot,
+  association: AgentSessionWorkflowScope,
+): SessionProjection => ({
+  association,
   cycle: snapshot.activity === "running" ? 1 : 0,
   errorNotified: false,
   idleNotified: false,
@@ -61,6 +58,7 @@ const isExpectedUserStop = (
 
 export const createSessionOccurrenceProjector = ({
   repositoryLabel,
+  resolveAssociation,
   resolveTask,
 }: CreateSessionOccurrenceProjectorOptions) => {
   const sessions = new Map<string, SessionProjection>();
@@ -78,8 +76,8 @@ export const createSessionOccurrenceProjector = ({
       navigationTarget: NotificationNavigationTarget;
     },
   ): NotificationOccurrence => {
-    const taskId = taskIdForAssociation(projection.association);
-    const task = taskId ? (resolveTask(taskId) ?? { id: taskId }) : undefined;
+    const taskId = projection.association.taskId;
+    const task = resolveTask(taskId) ?? { id: taskId };
     const occurrence: NotificationOccurrence = {
       occurrenceId: `${input.kind}:${agentSessionIdentityKey(projection.ref)}:${input.suffix}`,
       kind: input.kind,
@@ -88,21 +86,19 @@ export const createSessionOccurrenceProjector = ({
       status: input.status,
       navigationTarget: input.navigationTarget,
     };
-    if (task) occurrence.task = task;
-    const role = roleForAssociation(projection.association);
-    if (role) occurrence.role = role;
+    occurrence.task = task;
+    occurrence.role = projection.association.role;
     return occurrence;
   };
 
   const sessionTarget = (
     projection: SessionProjection,
   ): Omit<Extract<NotificationNavigationTarget, { type: "agent_session" }>, "type"> => {
-    const taskId = taskIdForAssociation(projection.association);
     const target: Omit<Extract<NotificationNavigationTarget, { type: "agent_session" }>, "type"> = {
       repoPath: projection.ref.repoPath,
       session: toSessionIdentity(projection.ref),
+      taskId: projection.association.taskId,
     };
-    if (taskId) target.taskId = taskId;
     return target;
   };
 
@@ -183,13 +179,18 @@ export const createSessionOccurrenceProjector = ({
 
   const applyUpsert = (snapshot: AgentSessionLiveSnapshot): NotificationOccurrence[] => {
     const key = agentSessionIdentityKey(snapshot.ref);
+    const association = resolveAssociation(snapshot.ref);
+    if (!association) {
+      sessions.delete(key);
+      return [];
+    }
     const projection = sessions.get(key);
     if (!projection) {
-      sessions.set(key, createProjection(snapshot));
+      sessions.set(key, createProjection(snapshot, association));
       return [];
     }
 
-    projection.association = snapshot.sessionAssociation;
+    projection.association = association;
     projection.isSubagent = snapshot.parentExternalSessionId !== undefined;
     projection.ref = snapshot.ref;
     if (projection.isSubagent) {
@@ -259,7 +260,13 @@ export const createSessionOccurrenceProjector = ({
       if (envelope.type === "snapshot") {
         sessions.clear();
         for (const snapshot of envelope.sessions) {
-          sessions.set(agentSessionIdentityKey(snapshot.ref), createProjection(snapshot));
+          const association = resolveAssociation(snapshot.ref);
+          if (association) {
+            sessions.set(
+              agentSessionIdentityKey(snapshot.ref),
+              createProjection(snapshot, association),
+            );
+          }
         }
         return [];
       }

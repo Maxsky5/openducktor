@@ -39,6 +39,7 @@ import type {
 } from "@/features/session-start/session-start-orchestration";
 import { hostBridge } from "@/lib/host-client";
 import { getShellBridge } from "@/lib/shell-bridge";
+import { loadAgentSessionListsFromQuery } from "@/state/queries/agent-sessions";
 import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useWorkspaceStateContext } from "../app-state-contexts";
@@ -134,6 +135,8 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
           const options = unfilteredRepoTaskDataQueryOptions(repoPath);
           return (await queryClient.fetchQuery({ ...options, staleTime: 0 })).tasks;
         },
+        loadSessionRecords: (repoPath, taskIds) =>
+          loadAgentSessionListsFromQuery(queryClient, repoPath, taskIds),
         publish: runtime.publish,
         onFailure: reportProducerFailure,
       }),

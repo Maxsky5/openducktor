@@ -17,7 +17,6 @@ const ref = {
 
 const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessionLiveSnapshot => ({
   ref,
-  sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
   activity: "idle",
   title: "Builder session",
   startedAt: "2026-08-31T10:00:00.000Z",
@@ -38,10 +37,31 @@ const transcript = (event: TranscriptEventFixture): AgentSessionTranscriptEvent 
 const createProjector = () =>
   createSessionOccurrenceProjector({
     repositoryLabel: "Repo",
+    resolveAssociation: () => ({ kind: "workflow", taskId: "task-1", role: "build" }),
     resolveTask: (taskId) => ({ id: taskId, title: "Build notifications" }),
   });
 
 describe("session occurrence projector", () => {
+  test("ignores sessions without workflow ownership", () => {
+    const projector = createSessionOccurrenceProjector({
+      repositoryLabel: "Repo",
+      resolveAssociation: () => null,
+      resolveTask: () => null,
+    });
+
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    expect(
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({
+          pendingApprovals: [
+            { requestId: "permission-1", requestType: "permission_grant", title: "Read" },
+          ],
+        }),
+      }),
+    ).toEqual([]);
+  });
+
   test("does not expose a runtime-generated session title", () => {
     const projector = createProjector();
     const secretTitle = "Customer token sk-secret-title";

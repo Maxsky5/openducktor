@@ -62,23 +62,20 @@ export function AppLifecycleStateProvider({
   const { taskStreamSink } = useNotificationContext();
   const taskStreamControllerFactory = useMemo(
     () =>
-      createProductionTaskStreamController(
-        (repoPath, taskIds) => {
-          if (sessionStore.getActivitySnapshot().workspaceRepoPath !== repoPath) {
-            return;
+      createProductionTaskStreamController((repoPath, taskIds) => {
+        if (sessionStore.getActivitySnapshot().workspaceRepoPath !== repoPath) {
+          return;
+        }
+        const taskIdSet = new Set(taskIds);
+        for (const session of sessionStore.listSessionSnapshots()) {
+          if (
+            session.sessionAssociation.kind === "workflow" &&
+            taskIdSet.has(session.sessionAssociation.taskId)
+          ) {
+            sessionStore.removeSession(session);
           }
-          const taskIdSet = new Set(taskIds);
-          for (const session of sessionStore.listSessionSnapshots()) {
-            if (
-              session.sessionAssociation.kind === "workflow" &&
-              taskIdSet.has(session.sessionAssociation.taskId)
-            ) {
-              sessionStore.removeSession(session);
-            }
-          }
-        },
-        taskStreamSink,
-      ),
+        }
+      }, taskStreamSink),
     [sessionStore, taskStreamSink],
   );
 
