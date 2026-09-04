@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskCard } from "@openducktor/contracts";
+import { readFileSync } from "node:fs";
+import { issueTypeSchema, taskStatusSchema, type TaskCard } from "@openducktor/contracts";
+import { z } from "zod";
 import {
+  allowsTransition,
   deriveAgentWorkflows,
   deriveAvailableActions,
   TaskPolicyError,
@@ -36,6 +39,41 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
 });
 
 describe("task domain policy", () => {
+  test("workflow contract transitions match the live policy for every issue type and status", () => {
+    const fixture = z
+      .object({
+        transitions: z.record(
+          issueTypeSchema,
+          z.record(taskStatusSchema, z.array(taskStatusSchema)),
+        ),
+      })
+      .parse(
+        JSON.parse(
+          readFileSync(
+            new URL(
+              "../../../../../docs/contracts/workflow-contract-fixture.json",
+              import.meta.url,
+            ),
+            "utf8",
+          ),
+        ),
+      );
+    for (const issueType of issueTypeSchema.options) {
+      for (const from of taskStatusSchema.options) {
+        const current = task({ issueType, status: from });
+        const allowed = taskStatusSchema.options.filter(
+          (to) => to !== from && allowsTransition(current, from, to),
+        );
+        expect({ issueType, from, allowed: allowed.toSorted() }).toEqual({
+          issueType,
+          from,
+          allowed: fixture.transitions[issueType][from].toSorted(),
+        });
+        expect(allowsTransition(current, from, from)).toBe(true);
+      }
+    }
+  });
+
   test("blocks feature work from starting before planning", () => {
     expect(() => validateTransition(task(), [task()], "open", "in_progress")).toThrow(
       "Transition not allowed",

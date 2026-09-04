@@ -49,8 +49,8 @@
       "ready_for_dev": ["in_progress"],
       "in_progress": ["blocked", "ai_review", "human_review"],
       "blocked": ["in_progress", "ai_review", "human_review"],
-      "ai_review": ["in_progress", "human_review", "closed"],
-      "human_review": ["in_progress", "closed"],
+      "ai_review": ["blocked", "in_progress", "human_review", "closed"],
+      "human_review": ["blocked", "in_progress", "closed"],
       "closed": []
     },
     "epic": {
@@ -59,8 +59,8 @@
       "ready_for_dev": ["in_progress"],
       "in_progress": ["blocked", "ai_review", "human_review"],
       "blocked": ["in_progress", "ai_review", "human_review"],
-      "ai_review": ["in_progress", "human_review", "closed"],
-      "human_review": ["in_progress", "closed"],
+      "ai_review": ["blocked", "in_progress", "human_review", "closed"],
+      "human_review": ["blocked", "in_progress", "closed"],
       "closed": []
     },
     "task": {
@@ -69,8 +69,8 @@
       "ready_for_dev": ["in_progress"],
       "in_progress": ["blocked", "ai_review", "human_review"],
       "blocked": ["in_progress", "ai_review", "human_review"],
-      "ai_review": ["in_progress", "human_review", "closed"],
-      "human_review": ["in_progress", "closed"],
+      "ai_review": ["blocked", "in_progress", "human_review", "closed"],
+      "human_review": ["blocked", "in_progress", "closed"],
       "closed": []
     },
     "bug": {
@@ -79,8 +79,8 @@
       "ready_for_dev": ["in_progress"],
       "in_progress": ["blocked", "ai_review", "human_review"],
       "blocked": ["in_progress", "ai_review", "human_review"],
-      "ai_review": ["in_progress", "human_review", "closed"],
-      "human_review": ["in_progress", "closed"],
+      "ai_review": ["blocked", "in_progress", "human_review", "closed"],
+      "human_review": ["blocked", "in_progress", "closed"],
       "closed": []
     }
   },

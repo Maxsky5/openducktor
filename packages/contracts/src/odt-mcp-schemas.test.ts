@@ -271,7 +271,7 @@ describe("odt mcp public task schemas", () => {
       ok: false,
       error: {
         code: "TASK_TRANSITION_NOT_ALLOWED",
-        message: "Transition not allowed for task-1 (bug): human_review -> blocked",
+        message: "Transition not allowed for task-1 (bug): closed -> blocked",
       },
     });
 

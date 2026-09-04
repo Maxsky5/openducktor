@@ -102,7 +102,7 @@ describe("Codex tool normalization", () => {
       ok: false,
       error: {
         code: "TASK_TRANSITION_NOT_ALLOWED",
-        message: "Transition not allowed for task-1 (bug): human_review -> blocked",
+        message: "Transition not allowed for task-1 (bug): closed -> blocked",
       },
     };
     const part = toStreamPart(
@@ -128,7 +128,7 @@ describe("Codex tool normalization", () => {
         tool: "odt_build_blocked",
         toolType: "workflow",
         status: "error",
-        error: "Transition not allowed for task-1 (bug): human_review -> blocked",
+        error: "Transition not allowed for task-1 (bug): closed -> blocked",
       }),
     );
     expect(part).not.toHaveProperty("output");

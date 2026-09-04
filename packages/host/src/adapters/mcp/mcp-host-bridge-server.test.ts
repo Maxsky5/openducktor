@@ -464,7 +464,7 @@ describe("createMcpHostBridgeServer", () => {
         invoke() {
           return Effect.fail(
             TaskPolicyError.transitionNotAllowed(
-              "Transition not allowed for task-1 (bug): human_review -> blocked",
+              "Transition not allowed for task-1 (bug): closed -> blocked",
               { reason: "needs a product decision", taskId: "task-1" },
             ),
           );
@@ -486,7 +486,7 @@ describe("createMcpHostBridgeServer", () => {
         ok: false,
         error: {
           code: "TASK_TRANSITION_NOT_ALLOWED",
-          message: "Transition not allowed for task-1 (bug): human_review -> blocked",
+          message: "Transition not allowed for task-1 (bug): closed -> blocked",
           details: { reason: "needs a product decision", taskId: "task-1" },
         },
       });
