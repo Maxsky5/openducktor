@@ -127,9 +127,12 @@ export function useTaskApprovalFlow({
       void (async () => {
         let effectiveMode = options?.mode;
         if (effectiveMode !== "direct_merge") {
-          let resolvedGitProviderContext: RepositoryGitProviderContext;
           try {
-            resolvedGitProviderContext = await loadGitProviderContext();
+            const resolvedGitProviderContext = await loadGitProviderContext();
+            effectiveMode = resolveTaskApprovalOpenMode({
+              gitProviderContext: resolvedGitProviderContext,
+              requestedMode: effectiveMode,
+            });
           } catch (error) {
             if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
               toast.error("Failed to load Git provider context", {
@@ -140,12 +143,8 @@ export function useTaskApprovalFlow({
                 },
               });
             }
-            return;
+            effectiveMode = "direct_merge";
           }
-          effectiveMode = resolveTaskApprovalOpenMode({
-            gitProviderContext: resolvedGitProviderContext,
-            requestedMode: effectiveMode,
-          });
         }
         if (!isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
           return;

@@ -556,7 +556,7 @@ describe("useTaskApprovalFlow", () => {
     await harness.unmount();
   });
 
-  test("shows a provider read error and retries the full approval open", async () => {
+  test("opens Direct Merge after a provider read error and retries the full approval open", async () => {
     let gitProviderContext: RepositoryGitProviderContext | undefined;
     const loadGitProviderContext = mock(async (): Promise<RepositoryGitProviderContext> => {
       throw new Error("provider context read failed");
@@ -572,8 +572,9 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
 
-    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
-    expect(taskApprovalContextGetMock).not.toHaveBeenCalled();
+    await waitForTaskApprovalModalLoaded();
+    expect(expectApprovalModal().mode).toBe("direct_merge");
+    expect(taskApprovalContextGetMock).toHaveBeenCalledTimes(1);
     expect(toastErrorMock).toHaveBeenCalledWith(
       "Failed to load Git provider context",
       expect.objectContaining({
@@ -581,12 +582,13 @@ describe("useTaskApprovalFlow", () => {
         action: expect.objectContaining({ label: "Retry" }),
       }),
     );
+    const retryAction = latestToastAction();
 
     gitProviderContext = createGitProviderContextFixture();
     loadGitProviderContext.mockImplementationOnce(async () => gitProviderContext ?? null);
     await harness.update(undefined);
     await act(async () => {
-      latestHarnessValue?.openTaskApproval("TASK-1");
+      retryAction.onClick();
       await Promise.resolve();
     });
     await waitForTaskApprovalModalLoaded();
@@ -625,6 +627,7 @@ describe("useTaskApprovalFlow", () => {
     const loadGitProviderContext = mock(async (): Promise<RepositoryGitProviderContext> => {
       throw new Error("provider context read failed");
     });
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
     let activeWorkspace = createWorkspace("a");
     const harness = await mountApprovalFlow(() =>
       createUseTaskApprovalFlowArgs({ activeWorkspace, loadGitProviderContext }),

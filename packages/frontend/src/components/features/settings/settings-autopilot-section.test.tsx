@@ -1,23 +1,11 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import {
-  type AutopilotSettings,
-  createDefaultAutopilotSettings,
-  type RepositoryGitProviderContext,
-} from "@openducktor/contracts";
-import { useQueryClient } from "@tanstack/react-query";
+import { type AutopilotSettings, createDefaultAutopilotSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
 import { setAutopilotRuleAction } from "@/features/autopilot/autopilot-catalog";
-import { QueryProvider } from "@/lib/query-provider";
-import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
-import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
 
-const renderSection = (
-  autopilot: AutopilotSettings,
-  disabled = false,
-  providerResult: RepositoryGitProviderContext | Error = createGitProviderContextFixture(),
-) => {
+const renderSection = (autopilot: AutopilotSettings, disabled = false) => {
   let latestAutopilot = autopilot;
   const onUpdateAutopilot = mock(
     (updater: (current: AutopilotSettings) => AutopilotSettings): void => {
@@ -25,34 +13,12 @@ const renderSection = (
     },
   );
 
-  const Harness = () => {
-    const queryClient = useQueryClient();
-    const providerQueryOptions = repositoryGitProviderContextQueryOptions("/repo");
-    if (providerResult instanceof Error) {
-      queryClient.setQueryDefaults(providerQueryOptions.queryKey, { enabled: false });
-      queryClient.setQueryData(providerQueryOptions.queryKey, null);
-      queryClient
-        .getQueryCache()
-        .find({ queryKey: providerQueryOptions.queryKey })
-        ?.setState({ data: undefined, error: providerResult, status: "error" });
-    } else {
-      queryClient.setQueryData(providerQueryOptions.queryKey, providerResult);
-    }
-
-    return (
-      <SettingsAutopilotSection
-        autopilot={autopilot}
-        disabled={disabled}
-        repoPath="/repo"
-        onUpdateAutopilot={onUpdateAutopilot}
-      />
-    );
-  };
-
   render(
-    <QueryProvider useIsolatedClient>
-      <Harness />
-    </QueryProvider>,
+    <SettingsAutopilotSection
+      autopilot={autopilot}
+      disabled={disabled}
+      onUpdateAutopilot={onUpdateAutopilot}
+    />,
   );
 
   return {
@@ -112,32 +78,32 @@ describe("settings Autopilot section", () => {
     });
   });
 
-  test("hides Pull Request generation when the provider does not support it", async () => {
-    renderSection(createDefaultAutopilotSettings(), false, null);
+  test("keeps the global Pull Request action available without provider support", async () => {
+    renderSection(createDefaultAutopilotSettings());
 
     await act(async () => {
       fireEvent.click(
         screen.getByRole("button", { name: "When a task progresses to Human Review" }),
       );
     });
-    expect(screen.queryByText("Start Generate Pull Request")).toBeNull();
+    expect(
+      screen
+        .getByRole("option", { name: /Start Generate Pull Request/ })
+        .getAttribute("aria-disabled"),
+    ).toBe("false");
   });
 
-  test("keeps a saved Pull Request action visible when the provider does not support it", async () => {
+  test("keeps a saved global Pull Request action visible", async () => {
     const autopilot = setAutopilotRuleAction(
       createDefaultAutopilotSettings(),
       "taskProgressedToHumanReview",
       "startGeneratePullRequest",
     );
-    renderSection(autopilot, false, null);
+    renderSection(autopilot);
 
     expect(
       screen.getByRole("button", { name: "When a task progresses to Human Review" }).textContent,
     ).toContain("Start Generate Pull Request");
-    expect(
-      screen.getByText(/Start Generate Pull Request.*does not support Pull Requests/),
-    ).toBeDefined();
-
     await act(async () => {
       fireEvent.click(
         screen.getByRole("button", { name: "When a task progresses to Human Review" }),
@@ -147,46 +113,6 @@ describe("settings Autopilot section", () => {
       screen
         .getByRole("option", { name: /Start Generate Pull Request/ })
         .getAttribute("aria-disabled"),
-    ).toBe("true");
-  });
-
-  test("shows but disables Pull Request generation when provider health blocks it", async () => {
-    renderSection(
-      createDefaultAutopilotSettings(),
-      false,
-      createGitProviderContextFixture({ available: false }),
-    );
-
-    expect(
-      screen.getAllByText(/Start Generate Pull Request.*Sign in to GitHub CLI\./),
-    ).not.toHaveLength(0);
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: "When a task progresses to Human Review" }),
-      );
-    });
-    expect(
-      screen
-        .getByRole("option", { name: /Start Generate Pull Request/ })
-        .getAttribute("aria-disabled"),
-    ).toBe("true");
-  });
-
-  test("shows but disables Pull Request generation when the provider read fails", async () => {
-    renderSection(createDefaultAutopilotSettings(), false, new Error("connection failed"));
-
-    expect(screen.getAllByText(/Start Generate Pull Request.*connection failed/)).not.toHaveLength(
-      0,
-    );
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: "When a task progresses to Human Review" }),
-      );
-    });
-    expect(
-      screen
-        .getByRole("option", { name: /Start Generate Pull Request/ })
-        .getAttribute("aria-disabled"),
-    ).toBe("true");
+    ).toBe("false");
   });
 });

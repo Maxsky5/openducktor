@@ -1,5 +1,4 @@
 import type { AutopilotSettings } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
@@ -13,31 +12,17 @@ import {
   getAutopilotSelectedValue,
   setAutopilotRuleAction,
 } from "@/features/autopilot/autopilot-catalog";
-import { gitProviderReadError, pullRequestHealthError } from "@/lib/git-provider-health";
-import { repositoryGitProviderContextQueryOptionsOrSkip } from "@/state/queries/git-provider-context";
-
 type SettingsAutopilotSectionProps = {
   autopilot: AutopilotSettings;
   disabled: boolean;
-  repoPath: string | null;
   onUpdateAutopilot: (updater: (current: AutopilotSettings) => AutopilotSettings) => void;
 };
 
 export function SettingsAutopilotSection({
   autopilot,
   disabled,
-  repoPath,
   onUpdateAutopilot,
 }: SettingsAutopilotSectionProps): ReactElement {
-  const providerQuery = useQuery(repositoryGitProviderContextQueryOptionsOrSkip(repoPath));
-  const providerContext =
-    repoPath !== null && providerQuery.isSuccess ? providerQuery.data : undefined;
-  const supportsPullRequests =
-    providerContext?.descriptor.capabilities.supportsPullRequests === true;
-  const providerHealthError = pullRequestHealthError(providerContext);
-  const providerReadError =
-    repoPath !== null && providerQuery.isError ? gitProviderReadError(providerQuery.error) : null;
-
   return (
     <div className="grid gap-4 p-4">
       <div className="space-y-2">
@@ -76,53 +61,18 @@ export function SettingsAutopilotSection({
         {AUTOPILOT_EVENT_DEFINITIONS.map((eventDefinition) => {
           const rule = getAutopilotRule(autopilot, eventDefinition.id);
           const selectedValue = getAutopilotSelectedValue(rule);
-          const hasPullRequestAction = eventDefinition.availableActionIds.includes(
-            "startGeneratePullRequest",
-          );
-          const hasSavedPullRequestAction = selectedValue === "startGeneratePullRequest";
-          const showPullRequestAction =
-            supportsPullRequests || hasSavedPullRequestAction || providerReadError !== null;
-          const availableActionIds = eventDefinition.availableActionIds.filter(
-            (actionId) => actionId !== "startGeneratePullRequest" || showPullRequestAction,
-          );
-          const isCheckingProvider =
-            hasPullRequestAction && repoPath !== null && providerQuery.isLoading;
-          let pullRequestError = providerHealthError ?? providerReadError;
-          if (
-            hasPullRequestAction &&
-            !isCheckingProvider &&
-            pullRequestError === null &&
-            !supportsPullRequests
-          ) {
-            pullRequestError = "The current Git provider does not support Pull Requests.";
-          }
-          let pullRequestNote: string | null = null;
-          if (isCheckingProvider) {
-            pullRequestNote = "Checking the current Git provider.";
-          } else if (pullRequestError && showPullRequestAction) {
-            pullRequestNote = `Start Generate Pull Request: ${pullRequestError}`;
-          }
           const labelId = `autopilot-${eventDefinition.id}-label`;
-          const noteId = pullRequestNote
-            ? `autopilot-${eventDefinition.id}-provider-note`
-            : undefined;
           const options = [
             {
               value: AUTOPILOT_DISABLED_VALUE,
               label: "Disabled",
               description: "Do not trigger an automatic workflow action for this event.",
             },
-            ...availableActionIds.map((actionId) => {
-              const isPullRequestAction = actionId === "startGeneratePullRequest";
-              return {
-                value: actionId,
-                label: AUTOPILOT_ACTION_DEFINITIONS[actionId].label,
-                description: AUTOPILOT_ACTION_DEFINITIONS[actionId].description,
-                disabled:
-                  isPullRequestAction &&
-                  (isCheckingProvider || !supportsPullRequests || pullRequestError !== null),
-              };
-            }),
+            ...eventDefinition.availableActionIds.map((actionId) => ({
+              value: actionId,
+              label: AUTOPILOT_ACTION_DEFINITIONS[actionId].label,
+              description: AUTOPILOT_ACTION_DEFINITIONS[actionId].description,
+            })),
           ];
 
           return (
@@ -145,7 +95,6 @@ export function SettingsAutopilotSection({
                   searchPlaceholder="Search actions..."
                   triggerClassName="justify-between"
                   triggerAriaLabelledBy={labelId}
-                  {...(noteId ? { triggerAriaDescribedBy: noteId } : {})}
                   onValueChange={(value) => {
                     if (!isAutopilotSelectValue(value)) {
                       return;
@@ -155,18 +104,6 @@ export function SettingsAutopilotSection({
                     );
                   }}
                 />
-                {pullRequestNote ? (
-                  <p
-                    id={noteId}
-                    className={
-                      pullRequestError
-                        ? "text-xs text-destructive"
-                        : "text-xs text-muted-foreground"
-                    }
-                  >
-                    {pullRequestNote}
-                  </p>
-                ) : null}
               </div>
             </div>
           );
