@@ -32,6 +32,19 @@ const createDependencies = (calls: unknown[], taskStore: TaskStorePort) => ({
   }),
 });
 
+type Gate = {
+  readonly promise: Promise<void>;
+  readonly release: () => void;
+};
+
+const createGate = (): Gate => {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+};
+
 describe("createTaskService build start worktree handling", () => {
   test("creates the canonical worktree and transitions the task", async () => {
     const calls: unknown[] = [];
@@ -145,31 +158,31 @@ describe("createTaskService build start worktree handling", () => {
 
   test("waits for an active worktree read before runtime failure rollback", async () => {
     const calls: unknown[] = [];
-    const coordinator = createTaskSessionLifecycleCoordinator();
-    let finishRead = () => {};
-    let failRuntime = () => {};
-    let markReadStarted = () => {};
-    let markRuntimeStarted = () => {};
-    const readFinished = new Promise<void>((resolve) => {
-      finishRead = resolve;
-    });
-    const runtimeFailureRequested = new Promise<void>((resolve) => {
-      failRuntime = resolve;
-    });
-    const readStarted = new Promise<void>((resolve) => {
-      markReadStarted = resolve;
-    });
-    const runtimeStarted = new Promise<void>((resolve) => {
-      markRuntimeStarted = resolve;
-    });
+    const baseCoordinator = createTaskSessionLifecycleCoordinator();
+    const readFinished = createGate();
+    const readStarted = createGate();
+    const rollbackStarted = createGate();
+    const runtimeFailureRequested = createGate();
+    const runtimeStarted = createGate();
+    let trackRollbackAcquisition = false;
+    const coordinator = {
+      ...baseCoordinator,
+      acquireWorktreeLifecycle(paths: readonly string[]) {
+        return Effect.sync(() => {
+          if (trackRollbackAcquisition) {
+            rollbackStarted.release();
+          }
+        }).pipe(Effect.zipRight(baseCoordinator.acquireWorktreeLifecycle(paths)));
+      },
+    };
     const dependencies = createDependencies(calls, {
       getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
     });
     const runtimeRegistry: RuntimeRegistryPort = {
       ...dependencies.runtimeRegistry,
       ensureWorkspaceRuntime() {
-        return Effect.sync(markRuntimeStarted).pipe(
-          Effect.zipRight(Effect.promise(() => runtimeFailureRequested)),
+        return Effect.sync(runtimeStarted.release).pipe(
+          Effect.zipRight(Effect.promise(() => runtimeFailureRequested.promise)),
           Effect.zipRight(
             Effect.fail(
               new HostOperationError({
@@ -193,44 +206,31 @@ describe("createTaskService build start worktree handling", () => {
       }),
     );
     const startFailure = startResult.catch((cause: unknown) => cause);
-    await runtimeStarted;
+    await runtimeStarted.promise;
     const readResult = Effect.runPromise(
       coordinator.runWorktreeRead(
         "/worktrees/repo/task-1",
-        Effect.sync(markReadStarted).pipe(
-          Effect.zipRight(Effect.promise(() => readFinished)),
-          Effect.tap(() => Effect.sync(() => calls.push({ type: "readFinished" }))),
+        Effect.sync(readStarted.release).pipe(
+          Effect.zipRight(Effect.promise(() => readFinished.promise)),
         ),
       ),
     );
-    await readStarted;
+    await readStarted.promise;
 
-    failRuntime();
-    await Promise.resolve();
-    await Promise.resolve();
+    trackRollbackAcquisition = true;
+    runtimeFailureRequested.release();
+    await rollbackStarted.promise;
 
-    const removedWhileReadWasActive = calls.some(
-      (call) => z.object({ type: z.literal("removeWorktree") }).safeParse(call).success,
-    );
-    finishRead();
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
+    readFinished.release();
     const [, startCause] = await Promise.all([readResult, startFailure]);
     expect(String(startCause)).toContain("runtime failed");
-    expect(removedWhileReadWasActive).toBe(false);
     expect(calls).toContainEqual({
       type: "removeWorktree",
       repoPath: "/repo",
       worktreePath: "/worktrees/repo/task-1",
       force: true,
     });
-    expect(
-      calls.findIndex(
-        (call) => z.object({ type: z.literal("readFinished") }).safeParse(call).success,
-      ),
-    ).toBeLessThan(
-      calls.findIndex(
-        (call) => z.object({ type: z.literal("removeWorktree") }).safeParse(call).success,
-      ),
-    );
   });
 
   test("removes a new worktree when the Builder transition fails", async () => {
