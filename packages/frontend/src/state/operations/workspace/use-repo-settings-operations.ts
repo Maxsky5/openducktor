@@ -177,11 +177,12 @@ export function useRepoSettingsOperations({
     async (snapshot: SettingsSnapshotSaveInput): Promise<void> => {
       const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsSnapshotQueryKey);
       const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
-      queryClient.removeQueries({
+      await queryClient.invalidateQueries({
         queryKey: settingsSnapshotQueryKey,
         exact: true,
+        refetchType: "none",
       });
-      const normalizedSnapshot = await loadSettingsSnapshotFromQuery(queryClient);
+      const normalizedSnapshot = await queryClient.fetchQuery(settingsSnapshotQueryOptions());
       await queryClient.invalidateQueries({
         queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
       });

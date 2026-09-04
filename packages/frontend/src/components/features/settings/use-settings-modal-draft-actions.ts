@@ -21,6 +21,9 @@ export type SettingsModalDraftActions = {
   updateGlobalChatSettings: (
     updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"],
   ) => void;
+  updateGlobalSystemSettings: (
+    updater: (current: SettingsSnapshot["system"]) => SettingsSnapshot["system"],
+  ) => void;
   updateGlobalGeneralSettings: (
     updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
   ) => void;
@@ -113,6 +116,13 @@ export const useSettingsModalDraftActions = ({
   const updateGlobalChatSettings = useCallback(
     (updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"]): void => {
       updateSnapshotSection("chat", updater);
+    },
+    [updateSnapshotSection],
+  );
+
+  const updateGlobalSystemSettings = useCallback(
+    (updater: (current: SettingsSnapshot["system"]) => SettingsSnapshot["system"]): void => {
+      updateSnapshotSection("system", updater);
     },
     [updateSnapshotSection],
   );
@@ -216,6 +226,7 @@ export const useSettingsModalDraftActions = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateGlobalSystemSettings,
     updateGlobalGeneralSettings,
     updateGlobalAppearanceSettings,
     updateAgentRuntimes,

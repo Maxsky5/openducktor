@@ -1,6 +1,6 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { agentPromptTemplateIdValues, type SettingsSnapshot } from "@openducktor/contracts";
-import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, QueryObserver, useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -13,7 +13,7 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { runtimeQueryKeys } from "../../queries/runtime";
 import { repoTaskDataQueryOptions, type RepoTaskData, taskQueryKeys } from "../../queries/tasks";
-import { workspaceQueryKeys } from "../../queries/workspace";
+import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "../../queries/workspace";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
 
@@ -663,6 +663,38 @@ describe("use-repo-settings-operations", () => {
     } finally {
       await harness.unmount();
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
+  test("publishes a full-save preference change to mounted settings observers", async () => {
+    const initial = createSettingsSnapshot();
+    const saved = { ...initial, system: { preferredOpenInToolId: "zed" as const } };
+    const originalGet = host.workspaceGetSettingsSnapshot;
+    const originalSave = host.workspaceSaveSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = async () => saved;
+    host.workspaceSaveSettingsSnapshot = async () => [];
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords: () => {},
+      applyWorkspaceRecord: () => {},
+    });
+    let unsubscribe = () => {};
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), initial);
+      const observer = new QueryObserver(queryClient, settingsSnapshotQueryOptions());
+      let observed = initial;
+      unsubscribe = observer.subscribe((result) => {
+        if (result.data) observed = result.data;
+      });
+      await harness.run(async (operations) => operations.saveSettingsSnapshot(saved));
+      expect(observed.system).toEqual(saved.system);
+    } finally {
+      unsubscribe();
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = originalGet;
+      host.workspaceSaveSettingsSnapshot = originalSave;
     }
   });
 

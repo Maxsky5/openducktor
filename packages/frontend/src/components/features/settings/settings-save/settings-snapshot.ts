@@ -17,6 +17,7 @@ export const prepareSettingsSnapshotForSave = (
 
   return {
     git: prepareGlobalGitSettingsForSave(snapshot.git),
+    system: snapshot.system,
     general: snapshot.general,
     appearance: snapshot.appearance,
     chat: snapshot.chat,

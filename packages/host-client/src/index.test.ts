@@ -1273,6 +1273,29 @@ describe("HostClient", () => {
     ]);
   });
 
+  test("systemUpdatePreferredOpenInTool uses the narrow route and validates the snapshot", async () => {
+    const { client, calls } = createClient(() => ({
+      theme: "light",
+      system: { preferredOpenInToolId: "zed" },
+    }));
+    expect(
+      (await client.systemUpdatePreferredOpenInTool({ preferredOpenInToolId: "zed" })).system,
+    ).toEqual({ preferredOpenInToolId: "zed" });
+    await client.systemUpdatePreferredOpenInTool({});
+    expect(calls).toEqual([
+      {
+        command: "system_update_preferred_open_in_tool",
+        args: { system: { preferredOpenInToolId: "zed" } },
+      },
+      { command: "system_update_preferred_open_in_tool", args: { system: {} } },
+    ]);
+    const invalid = createClient(() => ({
+      theme: "light",
+      system: { preferredOpenInToolId: "unknown" },
+    }));
+    await expect(invalid.client.systemUpdatePreferredOpenInTool({})).rejects.toThrow();
+  });
+
   test("workspaceUpdateAgentModelFavorites returns the canonical settings snapshot", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "workspace_update_agent_model_favorites") {

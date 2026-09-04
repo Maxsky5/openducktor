@@ -1,5 +1,9 @@
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
-import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
+import {
+  settingsSnapshotSchema,
+  type SystemSettings,
+  DEFAULT_AGENT_RUNTIMES,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { HostOperationError } from "../../effect/host-errors";
@@ -15,6 +19,38 @@ const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 describe("createWorkspaceSettingsCommandHandlers", () => {
+  test("validates the narrow preference command before dispatch", async () => {
+    const calls: SystemSettings[] = [];
+    const service = createWorkspaceSettingsServiceTestDouble({
+      updatePreferredOpenInTool(system) {
+        calls.push(system);
+        return Effect.succeed(settingsSnapshotSchema.parse({ theme: "light", system }));
+      },
+    });
+    const router = createHostCommandRouter({
+      handlers: createWorkspaceSettingsCommandHandlers(service),
+    });
+    await expect(
+      router.invoke("system_update_preferred_open_in_tool", {
+        system: { preferredOpenInToolId: "zed" },
+      }),
+    ).resolves.toMatchObject({ system: { preferredOpenInToolId: "zed" } });
+    await router.invoke("system_update_preferred_open_in_tool", { system: {} });
+    for (const system of [
+      null,
+      { preferredOpenInToolId: null },
+      { preferredOpenInToolId: "unknown" },
+    ]) {
+      await expect(
+        router.invoke("system_update_preferred_open_in_tool", { system }),
+      ).rejects.toThrow("Invalid preferred Open In tool");
+    }
+    await expect(router.invoke("system_update_preferred_open_in_tool", {})).rejects.toThrow(
+      "expects argument 'system'",
+    );
+    expect(calls).toEqual([{ preferredOpenInToolId: "zed" }, {}]);
+  });
+
   test("routes settings snapshot commands through the workspace settings service", async () => {
     const calls: string[] = [];
     const addedWorkspaceInputs: Parameters<WorkspaceSettingsService["addWorkspace"]>[0][] = [];
@@ -229,6 +265,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           try: async () => {
             calls.push("getSettingsSnapshot");
             return {
+              system: {},
               theme: "light",
               git: { defaultMergeMethod: "merge_commit" },
               general: { openAgentStudioTabOnBackgroundSessionStart: true },
@@ -278,6 +315,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           try: async () => {
             calls.push("updateAgentModelFavorites");
             return {
+              system: {},
               theme: "light",
               git: { defaultMergeMethod: "merge_commit" },
               general: { openAgentStudioTabOnBackgroundSessionStart: true },
@@ -397,11 +435,13 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       }),
     ).resolves.toMatchObject({ workspaceId: "repo" });
     await expect(router.invoke("workspace_get_settings_snapshot")).resolves.toMatchObject({
+      system: {},
       theme: "light",
     });
     await expect(
       router.invoke("workspace_save_settings_snapshot", {
         snapshot: {
+          system: {},
           git: { defaultMergeMethod: "merge_commit" },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
           appearance: { horizontalScrollbarVisibility: "system" },
@@ -620,6 +660,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(
       router.invoke("workspace_save_settings_snapshot", {
         snapshot: {
+          system: {},
           git: { defaultMergeMethod: "merge_commit" },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
           appearance: { horizontalScrollbarVisibility: "auto" },

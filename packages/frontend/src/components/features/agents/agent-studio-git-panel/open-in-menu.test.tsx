@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { SystemOpenInToolInfo } from "@openducktor/contracts";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  settingsSnapshotSchema,
+  type SystemSettings,
+  type SystemOpenInToolInfo,
+} from "@openducktor/contracts";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "@/lib/query-provider";
 import { toRightPanelStorageKey } from "@/pages/agents/agents-page-selection";
@@ -27,7 +31,20 @@ const runWithReactAct = async (run: () => void | Promise<void>): Promise<void> =
 describe("OpenInMenu", () => {
   let rendered: ReturnType<typeof render> | null = null;
 
+  const originalGetSettings = host.workspaceGetSettingsSnapshot;
+  const originalUpdatePreference = host.systemUpdatePreferredOpenInTool;
+  let system: SystemSettings = {};
+  const updatePreference = mock(async (next: SystemSettings) => {
+    system = next;
+    return settingsSnapshotSchema.parse({ theme: "light", system });
+  });
+
   beforeEach(() => {
+    system = {};
+    updatePreference.mockClear();
+    host.workspaceGetSettingsSnapshot = async () =>
+      settingsSnapshotSchema.parse({ theme: "light", system });
+    host.systemUpdatePreferredOpenInTool = updatePreference;
     enableReactActEnvironment();
   });
 
@@ -38,6 +55,8 @@ describe("OpenInMenu", () => {
       });
       rendered = null;
     }
+    host.workspaceGetSettingsSnapshot = originalGetSettings;
+    host.systemUpdatePreferredOpenInTool = originalUpdatePreference;
     globalThis.localStorage.clear();
   });
 
@@ -97,10 +116,104 @@ describe("OpenInMenu", () => {
       });
 
       expect(onOpenInTool).toHaveBeenCalledWith("ghostty");
-      expect(globalThis.localStorage.getItem(storageKey)).toContain("ghostty");
+      expect(updatePreference).toHaveBeenCalledWith({ preferredOpenInToolId: "ghostty" });
+      expect(globalThis.localStorage.getItem(storageKey)).toBeNull();
       expect(systemListOpenInTools).toHaveBeenCalledTimes(1);
     } finally {
       host.systemListOpenInTools = originalSystemListOpenInTools;
+    }
+  });
+
+  test("keeps the canonical preference when saving fails after launch", async () => {
+    await withMockedToast(async ({ toastErrorMock }) => {
+      const originalList = host.systemListOpenInTools;
+      host.systemListOpenInTools = async () => [{ toolId: "finder" }, { toolId: "zed" }];
+      host.systemUpdatePreferredOpenInTool = async () => {
+        throw new Error("config write failed");
+      };
+      const onOpenInTool = mock(async () => {});
+      try {
+        rendered = render(
+          <QueryProvider useIsolatedClient>
+            <TooltipProvider>
+              <OpenInMenu
+                contextMode="repository"
+                targetPath="/tmp/repo"
+                disabledReason={null}
+                onOpenInTool={onOpenInTool}
+              />
+            </TooltipProvider>
+          </QueryProvider>,
+        );
+        await screen.findByTestId("agent-studio-git-open-in-icon-finder");
+        await runWithReactAct(async () => {
+          fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
+        });
+        await runWithReactAct(async () => {
+          fireEvent.click(screen.getByTestId("agent-studio-git-open-in-item-zed"));
+        });
+        expect(onOpenInTool).toHaveBeenCalledWith("zed");
+        expect(toastErrorMock).toHaveBeenCalledWith("Opened tool, but failed to save preference", {
+          description: "config write failed",
+        });
+        expect(screen.getByTestId("agent-studio-git-open-in-default-button").textContent).toContain(
+          "Finder",
+        );
+      } finally {
+        host.systemListOpenInTools = originalList;
+      }
+    });
+  });
+
+  test("shares a successful preference update with another mounted menu", async () => {
+    const originalList = host.systemListOpenInTools;
+    host.systemListOpenInTools = async () => [{ toolId: "finder" }, { toolId: "zed" }];
+    let completeLaunch!: () => void;
+    const launched = new Promise<void>((resolve) => {
+      completeLaunch = resolve;
+    });
+    try {
+      rendered = render(
+        <QueryProvider useIsolatedClient>
+          <TooltipProvider>
+            <OpenInMenu
+              contextMode="repository"
+              targetPath="/tmp/repo"
+              disabledReason={null}
+              onOpenInTool={() => launched}
+            />
+            <OpenInMenu
+              contextMode="worktree"
+              targetPath="/tmp/worktree"
+              disabledReason={null}
+              onOpenInTool={async () => {}}
+            />
+          </TooltipProvider>
+        </QueryProvider>,
+      );
+      await screen.findByRole("button", { name: "Open repository root in Finder" });
+      await runWithReactAct(async () => {
+        fireEvent.click(screen.getAllByTestId("agent-studio-git-open-in-trigger")[0]!);
+      });
+      await runWithReactAct(async () => {
+        fireEvent.click(screen.getByTestId("agent-studio-git-open-in-item-zed"));
+      });
+      expect(updatePreference).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Open repository root in Finder" })
+          .disabled,
+      ).toBe(true);
+      await runWithReactAct(async () => {
+        completeLaunch();
+      });
+      await waitFor(
+        () =>
+          expect(screen.getByRole("button", { name: "Open task worktree in Zed" })).toBeTruthy(),
+        { timeout: 700 },
+      );
+      expect(updatePreference).toHaveBeenCalledTimes(1);
+    } finally {
+      host.systemListOpenInTools = originalList;
     }
   });
 
@@ -209,6 +322,7 @@ describe("OpenInMenu", () => {
           await Promise.resolve();
         });
 
+        expect(updatePreference).not.toHaveBeenCalled();
         expect(toastErrorMock).toHaveBeenCalledWith("Failed to open in Zed", {
           description: "launch failed",
         });
@@ -221,7 +335,8 @@ describe("OpenInMenu", () => {
   test("uses the persisted last-used tool as the default action and keeps only alternatives in the menu", async () => {
     const originalSystemListOpenInTools = host.systemListOpenInTools;
     const storageKey = toRightPanelStorageKey();
-    globalThis.localStorage.setItem(storageKey, JSON.stringify({ openInToolId: "zed" }));
+    system = { preferredOpenInToolId: "zed" };
+    globalThis.localStorage.setItem(storageKey, JSON.stringify({ openInToolId: "terminal" }));
     host.systemListOpenInTools = mock(
       async () =>
         [
@@ -272,7 +387,8 @@ describe("OpenInMenu", () => {
   test("falls back from an absent persisted tool to the first discovered tool without launching", async () => {
     const originalSystemListOpenInTools = host.systemListOpenInTools;
     const storageKey = toRightPanelStorageKey();
-    globalThis.localStorage.setItem(storageKey, JSON.stringify({ openInToolId: "zed" }));
+    system = { preferredOpenInToolId: "zed" };
+    globalThis.localStorage.setItem(storageKey, JSON.stringify({ openInToolId: "terminal" }));
     host.systemListOpenInTools = mock(
       async () =>
         [

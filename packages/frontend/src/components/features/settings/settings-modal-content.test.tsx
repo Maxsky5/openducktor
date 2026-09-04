@@ -100,6 +100,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   globalPromptRoleTabErrorCounts: { shared: 0, spec: 0, planner: 0, build: 0, qa: 0 },
   selectedRepoPromptRoleTabErrorCounts: { shared: 0, spec: 0, planner: 0, build: 0, qa: 0 },
   settingsSectionErrorCountById: {
+    system: 0,
     general: 0,
     git: 0,
     runtimes: 0,
@@ -119,6 +120,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   detectSelectedRepoGithubRepository: async () => null,
   updateSelectedRepoConfig: () => {},
   updateGlobalGitConfig: () => {},
+  updateGlobalSystemSettings: () => {},
   updateGlobalGeneralSettings: () => {},
   updateGlobalChatSettings: () => {},
   updateGlobalAppearanceSettings: () => {},

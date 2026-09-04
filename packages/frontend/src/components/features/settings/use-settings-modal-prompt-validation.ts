@@ -91,6 +91,7 @@ export const useSettingsModalPromptValidation = ({
   );
 
   const settingsSectionErrorCountById = {
+    system: 0,
     general: 0,
     git: 0,
     runtimes: 0,

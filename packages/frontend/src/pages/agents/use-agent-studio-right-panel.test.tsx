@@ -383,7 +383,7 @@ describe("useAgentStudioRightPanel", () => {
     await secondHarness.unmount();
   });
 
-  test("preserves the stored preferred open-in tool when panel state changes", async () => {
+  test("discards the stored preferred open-in tool and preserves role booleans", async () => {
     globalThis.localStorage.setItem(
       toRightPanelStorageKey(),
       JSON.stringify({ openInToolId: "zed", build: true }),
@@ -402,7 +402,7 @@ describe("useAgentStudioRightPanel", () => {
     });
 
     const persisted = JSON.parse(globalThis.localStorage.getItem(toRightPanelStorageKey()) ?? "{}");
-    expect(persisted.openInToolId).toBe("zed");
+    expect(persisted).not.toHaveProperty("openInToolId");
     expect(persisted.build).toBe(false);
 
     await harness.unmount();

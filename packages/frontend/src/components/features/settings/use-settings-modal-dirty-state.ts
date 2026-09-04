@@ -2,6 +2,7 @@ import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useCallback, useState } from "react";
 
 export type DirtySections = {
+  system: boolean;
   general: boolean;
   appearance: boolean;
   chat: boolean;
@@ -15,6 +16,7 @@ export type DirtySections = {
 };
 
 export const EMPTY_DIRTY_SECTIONS: DirtySections = {
+  system: false,
   general: false,
   appearance: false,
   chat: false,

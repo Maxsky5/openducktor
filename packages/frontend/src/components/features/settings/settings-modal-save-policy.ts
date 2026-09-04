@@ -3,6 +3,7 @@ import { prepareGlobalGitSettingsForSave } from "./settings-save/global-git-sett
 import type { DirtySections } from "./use-settings-modal-dirty-state";
 
 const DIRTY_SECTION_KEYS = [
+  "system",
   "general",
   "appearance",
   "chat",

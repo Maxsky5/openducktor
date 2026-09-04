@@ -142,6 +142,8 @@ Important paths:
 
 OpenDucktor uses one SQLite database per configured workspace.
 
+The preferred Open In tool is a global setting in `config.json` under `system.preferredOpenInToolId`. Edit it in Settings > System, or select a tool from the Open In menu. The menu saves the choice after the app opens. Clear the preference to use the first available tool. Right-panel layout remains in browser localStorage.
+
 ## Development Expectations
 
 - Keep changes consistent with the current hexagonal boundaries.

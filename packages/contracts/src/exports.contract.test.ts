@@ -482,6 +482,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "systemOpenInToolInfoSchema",
   "systemOpenInToolIdValues",
   "systemOpenInToolListSchema",
+  "systemSettingsSchema",
   "planSubtaskInputSchema",
   "planSubtaskIssueTypeSchema",
   "planSubtaskPrioritySchema",

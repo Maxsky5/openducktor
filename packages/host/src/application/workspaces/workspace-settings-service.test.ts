@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -37,6 +37,7 @@ const repoConfig = (workspaceId: string, repoPath: string): RepoConfig => ({
 });
 const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   version: 3,
+  system: {},
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   general: { openAgentStudioTabOnBackgroundSessionStart: true },
@@ -182,6 +183,95 @@ describe("createWorkspaceSettingsService", () => {
     await expect(Effect.runPromise(service.getSettingsSnapshot())).resolves.toMatchObject({
       autopilot: { alwaysStartQaReviewsFresh: true },
     });
+  });
+
+  test("rejects invalid preferences and propagates disk failures without publishing new state", async () => {
+    const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const invalid = { preferredOpenInToolId: "unknown" };
+    const result = await Effect.runPromise(
+      // @ts-expect-error Verify validation for an untyped caller.
+      Effect.either(service.updatePreferredOpenInTool(invalid)),
+    );
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") expect(result.left._tag).toBe("HostValidationError");
+    expect(settingsConfig.writtenConfigs).toHaveLength(0);
+    const failure = new HostOperationError({
+      operation: "config.write",
+      message: "Config directory is read-only",
+    });
+    const failingService = createWorkspaceSettingsService({
+      ...settingsConfig,
+      writeConfig: () => Effect.fail(failure),
+    });
+    const failedWrite = await Effect.runPromise(
+      Effect.either(failingService.updatePreferredOpenInTool({ preferredOpenInToolId: "zed" })),
+    );
+    expect(failedWrite._tag).toBe("Left");
+    if (failedWrite._tag === "Left") expect(failedWrite.left).toBe(failure);
+    expect((await Effect.runPromise(failingService.getSettingsSnapshot())).system).toEqual({});
+  });
+
+  test("serializes preference updates with other config writes", async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const writing = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig(),
+      beforeWrite: async (config) => {
+        if (config.theme === "dark" && !config.system.preferredOpenInToolId) {
+          started();
+          await held;
+        }
+      },
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const themeWrite = Effect.runPromise(service.setTheme("dark"));
+    await writing;
+    const preferenceWrite = Effect.runPromise(
+      service.updatePreferredOpenInTool({ preferredOpenInToolId: "zed" }),
+    );
+    release();
+    await Promise.all([themeWrite, preferenceWrite]);
+    expect(settingsConfig.writtenConfigs.at(-1)).toMatchObject({
+      theme: "dark",
+      system: { preferredOpenInToolId: "zed" },
+    });
+  });
+
+  test("updates only the system preference and full saves can clear it", async () => {
+    const config = globalConfig({ theme: "dark", recentWorkspaces: ["repo"] });
+    const settingsConfig = createFakeSettingsConfig({ config });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(
+      service.updatePreferredOpenInTool({ preferredOpenInToolId: "zed" }),
+    );
+    expect(snapshot.system).toEqual({ preferredOpenInToolId: "zed" });
+    expect(settingsConfig.writtenConfigs[0]).toEqual({ ...config, system: snapshot.system });
+    await Effect.runPromise(service.saveSettingsSnapshot({ ...snapshot, system: {} }));
+    expect((await Effect.runPromise(service.getSettingsSnapshot())).system).toEqual({});
+  });
+
+  test("persists the preference across host restarts and omits it when cleared", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-open-in-"));
+    const configPath = path.join(tempDir, "config.json");
+    try {
+      const service = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+      await Effect.runPromise(service.updatePreferredOpenInTool({ preferredOpenInToolId: "zed" }));
+      const restarted = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+      expect((await Effect.runPromise(restarted.getSettingsSnapshot())).system).toEqual({
+        preferredOpenInToolId: "zed",
+      });
+      await Effect.runPromise(restarted.updatePreferredOpenInTool({}));
+      expect(JSON.parse(await readFile(configPath, "utf8")).system).toEqual({});
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   test("updates only canonical agent model favorites", async () => {
@@ -492,6 +582,7 @@ describe("createWorkspaceSettingsService", () => {
     expect(records[0]?.repoPath).toBe("/canonical/repo");
     expect(settingsConfig.writtenConfigs[0]).toMatchObject({
       version: 3,
+      system: {},
       activeWorkspace: "repo",
       theme: "light",
       workspaceOrder: ["repo"],

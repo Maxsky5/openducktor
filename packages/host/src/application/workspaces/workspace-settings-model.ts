@@ -9,6 +9,7 @@ import {
   type RuntimeKind,
   repoConfigSchema,
   repoHooksSchema,
+  type SystemSettings,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
   settingsSnapshotSchema,
@@ -71,6 +72,9 @@ export type WorkspaceSettingsService = {
   ): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
   updateAgentModelFavorites(
     favorites: AgentModelFavorite[],
+  ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
+  updatePreferredOpenInTool(
+    system: SystemSettings,
   ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
   setTheme(theme: Theme): Effect.Effect<void, WorkspaceSettingsError>;
   updateGlobalGitConfig(git: GlobalGitConfig): Effect.Effect<void, WorkspaceSettingsError>;
@@ -195,6 +199,7 @@ export const workspaceRecordsInEffectiveOrder = (
 export const toSettingsSnapshot = (config: LoadedGlobalConfig): SettingsSnapshot =>
   settingsSnapshotSchema.parse({
     theme: config.theme,
+    system: config.system,
     git: config.git,
     general: config.general,
     appearance: config.appearance,

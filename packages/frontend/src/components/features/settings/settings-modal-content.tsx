@@ -1,3 +1,4 @@
+import { SettingsSystemSection } from "./settings-system-section";
 import type { ReactElement } from "react";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
@@ -90,6 +91,16 @@ export function SettingsModalContent({
       <div className="rounded-md border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
         Loading settings…
       </div>
+    );
+  }
+
+  if (section === "system") {
+    return (
+      <SettingsSystemSection
+        system={snapshotDraft.system}
+        disabled={isInteractionDisabled}
+        onUpdateSystem={controller.updateGlobalSystemSettings}
+      />
     );
   }
 

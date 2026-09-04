@@ -76,6 +76,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.hasPromptValidationErrors).toBe(false);
     expect(latest.promptValidationState.totalErrorCount).toBe(0);
     expect(latest.settingsSectionErrorCountById).toEqual({
+      system: 0,
       general: 0,
       git: 0,
       runtimes: 0,
@@ -107,6 +108,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.globalPromptRoleTabErrorCounts.spec).toBe(1);
     expect(latest.selectedRepoPromptRoleTabErrorCounts.build).toBe(1);
     expect(latest.settingsSectionErrorCountById).toEqual({
+      system: 0,
       general: 0,
       git: 0,
       runtimes: 0,

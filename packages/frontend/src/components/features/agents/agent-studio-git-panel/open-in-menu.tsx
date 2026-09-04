@@ -9,7 +9,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { errorMessage } from "@/lib/errors";
 import { openInToolsQueryOptions, refreshOpenInToolsFromQuery } from "@/state/queries/system";
-import { persistPreferredOpenInTool, readPreferredOpenInTool } from "./open-in-preferences";
+import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "@/state/queries/workspace";
+import { host } from "@/state/operations/host";
 import { OpenInToolIcon } from "./open-in-tool-metadata";
 import { getOpenInToolLabel } from "./open-in-tool-metadata-model";
 
@@ -189,9 +190,8 @@ export function OpenInMenu({
 }): ReactElement {
   const [isOpen, setIsOpen] = useState(false);
   const [pendingToolId, setPendingToolId] = useState<SystemOpenInToolId | null>(null);
-  const [preferredToolId, setPreferredToolId] = useState<SystemOpenInToolId | null>(() =>
-    readPreferredOpenInTool(),
-  );
+  const settingsQuery = useQuery(settingsSnapshotQueryOptions());
+  const preferredToolId = settingsQuery.data?.system.preferredOpenInToolId;
   const [isRefreshingTools, setIsRefreshingTools] = useState(false);
   const queryClient = useQueryClient();
   const toolsQuery = useQuery(openInToolsQueryOptions());
@@ -227,10 +227,16 @@ export function OpenInMenu({
     disabledReason,
     onOpenInTool,
   });
-  const isTriggerDisabled = resolvedDisabledReason != null;
+  const isTriggerDisabled = resolvedDisabledReason != null || pendingToolId !== null;
   const isDefaultActionDisabled =
-    isTriggerDisabled || toolsQuery.isPending || toolsQuery.isError || defaultTool == null;
+    isTriggerDisabled ||
+    settingsQuery.isPending ||
+    settingsQuery.isError ||
+    toolsQuery.isPending ||
+    toolsQuery.isError ||
+    defaultTool == null;
   const hasMenuTrigger =
+    settingsQuery.isError ||
     alternativeTools.length > 0 ||
     toolsQuery.isPending ||
     toolsQuery.isError ||
@@ -244,11 +250,25 @@ export function OpenInMenu({
     setPendingToolId(toolId);
     try {
       await onOpenInTool(toolId);
-      persistPreferredOpenInTool(toolId);
-      setPreferredToolId(toolId);
       setIsOpen(false);
     } catch (error) {
       toast.error(`Failed to open in ${getOpenInToolLabel(toolId)}`, {
+        description: errorMessage(error),
+      });
+      setPendingToolId(null);
+      return;
+    }
+    try {
+      const snapshot = await host.systemUpdatePreferredOpenInTool({
+        preferredOpenInToolId: toolId,
+      });
+      await queryClient.cancelQueries({
+        queryKey: workspaceQueryKeys.settingsSnapshot(),
+        exact: true,
+      });
+      queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), snapshot);
+    } catch (error) {
+      toast.error("Opened tool, but failed to save preference", {
         description: errorMessage(error),
       });
     } finally {
@@ -323,7 +343,18 @@ export function OpenInMenu({
             </p>
           </div>
 
-          {toolsQuery.isPending ? (
+          {settingsQuery.isError ? (
+            <div role="alert" className="grid gap-2 p-3 text-sm">
+              <p>Failed to load Open In preference: {errorMessage(settingsQuery.error)}</p>
+              <Button
+                variant="outline"
+                disabled={settingsQuery.isFetching}
+                onClick={() => void settingsQuery.refetch()}
+              >
+                Retry settings
+              </Button>
+            </div>
+          ) : toolsQuery.isPending ? (
             <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
               <LoaderCircle className="size-4 animate-spin" />
               <span>Looking for supported apps…</span>

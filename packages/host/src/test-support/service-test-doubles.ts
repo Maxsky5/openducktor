@@ -127,6 +127,10 @@ export const createWorkspaceSettingsServiceTestDouble = <
   saveSettingsSnapshot: unexpectedEffectCall("workspace settings service", "saveSettingsSnapshot"),
   selectWorkspace: unexpectedEffectCall("workspace settings service", "selectWorkspace"),
   setTheme: unexpectedEffectCall("workspace settings service", "setTheme"),
+  updatePreferredOpenInTool: unexpectedEffectCall(
+    "WorkspaceSettingsService",
+    "updatePreferredOpenInTool",
+  ),
   updateAgentModelFavorites: unexpectedEffectCall(
     "workspace settings service",
     "updateAgentModelFavorites",
