@@ -23,7 +23,6 @@ export type TaskStreamControllerFactory = (input: {
   queryClient: QueryClient;
   getActiveRepoPath: () => string | null;
   onDegraded: (cause: unknown) => void;
-  onInitialSnapshotStarted: () => void;
 }) => TaskStreamController;
 
 type UseAppLifecycleArgs = {
@@ -50,7 +49,7 @@ const lifecycleTimers: LifecycleTimerPort<ReturnType<typeof setTimeout>> = {
   clearTimeout: (timer) => clearTimeout(timer),
 };
 
-const resolvedInitialTaskSnapshot = Promise.resolve();
+const loadTasksWithoutStream = Promise.resolve(true);
 
 export function useAppLifecycle({
   activeWorkspace,
@@ -67,7 +66,7 @@ export function useAppLifecycle({
   const queryClient = useQueryClient();
   const activeWorkspaceRef = useRef(activeWorkspace);
   const loadWorkspaceTasksRef = useRef(loadWorkspaceTasks);
-  const initialTaskSnapshotRef = useRef<Promise<void>>(resolvedInitialTaskSnapshot);
+  const shouldLoadWorkspaceTasksRef = useRef<Promise<boolean>>(loadTasksWithoutStream);
 
   useLayoutEffect(() => {
     activeWorkspaceRef.current = activeWorkspace;
@@ -97,17 +96,17 @@ export function useAppLifecycle({
   }, [activeWorkspace?.repoPath, refreshRepoRuntimeHealth, runtimeKinds, startRepoRuntime]);
 
   useEffect(() => {
-    let initialSnapshotStarted = false;
-    let resolveInitialSnapshot!: () => void;
-    initialTaskSnapshotRef.current = new Promise<void>((resolve) => {
-      resolveInitialSnapshot = resolve;
+    let taskLoadDecisionMade = false;
+    let resolveTaskLoadDecision!: (shouldLoadWorkspaceTasks: boolean) => void;
+    shouldLoadWorkspaceTasksRef.current = new Promise<boolean>((resolve) => {
+      resolveTaskLoadDecision = resolve;
     });
-    const markInitialSnapshotStarted = (): void => {
-      if (initialSnapshotStarted) {
+    const decideTaskLoad = (shouldLoadWorkspaceTasks: boolean): void => {
+      if (taskLoadDecisionMade) {
         return;
       }
-      initialSnapshotStarted = true;
-      resolveInitialSnapshot();
+      taskLoadDecisionMade = true;
+      resolveTaskLoadDecision(shouldLoadWorkspaceTasks);
     };
     const controller = taskStreamControllerFactory({
       queryClient,
@@ -116,14 +115,16 @@ export function useAppLifecycle({
         const description = summarizeTaskLoadError({ error });
         toast.error("Task stream degraded", { description });
       },
-      onInitialSnapshotStarted: markInitialSnapshotStarted,
     });
-    void controller.start().catch((cause: unknown) => {
-      markInitialSnapshotStarted();
-      toast.error("Task stream unavailable", { description: errorMessage(cause) });
-    });
+    void controller.start().then(
+      () => decideTaskLoad(false),
+      (cause: unknown) => {
+        decideTaskLoad(true);
+        toast.error("Task stream unavailable", { description: errorMessage(cause) });
+      },
+    );
     return () => {
-      markInitialSnapshotStarted();
+      decideTaskLoad(false);
       void controller.stop();
     };
   }, [queryClient, taskStreamControllerFactory]);
@@ -136,7 +137,7 @@ export function useAppLifecycle({
     }
 
     const loadVersion = ++repoLoadVersionRef.current;
-    const initialTaskSnapshot = initialTaskSnapshotRef.current;
+    const shouldLoadWorkspaceTasks = shouldLoadWorkspaceTasksRef.current;
     const isCurrent = () =>
       repoLoadVersionRef.current === loadVersion &&
       activeWorkspaceRef.current?.repoPath === activeRepoPath;
@@ -146,8 +147,7 @@ export function useAppLifecycle({
       refreshBranches,
       refreshTaskStoreCheckForRepo,
       loadWorkspaceTasks: async (repoPath) => {
-        await initialTaskSnapshot;
-        if (isCurrent()) {
+        if ((await shouldLoadWorkspaceTasks) && isCurrent()) {
           await loadWorkspaceTasksRef.current(repoPath);
         }
       },

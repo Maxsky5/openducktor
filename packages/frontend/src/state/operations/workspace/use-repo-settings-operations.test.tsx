@@ -4,11 +4,15 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createDeferred,
+  createSettingsSnapshotFixture,
+  createTaskCardFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { runtimeQueryKeys } from "../../queries/runtime";
-import { taskQueryKeys } from "../../queries/tasks";
+import { repoTaskDataQueryOptions, type RepoTaskData, taskQueryKeys } from "../../queries/tasks";
 import { workspaceQueryKeys } from "../../queries/workspace";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
@@ -698,11 +702,14 @@ describe("use-repo-settings-operations", () => {
     const workspaceGetSettingsSnapshot = mock(async () => ({
       ...normalizedSnapshot,
     }));
+    const tasksList = mock(async () => []);
 
     const original = {
+      tasksList: host.tasksList,
       workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
       workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
     };
+    host.tasksList = tasksList;
     host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
     host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
 
@@ -751,11 +758,77 @@ describe("use-repo-settings-operations", () => {
           .alwaysStartQaReviewsFresh,
       ).toBe(true);
       expect(workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
+      expect(tasksList).toHaveBeenCalledWith("/repo-a");
       expect(
-        harness.getQueryClient().getQueryState(taskQueryKeys.repoData("/repo-a"))?.isInvalidated,
-      ).toBe(true);
+        harness.getQueryClient().getQueryState(taskQueryKeys.repoData("/repo-a")),
+      ).toMatchObject({
+        isInvalidated: false,
+        status: "success",
+      });
     } finally {
       await harness.unmount();
+      host.tasksList = original.tasksList;
+      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
+  test("replaces an in-flight task read after the retention setting changes", async () => {
+    const firstTaskRead = createDeferred<Awaited<ReturnType<typeof host.tasksList>>>();
+    const firstTaskReadStarted = createDeferred<void>();
+    const refreshedTasks = [createTaskCardFixture({ title: "New retention" })];
+    const tasksList = mock(async () => {
+      if (tasksList.mock.calls.length === 1) {
+        firstTaskReadStarted.resolve();
+        return firstTaskRead.promise;
+      }
+      return refreshedTasks;
+    });
+    const normalizedSnapshot = createSettingsSnapshotFixture({ kanban: { doneVisibleDays: 7 } });
+    const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+    const workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
+    const original = {
+      tasksList: host.tasksList,
+      workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.tasksList = tasksList;
+    host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords: mock(() => {}),
+      applyWorkspaceRecord: mock(() => {}),
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [] });
+      const pendingTaskRead = queryClient.fetchQuery(repoTaskDataQueryOptions("/repo-a"));
+      void pendingTaskRead.catch(() => {});
+      await firstTaskReadStarted.promise;
+
+      await harness.getLatest().saveSettingsSnapshot(normalizedSnapshot);
+
+      expect(tasksList).toHaveBeenCalledTimes(2);
+      expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo-a"))).toEqual({
+        tasks: refreshedTasks,
+      });
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-b"))?.isInvalidated).toBe(
+        true,
+      );
+
+      firstTaskRead.resolve([createTaskCardFixture({ title: "Old retention" })]);
+      await Promise.allSettled([pendingTaskRead]);
+      expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo-a"))).toEqual({
+        tasks: refreshedTasks,
+      });
+    } finally {
+      firstTaskRead.resolve([createTaskCardFixture({ title: "Old retention" })]);
+      await harness.unmount();
+      host.tasksList = original.tasksList;
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
     }

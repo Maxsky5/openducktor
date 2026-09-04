@@ -36,17 +36,6 @@ export const requireString = (result: z.ZodSafeParseResult<string>, label: strin
   return result.data.trim();
 };
 
-export const optionalNonNegativeInteger = (
-  result: z.ZodSafeParseResult<number | null | undefined>,
-  label: string,
-): number | undefined => {
-  if (!result.success) {
-    throw invalidInput(`${label} must be greater than or equal to 0.`, label);
-  }
-
-  return result.data ?? undefined;
-};
-
 export const parseCreateInput = (
   result: z.ZodSafeParseResult<TaskCreateInput>,
 ): TaskCreateInput => {

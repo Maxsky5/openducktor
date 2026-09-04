@@ -54,14 +54,13 @@ const taskViewSync: TaskViewSync = {
 };
 
 describe("useAppLifecycle task stream", () => {
-  test("waits for initial stream reconciliation before loading repository tasks", async () => {
-    let onInitialSnapshotStarted: (() => void) | undefined;
+  test("uses the established stream as the only normal startup task load", async () => {
     const loadWorkspaceTasks = mock(async () => {});
     const refreshTaskStoreCheckForRepo = mock(async () => makeTaskStoreCheck());
-    const factory: TaskStreamControllerFactory = ({ onInitialSnapshotStarted: onStarted }) => {
-      onInitialSnapshotStarted = onStarted;
-      return { start: async () => {}, stop: async () => {} };
-    };
+    const factory: TaskStreamControllerFactory = () => ({
+      start: async () => {},
+      stop: async () => {},
+    });
     const args = {
       ...lifecycleArgs,
       activeWorkspace: {
@@ -82,10 +81,89 @@ describe("useAppLifecycle task stream", () => {
       await waitFor(() => expect(refreshTaskStoreCheckForRepo).toHaveBeenCalledTimes(1));
 
       expect(loadWorkspaceTasks).not.toHaveBeenCalled();
-      expect(onInitialSnapshotStarted).toBeFunction();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(loadWorkspaceTasks).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
 
-      onInitialSnapshotStarted?.();
-      await waitFor(() => expect(loadWorkspaceTasks).toHaveBeenCalledWith("/repo"));
+  test("does not add a repository retry when initial snapshot recovery fails", async () => {
+    const snapshotFailure = new Error("snapshot failed");
+    const reconcileStreamSnapshot = mock(async (): Promise<string[]> => {
+      throw snapshotFailure;
+    });
+    const loadWorkspaceTasks = mock(async () => {});
+    const refreshTaskStoreCheckForRepo = mock(async (_repoPath: string, force = false) =>
+      createTaskStoreCheckFixture(
+        {},
+        force
+          ? {}
+          : {
+              taskStoreOk: false,
+              taskStorePath: null,
+              taskStoreError: "Task store unavailable",
+              repoStoreHealth: {
+                category: "database_unavailable",
+                status: "blocking",
+                isReady: false,
+                detail: "Task store unavailable",
+                databasePath: null,
+              },
+            },
+      ),
+    );
+    const factory: TaskStreamControllerFactory = ({ getActiveRepoPath, onDegraded }) =>
+      createTaskStreamController({
+        transport: {
+          subscribeTaskStream: async (_input, onFrame) => {
+            onFrame({
+              type: "snapshot_required",
+              cursor: {
+                epoch: "11111111-1111-4111-8111-111111111111",
+                sequence: 0,
+              },
+              reason: "buffer_gap",
+            });
+            return {
+              subscriptionId: "subscription",
+              acknowledge: async () => {},
+              unsubscribe: async () => {},
+            };
+          },
+        },
+        metadata: {
+          reconcileExternalTaskSyncEvent: () => {},
+          invalidateAllTaskMetadata: () => {},
+        },
+        taskViewSync: { ...taskViewSync, reconcileStreamSnapshot },
+        agentSessionViewSync: {
+          reconcileExternalEvent: async () => {},
+          reconcileStreamSnapshot: async () => {},
+        },
+        getActiveRepoPath,
+        onDegraded,
+      });
+    const args = {
+      ...lifecycleArgs,
+      activeWorkspace: {
+        workspaceId: "workspace-1",
+        workspaceName: "Repository",
+        repoPath: "/repo",
+      },
+      loadWorkspaceTasks,
+      refreshTaskStoreCheckForRepo,
+      taskStreamControllerFactory: factory,
+    };
+    const harness = createHookHarness(() => useAppLifecycle(args), undefined, {
+      wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+    });
+
+    try {
+      await harness.mount();
+      await waitFor(() => expect(reconcileStreamSnapshot).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(refreshTaskStoreCheckForRepo).toHaveBeenCalledTimes(2));
+      expect(loadWorkspaceTasks).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

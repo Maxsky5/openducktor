@@ -15,7 +15,7 @@ import {
 } from "./test-support/task-workflow-harness";
 
 describe("createTaskService list and session reads", () => {
-  test("loads Kanban tasks with the host-owned closed-task retention setting", async () => {
+  test("loads Kanban tasks with zero and default host-owned retention settings", async () => {
     const calls: Array<{ repoPath: string; doneVisibleDays?: number }> = [];
     const taskStore: TaskStorePort = {
       listTasks(input) {
@@ -23,19 +23,28 @@ describe("createTaskService list and session reads", () => {
         return Effect.succeed([]);
       },
     };
-    const settings = toSettingsSnapshot({
-      ...createDefaultGlobalConfig(),
-      kanban: { doneVisibleDays: 7, emptyColumnDisplay: "show" },
-    });
-    const workspaceSettingsService = createWorkspaceSettingsServiceTestDouble({
-      getSettingsSnapshot: () => Effect.succeed(settings),
-    });
-    const service = createTaskService({ taskStore, workspaceSettingsService });
+    const settingsInputs = [
+      toSettingsSnapshot({
+        ...createDefaultGlobalConfig(),
+        kanban: { doneVisibleDays: 0, emptyColumnDisplay: "show" },
+      }),
+      toSettingsSnapshot(createDefaultGlobalConfig()),
+    ];
 
-    await expect(
-      Effect.runPromise(service.listKanbanTasks({ repoPath: "/repo" })),
-    ).resolves.toEqual([]);
-    expect(calls).toEqual([{ repoPath: "/repo", doneVisibleDays: 7 }]);
+    for (const settings of settingsInputs) {
+      const workspaceSettingsService = createWorkspaceSettingsServiceTestDouble({
+        getSettingsSnapshot: () => Effect.succeed(settings),
+      });
+      const service = createTaskService({ taskStore, workspaceSettingsService });
+      await expect(
+        Effect.runPromise(service.listKanbanTasks({ repoPath: "/repo" })),
+      ).resolves.toEqual([]);
+    }
+
+    expect(calls).toEqual([
+      { repoPath: "/repo", doneVisibleDays: 0 },
+      { repoPath: "/repo", doneVisibleDays: 1 },
+    ]);
   });
 
   test("preserves typed task asset failures from task mutations", async () => {

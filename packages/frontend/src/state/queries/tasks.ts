@@ -52,16 +52,6 @@ const invalidateRepoTaskDataQueries = (
   return queryClient.invalidateQueries(filters);
 };
 
-export const refetchActiveKanbanQueries = (
-  queryClient: QueryClient,
-  repoPath: string,
-): Promise<void> =>
-  queryClient.refetchQueries({
-    queryKey: taskQueryKeys.repoDataPrefix(repoPath),
-    exact: false,
-    type: "active",
-  });
-
 const invalidateRepoTaskListQueries = (
   queryClient: QueryClient,
   repoPath: string,
