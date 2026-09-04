@@ -1596,7 +1596,6 @@ describe("createElectronHostCommandRouter", () => {
         targetBranch: { remote: "origin", branch: "main" },
         hasUncommittedChanges: true,
         uncommittedFileCount: 1,
-        providers: [{ providerId: "github", enabled: true, available: true }],
       },
     });
 

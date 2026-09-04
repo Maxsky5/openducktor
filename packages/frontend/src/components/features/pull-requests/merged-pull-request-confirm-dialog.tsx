@@ -45,8 +45,8 @@ export const MergedPullRequestConfirmDialog = memo(function MergedPullRequestCon
       title="Attach merged PR and finish task?"
       description={
         <>
-          This branch already landed on GitHub. Linking the merged pull request will close the task
-          cleanly and retire the builder worktree in one step.
+          This branch is already merged. Linking the Pull Request will close the task and retire the
+          builder worktree in one step.
         </>
       }
       closeLabel="Cancel"

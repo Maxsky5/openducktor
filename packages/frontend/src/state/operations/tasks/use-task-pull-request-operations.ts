@@ -130,7 +130,7 @@ export function useTaskPullRequestOperations({
           } else {
             notificationPort.warning(
               "No pull request found",
-              `No open GitHub pull request found for ${result.sourceBranch}.`,
+              `No open pull request found for ${result.sourceBranch}.`,
             );
           }
         }

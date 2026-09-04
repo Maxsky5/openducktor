@@ -242,7 +242,7 @@ describe("useTaskPullRequestOperations", () => {
         {
           level: "warning",
           title: "No pull request found",
-          description: "No open GitHub pull request found for feature/task-1.",
+          description: "No open pull request found for feature/task-1.",
         },
       ]);
     } finally {
