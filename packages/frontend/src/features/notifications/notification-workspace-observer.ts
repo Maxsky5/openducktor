@@ -48,6 +48,8 @@ export const createNotificationWorkspaceObserver = ({
     observations.set(workspace.repoPath, observation);
     const projector = createSessionOccurrenceProjector({
       repositoryLabel: workspace.repositoryLabel,
+      resolveAssociation: (ref) =>
+        taskObserver.resolveSessionAssociation(ref.repoPath, ref.externalSessionId),
       resolveTask: (taskId) => taskObserver.resolveTask(workspace.repoPath, taskId),
     });
 

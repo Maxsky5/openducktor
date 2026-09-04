@@ -1,4 +1,6 @@
 import type {
+  AgentSessionRecord,
+  AgentSessionWorkflowScope,
   ExternalTaskSyncEvent,
   NotificationOccurrence,
   TaskCard,
@@ -21,15 +23,37 @@ type NotificationProducerFailure = {
 type TaskObserverEntry = {
   label: string;
   projector: ReturnType<typeof createTaskOccurrenceProjector>;
+  sessionAssociations: Map<string, AgentSessionWorkflowScope>;
   tasks: Map<string, TaskEventTaskSnapshot>;
+};
+
+const toSessionAssociations = (
+  recordsByTaskId: Record<string, AgentSessionRecord[]>,
+): Map<string, AgentSessionWorkflowScope> => {
+  const associations = new Map<string, AgentSessionWorkflowScope>();
+  for (const [taskId, records] of Object.entries(recordsByTaskId)) {
+    for (const record of records) {
+      associations.set(record.externalSessionId, {
+        kind: "workflow",
+        taskId,
+        role: record.role,
+      });
+    }
+  }
+  return associations;
 };
 
 export const createNotificationTaskObserver = ({
   loadTasks,
+  loadSessionRecords,
   publish,
   onFailure,
 }: {
   loadTasks(repoPath: string): Promise<TaskCard[]>;
+  loadSessionRecords(
+    repoPath: string,
+    taskIds: string[],
+  ): Promise<Record<string, AgentSessionRecord[]>>;
   publish(occurrence: NotificationOccurrence): void;
   onFailure(failure: NotificationProducerFailure): void;
 }) => {
@@ -44,9 +68,25 @@ export const createNotificationTaskObserver = ({
     onFailure({ repoPath, source: "task", cause });
   };
 
+  const loadSessionAssociations = async (
+    repoPath: string,
+    taskIds: string[],
+  ): Promise<Map<string, AgentSessionWorkflowScope>> => {
+    try {
+      return toSessionAssociations(await loadSessionRecords(repoPath, taskIds));
+    } catch (cause) {
+      onFailure({ repoPath, source: "session", cause });
+      return new Map();
+    }
+  };
+
   const loadBaseline = async (workspace: NotificationWorkspace): Promise<void> => {
     try {
       const tasks = await loadTasks(workspace.repoPath);
+      const sessionAssociations = await loadSessionAssociations(
+        workspace.repoPath,
+        tasks.map((task) => task.id),
+      );
       if (workspaces.get(workspace.repoPath) !== workspace) {
         return;
       }
@@ -58,6 +98,7 @@ export const createNotificationTaskObserver = ({
       entries.set(workspace.repoPath, {
         label: workspace.repositoryLabel,
         projector,
+        sessionAssociations,
         tasks: new Map(tasks.map((task) => [task.id, task])),
       });
     } catch (cause) {
@@ -74,6 +115,10 @@ export const createNotificationTaskObserver = ({
     }
     try {
       const tasks = await loadTasks(event.repoPath);
+      const sessionAssociations = await loadSessionAssociations(
+        event.repoPath,
+        tasks.map((task) => task.id),
+      );
       if (workspaces.get(event.repoPath) !== workspace) {
         return;
       }
@@ -87,12 +132,14 @@ export const createNotificationTaskObserver = ({
         entry = {
           label: workspace.repositoryLabel,
           projector,
+          sessionAssociations,
           tasks: new Map(tasks.map((task) => [task.id, task])),
         };
         entries.set(event.repoPath, entry);
         return;
       }
       entry.projector.replaceBaseline(tasks);
+      entry.sessionAssociations = sessionAssociations;
       entry.tasks = new Map(tasks.map((task) => [task.id, task]));
     } catch (cause) {
       reportFailure(event.repoPath, cause);
@@ -115,6 +162,9 @@ export const createNotificationTaskObserver = ({
     for (const taskId of event.removedTaskIds) entry.tasks.delete(taskId);
     for (const task of event.taskSnapshots) entry.tasks.set(task.id, task);
     for (const occurrence of occurrences) publish(occurrence);
+    entry.sessionAssociations = await loadSessionAssociations(event.repoPath, [
+      ...entry.tasks.keys(),
+    ]);
   };
 
   const refreshAllBaselines = async (): Promise<void> => {
@@ -158,6 +208,12 @@ export const createNotificationTaskObserver = ({
     resolveTask(repoPath: string, taskId: string): { id: string; title?: string } | null {
       const task = entries.get(repoPath)?.tasks.get(taskId);
       return task ? { id: task.id, title: task.title } : null;
+    },
+    resolveSessionAssociation(
+      repoPath: string,
+      externalSessionId: string,
+    ): AgentSessionWorkflowScope | null {
+      return entries.get(repoPath)?.sessionAssociations.get(externalSessionId) ?? null;
     },
   };
 };

@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type {
+  AgentSessionRecord,
   AgentSessionLiveEnvelope,
   NotificationOccurrence,
   TaskCard,
@@ -26,7 +27,6 @@ const liveSnapshot = (pendingRequestIds: string[]): AgentSessionLiveSnapshotEnve
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-1",
       },
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       activity: "idle",
       title: "Builder session",
       startedAt: "2026-08-31T10:00:00.000Z",
@@ -40,6 +40,23 @@ const liveSnapshot = (pendingRequestIds: string[]): AgentSessionLiveSnapshotEnve
     },
   ],
 });
+
+const workflowSessionRecord: AgentSessionRecord = {
+  externalSessionId: "session-1",
+  role: "build",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo-a/worktree",
+  startedAt: "2026-08-31T10:00:00.000Z",
+  selectedModel: null,
+};
+
+const loadWorkflowSessionRecords = async (
+  _repoPath: string,
+  taskIds: string[],
+): Promise<Record<string, AgentSessionRecord[]>> =>
+  Object.fromEntries(
+    taskIds.map((taskId) => [taskId, taskId === "task-1" ? [workflowSessionRecord] : []]),
+  );
 
 const liveUpsert = (pendingRequestIds: string[]): AgentSessionLiveEnvelope => {
   const session = liveSnapshot(pendingRequestIds).sessions[0];
@@ -56,6 +73,7 @@ describe("all-workspace notification observation", () => {
     const observe = mock(async () => () => {});
     const taskObserver = createNotificationTaskObserver({
       loadTasks: async () => baseline,
+      loadSessionRecords: loadWorkflowSessionRecords,
       publish: () => {},
       onFailure: () => {},
     });
@@ -84,6 +102,7 @@ describe("all-workspace notification observation", () => {
     const observe = mock(async () => () => {});
     const taskObserver = createNotificationTaskObserver({
       loadTasks: async () => baseline,
+      loadSessionRecords: loadWorkflowSessionRecords,
       publish: () => {},
       onFailure: () => {},
     });
@@ -117,6 +136,7 @@ describe("all-workspace notification observation", () => {
     const stopped: string[] = [];
     const taskObserver = createNotificationTaskObserver({
       loadTasks: async (repoPath) => tasks.get(repoPath) ?? [],
+      loadSessionRecords: loadWorkflowSessionRecords,
       publish: (occurrence) => published.push(occurrence),
       onFailure: (failure) => failures.push(failure),
     });
@@ -162,6 +182,7 @@ describe("all-workspace notification observation", () => {
     const published: NotificationOccurrence[] = [];
     const taskObserver = createNotificationTaskObserver({
       loadTasks: async () => currentTasks,
+      loadSessionRecords: async () => ({}),
       publish: (occurrence) => published.push(occurrence),
       onFailure: () => {},
     });
@@ -186,11 +207,43 @@ describe("all-workspace notification observation", () => {
     ]);
   });
 
+  test("updates workflow ownership from task session records", async () => {
+    const tasks = [createTaskCardFixture({ id: "task-1", title: "Task A", status: "open" })];
+    let records = { "task-1": [workflowSessionRecord] };
+    const taskObserver = createNotificationTaskObserver({
+      loadTasks: async () => tasks,
+      loadSessionRecords: async () => records,
+      publish: () => {},
+      onFailure: () => {},
+    });
+    await taskObserver.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+
+    expect(taskObserver.resolveSessionAssociation("/repo-a", "session-1")).toEqual({
+      kind: "workflow",
+      taskId: "task-1",
+      role: "build",
+    });
+
+    records = { "task-1": [] };
+    await taskObserver.sink.onChange({
+      kind: "tasks_updated",
+      eventId: "event-session-removed",
+      repoPath: "/repo-a",
+      taskIds: ["task-1"],
+      removedTaskIds: [],
+      taskSnapshots: [{ id: "task-1", title: "Task A", status: "open" }],
+      emittedAt: "2026-08-31T10:01:00.000Z",
+    });
+
+    expect(taskObserver.resolveSessionAssociation("/repo-a", "session-1")).toBeNull();
+  });
+
   test("publishes each event-bound workflow transition when task reads see a newer state", async () => {
     let currentTasks = [createTaskCardFixture({ id: "task-1", title: "Task A", status: "open" })];
     const published: NotificationOccurrence[] = [];
     const taskObserver = createNotificationTaskObserver({
       loadTasks: async () => currentTasks,
+      loadSessionRecords: async () => ({}),
       publish: (occurrence) => published.push(occurrence),
       onFailure: () => {},
     });
