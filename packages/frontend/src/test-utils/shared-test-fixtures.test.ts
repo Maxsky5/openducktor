@@ -57,6 +57,28 @@ describe("shared test fixtures", () => {
     expect(second.descriptor.capabilities.supportsPullRequests).toBe(true);
   });
 
+  test("createGitProviderContextFixture applies provider options", () => {
+    const context = createGitProviderContextFixture({
+      available: false,
+      enabled: false,
+      supportsPullRequests: false,
+      supportsPullRequestReview: false,
+    });
+
+    expect(context.descriptor.capabilities).toEqual({
+      supportsPullRequests: false,
+      supportsPullRequestReview: false,
+    });
+    expect(context.config.enabled).toBe(false);
+    expect(context.health).toMatchObject({
+      available: false,
+      enabled: false,
+      authenticated: false,
+      account: null,
+      repositoryMappingValid: false,
+    });
+  });
+
   test("createAgentSessionFixture returns isolated nested objects", () => {
     const messages = createSessionMessagesState(TEST_EXTERNAL_SESSION_IDS.default, [
       {

@@ -335,7 +335,7 @@ describe("autopilot feature helpers", () => {
   test("skips pull request generation with the provider health error", async () => {
     const args = createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" }));
     args.loadTaskSessionRecords.mockResolvedValue([createBuilderSessionRecord()]);
-    setGitProviderContext(args.queryClient, createGitProviderContextFixture(false));
+    setGitProviderContext(args.queryClient, createGitProviderContextFixture({ available: false }));
 
     const outcome = await executeAutopilotAction({
       ...args,

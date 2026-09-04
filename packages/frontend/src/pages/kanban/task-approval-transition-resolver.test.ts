@@ -1,12 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  GITHUB_PROVIDER_DESCRIPTOR,
-  type GitProviderHealth,
-  type RepositoryGitProviderContext,
-  type TaskAction,
-  type TaskApprovalContext,
-  type TaskCard,
-} from "@openducktor/contracts";
+import { type TaskAction, type TaskApprovalContext, type TaskCard } from "@openducktor/contracts";
+import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import type { TaskApprovalFlowState } from "./task-approval-flow-state";
 import {
   resolveCurrentTaskApprovalMode,
@@ -39,36 +33,6 @@ const approvalContext = (overrides: Partial<TaskApprovalContext> = {}): TaskAppr
   suggestedSquashCommitMessage: undefined,
   ...overrides,
 });
-
-const providerContext = (
-  supportsPullRequests: boolean,
-  available = true,
-): NonNullable<RepositoryGitProviderContext> => {
-  const health: GitProviderHealth = {
-    providerId: "github",
-    enabled: true,
-    available,
-    executablePath: available ? "gh" : null,
-    version: available ? "gh version test" : null,
-    authenticated: available,
-    account: available ? "octocat" : null,
-    repositoryMappingValid: available,
-  };
-  if (!available) {
-    health.reason = "Run `gh auth login` to connect GitHub.";
-  }
-  return {
-    descriptor: {
-      ...GITHUB_PROVIDER_DESCRIPTOR,
-      capabilities: {
-        ...GITHUB_PROVIDER_DESCRIPTOR.capabilities,
-        supportsPullRequests,
-      },
-    },
-    config: { id: "github", enabled: true, autoDetected: false },
-    health,
-  };
-};
 
 const openState = (overrides: Partial<Extract<TaskApprovalFlowState, { kind: "open" }>> = {}) =>
   ({
@@ -229,7 +193,7 @@ describe("resolveTaskApprovalOpenMode", () => {
     {
       name: "keeps an explicit requested mode",
       requestedMode: "direct_merge" as const,
-      gitProviderContext: providerContext(true),
+      gitProviderContext: createGitProviderContextFixture(),
       task: task({
         status: "human_review",
         availableActions: ["human_approve"],
@@ -247,7 +211,7 @@ describe("resolveTaskApprovalOpenMode", () => {
     {
       name: "defaults PR-linked approval to pull request mode",
       requestedMode: undefined,
-      gitProviderContext: providerContext(true),
+      gitProviderContext: createGitProviderContextFixture(),
       task: task({
         status: "human_review",
         availableActions: ["human_approve"],
@@ -265,14 +229,14 @@ describe("resolveTaskApprovalOpenMode", () => {
     {
       name: "uses provider capability when there is no PR-linked approval",
       requestedMode: undefined,
-      gitProviderContext: providerContext(true),
+      gitProviderContext: createGitProviderContextFixture(),
       task: task({ status: "human_review", availableActions: ["human_approve"] }),
       expected: "pull_request" as const,
     },
     {
       name: "keeps Pull Request mode when health is unavailable",
       requestedMode: undefined,
-      gitProviderContext: providerContext(true, false),
+      gitProviderContext: createGitProviderContextFixture({ available: false }),
       task: task({
         status: "blocked",
         availableActions: ["open_builder"],
@@ -297,7 +261,7 @@ describe("resolveTaskApprovalOpenMode", () => {
     {
       name: "falls back to direct merge when Pull Requests are unsupported",
       requestedMode: undefined,
-      gitProviderContext: providerContext(false),
+      gitProviderContext: createGitProviderContextFixture({ supportsPullRequests: false }),
       task: task({ status: "blocked", availableActions: ["open_builder"] }),
       expected: "direct_merge" as const,
     },
@@ -321,12 +285,12 @@ describe("resolveCurrentTaskApprovalMode", () => {
     },
     {
       name: "keeps Pull Request mode when the provider supports it",
-      gitProviderContext: providerContext(true, false),
+      gitProviderContext: createGitProviderContextFixture({ available: false }),
       expected: "pull_request" as const,
     },
     {
       name: "uses Direct Merge when the current provider does not support Pull Requests",
-      gitProviderContext: providerContext(false),
+      gitProviderContext: createGitProviderContextFixture({ supportsPullRequests: false }),
       expected: "direct_merge" as const,
     },
     {

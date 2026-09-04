@@ -60,7 +60,7 @@ describe("agent-studio-quick-actions", () => {
   test("disables Pull Request generation when provider health blocks use", () => {
     const actions = buildAgentStudioQuickActions({
       ...buildPrActionArgs(),
-      gitProviderContext: createGitProviderContextFixture(false),
+      gitProviderContext: createGitProviderContextFixture({ available: false }),
     });
     expect(
       actions.find((option) => option.launchActionId === "build_pull_request_generation"),

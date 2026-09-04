@@ -109,7 +109,11 @@ describe("settings Autopilot section", () => {
   });
 
   test("shows but disables Pull Request generation when provider health blocks it", async () => {
-    renderSection(createDefaultAutopilotSettings(), false, createGitProviderContextFixture(false));
+    renderSection(
+      createDefaultAutopilotSettings(),
+      false,
+      createGitProviderContextFixture({ available: false }),
+    );
 
     expect(screen.getByText(/Start Generate Pull Request.*Sign in to GitHub CLI\./)).toBeDefined();
     await act(async () => {

@@ -162,13 +162,35 @@ const BASE_GIT_PROVIDER_CONTEXT_FIXTURE = {
   },
 } satisfies NonNullable<RepositoryGitProviderContext>;
 
-export const createGitProviderContextFixture = (
+type GitProviderContextFixtureOptions = {
+  available?: boolean;
+  enabled?: boolean;
+  supportsPullRequests?: boolean;
+  supportsPullRequestReview?: boolean;
+};
+
+export const createGitProviderContextFixture = ({
   available = true,
-): NonNullable<RepositoryGitProviderContext> => {
+  enabled = true,
+  supportsPullRequests = true,
+  supportsPullRequestReview = true,
+}: GitProviderContextFixtureOptions = {}): NonNullable<RepositoryGitProviderContext> => {
   const context = {
     ...BASE_GIT_PROVIDER_CONTEXT_FIXTURE,
+    descriptor: {
+      ...BASE_GIT_PROVIDER_CONTEXT_FIXTURE.descriptor,
+      capabilities: {
+        supportsPullRequests,
+        supportsPullRequestReview,
+      },
+    },
+    config: {
+      ...BASE_GIT_PROVIDER_CONTEXT_FIXTURE.config,
+      enabled,
+    },
     health: {
       ...BASE_GIT_PROVIDER_CONTEXT_FIXTURE.health,
+      enabled,
       available,
       reason: available ? undefined : "Sign in to GitHub CLI.",
       authenticated: available,

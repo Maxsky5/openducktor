@@ -27,7 +27,7 @@ describe("TaskDetailsSheetHeader", () => {
         task,
         subtasksCount: 0,
         taskLabels: [],
-        gitProviderContext: createGitProviderContextFixture(false),
+        gitProviderContext: createGitProviderContextFixture({ available: false }),
         onDetectPullRequest: () => {},
       }),
     );

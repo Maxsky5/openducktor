@@ -386,7 +386,7 @@ describe("buildAgentsPageDiffModel", () => {
   test("carries the provider health error for supported Pull Request detection", () => {
     const common = {
       ...createPullRequestDetectionArgs(),
-      gitProviderContext: createGitProviderContextFixture(false),
+      gitProviderContext: createGitProviderContextFixture({ available: false }),
     };
 
     expect(buildAgentsPageDiffModel(common)).toMatchObject({

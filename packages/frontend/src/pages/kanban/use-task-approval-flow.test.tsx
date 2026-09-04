@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
-  GITHUB_PROVIDER_DESCRIPTOR,
   type RepositoryGitProviderContext,
   type TaskApprovalContext,
   type TaskApprovalContextLoadResult,
@@ -24,7 +23,10 @@ import {
 import { QueryProvider } from "@/lib/query-provider";
 import { hostClient } from "@/lib/host-client";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createGitProviderContextFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -72,20 +74,6 @@ const defaultGitPushBranch: GitPushBranch = async () => ({
 const defaultGitAbortConflict: HostClient["gitAbortConflict"] = async () => ({ output: "" });
 const defaultHumanApproveTask = async () => {};
 const defaultOpenResetImplementation = (_taskId: string) => true;
-const healthyGitProviderContext = (): NonNullable<RepositoryGitProviderContext> => ({
-  descriptor: GITHUB_PROVIDER_DESCRIPTOR,
-  config: { id: "github", enabled: true, autoDetected: false },
-  health: {
-    providerId: "github",
-    enabled: true,
-    available: true,
-    executablePath: "gh",
-    version: "gh version test",
-    authenticated: true,
-    account: "octocat",
-    repositoryMappingValid: true,
-  },
-});
 const createDefaultAgentSessions = (): Awaited<ReturnType<HostClient["agentSessionsList"]>> => [
   {
     externalSessionId: "builder-session-old",
@@ -451,7 +439,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal).toBeNull();
     expect(taskApprovalContextGetMock).not.toHaveBeenCalled();
 
-    gitProviderContext = healthyGitProviderContext();
+    gitProviderContext = createGitProviderContextFixture();
     pendingProviderContext.resolve(gitProviderContext);
     await harness.update(undefined);
     await act(async () => {
@@ -506,7 +494,7 @@ describe("useTaskApprovalFlow", () => {
       repoPath: "/repo-b",
     };
     await harness.update(undefined);
-    pendingProviderContext.resolve(healthyGitProviderContext());
+    pendingProviderContext.resolve(createGitProviderContextFixture());
     await act(async () => {
       await pendingProviderContext.promise;
       await Promise.resolve();
@@ -531,7 +519,7 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
           activeWorkspace,
-          loadGitProviderContext: async () => healthyGitProviderContext(),
+          loadGitProviderContext: async () => createGitProviderContextFixture(),
         }),
       );
       return null;
@@ -632,7 +620,7 @@ describe("useTaskApprovalFlow", () => {
       }),
     );
 
-    gitProviderContext = healthyGitProviderContext();
+    gitProviderContext = createGitProviderContextFixture();
     loadGitProviderContext.mockImplementationOnce(async () => gitProviderContext ?? null);
     await harness.update(undefined);
     await act(async () => {
@@ -679,7 +667,7 @@ describe("useTaskApprovalFlow", () => {
       repoPath: "/repo-b",
     };
     await harness.update(undefined);
-    loadGitProviderContext.mockImplementationOnce(async () => healthyGitProviderContext());
+    loadGitProviderContext.mockImplementationOnce(async () => createGitProviderContextFixture());
 
     await act(async () => {
       retryAction.onClick();
@@ -761,8 +749,8 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          gitProviderContext: healthyGitProviderContext(),
-          loadGitProviderContext: async () => healthyGitProviderContext(),
+          gitProviderContext: createGitProviderContextFixture(),
+          loadGitProviderContext: async () => createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -870,7 +858,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("keeps Pull Request mode visible but unavailable for a disabled provider", async () => {
-    const context = healthyGitProviderContext();
+    const context = createGitProviderContextFixture();
     const disabledContext = {
       ...context,
       config: { ...context.config, enabled: false },
@@ -914,7 +902,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("uses current provider health and read errors while the approval modal is open", async () => {
-    const healthyContext = healthyGitProviderContext();
+    const healthyContext = createGitProviderContextFixture();
     let gitProviderContext: RepositoryGitProviderContext | undefined = healthyContext;
     let gitProviderContextError: Error | null = null;
     const requestPullRequestGeneration = mock(async () => "builder-session-pr");
@@ -976,7 +964,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("uses current provider capabilities while the approval modal is open", async () => {
-    const healthyContext = healthyGitProviderContext();
+    const healthyContext = createGitProviderContextFixture();
     let gitProviderContext: RepositoryGitProviderContext | undefined = healthyContext;
     const requestPullRequestGeneration = mock(async () => "builder-session-pr");
     taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
@@ -1146,7 +1134,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("completes missing-builder recovery when Pull Request health is unavailable", async () => {
-    const healthyContext = healthyGitProviderContext();
+    const healthyContext = createGitProviderContextFixture();
     const unavailableContext = {
       ...healthyContext,
       health: {
@@ -1972,8 +1960,8 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          gitProviderContext: healthyGitProviderContext(),
-          loadGitProviderContext: async () => healthyGitProviderContext(),
+          gitProviderContext: createGitProviderContextFixture(),
+          loadGitProviderContext: async () => createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -2044,8 +2032,8 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          gitProviderContext: healthyGitProviderContext(),
-          loadGitProviderContext: async () => healthyGitProviderContext(),
+          gitProviderContext: createGitProviderContextFixture(),
+          loadGitProviderContext: async () => createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -2104,7 +2092,7 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          gitProviderContext: healthyGitProviderContext(),
+          gitProviderContext: createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -2170,7 +2158,7 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          gitProviderContext: healthyGitProviderContext(),
+          gitProviderContext: createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -2257,7 +2245,7 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
-          gitProviderContext: healthyGitProviderContext(),
+          gitProviderContext: createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",

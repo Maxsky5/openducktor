@@ -1,38 +1,17 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  GITHUB_PROVIDER_DESCRIPTOR,
-  type RepositoryGitProviderContext,
-} from "@openducktor/contracts";
+import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { QueryClient, skipToken } from "@tanstack/react-query";
+import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import {
   repositoryGitProviderContextQueryKeys,
   repositoryGitProviderContextQueryOptions,
   repositoryGitProviderContextQueryOptionsOrSkip,
 } from "./git-provider-context";
 
-const healthyGithubContext = {
-  descriptor: GITHUB_PROVIDER_DESCRIPTOR,
-  config: {
-    id: "github",
-    enabled: true,
-    autoDetected: false,
-    repository: { host: "github.com", owner: "openai", name: "openducktor" },
-  },
-  health: {
-    providerId: "github",
-    enabled: true,
-    available: true,
-    executablePath: "/opt/homebrew/bin/gh",
-    version: "gh version 2.80.0",
-    authenticated: true,
-    account: "octocat",
-    repositoryMappingValid: true,
-  },
-} satisfies RepositoryGitProviderContext;
-
 describe("repository Git provider context query", () => {
   test("skips the host read when no repository is active", () => {
-    const workspaceGetGitProviderContext = mock(async () => healthyGithubContext);
+    const context = createGitProviderContextFixture();
+    const workspaceGetGitProviderContext = mock(async () => context);
     const options = repositoryGitProviderContextQueryOptionsOrSkip(null, {
       workspaceGetGitProviderContext,
     });
@@ -45,7 +24,8 @@ describe("repository Git provider context query", () => {
   });
 
   test("keys context by repository and loads it through the host", async () => {
-    const workspaceGetGitProviderContext = mock(async () => healthyGithubContext);
+    const context = createGitProviderContextFixture();
+    const workspaceGetGitProviderContext = mock(async () => context);
     const queryClient = new QueryClient();
 
     await expect(
@@ -54,7 +34,7 @@ describe("repository Git provider context query", () => {
           workspaceGetGitProviderContext,
         }),
       ),
-    ).resolves.toEqual(healthyGithubContext);
+    ).resolves.toEqual(context);
     expect(repositoryGitProviderContextQueryKeys.repo("/repo")).toEqual([
       "repository-git-provider-context",
       "/repo",

@@ -1,11 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  GITHUB_PROVIDER_DESCRIPTOR,
-  type GitProviderHealth,
-  type RepoConfig,
-  type RepositoryGitProviderContext,
-} from "@openducktor/contracts";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
+import type { RepoConfig, RepositoryGitProviderContext } from "@openducktor/contracts";
+import { createDeferred, createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -43,45 +38,6 @@ const createRepoConfigHost = (
   workspaceGetRepoConfig: mock(loadRepoConfig),
   workspaceGetGitProviderContext: mock(loadProviderContext),
 });
-
-const createProviderContext = ({
-  enabled = true,
-  available = true,
-  supportsPullRequestReview = true,
-}: {
-  enabled?: boolean;
-  available?: boolean;
-  supportsPullRequestReview?: boolean;
-} = {}): NonNullable<RepositoryGitProviderContext> => {
-  const health: GitProviderHealth = {
-    providerId: "github",
-    enabled,
-    available,
-    executablePath: available ? "gh" : null,
-    version: available ? "gh version test" : null,
-    authenticated: available,
-    account: available ? "octocat" : null,
-    repositoryMappingValid: available,
-  };
-  if (!available) {
-    health.reason = "Run `gh auth login` to connect GitHub.";
-  }
-  return {
-    descriptor: {
-      ...GITHUB_PROVIDER_DESCRIPTOR,
-      capabilities: {
-        supportsPullRequests: true,
-        supportsPullRequestReview,
-      },
-    },
-    config: {
-      id: "github",
-      enabled,
-      autoDetected: false,
-    },
-    health,
-  };
-};
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioRepoSettings, initialProps);
@@ -145,9 +101,9 @@ describe("useAgentStudioRepoSettings", () => {
 
   test.each([
     ["no configured provider", null],
-    ["disabled provider", createProviderContext({ enabled: false, available: false })],
-    ["healthy GitHub", createProviderContext()],
-    ["supported but unhealthy GitHub", createProviderContext({ available: false })],
+    ["disabled provider", createGitProviderContextFixture({ enabled: false, available: false })],
+    ["healthy GitHub", createGitProviderContextFixture()],
+    ["supported but unhealthy GitHub", createGitProviderContextFixture({ available: false })],
   ])("loads %s context through its repository query", async (_label, context) => {
     const hostClient = createRepoConfigHost(undefined, async () => context);
     const harness = createHookHarness({
@@ -202,7 +158,7 @@ describe("useAgentStudioRepoSettings", () => {
   });
 
   test("keeps cached provider data visible when a refresh fails", async () => {
-    const context = createProviderContext();
+    const context = createGitProviderContextFixture();
     let refreshFails = false;
     const loadProviderContext = mock(async () => {
       if (refreshFails) {

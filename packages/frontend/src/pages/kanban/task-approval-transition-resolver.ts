@@ -6,7 +6,6 @@ import type {
 } from "@openducktor/contracts";
 import type { TaskApprovalMode } from "./kanban-page-model-types";
 import {
-  determineDefaultTaskApprovalMode,
   isTaskApprovalReady,
   type TaskApprovalFlowOpenState,
   type TaskApprovalFlowReadyState,
@@ -131,7 +130,7 @@ export const resolveTaskApprovalOpenMode = (args: {
     }
   }
 
-  return determineDefaultTaskApprovalMode(args.gitProviderContext);
+  return "pull_request";
 };
 
 export const resolveCurrentTaskApprovalMode = (
