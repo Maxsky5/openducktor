@@ -51,11 +51,13 @@ type SubscriptionRecord = {
 
 const createHarness = ({
   onSubscribe,
+  onSnapshotStarted = mock((_repoPath: string | null) => {}),
   taskViewSync: taskViewSyncOverrides,
   agentSessionViewSync: agentSessionViewSyncOverride,
   getActiveRepoPath = () => "/repo",
 }: {
   onSubscribe?: (record: SubscriptionRecord, index: number) => Promise<TaskStreamSubscription>;
+  onSnapshotStarted?: ReturnType<typeof mock<(repoPath: string | null) => void>>;
   taskViewSync?: Partial<TaskViewSync>;
   agentSessionViewSync?: AgentSessionViewSync;
   getActiveRepoPath?: () => string | null;
@@ -105,6 +107,7 @@ const createHarness = ({
     agentSessionViewSync,
     getActiveRepoPath,
     onDegraded,
+    onSnapshotStarted,
   });
 
   return {
@@ -112,6 +115,7 @@ const createHarness = ({
     agentSessionViewSync,
     metadata,
     onDegraded,
+    onSnapshotStarted,
     records,
     taskViewSync,
     transport,
@@ -123,6 +127,26 @@ const createHarness = ({
 };
 
 describe("task stream controller recovery", () => {
+  test("claims the active repository before applying a snapshot", async () => {
+    const snapshotRefresh = deferred<void>();
+    const harness = createHarness({
+      taskViewSync: {
+        reconcileStreamSnapshot: async () => {
+          await snapshotRefresh.promise;
+          return [];
+        },
+      },
+    });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "snapshot_required", cursor: cursor(7), reason: "buffer_gap" });
+    await flush();
+
+    expect(harness.onSnapshotStarted).toHaveBeenCalledWith("/repo");
+    snapshotRefresh.resolve();
+    await flush();
+  });
+
   test("uses one task list read to reconcile task and session snapshots", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const listTasks = mock(async () => [createTaskCardFixture({ id: "task-1" })]);

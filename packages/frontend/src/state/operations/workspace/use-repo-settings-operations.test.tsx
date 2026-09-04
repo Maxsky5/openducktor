@@ -834,6 +834,55 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
+  test("keeps a committed settings save successful when the task refresh fails", async () => {
+    const taskRefreshFailure = new Error("task refresh failed");
+    const normalizedSnapshot = createSettingsSnapshotFixture({ kanban: { doneVisibleDays: 7 } });
+    const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+    const workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
+    const tasksList = mock(async () => {
+      throw taskRefreshFailure;
+    });
+    const original = {
+      tasksList: host.tasksList,
+      workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.tasksList = tasksList;
+    host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords: mock(() => {}),
+      applyWorkspaceRecord: mock(() => {}),
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
+
+      await expect(
+        harness.getLatest().saveSettingsSnapshot(normalizedSnapshot),
+      ).resolves.toBeUndefined();
+
+      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledTimes(1);
+      expect(
+        queryClient.getQueryData<SettingsSnapshot>(workspaceQueryKeys.settingsSnapshot())?.kanban
+          .doneVisibleDays,
+      ).toBe(7);
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-a"))).toMatchObject({
+        error: taskRefreshFailure,
+        status: "error",
+      });
+    } finally {
+      await harness.unmount();
+      host.tasksList = original.tasksList;
+      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
   test("keeps exact runtime validation data and refreshes diagnostics after saving settings", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});

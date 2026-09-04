@@ -8,6 +8,7 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { taskQueryKeys } from "@/state/queries/tasks";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { TaskStreamController } from "@/state/tasks/task-stream-controller";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
@@ -23,6 +24,7 @@ export type TaskStreamControllerFactory = (input: {
   queryClient: QueryClient;
   getActiveRepoPath: () => string | null;
   onDegraded: (cause: unknown) => void;
+  onSnapshotStarted: (repoPath: string | null) => void;
 }) => TaskStreamController;
 
 type UseAppLifecycleArgs = {
@@ -67,6 +69,7 @@ export function useAppLifecycle({
   const activeWorkspaceRef = useRef(activeWorkspace);
   const loadWorkspaceTasksRef = useRef(loadWorkspaceTasks);
   const shouldLoadWorkspaceTasksRef = useRef<Promise<boolean>>(loadTasksWithoutStream);
+  const streamSnapshotReposRef = useRef<Set<string>>(new Set());
 
   useLayoutEffect(() => {
     activeWorkspaceRef.current = activeWorkspace;
@@ -96,6 +99,7 @@ export function useAppLifecycle({
   }, [activeWorkspace?.repoPath, refreshRepoRuntimeHealth, runtimeKinds, startRepoRuntime]);
 
   useEffect(() => {
+    streamSnapshotReposRef.current = new Set();
     let taskLoadDecisionMade = false;
     let resolveTaskLoadDecision!: (shouldLoadWorkspaceTasks: boolean) => void;
     shouldLoadWorkspaceTasksRef.current = new Promise<boolean>((resolve) => {
@@ -114,6 +118,11 @@ export function useAppLifecycle({
       onDegraded: (error) => {
         const description = summarizeTaskLoadError({ error });
         toast.error("Task stream degraded", { description });
+      },
+      onSnapshotStarted: (repoPath) => {
+        if (repoPath) {
+          streamSnapshotReposRef.current.add(repoPath);
+        }
       },
     });
     void controller.start().then(
@@ -147,12 +156,26 @@ export function useAppLifecycle({
       refreshBranches,
       refreshTaskStoreCheckForRepo,
       loadWorkspaceTasks: async (repoPath) => {
-        if ((await shouldLoadWorkspaceTasks) && isCurrent()) {
+        const streamUnavailable = await shouldLoadWorkspaceTasks;
+        const taskQueryState = queryClient.getQueryState(taskQueryKeys.repoData(repoPath));
+        if (taskQueryState?.status === "success") {
+          streamSnapshotReposRef.current.delete(repoPath);
+        }
+        const streamOwnsRepo = streamSnapshotReposRef.current.has(repoPath);
+        const queryOwnsRepo =
+          taskQueryState?.status === "success" || taskQueryState?.fetchStatus === "fetching";
+        if ((streamUnavailable || (!streamOwnsRepo && !queryOwnsRepo)) && isCurrent()) {
           await loadWorkspaceTasksRef.current(repoPath);
         }
       },
       notifications: lifecycleNotifications,
       timers: lifecycleTimers,
     });
-  }, [activeWorkspace, clearBranchData, refreshTaskStoreCheckForRepo, refreshBranches]);
+  }, [
+    activeWorkspace,
+    clearBranchData,
+    queryClient,
+    refreshTaskStoreCheckForRepo,
+    refreshBranches,
+  ]);
 }

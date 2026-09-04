@@ -4,6 +4,8 @@ import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { host } from "@/state/operations/shared/host";
+import { useRepoSettingsOperations } from "@/state/operations/workspace/use-repo-settings-operations";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { SettingsSaveValidation } from "./settings-modal-save-policy";
 import { type DirtySections, EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
@@ -35,6 +37,17 @@ const createSnapshot = (): SettingsSnapshot =>
       },
     },
   });
+
+const activeWorkspace = {
+  workspaceId: "repo",
+  workspaceName: "Repo",
+  repoPath: "/repo",
+  isActive: true,
+  hasConfig: true,
+  configuredWorktreeBasePath: "/tmp/worktrees",
+  defaultWorktreeBasePath: "/tmp/default-worktrees",
+  effectiveWorktreeBasePath: "/tmp/worktrees",
+};
 
 const createValidation = (
   overrides: Partial<SettingsSaveValidation> = {},
@@ -507,6 +520,58 @@ describe("useSettingsModalSaveOrchestration", () => {
     );
 
     await harness.unmount();
+  });
+
+  test("keeps the modal save successful when the post-save task refresh fails", async () => {
+    const taskRefreshFailure = new Error("task refresh failed");
+    const normalizedSnapshot = createSnapshot();
+    normalizedSnapshot.kanban.doneVisibleDays = 7;
+    const workspaceSaveSettingsSnapshot = mock(async () => [activeWorkspace]);
+    const workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
+    const tasksList = mock(async () => {
+      throw taskRefreshFailure;
+    });
+    const original = {
+      tasksList: host.tasksList,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+      workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+    };
+    host.tasksList = tasksList;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+    const useIntegratedSave = (args: HookArgs) => {
+      const settingsOperations = useRepoSettingsOperations({
+        activeWorkspace,
+        applyWorkspaceRecords: () => {},
+        applyWorkspaceRecord: () => {},
+      });
+      return useSettingsModalSaveOrchestration({
+        ...args,
+        saveSettingsSnapshot: settingsOperations.saveSettingsSnapshot,
+      });
+    };
+    const harness = createSharedHookHarness(
+      useIntegratedSave,
+      createArgs({}, { ...EMPTY_DIRTY_SECTIONS, chat: true }),
+    );
+
+    try {
+      await harness.mount();
+      let didSave = false;
+      await harness.run(async (state) => {
+        didSave = await state.submit();
+      });
+
+      expect(harness.getLatest().saveError).toBeNull();
+      expect(didSave).toBe(true);
+      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledTimes(1);
+      expect(tasksList).toHaveBeenCalledWith("/repo");
+    } finally {
+      await harness.unmount();
+      host.tasksList = original.tasksList;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+    }
   });
 
   test("surfaces save-preparation errors before persistence", async () => {

@@ -198,10 +198,14 @@ export function useRepoSettingsOperations({
           refetchType: "none",
         });
         if (activeWorkspace) {
-          await queryClient.fetchQuery({
-            ...repoTaskDataQueryOptions(activeWorkspace.repoPath),
-            staleTime: 0,
-          });
+          try {
+            await queryClient.fetchQuery({
+              ...repoTaskDataQueryOptions(activeWorkspace.repoPath),
+              staleTime: 0,
+            });
+          } catch {
+            // TanStack Query keeps the failure for the task-loading error path to report.
+          }
         }
       }
       void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });

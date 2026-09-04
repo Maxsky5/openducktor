@@ -34,7 +34,7 @@ Read [ADR 0002](adr/0002-use-effect-in-the-typescript-host.md) and [the TanStack
 
 ## List tasks for the Kanban board
 
-1. `useTaskQueryReadModel` observes `repoTaskDataQueryOptions`. The initial stream snapshot fills the shared query cache. The render query reuses this data without a second request. If the stream cannot start, the repository load fills the cache. Manual and event refreshes use `TaskViewSync`.
+1. `useTaskQueryReadModel` observes `repoTaskDataQueryOptions`. The initial stream snapshot fills the shared query cache. The render query reuses this data without a second request. If the stream cannot start or has not claimed the selected repository, the repository load fills the cache. Manual and event refreshes use `TaskViewSync`.
 2. `repoTaskDataQueryOptions` calls `host.tasksList(repoPath)`. The host reads `kanban.doneVisibleDays`, and SQLite filters old closed tasks before the host builds task rows.
 3. `packages/frontend/src/lib/host-client.ts` delegates to the active shell bridge.
 4. `packages/host-client/src/task-client.ts` maps the call to `tasks_list`.
