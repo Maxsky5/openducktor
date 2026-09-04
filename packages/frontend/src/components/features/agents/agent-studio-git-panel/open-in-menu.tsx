@@ -8,23 +8,25 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { errorMessage } from "@/lib/errors";
+import { usePreferredOpenInTool } from "@/state/mutations/use-preferred-open-in-tool";
 import { openInToolsQueryOptions, refreshOpenInToolsFromQuery } from "@/state/queries/system";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { usePreferredOpenInTool } from "@/state/mutations/use-preferred-open-in-tool";
 import { OpenInToolIcon } from "./open-in-tool-metadata";
 import { getOpenInToolLabel } from "./open-in-tool-metadata-model";
+
+type OpenInMenuProps = {
+  contextMode: "repository" | "worktree";
+  targetPath: string | null;
+  disabledReason: string | null;
+  onOpenInTool?: ((toolId: SystemOpenInToolId) => Promise<void>) | undefined;
+};
 
 export function OpenInMenu({
   contextMode,
   targetPath,
   disabledReason,
   onOpenInTool,
-}: {
-  contextMode: "repository" | "worktree";
-  targetPath: string | null;
-  disabledReason: string | null;
-  onOpenInTool?: ((toolId: SystemOpenInToolId) => Promise<void>) | undefined;
-}): ReactElement {
+}: OpenInMenuProps): ReactElement {
   const [isOpen, setIsOpen] = useState(false);
   const [pendingToolId, setPendingToolId] = useState<SystemOpenInToolId | null>(null);
   const settingsQuery = useQuery(settingsSnapshotQueryOptions());
@@ -358,13 +360,7 @@ function resolveOpenInDisabledReason({
   targetPath,
   disabledReason,
   onOpenInTool,
-}: {
-  contextMode: "repository" | "worktree";
-  targetLabel: string;
-  targetPath: string | null;
-  disabledReason: string | null;
-  onOpenInTool?: ((toolId: SystemOpenInToolId) => Promise<void>) | undefined;
-}): string | null {
+}: OpenInMenuProps & { targetLabel: string }): string | null {
   if (disabledReason) {
     return disabledReason;
   }
