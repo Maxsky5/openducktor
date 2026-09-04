@@ -62,31 +62,31 @@ export const stopStoredWorkflowSessionAfterLaunchFailure = async ({
   stopReason: string;
   bootstrapToComplete?: SessionBootstrap;
 }): Promise<never> => {
+  let stopError: unknown;
   try {
     await runOrchestratorTask(
       stopReason,
       async () => runtime.adapter.stopSession({ ...identity, repoPath: startedCtx.repoPath }),
       { tags: toStartedSessionTags(startedCtx) },
     );
-  } catch (stopError) {
-    throw new SessionLaunchStopError(
-      `${message} Failed to stop the started session during rollback: ${errorMessage(stopError)}. Cleanup was not continued.`,
-      { cause: stopError },
-    );
+  } catch (error) {
+    stopError = error;
   }
 
-  const storedSession = readSessionSnapshot(identity);
-  if (storedSession) {
-    replaceSession({
-      ...storedSession,
-      status: "stopped",
-      runtimeStatusMessage: null,
-      stopRequestedAt: null,
-      pendingApprovals: [],
-      pendingQuestions: [],
-    });
+  if (stopError === undefined) {
+    const storedSession = readSessionSnapshot(identity);
+    if (storedSession) {
+      replaceSession({
+        ...storedSession,
+        status: "stopped",
+        runtimeStatusMessage: null,
+        stopRequestedAt: null,
+        pendingApprovals: [],
+        pendingQuestions: [],
+      });
+    }
+    clearSessionObservationState(identity);
   }
-  clearSessionObservationState(identity);
 
   let bootstrapError: unknown;
   if (bootstrapToComplete) {
@@ -95,6 +95,17 @@ export const stopStoredWorkflowSessionAfterLaunchFailure = async ({
     } catch (error) {
       bootstrapError = error;
     }
+  }
+
+  if (stopError !== undefined) {
+    const bootstrapFailure =
+      bootstrapError === undefined
+        ? ""
+        : ` Also failed to complete the task worktree bootstrap: ${errorMessage(bootstrapError)}.`;
+    throw new SessionLaunchStopError(
+      `${message} Failed to stop the started session during rollback: ${errorMessage(stopError)}. Cleanup was not continued.${bootstrapFailure}`,
+      { cause: stopError },
+    );
   }
 
   const progress = ["The started session was stopped.", "The stored task session was kept."];

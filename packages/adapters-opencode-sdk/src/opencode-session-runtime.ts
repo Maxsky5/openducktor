@@ -230,17 +230,19 @@ export const createPrepareOpencodeSessionRuntime = (
       return false;
     };
 
-    const syncEventSessions = async ({
-      sources,
-      failures,
-    }: OpencodeRuntimeSnapshotRead): Promise<void> => {
+    const syncEventSessions = async (
+      { sources, failures }: OpencodeRuntimeSnapshotRead,
+      sessionsAtReadStart: ReadonlyMap<string, SessionRecord>,
+    ): Promise<void> => {
       const sourceIds = new Set([
         ...sources.map((source) => source.externalSessionId),
         ...failures.map((failure) => failure.externalSessionId),
       ]);
-      // oxlint-disable-next-line unicorn/no-useless-spread -- release mutates eventSessions
-      for (const session of [...eventSessions.values()]) {
-        if (!sourceIds.has(session.externalSessionId)) {
+      for (const session of sessionsAtReadStart.values()) {
+        if (
+          !sourceIds.has(session.externalSessionId) &&
+          eventSessions.get(session.externalSessionId) === session
+        ) {
           await releaseSessionRuntime(session, eventSessions, runtimeEventTransports);
         }
       }
@@ -289,6 +291,7 @@ export const createPrepareOpencodeSessionRuntime = (
     const readSessionSources = (): Promise<OpencodeRuntimeSnapshotRead> => {
       const read = readSessionSourcesTail.then(async () => {
         requireActive();
+        const sessionsAtReadStart = new Map(eventSessions);
         const snapshotInput: Parameters<typeof listOpencodeRuntimeSnapshotSources>[0] = {
           createClient,
           runtimeEndpoint: input.runtimeEndpoint,
@@ -300,7 +303,7 @@ export const createPrepareOpencodeSessionRuntime = (
         }
         const result = await listOpencodeRuntimeSnapshotSources(snapshotInput);
         requireActive();
-        await syncEventSessions(result);
+        await syncEventSessions(result, sessionsAtReadStart);
         requireActive();
         return {
           ...result,

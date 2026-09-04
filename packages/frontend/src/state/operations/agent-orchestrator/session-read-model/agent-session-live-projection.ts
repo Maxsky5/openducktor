@@ -283,7 +283,7 @@ const applyDirectSnapshot = (
   };
 };
 
-const createObservedChildSession = (snapshot: AgentSessionLiveSnapshot): AgentSessionState => {
+const createObservedSession = (snapshot: AgentSessionLiveSnapshot): AgentSessionState => {
   const identity = toSessionIdentity(snapshot.ref);
   return applyDirectSnapshot(
     {
@@ -465,8 +465,8 @@ export const buildAgentSessionLiveCollection = ({
             externalSessionId: snapshot.parentExternalSessionId,
           })
         : null;
-      if (parent) {
-        collection = replaceAgentSession(collection, createObservedChildSession(snapshot));
+      if (parent || snapshot.repositoryScope?.kind === "repository") {
+        collection = replaceAgentSession(collection, createObservedSession(snapshot));
         applied += 1;
         continue;
       }
@@ -496,14 +496,15 @@ export const applyAgentSessionLiveDelta = ({
           externalSessionId: envelope.session.parentExternalSessionId,
         })
       : null;
-    if (!session && !parent) {
+    const isRepositoryRoot = envelope.session.repositoryScope?.kind === "repository";
+    if (!session && !parent && !isRepositoryRoot) {
       return current;
     }
     const withDirectSnapshot = replaceAgentSession(
       current,
       session
         ? applyDirectSnapshot(session, envelope.session)
-        : createObservedChildSession(envelope.session),
+        : createObservedSession(envelope.session),
     );
     return rebuildProjectedPendingInput(withDirectSnapshot);
   }

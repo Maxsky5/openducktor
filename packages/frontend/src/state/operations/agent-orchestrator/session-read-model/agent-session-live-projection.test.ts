@@ -130,6 +130,30 @@ describe("agent session live projection", () => {
     },
   );
 
+  test.each(["snapshot", "delta"] as const)(
+    "admits an OpenDucktor repository root from a %s",
+    (delivery) => {
+      const repositorySession = snapshot("repository-thread", {
+        repositoryScope: { kind: "repository" },
+      });
+      const sessions =
+        delivery === "snapshot"
+          ? buildAgentSessionLiveCollection({
+              current: emptyAgentSessionCollection(),
+              snapshots: [repositorySession],
+            })
+          : delta(emptyAgentSessionCollection(), {
+              type: "session_upsert",
+              session: repositorySession,
+            });
+
+      expect(getAgentSession(sessions, identity("repository-thread"))).toMatchObject({
+        sessionAssociation: { kind: "repository" },
+        livePresence: "present",
+      });
+    },
+  );
+
   test("preserves context identity for unrelated live updates", () => {
     const original = snapshot("thread-1", {
       contextUsage: { totalTokens: 6_086, contextWindow: 258_400 },

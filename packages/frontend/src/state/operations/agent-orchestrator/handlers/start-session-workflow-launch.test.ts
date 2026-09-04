@@ -534,6 +534,7 @@ describe("registerWorkflowSessionLaunch", () => {
     await expect(registerWorkflowSessionLaunch(registrationInputFor(harness))).rejects.toThrow(
       "Workspace changed while starting session. Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.",
     );
+    expect(harness.calls.bootstrapComplete).toBe(1);
     expect(harness.calls.clearObservation).toHaveLength(0);
   });
 });

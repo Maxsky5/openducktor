@@ -432,6 +432,41 @@ describe("OpenCode session runtime connection", () => {
     await prepared.release();
   });
 
+  test("keeps a session registered when an older refresh omits it", async () => {
+    let markListStarted: () => void = () => undefined;
+    let finishList: () => void = () => undefined;
+    const listStarted = new Promise<void>((resolve) => {
+      markListStarted = resolve;
+    });
+    const listBarrier = new Promise<void>((resolve) => {
+      finishList = resolve;
+    });
+    const harness = createLiveClientHarness({
+      externalSessionIds: [],
+      onList: markListStarted,
+      listBarrier: () => listBarrier,
+    });
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    await prepared.startForwarding((signal) => {
+      signals.push(signal);
+    });
+
+    const refresh = prepared.connection.readSessionSources();
+    await listStarted;
+    await resumeOpenDucktorSession(prepared);
+    finishList();
+    await refresh;
+    await harness.emitAndWait(sessionStatusEvent({ type: "busy" }, "session-1"));
+
+    expect(signals).toContainEqual({
+      type: "session_event",
+      externalSessionId: "session-1",
+      event: expect.objectContaining({ type: "session_status" }),
+    });
+    await prepared.release();
+  });
+
   test("lists parent lineage for a child session", async () => {
     const harness = createLiveClientHarness({
       externalSessionIds: ["child-session"],
