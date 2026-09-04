@@ -13,23 +13,28 @@ export type NotificationCopy = {
   body: string;
 };
 
+const toPlainNotificationText = (text: string): string =>
+  text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
 export const buildNotificationCopy = (occurrence: NotificationOccurrence): NotificationCopy => {
   const eventLabel = NOTIFICATION_KIND_LABELS[occurrence.kind];
-  const taskIdentity = occurrence.task?.id ? ` - ${occurrence.task.id}` : "";
-  const bodyParts = [occurrence.repositoryLabel];
-  if (occurrence.task?.title) {
-    bodyParts.push(occurrence.task.title);
-  }
+  const taskTitle = occurrence.task?.title
+    ? `: ${toPlainNotificationText(occurrence.task.title)}`
+    : "";
+  const context = [toPlainNotificationText(occurrence.repositoryLabel)];
   if (occurrence.role) {
-    bodyParts.push(ROLE_LABELS[occurrence.role]);
+    context.push(ROLE_LABELS[occurrence.role]);
+  } else if (occurrence.sessionLabel) {
+    context.push(toPlainNotificationText(occurrence.sessionLabel));
   }
-  if (occurrence.sessionLabel) {
-    bodyParts.push(occurrence.sessionLabel);
-  }
-  bodyParts.push(occurrence.status);
 
   return {
-    title: `${eventLabel}${taskIdentity}`.slice(0, 180),
-    body: bodyParts.join(" - ").slice(0, 500),
+    title: `${eventLabel}${taskTitle}`.slice(0, 180),
+    body: `${toPlainNotificationText(occurrence.status)}\n${context.join(" · ")}`.slice(0, 500),
   };
 };
