@@ -318,23 +318,6 @@ afterEach(async () => {
 });
 
 describe("MCP server tool results", () => {
-  test("advertises review-state blocking and the blocked no-op", async () => {
-    const bridge = await startMockBridge();
-    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
-    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
-    try {
-      await client.connect(transport);
-      const { tools } = await client.listTools();
-      const tool = tools.find((entry) => entry.name === "odt_build_blocked");
-      expect(tool?.description).toContain(
-        "Transition task from in_progress, ai_review, or human_review to blocked with a non-empty reason.",
-      );
-      expect(tool?.description).toContain("Calling from blocked is an idempotent no-op.");
-    } finally {
-      await client.close();
-    }
-  });
-
   test("workspaceId-forbidden mode rejects workspaceId for advertised workspace-scoped tools", async () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, {

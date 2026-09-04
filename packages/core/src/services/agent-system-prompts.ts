@@ -155,7 +155,7 @@ const AGENT_PROMPT_DEFINITIONS = {
   "system.shared.workflow_guards": {
     id: "system.shared.workflow_guards",
     purpose: "system",
-    builtinVersion: 6,
+    builtinVersion: 5,
     template: joinPromptBlocks(
       "Workflow constraints you must obey:",
       bulletSection("Lifecycle contract", [
@@ -165,7 +165,6 @@ const AGENT_PROMPT_DEFINITIONS = {
         "odt_set_plan for feature/epic allowed from spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
         "odt_set_plan for task/bug allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
         "odt_set_plan changes status only for valid pre-build progression to ready_for_dev; in_progress/blocked/ai_review/human_review calls are document-only revisions.",
-        "odt_build_blocked requires a non-empty reason and transitions in_progress/ai_review/human_review -> blocked. Calling it from blocked is an idempotent no-op.",
         "odt_build_completed from in_progress or blocked transitions to ai_review only when qaRequired=true and the latest QA verdict is not approved; otherwise it transitions to human_review. Calling odt_build_completed from ai_review or human_review is accepted as an idempotent no-op.",
         "odt_qa_rejected transitions blocked/ai_review/human_review -> in_progress.",
         "odt_qa_approved transitions blocked/ai_review/human_review -> human_review.",

@@ -39,7 +39,6 @@ describe("buildAgentSystemPrompt", () => {
     expectPromptToContainAll(prompt, [
       "Workflow constraints you must obey:",
       "Lifecycle contract:",
-      "odt_build_blocked requires a non-empty reason and transitions in_progress/ai_review/human_review -> blocked. Calling it from blocked is an idempotent no-op.",
       "Artifact discipline:",
       "Fail-fast rules:",
       "OpenDucktor workflow tools are native MCP tools.",

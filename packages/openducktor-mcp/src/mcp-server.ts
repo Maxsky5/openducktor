@@ -260,8 +260,7 @@ const ODT_TOOL_DEFINITIONS = [
     execute: (store, input) => store.setPlan(input),
   }),
   defineOdtTool("odt_build_blocked", ODT_TOOL_SCHEMAS.odt_build_blocked, {
-    description:
-      "Transition task from in_progress, ai_review, or human_review to blocked with a non-empty reason. Calling from blocked is an idempotent no-op.",
+    description: "Transition task to blocked with explicit reason.",
     execute: (store, input) => store.buildBlocked(input),
   }),
   defineOdtTool("odt_build_resumed", ODT_TOOL_SCHEMAS.odt_build_resumed, {
