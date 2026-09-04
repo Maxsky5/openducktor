@@ -4,7 +4,6 @@ import { listBuiltinAgentPromptTemplates } from "@openducktor/core";
 import {
   Columns3,
   Cpu,
-  Monitor,
   FolderGit2,
   type LucideIcon,
   MessageSquare,
@@ -16,7 +15,6 @@ import {
 } from "lucide-react";
 
 export type SettingsSectionId =
-  | "system"
   | "general"
   | "git"
   | "runtimes"
@@ -37,7 +35,6 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   label: string;
   icon: LucideIcon;
 }> = [
-  { id: "system", label: "System", icon: Monitor },
   { id: "general", label: "General", icon: SlidersHorizontal },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "git", label: "Git", icon: FolderGit2 },

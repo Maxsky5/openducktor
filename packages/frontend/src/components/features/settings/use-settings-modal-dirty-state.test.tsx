@@ -33,7 +33,6 @@ describe("useSettingsModalDirtyState", () => {
     });
 
     expect(harness.getLatest().dirtySections).toEqual({
-      system: false,
       general: false,
       appearance: true,
       chat: true,
@@ -52,7 +51,6 @@ describe("useSettingsModalDirtyState", () => {
     });
 
     expect(harness.getLatest().dirtySections).toEqual({
-      system: false,
       general: false,
       appearance: false,
       chat: false,

@@ -11,7 +11,7 @@ import { errorMessage } from "@/lib/errors";
 import { openInToolsQueryOptions, refreshOpenInToolsFromQuery } from "@/state/queries/system";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { OpenInToolIcon } from "./open-in-tool-metadata";
-import { getOpenInToolLabel } from "./open-in-tool-metadata-model";
+import { getDefaultOpenInTool, getOpenInToolLabel } from "./open-in-tool-metadata-model";
 
 type OpenInMenuProps = {
   contextMode: "repository" | "worktree";
@@ -35,21 +35,7 @@ export function OpenInMenu({
   const toolsQuery = useQuery(openInToolsQueryOptions());
   const targetLabel = contextMode === "repository" ? "repository root" : "task worktree";
 
-  const defaultTool = useMemo(() => {
-    const tools = toolsQuery.data ?? [];
-    if (tools.length === 0) {
-      return null;
-    }
-
-    if (preferredToolId) {
-      const preferredTool = tools.find((tool) => tool.toolId === preferredToolId);
-      if (preferredTool) {
-        return preferredTool;
-      }
-    }
-
-    return tools[0] ?? null;
-  }, [preferredToolId, toolsQuery.data]);
+  const defaultTool = getDefaultOpenInTool(toolsQuery.data ?? [], preferredToolId);
   const alternativeTools = useMemo(() => {
     const tools = toolsQuery.data ?? [];
     if (!defaultTool) {

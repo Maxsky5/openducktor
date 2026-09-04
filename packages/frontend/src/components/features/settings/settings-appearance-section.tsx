@@ -2,13 +2,17 @@ import {
   type AppearanceSettings,
   HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES,
   type HorizontalScrollbarVisibility,
+  type SystemSettings,
 } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
+import { SettingsOpenInTool } from "./settings-open-in-tool";
 
 type SettingsAppearanceSectionProps = {
   appearance: AppearanceSettings;
+  system: SystemSettings;
+  onUpdateSystem: (updater: (current: SystemSettings) => SystemSettings) => void;
   disabled: boolean;
   onUpdateAppearance: (updater: (current: AppearanceSettings) => AppearanceSettings) => void;
 };
@@ -32,6 +36,8 @@ const isHorizontalScrollbarVisibility = (value: string): value is HorizontalScro
 
 export function SettingsAppearanceSection({
   appearance,
+  system,
+  onUpdateSystem,
   disabled,
   onUpdateAppearance,
 }: SettingsAppearanceSectionProps): ReactElement {
@@ -58,10 +64,11 @@ export function SettingsAppearanceSection({
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-semibold text-foreground">Appearance</h3>
         <p className="text-xs text-muted-foreground">
-          Configure display preferences that apply across OpenDucktor.
+          Choose how OpenDucktor looks and which apps it uses.
         </p>
       </div>
 
+      <SettingsOpenInTool system={system} disabled={disabled} onUpdateSystem={onUpdateSystem} />
       <div className="grid gap-3 rounded-md border border-border bg-card p-4 md:grid-cols-[minmax(0,1fr)_16rem] md:items-start">
         <div className="grid gap-2">
           <Label id={labelId}>Horizontal Scrollbars</Label>

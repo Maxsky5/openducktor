@@ -60,7 +60,7 @@ export const useSettingsModalDirtyDraftActions = ({
 
   const updateGlobalSystemSettings = useCallback(
     (updater: (current: SettingsSnapshot["system"]) => SettingsSnapshot["system"]): void => {
-      runDirtyAction("system", () => draftActions.updateGlobalSystemSettings(updater));
+      runDirtyAction("appearance", () => draftActions.updateGlobalSystemSettings(updater));
     },
     [draftActions, runDirtyAction],
   );

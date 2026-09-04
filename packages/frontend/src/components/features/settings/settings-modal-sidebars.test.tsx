@@ -6,7 +6,6 @@ import { SettingsSidebar } from "./settings-modal-sidebars";
 describe("settings modal sidebars", () => {
   test("renders all settings sections including chat", () => {
     const errorCountById = {
-      system: 0,
       general: 0,
       git: 0,
       repositories: 0,
@@ -40,7 +39,6 @@ describe("settings modal sidebars", () => {
 
   test("renders Appearance directly after General", () => {
     const errorCountById = {
-      system: 0,
       general: 0,
       git: 0,
       repositories: 0,
@@ -67,7 +65,6 @@ describe("settings modal sidebars", () => {
 
   test("renders chat section as active when selected", () => {
     const errorCountById = {
-      system: 0,
       general: 0,
       git: 0,
       repositories: 0,
@@ -94,7 +91,6 @@ describe("settings modal sidebars", () => {
 
   test("disables all buttons when disabled prop is true", () => {
     const errorCountById = {
-      system: 0,
       general: 0,
       git: 0,
       repositories: 0,
@@ -121,7 +117,6 @@ describe("settings modal sidebars", () => {
 
   test("displays error count for reusable prompts section when errors exist", () => {
     const errorCountById = {
-      system: 0,
       general: 0,
       git: 0,
       repositories: 0,

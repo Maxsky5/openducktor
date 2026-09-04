@@ -92,7 +92,7 @@ describe("useSettingsModalSaveOrchestration", () => {
             snapshotDraft: { ...createSnapshot(), system },
             saveSettingsSnapshot: save,
           },
-          { ...EMPTY_DIRTY_SECTIONS, system: true },
+          { ...EMPTY_DIRTY_SECTIONS, appearance: true },
         ),
       );
       try {

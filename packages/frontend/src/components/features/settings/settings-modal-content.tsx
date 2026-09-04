@@ -1,4 +1,3 @@
-import { SettingsSystemSection } from "./settings-system-section";
 import type { ReactElement } from "react";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
@@ -94,16 +93,6 @@ export function SettingsModalContent({
     );
   }
 
-  if (section === "system") {
-    return (
-      <SettingsSystemSection
-        system={snapshotDraft.system}
-        disabled={isInteractionDisabled}
-        onUpdateSystem={controller.updateGlobalSystemSettings}
-      />
-    );
-  }
-
   if (section === "general") {
     return (
       <GeneralSettingsSection
@@ -188,6 +177,8 @@ export function SettingsModalContent({
     return (
       <SettingsAppearanceSection
         appearance={snapshotDraft.appearance}
+        system={snapshotDraft.system}
+        onUpdateSystem={controller.updateGlobalSystemSettings}
         disabled={isInteractionDisabled}
         onUpdateAppearance={updateGlobalAppearanceSettings}
       />
