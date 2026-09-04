@@ -17,6 +17,7 @@ import {
 import { useAgentStudioQuerySync } from "./query-sync/use-agent-studio-query-sync";
 import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigation";
 import { useAgentStudioSelectionState } from "./shell/use-agent-studio-selection-state";
+import { buildAgentStudioStateLoad } from "./agent-studio-workspace-state-load-model";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 import { useTaskTabState } from "./use-agent-studio-task-tabs-state";
 import { useAgentStudioWorkspaceStateLoad } from "./use-agent-studio-workspace-state-load";
@@ -350,6 +351,29 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     expect(harness.getLatest().navigation.roleFromQuery).toBe("spec");
     expect(harness.getLatest().navigation.sessionExternalIdParam).toBe("session-old");
     await harness.unmount();
+  });
+
+  test("keeps a cached workspace snapshot visible during a background refetch", () => {
+    const cachedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1"],
+      activeTask: { taskId: "task-1", role: "spec" },
+    };
+
+    const load = buildAgentStudioStateLoad({
+      activeWorkspaceId: "repo-a",
+      repoConfig: createRepoConfig(cachedState),
+      queryError: null,
+      isQueryPending: false,
+      tasks,
+      isLoadingTasks: false,
+      tasksAreCurrent: true,
+      sessions: [],
+      sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
+    });
+
+    expect(load.isLoading).toBe(false);
+    expect(load.loadedAgentStudioState).toEqual(cachedState);
+    expect(load.agentStudioState?.openTaskIds).toEqual(["task-1"]);
   });
 
   test("hides prior workspace tabs until the next workspace snapshot loads", async () => {

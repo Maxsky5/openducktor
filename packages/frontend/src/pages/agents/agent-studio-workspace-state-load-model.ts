@@ -16,7 +16,6 @@ export const buildAgentStudioStateLoad = ({
   repoConfig,
   queryError,
   isQueryPending,
-  isQueryFetching,
   tasks,
   isLoadingTasks,
   tasksAreCurrent,
@@ -27,7 +26,6 @@ export const buildAgentStudioStateLoad = ({
   repoConfig: RepoConfig | undefined;
   queryError: unknown;
   isQueryPending: boolean;
-  isQueryFetching: boolean;
   tasks: readonly TaskCard[];
   isLoadingTasks: boolean;
   tasksAreCurrent: boolean;
@@ -36,7 +34,7 @@ export const buildAgentStudioStateLoad = ({
 }): AgentStudioWorkspaceStateLoadModel => {
   const error = queryError instanceof Error ? queryError : null;
   const loadedAgentStudioState =
-    activeWorkspaceId && !isQueryFetching && !error ? (repoConfig?.agentStudioState ?? null) : null;
+    activeWorkspaceId && !error ? (repoConfig?.agentStudioState ?? null) : null;
   let agentStudioState: WorkspaceAgentStudioState | null = null;
   if (loadedAgentStudioState && !isLoadingTasks) {
     agentStudioState = tasksAreCurrent
@@ -48,7 +46,7 @@ export const buildAgentStudioStateLoad = ({
         })
       : loadedAgentStudioState;
   }
-  const isLoading = isQueryPending || isQueryFetching || isLoadingTasks;
+  const isLoading = isQueryPending || isLoadingTasks;
   const canSave =
     activeWorkspaceId !== null &&
     agentStudioState !== null &&
