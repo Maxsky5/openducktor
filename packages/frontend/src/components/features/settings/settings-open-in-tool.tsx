@@ -67,11 +67,6 @@ export function SettingsOpenInTool({
             }))
           }
         />
-        {preferredToolId ? (
-          <Button variant="outline" disabled={disabled} onClick={() => onUpdateSystem(() => ({}))}>
-            Clear preference
-          </Button>
-        ) : null}
         {toolsQuery.isPending ? (
           <p className="text-xs text-muted-foreground">Looking for supported apps…</p>
         ) : null}

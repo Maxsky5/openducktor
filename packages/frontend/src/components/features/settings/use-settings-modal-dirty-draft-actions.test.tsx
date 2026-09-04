@@ -65,7 +65,7 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useDirtyDraftActionsHarness, initialProps);
 
 describe("useSettingsModalDirtyDraftActions", () => {
-  test("marks Appearance dirty when setting and clearing the preference", async () => {
+  test("marks Appearance dirty when setting the preference", async () => {
     const harness = createHookHarness({
       selectedWorkspaceId: null,
       initialSnapshot: createSnapshot(),
@@ -75,9 +75,7 @@ describe("useSettingsModalDirtyDraftActions", () => {
       state.updateGlobalSystemSettings(() => ({ preferredOpenInToolId: "zed" })),
     );
     expect(harness.getLatest().snapshotDraft?.system).toEqual({ preferredOpenInToolId: "zed" });
-    await harness.run((state) => state.updateGlobalSystemSettings(() => ({})));
-    expect(harness.getLatest().snapshotDraft?.system).toEqual({});
-    expect(harness.getLatest().dirtyCalls).toEqual(["appearance", "appearance"]);
+    expect(harness.getLatest().dirtyCalls).toEqual(["appearance"]);
     await harness.unmount();
   });
 

@@ -38,7 +38,7 @@ function Harness({
 }
 
 describe("Open In settings", () => {
-  test("lists available tools, sets a preference, and clears it without null", async () => {
+  test("lists available tools and sets a preference without a clear action", async () => {
     host.systemListOpenInTools = async () => [{ toolId: "finder" }, { toolId: "zed" }];
     render(<Harness />);
     expect(screen.getByRole("heading", { name: "Appearance" })).toBeDefined();
@@ -58,11 +58,7 @@ describe("Open In settings", () => {
     expect(screen.getByTestId("agent-studio-git-open-in-icon-zed")).toBeDefined();
     await act(async () => fireEvent.click(await screen.findByText("Zed")));
     expect(screen.getByRole("status").textContent).toBe('{"preferredOpenInToolId":"zed"}');
-    await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: "Clear preference" })),
-    );
-    expect(screen.getByRole("status").textContent).toBe("{}");
-    expect(trigger.textContent).toContain("Finder");
+    expect(screen.queryByRole("button", { name: "Clear preference" }) === null).toBe(true);
   });
 
   test("can save the displayed default as an explicit preference", async () => {
@@ -91,17 +87,14 @@ describe("Open In settings", () => {
     expect(screen.getByRole("status").textContent).toBe("{}");
   });
 
-  test("shows an unavailable saved tool and allows clearing it", async () => {
+  test("shows the default when the saved tool is unavailable without changing the preference", async () => {
     host.systemListOpenInTools = async () => [{ toolId: "finder" }];
     render(<Harness initial={{ preferredOpenInToolId: "zed" }} />);
     await screen.findByText("Zed is unavailable. Open In will use Finder.");
     expect(screen.getByRole("button", { name: "Preferred Open In tool" }).textContent).toContain(
       "Finder",
     );
-    await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: "Clear preference" })),
-    );
-    expect(screen.getByRole("status").textContent).toBe("{}");
+    expect(screen.getByRole("status").textContent).toBe('{"preferredOpenInToolId":"zed"}');
   });
 
   test("shows discovery errors and retries while preserving the preference", async () => {
@@ -130,14 +123,11 @@ describe("Open In settings", () => {
     expect(screen.getByRole("status").textContent).toBe('{"preferredOpenInToolId":"zed"}');
   });
 
-  test("disables selection and clearing during save", async () => {
+  test("disables selection during save", async () => {
     host.systemListOpenInTools = async () => [{ toolId: "zed" }];
     render(<Harness initial={{ preferredOpenInToolId: "zed" }} disabled />);
     expect(
       screen.getByRole<HTMLButtonElement>("button", { name: "Preferred Open In tool" }).disabled,
-    ).toBe(true);
-    expect(
-      screen.getByRole<HTMLButtonElement>("button", { name: "Clear preference" }).disabled,
     ).toBe(true);
   });
 });
