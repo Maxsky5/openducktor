@@ -1,17 +1,17 @@
 import { type QueryKey, queryOptions, skipToken } from "@tanstack/react-query";
 
-type SkippedQueryOptionsArgs = {
-  queryKey: QueryKey;
+type SkippedQueryOptionsArgs<TQueryKey extends QueryKey> = {
+  queryKey: TQueryKey;
   staleTime: number;
   refetchOnWindowFocus?: boolean;
 };
 
-export const skippedQueryOptions = <TData>({
+export const skippedQueryOptions = <TData, TQueryKey extends QueryKey = QueryKey>({
   queryKey,
   staleTime,
   refetchOnWindowFocus,
-}: SkippedQueryOptionsArgs) => {
-  const options: Parameters<typeof queryOptions<TData, Error, TData, QueryKey>>[0] = {
+}: SkippedQueryOptionsArgs<TQueryKey>) => {
+  const options: Parameters<typeof queryOptions<TData, Error, TData, TQueryKey>>[0] = {
     queryKey,
     queryFn: skipToken,
     staleTime,
@@ -19,5 +19,5 @@ export const skippedQueryOptions = <TData>({
   if (refetchOnWindowFocus !== undefined) {
     options.refetchOnWindowFocus = refetchOnWindowFocus;
   }
-  return queryOptions<TData, Error, TData, QueryKey>(options);
+  return queryOptions<TData, Error, TData, TQueryKey>(options);
 };

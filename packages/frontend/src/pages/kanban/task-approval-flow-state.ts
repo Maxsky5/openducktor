@@ -26,7 +26,6 @@ export type TaskApprovalFlowOpenState = {
   squashCommitMessageTouched: boolean;
   errorMessage: string | null;
   approvalContext: TaskApprovalContext | null;
-  gitProviderContext: RepositoryGitProviderContext;
   workspaceIdentity: TaskApprovalWorkspaceIdentity;
 };
 
@@ -48,7 +47,6 @@ type TaskApprovalFlowOpenPayload = {
   title: string;
   body: string;
   errorMessage: string | null;
-  gitProviderContext: RepositoryGitProviderContext;
   workspaceIdentity: TaskApprovalWorkspaceIdentity;
 };
 
@@ -116,7 +114,6 @@ const buildTaskApprovalLoadingState = (
   squashCommitMessageTouched: false,
   errorMessage: payload.errorMessage,
   approvalContext: null,
-  gitProviderContext: payload.gitProviderContext,
   workspaceIdentity: payload.workspaceIdentity,
 });
 
@@ -136,7 +133,6 @@ const buildTaskApprovalLoadedState = (
   squashCommitMessageTouched: false,
   errorMessage: payload.errorMessage,
   approvalContext: payload.approvalContext,
-  gitProviderContext: payload.gitProviderContext,
   workspaceIdentity: payload.workspaceIdentity,
 });
 
@@ -156,7 +152,6 @@ const buildMissingBuilderWorktreeState = (
   squashCommitMessageTouched: false,
   errorMessage: payload.errorMessage,
   approvalContext: null,
-  gitProviderContext: payload.gitProviderContext,
   workspaceIdentity: payload.workspaceIdentity,
 });
 

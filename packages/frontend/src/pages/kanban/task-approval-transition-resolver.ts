@@ -134,6 +134,16 @@ export const resolveTaskApprovalOpenMode = (args: {
   return determineDefaultTaskApprovalMode(args.gitProviderContext);
 };
 
+export const resolveCurrentTaskApprovalMode = (
+  mode: TaskApprovalMode,
+  gitProviderContext: RepositoryGitProviderContext | undefined,
+): TaskApprovalMode => {
+  const pullRequestsUnsupported =
+    gitProviderContext !== undefined &&
+    gitProviderContext?.descriptor.capabilities.supportsPullRequests !== true;
+  return mode === "pull_request" && pullRequestsUnsupported ? "direct_merge" : mode;
+};
+
 export const resolveTaskApprovalSubmissionRoute = (
   state: TaskApprovalFlowState,
   repoPath: string | null,

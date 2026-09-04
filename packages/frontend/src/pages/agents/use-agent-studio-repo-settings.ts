@@ -2,7 +2,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { useCallback } from "react";
 import type { host } from "@/state/operations/host";
-import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
+import {
+  repositoryGitProviderContextQueryOptions,
+  repositoryGitProviderContextQueryOptionsOrSkip,
+} from "@/state/queries/git-provider-context";
 import { repoConfigQueryOptions, toRepoSettingsInput } from "@/state/queries/workspace";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
@@ -27,19 +30,12 @@ export function useAgentStudioRepoSettings(args: {
     ),
     enabled: activeWorkspaceId !== null,
   });
-  const providerContextQuery = useQuery({
-    ...repositoryGitProviderContextQueryOptions(
-      activeRepoPath ?? "__inactive_repository__",
-      hostClient,
-    ),
-    enabled: activeRepoPath !== null,
-  });
+  const providerContextQuery = useQuery(
+    repositoryGitProviderContextQueryOptionsOrSkip(activeRepoPath, hostClient),
+  );
   const repoSettings =
     activeWorkspaceId !== null && repoConfig ? toRepoSettingsInput(repoConfig) : null;
-  const gitProviderContext =
-    activeRepoPath !== null && providerContextQuery.isSuccess
-      ? providerContextQuery.data
-      : undefined;
+  const gitProviderContext = activeRepoPath !== null ? providerContextQuery.data : undefined;
   const gitProviderContextError =
     activeRepoPath !== null && providerContextQuery.isError ? providerContextQuery.error : null;
   const refetchGitProviderContext = providerContextQuery.refetch;

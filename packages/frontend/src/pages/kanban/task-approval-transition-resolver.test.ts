@@ -9,6 +9,7 @@ import {
 } from "@openducktor/contracts";
 import type { TaskApprovalFlowState } from "./task-approval-flow-state";
 import {
+  resolveCurrentTaskApprovalMode,
   resolveTaskApprovalOpenMode,
   resolveTaskApprovalSubmissionRoute,
   resolveTaskApprovalWorkflowTransition,
@@ -84,7 +85,6 @@ const openState = (overrides: Partial<Extract<TaskApprovalFlowState, { kind: "op
     squashCommitMessageTouched: false,
     errorMessage: null,
     approvalContext: approvalContext(),
-    gitProviderContext: null,
     workspaceIdentity: { workspaceId: "workspace-repo", repoPath: "/repo" },
     ...overrides,
   }) satisfies TaskApprovalFlowState;
@@ -309,6 +309,33 @@ describe("resolveTaskApprovalOpenMode", () => {
         task: taskFixture,
       }),
     ).toBe(expected);
+  });
+});
+
+describe("resolveCurrentTaskApprovalMode", () => {
+  test.each([
+    {
+      name: "keeps Pull Request mode while the provider read is pending",
+      gitProviderContext: undefined,
+      expected: "pull_request" as const,
+    },
+    {
+      name: "keeps Pull Request mode when the provider supports it",
+      gitProviderContext: providerContext(true, false),
+      expected: "pull_request" as const,
+    },
+    {
+      name: "uses Direct Merge when the current provider does not support Pull Requests",
+      gitProviderContext: providerContext(false),
+      expected: "direct_merge" as const,
+    },
+    {
+      name: "uses Direct Merge when no provider is configured",
+      gitProviderContext: null,
+      expected: "direct_merge" as const,
+    },
+  ])("$name", ({ expected, gitProviderContext }) => {
+    expect(resolveCurrentTaskApprovalMode("pull_request", gitProviderContext)).toBe(expected);
   });
 });
 

@@ -201,6 +201,37 @@ describe("useAgentStudioRepoSettings", () => {
     await harness.unmount();
   });
 
+  test("keeps cached provider data visible when a refresh fails", async () => {
+    const context = createProviderContext();
+    let refreshFails = false;
+    const loadProviderContext = mock(async () => {
+      if (refreshFails) {
+        throw new Error("provider context refresh failed");
+      }
+      return context;
+    });
+    const hostClient = createRepoConfigHost(undefined, loadProviderContext);
+    const harness = createHookHarness({
+      activeWorkspaceId: "workspace-repo",
+      activeRepoPath: "/repo",
+      hostClient,
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.gitProviderContext !== undefined);
+
+    refreshFails = true;
+    harness.getLatest().retryGitProviderContext();
+    await harness.waitFor((state) => state.gitProviderContextError !== null);
+
+    expect(harness.getLatest().gitProviderContext).toEqual(context);
+    expect(harness.getLatest().gitProviderContextError?.message).toBe(
+      "provider context refresh failed",
+    );
+
+    await harness.unmount();
+  });
+
   test("resets settings when active repo becomes null", async () => {
     const hostClient = createRepoConfigHost();
     const harness = createHookHarness({
@@ -211,10 +242,12 @@ describe("useAgentStudioRepoSettings", () => {
 
     await harness.mount();
     await harness.waitFor((state) => state.repoSettings !== null);
+    expect(hostClient.workspaceGetGitProviderContext).toHaveBeenCalledTimes(1);
 
     await harness.update({ activeWorkspaceId: null, activeRepoPath: null, hostClient });
 
     expect(harness.getLatest().repoSettings).toBeNull();
+    expect(hostClient.workspaceGetGitProviderContext).toHaveBeenCalledTimes(1);
 
     await harness.unmount();
   });

@@ -27,6 +27,7 @@ import {
 } from "./task-approval-flow-state";
 import { buildTaskApprovalModalModel } from "./task-approval-modal-model";
 import {
+  resolveCurrentTaskApprovalMode,
   resolveTaskApprovalOpenMode,
   resolveTaskApprovalSubmissionRoute,
 } from "./task-approval-transition-resolver";
@@ -34,6 +35,8 @@ import { useTaskApprovalGitConflictFlow } from "./use-task-approval-git-conflict
 
 type UseTaskApprovalFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
+  gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderContextError: Error | null;
   loadGitProviderContext: () => Promise<RepositoryGitProviderContext>;
   tasks: TaskCard[];
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
@@ -56,6 +59,8 @@ const hasSameWorkspaceIdentity = (
 
 export function useTaskApprovalFlow({
   activeWorkspace,
+  gitProviderContext,
+  gitProviderContextError,
   loadGitProviderContext,
   tasks,
   requestPullRequestGeneration,
@@ -152,7 +157,6 @@ export function useTaskApprovalFlow({
           title,
           body,
           errorMessage: openErrorMessage,
-          gitProviderContext: resolvedGitProviderContext,
           workspaceIdentity: requestWorkspace,
         });
 
@@ -172,7 +176,6 @@ export function useTaskApprovalFlow({
                 title,
                 body,
                 errorMessage: openErrorMessage,
-                gitProviderContext: resolvedGitProviderContext,
                 workspaceIdentity: requestWorkspace,
               });
             } else {
@@ -186,7 +189,6 @@ export function useTaskApprovalFlow({
                 body,
                 errorMessage: openErrorMessage,
                 approvalContext,
-                gitProviderContext: resolvedGitProviderContext,
                 workspaceIdentity: requestWorkspace,
               });
             }
@@ -228,8 +230,22 @@ export function useTaskApprovalFlow({
 
     const submissionWorkspace = state.workspaceIdentity;
     const submissionVersion = approvalRequestVersionRef.current;
-    const submissionRoute = resolveTaskApprovalSubmissionRoute(state, submissionWorkspace.repoPath);
+    const mode = resolveCurrentTaskApprovalMode(state.mode, gitProviderContext);
+    const submissionState = mode === state.mode ? state : { ...state, mode };
+    const submissionRoute = resolveTaskApprovalSubmissionRoute(
+      submissionState,
+      submissionWorkspace.repoPath,
+    );
     if (submissionRoute.kind === "ignore") {
+      return;
+    }
+
+    const canSubmitPullRequest =
+      gitProviderContextError === null &&
+      gitProviderContext?.descriptor.capabilities.supportsPullRequests === true &&
+      gitProviderContext.config.enabled &&
+      gitProviderContext.health.available;
+    if (submissionRoute.kind === "submit_pull_request" && !canSubmitPullRequest) {
       return;
     }
 
@@ -340,6 +356,8 @@ export function useTaskApprovalFlow({
     })();
   }, [
     humanApproveTask,
+    gitProviderContext,
+    gitProviderContextError,
     isApprovalRequestCurrent,
     queryClient,
     openGitConflictDialog,
@@ -420,6 +438,8 @@ export function useTaskApprovalFlow({
     reset,
     resetMissingBuilderWorktree,
     state,
+    gitProviderContext,
+    gitProviderContextError,
   });
 
   return {

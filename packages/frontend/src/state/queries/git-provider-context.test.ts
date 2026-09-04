@@ -3,10 +3,11 @@ import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type RepositoryGitProviderContext,
 } from "@openducktor/contracts";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, skipToken } from "@tanstack/react-query";
 import {
   repositoryGitProviderContextQueryKeys,
   repositoryGitProviderContextQueryOptions,
+  repositoryGitProviderContextQueryOptionsOrSkip,
 } from "./git-provider-context";
 
 const healthyGithubContext = {
@@ -30,6 +31,19 @@ const healthyGithubContext = {
 } satisfies RepositoryGitProviderContext;
 
 describe("repository Git provider context query", () => {
+  test("skips the host read when no repository is active", () => {
+    const workspaceGetGitProviderContext = mock(async () => healthyGithubContext);
+    const options = repositoryGitProviderContextQueryOptionsOrSkip(null, {
+      workspaceGetGitProviderContext,
+    });
+
+    expect(Array.from(options.queryKey)).toEqual(
+      Array.from(repositoryGitProviderContextQueryKeys.repo(null)),
+    );
+    expect(options.queryFn).toBe(skipToken);
+    expect(workspaceGetGitProviderContext).not.toHaveBeenCalled();
+  });
+
   test("keys context by repository and loads it through the host", async () => {
     const workspaceGetGitProviderContext = mock(async () => healthyGithubContext);
     const queryClient = new QueryClient();

@@ -15,7 +15,7 @@ import {
 } from "@/features/autopilot/autopilot-catalog";
 import { errorMessage } from "@/lib/errors";
 import { pullRequestHealthError } from "@/lib/git-provider-health";
-import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
+import { repositoryGitProviderContextQueryOptionsOrSkip } from "@/state/queries/git-provider-context";
 
 type SettingsAutopilotSectionProps = {
   autopilot: AutopilotSettings;
@@ -30,10 +30,7 @@ export function SettingsAutopilotSection({
   repoPath,
   onUpdateAutopilot,
 }: SettingsAutopilotSectionProps): ReactElement {
-  const providerQuery = useQuery({
-    ...repositoryGitProviderContextQueryOptions(repoPath ?? "__inactive_repository__"),
-    enabled: repoPath !== null,
-  });
+  const providerQuery = useQuery(repositoryGitProviderContextQueryOptionsOrSkip(repoPath));
   const providerContext =
     repoPath !== null && providerQuery.isSuccess ? providerQuery.data : undefined;
   const supportsPullRequests =
