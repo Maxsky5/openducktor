@@ -121,7 +121,7 @@ describe("useAgentStudioTaskTabs", () => {
     await harness.unmount();
   });
 
-  test("replaces a local tab draft when an unchanged snapshot reloads", async () => {
+  test("keeps a local tab draft when the same workspace snapshot reloads", async () => {
     const loadedState: WorkspaceAgentStudioState = {
       openTaskIds: ["task-1"],
       activeTask: { taskId: "task-1" },
@@ -145,7 +145,7 @@ describe("useAgentStudioTaskTabs", () => {
     await harness.update(
       withDefaults({
         loadedAgentStudioState: loadedState,
-        agentStudioStateLoadKey: "2:1",
+        agentStudioStateLoadKey: "1:1",
         agentStudioState: loadedState,
         taskId: "",
         selectedTask: null,
@@ -153,8 +153,8 @@ describe("useAgentStudioTaskTabs", () => {
       }),
     );
 
-    expect(harness.getLatest().tabTaskIds).toEqual(["task-1"]);
-    expect(harness.getLatest().activeTaskTabId).toBe("task-1");
+    expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
+    expect(harness.getLatest().activeTaskTabId).toBe("task-2");
     await harness.unmount();
   });
 

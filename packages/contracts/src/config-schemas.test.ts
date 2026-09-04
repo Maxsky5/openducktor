@@ -35,7 +35,6 @@ import {
   settingsSnapshotSaveInputSchema,
   settingsSnapshotSchema,
 } from "./config-schemas";
-import { workspaceAgentStudioStateSchema } from "./workspace-agent-studio-state-schemas";
 
 const baseRepoConfigInput = {
   workspaceId: "repo",
@@ -119,38 +118,6 @@ describe("config-schemas", () => {
     ).toBe(false);
   });
 
-  test("excludes workspace Agent Studio state from settings snapshots and save inputs", () => {
-    const repoConfig = repoConfigSchema.parse({
-      ...baseRepoConfigInput,
-      agentStudioState: {
-        openTaskIds: ["task-1"],
-        activeTask: { taskId: "task-1", role: "build", externalSessionId: "session-1" },
-      },
-    });
-    const snapshot = settingsSnapshotSchema.parse({
-      theme: "light",
-      git: { defaultMergeMethod: "merge_commit" },
-      workspaces: { repo: repoConfig },
-      globalPromptOverrides: {},
-    });
-    const saveInput = settingsSnapshotSaveInputSchema.parse({
-      git: snapshot.git,
-      general: snapshot.general,
-      appearance: snapshot.appearance,
-      chat: snapshot.chat,
-      reusablePrompts: snapshot.reusablePrompts,
-      kanban: snapshot.kanban,
-      autopilot: snapshot.autopilot,
-      agentRuntimes: snapshot.agentRuntimes,
-      agentModelFavorites: snapshot.agentModelFavorites,
-      workspaces: { repo: repoConfig },
-      globalPromptOverrides: snapshot.globalPromptOverrides,
-    });
-
-    expect(snapshot.workspaces.repo).not.toHaveProperty("agentStudioState");
-    expect(saveInput.workspaces.repo).not.toHaveProperty("agentStudioState");
-  });
-
   test("defaults missing agent model favorites and canonicalizes exact tuples", () => {
     const snapshot = settingsSnapshotSchema.parse({
       theme: "light",
@@ -205,44 +172,6 @@ describe("config-schemas", () => {
   test("defaults repository Git config to no provider", () => {
     const parsed = repoConfigSchema.parse(baseRepoConfigInput);
     expect(parsed.git).toEqual({});
-  });
-
-  test("defaults workspace Agent Studio state for older repository configs", () => {
-    const parsed = repoConfigSchema.parse(baseRepoConfigInput);
-
-    expect(parsed.agentStudioState).toEqual({ openTaskIds: [] });
-  });
-
-  test("accepts structural workspace Agent Studio state without cross-field rules", () => {
-    const agentStudioState = workspaceAgentStudioStateSchema.parse({
-      openTaskIds: ["task-1", "task-1", "stale-task"],
-      activeTask: {
-        taskId: "another-task",
-        role: "build",
-        externalSessionId: "session-1",
-      },
-    });
-
-    expect(agentStudioState).toEqual({
-      openTaskIds: ["task-1", "task-1", "stale-task"],
-      activeTask: {
-        taskId: "another-task",
-        role: "build",
-        externalSessionId: "session-1",
-      },
-    });
-  });
-
-  test("rejects invalid workspace Agent Studio state field types", () => {
-    expect(workspaceAgentStudioStateSchema.safeParse({ openTaskIds: ["task-1", 2] }).success).toBe(
-      false,
-    );
-    expect(
-      workspaceAgentStudioStateSchema.safeParse({
-        openTaskIds: [],
-        activeTask: { taskId: "task-1", role: "operator" },
-      }).success,
-    ).toBe(false);
   });
 
   test("ignores legacy trusted hook fields", () => {

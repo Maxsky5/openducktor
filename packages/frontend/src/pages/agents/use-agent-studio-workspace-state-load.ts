@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { host } from "@/state/operations/host";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
@@ -28,7 +28,12 @@ export function useAgentStudioWorkspaceStateLoad({
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
   hostClient?: AgentStudioWorkspaceStateHost;
 }) {
-  const queryClient = useQueryClient();
+  const [visit, setVisit] = useState({ workspaceId: activeWorkspaceId, key: 0 });
+  let currentVisit = visit;
+  if (visit.workspaceId !== activeWorkspaceId) {
+    currentVisit = { workspaceId: activeWorkspaceId, key: visit.key + 1 };
+    setVisit(currentVisit);
+  }
   const queryOptions = repoConfigQueryOptions(
     activeWorkspaceId ?? INACTIVE_AGENT_STUDIO_WORKSPACE_ID,
     hostClient,
@@ -37,6 +42,8 @@ export function useAgentStudioWorkspaceStateLoad({
     ...queryOptions,
     enabled: activeWorkspaceId !== null,
     refetchOnMount: "always",
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
     staleTime: 0,
   });
   const loadModel = useMemo(
@@ -67,7 +74,6 @@ export function useAgentStudioWorkspaceStateLoad({
     ],
   );
   const refetchAgentStudioState = repoConfigQuery.refetch;
-  const dataUpdateCount = queryClient.getQueryState(queryOptions.queryKey)?.dataUpdateCount ?? 0;
   const retry = useCallback((): void => {
     void refetchAgentStudioState();
   }, [refetchAgentStudioState]);
@@ -75,9 +81,7 @@ export function useAgentStudioWorkspaceStateLoad({
   return {
     ...loadModel,
     agentStudioStateLoadKey:
-      loadModel.loadedAgentStudioState === null
-        ? null
-        : `${dataUpdateCount}:${repoConfigQuery.dataUpdatedAt}`,
+      loadModel.loadedAgentStudioState === null ? null : `${activeWorkspaceId}:${currentVisit.key}`,
     retry,
   };
 }

@@ -16,7 +16,9 @@ import {
 } from "./agent-studio-test-utils";
 import { useAgentStudioQuerySync } from "./query-sync/use-agent-studio-query-sync";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
+import { useTaskTabState } from "./use-agent-studio-task-tabs-state";
 import { useAgentStudioWorkspaceStateLoad } from "./use-agent-studio-workspace-state-load";
+import { useAgentStudioWorkspaceStateSave } from "./use-agent-studio-workspace-state-save";
 
 enableReactActEnvironment();
 
@@ -74,14 +76,57 @@ const useWorkspaceRestore = (args: LoadHookArgs) => {
   return { load, navigation, tabs };
 };
 
+type WorkspaceStateHost = {
+  workspaceGetRepoConfig: (workspaceId: string) => Promise<RepoConfig>;
+  workspaceReplaceAgentStudioState: (
+    workspaceId: string,
+    state: WorkspaceAgentStudioState,
+  ) => Promise<RepoConfig>;
+};
+
+type PersistenceHookArgs = Omit<LoadHookArgs, "hostClient"> & {
+  hostClient: WorkspaceStateHost;
+};
+
+const useWorkspaceStatePersistence = (args: PersistenceHookArgs) => {
+  const load = useAgentStudioWorkspaceStateLoad(args);
+  const tabs = useTaskTabState({
+    activeWorkspaceId: args.activeWorkspaceId,
+    loadedAgentStudioState: load.loadedAgentStudioState,
+    agentStudioStateLoadKey: load.agentStudioStateLoadKey,
+    agentStudioState: load.agentStudioState,
+    taskId: "task-1",
+    selectedTask: args.tasks[0] ?? null,
+    tasks: args.tasks,
+    tasksAreCurrent: args.tasksAreCurrent,
+  });
+  const state: WorkspaceAgentStudioState = tabs.persistedActiveTaskId
+    ? {
+        openTaskIds: tabs.openTaskIds,
+        activeTask: { taskId: tabs.persistedActiveTaskId },
+      }
+    : { openTaskIds: tabs.openTaskIds };
+  useAgentStudioWorkspaceStateSave({
+    workspaceId: args.activeWorkspaceId,
+    loadedState: load.loadedAgentStudioState,
+    state,
+    enabled: load.canSave,
+    hostClient: args.hostClient,
+  });
+  return { load, tabs };
+};
+
 describe("useAgentStudioWorkspaceStateLoad", () => {
-  test("changes the load key when the host reloads the same state", async () => {
+  test("keeps the load key when the same workspace cache reloads", async () => {
     const savedState: WorkspaceAgentStudioState = {
       openTaskIds: ["task-1"],
       activeTask: { taskId: "task-1" },
     };
-    const repoConfig = createRepoConfig(savedState);
-    const workspaceGetRepoConfig = mock(async () => repoConfig);
+    const reloadedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1", "task-2"],
+      activeTask: { taskId: "task-1" },
+    };
+    const workspaceGetRepoConfig = mock(async () => createRepoConfig(savedState));
     const hookArgs: LoadHookArgs = {
       activeWorkspaceId: "repo-a",
       tasks,
@@ -91,17 +136,97 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
       hostClient: { workspaceGetRepoConfig },
     };
-    const harness = createSharedHookHarness(useAgentStudioWorkspaceStateLoad, hookArgs);
+    const queryClient = createQueryClient();
+    const queryKey = repoConfigQueryOptions("repo-a").queryKey;
+    const harness = createSharedHookHarness(useAgentStudioWorkspaceStateLoad, hookArgs, {
+      queryClient,
+    });
 
     await harness.mount();
     await harness.waitFor((result) => result.agentStudioStateLoadKey !== null);
     const firstLoadKey = harness.getLatest().agentStudioStateLoadKey;
 
-    await harness.run((result) => result.retry());
-    await harness.waitFor(() => workspaceGetRepoConfig.mock.calls.length === 2);
-    await harness.waitFor((result) => result.agentStudioStateLoadKey !== firstLoadKey);
+    await harness.run(() => {
+      queryClient.setQueryData(
+        queryKey,
+        { ...createRepoConfig(reloadedState), workspaceName: "Repo A renamed" },
+        { updatedAt: Date.now() + 1_000 },
+      );
+    });
+    await harness.waitFor((result) => result.loadedAgentStudioState?.openTaskIds.length === 2);
 
-    expect(harness.getLatest().loadedAgentStudioState).toBe(savedState);
+    const result = harness.getLatest();
+    await harness.unmount();
+
+    expect(result.agentStudioStateLoadKey).toBe(firstLoadKey);
+    expect(result.loadedAgentStudioState).toEqual(reloadedState);
+  });
+
+  test("does not overwrite a local tab change after a stale cache reload", async () => {
+    const savedState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1"],
+      activeTask: { taskId: "task-1" },
+    };
+    const nextState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1", "task-2"],
+      activeTask: { taskId: "task-2" },
+    };
+    const firstSave = createDeferred<RepoConfig>();
+    const workspaceGetRepoConfig = mock(async () => createRepoConfig(savedState));
+    const workspaceReplaceAgentStudioState = mock(
+      async (_workspaceId: string, state: WorkspaceAgentStudioState) => {
+        if (state.openTaskIds.length === 2) {
+          return firstSave.promise;
+        }
+        return createRepoConfig(state);
+      },
+    );
+    const queryClient = createQueryClient();
+    const queryKey = repoConfigQueryOptions("repo-a").queryKey;
+    const hookArgs: PersistenceHookArgs = {
+      activeWorkspaceId: "repo-a",
+      tasks,
+      isLoadingTasks: false,
+      tasksAreCurrent: true,
+      sessions: [],
+      sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
+      hostClient: { workspaceGetRepoConfig, workspaceReplaceAgentStudioState },
+    };
+    const harness = createSharedHookHarness(useWorkspaceStatePersistence, hookArgs, {
+      queryClient,
+    });
+
+    await harness.mount();
+    await harness.waitFor((result) => result.load.agentStudioStateLoadKey !== null);
+    const loadKey = harness.getLatest().load.agentStudioStateLoadKey;
+    await harness.run((result) =>
+      result.tabs.setTabState({
+        openTaskIds: nextState.openTaskIds,
+        activeTaskId: nextState.activeTask?.taskId ?? null,
+      }),
+    );
+    await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
+
+    await harness.run(() => {
+      queryClient.setQueryData(
+        queryKey,
+        { ...createRepoConfig(savedState), workspaceName: "Repo A renamed" },
+        { updatedAt: Date.now() + 1_000 },
+      );
+    });
+    expect(harness.getLatest().load.agentStudioStateLoadKey).toBe(loadKey);
+    expect(harness.getLatest().tabs.openTaskIds).toEqual(nextState.openTaskIds);
+
+    await harness.run(async () => {
+      firstSave.resolve(createRepoConfig(nextState));
+      await firstSave.promise;
+    });
+    await harness.waitFor(
+      () =>
+        queryClient.getQueryData<RepoConfig>(queryKey)?.agentStudioState.openTaskIds.length === 2,
+    );
+
+    expect(workspaceReplaceAgentStudioState).toHaveBeenCalledTimes(1);
     await harness.unmount();
   });
 
@@ -188,6 +313,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
 
     await harness.mount();
     await harness.waitFor((result) => result.tabs.loadedStateWorkspaceId === "repo-a");
+    const repoALoadKey = harness.getLatest().load.agentStudioStateLoadKey;
     expect(harness.getLatest().tabs.tabTaskIds).toEqual(["task-1"]);
     expect(harness.getLatest().tabs.activeTaskTabId).toBe("task-1");
 
@@ -216,6 +342,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     });
     await harness.waitFor((result) => result.tabs.loadedStateWorkspaceId === "repo-b");
 
+    expect(harness.getLatest().load.agentStudioStateLoadKey).not.toBe(repoALoadKey);
     expect(harness.getLatest().tabs.tabTaskIds).toEqual(["task-2", "task-1"]);
     expect(harness.getLatest().tabs.activeTaskTabId).toBe("task-2");
     await harness.unmount();
