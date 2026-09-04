@@ -842,21 +842,24 @@ describe("OpencodeSdkAdapter user message", () => {
     ]);
   });
 
-  test("updateSessionModel refreshes the adapter session model used for subsequent prompts", async () => {
+  test("updateSessionModel keeps the active profile for subsequent prompts", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await startDefaultSession(adapter, "spec");
-    adapter.updateSessionModel({
+    await startDefaultSession(adapter, "spec", {
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4",
+      profileId: "Hephaestus",
+    });
+    await adapter.updateSessionModel({
       externalSessionId: "session-opencode-1",
       model: {
         providerId: "openai",
         modelId: "gpt-5",
         variant: "high",
-        profileId: "Hephaestus",
       },
     });
 

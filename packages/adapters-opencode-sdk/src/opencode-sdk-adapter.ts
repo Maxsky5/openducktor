@@ -735,7 +735,8 @@ export class OpencodeSdkAdapter
     const session = requireSession(this.sessions, input.externalSessionId);
     const nextInput: SessionInput = { ...session.input };
     if (input.model) {
-      nextInput.model = input.model;
+      const profileId = session.input.model?.profileId;
+      nextInput.model = profileId ? { ...input.model, profileId } : input.model;
     } else {
       delete nextInput.model;
     }
