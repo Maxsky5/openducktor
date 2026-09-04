@@ -225,6 +225,7 @@ const MemoizedAgentChatPane = memo(function AgentChatPane({
 export type AgentsPageLayoutModel = {
   activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
+  isRestoring: boolean;
   chatSettingsLoadError: Error | null;
   activeTabValue: string;
   onRetryNavigationPersistence: () => void;
@@ -253,6 +254,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
   const {
     activeWorkspace,
     navigationPersistenceError,
+    isRestoring,
     chatSettingsLoadError,
     activeTabValue,
     onRetryNavigationPersistence,
@@ -359,6 +361,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       <AgentsPageShell
         activeWorkspace={activeWorkspace}
         navigationPersistenceError={navigationPersistenceError}
+        isRestoring={isRestoring}
         chatSettingsLoadError={chatSettingsLoadError}
         activeTabValue={activeTabValue}
         onRetryNavigationPersistence={onRetryNavigationPersistence}
