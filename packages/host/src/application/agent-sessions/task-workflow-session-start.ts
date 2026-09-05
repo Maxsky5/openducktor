@@ -76,17 +76,10 @@ export const createStartTaskWorkflowSession =
             model: input.model,
           };
           // Cancellation must retain the returned identity so cleanup can stop the session.
-          const launched = yield* Effect.either(
-            Effect.uninterruptible(
-              runtime.startSession(runtimeInput).pipe(
-                Effect.tap((result) =>
-                  Effect.sync(() => {
-                    summary = result;
-                  }),
-                ),
-              ),
-            ),
-          );
+          const launched = yield* Effect.gen(function* () {
+            summary = yield* runtime.startSession(runtimeInput);
+            return summary;
+          }).pipe(Effect.uninterruptible, Effect.either);
           if (launched._tag === "Left") {
             const cleanupError = yield* prepared.cleanup();
             if (!cleanupError) {
