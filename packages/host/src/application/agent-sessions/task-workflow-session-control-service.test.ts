@@ -177,6 +177,39 @@ const createModelUpdateService = ({
   });
 
 describe("createTaskWorkflowSessionControlService", () => {
+  test("rejects workflow startup while direct merge runs", async () => {
+    const deps = createControlDeps();
+    const service = createTaskWorkflowSessionControlService({
+      ...deps,
+      runtime: {
+        startSession: () => Effect.dieMessage("unexpected start"),
+        resumeSession: () => Effect.dieMessage("unexpected resume"),
+        forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () => Effect.dieMessage("unexpected stop"),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () => Effect.dieMessage("unexpected list"),
+        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+      },
+    });
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* deps.taskLifecycle.acquireLifecycle("/repo", ["task-1"], "direct merge");
+          const result = yield* Effect.either(service.startWorkflowSession(workflowStart));
+          expect(result).toMatchObject({
+            _tag: "Left",
+            left: { operation: "task.start session.lifecycle_guard" },
+          });
+        }),
+      ),
+    );
+  });
+
   test.each([
     { step: "runtime", stopFails: false, storeFails: false },
     { step: "runtime", stopFails: true, storeFails: false },

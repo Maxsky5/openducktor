@@ -18,7 +18,7 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 export const createTaskBuildStateUseCases = ({
   taskStore,
   gitPort,
-  taskSessionBootstrapCoordinator,
+  taskSessionLifecycleCoordinator,
   settingsConfig,
   systemCommands,
   workspaceSettingsService,
@@ -35,18 +35,18 @@ export const createTaskBuildStateUseCases = ({
             }),
           );
         }
-        if (!gitPort || !taskSessionBootstrapCoordinator) {
+        if (!gitPort || !taskSessionLifecycleCoordinator) {
           return yield* Effect.fail(
             new HostDependencyError({
-              dependency: !gitPort ? "gitPort" : "taskSessionBootstrapCoordinator",
+              dependency: !gitPort ? "gitPort" : "taskSessionLifecycleCoordinator",
               operation: "block build",
               message:
-                "Git port and task session bootstrap coordinator are required to block a build.",
+                "Git port and task session lifecycle coordinator are required to block a build.",
             }),
           );
         }
         const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath);
-        yield* taskSessionBootstrapCoordinator.acquireLifecycle(
+        yield* taskSessionLifecycleCoordinator.acquireLifecycle(
           canonicalRepoPath,
           [taskId],
           "block build",
