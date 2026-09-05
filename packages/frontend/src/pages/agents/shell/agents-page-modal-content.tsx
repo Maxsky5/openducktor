@@ -1,6 +1,7 @@
 import type { ComponentProps, ReactElement } from "react";
 import { SessionStartModal } from "@/components/features/agents/session-start-modal";
 import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
+import { TaskCreateModal } from "@/components/features/task-create/task-create-modal";
 import { TaskDetailsSheetController } from "@/components/features/task-details/task-details-sheet-controller";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import type { AgentStudioPullRequestModalModel } from "./use-agent-studio-pull-request-modal-model";
@@ -32,6 +33,9 @@ export function AgentsPageModalContent({ model }: AgentsPageModalContentProps): 
       ) : null}
       <HumanReviewFeedbackModal model={humanReviewFeedbackModal} />
       {sessionStartModal ? <SessionStartModal model={sessionStartModal} /> : null}
+      {taskDetailsLauncher.taskEditor ? (
+        <TaskCreateModal {...taskDetailsLauncher.taskEditor} />
+      ) : null}
       <TaskDetailsSheetController
         ref={taskDetailsLauncher.taskDetailsSheetRef}
         {...taskDetailsLauncher.taskDetailsSheetProps}
