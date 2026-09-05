@@ -195,6 +195,7 @@ export const workspaceRecordsInEffectiveOrder = (
 export const toSettingsSnapshot = (config: LoadedGlobalConfig): SettingsSnapshot =>
   settingsSnapshotSchema.parse({
     theme: config.theme,
+    system: config.system,
     git: config.git,
     general: config.general,
     appearance: config.appearance,

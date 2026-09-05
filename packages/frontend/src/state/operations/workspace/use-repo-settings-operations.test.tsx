@@ -1,6 +1,10 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import { agentPromptTemplateIdValues, type SettingsSnapshot } from "@openducktor/contracts";
-import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import {
+  agentPromptTemplateIdValues,
+  type SettingsSnapshotSaveInput,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
+import { type QueryClient, QueryObserver, useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -13,7 +17,7 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { runtimeQueryKeys } from "../../queries/runtime";
 import { repoTaskDataQueryOptions, type RepoTaskData, taskQueryKeys } from "../../queries/tasks";
-import { workspaceQueryKeys } from "../../queries/workspace";
+import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "../../queries/workspace";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
 
@@ -666,10 +670,58 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
+  test.each([
+    {
+      name: "publishes a full-save preference change to mounted settings observers",
+      save: (operations: HookResult, snapshot: SettingsSnapshot) =>
+        operations.saveSettingsSnapshot(snapshot),
+    },
+    {
+      name: "keeps settings observers attached after a Git-only save",
+      save: (operations: HookResult, snapshot: SettingsSnapshot) =>
+        operations.saveGlobalGitConfig(snapshot.git),
+    },
+  ])("$name", async ({ save }) => {
+    const initial = createSettingsSnapshot();
+    const saved = { ...initial, system: { preferredOpenInToolId: "zed" as const } };
+    const original = {
+      get: host.workspaceGetSettingsSnapshot,
+      save: host.workspaceSaveSettingsSnapshot,
+      saveGit: host.workspaceUpdateGlobalGitConfig,
+    };
+    host.workspaceGetSettingsSnapshot = async () => saved;
+    host.workspaceSaveSettingsSnapshot = async () => [];
+    host.workspaceUpdateGlobalGitConfig = async () => {};
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords: () => {},
+      applyWorkspaceRecord: () => {},
+    });
+    let unsubscribe = () => {};
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), initial);
+      const observer = new QueryObserver(queryClient, settingsSnapshotQueryOptions());
+      let observed = initial;
+      unsubscribe = observer.subscribe((result) => {
+        if (result.data) observed = result.data;
+      });
+      await harness.run((operations) => save(operations, saved));
+      expect(observed.system).toEqual(saved.system);
+    } finally {
+      unsubscribe();
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original.get;
+      host.workspaceSaveSettingsSnapshot = original.save;
+      host.workspaceUpdateGlobalGitConfig = original.saveGit;
+    }
+  });
+
   test("saves settings snapshot atomically and refreshes normalized snapshot from the host", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
-    const workspaceSaveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshot) => [
+    const workspaceSaveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) => [
       createWorkspaceRecord(),
     ]);
     const explicitChatSettings = {
@@ -744,7 +796,9 @@ describe("use-repo-settings-operations", () => {
         .setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
       harness.getQueryClient().setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
       await harness.getLatest().saveSettingsSnapshot(snapshot);
-      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
+      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith({
+        ...snapshot,
+      });
       expect(workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.chat).toEqual(explicitChatSettings);
       expect(
         workspaceSaveSettingsSnapshot.mock.calls[0]?.[0]?.autopilot.alwaysStartQaReviewsFresh,
@@ -1061,7 +1115,9 @@ describe("use-repo-settings-operations", () => {
     try {
       await harness.mount();
       await harness.getLatest().saveSettingsSnapshot(snapshot);
-      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith(snapshot);
+      expect(workspaceSaveSettingsSnapshot).toHaveBeenCalledWith({
+        ...snapshot,
+      });
       const savedSnapshot = workspaceSaveSettingsSnapshot.mock.calls[0]?.[0];
       if (savedSnapshot === undefined) {
         throw new Error("Expected settings snapshot to be forwarded.");

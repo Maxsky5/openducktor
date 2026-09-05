@@ -177,6 +177,8 @@ export function SettingsModalContent({
     return (
       <SettingsAppearanceSection
         appearance={snapshotDraft.appearance}
+        system={snapshotDraft.system}
+        onUpdateSystem={controller.updateGlobalSystemSettings}
         disabled={isInteractionDisabled}
         onUpdateAppearance={updateGlobalAppearanceSettings}
       />

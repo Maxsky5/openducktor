@@ -119,6 +119,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   detectSelectedRepoGithubRepository: async () => null,
   updateSelectedRepoConfig: () => {},
   updateGlobalGitConfig: () => {},
+  updateGlobalSystemSettings: () => {},
   updateGlobalGeneralSettings: () => {},
   updateGlobalChatSettings: () => {},
   updateGlobalAppearanceSettings: () => {},
@@ -435,22 +436,27 @@ describe("settings modal content", () => {
     const controller = createMockController(snapshot);
 
     const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "appearance",
-        repositorySection: "configuration",
-        globalPromptRoleTab: "shared",
-        repoPromptRoleTab: "shared",
-        selectedReusablePromptId: null,
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptRoleTabChange: () => {},
-        onRepoPromptRoleTabChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, {
+          section: "appearance",
+          repositorySection: "configuration",
+          globalPromptRoleTab: "shared",
+          repoPromptRoleTab: "shared",
+          selectedReusablePromptId: null,
+          isInteractionDisabled: false,
+          controller,
+          onRepositorySectionChange: () => {},
+          onGlobalPromptRoleTabChange: () => {},
+          onRepoPromptRoleTabChange: () => {},
+          onSelectedReusablePromptIdChange: () => {},
+        }),
+      ),
     );
 
     expect(html).toContain("Appearance");
+    expect(html).toContain("Preferred Open In tool");
     expect(html).toContain("Horizontal Scrollbars");
     expect(html).toContain("System default");
     expect(html).toContain("Show");

@@ -1,11 +1,21 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AppearanceSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { QueryProvider } from "@/lib/query-provider";
+import { host } from "@/state/operations/host";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
 
 enableReactActEnvironment();
+const originalList = host.systemListOpenInTools;
+beforeEach(() => {
+  host.systemListOpenInTools = async () => [{ toolId: "finder" }];
+});
+
+function TestProvider({ children }: { children: React.ReactNode }) {
+  return <QueryProvider useIsolatedClient>{children}</QueryProvider>;
+}
 
 const createAppearanceSettings = (
   overrides: Partial<AppearanceSettings> = {},
@@ -25,9 +35,12 @@ const renderAppearanceSection = (appearance: AppearanceSettings, disabled = fals
   render(
     <SettingsAppearanceSection
       appearance={latestAppearance}
+      system={{}}
+      onUpdateSystem={() => {}}
       disabled={disabled}
       onUpdateAppearance={onUpdateAppearance}
     />,
+    { wrapper: TestProvider },
   );
 };
 
@@ -42,9 +55,12 @@ const renderAppearanceSectionWithUpdates = (appearance: AppearanceSettings) => {
   const rendered = render(
     <SettingsAppearanceSection
       appearance={latestAppearance}
+      system={{}}
+      onUpdateSystem={() => {}}
       disabled={false}
       onUpdateAppearance={onUpdateAppearance}
     />,
+    { wrapper: TestProvider },
   );
 
   return {
@@ -54,6 +70,8 @@ const renderAppearanceSectionWithUpdates = (appearance: AppearanceSettings) => {
       rendered.rerender(
         <SettingsAppearanceSection
           appearance={latestAppearance}
+          system={{}}
+          onUpdateSystem={() => {}}
           disabled={false}
           onUpdateAppearance={onUpdateAppearance}
         />,
@@ -87,6 +105,7 @@ const changeHorizontalScrollbarVisibility = async (
 
 afterEach(() => {
   cleanup();
+  host.systemListOpenInTools = originalList;
 });
 
 describe("settings appearance section", () => {

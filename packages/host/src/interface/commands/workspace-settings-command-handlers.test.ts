@@ -229,6 +229,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           try: async () => {
             calls.push("getSettingsSnapshot");
             return {
+              system: {},
               theme: "light",
               git: { defaultMergeMethod: "merge_commit" },
               general: { openAgentStudioTabOnBackgroundSessionStart: true },
@@ -278,6 +279,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           try: async () => {
             calls.push("updateAgentModelFavorites");
             return {
+              system: {},
               theme: "light",
               git: { defaultMergeMethod: "merge_commit" },
               general: { openAgentStudioTabOnBackgroundSessionStart: true },
@@ -397,11 +399,13 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       }),
     ).resolves.toMatchObject({ workspaceId: "repo" });
     await expect(router.invoke("workspace_get_settings_snapshot")).resolves.toMatchObject({
+      system: {},
       theme: "light",
     });
     await expect(
       router.invoke("workspace_save_settings_snapshot", {
         snapshot: {
+          system: {},
           git: { defaultMergeMethod: "merge_commit" },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
           appearance: { horizontalScrollbarVisibility: "system" },
@@ -620,6 +624,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     await expect(
       router.invoke("workspace_save_settings_snapshot", {
         snapshot: {
+          system: {},
           git: { defaultMergeMethod: "merge_commit" },
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
           appearance: { horizontalScrollbarVisibility: "auto" },

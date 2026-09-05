@@ -67,6 +67,7 @@ describe("workspace Agent Studio state schemas", () => {
       globalPromptOverrides: {},
     });
     const saveInput = settingsSnapshotSaveInputSchema.parse({
+      system: snapshot.system,
       git: snapshot.git,
       general: snapshot.general,
       appearance: snapshot.appearance,

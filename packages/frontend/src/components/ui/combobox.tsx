@@ -86,7 +86,7 @@ const comboboxOptionItemVariants = cva("justify-between", {
   },
 });
 
-const comboboxOptionLabelRowVariants = cva("inline-flex min-w-0 items-center gap-2", {
+const comboboxOptionLabelRowVariants = cva("flex min-w-0 items-center gap-2", {
   variants: {
     wrap: {
       true: "whitespace-normal break-all",

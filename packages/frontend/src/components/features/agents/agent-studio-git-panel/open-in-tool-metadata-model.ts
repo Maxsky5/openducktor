@@ -1,4 +1,11 @@
-import type { SystemOpenInToolId } from "@openducktor/contracts";
+import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
+
+export function getDefaultOpenInTool(
+  tools: readonly SystemOpenInToolInfo[],
+  preferredToolId: SystemOpenInToolId | undefined,
+): SystemOpenInToolInfo | null {
+  return tools.find((tool) => tool.toolId === preferredToolId) ?? tools[0] ?? null;
+}
 
 export type OpenInToolFallbackKind = "finder" | "terminal" | "generic";
 

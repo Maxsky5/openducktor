@@ -197,9 +197,7 @@ export function useAgentStudioRightPanel({
     }
 
     try {
-      const persisted = readPersistedRightPanelPayload();
-      const nextValue = persisted ? { ...persisted, ...isOpenByRole } : isOpenByRole;
-      globalThis.localStorage.setItem(toRightPanelStorageKey(), JSON.stringify(nextValue));
+      globalThis.localStorage.setItem(toRightPanelStorageKey(), JSON.stringify(isOpenByRole));
     } catch (error) {
       console.error("[agent-studio-right-panel] Failed to persist panel state.", {
         nextState: isOpenByRole,

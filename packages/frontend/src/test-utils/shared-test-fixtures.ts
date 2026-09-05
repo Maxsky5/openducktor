@@ -154,6 +154,7 @@ export const createSettingsSnapshotFixture = (
       defaultMergeMethod: "merge_commit",
       ...git,
     },
+    system: {},
     general: {
       ...DEFAULT_GENERAL_SETTINGS,
       ...general,

@@ -58,6 +58,13 @@ export const useSettingsModalDirtyDraftActions = ({
     [draftActions, runDirtyAction],
   );
 
+  const updateGlobalSystemSettings = useCallback(
+    (updater: (current: SettingsSnapshot["system"]) => SettingsSnapshot["system"]): void => {
+      runDirtyAction("appearance", () => draftActions.updateGlobalSystemSettings(updater));
+    },
+    [draftActions, runDirtyAction],
+  );
+
   const updateGlobalGeneralSettings = useCallback(
     (updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"]): void => {
       runDirtyAction("general", () => {
@@ -158,6 +165,7 @@ export const useSettingsModalDirtyDraftActions = ({
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
+    updateGlobalSystemSettings,
     updateGlobalGeneralSettings,
     updateGlobalAppearanceSettings,
     updateAgentRuntimes,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { systemOpenInToolIdSchema } from "./system-open-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { type AgentRole, agentRoleSchema } from "./agent-workflow-schemas";
 import { gitTargetBranchSchema, globalGitConfigSchema, repoGitConfigSchema } from "./git-schemas";
@@ -630,7 +631,13 @@ export const agentModelFavoritesSchema = z
   })
   .default([]);
 
+export const systemSettingsSchema = z.object({
+  preferredOpenInToolId: systemOpenInToolIdSchema.optional(),
+});
+export type SystemSettings = z.infer<typeof systemSettingsSchema>;
+
 const globalConfigSharedFields = {
+  system: systemSettingsSchema.default({}),
   activeWorkspace: workspaceIdSchema.optional(),
   theme: themeSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
@@ -664,6 +671,7 @@ type ParsedGlobalConfig = z.infer<typeof globalConfigSchema>;
 export type GlobalConfig = ParsedGlobalConfig;
 
 export const settingsSnapshotSchema = z.object({
+  system: systemSettingsSchema.default({}),
   theme: themeValueSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   general: generalSettingsSchema.default(DEFAULT_GENERAL_SETTINGS),
@@ -687,6 +695,7 @@ const settingsSnapshotSaveAgentModelFavoritesSchema = agentModelFavoritesSchema
   );
 
 export const settingsSnapshotSaveInputSchema = z.object({
+  system: systemSettingsSchema,
   git: globalGitConfigSchema,
   general: generalSettingsSchema,
   appearance: appearanceSettingsSchema,

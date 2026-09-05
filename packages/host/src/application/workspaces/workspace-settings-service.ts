@@ -361,6 +361,7 @@ const createUnserializedWorkspaceSettingsService = (
             ...config,
             git: snapshot.git,
             general: snapshot.general,
+            system: snapshot.system,
             appearance: snapshot.appearance,
             chat: snapshot.chat,
             reusablePrompts: snapshot.reusablePrompts,

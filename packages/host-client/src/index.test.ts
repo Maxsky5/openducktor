@@ -1087,6 +1087,7 @@ describe("HostClient", () => {
     const { client, calls } = createClient((command) => {
       if (command === "workspace_get_settings_snapshot") {
         return {
+          system: { preferredOpenInToolId: "zed" },
           theme: "light",
           git: {
             defaultMergeMethod: "merge_commit",
@@ -1120,6 +1121,7 @@ describe("HostClient", () => {
 
     const snapshot = await client.workspaceGetSettingsSnapshot();
 
+    expect(snapshot.system).toEqual({ preferredOpenInToolId: "zed" });
     expect(snapshot.theme).toBe("light");
     expect(Object.keys(snapshot.workspaces)).toEqual(["repo"]);
     expect(calls).toEqual([
@@ -1199,6 +1201,7 @@ describe("HostClient", () => {
     });
 
     const result = await client.workspaceSaveSettingsSnapshot({
+      system: { preferredOpenInToolId: "zed" },
       git: {
         defaultMergeMethod: "merge_commit",
       },
@@ -1237,6 +1240,7 @@ describe("HostClient", () => {
         command: "workspace_save_settings_snapshot",
         args: {
           snapshot: {
+            system: { preferredOpenInToolId: "zed" },
             git: {
               defaultMergeMethod: "merge_commit",
             },

@@ -1,4 +1,4 @@
-import type { SystemOpenInToolId } from "@openducktor/contracts";
+import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, FolderOpen, LoaderCircle, RefreshCw } from "lucide-react";
 import { type ReactElement, type ReactNode, useId, useMemo, useState } from "react";
@@ -9,9 +9,227 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { errorMessage } from "@/lib/errors";
 import { openInToolsQueryOptions, refreshOpenInToolsFromQuery } from "@/state/queries/system";
-import { persistPreferredOpenInTool, readPreferredOpenInTool } from "./open-in-preferences";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { OpenInToolIcon } from "./open-in-tool-metadata";
-import { getOpenInToolLabel } from "./open-in-tool-metadata-model";
+import { getDefaultOpenInTool, getOpenInToolLabel } from "./open-in-tool-metadata-model";
+
+type OpenInMenuProps = {
+  contextMode: "repository" | "worktree";
+  targetPath: string | null;
+  disabledReason: string | null;
+  onOpenInTool?: ((toolId: SystemOpenInToolId) => Promise<void>) | undefined;
+};
+
+export function OpenInMenu({
+  contextMode,
+  targetPath,
+  disabledReason,
+  onOpenInTool,
+}: OpenInMenuProps): ReactElement {
+  const [isOpen, setIsOpen] = useState(false);
+  const [pendingToolId, setPendingToolId] = useState<SystemOpenInToolId | null>(null);
+  const settingsQuery = useQuery(settingsSnapshotQueryOptions());
+  const preferredToolId = settingsQuery.data?.system.preferredOpenInToolId;
+  const [isRefreshingTools, setIsRefreshingTools] = useState(false);
+  const queryClient = useQueryClient();
+  const toolsQuery = useQuery(openInToolsQueryOptions());
+  const targetLabel = contextMode === "repository" ? "repository root" : "task worktree";
+
+  const defaultTool = getDefaultOpenInTool(toolsQuery.data ?? [], preferredToolId);
+  const alternativeTools = useMemo(() => {
+    const tools = toolsQuery.data ?? [];
+    if (!defaultTool) {
+      return tools;
+    }
+
+    return tools.filter((tool) => tool.toolId !== defaultTool.toolId);
+  }, [defaultTool, toolsQuery.data]);
+  const resolvedDisabledReason = resolveOpenInDisabledReason({
+    contextMode,
+    targetLabel,
+    targetPath,
+    disabledReason,
+    onOpenInTool,
+  });
+  const isTriggerDisabled = resolvedDisabledReason != null || pendingToolId !== null;
+  const isDefaultActionDisabled =
+    isTriggerDisabled || !settingsQuery.isSuccess || !toolsQuery.isSuccess;
+  const hasMenuTrigger =
+    settingsQuery.isError ||
+    alternativeTools.length > 0 ||
+    !toolsQuery.isSuccess ||
+    defaultTool == null;
+
+  const handleOpenInTool = async (toolId: SystemOpenInToolId): Promise<void> => {
+    if (!targetPath || !onOpenInTool) {
+      return;
+    }
+
+    setPendingToolId(toolId);
+    try {
+      await onOpenInTool(toolId);
+      setIsOpen(false);
+    } catch (error) {
+      toast.error(`Failed to open in ${getOpenInToolLabel(toolId)}`, {
+        description: errorMessage(error),
+      });
+    } finally {
+      setPendingToolId(null);
+    }
+  };
+
+  const handleRefreshTools = async (): Promise<void> => {
+    if (isRefreshingTools) {
+      return;
+    }
+
+    setIsRefreshingTools(true);
+    try {
+      await refreshOpenInToolsFromQuery(queryClient);
+    } catch (error) {
+      toast.error("Failed to refresh supported apps", {
+        description: errorMessage(error),
+      });
+    } finally {
+      setIsRefreshingTools(false);
+    }
+  };
+
+  const defaultButton = (
+    <OpenInDefaultButton
+      targetLabel={targetLabel}
+      tool={defaultTool}
+      onOpen={handleOpenInTool}
+      disabled={isDefaultActionDisabled}
+      pendingToolId={pendingToolId}
+      hasMenuTrigger={hasMenuTrigger}
+    />
+  );
+  const menuTrigger = renderOpenInMenuTriggerButton({ disabled: isTriggerDisabled });
+  const trigger = hasMenuTrigger ? (
+    <OpenInActionGroup>
+      {defaultButton}
+      {menuTrigger}
+    </OpenInActionGroup>
+  ) : (
+    defaultButton
+  );
+
+  if (resolvedDisabledReason) {
+    return <DisabledOpenInTrigger disabledReason={resolvedDisabledReason} trigger={trigger} />;
+  }
+
+  if (!hasMenuTrigger) {
+    return defaultButton;
+  }
+
+  const renderMenuContent = (): ReactElement => {
+    if (settingsQuery.isError) {
+      return (
+        <div role="alert" className="grid gap-2 p-3 text-sm">
+          <p>Failed to load Open In preference: {errorMessage(settingsQuery.error)}</p>
+          <Button
+            variant="outline"
+            disabled={settingsQuery.isFetching}
+            onClick={() => void settingsQuery.refetch()}
+          >
+            Retry settings
+          </Button>
+        </div>
+      );
+    }
+
+    if (toolsQuery.isPending) {
+      return (
+        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" />
+          <span>Looking for supported apps…</span>
+        </div>
+      );
+    }
+
+    if (toolsQuery.isError) {
+      return (
+        <div className="space-y-3 p-3" data-testid="agent-studio-git-open-in-error">
+          <p className="text-sm text-foreground">Supported app discovery failed.</p>
+          <p className="text-[11px] text-muted-foreground">{errorMessage(toolsQuery.error)}</p>
+          <OpenInRefreshButton
+            isRefreshingTools={isRefreshingTools}
+            label="Retry"
+            onRefresh={() => {
+              void handleRefreshTools();
+            }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <ScrollArea className="max-h-80">
+        <div className="space-y-1 p-1">
+          {alternativeTools.map((tool) => {
+            const isPending = pendingToolId === tool.toolId;
+
+            return (
+              <Button
+                key={tool.toolId}
+                type="button"
+                variant="ghost"
+                className="h-auto w-full justify-start p-2 text-left text-sm"
+                onClick={() => {
+                  void handleOpenInTool(tool.toolId);
+                }}
+                disabled={pendingToolId !== null}
+                data-testid={`agent-studio-git-open-in-item-${tool.toolId}`}
+              >
+                <OpenInToolIcon tool={tool} />
+                <span className="min-w-0 flex-1 truncate">{getOpenInToolLabel(tool.toolId)}</span>
+                {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
+              </Button>
+            );
+          })}
+          {toolsQuery.data?.length === 0 ? (
+            <div
+              className="space-y-3 p-3 text-sm text-muted-foreground"
+              data-testid="agent-studio-git-open-in-empty"
+            >
+              <p>No supported Open In tools were found on this platform.</p>
+              <OpenInRefreshButton
+                isRefreshingTools={isRefreshingTools}
+                label="Refresh"
+                onRefresh={() => {
+                  void handleRefreshTools();
+                }}
+              />
+            </div>
+          ) : null}
+        </div>
+      </ScrollArea>
+    );
+  };
+
+  return (
+    <OpenInActionGroup>
+      {defaultButton}
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <PopoverTrigger asChild>{menuTrigger}</PopoverTrigger>
+        <OpenInMenuBody>
+          <div className="border-b border-border px-3 py-2">
+            <p className="text-xs font-medium text-foreground">Other tools for {targetLabel}</p>
+            <p
+              className="mt-1 truncate text-[11px] text-muted-foreground"
+              title={targetPath ?? undefined}
+            >
+              {targetPath ?? "Select a tool to continue."}
+            </p>
+          </div>
+
+          {renderMenuContent()}
+        </OpenInMenuBody>
+      </Popover>
+    </OpenInActionGroup>
+  );
+}
 
 function renderOpenInMenuTriggerButton({ disabled }: { disabled: boolean }): ReactElement {
   return (
@@ -29,23 +247,24 @@ function renderOpenInMenuTriggerButton({ disabled }: { disabled: boolean }): Rea
   );
 }
 
-function renderOpenInDefaultButton({
+function OpenInDefaultButton({
   targetLabel,
-  defaultToolLabel,
-  defaultToolIcon,
-  onClick,
+  tool,
+  onOpen,
   disabled,
-  isPending,
+  pendingToolId,
   hasMenuTrigger,
 }: {
   targetLabel: string;
-  defaultToolLabel: string;
-  defaultToolIcon: ReactNode;
-  onClick: (() => void) | null;
+  tool: SystemOpenInToolInfo | null;
+  onOpen: (toolId: SystemOpenInToolId) => Promise<void>;
   disabled: boolean;
-  isPending: boolean;
+  pendingToolId: SystemOpenInToolId | null;
   hasMenuTrigger: boolean;
 }): ReactElement {
+  const label = tool ? getOpenInToolLabel(tool.toolId) : "Open In";
+  const icon = tool ? <OpenInToolIcon tool={tool} /> : <FolderOpen className="size-3.5" />;
+  const isPending = tool != null && pendingToolId === tool.toolId;
   return (
     <Button
       type="button"
@@ -57,12 +276,12 @@ function renderOpenInDefaultButton({
           : "h-7 gap-1.5 px-2 text-[11px]"
       }
       data-testid="agent-studio-git-open-in-default-button"
-      aria-label={`Open ${targetLabel} in ${defaultToolLabel}`}
-      onClick={onClick ?? undefined}
-      disabled={disabled}
+      aria-label={`Open ${targetLabel} in ${label}`}
+      onClick={tool ? () => void onOpen(tool.toolId) : undefined}
+      disabled={disabled || tool == null}
     >
-      {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : defaultToolIcon}
-      <span className="truncate">{defaultToolLabel}</span>
+      {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : icon}
+      <span className="truncate">{label}</span>
     </Button>
   );
 }
@@ -118,13 +337,7 @@ function resolveOpenInDisabledReason({
   targetPath,
   disabledReason,
   onOpenInTool,
-}: {
-  contextMode: "repository" | "worktree";
-  targetLabel: string;
-  targetPath: string | null;
-  disabledReason: string | null;
-  onOpenInTool?: ((toolId: SystemOpenInToolId) => Promise<void>) | undefined;
-}): string | null {
+}: OpenInMenuProps & { targetLabel: string }): string | null {
   if (disabledReason) {
     return disabledReason;
   }
@@ -173,219 +386,5 @@ function OpenInRefreshButton({
       )}
       {label}
     </Button>
-  );
-}
-
-export function OpenInMenu({
-  contextMode,
-  targetPath,
-  disabledReason,
-  onOpenInTool,
-}: {
-  contextMode: "repository" | "worktree";
-  targetPath: string | null;
-  disabledReason: string | null;
-  onOpenInTool?: ((toolId: SystemOpenInToolId) => Promise<void>) | undefined;
-}): ReactElement {
-  const [isOpen, setIsOpen] = useState(false);
-  const [pendingToolId, setPendingToolId] = useState<SystemOpenInToolId | null>(null);
-  const [preferredToolId, setPreferredToolId] = useState<SystemOpenInToolId | null>(() =>
-    readPreferredOpenInTool(),
-  );
-  const [isRefreshingTools, setIsRefreshingTools] = useState(false);
-  const queryClient = useQueryClient();
-  const toolsQuery = useQuery(openInToolsQueryOptions());
-  const targetLabel = contextMode === "repository" ? "repository root" : "task worktree";
-
-  const defaultTool = useMemo(() => {
-    const tools = toolsQuery.data ?? [];
-    if (tools.length === 0) {
-      return null;
-    }
-
-    if (preferredToolId) {
-      const preferredTool = tools.find((tool) => tool.toolId === preferredToolId);
-      if (preferredTool) {
-        return preferredTool;
-      }
-    }
-
-    return tools[0] ?? null;
-  }, [preferredToolId, toolsQuery.data]);
-  const alternativeTools = useMemo(() => {
-    const tools = toolsQuery.data ?? [];
-    if (!defaultTool) {
-      return tools;
-    }
-
-    return tools.filter((tool) => tool.toolId !== defaultTool.toolId);
-  }, [defaultTool, toolsQuery.data]);
-  const resolvedDisabledReason = resolveOpenInDisabledReason({
-    contextMode,
-    targetLabel,
-    targetPath,
-    disabledReason,
-    onOpenInTool,
-  });
-  const isTriggerDisabled = resolvedDisabledReason != null;
-  const isDefaultActionDisabled =
-    isTriggerDisabled || toolsQuery.isPending || toolsQuery.isError || defaultTool == null;
-  const hasMenuTrigger =
-    alternativeTools.length > 0 ||
-    toolsQuery.isPending ||
-    toolsQuery.isError ||
-    defaultTool == null;
-
-  const handleOpenInTool = async (toolId: SystemOpenInToolId): Promise<void> => {
-    if (!targetPath || !onOpenInTool) {
-      return;
-    }
-
-    setPendingToolId(toolId);
-    try {
-      await onOpenInTool(toolId);
-      persistPreferredOpenInTool(toolId);
-      setPreferredToolId(toolId);
-      setIsOpen(false);
-    } catch (error) {
-      toast.error(`Failed to open in ${getOpenInToolLabel(toolId)}`, {
-        description: errorMessage(error),
-      });
-    } finally {
-      setPendingToolId(null);
-    }
-  };
-
-  const handleRefreshTools = async (): Promise<void> => {
-    if (isRefreshingTools) {
-      return;
-    }
-
-    setIsRefreshingTools(true);
-    try {
-      await refreshOpenInToolsFromQuery(queryClient);
-    } catch (error) {
-      toast.error("Failed to refresh supported apps", {
-        description: errorMessage(error),
-      });
-    } finally {
-      setIsRefreshingTools(false);
-    }
-  };
-
-  const defaultToolLabel = defaultTool ? getOpenInToolLabel(defaultTool.toolId) : "Open In";
-  const defaultToolIcon = defaultTool ? (
-    <OpenInToolIcon tool={defaultTool} />
-  ) : (
-    <FolderOpen className="size-3.5" />
-  );
-  const defaultToolIsPending = defaultTool != null && pendingToolId === defaultTool.toolId;
-  const defaultButton = renderOpenInDefaultButton({
-    targetLabel,
-    defaultToolLabel,
-    defaultToolIcon,
-    onClick: defaultTool ? () => void handleOpenInTool(defaultTool.toolId) : null,
-    disabled: isDefaultActionDisabled,
-    isPending: defaultToolIsPending,
-    hasMenuTrigger,
-  });
-  const menuTrigger = renderOpenInMenuTriggerButton({ disabled: isTriggerDisabled });
-  const trigger = hasMenuTrigger ? (
-    <OpenInActionGroup>
-      {defaultButton}
-      {menuTrigger}
-    </OpenInActionGroup>
-  ) : (
-    defaultButton
-  );
-
-  if (resolvedDisabledReason) {
-    return <DisabledOpenInTrigger disabledReason={resolvedDisabledReason} trigger={trigger} />;
-  }
-
-  if (!hasMenuTrigger) {
-    return defaultButton;
-  }
-
-  return (
-    <OpenInActionGroup>
-      {defaultButton}
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <PopoverTrigger asChild>{menuTrigger}</PopoverTrigger>
-        <OpenInMenuBody>
-          <div className="border-b border-border px-3 py-2">
-            <p className="text-xs font-medium text-foreground">Other tools for {targetLabel}</p>
-            <p
-              className="mt-1 truncate text-[11px] text-muted-foreground"
-              title={targetPath ?? undefined}
-            >
-              {targetPath ?? "Select a tool to continue."}
-            </p>
-          </div>
-
-          {toolsQuery.isPending ? (
-            <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
-              <LoaderCircle className="size-4 animate-spin" />
-              <span>Looking for supported apps…</span>
-            </div>
-          ) : toolsQuery.isError ? (
-            <div className="space-y-3 p-3" data-testid="agent-studio-git-open-in-error">
-              <p className="text-sm text-foreground">Supported app discovery failed.</p>
-              <p className="text-[11px] text-muted-foreground">{errorMessage(toolsQuery.error)}</p>
-              <OpenInRefreshButton
-                isRefreshingTools={isRefreshingTools}
-                label="Retry"
-                onRefresh={() => {
-                  void handleRefreshTools();
-                }}
-              />
-            </div>
-          ) : (
-            <ScrollArea className="max-h-80">
-              <div className="space-y-1 p-1">
-                {alternativeTools.map((tool) => {
-                  const isPending = pendingToolId === tool.toolId;
-
-                  return (
-                    <Button
-                      key={tool.toolId}
-                      type="button"
-                      variant="ghost"
-                      className="h-auto w-full justify-start p-2 text-left text-sm"
-                      onClick={() => {
-                        void handleOpenInTool(tool.toolId);
-                      }}
-                      disabled={pendingToolId !== null}
-                      data-testid={`agent-studio-git-open-in-item-${tool.toolId}`}
-                    >
-                      <OpenInToolIcon tool={tool} />
-                      <span className="min-w-0 flex-1 truncate">
-                        {getOpenInToolLabel(tool.toolId)}
-                      </span>
-                      {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
-                    </Button>
-                  );
-                })}
-                {toolsQuery.data?.length === 0 ? (
-                  <div
-                    className="space-y-3 p-3 text-sm text-muted-foreground"
-                    data-testid="agent-studio-git-open-in-empty"
-                  >
-                    <p>No supported Open In tools were found on this platform.</p>
-                    <OpenInRefreshButton
-                      isRefreshingTools={isRefreshingTools}
-                      label="Refresh"
-                      onRefresh={() => {
-                        void handleRefreshTools();
-                      }}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            </ScrollArea>
-          )}
-        </OpenInMenuBody>
-      </Popover>
-    </OpenInActionGroup>
   );
 }

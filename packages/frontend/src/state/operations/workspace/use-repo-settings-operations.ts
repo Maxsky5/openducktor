@@ -164,11 +164,8 @@ export function useRepoSettingsOperations({
   const saveGlobalGitConfig = useCallback(
     async (git: GlobalGitConfig): Promise<void> => {
       await host.workspaceUpdateGlobalGitConfig(git);
-      queryClient.removeQueries({
-        queryKey: settingsSnapshotQueryKey,
-        exact: true,
-      });
-      await loadSettingsSnapshotFromQuery(queryClient);
+      await queryClient.cancelQueries({ queryKey: settingsSnapshotQueryKey, exact: true });
+      await queryClient.fetchQuery({ ...settingsSnapshotQueryOptions(), staleTime: 0 });
     },
     [queryClient, settingsSnapshotQueryKey],
   );
@@ -177,15 +174,14 @@ export function useRepoSettingsOperations({
     async (snapshot: SettingsSnapshotSaveInput): Promise<void> => {
       const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsSnapshotQueryKey);
       const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
-      queryClient.removeQueries({
-        queryKey: settingsSnapshotQueryKey,
-        exact: true,
+      await queryClient.cancelQueries({ queryKey: settingsSnapshotQueryKey, exact: true });
+      const normalizedSnapshot = await queryClient.fetchQuery({
+        ...settingsSnapshotQueryOptions(),
+        staleTime: 0,
       });
-      const normalizedSnapshot = await loadSettingsSnapshotFromQuery(queryClient);
       await queryClient.invalidateQueries({
         queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
       });
-      queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
       const savedActiveWorkspace = workspaces.find((workspace) => workspace.isActive);
