@@ -9,6 +9,7 @@ const capability = (
   supported: true,
   permission: "granted",
   canGuaranteeSilent: true,
+  canOpenSystemSettings: false,
   ...overrides,
 });
 

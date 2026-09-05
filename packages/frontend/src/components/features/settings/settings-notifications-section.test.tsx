@@ -23,6 +23,7 @@ const createNotificationContext = (
     supported: true,
     permission: "prompt",
     canGuaranteeSilent: true,
+    canOpenSystemSettings: false,
   }),
   openSystemSettings: async () => {},
   previewCue: async () => {},
@@ -58,6 +59,46 @@ function NotificationsHarness({ context }: { context: NotificationContextValue }
 }
 
 describe("SettingsNotificationsSection", () => {
+  test("reports preview failure and clears it after a successful preview", async () => {
+    let fail = true;
+    render(
+      <NotificationsHarness
+        context={createNotificationContext({
+          previewCue: async () => {
+            if (fail) throw new Error("Audio unavailable");
+          },
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sound for Permission Prompt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview Sparkle" }));
+    await screen.findByText(/Notification sound could not play: Audio unavailable/);
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Preview Sparkle" }));
+    await waitFor(() =>
+      expect(screen.queryByText(/Notification sound could not play/) === null).toBe(true),
+    );
+  });
+
+  test("offers Windows system settings without a permission result", async () => {
+    const openSystemSettings = mock(async () => {});
+    render(
+      <NotificationsHarness
+        context={createNotificationContext({
+          getCapability: async () => ({
+            platform: "electron",
+            supported: true,
+            permission: "not_applicable",
+            canGuaranteeSilent: true,
+            canOpenSystemSettings: true,
+          }),
+          openSystemSettings,
+        })}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Open system settings" }));
+    await waitFor(() => expect(openSystemSettings).toHaveBeenCalledTimes(1));
+  });
   test("renders every notification kind and retains disabled row choices", async () => {
     render(<NotificationsHarness context={createNotificationContext()} />);
     await screen.findByText(
@@ -103,6 +144,7 @@ describe("SettingsNotificationsSection", () => {
       supported: true,
       permission: "prompt" as const,
       canGuaranteeSilent: true,
+      canOpenSystemSettings: false,
       failureMessage: "Browser notification coordination failed: Lock snapshot failed.",
     }));
     const testInApp = mock(async () => {});
@@ -135,6 +177,7 @@ describe("SettingsNotificationsSection", () => {
         supported: true,
         permission: capabilityChecks === 1 ? ("denied" as const) : ("granted" as const),
         canGuaranteeSilent: true,
+        canOpenSystemSettings: true,
       };
     });
     const testOs = mock(async () => ({ status: "shown" as const }));
@@ -177,6 +220,7 @@ describe("SettingsNotificationsSection", () => {
             supported: true,
             permission: "granted",
             canGuaranteeSilent: true,
+            canOpenSystemSettings: true,
           }),
         })}
       />,
@@ -189,7 +233,7 @@ describe("SettingsNotificationsSection", () => {
     expect(permissionStatus).not.toBeNull();
     expect(permissionStatus?.className).toContain("bg-success-surface");
     expect(permissionStatus?.textContent).toContain("OS notifications are on");
-    expect(screen.queryByRole("button", { name: "Open system settings" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open system settings" }) !== null).toBe(true);
   });
 
   test("uses a slider for volume", async () => {

@@ -27,6 +27,7 @@ export const createNotificationRuntime = ({
   onCoordinationRecovered,
   onOsShown = () => {},
   onSettingsRecovered = () => {},
+  onSoundPlayed = () => {},
   inApp,
   sound,
 }: {
@@ -37,16 +38,21 @@ export const createNotificationRuntime = ({
   onCoordinationRecovered(): void;
   onOsShown?: () => void;
   onSettingsRecovered?: () => void;
+  onSoundPlayed?: () => void;
   inApp: ReturnType<typeof createSonnerNotificationAdapter>;
   sound: ReturnType<typeof createCuelumeNotificationSoundAdapter>;
 }) => {
   const activeCoordinationFailures = new Set<CoordinationFailurePhase>();
   const os = createShellOsNotificationAdapter(bridge, onOsShown);
+  const playSound = async (cue: NotificationCue, volumePercent: number): Promise<void> => {
+    await sound.play(cue, volumePercent);
+    onSoundPlayed();
+  };
   const policy = createNotificationPolicy({
     loadSettings,
     inApp,
     os,
-    sound,
+    sound: { play: playSound },
     onFailure,
     onSettingsRecovered,
   });
@@ -59,9 +65,7 @@ export const createNotificationRuntime = ({
     sessionLabel: "Test session",
     status: "Notification settings test",
     navigationTarget: {
-      type: "kanban_task",
-      repoPath: "notification-settings-test",
-      taskId: "notification-settings-test",
+      type: "notification_settings",
     },
   };
 
@@ -70,7 +74,7 @@ export const createNotificationRuntime = ({
     cue: NotificationCue = settings.globalCue,
   ): Promise<void> => {
     if (settings.volumePercent > 0) {
-      await sound.play(cue, settings.volumePercent);
+      await playSound(cue, settings.volumePercent);
     }
   };
 
@@ -168,7 +172,7 @@ export const createNotificationRuntime = ({
     getCapability: () => bridge.getCapability(),
     openSystemSettings: () => bridge.openSystemSettings(),
     previewCue(cue: NotificationCue, volumePercent: number): Promise<void> {
-      return sound.play(cue, volumePercent);
+      return playSound(cue, volumePercent);
     },
     async testInApp(rawSettings: NotificationSettings): Promise<void> {
       const settings = notificationSettingsSchema.parse(rawSettings);

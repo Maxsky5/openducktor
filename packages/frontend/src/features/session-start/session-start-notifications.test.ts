@@ -314,6 +314,7 @@ describe("session-start notifications", () => {
         navigate: (nextHref) => {
           href = nextHref;
         },
+        openSettings: () => {},
         reportStale: (message) => {
           throw new Error(message);
         },

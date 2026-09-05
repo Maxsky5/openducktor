@@ -101,6 +101,7 @@ export const agentSessionLiveSnapshotSchema = z
     activity: agentSessionActivitySchema,
     title: nonEmptyStringSchema,
     startedAt: isoTimestampSchema,
+    executionEpisodeId: nonEmptyStringSchema.optional(),
     parentExternalSessionId: nonEmptyStringSchema.optional(),
     pendingApprovals: z.array(agentSessionLivePendingApprovalRequestSchema),
     pendingQuestions: z.array(agentSessionLivePendingQuestionRequestSchema),

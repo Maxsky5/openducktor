@@ -30,6 +30,37 @@ class FakeNativeNotification {
   }
 }
 
+test("retains Windows Action Center notifications after popup timeout", async () => {
+  FakeNativeNotification.instances = [];
+  FakeNativeNotification.supported = true;
+  const service = createElectronNotificationService({
+    Notification: FakeNativeNotification,
+    getPermission: () => "not_applicable",
+    getWindows: () => [],
+    platform: "win32",
+  });
+  const delivered = service.show(request);
+  const native = FakeNativeNotification.instances[0]!;
+  native.emit("show");
+  native.emit("close", { reason: "timedOut" });
+  expect(await delivered).toEqual({ status: "shown" });
+  service.dispose();
+  expect(native.close).toHaveBeenCalledTimes(1);
+});
+
+test.each(["win32", "darwin", "linux"] as const)(
+  "reports settings availability separately on %s",
+  (platform) => {
+    const service = createElectronNotificationService({
+      Notification: FakeNativeNotification,
+      getPermission: () => "not_applicable",
+      getWindows: () => [],
+      platform,
+    });
+    expect(service.getCapability().canOpenSystemSettings).toBe(platform !== "linux");
+  },
+);
+
 const request = {
   occurrenceId: "workflow.closed:/repo:task-1:event-1",
   title: "Task Closed - task-1",
@@ -53,6 +84,7 @@ describe("Electron notification service", () => {
       supported: true,
       permission: "granted",
       canGuaranteeSilent: true,
+      canOpenSystemSettings: true,
     });
     const delivery = service.show(request);
     const native = FakeNativeNotification.instances[0];
@@ -118,6 +150,7 @@ describe("Electron notification service", () => {
     const native = FakeNativeNotification.instances[0];
     native?.emit("show");
     await delivery;
+    native?.emit("close", { reason: "timedOut" });
     native?.emit("click");
 
     expect(restore).toHaveBeenCalledTimes(1);

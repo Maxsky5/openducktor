@@ -48,6 +48,7 @@ import {
   toAgentSessionLiveEnvelopePublishError,
 } from "./agent-session-live-envelope";
 import { createLiveStateCoordinator, type LiveStateCoordinator } from "./live-state-coordinator";
+import { createAgentSessionExecutionEpisodes } from "./agent-session-execution-episodes";
 
 export type AgentSessionLiveEnvelopePublisher = (envelope: AgentSessionLiveEnvelope) => void;
 
@@ -133,6 +134,7 @@ export const createAgentSessionLiveStateService = ({
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
   const refreshGate = createLiveStateCoordinator();
+  const executionEpisodes = createAgentSessionExecutionEpisodes();
   const publishEnvelopeResult = (envelope: AgentSessionLiveEnvelope) =>
     Effect.gen(function* () {
       if (envelope.type === "fault") {
@@ -188,7 +190,9 @@ export const createAgentSessionLiveStateService = ({
     Effect.gen(function* () {
       let faultLogFailure: HostError | null = null;
       for (const change of changes) {
-        const result = yield* publishEnvelopeResult(toAgentSessionLiveEnvelope(change));
+        const result = yield* publishEnvelopeResult(
+          executionEpisodes.accept(toAgentSessionLiveEnvelope(change)),
+        );
         if (faultLogFailure === null && result) {
           faultLogFailure = result;
         }
@@ -220,7 +224,7 @@ export const createAgentSessionLiveStateService = ({
         }
         seen.add(key);
       }
-      return flattened;
+      return executionEpisodes.replaceSnapshots(repoPath, flattened);
     });
 
   const service: AgentSessionLiveStateService = {
@@ -263,7 +267,7 @@ export const createAgentSessionLiveStateService = ({
           if (parsed.type === "missing") {
             return parsed;
           }
-          return parsed;
+          return { ...parsed, session: executionEpisodes.snapshotWithEpisode(parsed.session) };
         }),
       ),
     loadContext: (input) =>

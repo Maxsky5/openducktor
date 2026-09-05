@@ -138,6 +138,7 @@ describe("browser notification bridge", () => {
       supported: true,
       permission: "granted",
       canGuaranteeSilent: true,
+      canOpenSystemSettings: false,
       failureMessage: "Browser notification coordination failed: Lock snapshot failed.",
     });
 
@@ -157,6 +158,7 @@ describe("browser notification bridge", () => {
       supported: true,
       permission: "granted",
       canGuaranteeSilent: true,
+      canOpenSystemSettings: false,
       failureMessage: "Browser notification coordination failed: Lock snapshot failed.",
     });
   });
@@ -246,6 +248,7 @@ describe("browser notification bridge", () => {
       supported: false,
       permission: "granted",
       canGuaranteeSilent: false,
+      canOpenSystemSettings: false,
       failureMessage: "This browser cannot coordinate notifications and sound across tabs.",
     });
   });

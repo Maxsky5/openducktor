@@ -4,12 +4,14 @@ export type NotificationFailureState = {
   coordination: NotificationDispatchFailure | null;
   settings: NotificationDispatchFailure | null;
   os: NotificationDispatchFailure | null;
+  sound: NotificationDispatchFailure | null;
 };
 
 export const createNotificationFailureState = (): NotificationFailureState => ({
   coordination: null,
   settings: null,
   os: null,
+  sound: null,
 });
 
 export const recordNotificationFailure = (
@@ -27,6 +29,10 @@ export const recordNotificationFailure = (
   if (failure.channel === "os") {
     if (state.os) return state;
     return { ...state, os: failure };
+  }
+  if (failure.channel === "sound") {
+    if (state.sound) return state;
+    return { ...state, sound: failure };
   }
   return state;
 };
@@ -47,7 +53,12 @@ export const clearCoordinationNotificationFailure = (
 
 export const selectNotificationFailure = (
   state: NotificationFailureState,
-): NotificationDispatchFailure | null => state.settings ?? state.coordination ?? state.os;
+): NotificationDispatchFailure | null =>
+  state.settings ?? state.coordination ?? state.os ?? state.sound;
+
+export const clearSoundNotificationFailure = (
+  state: NotificationFailureState,
+): NotificationFailureState => (state.sound ? { ...state, sound: null } : state);
 
 export const clearSettingsNotificationFailure = (
   state: NotificationFailureState,

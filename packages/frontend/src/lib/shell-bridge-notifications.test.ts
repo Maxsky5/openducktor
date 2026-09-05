@@ -24,6 +24,7 @@ describe("unavailable shell notification bridge", () => {
       supported: false,
       permission: "not_applicable",
       canGuaranteeSilent: false,
+      canOpenSystemSettings: false,
     });
     expect(
       await notifications.showOsNotification({

@@ -5,14 +5,16 @@ import {
   type NotificationOsCapability,
   type NotificationOsDeliveryRequest,
 } from "@openducktor/contracts";
-import type { Event as ElectronEvent } from "electron";
+import type { Event as ElectronEvent, NotificationCloseEventParams } from "electron";
+import { resolveElectronNotificationSettingsUrl } from "./electron-notification-permission";
 import { ELECTRON_NOTIFICATION_CLICKED_CHANNEL } from "../shared/electron-bridge-contract";
 
 // Limit the wait for show confirmation because Linux does not emit failed.
 const NOTIFICATION_SHOW_TIMEOUT_MS = 10_000;
 
 type ElectronNotificationInstance = {
-  on(event: "show" | "click" | "close", listener: () => void): void;
+  on(event: "show" | "click", listener: () => void): void;
+  on(event: "close", listener: (event: ElectronEvent<NotificationCloseEventParams>) => void): void;
   on(event: "failed", listener: (event: ElectronEvent, error: string) => void): void;
   show(): void;
   close(): void;
@@ -41,12 +43,14 @@ type CreateElectronNotificationServiceOptions = {
   Notification: ElectronNotificationConstructor;
   getPermission(): NotificationOsCapability["permission"];
   getWindows(): ElectronNotificationWindow[];
+  platform?: NodeJS.Platform;
 };
 
 export const createElectronNotificationService = ({
   Notification,
   getPermission,
   getWindows,
+  platform = process.platform,
 }: CreateElectronNotificationServiceOptions) => {
   const retainedNotifications = new Map<ElectronNotificationInstance, () => void>();
   let latestFailureMessage: string | undefined;
@@ -57,6 +61,7 @@ export const createElectronNotificationService = ({
       supported: Notification.isSupported(),
       permission: getPermission(),
       canGuaranteeSilent: true,
+      canOpenSystemSettings: resolveElectronNotificationSettingsUrl(platform) !== null,
     };
     if (latestFailureMessage) {
       capability.failureMessage = latestFailureMessage;
@@ -131,8 +136,12 @@ export const createElectronNotificationService = ({
           retainedNotifications.delete(native);
           settle({ status: "failed", message: error.slice(0, 500) });
         });
-        native.on("click", () => focusAndRoute(request));
-        native.on("close", () => {
+        native.on("click", () => {
+          retainedNotifications.delete(native);
+          focusAndRoute(request);
+        });
+        native.on("close", (event) => {
+          if (event?.reason === "timedOut") return;
           retainedNotifications.delete(native);
           settle({
             status: "failed",

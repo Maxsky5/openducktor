@@ -1,13 +1,20 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { render } from "@testing-library/react";
+import { render as renderUi } from "@testing-library/react";
 import { act, createElement, createRef, type ReactElement } from "react";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import type { TaskCard } from "@openducktor/contracts";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { taskQueryKeys } from "@/state/queries/tasks";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
+import { QueryProvider } from "@/lib/query-provider";
+const render = (element: ReactElement) =>
+  renderUi(element, {
+    wrapper: ({ children }) => createElement(QueryProvider, { useIsolatedClient: true }, children),
+  });
 enableReactActEnvironment();
 
 const actualTaskDetailsSheetModule = await import("./task-details-sheet");
@@ -34,6 +41,42 @@ async function importMockedTaskDetailsSheetController(): Promise<TaskDetailsShee
 }
 
 describe("TaskDetailsSheetController", () => {
+  test("opens a closed task outside the board and clears selection on workspace switch", async () => {
+    const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
+    const task = createTaskCardFixture({ id: "closed-task", status: "closed" });
+    const client = new QueryClient();
+    client.setQueryData(taskQueryKeys.repoData(activeWorkspace.repoPath), { tasks: [task] });
+    client.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [task] });
+    const ref = createRef<TaskDetailsSheetControllerHandle>();
+    const controller = (repoPath: string) =>
+      createElement(TaskDetailsSheetController, {
+        ref,
+        activeWorkspace: { ...activeWorkspace, repoPath },
+        allTasks: [],
+        taskSessionsByTaskId: new Map(),
+        historicalSessionsByTaskId: new Map(),
+        activeTaskSessionContextByTaskId: new Map(),
+        workflowActionsEnabled: false,
+      });
+    const rendered = renderUi(controller(activeWorkspace.repoPath), {
+      wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
+    });
+    await act(async () => ref.current?.openTask(task.id));
+    expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ task, open: true, allTasks: [] }),
+    );
+    await act(async () => rendered.rerender(controller("/repo-b")));
+    expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ task: null, open: false }),
+    );
+    await act(async () => rendered.rerender(controller(activeWorkspace.repoPath)));
+    expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ task: null, open: false }),
+    );
+    rendered.unmount();
+    client.clear();
+  });
+
   beforeEach(() => {
     taskDetailsSheetSpy = spyOn(
       actualTaskDetailsSheetModule,

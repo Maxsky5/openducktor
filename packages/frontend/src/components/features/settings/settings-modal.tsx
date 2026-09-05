@@ -1,3 +1,7 @@
+import {
+  useSettingsModalRequests,
+  type SettingsModalOpenRequest,
+} from "./use-settings-modal-requests";
 import type { RuntimeKind } from "@openducktor/contracts";
 import {
   createContext,
@@ -7,7 +11,6 @@ import {
   useCallback,
   useContext,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import {
@@ -248,37 +251,14 @@ function LocalSettingsModal({
   );
 }
 
-type SettingsModalOpenRequest = {
-  deepLink?: SettingsDeepLink;
-  onOpenChange?: (open: boolean) => void;
-};
-
 type SettingsModalContextValue = {
   openSettings(request?: SettingsModalOpenRequest): void;
 };
 
 const SettingsModalContext = createContext<SettingsModalContextValue | null>(null);
 
-type ActiveSettingsRequest = SettingsModalOpenRequest & { id: number };
-
 export function SettingsModalProvider({ children }: PropsWithChildren): ReactElement {
-  const [activeRequest, setActiveRequest] = useState<ActiveSettingsRequest | null>(null);
-  const requestIdRef = useRef(0);
-
-  const openSettings = useCallback((request: SettingsModalOpenRequest = {}): void => {
-    requestIdRef.current += 1;
-    request.onOpenChange?.(true);
-    setActiveRequest({ ...request, id: requestIdRef.current });
-  }, []);
-
-  const handleOpenChange = useCallback(
-    (open: boolean): void => {
-      if (open) return;
-      activeRequest?.onOpenChange?.(false);
-      setActiveRequest(null);
-    },
-    [activeRequest],
-  );
+  const { activeRequest, openSettings, handleOpenChange } = useSettingsModalRequests();
 
   const contextValue = useMemo(() => ({ openSettings }), [openSettings]);
 

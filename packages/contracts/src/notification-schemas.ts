@@ -134,6 +134,7 @@ export const notificationSessionIdentitySchema = agentSessionRecordSchema
 export type NotificationSessionIdentity = z.infer<typeof notificationSessionIdentitySchema>;
 
 export const notificationNavigationTargetSchema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal("notification_settings") }),
   z.strictObject({
     type: z.literal("agent_studio_task"),
     ...notificationTaskTargetFields,
@@ -195,6 +196,7 @@ export const notificationOsCapabilitySchema = z.strictObject({
   supported: z.boolean(),
   permission: z.enum(NOTIFICATION_OS_PERMISSION_VALUES),
   canGuaranteeSilent: z.boolean(),
+  canOpenSystemSettings: z.boolean(),
   failureMessage: z.string().trim().min(1).max(500).optional(),
 });
 export type NotificationOsCapability = z.infer<typeof notificationOsCapabilitySchema>;

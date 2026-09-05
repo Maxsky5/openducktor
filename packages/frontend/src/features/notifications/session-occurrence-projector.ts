@@ -23,7 +23,7 @@ type CreateSessionOccurrenceProjectorOptions = {
 
 type SessionProjection = {
   association: AgentSessionWorkflowScope;
-  cycle: number;
+  executionEpisodeId: string | undefined;
   errorNotified: boolean;
   idleNotified: boolean;
   isSubagent: boolean;
@@ -45,7 +45,7 @@ const createProjection = (
   association: AgentSessionWorkflowScope,
 ): SessionProjection => ({
   association,
-  cycle: snapshot.activity === "running" ? 1 : 0,
+  executionEpisodeId: snapshot.executionEpisodeId,
   errorNotified: false,
   idleNotified: false,
   isSubagent: snapshot.parentExternalSessionId !== undefined,
@@ -62,6 +62,13 @@ const isExpectedUserStop = (
 
 const toNotificationStatus = (message: string): string =>
   message.trim().replace(/\s+/g, " ").slice(0, 240);
+
+const executionEpisodeId = (projection: SessionProjection): string => {
+  if (!projection.executionEpisodeId) {
+    throw new Error("The live Agent Session has no execution episode ID. Reload to reconnect.");
+  }
+  return projection.executionEpisodeId;
+};
 
 export const createSessionOccurrenceProjector = ({
   repositoryLabel,
@@ -113,7 +120,6 @@ export const createSessionOccurrenceProjector = ({
     if (projection.running) {
       return;
     }
-    projection.cycle += 1;
     projection.running = true;
     projection.errorNotified = false;
     projection.idleNotified = false;
@@ -129,7 +135,7 @@ export const createSessionOccurrenceProjector = ({
     return [
       sessionOccurrence(projection, {
         kind: "agent.session_idle",
-        suffix: `cycle-${projection.cycle}`,
+        suffix: executionEpisodeId(projection),
         status: projection.lastAssistantMessage?.text ?? "Agent Session is idle.",
         navigationTarget: { type: "agent_session", ...sessionTarget(projection) },
       }),
@@ -143,16 +149,12 @@ export const createSessionOccurrenceProjector = ({
     if (projection.errorNotified) {
       return [];
     }
-    if (projection.cycle === 0) {
-      projection.cycle = 1;
-    }
     projection.running = false;
     projection.errorNotified = true;
-    const cycleId = `cycle-${projection.cycle}`;
     return [
       sessionOccurrence(projection, {
         kind: "agent.session_error",
-        suffix: cycleId,
+        suffix: executionEpisodeId(projection),
         status: "Agent Session reported an error.",
         navigationTarget: { type: "session_error", ...sessionTarget(projection), errorId },
       }),
@@ -201,6 +203,7 @@ export const createSessionOccurrenceProjector = ({
     projection.association = association;
     projection.isSubagent = snapshot.parentExternalSessionId !== undefined;
     projection.ref = snapshot.ref;
+    projection.executionEpisodeId = snapshot.executionEpisodeId;
     if (projection.isSubagent) {
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
       projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));

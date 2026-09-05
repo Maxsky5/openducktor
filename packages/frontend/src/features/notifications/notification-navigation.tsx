@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type ReactElement, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
@@ -18,6 +19,7 @@ const staleTarget = (message: string): void => {
 };
 
 export function NotificationNavigationRegistrar(): null {
+  const { openSettings } = useSettingsModal();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { workspaces, activeWorkspace, selectWorkspace } = useWorkspaceState();
@@ -39,6 +41,8 @@ export function NotificationNavigationRegistrar(): null {
             loadAgentSessionListFromQuery(queryClient, repoPath, taskId, { forceFresh: true }),
           navigate,
           reportStale: staleTarget,
+          openSettings: () =>
+            openSettings({ deepLink: { kind: "global", section: "notifications" } }),
         },
         (message) =>
           toast.error("Could not open notification", {
@@ -50,6 +54,7 @@ export function NotificationNavigationRegistrar(): null {
   }, [
     activeWorkspace?.workspaceId,
     navigate,
+    openSettings,
     queryClient,
     registerNavigator,
     selectWorkspace,
@@ -79,6 +84,11 @@ export function NotificationAttentionFocus(): ReactElement | null {
         state: location.state,
       });
     };
+    if (kind !== "permission" && kind !== "question" && kind !== "error") {
+      staleTarget("The notification attention kind is invalid.");
+      clearAttention();
+      return;
+    }
     const focus = (): boolean => {
       const target = findNotificationAttentionTarget(kind, id);
       if (!target) return false;

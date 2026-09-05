@@ -56,12 +56,17 @@ type NotificationNavigationDependencies = {
   loadTaskSessions: (repoPath: string, taskId: string) => Promise<AgentSessionRecord[]>;
   navigate: (href: string, options?: { state?: unknown }) => void;
   reportStale: (message: string) => void;
+  openSettings(): void;
 };
 
 export const navigateToNotificationTarget = async (
   target: NotificationNavigationTarget,
   dependencies: NotificationNavigationDependencies,
 ): Promise<void> => {
+  if (target.type === "notification_settings") {
+    dependencies.openSettings();
+    return;
+  }
   const workspace = dependencies.workspaces.find((entry) => entry.repoPath === target.repoPath);
   if (!workspace) {
     dependencies.reportStale("The repository is not loaded in OpenDucktor.");
@@ -125,11 +130,14 @@ export const navigateToNotificationTarget = async (
 };
 
 export const findNotificationAttentionTarget = (kind: string, id: string): HTMLElement | null => {
-  const candidates = document.querySelectorAll<HTMLElement>(
-    `[data-notification-attention-kind="${kind}"]`,
-  );
+  if (kind !== "permission" && kind !== "question" && kind !== "error") return null;
+  const candidates = document.querySelectorAll<HTMLElement>("[data-notification-attention-kind]");
   return (
-    Array.from(candidates).find((element) => element.dataset.notificationAttentionId === id) ?? null
+    Array.from(candidates).find(
+      (element) =>
+        element.dataset.notificationAttentionKind === kind &&
+        element.dataset.notificationAttentionId === id,
+    ) ?? null
   );
 };
 

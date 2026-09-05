@@ -44,7 +44,7 @@ export const createElectronNotificationRuntime = ({
   platform,
   ...serviceInput
 }: CreateElectronNotificationRuntimeInput) => {
-  const service = createElectronNotificationService(serviceInput);
+  const service = createElectronNotificationService({ ...serviceInput, platform });
 
   ipcMain.handle(ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL, () => service.getCapability());
   ipcMain.handle(ELECTRON_NOTIFICATION_REQUEST_PERMISSION_CHANNEL, () => service.getCapability());

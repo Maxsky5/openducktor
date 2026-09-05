@@ -8,7 +8,6 @@ import type {
   TaskEventTaskSnapshot,
 } from "@openducktor/contracts";
 import type { TaskStreamNotificationSink } from "@/state/tasks/task-stream-controller";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createTaskOccurrenceProjector } from "./task-occurrence-projector";
 
 export type NotificationWorkspace = {
@@ -25,29 +24,13 @@ type NotificationProducerFailure = {
 type TaskObserverEntry = {
   label: string;
   projector: ReturnType<typeof createTaskOccurrenceProjector>;
-  sessionAssociations: Map<string, AgentSessionWorkflowScope>;
   tasks: Map<string, TaskEventTaskSnapshot>;
-};
-
-const toSessionAssociations = (
-  recordsByTaskId: Record<string, AgentSessionRecord[]>,
-): Map<string, AgentSessionWorkflowScope> => {
-  const associations = new Map<string, AgentSessionWorkflowScope>();
-  for (const [taskId, records] of Object.entries(recordsByTaskId)) {
-    for (const record of records) {
-      associations.set(agentSessionIdentityKey(record), {
-        kind: "workflow",
-        taskId,
-        role: record.role,
-      });
-    }
-  }
-  return associations;
 };
 
 export const createNotificationTaskObserver = ({
   loadTasks,
   loadSessionRecords,
+  resolveSessionAssociation,
   publish,
   onFailure,
 }: {
@@ -56,6 +39,7 @@ export const createNotificationTaskObserver = ({
     repoPath: string,
     taskIds: string[],
   ): Promise<Record<string, AgentSessionRecord[]>>;
+  resolveSessionAssociation(ref: AgentSessionLiveRef): AgentSessionWorkflowScope | null;
   publish(occurrence: NotificationOccurrence): void;
   onFailure(failure: NotificationProducerFailure): void;
 }) => {
@@ -70,17 +54,10 @@ export const createNotificationTaskObserver = ({
     onFailure({ repoPath, source: "task", cause });
   };
 
-  const loadSessionAssociations = async (
-    repoPath: string,
-    taskIds: string[],
-  ): Promise<Map<string, AgentSessionWorkflowScope>> => {
-    return toSessionAssociations(await loadSessionRecords(repoPath, taskIds));
-  };
-
   const loadBaseline = async (workspace: NotificationWorkspace): Promise<void> => {
     try {
       const tasks = await loadTasks(workspace.repoPath);
-      const sessionAssociations = await loadSessionAssociations(
+      await loadSessionRecords(
         workspace.repoPath,
         tasks.map((task) => task.id),
       );
@@ -95,7 +72,6 @@ export const createNotificationTaskObserver = ({
       entries.set(workspace.repoPath, {
         label: workspace.repositoryLabel,
         projector,
-        sessionAssociations,
         tasks: new Map(tasks.map((task) => [task.id, task])),
       });
     } catch (cause) {
@@ -112,7 +88,7 @@ export const createNotificationTaskObserver = ({
     }
     try {
       const tasks = await loadTasks(event.repoPath);
-      const sessionAssociations = await loadSessionAssociations(
+      await loadSessionRecords(
         event.repoPath,
         tasks.map((task) => task.id),
       );
@@ -129,14 +105,12 @@ export const createNotificationTaskObserver = ({
         entry = {
           label: workspace.repositoryLabel,
           projector,
-          sessionAssociations,
           tasks: new Map(tasks.map((task) => [task.id, task])),
         };
         entries.set(event.repoPath, entry);
         return;
       }
       entry.projector.replaceBaseline(tasks);
-      entry.sessionAssociations = sessionAssociations;
       entry.tasks = new Map(tasks.map((task) => [task.id, task]));
     } catch (cause) {
       reportFailure(event.repoPath, cause);
@@ -159,9 +133,7 @@ export const createNotificationTaskObserver = ({
     for (const taskId of event.removedTaskIds) entry.tasks.delete(taskId);
     for (const task of event.taskSnapshots) entry.tasks.set(task.id, task);
     for (const occurrence of occurrences) publish(occurrence);
-    entry.sessionAssociations = await loadSessionAssociations(event.repoPath, [
-      ...entry.tasks.keys(),
-    ]);
+    await loadSessionRecords(event.repoPath, [...entry.tasks.keys()]);
   };
 
   const refreshAllBaselines = async (): Promise<void> => {
@@ -176,6 +148,9 @@ export const createNotificationTaskObserver = ({
 
   return {
     sink,
+    hasBaseline: (repoPath: string): boolean =>
+      entries.get(repoPath)?.label === workspaces.get(repoPath)?.repositoryLabel &&
+      entries.has(repoPath),
     async syncWorkspaces(nextWorkspaces: readonly NotificationWorkspace[]): Promise<void> {
       const nextRepoPaths = new Set(nextWorkspaces.map((workspace) => workspace.repoPath));
       for (const repoPath of workspaces.keys()) {
@@ -187,18 +162,25 @@ export const createNotificationTaskObserver = ({
       }
       const baselines: Promise<void>[] = [];
       for (const workspace of nextWorkspaces) {
-        const previous = workspaces.get(workspace.repoPath);
-        if (!previous || previous.repositoryLabel !== workspace.repositoryLabel) {
-          workspaces.set(workspace.repoPath, workspace);
-          const promise = loadBaseline(workspace);
-          baselineLoads.set(workspace.repoPath, { workspace, promise });
-          baselines.push(promise);
-        } else {
-          const pending = baselineLoads.get(workspace.repoPath);
-          if (pending?.workspace === previous) {
-            baselines.push(pending.promise);
-          }
+        let owner = workspaces.get(workspace.repoPath);
+        if (!owner || owner.repositoryLabel !== workspace.repositoryLabel) {
+          owner = workspace;
+          workspaces.set(workspace.repoPath, owner);
         }
+        const pending = baselineLoads.get(workspace.repoPath);
+        if (pending?.workspace === owner) {
+          baselines.push(pending.promise);
+          continue;
+        }
+        if (entries.get(workspace.repoPath)?.label === owner.repositoryLabel) continue;
+        const registration = { workspace: owner, promise: Promise.resolve() };
+        registration.promise = loadBaseline(owner).finally(() => {
+          if (baselineLoads.get(workspace.repoPath) === registration) {
+            baselineLoads.delete(workspace.repoPath);
+          }
+        });
+        baselineLoads.set(workspace.repoPath, registration);
+        baselines.push(registration.promise);
       }
       await Promise.all(baselines);
     },
@@ -207,9 +189,7 @@ export const createNotificationTaskObserver = ({
       return task ? { id: task.id, title: task.title } : null;
     },
     resolveSessionAssociation(ref: AgentSessionLiveRef): AgentSessionWorkflowScope | null {
-      return (
-        entries.get(ref.repoPath)?.sessionAssociations.get(agentSessionIdentityKey(ref)) ?? null
-      );
+      return entries.has(ref.repoPath) ? resolveSessionAssociation(ref) : null;
     },
   };
 };

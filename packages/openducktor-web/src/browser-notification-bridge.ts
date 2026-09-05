@@ -62,6 +62,7 @@ export const createBrowserNotificationBridge = ({
         supported: false,
         permission: "not_applicable",
         canGuaranteeSilent: false,
+        canOpenSystemSettings: false,
         failureMessage: "This browser does not support OS notifications.",
       };
     }
@@ -71,6 +72,7 @@ export const createBrowserNotificationBridge = ({
         supported: false,
         permission: resolvePermission(NativeNotification.permission),
         canGuaranteeSilent,
+        canOpenSystemSettings: false,
         failureMessage: "This browser cannot coordinate notifications and sound across tabs.",
       };
     }
@@ -79,6 +81,7 @@ export const createBrowserNotificationBridge = ({
       supported: true,
       permission: resolvePermission(NativeNotification.permission),
       canGuaranteeSilent,
+      canOpenSystemSettings: false,
     };
     const coordinationFailure = coordinator.getFailureMessage();
     if (coordinationFailure) {

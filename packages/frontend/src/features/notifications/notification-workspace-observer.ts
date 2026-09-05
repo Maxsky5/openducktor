@@ -94,6 +94,7 @@ export const createNotificationWorkspaceObserver = ({
         return;
       }
       for (const workspace of workspaces) {
+        if (!taskObserver.hasBaseline(workspace.repoPath)) continue;
         const current = observations.get(workspace.repoPath);
         if (current?.label === workspace.repositoryLabel) {
           continue;

@@ -531,6 +531,7 @@ const notificationContextValue: NotificationContextValue = {
     supported: false,
     permission: "not_applicable",
     canGuaranteeSilent: false,
+    canOpenSystemSettings: false,
   }),
   openSystemSettings: async () => {},
   previewCue: async () => {},

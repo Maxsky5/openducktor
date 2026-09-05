@@ -20,6 +20,7 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
   activity: "idle",
   title: "Builder session",
   startedAt: "2026-08-31T10:00:00.000Z",
+  executionEpisodeId: "episode-1",
   pendingApprovals: [],
   pendingQuestions: [],
   contextUsage: null,
@@ -42,6 +43,33 @@ const createProjector = () =>
   });
 
 describe("session occurrence projector", () => {
+  test("shares occurrence IDs across late observers and renews them after re-registration", () => {
+    const first = createProjector();
+    const second = createProjector();
+    const baseline = {
+      type: "snapshot" as const,
+      repoPath: "/repo",
+      sessions: [snapshot({ activity: "running" })],
+    };
+    first.accept(baseline);
+    second.accept(baseline);
+    const idle = { type: "session_upsert" as const, session: snapshot() };
+    const [initial] = first.accept(idle);
+    expect(initial).toBeDefined();
+    expect(second.accept(idle)[0]?.occurrenceId).toBe(initial?.occurrenceId);
+    first.accept({ type: "session_removed", ref });
+    first.accept({
+      type: "session_upsert",
+      session: snapshot({ activity: "running", executionEpisodeId: "episode-2" }),
+    });
+    const [next] = first.accept({
+      type: "session_upsert",
+      session: snapshot({ executionEpisodeId: "episode-2" }),
+    });
+    expect(next).toBeDefined();
+    expect(next?.occurrenceId).not.toBe(initial?.occurrenceId);
+  });
+
   test("ignores sessions without workflow ownership", () => {
     const projector = createSessionOccurrenceProjector({
       repositoryLabel: "Repo",
@@ -203,7 +231,7 @@ describe("session occurrence projector", () => {
 
     projector.accept({
       type: "session_upsert",
-      session: snapshot({ activity: "running" }),
+      session: snapshot({ activity: "running", executionEpisodeId: "episode-2" }),
     });
     const laterError = transcript({
       type: "session_error",
@@ -214,7 +242,7 @@ describe("session occurrence projector", () => {
     expect(projector.accept({ type: "transcript_event", event: laterError })).toMatchObject([
       {
         kind: "agent.session_error",
-        occurrenceId: expect.stringContaining("cycle-2"),
+        occurrenceId: expect.stringContaining("episode-2"),
         navigationTarget: {
           type: "session_error",
           errorId: "2026-08-31T10:03:01.000Z",
@@ -416,7 +444,7 @@ describe("session occurrence projector", () => {
     ).toMatchObject([
       {
         kind: "agent.session_idle",
-        occurrenceId: expect.stringContaining("cycle-1"),
+        occurrenceId: expect.stringContaining("episode-1"),
       },
     ]);
 

@@ -3,6 +3,7 @@ import type { NotificationDispatchFailure } from "./notification-policy";
 import {
   clearCoordinationNotificationFailure,
   clearOsNotificationFailure,
+  clearSoundNotificationFailure,
   createNotificationFailureState,
   recordNotificationFailure,
   selectNotificationFailure,
@@ -20,6 +21,19 @@ const failure = (
 });
 
 describe("notification failure state", () => {
+  test("keeps sound failures until sound succeeds without clearing OS failures", () => {
+    const sound = { ...failure("sound-failed"), channel: "sound" as const };
+    const state = recordNotificationFailure(createNotificationFailureState(), sound);
+    expect(selectNotificationFailure(clearOsNotificationFailure(state))).toBe(sound);
+    expect(selectNotificationFailure(clearSoundNotificationFailure(state))).toBeNull();
+    const os = failure("os-failed");
+    expect(
+      selectNotificationFailure(
+        clearSoundNotificationFailure(recordNotificationFailure(state, os)),
+      ),
+    ).toBe(os);
+  });
+
   test("keeps one state for repeated failures with the same cause", () => {
     const current = failure("occurrence-1");
     const state = recordNotificationFailure(createNotificationFailureState(), current);

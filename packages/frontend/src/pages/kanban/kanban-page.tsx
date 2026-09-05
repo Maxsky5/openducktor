@@ -34,21 +34,11 @@ export function KanbanPage(): ReactElement {
   const requestedTaskId = searchParams.get("task");
   useEffect(() => {
     if (!requestedTaskId) return;
-    const taskExists = models.taskDetailsController.allTasks.some(
-      (task) => task.id === requestedTaskId,
-    );
-    if (!taskExists) return;
     handleOpenDetails(requestedTaskId);
     const next = new URLSearchParams(searchParams);
     next.delete("task");
     setSearchParams(next, { replace: true });
-  }, [
-    handleOpenDetails,
-    models.taskDetailsController.allTasks,
-    requestedTaskId,
-    searchParams,
-    setSearchParams,
-  ]);
+  }, [handleOpenDetails, requestedTaskId, searchParams, setSearchParams]);
   const taskGitConflictActions = models.taskGitConflictDialog?.conflict
     ? createGitConflictActionsModel({
         operation: models.taskGitConflictDialog.conflict.operation,

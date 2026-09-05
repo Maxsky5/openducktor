@@ -30,6 +30,34 @@ const target: Extract<NotificationNavigationTarget, { type: "pending_input" }> =
   requestId: "request-1",
 };
 
+test("opens test notification settings without workspace or task reads", async () => {
+  const openSettings = mock(() => {});
+  const loadTasks = mock(async () => []);
+  const selectWorkspace = mock(async () => {});
+  await navigateToNotificationTarget(
+    { type: "notification_settings" },
+    {
+      activeWorkspaceId: null,
+      workspaces: [],
+      openSettings,
+      loadTasks,
+      selectWorkspace,
+      loadTaskSessions: async () => [],
+      navigate: () => {},
+      reportStale: () => {
+        throw new Error("Unexpected stale target");
+      },
+    },
+  );
+  expect(openSettings).toHaveBeenCalledTimes(1);
+  expect(loadTasks).not.toHaveBeenCalled();
+  expect(selectWorkspace).not.toHaveBeenCalled();
+});
+
+test.each(['"]', "unknown", "error][id]"])("rejects malformed attention kind %s", (kind) => {
+  expect(findNotificationAttentionTarget(kind, "request")).toBeNull();
+});
+
 describe("notification navigation", () => {
   test("matches a task-scoped session by its external ID", () => {
     expect(matchesNotificationSession(session, target)).toBe(true);
@@ -83,6 +111,7 @@ describe("notification navigation", () => {
         loadTaskSessions: mock(async () => []),
         navigate,
         reportStale,
+        openSettings: () => {},
       },
     );
 
@@ -119,6 +148,7 @@ describe("notification navigation", () => {
         loadTaskSessions: mock(async () => []),
         navigate,
         reportStale: mock(() => {}),
+        openSettings: () => {},
       },
     );
 
@@ -163,6 +193,7 @@ test("passes the exact session identity through transient navigation state", asy
     loadTasks: async () => [createTaskCardFixture({ id: "task-1" })],
     loadTaskSessions: async () => [{ ...session, runtimeKind: "opencode" }, session],
     navigate,
+    openSettings: () => {},
     reportStale: () => {
       throw new Error("unexpected stale target");
     },
@@ -194,6 +225,7 @@ test.each(["workspace", "tasks", "sessions"])(
           loadTaskSessions: stage === "sessions" ? fail : async () => [session],
           navigate,
           reportStale: () => {},
+          openSettings: () => {},
         },
         reportFailure,
       ),

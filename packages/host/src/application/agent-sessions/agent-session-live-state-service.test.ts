@@ -94,6 +94,35 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
+  test("publishes the same execution episode to list, read, and refresh consumers", async () => {
+    const { events, service } = createHarness();
+    const snapshot = liveSnapshot("shared-episode");
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        fakeAdapter({
+          runtimeId: "runtime-codex",
+          snapshots: () => [snapshot],
+        }),
+      ),
+    );
+    const listed = await Effect.runPromise(service.list({ repoPath: "/repo" }));
+    const episodeId = listed[0]?.executionEpisodeId;
+    expect(episodeId).toBeString();
+    expect(await Effect.runPromise(service.read(snapshot.ref))).toEqual({
+      type: "live",
+      session: { ...snapshot, executionEpisodeId: episodeId },
+    });
+    events.length = 0;
+    await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
+    expect(events).toEqual([
+      {
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [{ ...snapshot, executionEpisodeId: episodeId }],
+      },
+    ]);
+  });
+
   test("asks each runtime for all current sessions on refresh", async () => {
     let snapshots = [liveSnapshot("runtime-session", "opencode")];
     const refreshCalls: string[] = [];
@@ -116,7 +145,7 @@ describe("createAgentSessionLiveStateService", () => {
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
     expect(refreshCalls).toEqual(["opencode", "opencode"]);
-    expect(events).toEqual([
+    expect(events).toMatchObject([
       {
         type: "snapshot",
         repoPath: "/repo",
@@ -171,7 +200,7 @@ describe("createAgentSessionLiveStateService", () => {
     await Promise.all([firstRefresh, nextRefresh]);
 
     expect(listCount).toBe(2);
-    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([
+    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toMatchObject([
       liveSnapshot("next", "opencode"),
     ]);
   });
@@ -193,10 +222,10 @@ describe("createAgentSessionLiveStateService", () => {
       ),
     );
 
-    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([
+    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toMatchObject([
       liveSnapshot("runtime-session", "opencode"),
     ]);
-    expect(events).toEqual([
+    expect(events).toMatchObject([
       { type: "snapshot", repoPath: "/repo", sessions: [] },
       { type: "session_upsert", session: liveSnapshot("runtime-session", "opencode") },
     ]);
@@ -217,14 +246,14 @@ describe("createAgentSessionLiveStateService", () => {
 
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
-    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([
+    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toMatchObject([
       snapshot,
     ]);
-    await expect(Effect.runPromise(service.read(snapshot.ref))).resolves.toEqual({
+    await expect(Effect.runPromise(service.read(snapshot.ref))).resolves.toMatchObject({
       type: "live",
       session: snapshot,
     });
-    expect(events).toEqual([
+    expect(events).toMatchObject([
       { type: "session_upsert", session: snapshot },
       { type: "snapshot", repoPath: "/repo", sessions: [snapshot] },
     ]);
@@ -491,7 +520,7 @@ describe("createAgentSessionLiveStateService", () => {
       ),
     );
 
-    expect(events).toEqual([{ type: "session_upsert", session: updated }]);
+    expect(events).toMatchObject([{ type: "session_upsert", session: updated }]);
   });
 
   test("publishes a scoped adapter fault with its exact live-session ref", async () => {
@@ -639,7 +668,7 @@ describe("createAgentSessionLiveStateService", () => {
         repoPath: "/repo",
         message: "Codex event processing failed.",
       },
-      { type: "session_upsert", session: snapshot },
+      { type: "session_upsert", session: { ...snapshot, executionEpisodeId: expect.any(String) } },
     ]);
   });
 
@@ -905,7 +934,7 @@ describe("createAgentSessionLiveStateService", () => {
       ),
     ).rejects.toThrow("already registered");
 
-    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([
+    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toMatchObject([
       current,
     ]);
   });

@@ -1,4 +1,8 @@
-import type { NotificationOsCapability, NotificationSettings } from "@openducktor/contracts";
+import type {
+  NotificationCue,
+  NotificationOsCapability,
+  NotificationSettings,
+} from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { notificationOsCapabilityQueryOptions } from "@/state/queries/notifications";
@@ -76,6 +80,18 @@ export const useNotificationTestControls = (settings: NotificationSettings | nul
     }
   };
 
+  const previewCue = async (cue: NotificationCue): Promise<void> => {
+    if (!settings) return;
+    setStatus(null);
+    try {
+      await runtime.previewCue(cue, settings.volumePercent);
+    } catch (cause) {
+      setStatus(
+        `Notification sound could not play: ${errorMessage(cause)}. Check sound settings and preview again.`,
+      );
+    }
+  };
+
   return {
     capability: capabilityQuery.data,
     capabilityDescription: describeNotificationOsCapability(
@@ -87,5 +103,6 @@ export const useNotificationTestControls = (settings: NotificationSettings | nul
     openSystemSettings,
     status,
     testNotification,
+    previewCue,
   };
 };

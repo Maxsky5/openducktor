@@ -14,6 +14,32 @@ const failure = (occurrenceId: string): NotificationDispatchFailure => ({
   message: "Native notifications are unavailable.",
 });
 
+test("replaces coordination recovery with OS recovery for the same occurrence", async () => {
+  await withMockedToast(async ({ toastErrorMock }) => {
+    const onOpenSettings = mock(() => {});
+    const onReload = mock(() => {});
+    const view = render(
+      <NotificationFailurePrompt
+        failure={{ ...failure("same"), channel: "coordination" }}
+        onOpenSettings={onOpenSettings}
+        onReload={onReload}
+      />,
+    );
+    view.rerender(
+      <NotificationFailurePrompt
+        failure={failure("same")}
+        onOpenSettings={onOpenSettings}
+        onReload={onReload}
+      />,
+    );
+    expect(toastErrorMock).toHaveBeenCalledTimes(2);
+    expect(toastErrorMock.mock.calls[1]?.[1]).toMatchObject({
+      id: "notification-failure:os:same",
+      action: { label: "Open settings", onClick: onOpenSettings },
+    });
+  });
+});
+
 describe("NotificationFailurePrompt", () => {
   test("shows one actionable toast for each OS failure occurrence", async () => {
     await withMockedToast(async ({ toastErrorMock }) => {
@@ -40,7 +66,7 @@ describe("NotificationFailurePrompt", () => {
 
       const options = toastErrorMock.mock.calls[0]?.[1];
       expect(options).toMatchObject({
-        id: "notification-os-delivery-failure",
+        id: "notification-failure:os:failure-1",
         description: "Native notifications are unavailable.",
         action: { label: "Open settings" },
       });
@@ -76,7 +102,7 @@ describe("NotificationFailurePrompt", () => {
       const options = toastErrorMock.mock.calls[0]?.[1];
       expect(toastErrorMock.mock.calls[0]?.[0]).toBe("Browser notification coordination failed");
       expect(options).toMatchObject({
-        id: "notification-coordination-failure",
+        id: "notification-failure:coordination:coordination-failure",
         action: { label: "Reload" },
       });
       // SAFETY: The assertion above proves that the recorded toast options contain this action.

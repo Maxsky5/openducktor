@@ -14,12 +14,14 @@ const createBridge = (overrides: Partial<NotificationBridge> = {}): Notification
     supported: true,
     permission: "prompt",
     canGuaranteeSilent: true,
+    canOpenSystemSettings: false,
   }),
   requestPermission: async () => ({
     platform: "browser",
     supported: true,
     permission: "granted",
     canGuaranteeSilent: true,
+    canOpenSystemSettings: false,
   }),
   openSystemSettings: async () => {},
   isAppFocused: async () => false,
@@ -66,6 +68,54 @@ const createNotificationRuntime = (options: TestRuntimeOptions) => {
     ...options,
   });
 };
+
+test("reports sound failures independently and signals recovery after a preview", async () => {
+  const onFailure = mock(() => {});
+  const onSoundPlayed = mock(() => {});
+  let fail = true;
+  const inApp = { deliver: mock(async () => {}) };
+  const runtime = createNotificationRuntime({
+    bridge: createBridge(),
+    loadSettings: async () => createDefaultNotificationSettings(),
+    navigate: async () => {},
+    onFailure,
+    onSoundPlayed,
+    inApp,
+    sound: {
+      play: async () => {
+        if (fail) throw new Error("Audio unavailable");
+      },
+    },
+  });
+  await runtime.publishAndWait(workflowClosedOccurrence("sound-failure"));
+  expect(inApp.deliver).toHaveBeenCalledTimes(1);
+  expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ channel: "sound" }));
+  expect(onSoundPlayed).not.toHaveBeenCalled();
+  fail = false;
+  await runtime.previewCue("chime", 30);
+  expect(onSoundPlayed).toHaveBeenCalledTimes(1);
+});
+
+test("uses the settings navigation target in both explicit tests", async () => {
+  const inApp = { deliver: mock(async () => {}) };
+  const showOsNotification = mock(async () => ({ status: "shown" as const }));
+  const runtime = createNotificationRuntime({
+    bridge: createBridge({ showOsNotification }),
+    loadSettings: async () => createDefaultNotificationSettings(),
+    navigate: async () => {},
+    onFailure: () => {},
+    inApp,
+  });
+  await runtime.testInApp(createDefaultNotificationSettings());
+  await runtime.testOs(createDefaultNotificationSettings());
+  expect(inApp.deliver).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ navigationTarget: { type: "notification_settings" } }),
+  );
+  expect(showOsNotification).toHaveBeenCalledWith(
+    expect.objectContaining({ navigationTarget: { type: "notification_settings" } }),
+  );
+});
 
 describe("notification runtime tests", () => {
   test("bounds display text before publishing the occurrence", async () => {
@@ -304,6 +354,7 @@ describe("notification runtime tests", () => {
       supported: true,
       permission: "granted" as const,
       canGuaranteeSilent: true,
+      canOpenSystemSettings: false,
     }));
     const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
       status: "shown" as const,
@@ -338,6 +389,7 @@ describe("notification runtime tests", () => {
           supported: true,
           permission: "denied",
           canGuaranteeSilent: true,
+          canOpenSystemSettings: false,
         }),
         showOsNotification,
       }),

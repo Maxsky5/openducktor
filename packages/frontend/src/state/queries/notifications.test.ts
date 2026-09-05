@@ -8,6 +8,7 @@ describe("notificationOsCapabilityQueryOptions", () => {
       platform: "electron",
       supported: true,
       canGuaranteeSilent: true,
+      canOpenSystemSettings: true,
     }));
 
     expect(options.refetchOnWindowFocus).toBe(true);

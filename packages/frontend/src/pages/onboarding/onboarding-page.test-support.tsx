@@ -34,6 +34,7 @@ const notificationContextValue = {
     supported: true,
     permission: "prompt" as const,
     canGuaranteeSilent: true,
+    canOpenSystemSettings: false,
   }),
   openSystemSettings: async () => {},
   previewCue: async () => {},

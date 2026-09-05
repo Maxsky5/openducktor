@@ -24,6 +24,7 @@ import {
   clearCoordinationNotificationFailure,
   clearOsNotificationFailure,
   clearSettingsNotificationFailure,
+  clearSoundNotificationFailure,
   createNotificationFailureState,
   type NotificationFailureState,
   recordNotificationFailure,
@@ -41,6 +42,7 @@ import type {
 import { hostBridge } from "@/lib/host-client";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { loadAgentSessionListsFromQuery } from "@/state/queries/agent-sessions";
+import { readCachedAgentSessionAssociation } from "@/state/queries/agent-session-association";
 import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useWorkspaceStateContext } from "../app-state-contexts";
@@ -77,6 +79,7 @@ type NotificationFailureAction =
   | { type: "reported"; failure: NotificationDispatchFailure }
   | { type: "os-shown" }
   | { type: "settings-recovered" }
+  | { type: "sound-played" }
   | { type: "coordination-recovered" };
 
 const reduceNotificationFailureState = (
@@ -87,6 +90,7 @@ const reduceNotificationFailureState = (
     return recordNotificationFailure(state, action.failure);
   }
   if (action.type === "settings-recovered") return clearSettingsNotificationFailure(state);
+  if (action.type === "sound-played") return clearSoundNotificationFailure(state);
   if (action.type === "os-shown") {
     return clearOsNotificationFailure(state);
   }
@@ -130,7 +134,8 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
         if (
           failure.channel === "os" ||
           failure.channel === "coordination" ||
-          failure.channel === "settings"
+          failure.channel === "settings" ||
+          failure.channel === "sound"
         ) {
           updateFailureState({ type: "reported", failure });
         }
@@ -138,6 +143,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
       onCoordinationRecovered: () => updateFailureState({ type: "coordination-recovered" }),
       onOsShown: () => updateFailureState({ type: "os-shown" }),
       onSettingsRecovered: () => updateFailureState({ type: "settings-recovered" }),
+      onSoundPlayed: () => updateFailureState({ type: "sound-played" }),
     });
   }, [queryClient, shellNotifications]);
 
@@ -150,6 +156,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
         },
         loadSessionRecords: (repoPath, taskIds) =>
           loadAgentSessionListsFromQuery(queryClient, repoPath, taskIds),
+        resolveSessionAssociation: (ref) => readCachedAgentSessionAssociation(queryClient, ref),
         publish: runtime.publish,
         onFailure: reportProducerFailure,
       }),

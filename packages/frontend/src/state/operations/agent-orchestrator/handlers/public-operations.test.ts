@@ -117,9 +117,7 @@ describe("agent-orchestrator-public-operations", () => {
       await expect(
         operations.sendAgentMessage(SESSION_IDENTITY, [{ kind: "text", text: "hello" }]),
       ).rejects.toThrow("send failed");
-      expect(toastError).toHaveBeenCalledWith("Failed to send message", {
-        description: "send failed",
-      });
+      expect(toastError).not.toHaveBeenCalled();
     } finally {
       toast.error = originalToastError;
     }
