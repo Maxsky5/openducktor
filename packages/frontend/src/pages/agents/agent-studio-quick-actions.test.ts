@@ -99,6 +99,18 @@ describe("agent-studio-quick-actions", () => {
     });
   });
 
+  test("hides unsupported Pull Request generation when the provider refresh fails", () => {
+    const actions = buildAgentStudioQuickActions({
+      ...buildPrActionArgs(),
+      gitProviderContext: createGitProviderContextFixture({ supportsPullRequests: false }),
+      gitProviderReadError: "Could not load the current Git provider: connection failed",
+    });
+
+    expect(
+      actions.some((option) => option.launchActionId === "build_pull_request_generation"),
+    ).toBe(false);
+  });
+
   test("builds quick actions from backend actions, role workflows, and builder sessions", () => {
     const task = buildTask({
       id: "task-1",

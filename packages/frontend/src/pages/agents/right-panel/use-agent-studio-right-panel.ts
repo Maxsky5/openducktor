@@ -17,7 +17,7 @@ import { toRightPanelStorageKey } from "../agents-page-selection";
 type UseAgentStudioRightPanelInput = {
   role: AgentRole;
   hasDocumentPanel: boolean;
-  supportsPullRequestReview: boolean;
+  canShowPullRequestReview: boolean;
   hasLinkedPullRequest: boolean;
   pullRequestReviewUnavailableReason: string | null;
   hasTaskContext?: boolean;
@@ -102,11 +102,11 @@ const readPersistedOpenByRole = (): Record<AgentRole, boolean> => {
 
 const buildTaskExecutionTabs = ({
   hasDocumentPanel,
-  supportsPullRequestReview,
+  canShowPullRequestReview,
   hasLinkedPullRequest,
 }: {
   hasDocumentPanel: boolean;
-  supportsPullRequestReview: boolean;
+  canShowPullRequestReview: boolean;
   hasLinkedPullRequest: boolean;
 }): TaskExecutionPanelTab[] => {
   const tabs: TaskExecutionPanelTab[] = [];
@@ -115,7 +115,7 @@ const buildTaskExecutionTabs = ({
   }
   tabs.push({ id: "git", label: "Git" });
   tabs.push({ id: "file_explorer", label: "File explorer" });
-  if (supportsPullRequestReview && hasLinkedPullRequest) {
+  if (canShowPullRequestReview && hasLinkedPullRequest) {
     tabs.push({ id: "ci_checks", label: "CI Checks" });
   }
   return tabs;
@@ -181,7 +181,7 @@ export const buildTaskExecutionPanelModel = ({
 export function useAgentStudioRightPanel({
   role,
   hasDocumentPanel,
-  supportsPullRequestReview,
+  canShowPullRequestReview,
   hasLinkedPullRequest,
   pullRequestReviewUnavailableReason,
   hasTaskContext = true,
@@ -219,11 +219,11 @@ export function useAgentStudioRightPanel({
       hasTaskContext
         ? buildTaskExecutionTabs({
             hasDocumentPanel,
-            supportsPullRequestReview,
+            canShowPullRequestReview,
             hasLinkedPullRequest,
           })
         : [],
-    [hasDocumentPanel, hasLinkedPullRequest, hasTaskContext, supportsPullRequestReview],
+    [canShowPullRequestReview, hasDocumentPanel, hasLinkedPullRequest, hasTaskContext],
   );
   const activeTabId = resolveActiveTab({
     role,

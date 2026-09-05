@@ -206,7 +206,9 @@ export function useRepoSettingsOperations({
         }
       }
       void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
-      void queryClient.invalidateQueries({ queryKey: repositoryGitProviderContextQueryKeys.all });
+      await queryClient.invalidateQueries({
+        queryKey: repositoryGitProviderContextQueryKeys.all,
+      });
     },
     [applyWorkspaceRecords, queryClient, settingsSnapshotQueryKey],
   );

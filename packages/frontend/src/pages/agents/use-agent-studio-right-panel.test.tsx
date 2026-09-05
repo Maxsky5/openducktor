@@ -156,7 +156,7 @@ const tabs = [
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   role: "spec",
   hasDocumentPanel: true,
-  supportsPullRequestReview: false,
+  canShowPullRequestReview: false,
   hasLinkedPullRequest: false,
   pullRequestReviewUnavailableReason: null,
   ...overrides,
@@ -282,7 +282,7 @@ describe("useAgentStudioRightPanel", () => {
   test("shows CI checks only when review is supported and a pull request is linked", async () => {
     const harness = createHookHarness(
       createHookArgs({
-        supportsPullRequestReview: true,
+        canShowPullRequestReview: true,
         hasLinkedPullRequest: true,
       }),
     );
@@ -298,7 +298,7 @@ describe("useAgentStudioRightPanel", () => {
 
     await harness.update(
       createHookArgs({
-        supportsPullRequestReview: true,
+        canShowPullRequestReview: true,
         hasLinkedPullRequest: false,
       }),
     );

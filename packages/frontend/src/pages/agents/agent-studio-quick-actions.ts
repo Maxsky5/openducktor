@@ -98,10 +98,11 @@ const canShowPullRequestQuickAction = (
   gitProviderContext: RepositoryGitProviderContext | undefined,
   gitProviderReadError: string | null | undefined,
 ): boolean => {
+  const readFailedWithoutContext = gitProviderContext == null && gitProviderReadError != null;
   return (
     PULL_REQUEST_QUICK_ACTION_STATUSES.has(task.status) &&
     (gitProviderContext?.descriptor.capabilities.supportsPullRequests === true ||
-      gitProviderReadError != null)
+      readFailedWithoutContext)
   );
 };
 

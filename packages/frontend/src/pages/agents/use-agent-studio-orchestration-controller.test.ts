@@ -321,7 +321,28 @@ describe("resolvePullRequestReviewAvailability", () => {
         },
       }),
     ).toEqual({
-      supportsPullRequestReview: true,
+      canShowPullRequestReview: true,
+      hasLinkedPullRequest: true,
+      unavailableReason: "Could not load the current Git provider: connection failed",
+    });
+  });
+
+  test("keeps review visible but unavailable when the initial provider read fails", () => {
+    expect(
+      resolvePullRequestReviewAvailability({
+        gitProviderContext: undefined,
+        gitProviderReadError: "Could not load the current Git provider: connection failed",
+        linkedPullRequest: {
+          providerId: "github",
+          number: 7,
+          url: "https://example.com/pulls/7",
+          state: "open",
+          createdAt: "2026-09-03T10:00:00.000Z",
+          updatedAt: "2026-09-03T10:00:00.000Z",
+        },
+      }),
+    ).toEqual({
+      canShowPullRequestReview: true,
       hasLinkedPullRequest: true,
       unavailableReason: "Could not load the current Git provider: connection failed",
     });
@@ -354,6 +375,7 @@ describe("resolvePullRequestReviewAvailability", () => {
     expect(
       resolvePullRequestReviewAvailability({
         gitProviderContext,
+        gitProviderReadError: "Could not load the current Git provider: connection failed",
         linkedPullRequest: {
           providerId: "fake",
           number: 7,
@@ -364,7 +386,7 @@ describe("resolvePullRequestReviewAvailability", () => {
         },
       }),
     ).toEqual({
-      supportsPullRequestReview: false,
+      canShowPullRequestReview: false,
       hasLinkedPullRequest: true,
       unavailableReason: null,
     });

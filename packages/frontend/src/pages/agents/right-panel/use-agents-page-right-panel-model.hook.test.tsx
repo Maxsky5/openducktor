@@ -472,4 +472,37 @@ describe("useAgentsPageRightPanelModel", () => {
 
     await harness.unmount();
   });
+
+  test("does not prefetch CI review data while the provider read has failed", async () => {
+    const readError = "Could not load the current Git provider: connection failed";
+    const harness = createHookHarness(
+      useAgentsPageRightPanelModel,
+      createHookArgs({
+        selectedView: createSelectedView({
+          selectedTask: createTaskCardFixture({
+            id: "task-1",
+            pullRequest: linkedPullRequest,
+          }),
+        }),
+        tabs: [
+          { id: "git", label: "Git" },
+          { id: "file_explorer", label: "File explorer" },
+          { id: "ci_checks", label: "CI Checks" },
+        ],
+        activeTabId: "ci_checks",
+        isPanelOpen: true,
+        pullRequestReviewUnavailableReason: readError,
+      }),
+    );
+
+    await harness.mount();
+
+    expect(prefetchPullRequestReviewContextMock).not.toHaveBeenCalled();
+    expect(harness.getLatest().rightPanelModel?.ciChecksModel).toMatchObject({
+      queryInput: null,
+      unavailableReason: readError,
+    });
+
+    await harness.unmount();
+  });
 });

@@ -169,6 +169,30 @@ describe("settings git sections", () => {
     expect(html).toContain("GitLab repository hosting.");
   });
 
+  test("does not use GitHub copy when a configured provider read fails", () => {
+    const gitlabProvider = createGitlabProvider();
+    const html = renderToStaticMarkup(
+      createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: {
+          ...baseRepoConfig,
+          git: { provider: gitlabProvider },
+        },
+        providerState: {
+          status: "error",
+          message: "Could not load GitLab health.",
+        },
+        disabled: false,
+        onDetectGithubRepository: async () => null,
+        onUpdateSelectedRepoConfig: () => baseRepoConfig,
+      }),
+    );
+
+    expect(html).toContain(">Git provider gitlab<");
+    expect(html).toContain("This repository uses gitlab.");
+    expect(html).not.toContain("GitHub repository hosting and Pull Request integration.");
+  });
+
   test("does not report a missing CLI while GitHub is disabled", () => {
     const html = renderToStaticMarkup(
       createElement(RepositoryGitSection, {

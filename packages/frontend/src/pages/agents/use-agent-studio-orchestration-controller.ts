@@ -79,18 +79,24 @@ export const resolvePullRequestReviewAvailability = ({
 }) => {
   const supportsPullRequestReview =
     gitProviderContext?.descriptor.capabilities.supportsPullRequestReview === true;
+  const readFailedWithoutContext = gitProviderContext == null && gitProviderReadError != null;
+  const canShowPullRequestReview = supportsPullRequestReview || readFailedWithoutContext;
   const hasLinkedPullRequest =
     linkedPullRequest !== undefined &&
-    linkedPullRequest.providerId === gitProviderContext?.config.id;
+    (readFailedWithoutContext || linkedPullRequest.providerId === gitProviderContext?.config.id);
   let unavailableReason: string | null = null;
-  if (supportsPullRequestReview && gitProviderReadError) {
+  if (canShowPullRequestReview && gitProviderReadError) {
     unavailableReason = gitProviderReadError;
-  } else if (supportsPullRequestReview && gitProviderContext.health.available === false) {
+  } else if (
+    supportsPullRequestReview &&
+    gitProviderContext &&
+    gitProviderContext.health.available === false
+  ) {
     unavailableReason =
       gitProviderContext.health.reason ??
       `${gitProviderContext.descriptor.label} is not available for Pull Request review.`;
   }
-  return { supportsPullRequestReview, hasLinkedPullRequest, unavailableReason };
+  return { canShowPullRequestReview, hasLinkedPullRequest, unavailableReason };
 };
 
 type UseAgentStudioOrchestrationControllerResult = {
@@ -501,7 +507,7 @@ export function useAgentStudioOrchestrationController({
   } = useAgentStudioPageModels(pageModelsArgs);
 
   const {
-    supportsPullRequestReview,
+    canShowPullRequestReview,
     hasLinkedPullRequest,
     unavailableReason: pullRequestReviewUnavailableReason,
   } = resolvePullRequestReviewAvailability({
@@ -513,7 +519,7 @@ export function useAgentStudioOrchestrationController({
     role: selectedSessionContext.role,
     hasTaskContext: Boolean(selectedSessionContext.taskId),
     hasDocumentPanel: selectedSessionContext.documents.activeDocument !== null,
-    supportsPullRequestReview,
+    canShowPullRequestReview,
     hasLinkedPullRequest,
     pullRequestReviewUnavailableReason,
   });

@@ -292,7 +292,15 @@ const getGithubView = ({
     providerState.status === "loaded" && providerState.context?.config.id === configuredProvider?.id
       ? providerState.context
       : null;
-  const descriptor = resolvedContext?.descriptor ?? GITHUB_PROVIDER_DESCRIPTOR;
+  let providerLabel: string = GITHUB_PROVIDER_DESCRIPTOR.label;
+  let providerDescription: string = GITHUB_PROVIDER_DESCRIPTOR.description;
+  if (resolvedContext) {
+    providerLabel = resolvedContext.descriptor.label;
+    providerDescription = resolvedContext.descriptor.description;
+  } else if (hasConfiguredNonGithubProvider) {
+    providerLabel = `Git provider ${configuredProviderId}`;
+    providerDescription = `This repository uses ${configuredProviderId}.`;
+  }
   const health = resolvedContext?.health ?? null;
   const hasGithubCli = health?.executablePath != null;
   const githubHost = github.repository?.host ?? "github.com";
@@ -370,8 +378,8 @@ const getGithubView = ({
     hasConfiguredNonGithubProvider,
     hasRepositoryCoordinates,
     providerStatusLabel,
-    providerDescription: descriptor.description,
-    providerLabel: descriptor.label,
+    providerDescription,
+    providerLabel,
     repositorySlug,
     usesDefaultGithubHost,
   };
