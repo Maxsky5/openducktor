@@ -2,8 +2,6 @@
 
 This matrix lists every allowed task transition. The backend validates it. The UI cannot set a status directly. A workflow tool or task action must start each automatic transition.
 
-`task_transition` cannot move a task to `blocked` or `closed`. Use the corresponding workflow tool or task action.
-
 ## Workflow tools
 
 - `odt_read_task`: `taskId`

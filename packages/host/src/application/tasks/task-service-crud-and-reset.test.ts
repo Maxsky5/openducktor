@@ -2502,30 +2502,6 @@ describe("createTaskService task mutations and reset", () => {
       availableActions: expect.arrayContaining(["open_builder"]),
     });
   });
-  test.each(["in_progress", "ai_review", "human_review", "blocked"] as const)(
-    "generic transitions cannot bypass build_blocked from %s",
-    async (status) => {
-      const writes: unknown[] = [];
-      const taskStore: TaskStorePort = {
-        listTasks: () => Effect.succeed([task({ status })]),
-        transitionTask: (input) => {
-          writes.push(input);
-          return Effect.succeed(task({ status: "blocked" }));
-        },
-      };
-      await expect(
-        Effect.runPromise(
-          createTaskService({ taskStore }).transitionTask({
-            repoPath: "/repo",
-            taskId: "task-1",
-            status: "blocked",
-          }),
-        ),
-      ).rejects.toThrow("task_transition cannot block tasks. Use build_blocked with a reason.");
-      expect(writes).toEqual([]);
-    },
-  );
-
   test("returns the current task without store mutation when transition status is unchanged", async () => {
     const taskStore: TaskStorePort = {
       listTasks() {
