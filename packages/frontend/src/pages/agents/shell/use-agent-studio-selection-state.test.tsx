@@ -294,3 +294,20 @@ describe("useAgentStudioSelectionState", () => {
     await harness.unmount();
   });
 });
+
+test("selects two notification targets with the same native ID and keeps identity after URL cleanup", async () => {
+  const first = { ...session };
+  const second = { ...session, runtimeKind: "codex" as const, workingDirectory: "/repo/other" };
+  const harness = createHookHarness(
+    baseProps({ sessionExternalIdParam: first.externalSessionId, routeSessionIdentity: first }),
+  );
+  await harness.mount();
+  expect(harness.getLatest().selection.sessionIdentity).toEqual(first);
+  await harness.update(
+    baseProps({ sessionExternalIdParam: second.externalSessionId, routeSessionIdentity: second }),
+  );
+  expect(harness.getLatest().selection.sessionIdentity).toEqual(second);
+  await harness.update(baseProps({ sessionExternalIdParam: second.externalSessionId }));
+  expect(harness.getLatest().selection.sessionIdentity).toEqual(second);
+  await harness.unmount();
+});

@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { agentSessionLiveRefSchema } from "./agent-session-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
+import { agentSessionRecordSchema } from "./session-schemas";
 
 export const NOTIFICATION_KIND_VALUES = [
   "agent.permission_requested",
@@ -113,7 +115,7 @@ export function createDefaultNotificationSettings(): NotificationSettings {
 export const DEFAULT_NOTIFICATION_SETTINGS = createDefaultNotificationSettings();
 
 const notificationRepoTargetFields = {
-  repoPath: z.string().trim().min(1).max(1024),
+  repoPath: agentSessionLiveRefSchema.shape.repoPath,
 } as const;
 
 const notificationTaskTargetFields = {
@@ -126,9 +128,9 @@ const notificationSessionTargetFields = {
   taskId: z.string().trim().min(1).max(128).optional(),
 } as const;
 
-export const notificationSessionIdentitySchema = z.strictObject({
-  externalSessionId: z.string().trim().min(1).max(512),
-});
+export const notificationSessionIdentitySchema = agentSessionRecordSchema
+  .pick({ externalSessionId: true, runtimeKind: true, workingDirectory: true })
+  .strict();
 export type NotificationSessionIdentity = z.infer<typeof notificationSessionIdentitySchema>;
 
 export const notificationNavigationTargetSchema = z.discriminatedUnion("type", [
@@ -165,7 +167,7 @@ export type NotificationNavigationTarget = z.infer<typeof notificationNavigation
 export const notificationOccurrenceSchema = z.strictObject({
   occurrenceId: z.string().trim().min(1).max(1024),
   kind: notificationKindSchema,
-  repoPath: z.string().trim().min(1).max(1024),
+  repoPath: agentSessionLiveRefSchema.shape.repoPath,
   repositoryLabel: z.string().trim().min(1).max(120),
   task: z
     .strictObject({

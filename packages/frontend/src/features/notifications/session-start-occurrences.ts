@@ -18,6 +18,8 @@ const toSession = (
   session: NonNullable<SessionStartNotificationInput["session"]>,
 ): NotificationSessionIdentity => ({
   externalSessionId: session.externalSessionId,
+  runtimeKind: session.runtimeKind,
+  workingDirectory: session.workingDirectory,
 });
 
 const task = (

@@ -137,7 +137,9 @@ describe("session occurrence projector", () => {
           repoPath: "/repo",
           taskId: "task-1",
           session: {
-            externalSessionId: "session-1",
+            externalSessionId: ref.externalSessionId,
+            runtimeKind: ref.runtimeKind,
+            workingDirectory: ref.workingDirectory,
           },
           inputKind: "permission",
           requestId: "permission-1",

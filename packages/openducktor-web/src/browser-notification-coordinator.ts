@@ -24,10 +24,20 @@ const coordinatorMessageSchema = z.discriminatedUnion("type", [
     occurrence: notificationOccurrenceSchema,
     settings: notificationSettingsSchema.removeDefault(),
   }),
-  z.object({ type: z.literal("external_delivery_claimed"), occurrenceId: z.string().min(1) }),
+  z.object({
+    type: z.literal("external_delivery_claimed"),
+    occurrenceId: z.string().min(1),
+    claimId: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("external_delivery_claim_released"),
+    occurrenceId: z.string().min(1),
+    claimId: z.string().min(1),
+  }),
   z.object({
     type: z.literal("external_delivery_claim_ack"),
     occurrenceId: z.string().min(1),
+    claimId: z.string().min(1),
     tabId: z.string().min(1),
   }),
 ]);
@@ -165,7 +175,8 @@ export const createBrowserNotificationCoordinator = ({
   const candidateOccurrences = new Map<string, PendingOccurrence>();
   const selectedOccurrences = new Map<string, PendingOccurrence>();
   const pendingOccurrences = new Map<string, PendingOccurrence>();
-  const claimedOccurrences = new Set<string>();
+  const claimedOccurrences = new Map<string, string>();
+  const claimingOccurrences = new Set<string>();
   const occurrenceListeners = new Set<
     (occurrence: NotificationOccurrence, settings: NotificationSettings) => void
   >();
@@ -236,7 +247,7 @@ export const createBrowserNotificationCoordinator = ({
   };
 
   const waitForClaimAcknowledgementOrExit = (
-    occurrenceId: string,
+    claimId: string,
     recipientTabId: string,
   ): Promise<void> => {
     const controller = new AbortController();
@@ -247,9 +258,9 @@ export const createBrowserNotificationCoordinator = ({
         controller.abort();
       };
     });
-    const acknowledgements = claimAcknowledgements.get(occurrenceId) ?? new Map();
+    const acknowledgements = claimAcknowledgements.get(claimId) ?? new Map();
     acknowledgements.set(recipientTabId, acknowledge);
-    claimAcknowledgements.set(occurrenceId, acknowledgements);
+    claimAcknowledgements.set(claimId, acknowledgements);
     const exited = locks
       .request(
         `${TAB_LOCK_NAME_PREFIX}${recipientTabId}`,
@@ -262,18 +273,18 @@ export const createBrowserNotificationCoordinator = ({
         throw cause;
       })
       .finally(() => {
-        const currentAcknowledgements = claimAcknowledgements.get(occurrenceId);
+        const currentAcknowledgements = claimAcknowledgements.get(claimId);
         if (currentAcknowledgements?.get(recipientTabId) === acknowledge) {
           currentAcknowledgements.delete(recipientTabId);
           if (currentAcknowledgements.size === 0) {
-            claimAcknowledgements.delete(occurrenceId);
+            claimAcknowledgements.delete(claimId);
           }
         }
       });
     return Promise.race([acknowledged, exited]);
   };
 
-  const propagateClaim = async (occurrenceId: string): Promise<void> => {
+  const propagateClaim = async (occurrenceId: string, claimId: string): Promise<void> => {
     let snapshot: LockSnapshot;
     try {
       snapshot = await locks.query();
@@ -287,20 +298,20 @@ export const createBrowserNotificationCoordinator = ({
         .filter((value): value is string => value !== null && value !== tabId),
     );
     const acknowledgements = [...tabIds].map((recipientTabId) =>
-      waitForClaimAcknowledgementOrExit(occurrenceId, recipientTabId),
+      waitForClaimAcknowledgementOrExit(claimId, recipientTabId),
     );
     const registeredChannel = channel;
     if (!registeredChannel) {
       throw new Error("The browser notification channel is not registered.");
     }
-    registeredChannel.postMessage({ type: "external_delivery_claimed", occurrenceId });
+    registeredChannel.postMessage({ type: "external_delivery_claimed", occurrenceId, claimId });
     await Promise.all(acknowledgements);
     failureMessages.delete("claim");
   };
 
-  const trackClaimPropagation = (occurrenceId: string): Promise<void> => {
+  const trackClaimPropagation = (occurrenceId: string, claimId: string): Promise<void> => {
     let propagation: Promise<void>;
-    propagation = propagateClaim(occurrenceId).finally(() => {
+    propagation = propagateClaim(occurrenceId, claimId).finally(() => {
       activeClaimPropagations.delete(propagation);
     });
     activeClaimPropagations.add(propagation);
@@ -349,15 +360,27 @@ export const createBrowserNotificationCoordinator = ({
     const parsed = coordinatorMessageSchema.safeParse(event.data);
     if (!parsed.success) return;
     if (parsed.data.type === "external_delivery_claim_ack") {
-      claimAcknowledgements.get(parsed.data.occurrenceId)?.get(parsed.data.tabId)?.();
+      claimAcknowledgements.get(parsed.data.claimId)?.get(parsed.data.tabId)?.();
+      return;
+    }
+    if (parsed.data.type === "external_delivery_claim_released") {
+      const occurrenceId = parsed.data.occurrenceId;
+      if (claimedOccurrences.get(occurrenceId) !== parsed.data.claimId) return;
+      claimedOccurrences.delete(occurrenceId);
+      const selected = selectedOccurrences.get(occurrenceId);
+      if (selected) {
+        pendingOccurrences.set(occurrenceId, selected);
+        if (externalDeliveryOwner) notifyOccurrenceListeners(selected);
+      }
       return;
     }
     if (parsed.data.type === "external_delivery_claimed") {
-      claimedOccurrences.add(parsed.data.occurrenceId);
+      claimedOccurrences.set(parsed.data.occurrenceId, parsed.data.claimId);
       pendingOccurrences.delete(parsed.data.occurrenceId);
       channel?.postMessage({
         type: "external_delivery_claim_ack",
         occurrenceId: parsed.data.occurrenceId,
+        claimId: parsed.data.claimId,
         tabId,
       });
       return;
@@ -504,11 +527,28 @@ export const createBrowserNotificationCoordinator = ({
     },
     isExternalDeliveryOwner: () => externalDeliveryOwner,
     async claimExternalDelivery(occurrenceId) {
-      if (!externalDeliveryOwner || !pendingOccurrences.has(occurrenceId)) return false;
-      claimedOccurrences.add(occurrenceId);
-      pendingOccurrences.delete(occurrenceId);
-      await trackClaimPropagation(occurrenceId);
-      return true;
+      if (
+        !externalDeliveryOwner ||
+        !pendingOccurrences.has(occurrenceId) ||
+        claimingOccurrences.has(occurrenceId)
+      )
+        return false;
+      claimingOccurrences.add(occurrenceId);
+      const claimId = crypto.randomUUID();
+      try {
+        await trackClaimPropagation(occurrenceId, claimId);
+        claimedOccurrences.set(occurrenceId, claimId);
+        pendingOccurrences.delete(occurrenceId);
+        return true;
+      } catch (cause) {
+        // No external channel has run yet. Restore reservations in tabs that
+        // acknowledged before another recipient or the lock query failed.
+        for (const acknowledge of claimAcknowledgements.get(claimId)?.values() ?? []) acknowledge();
+        channel?.postMessage({ type: "external_delivery_claim_released", occurrenceId, claimId });
+        throw cause;
+      } finally {
+        claimingOccurrences.delete(occurrenceId);
+      }
     },
     async isAnyTabFocused() {
       const focusLockFailure = failureMessages.get("focus_lock");

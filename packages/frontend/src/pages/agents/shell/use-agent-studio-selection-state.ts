@@ -1,3 +1,5 @@
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
@@ -13,6 +15,7 @@ type UseAgentStudioSelectionStateArgs = {
   isWorkspaceRestorePending: boolean;
   taskIdParam: string;
   sessionExternalIdParam: string | null;
+  routeSessionIdentity?: AgentSessionIdentity | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
@@ -37,6 +40,7 @@ export function useAgentStudioSelectionState({
   isWorkspaceRestorePending,
   taskIdParam,
   sessionExternalIdParam,
+  routeSessionIdentity = null,
   hasExplicitRoleParam,
   roleFromQuery,
   scheduleQueryUpdate,
@@ -48,6 +52,7 @@ export function useAgentStudioSelectionState({
         isWorkspaceRestorePending,
         taskIdParam,
         sessionExternalIdParam,
+        routeSessionIdentity,
         hasExplicitRoleParam,
         roleFromQuery,
       }),
@@ -56,13 +61,16 @@ export function useAgentStudioSelectionState({
       isWorkspaceRestorePending,
       roleFromQuery,
       sessionExternalIdParam,
+      routeSessionIdentity,
       taskIdParam,
     ],
   );
-  const routeSelectionQueryKey = useMemo(
-    () => agentStudioSelectionQueryKey(routeSelection),
-    [routeSelection],
-  );
+  const routeSelectionQueryKey = useMemo(() => {
+    const queryKey = agentStudioSelectionQueryKey(routeSelection);
+    return routeSelection.sessionIdentity
+      ? `${queryKey}${agentSessionIdentityKey(routeSelection.sessionIdentity)}`
+      : queryKey;
+  }, [routeSelection]);
   const [snapshot, setSnapshot] = useState<SelectionStateSnapshot>(() => ({
     routeQueryKey: routeSelectionQueryKey,
     selection: routeSelection,

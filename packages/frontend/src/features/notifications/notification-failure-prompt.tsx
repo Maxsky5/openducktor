@@ -28,6 +28,11 @@ export function NotificationFailurePrompt({
       id = "notification-coordination-failure";
       action = { label: "Reload", onClick: onReload };
     }
+    if (failure.channel === "settings") {
+      title = "Notification settings could not be loaded";
+      id = "notification-settings-failure";
+      action = { label: "Reload", onClick: onReload };
+    }
     toast.error(title, {
       id,
       description: failure.message,

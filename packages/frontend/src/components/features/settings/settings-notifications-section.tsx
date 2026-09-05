@@ -24,8 +24,8 @@ import { useNotificationTestControls } from "@/state/notifications/use-notificat
 import {
   createNotificationSoundOptions,
   notificationCueOptions,
-  NotificationSoundPicker,
-} from "./settings-notification-sound-picker";
+} from "./settings-notification-sound-options";
+import { NotificationSoundPicker } from "./settings-notification-sound-picker";
 
 type SegmentedOption<Value extends string> = {
   value: Value;

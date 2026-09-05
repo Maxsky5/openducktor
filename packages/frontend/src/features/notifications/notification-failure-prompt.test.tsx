@@ -87,3 +87,21 @@ describe("NotificationFailurePrompt", () => {
     });
   });
 });
+
+test("offers reload when settings prevent notification delivery", async () => {
+  await withMockedToast(async ({ toastErrorMock }) => {
+    const onReload = mock(() => {});
+    render(
+      <NotificationFailurePrompt
+        failure={{ ...failure("settings-failure"), channel: "settings" }}
+        onOpenSettings={() => {}}
+        onReload={onReload}
+      />,
+    );
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+    expect(toastErrorMock.mock.calls[0]?.[0]).toBe("Notification settings could not be loaded");
+    expect(toastErrorMock.mock.calls[0]?.[1]).toMatchObject({
+      action: { label: "Reload", onClick: onReload },
+    });
+  });
+});

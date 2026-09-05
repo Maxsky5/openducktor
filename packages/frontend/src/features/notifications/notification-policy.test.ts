@@ -20,6 +20,8 @@ const occurrence: NotificationOccurrence = {
     taskId: "task-1",
     session: {
       externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktree",
     },
     inputKind: "permission",
     requestId: "permission-1",
@@ -47,9 +49,9 @@ const dispatchAsOwner = async (
   harness: ReturnType<typeof createHarness>,
   appFocused = false,
 ): Promise<void> => {
-  const result = await harness.policy.dispatch(occurrence, { phase: "local" });
+  const result = await harness.policy.dispatch(occurrence, { phase: "local" }, harness.settings);
   if (result.externalPlan) {
-    await harness.policy.dispatch(occurrence, { phase: "external", appFocused });
+    await harness.policy.dispatch(occurrence, { phase: "external", appFocused }, harness.settings);
   }
 };
 
@@ -91,7 +93,7 @@ describe("notification policy", () => {
   test("lets only the external owner deliver OS and sound", async () => {
     const harness = createHarness("both");
 
-    await harness.policy.dispatch(occurrence, { phase: "local" });
+    await harness.policy.dispatch(occurrence, { phase: "local" }, harness.settings);
 
     expect(harness.inApp).toHaveBeenCalledTimes(1);
     expect(harness.os).not.toHaveBeenCalled();
@@ -101,8 +103,12 @@ describe("notification policy", () => {
   test("delivers local once and external once when leadership replays an occurrence", async () => {
     const harness = createHarness("both");
 
-    await harness.policy.dispatch(occurrence, { phase: "local" });
-    await harness.policy.dispatch(occurrence, { phase: "external", appFocused: false });
+    await harness.policy.dispatch(occurrence, { phase: "local" }, harness.settings);
+    await harness.policy.dispatch(
+      occurrence,
+      { phase: "external", appFocused: false },
+      harness.settings,
+    );
 
     expect(harness.inApp).toHaveBeenCalledTimes(1);
     expect(harness.os).toHaveBeenCalledTimes(1);
@@ -112,8 +118,12 @@ describe("notification policy", () => {
   test("uses the current focus state when leadership changes", async () => {
     const harness = createHarness("both");
 
-    await harness.policy.dispatch(occurrence, { phase: "local" });
-    await harness.policy.dispatch(occurrence, { phase: "external", appFocused: true });
+    await harness.policy.dispatch(occurrence, { phase: "local" }, harness.settings);
+    await harness.policy.dispatch(
+      occurrence,
+      { phase: "external", appFocused: true },
+      harness.settings,
+    );
 
     expect(harness.inApp).toHaveBeenCalledTimes(1);
     expect(harness.os).not.toHaveBeenCalled();
@@ -144,4 +154,39 @@ describe("notification policy", () => {
       expect.objectContaining({ channel: "os", occurrenceId: occurrence.occurrenceId }),
     );
   });
+});
+
+test("reserves each delivery before overlapping dispatches run", async () => {
+  const harness = createHarness("both");
+  await Promise.all([dispatchAsOwner(harness), dispatchAsOwner(harness)]);
+  expect(harness.inApp).toHaveBeenCalledTimes(1);
+  expect(harness.os).toHaveBeenCalledTimes(1);
+  expect(harness.sound).toHaveBeenCalledTimes(1);
+});
+
+test("reports settings failure and recovery without replacing preferences", async () => {
+  let fail = true;
+  const onFailure = mock(() => {});
+  const onSettingsRecovered = mock(() => {});
+  const deliver = mock(async () => {});
+  const policy = createNotificationPolicy({
+    loadSettings: async () => {
+      if (fail) throw new Error("Config read failed");
+      return createDefaultNotificationSettings();
+    },
+    inApp: { deliver },
+    os: { deliver },
+    sound: { play: async () => {} },
+    onFailure,
+    onSettingsRecovered,
+  });
+  expect(await policy.loadSettingsCandidate(occurrence)).toBeNull();
+  expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ channel: "settings" }));
+  expect(onSettingsRecovered).not.toHaveBeenCalled();
+  expect(deliver).not.toHaveBeenCalled();
+  fail = false;
+  expect(await policy.loadSettingsCandidate(occurrence)).toEqual(
+    createDefaultNotificationSettings(),
+  );
+  expect(onSettingsRecovered).toHaveBeenCalledTimes(1);
 });

@@ -20,6 +20,8 @@ const occurrence: NotificationOccurrence = {
     taskId: "task-1",
     session: {
       externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktree",
     },
   },
 };

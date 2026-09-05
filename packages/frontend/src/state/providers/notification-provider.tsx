@@ -23,6 +23,7 @@ import type { NotificationDispatchFailure } from "@/features/notifications/notif
 import {
   clearCoordinationNotificationFailure,
   clearOsNotificationFailure,
+  clearSettingsNotificationFailure,
   createNotificationFailureState,
   type NotificationFailureState,
   recordNotificationFailure,
@@ -59,6 +60,11 @@ const reportProducerFailure = (failure: NotificationProducerFailure): void => {
     repoPath: failure.repoPath,
     source: failure.source,
   });
+  toast.error("Agent notification observation failed", {
+    id: `notification-producer-failure:${failure.repoPath}:${failure.source}`,
+    description: "OpenDucktor could not read live notification data. Reload to reconnect.",
+    action: { label: "Reload", onClick: () => window.location.reload() },
+  });
 };
 
 const unavailableNotificationNavigator: NotificationNavigator = async () => {
@@ -70,6 +76,7 @@ const unavailableNotificationNavigator: NotificationNavigator = async () => {
 type NotificationFailureAction =
   | { type: "reported"; failure: NotificationDispatchFailure }
   | { type: "os-shown" }
+  | { type: "settings-recovered" }
   | { type: "coordination-recovered" };
 
 const reduceNotificationFailureState = (
@@ -79,6 +86,7 @@ const reduceNotificationFailureState = (
   if (action.type === "reported") {
     return recordNotificationFailure(state, action.failure);
   }
+  if (action.type === "settings-recovered") return clearSettingsNotificationFailure(state);
   if (action.type === "os-shown") {
     return clearOsNotificationFailure(state);
   }
@@ -119,12 +127,17 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
           occurrenceId: failure.occurrenceId,
           repoPath: failure.repoPath,
         });
-        if (failure.channel === "os" || failure.channel === "coordination") {
+        if (
+          failure.channel === "os" ||
+          failure.channel === "coordination" ||
+          failure.channel === "settings"
+        ) {
           updateFailureState({ type: "reported", failure });
         }
       },
       onCoordinationRecovered: () => updateFailureState({ type: "coordination-recovered" }),
       onOsShown: () => updateFailureState({ type: "os-shown" }),
+      onSettingsRecovered: () => updateFailureState({ type: "settings-recovered" }),
     });
   }, [queryClient, shellNotifications]);
 

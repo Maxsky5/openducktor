@@ -5,6 +5,7 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import { buildAgentStudioHref } from "@/pages/agents/query-sync/agent-studio-navigation";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 
 export const ATTENTION_KIND_QUERY_KEY = "attention";
 export const ATTENTION_ID_QUERY_KEY = "attentionId";
@@ -45,7 +46,7 @@ export const matchesNotificationSession = (
     NotificationNavigationTarget,
     { type: "agent_session" | "pending_input" | "session_error" }
   >,
-): boolean => session.externalSessionId === target.session.externalSessionId;
+): boolean => matchesAgentSessionIdentity(session, target.session);
 
 type NotificationNavigationDependencies = {
   activeWorkspaceId: string | null;
@@ -119,6 +120,7 @@ export const navigateToNotificationTarget = async (
   });
   dependencies.navigate(
     target.type === "agent_session" ? href : addNotificationAttention(href, target),
+    { state: { notificationTarget: target } },
   );
 };
 
@@ -129,4 +131,18 @@ export const findNotificationAttentionTarget = (kind: string, id: string): HTMLE
   return (
     Array.from(candidates).find((element) => element.dataset.notificationAttentionId === id) ?? null
   );
+};
+
+export const openNotificationTarget = async (
+  target: NotificationNavigationTarget,
+  dependencies: NotificationNavigationDependencies,
+  reportFailure: (message: string) => void,
+): Promise<void> => {
+  try {
+    await navigateToNotificationTarget(target, dependencies);
+  } catch {
+    reportFailure(
+      "OpenDucktor could not load this notification target. Reload and open the notification again.",
+    );
+  }
 };

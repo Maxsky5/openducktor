@@ -73,3 +73,16 @@ describe("notification failure state", () => {
     );
   });
 });
+
+test("keeps settings failures visible until settings recover", async () => {
+  const { clearSettingsNotificationFailure } = await import("./notification-failure-state");
+  const settings = { ...failure("settings-failed"), channel: "settings" as const };
+  const os = failure("os-failed");
+  const state = recordNotificationFailure(
+    recordNotificationFailure(createNotificationFailureState(), os),
+    settings,
+  );
+  expect(selectNotificationFailure(clearOsNotificationFailure(state))).toBe(settings);
+  expect(selectNotificationFailure(clearCoordinationNotificationFailure(state))).toBe(settings);
+  expect(selectNotificationFailure(clearSettingsNotificationFailure(state))).toBe(os);
+});

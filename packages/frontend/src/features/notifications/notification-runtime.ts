@@ -13,6 +13,7 @@ import {
   type createCuelumeNotificationSoundAdapter,
   type createSonnerNotificationAdapter,
 } from "./notification-delivery";
+import { boundNotificationOccurrenceId } from "./notification-occurrence-id";
 import { prepareNotificationOccurrence } from "./notification-occurrence";
 import { createNotificationPolicy, type NotificationDispatchFailure } from "./notification-policy";
 
@@ -25,6 +26,7 @@ export const createNotificationRuntime = ({
   onFailure,
   onCoordinationRecovered,
   onOsShown = () => {},
+  onSettingsRecovered = () => {},
   inApp,
   sound,
 }: {
@@ -34,6 +36,7 @@ export const createNotificationRuntime = ({
   onFailure(failure: NotificationDispatchFailure): void;
   onCoordinationRecovered(): void;
   onOsShown?: () => void;
+  onSettingsRecovered?: () => void;
   inApp: ReturnType<typeof createSonnerNotificationAdapter>;
   sound: ReturnType<typeof createCuelumeNotificationSoundAdapter>;
 }) => {
@@ -45,6 +48,7 @@ export const createNotificationRuntime = ({
     os,
     sound,
     onFailure,
+    onSettingsRecovered,
   });
 
   const testOccurrence: NotificationOccurrence = {
@@ -93,7 +97,7 @@ export const createNotificationRuntime = ({
 
   const dispatch = async (
     rawOccurrence: NotificationOccurrence,
-    suppliedSettings?: NotificationSettings,
+    suppliedSettings: NotificationSettings,
   ): Promise<boolean> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
     const localResult = await policy.dispatch(occurrence, { phase: "local" }, suppliedSettings);
@@ -113,7 +117,7 @@ export const createNotificationRuntime = ({
             reportCoordinationFailure("external_delivery", occurrence, cause);
           }
         }
-        await policy.dispatch(occurrence, { phase: "external", appFocused });
+        await policy.dispatch(occurrence, { phase: "external", appFocused }, suppliedSettings);
         coordinationCompleted = true;
       });
     } catch (cause) {
@@ -127,12 +131,14 @@ export const createNotificationRuntime = ({
   };
 
   const publishAndWait = async (rawOccurrence: NotificationOccurrence): Promise<boolean> => {
-    const occurrence = notificationOccurrenceSchema.parse(
-      prepareNotificationOccurrence(rawOccurrence),
-    );
-    const settings = await policy.loadSettingsCandidate(occurrence);
-    if (!settings) return false;
+    let occurrence = rawOccurrence;
     try {
+      occurrence = notificationOccurrenceSchema.parse({
+        ...prepareNotificationOccurrence(rawOccurrence),
+        occurrenceId: await boundNotificationOccurrenceId(rawOccurrence.occurrenceId),
+      });
+      const settings = await policy.loadSettingsCandidate(occurrence);
+      if (!settings) return false;
       const selected = await bridge.publishOccurrence(occurrence, settings);
       recoverCoordinationFailure("publication");
       return await dispatch(selected.occurrence, selected.settings);
@@ -143,7 +149,6 @@ export const createNotificationRuntime = ({
   };
 
   return {
-    dispatch,
     publish(rawOccurrence: NotificationOccurrence): void {
       void publishAndWait(rawOccurrence);
     },

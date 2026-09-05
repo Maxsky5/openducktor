@@ -23,6 +23,8 @@ const target: Extract<NotificationNavigationTarget, { type: "pending_input" }> =
   taskId: "task-1",
   session: {
     externalSessionId: "session-1",
+    runtimeKind: "codex",
+    workingDirectory: "/repo/worktree",
   },
   inputKind: "permission",
   requestId: "request-1",
@@ -34,7 +36,11 @@ describe("notification navigation", () => {
     expect(
       matchesNotificationSession(session, {
         ...target,
-        session: { externalSessionId: "session-other" },
+        session: {
+          externalSessionId: "session-other",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/worktree",
+        },
       }),
     ).toBe(false);
   });
@@ -140,3 +146,59 @@ describe("notification navigation", () => {
     expect(findNotificationAttentionTarget("error", "missing")).toBeNull();
   });
 });
+
+test("rejects a matching native ID from a different runtime or worktree", () => {
+  expect(matchesNotificationSession({ ...session, runtimeKind: "opencode" }, target)).toBe(false);
+  expect(matchesNotificationSession({ ...session, workingDirectory: "/other" }, target)).toBe(
+    false,
+  );
+});
+
+test("passes the exact session identity through transient navigation state", async () => {
+  const navigate = mock(() => {});
+  await navigateToNotificationTarget(target, {
+    activeWorkspaceId: "workspace",
+    workspaces: [{ workspaceId: "workspace", repoPath: "/repo" }],
+    selectWorkspace: async () => {},
+    loadTasks: async () => [createTaskCardFixture({ id: "task-1" })],
+    loadTaskSessions: async () => [{ ...session, runtimeKind: "opencode" }, session],
+    navigate,
+    reportStale: () => {
+      throw new Error("unexpected stale target");
+    },
+  });
+  expect(navigate).toHaveBeenCalledWith(
+    "/agents?task=task-1&session=session-1&agent=build&attention=permission&attentionId=request-1",
+    { state: { notificationTarget: target } },
+  );
+});
+
+test.each(["workspace", "tasks", "sessions"])(
+  "reports %s read failures without rejecting the click",
+  async (stage) => {
+    const { openNotificationTarget } = await import("./notification-navigation-logic");
+    const reportFailure = mock(() => {});
+    const navigate = mock(() => {});
+    const fail = async () => {
+      throw new Error("Host unavailable");
+    };
+    await expect(
+      openNotificationTarget(
+        target,
+        {
+          activeWorkspaceId: null,
+          workspaces: [{ workspaceId: "workspace", repoPath: "/repo" }],
+          selectWorkspace: stage === "workspace" ? fail : async () => {},
+          loadTasks:
+            stage === "tasks" ? fail : async () => [createTaskCardFixture({ id: "task-1" })],
+          loadTaskSessions: stage === "sessions" ? fail : async () => [session],
+          navigate,
+          reportStale: () => {},
+        },
+        reportFailure,
+      ),
+    ).resolves.toBeUndefined();
+    expect(reportFailure).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+  },
+);

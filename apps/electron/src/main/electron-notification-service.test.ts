@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import { ELECTRON_NOTIFICATION_CLICKED_CHANNEL } from "../shared/electron-bridge-contract";
 import { createElectronNotificationService } from "./electron-notification-service";
 
@@ -141,4 +141,54 @@ describe("Electron notification service", () => {
       permission: "denied",
     });
   });
+});
+
+test("settles missing native confirmation and clears the failure after recovery", async () => {
+  FakeNativeNotification.supported = true;
+  FakeNativeNotification.instances = [];
+  let expire = () => {
+    throw new Error("Expected a confirmation deadline");
+  };
+  const originalSetTimeout = globalThis.setTimeout;
+  const timer = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+    if (delay === 10_000) expire = () => callback(...args);
+    return originalSetTimeout(callback, delay, ...args);
+  });
+  const service = createElectronNotificationService({
+    Notification: FakeNativeNotification,
+    getPermission: () => "granted",
+    getWindows: () => [],
+  });
+  try {
+    const pending = service.show(request);
+    expire();
+    await expect(pending).resolves.toMatchObject({
+      status: "failed",
+      message: expect.stringContaining("10 seconds"),
+    });
+    expect(FakeNativeNotification.instances[0]?.close).toHaveBeenCalledTimes(1);
+    expect(service.getCapability().failureMessage).toContain("test again");
+    const recovery = service.show(request);
+    FakeNativeNotification.instances[1]?.emit("show");
+    await expect(recovery).resolves.toEqual({ status: "shown" });
+    expect(service.getCapability().failureMessage).toBeUndefined();
+  } finally {
+    service.dispose();
+    timer.mockRestore();
+  }
+});
+
+test.each(["close", "dispose"])("settles an unconfirmed notification on %s", async (ending) => {
+  FakeNativeNotification.supported = true;
+  FakeNativeNotification.instances = [];
+  const service = createElectronNotificationService({
+    Notification: FakeNativeNotification,
+    getPermission: () => "granted",
+    getWindows: () => [],
+  });
+  const pending = service.show(request);
+  if (ending === "close") FakeNativeNotification.instances[0]?.emit("close");
+  else service.dispose();
+  await expect(pending).resolves.toMatchObject({ status: "failed" });
+  service.dispose();
 });

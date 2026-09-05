@@ -1,5 +1,6 @@
 import type {
   AgentSessionRecord,
+  AgentSessionLiveRef,
   AgentSessionWorkflowScope,
   ExternalTaskSyncEvent,
   NotificationOccurrence,
@@ -7,6 +8,7 @@ import type {
   TaskEventTaskSnapshot,
 } from "@openducktor/contracts";
 import type { TaskStreamNotificationSink } from "@/state/tasks/task-stream-controller";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createTaskOccurrenceProjector } from "./task-occurrence-projector";
 
 export type NotificationWorkspace = {
@@ -33,7 +35,7 @@ const toSessionAssociations = (
   const associations = new Map<string, AgentSessionWorkflowScope>();
   for (const [taskId, records] of Object.entries(recordsByTaskId)) {
     for (const record of records) {
-      associations.set(record.externalSessionId, {
+      associations.set(agentSessionIdentityKey(record), {
         kind: "workflow",
         taskId,
         role: record.role,
@@ -72,12 +74,7 @@ export const createNotificationTaskObserver = ({
     repoPath: string,
     taskIds: string[],
   ): Promise<Map<string, AgentSessionWorkflowScope>> => {
-    try {
-      return toSessionAssociations(await loadSessionRecords(repoPath, taskIds));
-    } catch (cause) {
-      onFailure({ repoPath, source: "session", cause });
-      return new Map();
-    }
+    return toSessionAssociations(await loadSessionRecords(repoPath, taskIds));
   };
 
   const loadBaseline = async (workspace: NotificationWorkspace): Promise<void> => {
@@ -209,11 +206,10 @@ export const createNotificationTaskObserver = ({
       const task = entries.get(repoPath)?.tasks.get(taskId);
       return task ? { id: task.id, title: task.title } : null;
     },
-    resolveSessionAssociation(
-      repoPath: string,
-      externalSessionId: string,
-    ): AgentSessionWorkflowScope | null {
-      return entries.get(repoPath)?.sessionAssociations.get(externalSessionId) ?? null;
+    resolveSessionAssociation(ref: AgentSessionLiveRef): AgentSessionWorkflowScope | null {
+      return (
+        entries.get(ref.repoPath)?.sessionAssociations.get(agentSessionIdentityKey(ref)) ?? null
+      );
     },
   };
 };

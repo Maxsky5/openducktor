@@ -47,6 +47,7 @@ type CreateNotificationPolicyOptions = {
   os: OsNotificationAdapter;
   sound: SoundNotificationAdapter;
   onFailure(failure: NotificationDispatchFailure): void;
+  onSettingsRecovered?(): void;
 };
 
 type DeliveryChannel = "in_app" | "os" | "sound";
@@ -75,9 +76,10 @@ export const createNotificationPolicy = ({
   os,
   sound,
   onFailure,
+  onSettingsRecovered = () => {},
 }: CreateNotificationPolicyOptions) => {
-  const settingsSnapshots = new Map<string, Promise<NotificationSettings | null>>();
-  const terminalChannels = new Map<string, Set<DeliveryChannel>>();
+  const localOccurrences = new Set<string>();
+  const externalOccurrences = new Set<string>();
 
   const reportFailure = (
     occurrence: NotificationOccurrence,
@@ -97,57 +99,22 @@ export const createNotificationPolicy = ({
     occurrence: NotificationOccurrence,
   ): Promise<NotificationSettings | null> =>
     loadSettings()
-      .then((settings) => notificationSettingsSchema.parse(settings))
+      .then((settings) => {
+        const parsed = notificationSettingsSchema.parse(settings);
+        onSettingsRecovered();
+        return parsed;
+      })
       .catch((cause: unknown) => {
         reportFailure(occurrence, "settings", cause);
         return null;
       });
 
-  const loadSettingsSnapshot = (
-    occurrence: NotificationOccurrence,
-    suppliedSettings?: NotificationSettings,
-  ): Promise<NotificationSettings | null> => {
-    const existing = settingsSnapshots.get(occurrence.occurrenceId);
-    if (existing) return existing;
-    const snapshot =
-      suppliedSettings === undefined
-        ? loadSettingsCandidate(occurrence)
-        : Promise.resolve(suppliedSettings)
-            .then((settings) => notificationSettingsSchema.parse(settings))
-            .catch((cause: unknown) => {
-              reportFailure(occurrence, "settings", cause);
-              return null;
-            });
-    settingsSnapshots.set(occurrence.occurrenceId, snapshot);
-    return snapshot;
-  };
-
-  const markChannelTerminal = (occurrenceId: string, channel: DeliveryChannel): boolean => {
-    const terminal = terminalChannels.get(occurrenceId) ?? new Set();
-    if (terminal.has(channel)) return false;
-    terminal.add(channel);
-    terminalChannels.set(occurrenceId, terminal);
-    return true;
-  };
-
-  const addDelivery = (
-    occurrenceId: string,
-    deliveries: PendingDelivery[],
-    delivery: PendingDelivery,
-  ): void => {
-    if (!markChannelTerminal(occurrenceId, delivery.channel)) return;
-    deliveries.push(delivery);
-  };
-
   const dispatch = async (
     rawOccurrence: NotificationOccurrence,
     context: NotificationDispatchContext,
-    suppliedSettings?: NotificationSettings,
+    settings: NotificationSettings,
   ): Promise<NotificationDispatchResult> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
-    const settings = await loadSettingsSnapshot(occurrence, suppliedSettings);
-    if (!settings) return { externalPlan: null, inAppDelivered: false };
-
     const kindSettings = settings.kinds[occurrence.kind];
     if (!kindSettings.enabled) {
       return { externalPlan: null, inAppDelivered: false };
@@ -155,36 +122,21 @@ export const createNotificationPolicy = ({
 
     const copy = buildNotificationCopy(occurrence);
     const deliveries: PendingDelivery[] = [];
-    if (context.phase === "local" && targetIncludesInApp(kindSettings.target)) {
-      addDelivery(occurrence.occurrenceId, deliveries, {
-        channel: "in_app",
-        run: () => inApp.deliver(copy, occurrence),
-      });
-    }
-
     const osSelected = targetIncludesOs(kindSettings.target);
     const cue = resolveNotificationCue(kindSettings.sound, settings.globalCue);
-    if (context.phase === "external" && osSelected) {
-      const canDeliverOs = settings.osFocus === "always_send" || context.appFocused === false;
-      if (canDeliverOs) {
-        addDelivery(occurrence.occurrenceId, deliveries, {
-          channel: "os",
-          run: () => os.deliver(copy, occurrence),
-        });
-      } else {
-        markChannelTerminal(occurrence.occurrenceId, "os");
+    if (context.phase === "local" && !localOccurrences.has(occurrence.occurrenceId)) {
+      localOccurrences.add(occurrence.occurrenceId);
+      if (targetIncludesInApp(kindSettings.target)) {
+        deliveries.push({ channel: "in_app", run: () => inApp.deliver(copy, occurrence) });
       }
     }
-
-    if (context.phase === "external" && cue) {
-      const canPlaySound = settings.soundFocus === "always_play" || context.appFocused === false;
-      if (canPlaySound) {
-        addDelivery(occurrence.occurrenceId, deliveries, {
-          channel: "sound",
-          run: () => sound.play(cue, settings.volumePercent),
-        });
-      } else {
-        markChannelTerminal(occurrence.occurrenceId, "sound");
+    if (context.phase === "external" && !externalOccurrences.has(occurrence.occurrenceId)) {
+      externalOccurrences.add(occurrence.occurrenceId);
+      if (osSelected && (settings.osFocus === "always_send" || context.appFocused === false)) {
+        deliveries.push({ channel: "os", run: () => os.deliver(copy, occurrence) });
+      }
+      if (cue && (settings.soundFocus === "always_play" || context.appFocused === false)) {
+        deliveries.push({ channel: "sound", run: () => sound.play(cue, settings.volumePercent) });
       }
     }
 
@@ -202,18 +154,15 @@ export const createNotificationPolicy = ({
       }
     }
 
-    if (context.phase === "external") {
+    if (context.phase === "external" || externalOccurrences.has(occurrence.occurrenceId)) {
       return { externalPlan: null, inAppDelivered };
     }
-    const terminal = terminalChannels.get(occurrence.occurrenceId);
-    const osPending = osSelected && !terminal?.has("os");
-    const soundPending = Boolean(cue) && !terminal?.has("sound");
     const externalPlan =
-      osPending || soundPending
+      osSelected || cue
         ? {
             requiresFocus:
-              (osPending && settings.osFocus === "suppress_if_focused") ||
-              (soundPending && settings.soundFocus === "mute_while_focused"),
+              (osSelected && settings.osFocus === "suppress_if_focused") ||
+              (Boolean(cue) && settings.soundFocus === "mute_while_focused"),
           }
         : null;
     return { externalPlan, inAppDelivered };

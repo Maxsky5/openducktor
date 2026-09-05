@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type {
   AgentSessionRecord,
+  AgentSessionLiveSnapshot,
   AgentSessionLiveEnvelope,
   NotificationOccurrence,
   TaskCard,
@@ -218,7 +219,9 @@ describe("all-workspace notification observation", () => {
     });
     await taskObserver.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
 
-    expect(taskObserver.resolveSessionAssociation("/repo-a", "session-1")).toEqual({
+    expect(
+      taskObserver.resolveSessionAssociation({ repoPath: "/repo-a", ...workflowSessionRecord }),
+    ).toEqual({
       kind: "workflow",
       taskId: "task-1",
       role: "build",
@@ -235,7 +238,9 @@ describe("all-workspace notification observation", () => {
       emittedAt: "2026-08-31T10:01:00.000Z",
     });
 
-    expect(taskObserver.resolveSessionAssociation("/repo-a", "session-1")).toBeNull();
+    expect(
+      taskObserver.resolveSessionAssociation({ repoPath: "/repo-a", ...workflowSessionRecord }),
+    ).toBeNull();
   });
 
   test("publishes each event-bound workflow transition when task reads see a newer state", async () => {
@@ -282,4 +287,94 @@ describe("all-workspace notification observation", () => {
       },
     ]);
   });
+});
+
+test("starts observation again after a failed registration on the next workspace sync", async () => {
+  const onFailure = mock(() => {});
+  const stop = mock(() => {});
+  const observe = mock(async () => {
+    if (observe.mock.calls.length === 1) throw new Error("Subscription failed");
+    return stop;
+  });
+  const taskObserver = createNotificationTaskObserver({
+    loadTasks: async () => [],
+    loadSessionRecords: async () => ({}),
+    publish: () => {},
+    onFailure,
+  });
+  const observer = createNotificationWorkspaceObserver({
+    observe,
+    taskObserver,
+    publish: () => {},
+    onFailure,
+  });
+  const workspaces = [{ repoPath: "/repo", repositoryLabel: "Repo" }];
+  await observer.syncWorkspaces(workspaces);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(onFailure).toHaveBeenCalledTimes(1);
+  await observer.syncWorkspaces(workspaces);
+  await Promise.resolve();
+  expect(observe).toHaveBeenCalledTimes(2);
+  observer.dispose();
+  expect(stop).toHaveBeenCalledTimes(1);
+});
+
+test("retains full-identity workflow associations when the next session read fails", async () => {
+  const onFailure = mock(() => {});
+  let fail = false;
+  const tasks = [createTaskCardFixture({ id: "task-1", status: "open" })];
+  const taskObserver = createNotificationTaskObserver({
+    loadTasks: async () => tasks,
+    loadSessionRecords: async () => {
+      if (fail) throw new Error("Session read failed");
+      return { "task-1": [workflowSessionRecord] };
+    },
+    publish: () => {},
+    onFailure,
+  });
+  const workspaces = [{ repoPath: "/repo-a", repositoryLabel: "Repo" }];
+  await taskObserver.syncWorkspaces(workspaces);
+  fail = true;
+  await expect(
+    taskObserver.sink.onChange({
+      kind: "tasks_updated",
+      eventId: "event-failed-read",
+      repoPath: "/repo-a",
+      taskIds: ["task-1"],
+      removedTaskIds: [],
+      taskSnapshots: [{ id: "task-1", title: "Task", status: "spec_ready" }],
+      emittedAt: "2026-09-05T10:00:00.000Z",
+    }),
+  ).rejects.toThrow("Session read failed");
+  const ref = { repoPath: "/repo-a", ...workflowSessionRecord };
+  expect(taskObserver.resolveSessionAssociation(ref)?.taskId).toBe("task-1");
+  expect(
+    taskObserver.resolveSessionAssociation({ ...ref, workingDirectory: "/different" }),
+  ).toBeNull();
+  let listener = (_envelope: AgentSessionLiveEnvelope) => {};
+  const published: NotificationOccurrence[] = [];
+  const observer = createNotificationWorkspaceObserver({
+    observe: async (_input, next) => {
+      listener = next;
+      return () => {};
+    },
+    taskObserver,
+    publish: (item) => published.push(item),
+    onFailure,
+  });
+  await observer.syncWorkspaces(workspaces);
+  const live: AgentSessionLiveSnapshot = {
+    ref,
+    activity: "running",
+    startedAt: "2026-09-05T10:00:00.000Z",
+    title: "Builder",
+    pendingApprovals: [],
+    pendingQuestions: [],
+    contextUsage: null,
+  };
+  listener({ type: "session_upsert", session: live });
+  listener({ type: "session_upsert", session: { ...live, activity: "idle" } });
+  expect(published).toMatchObject([{ kind: "agent.session_idle", task: { id: "task-1" } }]);
+  observer.dispose();
 });
