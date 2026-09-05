@@ -338,7 +338,7 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      listTasks(input) {
+      listKanbanTasks(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "tasks_list", input });

@@ -1,22 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import {
-  createSettingsSnapshotFixture,
-  createTaskCardFixture,
-} from "@/test-utils/shared-test-fixtures";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { documentQueryKeys } from "./documents";
 import { createTaskViewSync, type TaskViewSyncPorts } from "./task-view-sync";
 import { taskQueryKeys } from "./tasks";
 import { workspaceQueryKeys } from "./workspace";
 
-const doneVisibleDays = 1;
-const settings: SettingsSnapshot = createSettingsSnapshotFixture({
-  kanban: { doneVisibleDays },
-});
-
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
-  loadSettings: async () => settings,
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
   loadFreshDocument: async () => ({ markdown: "# Fresh", updatedAt: "2026-04-10T13:10:00.000Z" }),
   ...overrides,
@@ -24,7 +15,6 @@ const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPo
 
 const createSync = (ports: TaskViewSyncPorts) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settings);
   return { queryClient, sync: createTaskViewSync({ queryClient, ports }) };
 };
 
@@ -136,7 +126,7 @@ describe("TaskViewSync", () => {
   test("cancels active event documents and task lists before removing or invalidating", async () => {
     const { queryClient, sync } = createSync(createPorts());
     const calls = recordQueryOperations(queryClient);
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo", doneVisibleDays), { tasks: [] });
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [] });
     queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
       markdown: "# Retained",
       updatedAt: null,
@@ -220,45 +210,11 @@ describe("TaskViewSync", () => {
     ).toBe(true);
   });
 
-  test("refreshes cached documents for existing tasks hidden from the kanban list", async () => {
-    const listTasks = mock(
-      async (_repoPath: string, requestedDoneVisibleDays?: number): Promise<TaskCard[]> =>
-        requestedDoneVisibleDays === undefined
-          ? [createTaskCardFixture({ id: "task-1", status: "closed" })]
-          : [],
-    );
-    const loadFreshDocument = mock(async () => ({
-      markdown: "# Updated hidden task",
-      updatedAt: "2026-04-10T13:10:00.000Z",
-    }));
-    const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
-      markdown: "# Stale",
-      updatedAt: null,
-    });
-
-    await sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-hidden-task",
-        repoPath: "/repo",
-        taskIds: ["task-1"],
-        removedTaskIds: [],
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
-      "/repo",
-    );
-
-    expect(listTasks).toHaveBeenCalledWith("/repo", doneVisibleDays);
-    expect(listTasks).toHaveBeenCalledWith("/repo", undefined);
-    expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
-  });
-
   test("invalidates inactive repository caches without fetching", async () => {
     const listTasks = mock(async () => [] satisfies TaskCard[]);
     const loadFreshDocument = mock(async () => ({ markdown: "# Fresh", updatedAt: null }));
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
-    queryClient.setQueryData(taskQueryKeys.repoData("/inactive", doneVisibleDays), { tasks: [] });
+    queryClient.setQueryData(taskQueryKeys.repoData("/inactive"), { tasks: [] });
     queryClient.setQueryData(documentQueryKeys.spec("/inactive", "task-1"), {
       markdown: "# Stale",
       updatedAt: null,
@@ -278,10 +234,9 @@ describe("TaskViewSync", () => {
 
     expect(listTasks).not.toHaveBeenCalled();
     expect(loadFreshDocument).not.toHaveBeenCalled();
-    expect(
-      queryClient.getQueryState(taskQueryKeys.repoData("/inactive", doneVisibleDays))
-        ?.isInvalidated,
-    ).toBe(true);
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/inactive"))?.isInvalidated).toBe(
+      true,
+    );
     expect(
       queryClient.getQueryState(documentQueryKeys.spec("/inactive", "task-1"))?.isInvalidated,
     ).toBe(true);
@@ -290,7 +245,7 @@ describe("TaskViewSync", () => {
   test("cancels inactive event documents and task lists before invalidation", async () => {
     const { queryClient, sync } = createSync(createPorts());
     const calls = recordQueryOperations(queryClient);
-    queryClient.setQueryData(taskQueryKeys.repoData("/inactive", doneVisibleDays), { tasks: [] });
+    queryClient.setQueryData(taskQueryKeys.repoData("/inactive"), { tasks: [] });
     queryClient.setQueryData(documentQueryKeys.spec("/inactive", "task-1"), {
       markdown: "# Stale",
       updatedAt: null,
@@ -381,13 +336,45 @@ describe("TaskViewSync", () => {
     await expect(sync.refreshManually("/repo")).rejects.toThrow("task list unavailable");
   });
 
+  test("refreshes tasks when the settings query fails", async () => {
+    const listTasks = mock(async () => [createTaskCardFixture({ id: "task-2" })]);
+    const { queryClient, sync } = createSync(createPorts({ listTasks }));
+    await expect(
+      queryClient.fetchQuery({
+        queryKey: workspaceQueryKeys.settingsSnapshot(),
+        queryFn: async () => {
+          throw new Error("settings unavailable");
+        },
+      }),
+    ).rejects.toThrow("settings unavailable");
+
+    await expect(sync.refreshManually("/repo")).resolves.toBeUndefined();
+    expect(listTasks).toHaveBeenCalledWith("/repo");
+  });
+
+  test("loads repository tasks when the settings query fails", async () => {
+    const listTasks = mock(async () => [createTaskCardFixture({ id: "task-2" })]);
+    const { queryClient, sync } = createSync(createPorts({ listTasks }));
+    await expect(
+      queryClient.fetchQuery({
+        queryKey: workspaceQueryKeys.settingsSnapshot(),
+        queryFn: async () => {
+          throw new Error("settings unavailable");
+        },
+      }),
+    ).rejects.toThrow("settings unavailable");
+
+    await expect(sync.loadWorkspace("/repo")).resolves.toBeUndefined();
+    expect(listTasks).toHaveBeenCalledWith("/repo");
+  });
+
   test("reconciles snapshots without fetching cached documents that may be deleted", async () => {
     const listTasks = mock(async () => []);
     const loadFreshDocument = mock(async () => {
       throw new Error("task no longer exists");
     });
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo", doneVisibleDays), { tasks: [] });
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [] });
     queryClient.setQueryData(documentQueryKeys.spec("/repo", "deleted-task"), {
       markdown: "# Stale",
       updatedAt: null,
@@ -396,19 +383,14 @@ describe("TaskViewSync", () => {
     await sync.reconcileStreamSnapshot("/repo");
 
     expect(loadFreshDocument).not.toHaveBeenCalled();
-    expect(listTasks).toHaveBeenCalledWith("/repo", doneVisibleDays);
+    expect(listTasks).toHaveBeenCalledWith("/repo");
     expect(
       queryClient.getQueryState(documentQueryKeys.spec("/repo", "deleted-task"))?.isInvalidated,
     ).toBe(true);
   });
 
-  test("refreshes active snapshot documents for existing tasks hidden from the kanban list", async () => {
-    const listTasks = mock(
-      async (_repoPath: string, requestedDoneVisibleDays?: number): Promise<TaskCard[]> =>
-        requestedDoneVisibleDays === undefined
-          ? [createTaskCardFixture({ id: "task-1", status: "closed" })]
-          : [],
-    );
+  test("does not refresh active snapshot documents absent from the kanban list", async () => {
+    const listTasks = mock(async (): Promise<TaskCard[]> => []);
     const loadFreshDocument = mock(async () => ({
       markdown: "# Updated hidden task",
       updatedAt: "2026-04-10T13:10:00.000Z",
@@ -419,11 +401,12 @@ describe("TaskViewSync", () => {
     const unsubscribe = observeDocument(queryClient, documentKey);
 
     try {
-      await sync.reconcileStreamSnapshot("/repo");
+      await expect(sync.reconcileStreamSnapshot("/repo")).resolves.toEqual([]);
 
-      expect(listTasks).toHaveBeenCalledWith("/repo", doneVisibleDays);
-      expect(listTasks).toHaveBeenCalledWith("/repo", undefined);
-      expect(loadFreshDocument).toHaveBeenCalledWith("/repo", "task-1", "spec");
+      expect(listTasks).toHaveBeenCalledWith("/repo");
+      expect(listTasks).toHaveBeenCalledTimes(1);
+      expect(loadFreshDocument).not.toHaveBeenCalled();
+      expect(queryClient.getQueryState(documentKey)?.isInvalidated).toBe(true);
     } finally {
       unsubscribe();
     }
@@ -473,7 +456,7 @@ describe("TaskViewSync", () => {
     const listTasks = mock(async () => []);
     const loadFreshDocument = mock(async () => ({ markdown: "# Snapshot", updatedAt: null }));
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo", doneVisibleDays), { tasks: [] });
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [] });
     queryClient.setQueryData(documentQueryKeys.plan("/inactive", "task-1"), {
       markdown: "# Stale",
       updatedAt: null,
@@ -481,8 +464,8 @@ describe("TaskViewSync", () => {
 
     await sync.reconcileStreamSnapshot("/repo");
 
-    expect(listTasks).toHaveBeenCalledWith("/repo", doneVisibleDays);
-    expect(listTasks).not.toHaveBeenCalledWith("/inactive", doneVisibleDays);
+    expect(listTasks).toHaveBeenCalledWith("/repo");
+    expect(listTasks).not.toHaveBeenCalledWith("/inactive");
     expect(loadFreshDocument).not.toHaveBeenCalled();
     expect(
       queryClient.getQueryState(documentQueryKeys.plan("/inactive", "task-1"))?.isInvalidated,
@@ -492,8 +475,8 @@ describe("TaskViewSync", () => {
   test("cancels snapshot document and inactive task queries before invalidating", async () => {
     const { queryClient, sync } = createSync(createPorts());
     const calls = recordQueryOperations(queryClient);
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo", doneVisibleDays), { tasks: [] });
-    queryClient.setQueryData(taskQueryKeys.repoData("/inactive", doneVisibleDays), { tasks: [] });
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [] });
+    queryClient.setQueryData(taskQueryKeys.repoData("/inactive"), { tasks: [] });
     queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
       markdown: "# Active stale",
       updatedAt: null,

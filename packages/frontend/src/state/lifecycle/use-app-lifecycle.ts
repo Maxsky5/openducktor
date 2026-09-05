@@ -8,6 +8,7 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { taskQueryKeys } from "@/state/queries/tasks";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { TaskStreamController } from "@/state/tasks/task-stream-controller";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
@@ -23,6 +24,8 @@ export type TaskStreamControllerFactory = (input: {
   queryClient: QueryClient;
   getActiveRepoPath: () => string | null;
   onDegraded: (cause: unknown) => void;
+  onSnapshotFinished: (repoPath: string | null, succeeded: boolean) => void;
+  onSnapshotStarted: (repoPath: string | null) => void;
 }) => TaskStreamController;
 
 type UseAppLifecycleArgs = {
@@ -49,6 +52,8 @@ const lifecycleTimers: LifecycleTimerPort<ReturnType<typeof setTimeout>> = {
   clearTimeout: (timer) => clearTimeout(timer),
 };
 
+const loadTasksWithoutStream = Promise.resolve(true);
+
 export function useAppLifecycle({
   activeWorkspace,
   runtimeDefinitions,
@@ -64,6 +69,9 @@ export function useAppLifecycle({
   const queryClient = useQueryClient();
   const activeWorkspaceRef = useRef(activeWorkspace);
   const loadWorkspaceTasksRef = useRef(loadWorkspaceTasks);
+  const shouldLoadWorkspaceTasksRef = useRef<Promise<boolean>>(loadTasksWithoutStream);
+  const failedStreamSnapshotReposRef = useRef<Set<string>>(new Set());
+  const streamSnapshotReposRef = useRef<Set<string>>(new Set());
 
   useLayoutEffect(() => {
     activeWorkspaceRef.current = activeWorkspace;
@@ -93,6 +101,20 @@ export function useAppLifecycle({
   }, [activeWorkspace?.repoPath, refreshRepoRuntimeHealth, runtimeKinds, startRepoRuntime]);
 
   useEffect(() => {
+    failedStreamSnapshotReposRef.current = new Set();
+    streamSnapshotReposRef.current = new Set();
+    let taskLoadDecisionMade = false;
+    let resolveTaskLoadDecision!: (shouldLoadWorkspaceTasks: boolean) => void;
+    shouldLoadWorkspaceTasksRef.current = new Promise<boolean>((resolve) => {
+      resolveTaskLoadDecision = resolve;
+    });
+    const decideTaskLoad = (shouldLoadWorkspaceTasks: boolean): void => {
+      if (taskLoadDecisionMade) {
+        return;
+      }
+      taskLoadDecisionMade = true;
+      resolveTaskLoadDecision(shouldLoadWorkspaceTasks);
+    };
     const controller = taskStreamControllerFactory({
       queryClient,
       getActiveRepoPath: () => activeWorkspaceRef.current?.repoPath ?? null,
@@ -100,11 +122,30 @@ export function useAppLifecycle({
         const description = summarizeTaskLoadError({ error });
         toast.error("Task stream degraded", { description });
       },
+      onSnapshotStarted: (repoPath) => {
+        if (repoPath) {
+          failedStreamSnapshotReposRef.current.delete(repoPath);
+          streamSnapshotReposRef.current.add(repoPath);
+        }
+      },
+      onSnapshotFinished: (repoPath, succeeded) => {
+        if (repoPath) {
+          streamSnapshotReposRef.current.delete(repoPath);
+          if (!succeeded) {
+            failedStreamSnapshotReposRef.current.add(repoPath);
+          }
+        }
+      },
     });
-    void controller.start().catch((cause: unknown) => {
-      toast.error("Task stream unavailable", { description: errorMessage(cause) });
-    });
+    void controller.start().then(
+      () => decideTaskLoad(false),
+      (cause: unknown) => {
+        decideTaskLoad(true);
+        toast.error("Task stream unavailable", { description: errorMessage(cause) });
+      },
+    );
     return () => {
+      decideTaskLoad(false);
       void controller.stop();
     };
   }, [queryClient, taskStreamControllerFactory]);
@@ -117,16 +158,37 @@ export function useAppLifecycle({
     }
 
     const loadVersion = ++repoLoadVersionRef.current;
+    const shouldLoadWorkspaceTasks = shouldLoadWorkspaceTasksRef.current;
+    const isCurrent = () =>
+      repoLoadVersionRef.current === loadVersion &&
+      activeWorkspaceRef.current?.repoPath === activeRepoPath;
     return startRepositoryLoad({
       repoPath: activeRepoPath,
-      isCurrent: () =>
-        repoLoadVersionRef.current === loadVersion &&
-        activeWorkspaceRef.current?.repoPath === activeRepoPath,
+      isCurrent,
       refreshBranches,
       refreshTaskStoreCheckForRepo,
-      loadWorkspaceTasks: (repoPath) => loadWorkspaceTasksRef.current(repoPath),
+      loadWorkspaceTasks: async (repoPath) => {
+        const streamUnavailable = await shouldLoadWorkspaceTasks;
+        const taskQueryState = queryClient.getQueryState(taskQueryKeys.repoData(repoPath));
+        const streamFailedForRepo = failedStreamSnapshotReposRef.current.has(repoPath);
+        const streamOwnsRepo = streamSnapshotReposRef.current.has(repoPath);
+        const queryOwnsRepo =
+          taskQueryState?.status === "success" || taskQueryState?.fetchStatus === "fetching";
+        if (
+          (streamUnavailable || (!streamFailedForRepo && !streamOwnsRepo && !queryOwnsRepo)) &&
+          isCurrent()
+        ) {
+          await loadWorkspaceTasksRef.current(repoPath);
+        }
+      },
       notifications: lifecycleNotifications,
       timers: lifecycleTimers,
     });
-  }, [activeWorkspace, clearBranchData, refreshTaskStoreCheckForRepo, refreshBranches]);
+  }, [
+    activeWorkspace,
+    clearBranchData,
+    queryClient,
+    refreshTaskStoreCheckForRepo,
+    refreshBranches,
+  ]);
 }

@@ -20,7 +20,6 @@ import type {
   DeleteTaskInput,
   DirectMergeInput,
   ListAgentSessionsForTasksInput,
-  ListTasksInput,
   MarkdownDocumentInput,
   OptionalNoteInput,
   PullRequestLinkMergedInput,
@@ -37,7 +36,6 @@ import { HostValidationError } from "../../effect/host-errors";
 import {
   normalizedAgentSessionIdentitySchema,
   optionalBoolean,
-  optionalNonNegativeInteger,
   parseAgentSessionIdentity,
   parseCreateInput,
   parseDescriptionAssets,
@@ -58,11 +56,6 @@ import {
   requireParsedRecord,
 } from "./command-inputs";
 
-const optionalNonNegativeIntegerSchema = z.union([
-  z.number().int().nonnegative(),
-  z.null(),
-  z.undefined(),
-]);
 const optionalBooleanSchema = z.union([z.boolean(), z.null(), z.undefined()]);
 const optionalStringSchema = z.union([z.string(), z.null(), z.undefined()]);
 const taskIdsSchema = z.array(z.unknown());
@@ -93,16 +86,6 @@ export const parseTaskIdInput = (input: HostCommandArgs, label: string): TaskIdI
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
   };
-};
-
-export const parseListTasksInput = (input: HostCommandArgs): ListTasksInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), "tasks_list input");
-  const repoPath = readRequiredString(record, "repoPath");
-  const doneVisibleDays = optionalNonNegativeInteger(
-    optionalNonNegativeIntegerSchema.safeParse(record.doneVisibleDays),
-    "doneVisibleDays",
-  );
-  return doneVisibleDays === undefined ? { repoPath } : { repoPath, doneVisibleDays };
 };
 
 export const parseListAgentSessionsForTasksInput = (

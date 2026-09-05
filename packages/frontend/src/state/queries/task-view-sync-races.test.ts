@@ -1,19 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import {
-  createSettingsSnapshotFixture,
-  createTaskCardFixture,
-} from "@/test-utils/shared-test-fixtures";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { documentQueryKeys } from "./documents";
 import { createTaskViewSync, type TaskViewSyncPorts } from "./task-view-sync";
 import { taskQueryKeys } from "./tasks";
-import { workspaceQueryKeys } from "./workspace";
-
-const doneVisibleDays = 1;
-const settings: SettingsSnapshot = createSettingsSnapshotFixture({
-  kanban: { doneVisibleDays },
-});
 
 const createDeferred = <T>() => {
   let resolve: (value: T) => void = () => {};
@@ -24,7 +15,6 @@ const createDeferred = <T>() => {
 };
 
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
-  loadSettings: async () => settings,
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
   loadFreshDocument: async () => ({ markdown: "# Fresh", updatedAt: "2026-04-10T13:10:00.000Z" }),
   ...overrides,
@@ -32,11 +22,38 @@ const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPo
 
 const createSync = (ports: TaskViewSyncPorts) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settings);
   return { queryClient, sync: createTaskViewSync({ queryClient, ports }) };
 };
 
 describe("TaskViewSync races", () => {
+  test("uses the snapshot task read for a workspace load started at the same time", async () => {
+    const taskList = createDeferred<TaskCard[]>();
+    const taskListStarted = createDeferred<void>();
+    const listTasks = mock(async () => {
+      taskListStarted.resolve();
+      return taskList.promise;
+    });
+    const { sync } = createSync(createPorts({ listTasks }));
+
+    const snapshot = sync.reconcileStreamSnapshot("/repo");
+    const workspaceLoad = sync.loadWorkspace("/repo");
+    void workspaceLoad.catch(() => {});
+
+    try {
+      await taskListStarted.promise;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      expect(listTasks).toHaveBeenCalledTimes(1);
+
+      taskList.resolve([createTaskCardFixture({ id: "task-1" })]);
+      await expect(snapshot).resolves.toEqual(["task-1"]);
+      await expect(workspaceLoad).resolves.toBeUndefined();
+    } finally {
+      taskList.resolve([createTaskCardFixture({ id: "task-1" })]);
+      await Promise.allSettled([snapshot, workspaceLoad]);
+    }
+  });
+
   test("runs external document refreshes in event order", async () => {
     const firstDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const secondDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
@@ -187,9 +204,8 @@ describe("TaskViewSync races", () => {
     await expect(first).rejects.toBe(firstFailure);
     await expect(second).resolves.toBeUndefined();
     expect(
-      queryClient.getQueryData<{ tasks: TaskCard[] }>(
-        taskQueryKeys.repoData("/repo", doneVisibleDays),
-      )?.tasks[0]?.id,
+      queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
+        ?.id,
     ).toBe("fresh");
   });
 
@@ -228,9 +244,8 @@ describe("TaskViewSync races", () => {
       await Promise.all([first, second]);
 
       expect(
-        queryClient.getQueryData<{ tasks: TaskCard[] }>(
-          taskQueryKeys.repoData("/repo", doneVisibleDays),
-        )?.tasks[0]?.id,
+        queryClient.getQueryData<{ tasks: TaskCard[] }>(taskQueryKeys.repoData("/repo"))?.tasks[0]
+          ?.id,
       ).toBe("task-2");
     } finally {
       releaseFirstCancel.resolve();
@@ -360,62 +375,6 @@ describe("TaskViewSync races", () => {
     }
   });
 
-  test("finishes a hidden-task snapshot lookup before a queued local refresh", async () => {
-    const hiddenTaskLookup = createDeferred<TaskCard[]>();
-    const hiddenTaskLookupStarted = createDeferred<void>();
-    let hiddenTaskReads = 0;
-    const { queryClient, sync } = createSync(
-      createPorts({
-        listTasks: async (_repoPath, requestedDoneVisibleDays) => {
-          if (requestedDoneVisibleDays !== undefined) {
-            return [];
-          }
-          hiddenTaskReads += 1;
-          if (hiddenTaskReads === 1) {
-            hiddenTaskLookupStarted.resolve();
-            return hiddenTaskLookup.promise;
-          }
-          return [createTaskCardFixture({ id: "task-1", status: "closed" })];
-        },
-        loadFreshDocument: async () => ({
-          markdown: "# Fresh",
-          updatedAt: "2026-04-10T13:11:00.000Z",
-        }),
-      }),
-    );
-    const documentKey = documentQueryKeys.spec("/repo", "task-1");
-    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
-    const observer = new QueryObserver(queryClient, {
-      queryKey: documentKey,
-      queryFn: async () => ({ markdown: "# Observed", updatedAt: null }),
-      staleTime: Infinity,
-    });
-    const unsubscribe = observer.subscribe(() => {});
-
-    try {
-      const snapshot = sync.reconcileStreamSnapshot("/repo");
-      await hiddenTaskLookupStarted.promise;
-
-      const localRefresh = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(hiddenTaskReads).toBe(1);
-
-      hiddenTaskLookup.resolve([createTaskCardFixture({ id: "task-1", status: "closed" })]);
-      await Promise.all([snapshot, localRefresh]);
-
-      expect(hiddenTaskReads).toBe(1);
-      expect(
-        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
-      ).toEqual({
-        markdown: "# Fresh",
-        updatedAt: "2026-04-10T13:11:00.000Z",
-      });
-    } finally {
-      hiddenTaskLookup.resolve([createTaskCardFixture({ id: "task-1", status: "closed" })]);
-      unsubscribe();
-    }
-  });
-
   test("runs a same-task document refresh after the snapshot refresh", async () => {
     const snapshotDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
     const successorDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
@@ -506,7 +465,7 @@ describe("TaskViewSync races", () => {
       const snapshot = sync.reconcileStreamSnapshot("/repo");
 
       staleDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-      await expect(Promise.all([refresh, snapshot])).resolves.toEqual([undefined, undefined]);
+      await expect(Promise.all([refresh, snapshot])).resolves.toEqual([undefined, ["task-1"]]);
 
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
@@ -732,7 +691,7 @@ describe("TaskViewSync races", () => {
     });
     const loadFreshDocument = mock(async () => ({ markdown: "# Unexpected", updatedAt: null }));
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
-    const taskKey = taskQueryKeys.repoData("/inactive", doneVisibleDays);
+    const taskKey = taskQueryKeys.repoData("/inactive");
     const documentKey = documentQueryKeys.spec("/inactive", "task-1");
     queryClient.setQueryData(taskKey, {
       tasks: [createTaskCardFixture({ id: "task-1", status: "open" })],

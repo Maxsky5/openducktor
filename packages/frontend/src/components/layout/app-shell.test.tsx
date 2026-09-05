@@ -530,10 +530,7 @@ describe("AppShell", () => {
       workspaceAdd,
       prepareQueryClient: (queryClient) => {
         void queryClient.fetchQuery({
-          ...repoTaskDataQueryOptions(
-            createdWorkspace.repoPath,
-            createSettingsSnapshotFixture().kanban.doneVisibleDays,
-          ),
+          ...repoTaskDataQueryOptions(createdWorkspace.repoPath),
           queryFn: async () => {
             await initialTaskLoad.promise;
             return { tasks: [] };

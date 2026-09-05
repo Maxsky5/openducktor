@@ -15,6 +15,7 @@ import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { gitProviderHealthQueryKeys } from "../../queries/git-provider-health";
+import { repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
 import {
   loadRepoConfigFromQuery,
   loadSettingsSnapshotFromQuery,
@@ -174,6 +175,7 @@ export function useRepoSettingsOperations({
 
   const saveSettingsSnapshot = useCallback(
     async (snapshot: SettingsSnapshotSaveInput): Promise<void> => {
+      const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsSnapshotQueryKey);
       const workspaces = await host.workspaceSaveSettingsSnapshot(snapshot);
       queryClient.removeQueries({
         queryKey: settingsSnapshotQueryKey,
@@ -186,6 +188,27 @@ export function useRepoSettingsOperations({
       queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
+      const savedActiveWorkspace = workspaces.find((workspace) => workspace.isActive);
+      const retentionChanged =
+        previousSnapshot !== undefined &&
+        previousSnapshot.kanban.doneVisibleDays !== normalizedSnapshot.kanban.doneVisibleDays;
+      if (retentionChanged) {
+        await queryClient.cancelQueries({ queryKey: taskQueryKeys.all }, { silent: true });
+        await queryClient.invalidateQueries({
+          queryKey: taskQueryKeys.all,
+          refetchType: "none",
+        });
+        if (savedActiveWorkspace) {
+          try {
+            await queryClient.fetchQuery({
+              ...repoTaskDataQueryOptions(savedActiveWorkspace.repoPath),
+              staleTime: 0,
+            });
+          } catch {
+            // TanStack Query keeps the failure for the task-loading error path to report.
+          }
+        }
+      }
       void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
       void queryClient.invalidateQueries({ queryKey: gitProviderHealthQueryKeys.all });
     },

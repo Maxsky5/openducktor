@@ -10,7 +10,6 @@ import {
   parseDeleteTaskInput,
   parseDirectMergeInput,
   parseListAgentSessionsForTasksInput,
-  parseListTasksInput,
   parseMarkdownDocumentInput,
   parseOptionalNoteInput,
   parsePullRequestLinkMergedInput,
@@ -99,5 +98,5 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.saveSpecDocument(
         parseMarkdownDocumentInput(args, "spec_save_document input", "spec"),
       ),
-    tasks_list: (args) => taskService.listTasks(parseListTasksInput(args)),
+    tasks_list: (args) => taskService.listKanbanTasks(parseRepoPathInput(args, "tasks_list input")),
   }) satisfies HostCommandHandlerDefinitions;

@@ -32,9 +32,7 @@ export const useOnboardingWorkspaceCompletion = ({
       setCompletionRepoPath(input.repoPath);
 
       const destinationQueries: Promise<unknown>[] = [
-        queryClient.fetchQuery(
-          repoTaskDataQueryOptions(input.repoPath, settingsSnapshot.kanban.doneVisibleDays),
-        ),
+        queryClient.fetchQuery(repoTaskDataQueryOptions(input.repoPath)),
       ];
       if (settingsSnapshot.appearance.horizontalScrollbarVisibility === "system") {
         destinationQueries.push(queryClient.fetchQuery(platformQueryOptions()));

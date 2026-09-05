@@ -74,7 +74,7 @@ export type TaskDocumentReadResult = {
   error?: string | null;
 };
 
-type TasksListArgs = { repoPath: string; doneVisibleDays?: number };
+type TasksListArgs = { repoPath: string };
 type TaskCreateArgs = {
   repoPath: string;
   input: TaskCreateInput;
@@ -162,11 +162,8 @@ export class HostTaskClient {
     return repoPath;
   }
 
-  async tasksList(repoPath: string, doneVisibleDays?: number): Promise<TaskCard[]> {
+  async tasksList(repoPath: string): Promise<TaskCard[]> {
     const args: TasksListArgs = { repoPath };
-    if (doneVisibleDays !== undefined) {
-      args.doneVisibleDays = doneVisibleDays;
-    }
     return this.invokeFn("tasks_list", args, arrayResultSchema(taskCardSchema, "tasks_list"));
   }
 

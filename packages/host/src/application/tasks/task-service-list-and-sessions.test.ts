@@ -1,6 +1,9 @@
 import { Effect } from "effect";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
+import { toSettingsSnapshot } from "../workspaces/workspace-settings-model";
 import {
   createAgentSessionRecord,
   createAgentSessionSettingsConfig,
@@ -12,6 +15,38 @@ import {
 } from "./test-support/task-workflow-harness";
 
 describe("createTaskService list and session reads", () => {
+  test("loads Kanban tasks with zero and default host-owned retention settings", async () => {
+    const calls: Array<{ repoPath: string; doneVisibleDays?: number }> = [];
+    const taskStore: TaskStorePort = {
+      listTasks(input) {
+        calls.push(input);
+        return Effect.succeed([]);
+      },
+    };
+    const settingsInputs = [
+      toSettingsSnapshot({
+        ...createDefaultGlobalConfig(),
+        kanban: { doneVisibleDays: 0, emptyColumnDisplay: "show" },
+      }),
+      toSettingsSnapshot(createDefaultGlobalConfig()),
+    ];
+
+    for (const settings of settingsInputs) {
+      const workspaceSettingsService = createWorkspaceSettingsServiceTestDouble({
+        getSettingsSnapshot: () => Effect.succeed(settings),
+      });
+      const service = createTaskService({ taskStore, workspaceSettingsService });
+      await expect(
+        Effect.runPromise(service.listKanbanTasks({ repoPath: "/repo" })),
+      ).resolves.toEqual([]);
+    }
+
+    expect(calls).toEqual([
+      { repoPath: "/repo", doneVisibleDays: 0 },
+      { repoPath: "/repo", doneVisibleDays: 1 },
+    ]);
+  });
+
   test("preserves typed task asset failures from task mutations", async () => {
     const failure = new TaskAssetError({
       operation: "create",
@@ -273,95 +308,6 @@ describe("createTaskService list and session reads", () => {
       createTaskService({ taskStore }).listTasks({ repoPath: "/repo" }),
     );
     expect(tasks[0]?.availableActions).toContain("human_approve");
-  });
-  test("rejects invalid list command input before calling the service", async () => {
-    const taskStore: TaskStorePort = {
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call store");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call store");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call store");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call store");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call store");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      listTasks() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("should not call store");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    const { createTaskCommandHandlers } =
-      await import("../../interface/commands/task-command-handlers");
-    const service = createTaskService({ taskStore });
-    const handlers = createTaskCommandHandlers(service);
-    expect(() => handlers.tasks_list?.({ repoPath: "/repo", doneVisibleDays: -1 })).toThrow(
-      "doneVisibleDays must be greater than or equal to 0.",
-    );
   });
   test("loads task metadata through the task store", async () => {
     const calls: unknown[] = [];

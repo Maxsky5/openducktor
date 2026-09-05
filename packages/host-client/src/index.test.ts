@@ -136,6 +136,18 @@ describe("HostClient", () => {
     expect(rewrittenAfterReplace).toHaveLength(1);
   });
 
+  test("uses host-owned retention for task lists", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "tasks_list") {
+        return [];
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(client.tasksList("/repo")).resolves.toEqual([]);
+    expect(calls).toEqual([{ command: "tasks_list", args: { repoPath: "/repo" } }]);
+  });
+
   test("parses filesystem directory listings from the host", async () => {
     const { client, calls } = createClient((command, args) => {
       if (command === "filesystem_list_directory") {

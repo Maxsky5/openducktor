@@ -32,6 +32,7 @@ const createTaskServiceDefaults = () =>
     linkMergedPullRequest: unexpectedTaskServiceCall("linkMergedPullRequest"),
     linkPullRequest: unexpectedTaskServiceCall("linkPullRequest"),
     listTasks: unexpectedTaskServiceCall("listTasks"),
+    listKanbanTasks: unexpectedTaskServiceCall("listKanbanTasks"),
     planGet: unexpectedTaskServiceCall("planGet"),
     qaApproved: unexpectedTaskServiceCall("qaApproved"),
     qaGetReport: unexpectedTaskServiceCall("qaGetReport"),

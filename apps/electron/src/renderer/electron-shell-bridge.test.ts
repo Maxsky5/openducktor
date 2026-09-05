@@ -244,7 +244,8 @@ describe("electron shell bridge", () => {
         await finishFirstChange.promise;
       }
     });
-    const reconcileStreamSnapshot = mock(async () => {});
+    const snapshotTaskIds = ["task-1"];
+    const reconcileStreamSnapshot = mock(async () => snapshotTaskIds);
     const reconcileAgentSessionExternalEvent = mock(async () => {});
     const reconcileAgentSessionStreamSnapshot = mock(async () => {});
     const invalidateAllTaskMetadata = mock(() => {});
@@ -285,6 +286,7 @@ describe("electron shell bridge", () => {
     await flushTaskStream();
     expect(acknowledgements).toEqual([taskStreamCursor(0)]);
     reconcileStreamSnapshot.mockClear();
+    reconcileAgentSessionStreamSnapshot.mockClear();
     invalidateAllTaskMetadata.mockClear();
 
     stream.publish(taskStreamEvent(1));
@@ -299,7 +301,7 @@ describe("electron shell bridge", () => {
     expect(reconcileExternalEvent).toHaveBeenCalledTimes(1);
     expect(reconcileAgentSessionExternalEvent).toHaveBeenCalledWith(taskStreamEvent(1));
     expect(reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
-    expect(reconcileAgentSessionStreamSnapshot).toHaveBeenCalledWith("/repo");
+    expect(reconcileAgentSessionStreamSnapshot).toHaveBeenCalledWith("/repo", snapshotTaskIds);
     expect(invalidateAllTaskMetadata).toHaveBeenCalledTimes(1);
     expect(acknowledgements).toEqual([taskStreamCursor(0), taskStreamCursor(257)]);
     expect(failures).toEqual([]);
