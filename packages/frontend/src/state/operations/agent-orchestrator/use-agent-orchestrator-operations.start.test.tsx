@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import {
   acceptedUserMessageForInput,
   BUILD_SELECTION,
@@ -45,6 +46,58 @@ describe("use-agent-orchestrator-operations start and send", () => {
       await harness.updateArgs({});
 
       expect(harness.getLatest().operations).toBe(firstOperations);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("invalidates only the failed workflow task's worktree queries", async () => {
+    const failure = new Error("workflow start failed");
+    const dependencies = createTestDependencies(
+      {},
+      {
+        agentSessionWorkflowStart: async () => {
+          throw failure;
+        },
+      },
+    );
+    const failedKeys = [null, taskFixture.updatedAt].map((taskVersion) =>
+      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/tmp/repo", taskId: "task-1", taskVersion }),
+    );
+    const otherKeys = [
+      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/tmp/repo", taskId: "task-2" }),
+      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/other/repo", taskId: "task-1" }),
+    ];
+    for (const key of [...failedKeys, ...otherKeys]) {
+      dependencies.queryClient.setQueryData(key, {
+        workingDirectory: "/tmp/repo/worktree",
+        source: "active_build_run",
+      });
+    }
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixture],
+      refreshTaskData: async () => {},
+      dependencies,
+    });
+    try {
+      await harness.mount();
+      await harness.run(async () => {
+        await expect(
+          harness.getLatest().operations.startAgentSession({
+            taskId: "task-1",
+            role: "build",
+            startMode: "fresh",
+            selectedModel: BUILD_SELECTION,
+          }),
+        ).rejects.toBe(failure);
+      });
+      for (const key of failedKeys) {
+        expect(dependencies.queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+      }
+      for (const key of otherKeys) {
+        expect(dependencies.queryClient.getQueryState(key)?.isInvalidated).toBe(false);
+      }
     } finally {
       await harness.unmount();
     }

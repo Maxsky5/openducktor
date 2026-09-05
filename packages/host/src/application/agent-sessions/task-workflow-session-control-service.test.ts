@@ -177,9 +177,15 @@ const createModelUpdateService = ({
   });
 
 describe("createTaskWorkflowSessionControlService", () => {
-  test.each([false, true])(
-    "waits for interrupted runtime creation before cleanup (stop fails: %s)",
-    async (stopFails) => {
+  test.each([
+    { step: "runtime", stopFails: false, storeFails: false },
+    { step: "runtime", stopFails: true, storeFails: false },
+    { step: "store", stopFails: false, storeFails: false },
+    { step: "store", stopFails: true, storeFails: false },
+    { step: "store", stopFails: false, storeFails: true },
+  ])(
+    "waits for the interrupted startup step before cleanup: %j",
+    async ({ step, stopFails, storeFails }) => {
       const calls: string[] = [];
       const created = await Effect.runPromise(Deferred.make<void>());
       const returnSummary = await Effect.runPromise(Deferred.make<void>());
@@ -208,8 +214,10 @@ describe("createTaskWorkflowSessionControlService", () => {
           startSession: () =>
             Effect.gen(function* () {
               calls.push("runtime-created");
-              yield* Deferred.succeed(created, undefined);
-              yield* Deferred.await(returnSummary);
+              if (step === "runtime") {
+                yield* Deferred.succeed(created, undefined);
+                yield* Deferred.await(returnSummary);
+              }
               calls.push("runtime-returned");
               return summary;
             }),
@@ -234,7 +242,19 @@ describe("createTaskWorkflowSessionControlService", () => {
         },
         tasks: {
           agentSessionsList: () => Effect.dieMessage("unexpected list"),
-          agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+          agentSessionUpsert: () =>
+            Effect.gen(function* () {
+              yield* Deferred.succeed(created, undefined);
+              yield* Deferred.await(returnSummary);
+              if (storeFails) {
+                calls.push("store-failed");
+                return yield* Effect.fail(
+                  new HostOperationError({ operation: "test.store", message: "store failed" }),
+                );
+              }
+              calls.push("store-committed");
+              return true;
+            }),
           agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
         },
       });
@@ -244,11 +264,15 @@ describe("createTaskWorkflowSessionControlService", () => {
         await Effect.runPromise(Fiber.interruptFork(fiber));
         await Effect.runPromise(Deferred.succeed(returnSummary, undefined));
         expect(Exit.isFailure(await Effect.runPromise(Fiber.await(fiber)))).toBe(true);
-        expect(calls).toEqual(
-          stopFails
-            ? ["runtime-created", "runtime-returned", "stop-runtime"]
-            : ["runtime-created", "runtime-returned", "stop-runtime", "cleanup-worktree"],
-        );
+        const expected = ["runtime-created", "runtime-returned"];
+        if (step === "store") {
+          expected.push(storeFails ? "store-failed" : "store-committed");
+        }
+        expected.push("stop-runtime");
+        if (!stopFails && (step === "runtime" || storeFails)) {
+          expected.push("cleanup-worktree");
+        }
+        expect(calls).toEqual(expected);
         await expect(
           Effect.runPromise(
             Effect.scoped(deps.taskLifecycle.acquireLifecycle("/repo", ["task-1"], "close task")),

@@ -6,6 +6,7 @@ import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-
 import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
 import { refreshAgentSessionListQuery } from "@/state/queries/agent-sessions";
+import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type {
@@ -231,7 +232,19 @@ export function useAgentOrchestratorOperations({
         sessionTurnState,
         updateSession,
         canonicalizePath: runtimeHostPort.gitCanonicalizePath,
-        startWorkflowSession: runtimeHostPort.agentSessionWorkflowStart,
+        startWorkflowSession: async (input) => {
+          try {
+            return await runtimeHostPort.agentSessionWorkflowStart(input);
+          } catch (cause) {
+            await queryClient.invalidateQueries({
+              queryKey: taskWorktreeQueryKeys.taskWorktree({
+                repoPath: input.repoPath,
+                taskId: input.sessionScope.taskId,
+              }),
+            });
+            throw cause;
+          }
+        },
         ensureExistingSessionRuntime,
         loadTaskDocuments: (repoPath, taskId) =>
           loadTaskDocuments(repoPath, taskId, hostPort.taskMetadataGetFresh),

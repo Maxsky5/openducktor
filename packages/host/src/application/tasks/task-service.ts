@@ -99,7 +99,6 @@ import {
 import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 import {
   createTaskSessionStartPreparationService,
-  type PreparedTaskSessionStart,
   type TaskSessionStartPreparationInput,
 } from "./worktrees/task-session-start-preparation-service";
 
@@ -358,26 +357,28 @@ const createTaskServiceImplementation = (
             [startInput.taskId],
             "start build",
           );
-          let prepared: PreparedTaskSessionStart | null = null;
-          let cleanup: PreparedTaskSessionStart["cleanup"] = () => Effect.succeed("");
-          const completion = yield* Effect.either(
-            Effect.gen(function* () {
-              const preparationInput: TaskSessionStartPreparationInput = {
-                canonicalRepoPath,
-                taskId: startInput.taskId,
-                role: "build",
-                runtimeKind: startInput.runtimeKind,
-              };
-              prepared = yield* taskSessionStart.prepare(preparationInput);
-              cleanup = prepared.cleanup;
-              yield* taskSessionStart.complete(prepared, (transitionInput) =>
-                input.taskStore.transitionTask(transitionInput),
-              );
-              return buildSessionBootstrapSchema.parse({
-                runtimeKind: prepared.runtimeKind,
-                workingDirectory: prepared.workingDirectory,
-              });
-            }).pipe(Effect.onInterrupt(() => cleanup().pipe(Effect.orDie, Effect.asVoid))),
+          const preparationInput: TaskSessionStartPreparationInput = {
+            canonicalRepoPath,
+            taskId: startInput.taskId,
+            role: "build",
+            runtimeKind: startInput.runtimeKind,
+          };
+          const prepared = yield* taskSessionStart.prepare(preparationInput);
+          let cleanup = prepared.cleanup;
+          const completion = yield* Effect.gen(function* () {
+            yield* taskSessionStart.complete(prepared, (transitionInput) =>
+              input.taskStore.transitionTask(transitionInput),
+            );
+            // A committed build retains its worktree when cancellation arrives.
+            cleanup = () => Effect.succeed("");
+            return buildSessionBootstrapSchema.parse({
+              runtimeKind: prepared.runtimeKind,
+              workingDirectory: prepared.workingDirectory,
+            });
+          }).pipe(
+            Effect.either,
+            Effect.uninterruptible,
+            Effect.onInterrupt(() => cleanup().pipe(Effect.orDie, Effect.asVoid)),
           );
           if (completion._tag === "Right") {
             return completion.right;

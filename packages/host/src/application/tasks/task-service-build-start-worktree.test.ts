@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Effect, Exit, Fiber } from "effect";
 import { z } from "zod";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 import {
   createBuildSettingsConfig,
@@ -46,6 +46,133 @@ const createGate = (): Gate => {
 };
 
 describe("createTaskService build start worktree handling", () => {
+  test.each([false, true])(
+    "waits for an interrupted transition before deciding cleanup (write fails: %s)",
+    async (writeFails) => {
+      const calls: unknown[] = [];
+      const started = createGate();
+      const finishWrite = createGate();
+      const settled = createGate();
+      let current = task({ status: "ready_for_dev" });
+      const writeError = new HostOperationError({
+        operation: "test.transition",
+        message: "write failed",
+      });
+      const taskStore: TaskStorePort = {
+        getTask: () => Effect.sync(() => current),
+        transitionTask: () =>
+          Effect.tryPromise({
+            try: async () => {
+              started.release();
+              try {
+                await finishWrite.promise;
+                if (writeFails) throw writeError;
+                current = task({ status: "in_progress" });
+                return current;
+              } finally {
+                settled.release();
+              }
+            },
+            catch: () => writeError,
+          }),
+      };
+      const coordinator = createTaskSessionLifecycleCoordinator();
+      const service = createTaskService({
+        ...createDependencies(calls, taskStore),
+        taskSessionLifecycleCoordinator: coordinator,
+      });
+      const fiber = Effect.runFork(
+        service.buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+      );
+      try {
+        await started.promise;
+        await Effect.runPromise(Fiber.interruptFork(fiber));
+        finishWrite.release();
+        await settled.promise;
+        expect(Exit.isFailure(await Effect.runPromise(Fiber.await(fiber)))).toBe(true);
+        expect(current.status).toBe(writeFails ? "ready_for_dev" : "in_progress");
+        const removals = calls.filter(
+          (call) => z.object({ type: z.literal("removeWorktree") }).safeParse(call).success,
+        );
+        expect(removals).toHaveLength(writeFails ? 1 : 0);
+        await expect(
+          Effect.runPromise(
+            Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "close task")),
+          ),
+        ).resolves.toBeUndefined();
+      } finally {
+        finishWrite.release();
+        await Effect.runPromise(Fiber.interrupt(fiber));
+      }
+    },
+  );
+
+  test("preserves preparation validation errors", async () => {
+    const calls: unknown[] = [];
+    const deps = createDependencies(calls, {});
+    const failure = new HostValidationError({ field: "repoPath", message: "invalid repository" });
+    const service = createTaskService({
+      ...deps,
+      workspaceSettingsService: {
+        ...deps.workspaceSettingsService,
+        getRepoConfigByRepoPath: () => Effect.fail(failure),
+      },
+    });
+    const result = await Effect.runPromise(
+      Effect.either(
+        service.buildStart({
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
+      ),
+    );
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") expect(result.left).toBe(failure);
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "removeWorktree" }));
+  });
+
+  test("cleans a new worktree once when preparation is interrupted", async () => {
+    const calls: unknown[] = [];
+    const started = createGate();
+    const deps = createDependencies(calls, {
+      getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
+    });
+    const coordinator = createTaskSessionLifecycleCoordinator();
+    const service = createTaskService({
+      ...deps,
+      taskSessionLifecycleCoordinator: coordinator,
+      runtimeRegistry: {
+        ...deps.runtimeRegistry,
+        ensureWorkspaceRuntime: () =>
+          Effect.sync(started.release).pipe(Effect.zipRight(Effect.never)),
+      },
+    });
+    const fiber = Effect.runFork(
+      service.buildStart({
+        repoPath: "/repo",
+        taskId: "task-1",
+        runtimeKind: "opencode",
+      }),
+    );
+    try {
+      await started.promise;
+      await Effect.runPromise(Fiber.interrupt(fiber));
+      expect(
+        calls.filter(
+          (call) => z.object({ type: z.literal("removeWorktree") }).safeParse(call).success,
+        ),
+      ).toHaveLength(1);
+      await expect(
+        Effect.runPromise(
+          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "close task")),
+        ),
+      ).resolves.toBeUndefined();
+    } finally {
+      await Effect.runPromise(Fiber.interrupt(fiber));
+    }
+  });
+
   test("rejects a task status change during Builder startup and cleans up its worktree", async () => {
     const calls: unknown[] = [];
     let current = task({ status: "ready_for_dev" });

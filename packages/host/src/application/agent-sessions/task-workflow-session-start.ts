@@ -96,15 +96,16 @@ export const createStartTaskWorkflowSession =
           }
           summary = launched.right;
 
-          const persisted = yield* Effect.either(
-            storeWorkflowSession(tasks, {
+          const persisted = yield* Effect.gen(function* () {
+            yield* storeWorkflowSession(tasks, {
               repoPath,
               sessionScope: input.sessionScope,
               model: input.model,
               selectedModel: undefined,
-              summary,
-            }),
-          );
+              summary: launched.right,
+            });
+            stored = true;
+          }).pipe(Effect.uninterruptible, Effect.either);
           if (persisted._tag === "Left") {
             const stopped = yield* Effect.either(
               runtime.stopSession(toControlSessionRef(repoPath, summary)),
@@ -133,8 +134,6 @@ export const createStartTaskWorkflowSession =
               }),
             );
           }
-          stored = true;
-
           const completed = yield* Effect.either(
             taskSessionStart.complete(prepared, (transitionInput) =>
               tasks.transitionTask(transitionInput),
