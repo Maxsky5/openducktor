@@ -1,3 +1,4 @@
+import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
@@ -101,6 +102,7 @@ export const assembleNodeEffectHostCommandRouter = (
     filesystem,
     git,
     localAttachments,
+    generatedImageFiles,
     openInTools,
     processEnv,
     runtimeDistribution,
@@ -465,6 +467,11 @@ export const assembleNodeEffectHostCommandRouter = (
         service: gitProviderService,
       }),
       ...createLocalAttachmentCommandHandlers(localAttachmentService),
+      ...createNodeImageCommandHandlers(
+        liveSessionAdapterRegistry,
+        generatedImageFiles,
+        runtimeDefinitionsService,
+      ),
       ...createOpenInToolsCommandHandlers(openInToolsService),
       ...createPullRequestReviewCommandHandlers(pullRequestReviewService),
       ...createRuntimeDefinitionsCommandHandlers(runtimeDefinitionsService),

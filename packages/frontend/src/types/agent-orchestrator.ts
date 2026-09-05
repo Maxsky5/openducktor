@@ -1,4 +1,5 @@
 import type {
+  AgentImageGenerationPart,
   AgentSessionAssociation,
   AgentSessionLiveLoadContextInput,
   AgentSessionWorkflowScope,
@@ -19,6 +20,7 @@ import type {
 } from "@openducktor/core";
 
 export type AgentChatMessageMeta =
+  | AgentImageGenerationPart
   | {
       kind: "reasoning";
       partId: string;

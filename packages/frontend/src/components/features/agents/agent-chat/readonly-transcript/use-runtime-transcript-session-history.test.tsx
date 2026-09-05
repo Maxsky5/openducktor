@@ -43,6 +43,9 @@ const operations = (
   loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"],
   readSessionHistory: AgentOperationsContextValue["readSessionHistory"] = async () => [],
 ): AgentOperationsContextValue => ({
+  readGeneratedImage: async () => {
+    throw new Error("Unexpected generated image read");
+  },
   readSessionTodos: async () => [],
   readSessionHistory,
   loadAgentSessionHistory,

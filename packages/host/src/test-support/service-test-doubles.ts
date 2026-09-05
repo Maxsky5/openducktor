@@ -23,6 +23,10 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
   overrides: Overrides,
 ): AgentSessionRuntimeAdapterPort => ({
   supportsSessionControl: true,
+  resolveGeneratedImageSource: unexpectedEffectCall(
+    "session adapter",
+    "resolveGeneratedImageSource",
+  ),
   binding,
   forkSession: unexpectedEffectCall("live session adapter", "forkSession"),
   listSnapshots: unexpectedEffectCall("live session adapter", "listSnapshots"),

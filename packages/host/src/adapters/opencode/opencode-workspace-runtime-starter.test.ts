@@ -87,6 +87,7 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
       ((runtime) => {
         const adapter: AgentSessionLiveAdapterPort = {
           supportsSessionControl: false,
+          resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
           binding: {
             runtimeId: runtime.runtimeId,
             runtimeKind: runtime.kind,
@@ -288,6 +289,7 @@ if (exitAfterMs !== null) {
 
 const createLiveAdapter = (runtime: RuntimeInstanceSummary): AgentSessionLiveAdapterPort => ({
   supportsSessionControl: false,
+  resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
   binding: {
     runtimeId: runtime.runtimeId,
     runtimeKind: runtime.kind,

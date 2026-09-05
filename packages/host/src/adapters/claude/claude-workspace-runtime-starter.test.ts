@@ -92,6 +92,7 @@ const createLiveSessionDependencies = ({
   let remainingReleaseFailures = releaseFailures;
   const adapter: AgentSessionLiveAdapterPort = {
     supportsSessionControl: false,
+    resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
     binding: { runtimeId: "runtime-1", runtimeKind: "claude", repoPath: "/repo" },
     listSnapshots: () => Effect.succeed([]),
     readSnapshot: () => Effect.die("unused"),

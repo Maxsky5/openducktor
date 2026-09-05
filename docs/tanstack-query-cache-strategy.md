@@ -100,3 +100,9 @@ Keep these values outside TanStack Query:
 - Composer input.
 - Event-driven orchestration state.
 - Commands such as `runtimeEnsure`, `buildStart`, `gitPushBranch`, and `taskTransition`.
+
+## Generated images
+
+`agent-generated-images.ts` owns bounded generated-image reads. Its key includes repository, runtime kind, working directory, external session ID, turn and item IDs, and the normalized output reference. Saved-path metadata also separates changed output locations.
+
+The query caches a Blob, never base64. It has no automatic retry, polling, focus refetch, reconnect refetch, or previous-session placeholder. It remains fresh while observed and uses `gcTime: 0` after its last observer leaves. The query checks cancellation and echoed identity before it publishes bytes. The preview component owns image decoding and object URLs, and revokes each URL when its source or session changes or it unmounts.

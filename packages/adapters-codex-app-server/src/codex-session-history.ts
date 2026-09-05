@@ -108,6 +108,7 @@ const projectCodexThreadReadToHistory = ({
         {
           item,
           turnIndex,
+          turn,
           timestamp,
           timestampIsApproximate,
           isFinalAgentMessage,
@@ -123,6 +124,7 @@ const projectCodexThreadReadToHistory = ({
         const turnModel = model;
         const threadItemInput: CodexThreadItemInput = {
           item,
+          turn,
           index,
         };
         if (timestamp) {
@@ -135,6 +137,7 @@ const projectCodexThreadReadToHistory = ({
           source: "thread_read",
           runtimeId,
           threadId: itemOwnerThreadId,
+          turnId: turn.id,
         };
         if (timestamp) {
           mappingContext.timestamp = timestamp;

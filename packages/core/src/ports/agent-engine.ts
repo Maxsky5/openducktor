@@ -1,4 +1,6 @@
 import type {
+  AgentGeneratedImageReadInput,
+  AgentGeneratedImageReadResult,
   AgentSessionAssociation,
   AgentSessionControlForkInput,
   AgentSessionControlResumeInput,
@@ -304,7 +306,16 @@ export interface AgentWorkspaceInspectionPort {
   loadFileStatus(input: LoadAgentFileStatusInput): Promise<FileStatus[]>;
 }
 
-export type AgentEnginePort = AgentRuntimeDefinitionsPort &
+export interface AgentGeneratedImageReadPort {
+  readGeneratedImage(input: AgentGeneratedImageReadInput): Promise<AgentGeneratedImageReadResult>;
+}
+
+export type AgentGeneratedImageSource =
+  | { representation: "saved_file"; path: string }
+  | { representation: "inline"; base64: string };
+
+export type AgentEnginePort = AgentGeneratedImageReadPort &
+  AgentRuntimeDefinitionsPort &
   AgentCatalogPort &
   AgentSessionControlPort &
   AgentSessionHistoryPort &

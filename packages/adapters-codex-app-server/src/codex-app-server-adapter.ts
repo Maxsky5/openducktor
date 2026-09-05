@@ -1,3 +1,6 @@
+import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
+import type { AgentGeneratedImageSource } from "@openducktor/core";
+import { CodexGeneratedImageResolver } from "./codex-generated-image-resolver";
 import {
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
@@ -191,10 +194,15 @@ export class CodexAppServerAdapter
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
   private readonly models = new CodexModels();
   private readonly threadInventory = new CodexThreadInventoryReader();
+  private readonly generatedImages: CodexGeneratedImageResolver;
   private readonly subagents = new CodexSubagentLinkState();
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.runtimeClients = new CodexRuntimeClientResolver(options);
+    this.generatedImages = new CodexGeneratedImageResolver(
+      this.runtimeClients,
+      this.threadInventory,
+    );
     const onLiveSessionMutation = options.onLiveSessionMutation;
     const onCatalogInvalidated = options.onCatalogInvalidated;
     const runtimeEventsDepsBase: Omit<
@@ -284,12 +292,56 @@ export class CodexAppServerAdapter
     }
     this.requireServerRequestResponder(runtimeId);
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+    this.generatedImages.prepareRuntime(runtimeId);
+  }
+
+  resolveGeneratedImageSource(
+    input: AgentGeneratedImageReadInput,
+  ): Promise<AgentGeneratedImageSource> {
+    return this.generatedImages.resolve(input);
+  }
+
+  settleGeneratedImages(runtimeId: string, sessionRef?: SessionRef): AgentEvent[] {
+    const threadIds = sessionRef
+      ? new Set([
+          sessionRef.externalSessionId,
+          ...this.subagents
+            .descendantRoutesForParent(sessionRef.externalSessionId, runtimeId, () => true)
+            .map((route) => route.childExternalSessionId),
+        ])
+      : undefined;
+    const events: AgentEvent[] = [];
+    for (const session of this.localSessions.values()) {
+      if (session.runtimeId !== runtimeId || (threadIds && !threadIds.has(session.threadId)))
+        continue;
+      if (
+        sessionRef &&
+        (session.repoPath !== sessionRef.repoPath ||
+          session.workingDirectory !== sessionRef.workingDirectory)
+      )
+        continue;
+      events.push(
+        ...this.runtimeEvents.settleImageGenerations(
+          session,
+          undefined,
+          sessionRef ? "turn_ended" : "runtime_failure",
+        ),
+      );
+    }
+    return events;
   }
 
   releaseRuntime(runtimeId: string): void {
+    this.generatedImages.releaseRuntime(runtimeId);
     releaseCodexRuntimeState(runtimeId, {
       cancelContextUsage: () => this.contextUsageLoader.cancelRuntime(runtimeId),
-      releaseSessions: () => this.localSessions.releaseRuntime(runtimeId),
+      releaseSessions: () => {
+        for (const session of this.localSessions.values()) {
+          if (session.runtimeId === runtimeId)
+            this.runtimeEvents.settleImageGenerations(session, undefined, "runtime_failure");
+        }
+        this.localSessions.releaseRuntime(runtimeId);
+      },
       clearPendingInput: () => this.pendingInput.clearRuntime(runtimeId),
       clearSubagents: () => this.subagents.clearRuntime(runtimeId),
       clearRuntimeEvents: () => this.runtimeEvents.clearRuntime(runtimeId),
@@ -1158,6 +1210,7 @@ export class CodexAppServerAdapter
   }
 
   private releaseSessionTree(session: CodexSessionState): void {
+    this.runtimeEvents.settleImageGenerations(session, undefined, "turn_ended");
     const descendants = this.subagents.descendantRoutesForParent(
       session.threadId,
       session.runtimeId,
@@ -1175,6 +1228,8 @@ export class CodexAppServerAdapter
         externalSessionId: route.childExternalSessionId,
       });
       if (this.localSessions.has(route.childExternalSessionId)) {
+        const child = this.localSessions.get(route.childExternalSessionId);
+        if (child) this.runtimeEvents.settleImageGenerations(child, undefined, "turn_ended");
         this.localSessions.release(route.childExternalSessionId);
       }
     }

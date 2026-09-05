@@ -5,6 +5,7 @@ import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registr
 
 const adapter = (runtimeId: string): AgentSessionLiveAdapterPort => ({
   supportsSessionControl: false,
+  resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
   binding: { runtimeId, runtimeKind: "codex", repoPath: "/repo" },
   listSnapshots: () => Effect.succeed([]),
   readSnapshot: (candidate) => Effect.succeed({ type: "missing", ref: candidate }),

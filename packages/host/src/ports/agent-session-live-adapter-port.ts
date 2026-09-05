@@ -1,3 +1,5 @@
+import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
+import type { AgentGeneratedImageSource } from "@openducktor/core";
 import type {
   AcceptedAgentUserMessage,
   AgentSessionContextUsage,
@@ -74,6 +76,9 @@ export type AgentSessionLiveAdapterBinding = {
 export type AgentSessionLiveAdapterScope = Pick<AgentSessionLiveRef, "repoPath" | "runtimeKind">;
 
 type AgentSessionLiveAdapterBase = {
+  readonly resolveGeneratedImageSource: (
+    input: AgentGeneratedImageReadInput,
+  ) => Effect.Effect<AgentGeneratedImageSource, HostError>;
   readonly binding: AgentSessionLiveAdapterBinding;
   readonly refreshSnapshots?: (repoPath: string) => Effect.Effect<void, HostError>;
   readonly listSnapshots: (
@@ -94,6 +99,11 @@ type AgentSessionLiveAdapterBase = {
   readonly replyQuestion: (
     input: AgentSessionLiveReplyQuestionInput,
   ) => Effect.Effect<void, HostError>;
+  /** Returns terminal transcript updates under the lifecycle lock, without re-entering it. */
+  readonly settleRuntimeTranscript?: () => Effect.Effect<
+    ReadonlyArray<AgentSessionTranscriptEvent>,
+    HostError
+  >;
   /** Clears only this runtime and returns the public sessions that disappeared. */
   readonly releaseRuntime: () => Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError>;
 };

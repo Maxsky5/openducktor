@@ -89,6 +89,7 @@ const createAgentEngine = (
   runtimeKinds: RuntimeKind[],
 ): AgentEnginePort => {
   return {
+    readGeneratedImage: (input) => host.agentSessionReadGeneratedImage(input),
     startSession: (input) => {
       if (input.sessionScope.kind === "workflow") {
         return Promise.reject(

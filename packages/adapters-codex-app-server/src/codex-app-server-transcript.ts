@@ -1,3 +1,4 @@
+import { codexImageGenerationPart } from "./codex-image-generation";
 import type { AgentModelSelection, AgentStreamPart } from "@openducktor/core";
 import {
   arrayFromCodexJsonValue,
@@ -79,6 +80,7 @@ export type CodexTurnTiming = {
 export type CodexThreadReadItem = {
   item: CodexTimedThreadItem;
   turnIndex: number;
+  turn: CodexAppServerTurn;
   turnId: string | null;
   timestamp: string | null;
   timestampIsApproximate?: true;
@@ -206,6 +208,7 @@ export const codexTurnItemsFromThreadRead = (
       const threadReadItem: CodexThreadReadItem = {
         item,
         turnIndex,
+        turn,
         turnId,
         timestamp,
         isFinalAgentMessage: itemIsFinalAgentMessage,
@@ -801,6 +804,11 @@ export const toStreamPart = (
   timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const partId = value.id;
+  if (value.type === "imageGeneration") {
+    return [
+      codexImageGenerationPart(value, { liveStart: timingOptions?.allowStartedAtOnly === true }),
+    ];
+  }
   if (codexItemTypeMatches(value, "reasoning")) {
     return codexReasoningStreamParts(value, messageId, partId);
   }

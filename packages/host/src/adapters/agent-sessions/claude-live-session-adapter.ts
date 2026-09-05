@@ -1,3 +1,4 @@
+import { unsupportedGeneratedImageSource } from "./generated-image-unsupported";
 import {
   type AgentSessionControlSummary,
   acceptedAgentUserMessageSchema,
@@ -268,6 +269,7 @@ export const createClaudeLiveSessionAdapterPreparer =
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        resolveGeneratedImageSource: unsupportedGeneratedImageSource,
         supportsSessionControl: true,
         binding: {
           runtimeId: runtime.runtimeId,

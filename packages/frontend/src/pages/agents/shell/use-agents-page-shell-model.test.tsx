@@ -273,6 +273,9 @@ const sessionIdentity = (externalSessionId: string) => ({
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
 let agentOperations: AgentOperationsContextValue = {
+  readGeneratedImage: async () => {
+    throw new Error("Unexpected generated image read");
+  },
   readSessionTodos: mock(async () => []),
   readSessionHistory: mock(async () => []),
   loadAgentSessionHistory: mock(async () => null),
@@ -708,6 +711,9 @@ beforeEach(async () => {
     isLoadingRepoSettings: false,
   };
   agentOperations = {
+    readGeneratedImage: async () => {
+      throw new Error("Unexpected generated image read");
+    },
     readSessionTodos: mock(async () => []),
     readSessionHistory: mock(async () => []),
     loadAgentSessionHistory: mock(async () => null),

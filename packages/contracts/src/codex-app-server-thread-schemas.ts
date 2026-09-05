@@ -292,7 +292,7 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
     status: z.string(),
     revisedPrompt: z.string().nullable(),
     result: z.string(),
-    transparentBackground: z.boolean().optional(),
+    transparentBackground: z.boolean().nullable().optional(),
     failure: z
       .object({
         type: z.literal("usageLimitExceeded"),

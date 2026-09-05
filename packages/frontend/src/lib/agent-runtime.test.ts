@@ -82,6 +82,7 @@ describe("agent-runtime capability policies", () => {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.optionalSurfaces,
         supportsProfiles: true,
         supportsMcpStatus: false,
+        supportsImageGeneration: false,
       },
       promptInput: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,

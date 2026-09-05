@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentImageGenerationPartSchema } from "./agent-image-generation-schemas";
 import {
   runtimeApprovalReplyOutcomeSchema,
   runtimeApprovalRequestTypeSchema,
@@ -123,6 +124,7 @@ const agentToolTypeSchema = z.enum([
 ]);
 
 const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
+  agentImageGenerationPartSchema,
   z
     .object({
       kind: z.literal("text"),

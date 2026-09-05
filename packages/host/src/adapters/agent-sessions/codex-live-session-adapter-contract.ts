@@ -21,6 +21,8 @@ import type {
 
 export type CodexSessionController = Pick<
   CodexAppServerAdapter,
+  | "resolveGeneratedImageSource"
+  | "settleGeneratedImages"
   | "prepareRuntime"
   | "listLiveSessionSnapshots"
   | "loadLiveSessionContextUsage"

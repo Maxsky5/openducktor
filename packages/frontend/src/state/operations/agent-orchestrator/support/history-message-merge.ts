@@ -1,3 +1,4 @@
+import { mergeAgentImageGeneration } from "@openducktor/core";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { matchesLoadedTool, mergeToolMessages } from "./history-tool-message-merge";
 import { applyPreferredMessageTimestamp } from "./message-timestamp";
@@ -233,6 +234,16 @@ const mergeSameMessageId = (
       currentMessage,
       loadedMessage,
     );
+  }
+
+  if (
+    loadedMessage.meta?.kind === "image_generation" &&
+    currentMessage.meta?.kind === "image_generation"
+  ) {
+    return {
+      ...currentMessage,
+      meta: mergeAgentImageGeneration(currentMessage.meta, loadedMessage.meta, "history"),
+    };
   }
 
   if (isFinalAssistantChatMessage(loadedMessage) && currentMessage.role === "assistant") {

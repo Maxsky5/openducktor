@@ -53,6 +53,9 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
 };
 
 const createAgentEngine = (overrides: Partial<PublicAgentEngine> = {}): PublicAgentEngine => ({
+  readGeneratedImage: async () => {
+    throw new Error("Unexpected generated image read");
+  },
   loadSessionTodos: async () => [],
   loadSessionHistory: async () => [],
   ...overrides,

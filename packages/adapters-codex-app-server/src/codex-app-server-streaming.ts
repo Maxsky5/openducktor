@@ -1,3 +1,4 @@
+import type { CodexImageSettlement } from "./codex-image-generation-state";
 import type { CodexAppServerThreadStatus, CodexAppServerTurn } from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
@@ -66,6 +67,11 @@ export type CodexStreamingContext = {
   modelByTurnKey: Map<string, AgentModelSelection>;
   latestTodosBySessionId: Map<string, AgentSessionTodoItem[]>;
   eventMapperPipeline: CodexEventMapperPipeline;
+  settleImageGenerations(
+    session: CodexSessionState,
+    turnId: string | undefined,
+    reason: CodexImageSettlement,
+  ): void;
   recordStartedItemTimestamp(
     runtimeId: string,
     threadId: string,
@@ -302,6 +308,7 @@ const emitStartedItem = (
   session: CodexSessionState,
   item: CodexTimedThreadItem,
   timestamp: string,
+  turnId: string,
 ): void => {
   if (
     codexItemTypeMatches(item, "userMessage") ||
@@ -315,7 +322,7 @@ const emitStartedItem = (
   recordStartedItemTimestamp(context, session, startedItem);
   const canonicalEvents = context.eventMapperPipeline.runLive(
     { kind: "item_started", item: startedItem },
-    { source: "live", runtimeId: session.runtimeId, threadId: session.threadId, timestamp },
+    { source: "live", runtimeId: session.runtimeId, threadId: session.threadId, timestamp, turnId },
   );
   for (const event of projectCodexCanonicalEvents(canonicalEvents)) {
     if (event.type !== "assistant_part") {
@@ -636,6 +643,7 @@ export const handleCodexPendingNotifications = async (
         const liveStatus = codexThreadStatusSnapshot(notification.params.status);
         context.setSessionLiveStatus(session, liveStatus);
         if (activeTurn && isIdleStatus) {
+          context.settleImageGenerations(session, activeTurn.turnId, "turn_ended");
           const hasBufferedFinalAgentMessage =
             activeTurn.turnId !== undefined &&
             context.completedAgentMessagesByTurnKey.has(
@@ -744,6 +752,15 @@ export const handleCodexPendingNotifications = async (
       emitUnlinkedSpawnFailures(context, session, timestamp);
       const turn = notification.params.turn;
       const turnId = turn.id;
+      context.settleImageGenerations(
+        session,
+        turnId,
+        turn.status === "interrupted"
+          ? "interrupted"
+          : turn.status === "failed"
+            ? "runtime_failure"
+            : "turn_ended",
+      );
       if (turn.status === "completed") {
         const completedAgentMessage = context.completedAgentMessagesByTurnKey.get(
           codexTurnKey(session.threadId, turnId),
@@ -823,6 +840,7 @@ export const handleCodexPendingNotifications = async (
         session,
         { ...notification.params.item, startedAtMs: notification.params.startedAtMs },
         timestamp,
+        notification.params.turnId,
       );
       continue;
     }

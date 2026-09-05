@@ -297,3 +297,9 @@ Startup is complete when the task record query and first host snapshot have prod
 - Child sessions own pending requests. Parent rows only link to child IDs.
 - Operations context does not own read-model state or task-session refresh.
 - Build one selected candidate list. Do not split live and durable selection paths.
+
+## Generated image projection
+
+Files: `support/image-generation-messages.ts`, `support/chat-message-ids.ts`, `support/history-message-merge.ts`, and `state/queries/agent-generated-images.ts`.
+
+The image helper projects normalized parts from live events and history into one row per native item and turn. The shared core merge rule preserves known outcomes across replay. Image updates do not change activity, pending input, runtime routes, or session selection. The transcript presentation carries the repository and displayed session reference to the shared preview component. See [the runtime guide](runtime-integration-guide.md#generated-images) and [the Query cache strategy](tanstack-query-cache-strategy.md#generated-images) for access and preview lifetime.

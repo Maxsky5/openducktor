@@ -17,6 +17,7 @@ export const HOST_COMMAND_NAMES = [
   "agent_session_live_refresh",
   "agent_session_live_reply_approval",
   "agent_session_live_reply_question",
+  "agent_session_read_generated_image",
   "agent_session_stop",
   "agent_session_workflow_start",
   "agent_sessions_list",

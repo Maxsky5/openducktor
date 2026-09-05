@@ -15,3 +15,6 @@ export const toToolMessageId = ({
   partId: string;
   callId?: string;
 }): string => `tool:${messageId}:${callId?.trim() || partId}`;
+
+export const toImageGenerationMessageId = (itemId: string, turnId?: string): string =>
+  `image:${JSON.stringify([turnId ?? null, itemId])}`;

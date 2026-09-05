@@ -7,6 +7,7 @@ import type {
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
 type ResolveAgentChatTranscriptPresentationArgs = {
+  repoPath: string | null;
   sessionKey: string | null;
   session: AgentChatTranscriptSession | null;
   target: AgentSessionTranscriptTarget | null;
@@ -18,6 +19,7 @@ const shouldHideSession = (state: AgentSessionTranscriptState): boolean =>
   state.kind === "empty" || state.kind === "failed" || state.kind === "session_loading";
 
 export const resolveAgentChatTranscriptPresentation = ({
+  repoPath,
   sessionKey,
   session,
   target,
@@ -27,6 +29,7 @@ export const resolveAgentChatTranscriptPresentation = ({
   if (session && !shouldHideSession(state)) {
     return {
       kind: "session",
+      repoPath,
       session,
       target,
       displayedSessionKey: sessionKey,
@@ -37,6 +40,7 @@ export const resolveAgentChatTranscriptPresentation = ({
 
   return {
     kind: "empty",
+    repoPath,
     session: null,
     target,
     displayedSessionKey: sessionKey,

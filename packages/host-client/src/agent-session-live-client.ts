@@ -1,4 +1,10 @@
 import {
+  type AgentGeneratedImageReadInput,
+  type AgentGeneratedImageReadResult,
+  agentGeneratedImageReadInputSchema,
+  agentGeneratedImageReadResultSchema,
+} from "@openducktor/contracts";
+import {
   type AcceptedAgentUserMessage,
   type AgentRepositorySessionStartInput,
   type AgentSessionContextUsage,
@@ -147,6 +153,16 @@ export class HostAgentSessionLiveClient {
       "agent_session_live_read",
       agentSessionLiveReadInputSchema.parse(input),
       agentSessionLiveReadResultSchema,
+    );
+  }
+
+  async agentSessionReadGeneratedImage(
+    input: AgentGeneratedImageReadInput,
+  ): Promise<AgentGeneratedImageReadResult> {
+    return this.invokeFn(
+      "agent_session_read_generated_image",
+      agentGeneratedImageReadInputSchema.parse(input),
+      agentGeneratedImageReadResultSchema,
     );
   }
 

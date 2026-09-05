@@ -149,6 +149,7 @@ const createLifecycle = (changes: AgentSessionLiveAdapterChange[]) =>
   }) satisfies RuntimeLiveSessionLifecyclePort;
 
 type ControllerHarnessOptions = {
+  settleGeneratedImages?: CodexAppServerAdapter["settleGeneratedImages"];
   initialSnapshots?: AgentSessionLiveSnapshot[];
   releaseRuntime?: () => void;
   liveContextUsage?: CodexSessionContextUsage | null;
@@ -164,6 +165,7 @@ type AgentControlInputs = {
 };
 
 const createControllerHarness = ({
+  settleGeneratedImages = () => [],
   initialSnapshots = [liveSnapshot()],
   releaseRuntime = () => undefined,
   liveContextUsage = { totalTokens: 123, contextWindow: 1_000 },
@@ -195,6 +197,10 @@ const createControllerHarness = ({
     createController: (nextOptions: CodexAppServerAdapterOptions) => {
       options = nextOptions;
       return {
+        resolveGeneratedImageSource: async () => {
+          throw new Error("Unexpected generated image read");
+        },
+        settleGeneratedImages,
         prepareRuntime: async (runtimeId: string) => {
           await nextOptions.subscribeEvents?.(runtimeId, (event) => rawEvents.push(event));
         },
@@ -1238,3 +1244,68 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     expect(harness.policyBoundContextLoads).toEqual([]);
   });
 });
+
+for (const action of ["stop", "release", "runtime"] as const) {
+  test(`publishes settled image output before ${action} removes the session`, async () => {
+    const events: AgentSessionLiveEnvelope[] = [];
+    const service = createAgentSessionLiveStateService({
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      faultLog: () => Effect.void,
+      publish: (event) => events.push(event),
+    });
+    const harness = createControllerHarness({
+      settleGeneratedImages: () => [
+        {
+          type: "assistant_part",
+          externalSessionId: ref.externalSessionId,
+          sessionRef: ref,
+          timestamp: "2026-07-16T10:02:00.000Z",
+          part: {
+            kind: "image_generation",
+            messageId: "image",
+            partId: "image",
+            itemId: "image",
+            status: "incomplete",
+            incompleteReason: "turn_ended",
+          },
+        },
+      ],
+    });
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: service,
+        codexAppServer: {
+          ...codexAppServer,
+          request: () => {
+            const result = threadReadResult(ref.externalSessionId, ref.workingDirectory);
+            result.thread.status = { type: "idle" };
+            return Effect.succeed(result);
+          },
+        },
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
+    await Effect.runPromise(prepared.startForwarding());
+    await harness.getOptions().onLiveSessionMutation?.({
+      runtimeId: runtime.runtimeId,
+      snapshots: [liveSnapshot()],
+      transcriptEvents: [],
+      catalogInvalidated: false,
+    });
+    events.length = 0;
+    const operation =
+      action === "runtime"
+        ? service.releaseRuntime(runtime.runtimeId)
+        : action === "stop"
+          ? prepared.adapter.stopSession(ref)
+          : prepared.adapter.releaseSession(ref);
+    await Effect.runPromise(operation.pipe(Effect.asVoid, Effect.timeout("1 second")));
+    const settled = events.findIndex((event) => event.type === "transcript_event");
+    const removed = events.findIndex((event) => event.type === "session_removed");
+    expect(settled).toBeGreaterThanOrEqual(0);
+    expect(removed).toBeGreaterThan(settled);
+  });
+}

@@ -40,6 +40,9 @@ describe("useSelectedSessionContextLoad", () => {
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
     const operations: AgentOperationsContextValue = {
+      readGeneratedImage: async () => {
+        throw new Error("Unexpected generated image read");
+      },
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
       loadAgentSessionHistory: async () => null,
@@ -84,6 +87,9 @@ describe("useSelectedSessionContextLoad", () => {
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
     const operations: AgentOperationsContextValue = {
+      readGeneratedImage: async () => {
+        throw new Error("Unexpected generated image read");
+      },
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
       loadAgentSessionHistory: async () => null,
@@ -125,6 +131,9 @@ describe("useSelectedSessionContextLoad", () => {
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
     const operations: AgentOperationsContextValue = {
+      readGeneratedImage: async () => {
+        throw new Error("Unexpected generated image read");
+      },
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
       loadAgentSessionHistory: async () => null,
@@ -168,6 +177,9 @@ describe("useSelectedSessionContextLoad", () => {
     async (hasModel) => {
       const loadAgentSessionContext = mock(async () => undefined);
       const operations: AgentOperationsContextValue = {
+        readGeneratedImage: async () => {
+          throw new Error("Unexpected generated image read");
+        },
         readSessionTodos: async () => [],
         readSessionHistory: async () => [],
         loadAgentSessionHistory: async () => null,
@@ -211,6 +223,9 @@ describe("useSelectedSessionContextLoad", () => {
       throw new Error("thread resume failed");
     });
     const operations: AgentOperationsContextValue = {
+      readGeneratedImage: async () => {
+        throw new Error("Unexpected generated image read");
+      },
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
       loadAgentSessionHistory: async () => null,

@@ -257,3 +257,17 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 | Live-session adapters | `packages/host/src/adapters/agent-sessions` |
 | Runtime registry | `packages/host/src/adapters/runtimes/runtime-registry.ts` |
 | Native adapters | `packages/adapters-opencode-sdk/src`, `packages/adapters-codex-app-server/src`, `packages/host/src/adapters/claude` |
+
+## Generated images
+
+`optionalSurfaces.supportsImageGeneration` enables generated-output previews. It does not grant image input or change workflow role eligibility. Codex supports this surface. Other built-in runtimes report false.
+
+Adapters emit `image_generation` parts with stable item and turn identity. Generation status and preview availability are separate. A completed item can have an unavailable preview. An unconfirmed turn end produces an incomplete outcome; only a confirmed interruption produces an interrupted outcome. Native completed and failed outcomes survive replay and history loading. Binary data stays outside transcript state and durable session records.
+
+Runtime adapters can supply `settleRuntimeTranscript` to return final transient transcript events during cleanup. The host calls this hook under its lifecycle lock and publishes these events before session removal. The hook must not call the lifecycle coordinator. Codex uses it to mark unresolved image outcomes incomplete when the runtime is released.
+
+`agent_session_read_generated_image` accepts an exact repository, runtime, working directory, session, and image item reference. The host derives the source from public runtime history. Codex uses `thread/read` with `includeTurns: false`, then paginated `thread/turns/list` with `itemsView: full`. It does not resume the turn. Concurrent image reads can share an in-flight history request; the adapter retains no source cache after settlement.
+
+A supplied saved path takes priority over inline output. A missing, denied, or invalid saved file fails that preview; the host does not substitute inline bytes. The host supports PNG files up to 32 MiB, bounds encoded and decoded sizes, checks regular files through a read-only handle, and detects file growth. The frontend requires a successful image decode before it shows a usable preview. Reads use the existing authenticated browser invoke or Electron IPC transport.
+
+The runtime owns image retention. OpenDucktor stores no image archive. If the runtime removes its history or saved output, the generation outcome remains visible when known, but its preview can become unavailable. See [the Query cache strategy](tanstack-query-cache-strategy.md#generated-images) for preview lifetime.

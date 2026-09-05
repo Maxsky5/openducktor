@@ -1703,3 +1703,34 @@ describe("TypeScript web host backend", () => {
     expect(calls).toEqual(["dispose-started", "dispose-finished", "server-stopped", "exited-0"]);
   });
 });
+
+test("unauthenticated generated image invokes never reach the reader or return bytes", async () => {
+  let calls = 0;
+  const hostCommandRouter = createTestHostCommandRouter(() => {
+    calls++;
+    return Effect.dieMessage("unauthorized image read");
+  });
+  for (const token of [undefined, "invalid"]) {
+    const headers = new Headers({ "content-type": "application/json" });
+    if (token) headers.set("x-openducktor-app-token", token);
+    const response = await handleTestRequest(
+      new Request("http://127.0.0.1/invoke/agent_session_read_generated_image", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          ref: {
+            repoPath: "/repo",
+            runtimeKind: "codex",
+            workingDirectory: "/repo",
+            externalSessionId: "thread",
+          },
+          itemId: "image",
+        }),
+      }),
+      { hostCommandRouter },
+    );
+    expect(response.status).toBe(token ? 403 : 401);
+    expect(await response.text()).not.toContain("base64");
+  }
+  expect(calls).toBe(0);
+});

@@ -342,6 +342,9 @@ const createWorkspacePresenceValue = (): WorkspacePresenceContextValue => ({
 });
 
 const createAgentOperationsValue = (): AgentOperationsContextValue => ({
+  readGeneratedImage: async () => {
+    throw new Error("Unexpected generated image read");
+  },
   readSessionTodos: async () => [],
   readSessionHistory: async () => [],
   loadAgentSessionHistory: async () => null,

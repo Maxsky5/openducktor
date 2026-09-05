@@ -1,3 +1,4 @@
+import { createImageGenerationMessage } from "./image-generation-messages";
 import type {
   AgentModelSelection,
   AgentRole,
@@ -77,6 +78,11 @@ const historyPartToChatMessage = (
   part: SessionHistoryPart,
 ): AgentChatMessage | null => {
   switch (part.kind) {
+    case "image_generation":
+      return inheritTimestampAccuracy(
+        createImageGenerationMessage(part, message.timestamp),
+        message,
+      );
     case "reasoning": {
       if (part.text.trim().length === 0) {
         return null;

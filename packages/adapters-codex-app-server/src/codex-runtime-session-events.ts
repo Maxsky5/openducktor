@@ -1,4 +1,8 @@
 import {
+  CodexImageGenerationState,
+  type CodexImageSettlement,
+} from "./codex-image-generation-state";
+import {
   agentSessionTranscriptEventSchema,
   type AgentSessionLiveRef,
   type AgentSessionTranscriptEvent,
@@ -151,6 +155,7 @@ const routedSession = (
 });
 
 export class CodexRuntimeSessionEvents {
+  private readonly imageGenerations = new CodexImageGenerationState();
   private readonly handledStreamRequestKeysByRuntimeId = new Map<
     string,
     Map<string, Set<string>>
@@ -223,6 +228,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   clearRuntime(runtimeId: string): void {
+    this.imageGenerations.clearRuntime(runtimeId);
     this.runtimeEventGenerationByRuntimeId.delete(runtimeId);
     this.runtimeEventProcessingByRuntimeId.delete(runtimeId);
     try {
@@ -394,6 +400,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   clearSession(externalSessionId: string, runtimeId?: string): void {
+    this.imageGenerations.clearSession(externalSessionId, runtimeId);
     const routedDescendantThreadIds =
       runtimeId === undefined
         ? []
@@ -936,6 +943,8 @@ export class CodexRuntimeSessionEvents {
       modelByTurnKey: this.modelByTurnKey,
       latestTodosBySessionId: this.latestTodosBySessionId,
       eventMapperPipeline: this.eventMapperPipeline,
+      settleImageGenerations: (session, turnId, reason) =>
+        this.settleImageGenerations(session, turnId, reason),
       recordStartedItemTimestamp: (runtimeId, threadId, itemId, startedAtMs) =>
         this.recordStartedItemTimestamp(runtimeId, threadId, itemId, startedAtMs),
       takeStartedItemTimestamp: (runtimeId, threadId, itemId) =>
@@ -1089,6 +1098,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   private emitSessionErrorForSession(session: CodexSessionState, cause: unknown): void {
+    this.settleImageGenerations(session, undefined, "runtime_failure");
     this.emitSessionEventForSession(session, {
       type: "session_error",
       externalSessionId: session.threadId,
@@ -1111,9 +1121,40 @@ export class CodexRuntimeSessionEvents {
     this.emitSessionEventForSession(session, event);
   }
 
+  settleImageGenerations(
+    session: CodexSessionState,
+    turnId: string | undefined,
+    reason: CodexImageSettlement,
+  ): AgentEvent[] {
+    const events: AgentEvent[] = [];
+    for (const part of this.imageGenerations.settle(
+      session.runtimeId,
+      session.threadId,
+      turnId,
+      reason,
+    )) {
+      const event: AgentEvent = {
+        type: "assistant_part",
+        externalSessionId: session.threadId,
+        timestamp: new Date().toISOString(),
+        part,
+      };
+      this.emitSessionEventForSession(session, event);
+      events.push(withAgentSessionRef(codexSessionRef(session), event));
+    }
+    return events;
+  }
+
   private emitSessionEventForSession(session: CodexSessionState, event: AgentEvent): void {
     const sessionRef = codexSessionRef(session);
-    const normalizedEvent = withAgentSessionRef(sessionRef, event);
+    const imageEvent =
+      event.type === "assistant_part" && event.part.kind === "image_generation"
+        ? {
+            ...event,
+            part: this.imageGenerations.upsert(session.runtimeId, session.threadId, event.part),
+          }
+        : event;
+    const normalizedEvent = withAgentSessionRef(sessionRef, imageEvent);
     this.deps.sessionEvents.emit(sessionRef, normalizedEvent);
     if (isAgentSessionTranscriptEventType(normalizedEvent.type)) {
       this.activeMutationByRuntimeId

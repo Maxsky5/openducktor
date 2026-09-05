@@ -1,0 +1,44 @@
+import type { AgentImageGenerationPart } from "@openducktor/contracts";
+
+const isNativeTerminal = (part: AgentImageGenerationPart): boolean =>
+  part.status === "completed" || part.status === "failed";
+
+/** The caller scopes both items to the same runtime session. */
+export const mergeAgentImageGeneration = (
+  current: AgentImageGenerationPart,
+  incoming: AgentImageGenerationPart,
+  source: "live" | "history",
+): AgentImageGenerationPart => {
+  if (
+    current.itemId !== incoming.itemId ||
+    (current.turnId !== undefined &&
+      incoming.turnId !== undefined &&
+      current.turnId !== incoming.turnId)
+  ) {
+    throw new Error("Cannot merge image generation items with different identity.");
+  }
+  if (
+    (isNativeTerminal(current) || current.status === "interrupted") &&
+    !isNativeTerminal(incoming)
+  )
+    return current;
+  if (current.status !== "running" && incoming.status === "running") return current;
+  if (source === "history" && isNativeTerminal(current)) {
+    if (current.status !== incoming.status) return current;
+    const merged = { ...incoming, ...current };
+    if (current.output && current.output.representation !== incoming.output?.representation) {
+      if (current.savedPath === undefined) delete merged.savedPath;
+    }
+    return merged;
+  }
+  const { output, failure, incompleteReason, ...metadata } = current;
+  const merged = { ...metadata, ...incoming };
+  if (current.status === incoming.status) {
+    if (incoming.output === undefined && output !== undefined) merged.output = output;
+    if (incoming.failure === undefined && failure !== undefined) merged.failure = failure;
+    if (incoming.incompleteReason === undefined && incompleteReason !== undefined)
+      merged.incompleteReason = incompleteReason;
+  }
+  if (incoming.output?.representation === "inline") delete merged.savedPath;
+  return merged;
+};

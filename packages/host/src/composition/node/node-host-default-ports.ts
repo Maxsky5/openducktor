@@ -1,3 +1,8 @@
+import { createGeneratedImageFileAdapter } from "../../adapters/attachments/generated-image-file-adapter";
+import {
+  GeneratedImageFilePortTag,
+  type GeneratedImageFilePort,
+} from "../../ports/generated-image-file-port";
 import { Context, Effect, Layer } from "effect";
 import { createLocalAttachmentAdapter } from "../../adapters/attachments/local-attachment-adapter";
 import {
@@ -52,6 +57,7 @@ export type NodeHostDefaultPorts = {
   devServerProcesses: DevServerProcessPort;
   filesystem: FilesystemPort;
   git: GitPort;
+  generatedImageFiles: GeneratedImageFilePort;
   localAttachments: LocalAttachmentPort;
   openInTools: OpenInToolsPort;
   processEnv: NodeJS.ProcessEnv;
@@ -88,6 +94,7 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
     devServerProcesses: DevServerProcessPort;
     filesystem: FilesystemPort;
     git: GitPort;
+    generatedImageFiles: GeneratedImageFilePort;
     localAttachments: LocalAttachmentPort;
     openInTools: OpenInToolsPort;
     processEnv: NodeJS.ProcessEnv;
@@ -110,6 +117,7 @@ export type NodeHostDefaultPortServices =
   | DevServerProcessPortTag
   | FilesystemPortTag
   | GitPortTag
+  | GeneratedImageFilePortTag
   | LocalAttachmentPortTag
   | NodeHostDefaultPortsTag
   | OpenInToolsPortTag
@@ -184,6 +192,7 @@ const makeNodeHostDefaultPorts = (
               ),
             ),
         }),
+      generatedImageFiles: input.generatedImageFiles ?? createGeneratedImageFileAdapter(),
       localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
       openInTools: input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
       processEnv,
@@ -210,6 +219,7 @@ const makeNodeHostDefaultPortContext = (
         Context.add(FilesystemPortTag, ports.filesystem),
         Context.add(GitPortTag, ports.git),
         Context.add(LocalAttachmentPortTag, ports.localAttachments),
+        Context.add(GeneratedImageFilePortTag, ports.generatedImageFiles),
         Context.add(OpenInToolsPortTag, ports.openInTools),
         Context.add(RuntimeHealthPortTag, ports.runtimeHealth),
         Context.add(SettingsConfigPortTag, ports.settingsConfig),
