@@ -43,7 +43,7 @@ export const completeTaskClosure = <CleanupError>({
           new HostDependencyError({
             dependency: "taskSessionLifecycleCoordinator",
             operation,
-            message: `Task session bootstrap coordinator is required to ${operation}.`,
+            message: `Task session lifecycle coordinator is required to ${operation}.`,
           }),
         );
       }

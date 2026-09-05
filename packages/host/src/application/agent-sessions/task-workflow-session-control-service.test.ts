@@ -8,7 +8,7 @@ import type {
   AgentWorkflowSessionStartInput,
   TaskCard,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, Exit, Fiber } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createTaskWorkflowSessionControlService as createControlService } from "./task-workflow-session-control-service";
@@ -177,6 +177,90 @@ const createModelUpdateService = ({
   });
 
 describe("createTaskWorkflowSessionControlService", () => {
+  test.each([false, true])(
+    "waits for interrupted runtime creation before cleanup (stop fails: %s)",
+    async (stopFails) => {
+      const calls: string[] = [];
+      const created = await Effect.runPromise(Deferred.make<void>());
+      const returnSummary = await Effect.runPromise(Deferred.make<void>());
+      const preparedTask = task("ready_for_dev");
+      const deps = createControlDeps();
+      const service = createTaskWorkflowSessionControlService({
+        ...deps,
+        taskSessionStart: {
+          prepare: () =>
+            Effect.succeed({
+              canonicalRepoPath: "/repo",
+              cleanup: () =>
+                Effect.sync(() => {
+                  calls.push("cleanup-worktree");
+                  return "";
+                }),
+              preparedStatus: preparedTask.status,
+              role: "build",
+              runtimeKind: "opencode",
+              task: preparedTask,
+              workingDirectory: "/repo/worktree",
+            }),
+          complete: () => Effect.dieMessage("unexpected completion"),
+        },
+        runtime: {
+          startSession: () =>
+            Effect.gen(function* () {
+              calls.push("runtime-created");
+              yield* Deferred.succeed(created, undefined);
+              yield* Deferred.await(returnSummary);
+              calls.push("runtime-returned");
+              return summary;
+            }),
+          stopSession: (ref) =>
+            Effect.gen(function* () {
+              expect(ref.externalSessionId).toBe(summary.externalSessionId);
+              calls.push("stop-runtime");
+              if (stopFails) {
+                return yield* Effect.fail(
+                  new HostOperationError({
+                    operation: "test.stop",
+                    message: "stop failed",
+                  }),
+                );
+              }
+            }),
+          resumeSession: () => Effect.dieMessage("unexpected resume"),
+          forkSession: () => Effect.dieMessage("unexpected fork"),
+          sendUserMessage: unexpectedSend,
+          updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+          releaseSession: () => Effect.dieMessage("unexpected release"),
+        },
+        tasks: {
+          agentSessionsList: () => Effect.dieMessage("unexpected list"),
+          agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+          agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+        },
+      });
+      const fiber = Effect.runFork(service.startWorkflowSession(workflowStart));
+      try {
+        await Effect.runPromise(Deferred.await(created));
+        await Effect.runPromise(Fiber.interruptFork(fiber));
+        await Effect.runPromise(Deferred.succeed(returnSummary, undefined));
+        expect(Exit.isFailure(await Effect.runPromise(Fiber.await(fiber)))).toBe(true);
+        expect(calls).toEqual(
+          stopFails
+            ? ["runtime-created", "runtime-returned", "stop-runtime"]
+            : ["runtime-created", "runtime-returned", "stop-runtime", "cleanup-worktree"],
+        );
+        await expect(
+          Effect.runPromise(
+            Effect.scoped(deps.taskLifecycle.acquireLifecycle("/repo", ["task-1"], "close task")),
+          ),
+        ).resolves.toBeUndefined();
+      } finally {
+        await Effect.runPromise(Deferred.succeed(returnSummary, undefined));
+        await Effect.runPromise(Fiber.interrupt(fiber));
+      }
+    },
+  );
+
   test("starts and stores a fresh workflow session inside one task lifecycle scope", async () => {
     const calls: string[] = [];
     const taskLifecycle = createTaskSessionLifecycleCoordinator();

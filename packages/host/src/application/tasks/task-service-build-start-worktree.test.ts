@@ -46,6 +46,59 @@ const createGate = (): Gate => {
 };
 
 describe("createTaskService build start worktree handling", () => {
+  test("rejects a task status change during Builder startup and cleans up its worktree", async () => {
+    const calls: unknown[] = [];
+    let current = task({ status: "ready_for_dev" });
+    const taskStore: TaskStorePort = {
+      getTask: () => Effect.sync(() => current),
+      transitionTask: () =>
+        Effect.sync(() => {
+          calls.push({ type: "unexpected-transition" });
+          return current;
+        }),
+    };
+    const deps = createDependencies(calls, taskStore);
+    const coordinator = createTaskSessionLifecycleCoordinator();
+    const service = createTaskService({
+      ...deps,
+      taskSessionLifecycleCoordinator: coordinator,
+      runtimeRegistry: {
+        ...deps.runtimeRegistry,
+        ensureWorkspaceRuntime: (input) =>
+          deps.runtimeRegistry.ensureWorkspaceRuntime(input).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                current = task({ status: "blocked" });
+              }),
+            ),
+          ),
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        service.buildStart({
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
+      ),
+    ).rejects.toThrow(
+      "changed from ready_for_dev to blocked while Builder startup was in progress",
+    );
+    expect(calls).not.toContainEqual({ type: "unexpected-transition" });
+    expect(calls).toContainEqual({
+      type: "removeWorktree",
+      repoPath: "/repo",
+      worktreePath: "/worktrees/repo/task-1",
+      force: true,
+    });
+    await expect(
+      Effect.runPromise(
+        Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "close task")),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   test("creates the canonical worktree and transitions the task", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {

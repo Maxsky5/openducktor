@@ -6,7 +6,13 @@ import {
   taskMetadataPayloadSchema,
 } from "@openducktor/contracts";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import { loadRepoDefaultModel, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime";
+import {
+  loadRepoDefaultModel,
+  loadRepoDefaultRuntimeKind,
+  loadRepoPromptOverrides,
+  loadTaskDocuments,
+  requireConfiguredRuntimeKind,
+} from "./runtime";
 
 const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
@@ -34,6 +40,41 @@ const createPromptOverrideSettingsSnapshot = (
 ): SettingsSnapshot => createSettingsSnapshotFixture({ globalPromptOverrides });
 
 describe("agent-orchestrator-runtime", () => {
+  test("uses the role runtime before the repository default", async () => {
+    await expect(
+      loadRepoDefaultRuntimeKind("repo", "build", async () =>
+        createRepoConfig({
+          agentDefaults: {
+            build: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+          },
+        }),
+      ),
+    ).resolves.toBe("codex");
+  });
+
+  test("uses the repository runtime when the role has no default", async () => {
+    await expect(
+      loadRepoDefaultRuntimeKind("repo", "build", async () => createRepoConfig()),
+    ).resolves.toBe("opencode");
+  });
+
+  test("propagates runtime config loading failures", async () => {
+    await expect(
+      loadRepoDefaultRuntimeKind("repo", "build", async () => {
+        throw new Error("cannot read repository config");
+      }),
+    ).rejects.toThrow("cannot read repository config");
+  });
+
+  test.each([null, undefined])(
+    "rejects a missing runtime with caller instructions: %s",
+    (runtimeKind) => {
+      expect(() =>
+        requireConfiguredRuntimeKind(runtimeKind, "Select a runtime before starting."),
+      ).toThrow("Select a runtime before starting.");
+    },
+  );
+
   test("loads startup documents from one fresh task metadata read", async () => {
     const taskMetadata = taskMetadataPayloadSchema.parse({
       spec: { markdown: "# Spec", updatedAt: "2026-04-10T13:10:00.000Z" },

@@ -58,6 +58,7 @@ import type {
   AgentTranscriptStreamPart,
   AgentTranscriptUserMessageDisplayPart,
   AgentWorkflowState,
+  AgentWorkflowSessionStartInput,
   AgentWorkflows,
   AppearanceSettings,
   AppPlatform,
@@ -165,12 +166,9 @@ import type {
   RepoRuntimeStartupStatus,
   WorkspaceAgentStudioActiveTask,
   WorkspaceAgentStudioState,
-  RepoStoreAttachmentHealth,
   RepoStoreHealth,
   RepoStoreHealthCategory,
   RepoStoreHealthStatus,
-  RepoStoreSharedServerHealth,
-  RepoStoreSharedServerOwnershipState,
   ReusablePrompt,
   RuntimeApprovalCapabilities,
   RuntimeApprovalReplyOutcome,
@@ -247,7 +245,6 @@ import type {
   TaskMetadataQaReport,
   TaskPriority,
   TaskQaDocumentPresence,
-  TaskSessionBootstrap,
   TaskStatus,
   TaskStoreCheck,
   TaskStopImpact,
@@ -887,6 +884,7 @@ type ExportedTypeContract = {
   AgentRuntimeEvent: AgentRuntimeEvent;
   AgentRuntimes: AgentRuntimes;
   AgentRepositorySessionStartInput: AgentRepositorySessionStartInput;
+  AgentWorkflowSessionStartInput: AgentWorkflowSessionStartInput;
   AgentSessionActivity: AgentSessionActivity;
   AgentSessionAssociation: AgentSessionAssociation;
   AgentSessionContextUsage: AgentSessionContextUsage;
@@ -937,7 +935,6 @@ type ExportedTypeContract = {
   RuntimeInstanceSummary: RuntimeInstanceSummary;
   RuntimeInstanceSummaryRole: RuntimeInstanceSummaryRole;
   BuildSessionBootstrap: BuildSessionBootstrap;
-  TaskSessionBootstrap: TaskSessionBootstrap;
   TaskStopImpact: TaskStopImpact;
   TaskStopImpactOperation: TaskStopImpactOperation;
   TaskStopImpactRequest: TaskStopImpactRequest;
@@ -1072,12 +1069,9 @@ type ExportedTypeContract = {
   SubagentCatalog: SubagentCatalog;
   SubagentDescriptor: SubagentDescriptor;
   RepoRuntimeHealthCheck: RepoRuntimeHealthCheck;
-  RepoStoreAttachmentHealth: RepoStoreAttachmentHealth;
   RepoStoreHealth: RepoStoreHealth;
   RepoStoreHealthCategory: RepoStoreHealthCategory;
   RepoStoreHealthStatus: RepoStoreHealthStatus;
-  RepoStoreSharedServerHealth: RepoStoreSharedServerHealth;
-  RepoStoreSharedServerOwnershipState: RepoStoreSharedServerOwnershipState;
   RepoRuntimeHealthMcp: RepoRuntimeHealthMcp;
   RepoRuntimeHealthObservation: RepoRuntimeHealthObservation;
   RepoRuntimeHealthRuntime: RepoRuntimeHealthRuntime;

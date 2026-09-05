@@ -162,6 +162,31 @@ const createHarness = async (
 };
 
 describe("createAgentSessionLiveCommandHandlers", () => {
+  test.each([
+    { runtimeId: "native-runtime" },
+    { runtimePolicy: { kind: "native" } },
+    { model: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" } },
+  ])("rejects invalid workflow starts before calling the service: %j", async (invalid) => {
+    const inputs: unknown[] = [];
+    const { router } = await createHarness(undefined, (input) => {
+      inputs.push(input);
+      return Effect.dieMessage("unexpected workflow start");
+    });
+    await expect(
+      Effect.runPromise(
+        router.invoke("agent_session_workflow_start", {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: "Build the feature",
+          model: { providerId: "openai", modelId: "gpt-5" },
+          ...invalid,
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(inputs).toEqual([]);
+  });
+
   test("routes one strict host-owned workflow start command", async () => {
     const inputs: unknown[] = [];
     const { router } = await createHarness(undefined, (input) =>
