@@ -77,10 +77,9 @@ const model: TerminalPanelModel = {
 
 describe("TerminalPanel", () => {
   test("keeps the terminal failure visible after exit and reattachment", async () => {
-    const mounts: Parameters<typeof terminalMount.mountInteractiveTerminal>[0][] = [];
-    const mount = spyOn(terminalMount, "mountInteractiveTerminal").mockImplementation((input) => {
-      mounts.push(input);
-      return { activate: () => undefined, dispose: () => undefined };
+    const mount = spyOn(terminalMount, "mountInteractiveTerminal").mockReturnValue({
+      activate: () => undefined,
+      dispose: () => undefined,
     });
     const controller = createTerminalTransportController(
       {
@@ -113,16 +112,13 @@ describe("TerminalPanel", () => {
         />,
       );
       unmount = view.unmount;
-      await waitFor(() => expect(mounts).toHaveLength(1));
-      const callbacks = mounts[0];
+      await waitFor(() => expect(mount).toHaveBeenCalledTimes(1));
+      const callbacks = mount.mock.calls[0]?.[0];
       if (!callbacks) throw new Error("Terminal did not mount");
       act(() => callbacks.onAttention("Shell access denied. Check the shell executable."));
       act(() => callbacks.onLifecycle("exited", "Exited with code 1."));
       expect(screen.getByRole("status", { name: "Terminal status" }).textContent).toContain(
         "Shell access denied.",
-      );
-      expect(screen.getByRole("status", { name: "Terminal status" }).textContent).not.toBe(
-        "Exited with code 1.",
       );
       act(() => callbacks.onLifecycle("exited", null));
       expect(screen.getByRole("status", { name: "Terminal status" }).textContent).toContain(

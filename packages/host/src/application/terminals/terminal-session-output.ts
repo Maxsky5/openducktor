@@ -72,7 +72,7 @@ export class TerminalSessionOutput {
   private readonly attachments = new Map<string, TerminalAttachment>();
   private paused = false;
   private overflowed = false;
-  private failure: TerminalFailure | null = null;
+  private failureFrame: Extract<TerminalServerMessage, { type: "protocol_error" }> | null = null;
 
   constructor(
     private readonly terminalId: string,
@@ -120,14 +120,7 @@ export class TerminalSessionOutput {
         complete: requested >= this.earliestRetainedSequence,
       });
       const events = this.flush(attachment, true, handle);
-      if (this.failure) {
-        this.publishTo(attachment, {
-          version: TERMINAL_PROTOCOL_VERSION,
-          type: "protocol_error",
-          terminalId: this.terminalId,
-          failure: this.failure,
-        });
-      }
+      if (this.failureFrame) this.publishTo(attachment, this.failureFrame);
       return events;
     } catch (cause) {
       if (previous) this.attachments.set(input.attachmentId, previous);
@@ -146,13 +139,13 @@ export class TerminalSessionOutput {
   }
 
   publishFailure(failure: TerminalFailure): TerminalOutputEvents {
-    this.failure ??= failure;
-    return this.publish({
+    this.failureFrame ??= {
       version: TERMINAL_PROTOCOL_VERSION,
       type: "protocol_error",
       terminalId: this.terminalId,
-      failure: this.failure,
-    });
+      failure,
+    };
+    return this.publish(this.failureFrame);
   }
 
   accept(data: Uint8Array, handle: TerminalPtyHandle | null): TerminalOutputEvents {
