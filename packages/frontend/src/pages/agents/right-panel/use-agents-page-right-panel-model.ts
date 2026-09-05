@@ -126,7 +126,8 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
     buildToolsSnapshot;
   const targetBranchValidationError = targetBranchState.validationError;
   const pullRequestDetectionTask =
-    gitProviderContext?.descriptor.capabilities.supportsPullRequests === true &&
+    (gitProviderContext?.descriptor.capabilities.supportsPullRequests === true ||
+      gitProviderReadError != null) &&
     selectedTask &&
     !selectedTask.pullRequest &&
     canDetectTaskPullRequest(selectedTask)

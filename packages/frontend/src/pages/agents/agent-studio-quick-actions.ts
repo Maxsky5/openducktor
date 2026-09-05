@@ -96,10 +96,12 @@ const PULL_REQUEST_QUICK_ACTION_STATUSES = new Set<TaskCard["status"]>(["human_r
 const canShowPullRequestQuickAction = (
   task: TaskCard,
   gitProviderContext: RepositoryGitProviderContext | undefined,
+  gitProviderReadError: string | null | undefined,
 ): boolean => {
   return (
     PULL_REQUEST_QUICK_ACTION_STATUSES.has(task.status) &&
-    gitProviderContext?.descriptor.capabilities.supportsPullRequests === true
+    (gitProviderContext?.descriptor.capabilities.supportsPullRequests === true ||
+      gitProviderReadError != null)
   );
 };
 
@@ -239,7 +241,7 @@ export const buildAgentStudioQuickActions = (params: {
   }
 
   if (
-    canShowPullRequestQuickAction(task, params.gitProviderContext) &&
+    canShowPullRequestQuickAction(task, params.gitProviderContext, params.gitProviderReadError) &&
     params.roleEnabledByTask.build
   ) {
     const builderSessionOptions = buildReusableSessionOptions({

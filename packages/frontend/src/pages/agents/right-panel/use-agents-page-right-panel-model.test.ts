@@ -408,6 +408,18 @@ describe("buildAgentsPageDiffModel", () => {
     });
   });
 
+  test("keeps Pull Request detection visible when the initial provider read fails", () => {
+    const diffModel = buildAgentsPageDiffModel({
+      ...createPullRequestDetectionArgs(),
+      gitProviderReadError: "Could not load the current Git provider: connection failed",
+    });
+
+    expect(diffModel).toMatchObject({
+      onDetectPullRequest: expect.any(Function),
+      detectPullRequestDisabledReason: "Could not load the current Git provider: connection failed",
+    });
+  });
+
   test("locks git actions from snapshot target-branch validation", () => {
     const validationError = "Invalid openducktor.targetBranch metadata: missing field `branch`.";
     const diffModel = buildAgentsPageDiffModel({
