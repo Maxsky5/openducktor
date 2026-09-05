@@ -1,6 +1,7 @@
 import {
   recordImageGenerationSessionEnd,
   recordImageGenerationTurnEnd,
+  recordImageGenerationTurnStart,
 } from "../support/image-generation-settlement";
 import type { AgentSessionTranscriptEvent } from "@openducktor/contracts";
 import { toast } from "sonner";
@@ -105,6 +106,11 @@ const dispatchTranscriptEvent = (
       return;
     case "assistant_delta":
       handleAssistantDelta(context, event);
+      return;
+    case "image_generation_turn_started":
+      context.store.updateSession(context.session.identity, (session) =>
+        recordImageGenerationTurnStart(session, event.turnId),
+      );
       return;
     case "image_generation_settled":
       context.store.updateSession(context.session.identity, (session) =>

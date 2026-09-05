@@ -73,3 +73,18 @@ test("history and live overlap preserve terminal output and fill absent metadata
     merged.items,
   );
 });
+
+test("a live image observation replaces a synthesized history timestamp before terminal checks", () => {
+  const owner = {
+    externalSessionId: "thread",
+    messages: createSessionMessagesState("thread", [
+      {
+        ...createImageGenerationMessage(image("running"), "2026-09-06T10:00:10.000Z"),
+        timestampIsApproximate: true,
+      },
+    ]),
+  };
+  const updated = upsertImageGenerationMessage(owner, image("running"), timestamp);
+  expect(updated.items[0]?.timestamp).toBe(timestamp);
+  expect(updated.items[0]?.timestampIsApproximate).toBeUndefined();
+});

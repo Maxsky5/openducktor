@@ -1,3 +1,4 @@
+import { preferredMessageTimestamp } from "./message-timestamp";
 import { settleImageGenerationMessage } from "./image-generation-settlement";
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 import { mergeAgentImageGeneration } from "@openducktor/core";
@@ -19,7 +20,11 @@ export const createImageGenerationMessage = (
 export const upsertImageGenerationMessage = (
   owner: Pick<
     AgentSessionState,
-    "externalSessionId" | "messages" | "imageGenerationEnd" | "imageGenerationTurnEnds"
+    | "externalSessionId"
+    | "messages"
+    | "imageGenerationEnd"
+    | "imageGenerationTurnEnds"
+    | "imageGenerationTurnStarts"
   >,
   part: AgentImageGenerationPart,
   timestamp: string,
@@ -28,10 +33,15 @@ export const upsertImageGenerationMessage = (
   const current = findSessionMessageById(owner, message.id);
   if (current?.meta?.kind === "image_generation") {
     message.meta = mergeAgentImageGeneration(current.meta, part, "live");
-    message.timestamp = current.timestamp;
+    message.timestamp = preferredMessageTimestamp(current, message).timestamp;
   }
   return upsertSessionMessage(
     owner,
-    settleImageGenerationMessage(message, owner.imageGenerationEnd, owner.imageGenerationTurnEnds),
+    settleImageGenerationMessage(
+      message,
+      owner.imageGenerationEnd,
+      owner.imageGenerationTurnEnds,
+      owner.imageGenerationTurnStarts,
+    ),
   );
 };

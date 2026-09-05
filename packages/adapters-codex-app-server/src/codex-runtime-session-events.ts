@@ -943,6 +943,15 @@ export class CodexRuntimeSessionEvents {
       modelByTurnKey: this.modelByTurnKey,
       latestTodosBySessionId: this.latestTodosBySessionId,
       eventMapperPipeline: this.eventMapperPipeline,
+      startImageGenerationTurn: (session, turnId, timestamp) => {
+        this.imageGenerations.startTurn(session.runtimeId, session.threadId, turnId);
+        this.emitSessionEventForSession(session, {
+          type: "image_generation_turn_started",
+          externalSessionId: session.threadId,
+          timestamp,
+          turnId,
+        });
+      },
       settleImageGenerations: (session, turnId, reason) =>
         this.settleImageGenerations(session, turnId, reason),
       recordStartedItemTimestamp: (runtimeId, threadId, itemId, startedAtMs) =>
@@ -1144,6 +1153,7 @@ export class CodexRuntimeSessionEvents {
       session.threadId,
       turnId,
       reason,
+      settlement.timestamp,
     )) {
       const event: AgentEvent = {
         type: "assistant_part",

@@ -204,9 +204,8 @@ export type AgentSessionState = {
     timestamp: string;
     reason: "interrupted" | "turn_ended" | "runtime_failure";
   };
-  imageGenerationTurnEnds?: Readonly<
-    Record<string, "interrupted" | "turn_ended" | "runtime_failure">
-  >;
+  imageGenerationTurnStarts?: ReadonlySet<string>;
+  imageGenerationTurnEnds?: ReadonlyMap<string, "interrupted" | "turn_ended" | "runtime_failure">;
   historyLoadState: AgentSessionHistoryLoadState;
   historyLoadFailure?: SessionHistoryFailure | null;
   messages: AgentSessionMessages;

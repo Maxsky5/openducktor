@@ -16,6 +16,7 @@ const IMMEDIATE_SESSION_EVENT_TYPE_LIST = [
   "turn_error",
   "session_error",
   "session_idle",
+  "image_generation_turn_started",
   "image_generation_settled",
   "session_finished",
 ] as const satisfies readonly SessionEvent["type"][];

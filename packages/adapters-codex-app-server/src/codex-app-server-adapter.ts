@@ -644,7 +644,12 @@ export class CodexAppServerAdapter
         ? {
             ...message,
             parts: message.parts.map((part) =>
-              part.kind === "image_generation" ? normalizeImage(part) : part,
+              part.kind === "image_generation"
+                ? normalizeImage(
+                    part,
+                    message.timestampIsApproximate ? undefined : message.timestamp,
+                  )
+                : part,
             ),
           }
         : message,

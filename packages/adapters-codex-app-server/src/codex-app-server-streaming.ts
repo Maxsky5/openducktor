@@ -67,6 +67,7 @@ export type CodexStreamingContext = {
   modelByTurnKey: Map<string, AgentModelSelection>;
   latestTodosBySessionId: Map<string, AgentSessionTodoItem[]>;
   eventMapperPipeline: CodexEventMapperPipeline;
+  startImageGenerationTurn(session: CodexSessionState, turnId: string, timestamp: string): void;
   settleImageGenerations(
     session: CodexSessionState,
     turnId: string | undefined,
@@ -613,6 +614,7 @@ export const handleCodexPendingNotifications = async (
         classification: "running",
       });
       const turnId = notification.params.turn.id;
+      context.startImageGenerationTurn(session, turnId, notification.receivedAt);
       if (
         turnId &&
         activeTurn &&

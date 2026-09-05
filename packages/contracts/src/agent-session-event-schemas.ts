@@ -397,6 +397,10 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
     message: z.string(),
   }),
   transcriptEventSchema({
+    type: z.literal("image_generation_turn_started"),
+    turnId: z.string().min(1),
+  }),
+  transcriptEventSchema({
     type: z.literal("image_generation_settled"),
     turnId: z.string().min(1).optional(),
     reason: z.enum(["interrupted", "turn_ended", "runtime_failure"]),
@@ -419,6 +423,7 @@ export type AgentSessionTranscriptEventType =
   | "transcript_retracted"
   | "user_message"
   | "assistant_part"
+  | "image_generation_turn_started"
   | "image_generation_settled"
   | "session_todos_updated"
   | "session_compaction_started"
@@ -437,6 +442,7 @@ const agentSessionTranscriptEventTypes: ReadonlySet<string> = new Set([
   "transcript_retracted",
   "user_message",
   "assistant_part",
+  "image_generation_turn_started",
   "image_generation_settled",
   "session_todos_updated",
   "session_compaction_started",

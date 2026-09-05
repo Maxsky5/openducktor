@@ -9,6 +9,8 @@ export type CodexImageSettlement = AgentImageGenerationSettlement;
 type ThreadImages = {
   items: Map<string, AgentImageGenerationPart>;
   terminalTurns: Map<string, CodexImageSettlement>;
+  startedTurns: Set<string>;
+  sessionEnd?: { timestamp: string; reason: CodexImageSettlement };
 };
 const itemKey = (part: AgentImageGenerationPart): string =>
   JSON.stringify([part.turnId ?? null, part.itemId]);
@@ -24,7 +26,7 @@ export class CodexImageGenerationState {
     }
     let state = threads.get(threadId);
     if (!state) {
-      state = { items: new Map(), terminalTurns: new Map() };
+      state = { items: new Map(), terminalTurns: new Map(), startedTurns: new Set() };
       threads.set(threadId, state);
     }
     return state;
@@ -34,12 +36,23 @@ export class CodexImageGenerationState {
     state: ThreadImages,
     incoming: AgentImageGenerationPart,
     source: "live" | "history",
+    occurredAt?: string,
   ): AgentImageGenerationPart {
     const key = itemKey(incoming);
     const current = state.items.get(key);
     const merged = current ? mergeAgentImageGeneration(current, incoming, source) : incoming;
-    const terminal =
+    const turnEnd =
       merged.turnId === undefined ? undefined : state.terminalTurns.get(merged.turnId);
+    const hasNewTurn = merged.turnId !== undefined && state.startedTurns.has(merged.turnId);
+    const sessionEnd = state.sessionEnd;
+    const historyEnd =
+      source === "history" &&
+      sessionEnd &&
+      !hasNewTurn &&
+      (occurredAt === undefined || Date.parse(occurredAt) <= Date.parse(sessionEnd.timestamp))
+        ? sessionEnd.reason
+        : undefined;
+    const terminal = turnEnd ?? historyEnd;
     const next = terminal ? settleAgentImageGeneration(merged, terminal) : merged;
     state.items.set(key, next);
     return next;
@@ -56,16 +69,19 @@ export class CodexImageGenerationState {
   prepareHistory(
     runtimeId: string,
     threadId: string,
-  ): (part: AgentImageGenerationPart) => AgentImageGenerationPart {
+  ): (part: AgentImageGenerationPart, occurredAt?: string) => AgentImageGenerationPart {
     const owner = this.thread(runtimeId, threadId);
-    return (part) =>
-      this.runtimes.get(runtimeId)?.get(threadId) === owner
-        ? this.update(owner, part, "history")
-        : settleAgentImageGeneration(
-            part,
-            (part.turnId === undefined ? undefined : owner.terminalTurns.get(part.turnId)) ??
-              "runtime_failure",
-          );
+    return (part, occurredAt) => {
+      const normalized = this.update(owner, part, "history", occurredAt);
+      return this.runtimes.get(runtimeId)?.get(threadId) === owner
+        ? normalized
+        : settleAgentImageGeneration(normalized, "runtime_failure");
+    };
+  }
+
+  startTurn(runtimeId: string, threadId: string, turnId: string): void {
+    const state = this.thread(runtimeId, threadId);
+    if (!state.terminalTurns.has(turnId)) state.startedTurns.add(turnId);
   }
 
   settle(
@@ -73,12 +89,20 @@ export class CodexImageGenerationState {
     threadId: string,
     turnId: string | undefined,
     reason: CodexImageSettlement,
+    timestamp: string,
   ): AgentImageGenerationPart[] {
     const state = this.thread(runtimeId, threadId);
     const recordTurn = (id: string) => {
       if (state.terminalTurns.get(id) !== "interrupted") state.terminalTurns.set(id, reason);
     };
-    if (turnId !== undefined) recordTurn(turnId);
+    if (turnId !== undefined) {
+      recordTurn(turnId);
+      state.startedTurns.delete(turnId);
+    } else {
+      state.sessionEnd = { timestamp, reason };
+      for (const id of state.startedTurns) recordTurn(id);
+      state.startedTurns.clear();
+    }
     const settled: AgentImageGenerationPart[] = [];
     for (const item of state.items.values()) {
       if (turnId !== undefined && item.turnId !== turnId) continue;
