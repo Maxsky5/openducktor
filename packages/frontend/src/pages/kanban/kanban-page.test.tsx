@@ -1173,6 +1173,7 @@ describe("KanbanPage session start modal flow", () => {
     await waitForMockCall(startAgentSessionMock);
     expect(publishSessionErrorMock).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: "TASK-123", role: "build" }),
+      "Worktree path already exists for task TASK-123",
     );
     expect(publishSessionErrorMock.mock.calls.at(0)?.at(0)).not.toHaveProperty("session");
     expect(toastErrorMock).not.toHaveBeenCalled();
@@ -1210,6 +1211,7 @@ describe("KanbanPage session start modal flow", () => {
       expect(renderer.getLocation()).toBe("/");
       expect(publishSessionErrorMock).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: "TASK-123", role: "build" }),
+        'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token".',
       );
       expect(toastErrorMock).not.toHaveBeenCalled();
 

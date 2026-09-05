@@ -39,6 +39,7 @@ const coordinatorMessageSchema = z.discriminatedUnion("type", [
     occurrenceId: z.string().min(1),
     claimId: z.string().min(1),
     tabId: z.string().min(1),
+    focusUnavailable: z.boolean().optional(),
   }),
 ]);
 type CoordinatorMessage = z.infer<typeof coordinatorMessageSchema>;
@@ -73,6 +74,7 @@ type CoordinationOperation =
   | "tab_registration"
   | "claim"
   | "external_ownership"
+  | "remote_focus"
   | "focus_lock"
   | "focus_query";
 
@@ -168,8 +170,12 @@ export const createBrowserNotificationCoordinator = ({
   let externalDeliveryOwner = false;
   let releaseExternalDeliveryLock: (() => void) | null = null;
   let externalDeliveryLockAbortController: AbortController | null = null;
-  let releaseFocusLock: (() => void) | null = null;
-  let focusLockAbortController: AbortController | null = null;
+  let focusLock: {
+    controller: AbortController;
+    release(): void;
+    released: Promise<void>;
+  } | null = null;
+  let focusTransition = Promise.resolve();
   let releaseTabLock: (() => void) | null = null;
   let tabLockAbortController: AbortController | null = null;
   const candidateOccurrences = new Map<string, PendingOccurrence>();
@@ -180,7 +186,7 @@ export const createBrowserNotificationCoordinator = ({
   const occurrenceListeners = new Set<
     (occurrence: NotificationOccurrence, settings: NotificationSettings) => void
   >();
-  const claimWaiters = new Map<string, Map<string, () => void>>();
+  const claimWaiters = new Map<string, Map<string, (focusUnavailable?: boolean) => void>>();
   const publicationSettlements = new Map<string, Set<PublicationSettlement>>();
   const activeClaimPropagations = new Set<Promise<void>>();
   const tabLockName = `${TAB_LOCK_NAME_PREFIX}${tabId}`;
@@ -249,12 +255,12 @@ export const createBrowserNotificationCoordinator = ({
   const waitForClaimAcknowledgementOrExit = (
     claimId: string,
     recipientTabId: string,
-  ): Promise<void> => {
+  ): Promise<boolean | void> => {
     const controller = new AbortController();
-    let finishWaiting = (): void => {};
-    const waitFinished = new Promise<void>((resolve) => {
-      finishWaiting = () => {
-        resolve();
+    let finishWaiting = (_focusUnavailable?: boolean): void => {};
+    const waitFinished = new Promise<boolean | void>((resolve) => {
+      finishWaiting = (focusUnavailable) => {
+        resolve(focusUnavailable);
         controller.abort();
       };
     });
@@ -285,6 +291,7 @@ export const createBrowserNotificationCoordinator = ({
   };
 
   const propagateClaim = async (occurrenceId: string, claimId: string): Promise<void> => {
+    await waitForFocusTransition();
     let snapshot: LockSnapshot;
     try {
       snapshot = await locks.query();
@@ -305,7 +312,12 @@ export const createBrowserNotificationCoordinator = ({
       throw new Error("The browser notification channel is not registered.");
     }
     registeredChannel.postMessage({ type: "external_delivery_claimed", occurrenceId, claimId });
-    await Promise.all(acknowledgements);
+    const focusFailures = await Promise.all(acknowledgements);
+    if (focusFailures.some(Boolean)) {
+      recordFailure("remote_focus", "A browser tab could not report its focus state.");
+    } else {
+      failureMessages.delete("remote_focus");
+    }
     failureMessages.delete("claim");
   };
 
@@ -360,7 +372,7 @@ export const createBrowserNotificationCoordinator = ({
     const parsed = coordinatorMessageSchema.safeParse(event.data);
     if (!parsed.success) return;
     if (parsed.data.type === "external_delivery_claim_ack") {
-      claimWaiters.get(parsed.data.claimId)?.get(parsed.data.tabId)?.();
+      claimWaiters.get(parsed.data.claimId)?.get(parsed.data.tabId)?.(parsed.data.focusUnavailable);
       return;
     }
     if (parsed.data.type === "external_delivery_claim_released") {
@@ -377,12 +389,18 @@ export const createBrowserNotificationCoordinator = ({
     if (parsed.data.type === "external_delivery_claimed") {
       claimedOccurrences.set(parsed.data.occurrenceId, parsed.data.claimId);
       pendingOccurrences.delete(parsed.data.occurrenceId);
-      channel?.postMessage({
-        type: "external_delivery_claim_ack",
-        occurrenceId: parsed.data.occurrenceId,
-        claimId: parsed.data.claimId,
-        tabId,
-      });
+      const { occurrenceId, claimId } = parsed.data;
+      void waitForFocusTransition()
+        .then(() => {
+          channel?.postMessage({
+            type: "external_delivery_claim_ack",
+            occurrenceId,
+            claimId,
+            tabId,
+            focusUnavailable: failureMessages.has("focus_lock"),
+          });
+        })
+        .catch((cause: unknown) => recordFailure("claim", cause));
       return;
     }
     const pending = { occurrence: parsed.data.occurrence, settings: parsed.data.settings };
@@ -442,39 +460,49 @@ export const createBrowserNotificationCoordinator = ({
       });
   };
 
+  const waitForFocusTransition = async (): Promise<void> => {
+    let transition: Promise<void>;
+    do {
+      transition = focusTransition;
+      await transition;
+    } while (transition !== focusTransition);
+  };
+
   const releaseFocusedState = (): void => {
-    focusLockAbortController?.abort();
-    focusLockAbortController = null;
-    releaseFocusLock?.();
-    releaseFocusLock = null;
+    const current = focusLock;
+    if (!current) return;
+    focusLock = null;
+    current.controller.abort();
+    current.release();
+    focusTransition = Promise.all([focusTransition, current.released]).then(() => {});
   };
 
   const holdFocusedState = (): void => {
-    if (disposed || !channel || focusLockAbortController || releaseFocusLock) {
-      return;
-    }
+    if (disposed || !channel || focusLock) return;
     const controller = new AbortController();
-    focusLockAbortController = controller;
-    void locks
+    let markReady = (): void => {};
+    const ready = new Promise<void>((resolve) => {
+      markReady = resolve;
+    });
+    const current = { controller, release: () => {}, released: Promise.resolve() };
+    focusLock = current;
+    current.released = locks
       .request(APP_FOCUS_LOCK_NAME, { mode: "shared", signal: controller.signal }, async () => {
-        if (disposed || !focusDocument.hasFocus()) {
-          return;
-        }
+        if (disposed || !focusDocument.hasFocus() || focusLock !== current) return;
         failureMessages.delete("focus_lock");
-        focusLockAbortController = null;
         await new Promise<void>((resolve) => {
-          releaseFocusLock = resolve;
+          current.release = resolve;
+          markReady();
         });
-        releaseFocusLock = null;
       })
       .catch((cause: unknown) => {
-        if (focusLockAbortController === controller) {
-          focusLockAbortController = null;
-        }
-        if (!controller.signal.aborted) {
-          recordFailure("focus_lock", cause);
-        }
+        if (!controller.signal.aborted) recordFailure("focus_lock", cause);
+      })
+      .finally(() => {
+        if (focusLock === current) focusLock = null;
+        markReady();
       });
+    focusTransition = Promise.all([focusTransition, ready]).then(() => {});
   };
 
   const handleFocus = (): void => holdFocusedState();
@@ -549,7 +577,9 @@ export const createBrowserNotificationCoordinator = ({
       }
     },
     async isAnyTabFocused() {
-      const focusLockFailure = failureMessages.get("focus_lock");
+      await waitForFocusTransition();
+      const focusLockFailure =
+        failureMessages.get("focus_lock") ?? failureMessages.get("remote_focus");
       if (focusLockFailure) {
         throw new Error(focusLockFailure);
       }

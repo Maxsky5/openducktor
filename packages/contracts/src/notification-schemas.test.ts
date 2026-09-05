@@ -25,6 +25,24 @@ const expectedKinds = [
 ] as const;
 
 describe("notification contracts", () => {
+  test.each(["permission", "question"] as const)(
+    "retains long %s request identities",
+    (inputKind) => {
+      const target = {
+        type: "pending_input",
+        repoPath: "/repo",
+        taskId: "task",
+        session: { externalSessionId: "session", runtimeKind: "codex", workingDirectory: "/repo" },
+        inputKind,
+        requestId: "request-".repeat(300),
+      };
+      expect(notificationNavigationTargetSchema.parse(target)).toEqual(target);
+      expect(
+        notificationNavigationTargetSchema.safeParse({ ...target, requestId: " " }).success,
+      ).toBe(false);
+    },
+  );
+
   test("ships the exact v1 catalogue and defaults", () => {
     const bloomKinds = new Set([
       "agent.permission_requested",

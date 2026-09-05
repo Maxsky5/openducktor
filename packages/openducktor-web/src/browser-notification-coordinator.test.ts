@@ -222,7 +222,9 @@ class FakeBroadcastHub {
   }
 
   async flushNext(channel: FakeBroadcastChannel, type: CoordinatorMessage["type"]): Promise<void> {
-    await Promise.resolve();
+    await waitFor(() =>
+      this.messages.some((message) => message.channel === channel && message.value.type === type),
+    );
     const index = this.messages.findIndex(
       (message) => message.channel === channel && message.value.type === type,
     );
@@ -362,6 +364,104 @@ describe("FakeLockManager", () => {
 });
 
 describe("browser notification coordinator", () => {
+  test("waits for focus acquisition and release before querying focus", async () => {
+    const locks = new FakeLockManager();
+    const focusWindow = new FakeFocusWindow();
+    let focused = false;
+    const coordinator = createBrowserNotificationCoordinator({
+      createChannel: () => new FakeBroadcastHub().createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => focused },
+      focusWindow,
+    });
+    await waitFor(() => coordinator.isExternalDeliveryOwner());
+    locks.defer(APP_FOCUS_LOCK_NAME);
+    focused = true;
+    focusWindow.emit("focus");
+    const gainingFocus = coordinator.isAnyTabFocused();
+    expect(await observeSettlement(gainingFocus)).toBe("pending");
+    locks.admit(APP_FOCUS_LOCK_NAME);
+    expect(await gainingFocus).toBe(true);
+
+    focused = false;
+    focusWindow.emit("blur");
+    expect(await coordinator.isAnyTabFocused()).toBe(false);
+    coordinator.dispose();
+  });
+
+  test("keeps the latest focus lock through rapid blur and focus events", async () => {
+    const locks = new FakeLockManager();
+    const focusWindow = new FakeFocusWindow();
+    let focused = true;
+    const coordinator = createBrowserNotificationCoordinator({
+      createChannel: () => new FakeBroadcastHub().createChannel(),
+      locks,
+      focusDocument: { hasFocus: () => focused },
+      focusWindow,
+    });
+    await waitFor(() => coordinator.isExternalDeliveryOwner());
+    expect(await coordinator.isAnyTabFocused()).toBe(true);
+    focused = false;
+    focusWindow.emit("blur");
+    focused = true;
+    focusWindow.emit("focus");
+    expect(await coordinator.isAnyTabFocused()).toBe(true);
+    focused = false;
+    focusWindow.emit("blur");
+    expect(await coordinator.isAnyTabFocused()).toBe(false);
+    coordinator.dispose();
+  });
+
+  test.each(["grant", "exit", "failure"] as const)(
+    "settles remote focus transitions before claim acknowledgement: %s",
+    async (outcome) => {
+      const locks = new FakeLockManager();
+      const hub = new FakeBroadcastHub();
+      const owner = createBrowserNotificationCoordinator({
+        createChannel: () => hub.createChannel(),
+        locks,
+        focusDocument: { hasFocus: () => false },
+        focusWindow: new FakeFocusWindow(),
+        tabId: "owner",
+      });
+      await waitFor(() => owner.isExternalDeliveryOwner());
+      const remoteWindow = new FakeFocusWindow();
+      let focused = false;
+      const remote = createBrowserNotificationCoordinator({
+        createChannel: () => hub.createChannel(),
+        locks,
+        focusDocument: { hasFocus: () => focused },
+        focusWindow: remoteWindow,
+        tabId: "remote",
+      });
+      await waitFor(() => hub.channels.size === 2);
+      await owner.publishOccurrence(occurrence, settings);
+      if (outcome === "failure") {
+        locks.rejectNextRequest(APP_FOCUS_LOCK_NAME, new Error("Focus lock failed."));
+      } else {
+        locks.defer(APP_FOCUS_LOCK_NAME);
+      }
+      focused = true;
+      remoteWindow.emit("focus");
+      const claim = owner.claimExternalDelivery(occurrence.occurrenceId);
+      if (outcome !== "failure") {
+        expect(await observeSettlement(claim)).toBe("pending");
+        if (outcome === "exit") remote.dispose();
+        else locks.admit(APP_FOCUS_LOCK_NAME);
+      }
+      expect(await claim).toBe(true);
+      if (outcome === "failure") {
+        await expect(owner.isAnyTabFocused()).rejects.toThrow(
+          "A browser tab could not report its focus state.",
+        );
+      } else {
+        expect(await owner.isAnyTabFocused()).toBe(outcome === "grant");
+      }
+      owner.dispose();
+      remote.dispose();
+    },
+  );
+
   test("rejects a pending publication when owner selection fails", async () => {
     const locks = new FakeLockManager(true);
     locks.rejectNextRequest(EXTERNAL_DELIVERY_LOCK_NAME, new Error("Owner lock failed."));

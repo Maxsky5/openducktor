@@ -43,6 +43,75 @@ const createProjector = () =>
   });
 
 describe("session occurrence projector", () => {
+  test.each(["snapshot", "session_upsert"] as const)(
+    "reconciles live pending inputs when ownership arrives through %s",
+    (type) => {
+      let owned = false;
+      const projector = createSessionOccurrenceProjector({
+        repositoryLabel: "Repo",
+        resolveAssociation: () =>
+          owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+        resolveTask: () => ({ id: "task-1" }),
+      });
+      const pending = snapshot({
+        pendingApprovals: [
+          { requestId: "permission", requestType: "permission_grant", title: "Read" },
+        ],
+        pendingQuestions: [{ requestId: "question", questions: [] }],
+      });
+      projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [] });
+      expect(projector.accept({ type: "session_upsert", session: pending })).toEqual([]);
+      owned = true;
+      const event =
+        type === "snapshot"
+          ? { type, repoPath: "/repo", sessions: [pending] }
+          : { type, session: pending };
+      expect(projector.accept(event).map((entry) => entry.kind)).toEqual([
+        "agent.permission_requested",
+        "agent.question_asked",
+      ]);
+      expect(projector.accept(event)).toEqual([]);
+      expect(projector.accept({ type: "session_upsert", session: pending })).toEqual([]);
+    },
+  );
+
+  test.each(["hydration", "resolved", "removed", "reconnect", "subagent"])(
+    "does not replay %s inputs when ownership arrives",
+    (scenario) => {
+      let owned = false;
+      const projector = createSessionOccurrenceProjector({
+        repositoryLabel: "Repo",
+        resolveAssociation: () =>
+          owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+        resolveTask: () => ({ id: "task-1" }),
+      });
+      const pending = snapshot({
+        pendingApprovals: [
+          { requestId: "permission", requestType: "permission_grant", title: "Read" },
+        ],
+      });
+      if (scenario === "subagent") pending.parentExternalSessionId = "parent";
+      projector.accept({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: scenario === "hydration" ? [pending] : [],
+      });
+      projector.accept({ type: "session_upsert", session: pending });
+      if (scenario === "resolved")
+        projector.accept({ type: "session_upsert", session: snapshot() });
+      if (scenario === "removed") projector.accept({ type: "session_removed", ref });
+      owned = true;
+      expect(
+        projector.accept({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [pending],
+          isConnectionSnapshot: scenario === "reconnect",
+        }),
+      ).toEqual([]);
+    },
+  );
+
   test("shares occurrence IDs across late observers and renews them after re-registration", () => {
     const first = createProjector();
     const second = createProjector();

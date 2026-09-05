@@ -2,6 +2,7 @@ import { z } from "zod";
 import { agentSessionLiveRefSchema } from "./agent-session-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
 import { agentSessionRecordSchema } from "./session-schemas";
+import { agentSessionLivePendingApprovalRequestSchema } from "./agent-session-live-schemas";
 
 export const NOTIFICATION_KIND_VALUES = [
   "agent.permission_requested",
@@ -150,7 +151,7 @@ export const notificationNavigationTargetSchema = z.discriminatedUnion("type", [
     ...notificationSessionTargetFields,
     session: notificationSessionIdentitySchema,
     inputKind: z.enum(["permission", "question"]),
-    requestId: z.string().trim().min(1).max(512),
+    requestId: agentSessionLivePendingApprovalRequestSchema.shape.requestId,
   }),
   z.strictObject({
     type: z.literal("session_error"),

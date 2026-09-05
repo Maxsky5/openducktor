@@ -118,6 +118,124 @@ test("uses the settings navigation target in both explicit tests", async () => {
 });
 
 describe("notification runtime tests", () => {
+  test("shows the local start error once without putting it in the shared or OS payload", async () => {
+    const detail =
+      "Could not start: set the runtime executable path. Private endpoint: secret.local";
+    const occurrence = {
+      ...workflowClosedOccurrence("start-failed"),
+      kind: "agent.session_error" as const,
+    };
+    let listener: Parameters<NotificationBridge["subscribeOccurrences"]>[0] = () => {};
+    const published: NotificationOccurrence[] = [];
+    const osRequests: NotificationOsDeliveryRequest[] = [];
+    const deliverInApp = mock(
+      async (_copy: { body: string }, _occurrence: NotificationOccurrence) => {},
+    );
+    const runtime = createNotificationRuntime({
+      bridge: createBridge({
+        subscribeOccurrences: (next) => {
+          listener = next;
+          return () => {};
+        },
+        publishOccurrence: async (value, settings) => {
+          published.push(value);
+          listener(value, settings);
+          return { occurrence: value, settings };
+        },
+        showOsNotification: async (request) => {
+          osRequests.push(request);
+          return { status: "shown" };
+        },
+      }),
+      loadSettings: async () => createDefaultNotificationSettings(),
+      navigate: async () => {},
+      onFailure: () => {},
+      inApp: { deliver: deliverInApp },
+    });
+    const stop = runtime.subscribe();
+    expect(await runtime.publishAndWait(occurrence, detail)).toBe(true);
+    expect(deliverInApp).toHaveBeenCalledTimes(1);
+    expect(deliverInApp.mock.calls[0]?.[0].body).toContain(detail);
+    expect(JSON.stringify(published)).not.toContain("secret.local");
+    expect(osRequests).toHaveLength(1);
+    expect(JSON.stringify(osRequests)).not.toContain("secret.local");
+    stop();
+  });
+
+  test.each(["disabled", "os", "failed"] as const)(
+    "does not claim local error feedback for %s delivery",
+    async (mode) => {
+      const settings = createDefaultNotificationSettings();
+      settings.kinds["agent.session_error"].enabled = mode !== "disabled";
+      settings.kinds["agent.session_error"].target = mode === "os" ? "os" : "in_app";
+      const inApp = {
+        deliver: mock(async () => {
+          throw new Error("Toast failed");
+        }),
+      };
+      const runtime = createNotificationRuntime({
+        bridge: createBridge(),
+        loadSettings: async () => settings,
+        navigate: async () => {},
+        onFailure: () => {},
+        inApp,
+      });
+      expect(
+        await runtime.publishAndWait(
+          { ...workflowClosedOccurrence(mode), kind: "agent.session_error" },
+          "Set the runtime executable path.",
+        ),
+      ).toBe(false);
+      expect(inApp.deliver).toHaveBeenCalledTimes(mode === "failed" ? 1 : 0);
+    },
+  );
+
+  test.each(["permission", "question"] as const)(
+    "publishes a long %s ID without changing the click target",
+    async (inputKind) => {
+      const requestId = "request-".repeat(300);
+      const target = {
+        type: "pending_input" as const,
+        repoPath: "/repo",
+        taskId: "task-1",
+        session: {
+          externalSessionId: "session",
+          runtimeKind: "codex" as const,
+          workingDirectory: "/repo",
+        },
+        inputKind,
+        requestId,
+      };
+      const published: NotificationOccurrence[] = [];
+      const requests: NotificationOsDeliveryRequest[] = [];
+      const runtime = createNotificationRuntime({
+        bridge: createBridge({
+          publishOccurrence: async (occurrence, settings) => {
+            published.push(occurrence);
+            return { occurrence, settings };
+          },
+          showOsNotification: async (request) => {
+            requests.push(request);
+            return { status: "shown" };
+          },
+        }),
+        loadSettings: async () => createDefaultNotificationSettings(),
+        navigate: async () => {},
+        onFailure: () => {},
+      });
+      expect(
+        await runtime.publishAndWait({
+          ...workflowClosedOccurrence(requestId),
+          kind: inputKind === "permission" ? "agent.permission_requested" : "agent.question_asked",
+          navigationTarget: target,
+        }),
+      ).toBe(true);
+      expect(published[0]?.occurrenceId).toStartWith("sha256:");
+      expect(published[0]?.navigationTarget).toEqual(target);
+      expect(requests[0]?.navigationTarget).toEqual(target);
+    },
+  );
+
   test("bounds display text before publishing the occurrence", async () => {
     let resolvePublished = (_occurrence: NotificationOccurrence): void => {};
     const publishedOccurrence = new Promise<NotificationOccurrence>((resolve) => {

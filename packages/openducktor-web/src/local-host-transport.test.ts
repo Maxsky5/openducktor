@@ -437,6 +437,7 @@ describe("local host SSE subscriptions", () => {
       },
     });
     expect(liveSessionListener).toHaveBeenCalledWith({
+      isConnectionSnapshot: true,
       type: "snapshot",
       repoPath: "/repo",
       sessions: [],
@@ -553,7 +554,10 @@ describe("local host SSE subscriptions", () => {
         payload: snapshot,
       }),
     );
-    expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([snapshot, transcriptEvent]);
+    expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
+      { ...snapshot, isConnectionSnapshot: true },
+      transcriptEvent,
+    ]);
 
     eventSource.emit("open", "");
     await secondRefresh;
@@ -604,10 +608,10 @@ describe("local host SSE subscriptions", () => {
       }),
     );
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
-      snapshot,
+      { ...snapshot, isConnectionSnapshot: true },
       transcriptEvent,
       transcriptGap,
-      replayedSnapshot,
+      { ...replayedSnapshot, isConnectionSnapshot: true },
       reconnectTranscriptEvent,
       refreshedSnapshot,
     ]);

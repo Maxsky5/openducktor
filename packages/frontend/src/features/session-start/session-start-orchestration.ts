@@ -92,7 +92,10 @@ export type SessionStartNotificationPublisher = {
   publishSessionStarted(
     input: SessionStartNotificationInput & { session: AgentSessionIdentity },
   ): void;
-  publishSessionError(input: SessionStartNotificationInput): Promise<boolean>;
+  publishSessionError(
+    input: SessionStartNotificationInput,
+    localErrorMessage?: string,
+  ): Promise<boolean>;
   reportFailure(cause: unknown, input: SessionStartNotificationInput): void;
 };
 
@@ -345,15 +348,18 @@ export const createSessionStartWorkflowRunner = ({
     try {
       result = await executeSessionStartFromDecision(args);
     } catch (cause) {
+      const startError = cause instanceof Error ? cause : new Error(String(cause));
       let feedbackHandled = false;
       try {
         if (notifications) {
-          feedbackHandled = await notifications.publishSessionError(notificationInput);
+          feedbackHandled = await notifications.publishSessionError(
+            notificationInput,
+            startError.message,
+          );
         }
       } catch (notificationCause) {
         reportNotificationFailure(notificationCause);
       }
-      const startError = cause instanceof Error ? cause : new Error(String(cause));
       throw new SessionStartWorkflowError(startError, feedbackHandled);
     }
 

@@ -9,7 +9,7 @@ import { buildNotificationCopy, type NotificationCopy } from "./notification-cop
 import { resolveNotificationCue } from "./notification-sound";
 
 export type NotificationDispatchContext =
-  | { phase: "local" }
+  | { phase: "local"; errorMessage?: string }
   | { phase: "external"; appFocused: boolean | undefined };
 
 type InAppNotificationAdapter = {
@@ -127,7 +127,10 @@ export const createNotificationPolicy = ({
     if (context.phase === "local" && !localOccurrences.has(occurrence.occurrenceId)) {
       localOccurrences.add(occurrence.occurrenceId);
       if (targetIncludesInApp(kindSettings.target)) {
-        deliveries.push({ channel: "in_app", run: () => inApp.deliver(copy, occurrence) });
+        const localCopy = context.errorMessage
+          ? { ...copy, body: `${context.errorMessage}\n${copy.body}` }
+          : copy;
+        deliveries.push({ channel: "in_app", run: () => inApp.deliver(localCopy, occurrence) });
       }
     }
     if (context.phase === "external" && !externalOccurrences.has(occurrence.occurrenceId)) {

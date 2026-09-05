@@ -124,13 +124,16 @@ describe("session-start notifications", () => {
     expect(rejected).toBeInstanceOf(SessionStartWorkflowError);
     expect(rejected).toHaveProperty("originalCause", startFailure);
     expect(isSessionStartFailureFeedbackHandled(rejected)).toBe(true);
-    expect(notifications.publishSessionError).toHaveBeenCalledWith({
-      launchAttemptId: "launch-error",
-      workspaceId: "workspace-1",
-      taskId: "task-1",
-      taskTitle: "Build notifications",
-      role: "build",
-    });
+    expect(notifications.publishSessionError).toHaveBeenCalledWith(
+      {
+        launchAttemptId: "launch-error",
+        workspaceId: "workspace-1",
+        taskId: "task-1",
+        taskTitle: "Build notifications",
+        role: "build",
+      },
+      startFailure.message,
+    );
     expect(notifications.publishSessionStarted).not.toHaveBeenCalled();
   });
 

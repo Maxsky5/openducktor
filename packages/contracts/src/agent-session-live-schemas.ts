@@ -142,6 +142,7 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
       type: z.literal("snapshot"),
       repoPath: nonEmptyStringSchema,
       sessions: z.array(agentSessionLiveSnapshotSchema),
+      isConnectionSnapshot: z.boolean().optional(),
     })
     .strict(),
   z

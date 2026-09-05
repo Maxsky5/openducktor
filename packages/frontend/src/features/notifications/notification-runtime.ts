@@ -15,7 +15,11 @@ import {
 } from "./notification-delivery";
 import { boundNotificationOccurrenceId } from "./notification-occurrence-id";
 import { prepareNotificationOccurrence } from "./notification-occurrence";
-import { createNotificationPolicy, type NotificationDispatchFailure } from "./notification-policy";
+import {
+  createNotificationPolicy,
+  type NotificationDispatchFailure,
+  type NotificationDispatchContext,
+} from "./notification-policy";
 
 type CoordinationFailurePhase = "publication" | "external_delivery";
 
@@ -43,6 +47,7 @@ export const createNotificationRuntime = ({
   sound: ReturnType<typeof createCuelumeNotificationSoundAdapter>;
 }) => {
   const activeCoordinationFailures = new Set<CoordinationFailurePhase>();
+  const localErrorPublications = new Set<string>();
   const os = createShellOsNotificationAdapter(bridge, onOsShown);
   const playSound = async (cue: NotificationCue, volumePercent: number): Promise<void> => {
     await sound.play(cue, volumePercent);
@@ -102,9 +107,12 @@ export const createNotificationRuntime = ({
   const dispatch = async (
     rawOccurrence: NotificationOccurrence,
     suppliedSettings: NotificationSettings,
+    errorMessage?: string,
   ): Promise<boolean> => {
     const occurrence = notificationOccurrenceSchema.parse(rawOccurrence);
-    const localResult = await policy.dispatch(occurrence, { phase: "local" }, suppliedSettings);
+    const context: NotificationDispatchContext = { phase: "local" };
+    if (errorMessage !== undefined) context.errorMessage = errorMessage;
+    const localResult = await policy.dispatch(occurrence, context, suppliedSettings);
     const externalPlan = localResult.externalPlan;
     if (!externalPlan) return localResult.inAppDelivered;
     let coordinationFailed = false;
@@ -134,7 +142,10 @@ export const createNotificationRuntime = ({
     return localResult.inAppDelivered;
   };
 
-  const publishAndWait = async (rawOccurrence: NotificationOccurrence): Promise<boolean> => {
+  const publishAndWait = async (
+    rawOccurrence: NotificationOccurrence,
+    localErrorMessage?: string,
+  ): Promise<boolean> => {
     let occurrence = rawOccurrence;
     try {
       occurrence = notificationOccurrenceSchema.parse({
@@ -143,12 +154,15 @@ export const createNotificationRuntime = ({
       });
       const settings = await policy.loadSettingsCandidate(occurrence);
       if (!settings) return false;
+      if (localErrorMessage !== undefined) localErrorPublications.add(occurrence.occurrenceId);
       const selected = await bridge.publishOccurrence(occurrence, settings);
       recoverCoordinationFailure("publication");
-      return await dispatch(selected.occurrence, selected.settings);
+      return await dispatch(selected.occurrence, selected.settings, localErrorMessage);
     } catch (cause) {
       reportCoordinationFailure("publication", occurrence, cause);
       return false;
+    } finally {
+      if (localErrorMessage !== undefined) localErrorPublications.delete(occurrence.occurrenceId);
     }
   };
 
@@ -159,6 +173,7 @@ export const createNotificationRuntime = ({
     publishAndWait,
     subscribe(): () => void {
       const stopOccurrences = bridge.subscribeOccurrences((occurrence, settings) => {
+        if (localErrorPublications.has(occurrence.occurrenceId)) return;
         void dispatch(occurrence, settings);
       });
       const stopClicks = bridge.subscribeClicks(({ navigationTarget }) => {

@@ -364,7 +364,10 @@ describe("electron shell bridge", () => {
     expect(listener).not.toHaveBeenCalled();
     subscription(snapshot);
 
-    expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([snapshot, transcriptEvent]);
+    expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
+      { ...snapshot, isConnectionSnapshot: true },
+      transcriptEvent,
+    ]);
   });
 
   test("uses the preload bridge for app update state and actions", async () => {

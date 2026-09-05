@@ -39,7 +39,7 @@ describe("agent session live attachment", () => {
     expect(received).toEqual([]);
     attachment.accept(snapshot);
 
-    expect(received).toEqual([snapshot, first, second]);
+    expect(received).toEqual([{ ...snapshot, isConnectionSnapshot: true }, first, second]);
   });
 
   test("delivers later ordered snapshots without dropping deltas", () => {
@@ -55,7 +55,11 @@ describe("agent session live attachment", () => {
     attachment.accept(refreshedSnapshot);
     attachment.accept(delta);
 
-    expect(received).toEqual([snapshot, refreshedSnapshot, delta]);
+    expect(received).toEqual([
+      { ...snapshot, isConnectionSnapshot: true },
+      refreshedSnapshot,
+      delta,
+    ]);
   });
 
   test("starts a new snapshot-first epoch after reconnect", () => {
@@ -73,7 +77,12 @@ describe("agent session live attachment", () => {
     attachment.accept(replayedSnapshot);
     attachment.accept(refreshedSnapshot);
 
-    expect(received).toEqual([snapshot, replayedSnapshot, duringReconnect, refreshedSnapshot]);
+    expect(received).toEqual([
+      { ...snapshot, isConnectionSnapshot: true },
+      { ...replayedSnapshot, isConnectionSnapshot: true },
+      duringReconnect,
+      refreshedSnapshot,
+    ]);
   });
 
   test("lets a repair snapshot supersede buffered session state without dropping transcripts", () => {
@@ -112,7 +121,11 @@ describe("agent session live attachment", () => {
     attachment.accept(duringReconnect);
     attachment.accept(repairSnapshot);
 
-    expect(received).toEqual([snapshot, repairSnapshot, duringReconnect]);
+    expect(received).toEqual([
+      { ...snapshot, isConnectionSnapshot: true },
+      { ...repairSnapshot, isConnectionSnapshot: true },
+      duringReconnect,
+    ]);
   });
 
   test("preserves buffered transcript events across repeated reconnect signals", () => {
@@ -130,7 +143,12 @@ describe("agent session live attachment", () => {
     attachment.accept(second);
     attachment.accept(snapshot);
 
-    expect(received).toEqual([snapshot, snapshot, first, second]);
+    expect(received).toEqual([
+      { ...snapshot, isConnectionSnapshot: true },
+      { ...snapshot, isConnectionSnapshot: true },
+      first,
+      second,
+    ]);
   });
 
   test("preserves repository association in live session events", () => {
@@ -158,6 +176,6 @@ describe("agent session live attachment", () => {
     attachment.accept(snapshot);
     attachment.accept(event);
 
-    expect(received).toEqual([snapshot, event]);
+    expect(received).toEqual([{ ...snapshot, isConnectionSnapshot: true }, event]);
   });
 });

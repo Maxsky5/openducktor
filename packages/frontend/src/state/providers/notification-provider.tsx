@@ -198,9 +198,10 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
       publishSessionStarted(input) {
         runtime.publish(buildSessionStartedOccurrence(resolveWorkspace(input), input));
       },
-      async publishSessionError(input) {
+      async publishSessionError(input, localErrorMessage) {
         return await runtime.publishAndWait(
           buildSessionStartErrorOccurrence(resolveWorkspace(input), input),
+          localErrorMessage,
         );
       },
       reportFailure(_cause, input) {
