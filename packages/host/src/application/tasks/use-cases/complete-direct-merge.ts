@@ -13,7 +13,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
   gitPort,
   taskStore,
   settingsConfig,
-  taskSessionBootstrapCoordinator,
+  taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
   worktreeFiles,
@@ -100,7 +100,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
           operation: "complete direct merge",
           repoPath,
           taskId,
-          taskSessionBootstrapCoordinator,
+          taskSessionLifecycleCoordinator,
           taskStore,
         });
       } else {

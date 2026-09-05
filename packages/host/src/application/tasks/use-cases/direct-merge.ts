@@ -23,7 +23,7 @@ export const createTaskDirectMergeUseCase = ({
   gitPort,
   taskStore,
   settingsConfig,
-  taskSessionBootstrapCoordinator,
+  taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
   worktreeFiles,
@@ -150,7 +150,7 @@ export const createTaskDirectMergeUseCase = ({
             operation: "direct merge",
             repoPath: effectiveRepoPath,
             taskId,
-            taskSessionBootstrapCoordinator,
+            taskSessionLifecycleCoordinator,
             taskStore,
           });
           const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));

@@ -36,7 +36,7 @@ export const createTaskCloseUseCase = ({
   taskWorktreeService,
   worktreeFiles,
   workspaceSettingsService,
-  taskSessionBootstrapCoordinator,
+  taskSessionLifecycleCoordinator,
 }: TaskServiceUseCaseInput): Pick<TaskService, "closeTask"> => ({
   closeTask(input) {
     return Effect.gen(function* () {
@@ -112,7 +112,7 @@ export const createTaskCloseUseCase = ({
           current,
           currentSessions,
         );
-        yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
+        yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle(worktreePaths);
         if (hasWorkflowSessions && taskActivityGuard) {
           const { stoppedSessionCount } = yield* taskActivityGuard.cleanupTaskSessions({
             repoPath: effectiveRepoPath,
@@ -154,7 +154,7 @@ export const createTaskCloseUseCase = ({
           operation: "close task",
           repoPath: effectiveRepoPath,
           taskId,
-          taskSessionBootstrapCoordinator,
+          taskSessionLifecycleCoordinator,
           taskStore,
         });
         return enrichTask(updated, replaceTaskInList(currentTasks, updated));

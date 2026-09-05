@@ -119,9 +119,7 @@ export const createTestDependencies = (
     runtimeHostPort: {
       gitCanonicalizePath: async (path) => path,
       runtimeEnsure: (...args) => host.runtimeEnsure(...args),
-      taskSessionBootstrapPrepare: (...args) => host.taskSessionBootstrapPrepare(...args),
-      taskSessionBootstrapComplete: (...args) => host.taskSessionBootstrapComplete(...args),
-      taskSessionBootstrapAbort: (...args) => host.taskSessionBootstrapAbort(...args),
+      agentSessionWorkflowStart: (...args) => host.agentSessionWorkflowStart(...args),
       ...runtimeHostOverrides,
     },
     liveSessionHostPort: {

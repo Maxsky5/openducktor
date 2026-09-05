@@ -3,7 +3,7 @@ import type { AgentEnginePort, AgentRole, AgentUserMessagePart } from "@openduck
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { StartAgentSessionInput, StartAgentSessionResult } from "@/types/agent-session-start";
-import type { EnsureRuntime, TaskDocuments } from "../runtime/runtime";
+import type { TaskDocuments } from "../runtime/runtime";
 import type { LoadSourceSession } from "../session-read-model/source-session-loader";
 import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-runtime-policy";
 
@@ -21,7 +21,7 @@ export type SessionDependencies = {
 export type RuntimeDependencies = {
   canonicalizePath: (path: string) => Promise<string>;
   adapter: AgentEnginePort;
-  ensureRuntime: EnsureRuntime;
+  startWorkflowSession: typeof import("../../shared/host").host.agentSessionWorkflowStart;
 };
 
 export type TaskDependencies = {

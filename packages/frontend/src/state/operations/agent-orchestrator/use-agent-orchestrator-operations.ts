@@ -6,6 +6,7 @@ import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-
 import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
 import { refreshAgentSessionListQuery } from "@/state/queries/agent-sessions";
+import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import type {
@@ -28,7 +29,6 @@ import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-st
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
 import {
   createEnsureExistingSessionRuntime,
-  createEnsureRuntime,
   loadRepoPromptOverrides,
   loadTaskDocuments,
 } from "./runtime/runtime";
@@ -213,17 +213,6 @@ export function useAgentOrchestratorOperations({
     queryClient,
     sessionReadPort: hostPort,
   });
-  const ensureRuntime = useMemo(
-    () =>
-      createEnsureRuntime({
-        refreshTaskData,
-        queryClient,
-        hostClient: {
-          ...runtimeHostPort,
-        },
-      }),
-    [queryClient, refreshTaskData, runtimeHostPort],
-  );
   const ensureExistingSessionRuntime = useMemo(
     () => createEnsureExistingSessionRuntime(runtimeHostPort),
     [runtimeHostPort],
@@ -243,7 +232,19 @@ export function useAgentOrchestratorOperations({
         sessionTurnState,
         updateSession,
         canonicalizePath: runtimeHostPort.gitCanonicalizePath,
-        ensureRuntime,
+        startWorkflowSession: async (input) => {
+          try {
+            return await runtimeHostPort.agentSessionWorkflowStart(input);
+          } catch (cause) {
+            await queryClient.invalidateQueries({
+              queryKey: taskWorktreeQueryKeys.taskWorktree({
+                repoPath: input.repoPath,
+                taskId: input.sessionScope.taskId,
+              }),
+            });
+            throw cause;
+          }
+        },
         ensureExistingSessionRuntime,
         loadTaskDocuments: (repoPath, taskId) =>
           loadTaskDocuments(repoPath, taskId, hostPort.taskMetadataGetFresh),
@@ -259,7 +260,6 @@ export function useAgentOrchestratorOperations({
     [
       agentEngine,
       currentWorkspaceRepoPathRef,
-      ensureRuntime,
       ensureExistingSessionRuntime,
       hostPort,
       invalidateSessionStopQueries,

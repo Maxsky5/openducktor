@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  AgentRepositorySessionStartInput,
   AgentSessionControlSendInput,
   AgentSessionControlStartInput,
   AgentSessionLiveEnvelope,
@@ -15,12 +16,12 @@ import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-l
 import { createEffectHostCommandRouter } from "../router/host-command-router";
 import { createAgentSessionLiveCommandHandlers } from "./agent-session-live-command-handlers";
 
-const startInput: AgentSessionControlStartInput = {
+const startInput: AgentRepositorySessionStartInput = {
   repoPath: "/repo",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
-  sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-  systemPrompt: "Build the feature",
+  sessionScope: { kind: "repository" },
+  systemPrompt: "Repository chat",
 };
 
 const controlSummary = (
@@ -35,7 +36,12 @@ const controlSummary = (
   status: "idle" as const,
 });
 
-const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve"]) => {
+const createHarness = async (
+  resolveAttachment?: LocalAttachmentService["resolve"],
+  startWorkflowSession: Parameters<
+    typeof createAgentSessionLiveCommandHandlers
+  >[0]["startWorkflowSession"] = () => Effect.dieMessage("unexpected workflow session start"),
+) => {
   const envelopes: AgentSessionLiveEnvelope[] = [];
   const snapshots: AgentSessionLiveSnapshot[] = [];
   const attachmentResolutions: string[] = [];
@@ -142,7 +148,13 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
     forks,
     resumes,
     router: createEffectHostCommandRouter({
-      handlers: createAgentSessionLiveCommandHandlers(service, attachmentResolver),
+      handlers: createAgentSessionLiveCommandHandlers(
+        {
+          ...service,
+          startWorkflowSession,
+        },
+        attachmentResolver,
+      ),
     }),
     sends,
     starts,
@@ -150,6 +162,61 @@ const createHarness = async (resolveAttachment?: LocalAttachmentService["resolve
 };
 
 describe("createAgentSessionLiveCommandHandlers", () => {
+  test.each([
+    { runtimeId: "native-runtime" },
+    { runtimePolicy: { kind: "native" } },
+    { model: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" } },
+  ])("rejects invalid workflow starts before calling the service: %j", async (invalid) => {
+    const inputs: unknown[] = [];
+    const { router } = await createHarness(undefined, (input) => {
+      inputs.push(input);
+      return Effect.dieMessage("unexpected workflow start");
+    });
+    await expect(
+      Effect.runPromise(
+        router.invoke("agent_session_workflow_start", {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: "Build the feature",
+          model: { providerId: "openai", modelId: "gpt-5" },
+          ...invalid,
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(inputs).toEqual([]);
+  });
+
+  test("routes one strict host-owned workflow start command", async () => {
+    const inputs: unknown[] = [];
+    const { router } = await createHarness(undefined, (input) =>
+      Effect.sync(() => {
+        inputs.push(input);
+        return controlSummary(
+          {
+            runtimeKind: input.runtimeKind,
+            workingDirectory: "/repo/worktree",
+            sessionScope: input.sessionScope,
+          },
+          "workflow-1",
+        );
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        router.invoke("agent_session_workflow_start", {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: "Build the feature",
+          model: { providerId: "openai", modelId: "gpt-5" },
+        }),
+      ),
+    ).resolves.toMatchObject({ externalSessionId: "workflow-1" });
+    expect(inputs).toHaveLength(1);
+  });
+
   test("routes live session diff reads to the owning adapter", async () => {
     const { diffLoads, router } = await createHarness();
     await Effect.runPromise(router.invoke("agent_session_control_start", { ...startInput }));
@@ -201,6 +268,20 @@ describe("createAgentSessionLiveCommandHandlers", () => {
     ).resolves.toMatchObject({ externalSessionId: "fork-1" });
     expect(resumes).toEqual([resumeInput]);
     expect(forks).toEqual([forkInput]);
+  });
+
+  test("rejects workflow scope from the generic start command", async () => {
+    const { router, starts } = await createHarness();
+
+    await expect(
+      Effect.runPromise(
+        router.invoke("agent_session_control_start", {
+          ...startInput,
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(starts).toEqual([]);
   });
 
   test("rejects native routing fields before invoking an adapter", async () => {

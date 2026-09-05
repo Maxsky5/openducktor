@@ -1,11 +1,11 @@
 import {
   type AcceptedAgentUserMessage,
+  type AgentRepositorySessionStartInput,
   type AgentSessionContextUsage,
   type AgentSessionControlForkInput,
   type AgentSessionControlReleaseInput,
   type AgentSessionControlResumeInput,
   type AgentSessionControlSendInput,
-  type AgentSessionControlStartInput,
   type AgentSessionControlStopInput,
   type AgentSessionControlSummary,
   type AgentSessionControlUpdateModelInput,
@@ -18,6 +18,7 @@ import {
   type AgentSessionLiveReplyApprovalInput,
   type AgentSessionLiveReplyQuestionInput,
   type AgentSessionLiveSnapshot,
+  type AgentWorkflowSessionStartInput,
   type FileDiff,
   acceptedAgentUserMessageSchema,
   agentSessionContextUsageSchema,
@@ -25,7 +26,7 @@ import {
   agentSessionControlReleaseInputSchema,
   agentSessionControlResumeInputSchema,
   agentSessionControlSendInputSchema,
-  agentSessionControlStartInputSchema,
+  agentRepositorySessionStartInputSchema,
   agentSessionControlStopInputSchema,
   agentSessionControlSummarySchema,
   agentSessionControlUpdateModelInputSchema,
@@ -39,6 +40,7 @@ import {
   agentSessionLiveReplyApprovalInputSchema,
   agentSessionLiveReplyQuestionInputSchema,
   agentSessionLiveSnapshotSchema,
+  agentWorkflowSessionStartInputSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, voidResultSchema } from "./invoke-utils";
@@ -47,11 +49,21 @@ export class HostAgentSessionLiveClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
   async agentSessionControlStart(
-    input: AgentSessionControlStartInput,
+    input: AgentRepositorySessionStartInput,
   ): Promise<AgentSessionControlSummary> {
     return this.invokeFn(
       "agent_session_control_start",
-      agentSessionControlStartInputSchema.parse(input),
+      agentRepositorySessionStartInputSchema.parse(input),
+      agentSessionControlSummarySchema,
+    );
+  }
+
+  async agentSessionWorkflowStart(
+    input: AgentWorkflowSessionStartInput,
+  ): Promise<AgentSessionControlSummary> {
+    return this.invokeFn(
+      "agent_session_workflow_start",
+      agentWorkflowSessionStartInputSchema.parse(input),
       agentSessionControlSummarySchema,
     );
   }

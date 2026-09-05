@@ -447,6 +447,7 @@ describe("HostClient", () => {
     const { client, calls } = createClient((command) => {
       if (
         command === "agent_session_control_start" ||
+        command === "agent_session_workflow_start" ||
         command === "agent_session_control_resume" ||
         command === "agent_session_control_fork"
       ) {
@@ -458,6 +459,15 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
+    await expect(
+      client.agentSessionWorkflowStart({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        systemPrompt: "Build the feature",
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).resolves.toEqual(summary);
     await expect(
       client.agentSessionControlStart({
         repoPath: "/repo",
@@ -494,6 +504,16 @@ describe("HostClient", () => {
     });
 
     expect(calls).toEqual([
+      {
+        command: "agent_session_workflow_start",
+        args: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: "Build the feature",
+          model: { providerId: "openai", modelId: "gpt-5" },
+        },
+      },
       {
         command: "agent_session_control_start",
         args: {

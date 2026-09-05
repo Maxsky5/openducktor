@@ -270,15 +270,6 @@ export const createEventPublishingTaskService = ({
         changeForTask(input.taskId),
         taskService.buildStart(input),
       ),
-    taskSessionBootstrapPrepare: (input) => taskService.taskSessionBootstrapPrepare(input),
-    taskSessionBootstrapComplete: (input) =>
-      publishAfterMutation(
-        "task-session-bootstrap-complete",
-        input.repoPath,
-        changeForTask(input.taskId),
-        taskService.taskSessionBootstrapComplete(input),
-      ),
-    taskSessionBootstrapAbort: (input) => taskService.taskSessionBootstrapAbort(input),
     buildResumed: (input) =>
       publishAfterMutation(
         "build-resumed",

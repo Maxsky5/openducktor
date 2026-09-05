@@ -1,15 +1,15 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
-import { createTaskSessionBootstrapCoordinator } from "../worktrees/task-session-bootstrap-coordinator";
+import { createTaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
 import { completeTaskClosure } from "./task-closure";
 
 const closureDependencies = () => ({
   gitPort: {
     canonicalizePath: (path: string) => Effect.succeed(path),
   },
-  taskSessionBootstrapCoordinator: createTaskSessionBootstrapCoordinator(),
+  taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
 });
 
 const closedTask = (): TaskCard => ({
@@ -105,18 +105,19 @@ test("does not close the task when cleanup fails", async () => {
 });
 
 test("holds the task lifecycle guard across cleanup and closure", async () => {
-  const taskSessionBootstrapCoordinator = createTaskSessionBootstrapCoordinator();
-  let bootstrapWasBlocked = false;
+  const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
+  let lifecycleWasBlocked = false;
   const cleanup = Effect.gen(function* () {
-    const bootstrap = yield* Effect.either(
-      taskSessionBootstrapCoordinator.acquireBootstrap(
-        "/canonical/repo",
-        "task-1",
-        "bootstrap-1",
-        "build",
+    const lifecycle = yield* Effect.either(
+      Effect.scoped(
+        taskSessionLifecycleCoordinator.acquireLifecycle(
+          "/canonical/repo",
+          ["task-1"],
+          "start workflow session",
+        ),
       ),
     );
-    bootstrapWasBlocked = bootstrap._tag === "Left";
+    lifecycleWasBlocked = lifecycle._tag === "Left";
   });
   const taskStore: Pick<TaskStorePort, "transitionTask"> = {
     transitionTask: () => Effect.succeed(closedTask()),
@@ -131,24 +132,32 @@ test("holds the task lifecycle guard across cleanup and closure", async () => {
       operation: "close task",
       repoPath: "/repo-link",
       taskId: "task-1",
-      taskSessionBootstrapCoordinator,
+      taskSessionLifecycleCoordinator,
       taskStore,
     }),
   );
 
-  expect(bootstrapWasBlocked).toBe(true);
+  expect(lifecycleWasBlocked).toBe(true);
 });
 
-test("does not begin cleanup while a task session bootstrap is active", async () => {
-  const taskSessionBootstrapCoordinator = createTaskSessionBootstrapCoordinator();
-  await Effect.runPromise(
-    taskSessionBootstrapCoordinator.acquireBootstrap(
-      "/canonical/repo",
-      "task-1",
-      "bootstrap-1",
-      "build",
+test("does not begin cleanup while another task lifecycle operation is active", async () => {
+  const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
+  const acquired = await Effect.runPromise(Deferred.make<void>());
+  const release = await Effect.runPromise(Deferred.make<void>());
+  const holder = Effect.runFork(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* taskSessionLifecycleCoordinator.acquireLifecycle(
+          "/canonical/repo",
+          ["task-1"],
+          "start workflow session",
+        );
+        yield* Deferred.succeed(acquired, undefined);
+        yield* Deferred.await(release);
+      }),
     ),
   );
+  await Effect.runPromise(Deferred.await(acquired));
   let cleanupStarted = false;
   let transitioned = false;
   const taskStore: Pick<TaskStorePort, "transitionTask"> = {
@@ -170,11 +179,13 @@ test("does not begin cleanup while a task session bootstrap is active", async ()
         operation: "close task",
         repoPath: "/repo-link",
         taskId: "task-1",
-        taskSessionBootstrapCoordinator,
+        taskSessionLifecycleCoordinator,
         taskStore,
       }),
     ),
-  ).rejects.toThrow("bootstrap is in progress");
+  ).rejects.toThrow("another lifecycle operation is in progress");
+  await Effect.runPromise(Deferred.succeed(release, undefined));
+  await Effect.runPromise(Fiber.join(holder));
   expect(cleanupStarted).toBe(false);
   expect(transitioned).toBe(false);
 });

@@ -2,21 +2,41 @@ import { describe, expect, test } from "bun:test";
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlSendInput,
-  AgentSessionControlStartInput,
   AgentSessionControlSummary,
   AgentSessionControlUpdateModelInput,
   AgentSessionRecord,
+  AgentWorkflowSessionStartInput,
   TaskCard,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, Exit, Fiber } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import { createTaskSessionBootstrapCoordinator } from "../tasks/worktrees/task-session-bootstrap-coordinator";
-import { createTaskWorkflowSessionControlService } from "./task-workflow-session-control-service";
+import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
+import { createTaskWorkflowSessionControlService as createControlService } from "./task-workflow-session-control-service";
 
-const workflowStart: AgentSessionControlStartInput = {
+type ControlServiceInput = Parameters<typeof createControlService>[0];
+type TestControlServiceInput = Omit<ControlServiceInput, "taskSessionStart" | "tasks"> & {
+  taskSessionStart?: ControlServiceInput["taskSessionStart"];
+  tasks: Omit<ControlServiceInput["tasks"], "transitionTask"> &
+    Partial<Pick<ControlServiceInput["tasks"], "transitionTask">>;
+};
+
+const createTaskWorkflowSessionControlService = (input: TestControlServiceInput) =>
+  createControlService({
+    taskSessionStart: {
+      prepare: () => Effect.dieMessage("unexpected task session preparation"),
+      complete: () => Effect.dieMessage("unexpected task session completion"),
+    },
+    ...input,
+    tasks: {
+      transitionTask: () => Effect.dieMessage("unexpected task transition"),
+      ...input.tasks,
+    },
+  });
+
+const workflowStart: AgentWorkflowSessionStartInput = {
   repoPath: "/repo",
   runtimeKind: "opencode",
-  workingDirectory: "/repo/worktree",
+  targetWorkingDirectory: "/repo/worktree",
   sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
   systemPrompt: "Build the feature",
   model: {
@@ -88,7 +108,7 @@ const taskReader = { getTask: () => Effect.succeed(task("in_progress")) };
 const createControlDeps = () => ({
   canonicalizeRepoPath: (repoPath: string) => Effect.succeed(repoPath),
   taskReader,
-  taskLifecycle: createTaskSessionBootstrapCoordinator(),
+  taskLifecycle: createTaskSessionLifecycleCoordinator(),
 });
 
 const workflowModelUpdate: AgentSessionControlUpdateModelInput = {
@@ -157,15 +177,147 @@ const createModelUpdateService = ({
   });
 
 describe("createTaskWorkflowSessionControlService", () => {
-  test("stores a workflow session only from its runtime control result", async () => {
+  test.each([
+    { step: "runtime", stopFails: false, storeFails: false },
+    { step: "runtime", stopFails: true, storeFails: false },
+    { step: "store", stopFails: false, storeFails: false },
+    { step: "store", stopFails: true, storeFails: false },
+    { step: "store", stopFails: false, storeFails: true },
+  ])(
+    "waits for the interrupted startup step before cleanup: %j",
+    async ({ step, stopFails, storeFails }) => {
+      const calls: string[] = [];
+      const created = await Effect.runPromise(Deferred.make<void>());
+      const returnSummary = await Effect.runPromise(Deferred.make<void>());
+      const preparedTask = task("ready_for_dev");
+      const deps = createControlDeps();
+      const service = createTaskWorkflowSessionControlService({
+        ...deps,
+        taskSessionStart: {
+          prepare: () =>
+            Effect.succeed({
+              canonicalRepoPath: "/repo",
+              cleanup: () =>
+                Effect.sync(() => {
+                  calls.push("cleanup-worktree");
+                  return "";
+                }),
+              preparedStatus: preparedTask.status,
+              role: "build",
+              runtimeKind: "opencode",
+              task: preparedTask,
+              workingDirectory: "/repo/worktree",
+            }),
+          complete: () => Effect.dieMessage("unexpected completion"),
+        },
+        runtime: {
+          startSession: () =>
+            Effect.gen(function* () {
+              calls.push("runtime-created");
+              if (step === "runtime") {
+                yield* Deferred.succeed(created, undefined);
+                yield* Deferred.await(returnSummary);
+              }
+              calls.push("runtime-returned");
+              return summary;
+            }),
+          stopSession: (ref) =>
+            Effect.gen(function* () {
+              expect(ref.externalSessionId).toBe(summary.externalSessionId);
+              calls.push("stop-runtime");
+              if (stopFails) {
+                return yield* Effect.fail(
+                  new HostOperationError({
+                    operation: "test.stop",
+                    message: "stop failed",
+                  }),
+                );
+              }
+            }),
+          resumeSession: () => Effect.dieMessage("unexpected resume"),
+          forkSession: () => Effect.dieMessage("unexpected fork"),
+          sendUserMessage: unexpectedSend,
+          updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+          releaseSession: () => Effect.dieMessage("unexpected release"),
+        },
+        tasks: {
+          agentSessionsList: () => Effect.dieMessage("unexpected list"),
+          agentSessionUpsert: () =>
+            Effect.gen(function* () {
+              yield* Deferred.succeed(created, undefined);
+              yield* Deferred.await(returnSummary);
+              if (storeFails) {
+                calls.push("store-failed");
+                return yield* Effect.fail(
+                  new HostOperationError({ operation: "test.store", message: "store failed" }),
+                );
+              }
+              calls.push("store-committed");
+              return true;
+            }),
+          agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+        },
+      });
+      const fiber = Effect.runFork(service.startWorkflowSession(workflowStart));
+      try {
+        await Effect.runPromise(Deferred.await(created));
+        await Effect.runPromise(Fiber.interruptFork(fiber));
+        await Effect.runPromise(Deferred.succeed(returnSummary, undefined));
+        expect(Exit.isFailure(await Effect.runPromise(Fiber.await(fiber)))).toBe(true);
+        const expected = ["runtime-created", "runtime-returned"];
+        if (step === "store") {
+          expected.push(storeFails ? "store-failed" : "store-committed");
+        }
+        expected.push("stop-runtime");
+        if (!stopFails && (step === "runtime" || storeFails)) {
+          expected.push("cleanup-worktree");
+        }
+        expect(calls).toEqual(expected);
+        await expect(
+          Effect.runPromise(
+            Effect.scoped(deps.taskLifecycle.acquireLifecycle("/repo", ["task-1"], "close task")),
+          ),
+        ).resolves.toBeUndefined();
+      } finally {
+        await Effect.runPromise(Deferred.succeed(returnSummary, undefined));
+        await Effect.runPromise(Fiber.interrupt(fiber));
+      }
+    },
+  );
+
+  test("starts and stores a fresh workflow session inside one task lifecycle scope", async () => {
     const calls: string[] = [];
-    const stored: Array<{
-      repoPath: string;
-      taskId: string;
-      session: AgentSessionRecord;
-    }> = [];
+    const taskLifecycle = createTaskSessionLifecycleCoordinator();
+    const preparedTask = task("ready_for_dev");
     const service = createTaskWorkflowSessionControlService({
-      ...createControlDeps(),
+      canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+      taskReader,
+      taskLifecycle,
+      taskSessionStart: {
+        prepare: () =>
+          Effect.sync(() => {
+            calls.push("prepare");
+            return {
+              canonicalRepoPath: "/repo",
+              cleanup: () => Effect.succeed(""),
+              preparedStatus: preparedTask.status,
+              role: "build" as const,
+              runtimeKind: "opencode" as const,
+              task: preparedTask,
+              workingDirectory: "/repo/worktree",
+            };
+          }),
+        complete: (_prepared, transitionTask) =>
+          Effect.gen(function* () {
+            calls.push("complete");
+            yield* transitionTask({
+              repoPath: "/repo",
+              taskId: "task-1",
+              status: "in_progress",
+            });
+            return undefined;
+          }),
+      },
       runtime: {
         startSession: () =>
           Effect.sync(() => {
@@ -181,37 +333,212 @@ describe("createTaskWorkflowSessionControlService", () => {
       },
       tasks: {
         agentSessionsList: () => Effect.dieMessage("unexpected list"),
-        agentSessionUpsert: (input) =>
-          Effect.sync(() => {
+        agentSessionUpsert: () =>
+          Effect.gen(function* () {
             calls.push("store");
-            stored.push(input);
+            const overlap = yield* Effect.either(
+              Effect.scoped(taskLifecycle.acquireLifecycle("/repo", ["task-1"], "close task")),
+            );
+            expect(overlap._tag).toBe("Left");
             return true;
           }),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+        transitionTask: () =>
+          Effect.sync(() => {
+            calls.push("transition");
+            return task("in_progress");
+          }),
       },
     });
 
-    await Effect.runPromise(service.startSession(workflowStart));
-
-    expect(calls).toEqual(["runtime", "store"]);
-    expect(stored).toEqual([
-      {
-        repoPath: "/repo",
-        taskId: "task-1",
-        session: {
-          externalSessionId: "session-1",
-          role: "build",
-          startedAt: "2026-09-02T10:00:00.000Z",
+    await expect(
+      Effect.runPromise(
+        service.startWorkflowSession({
+          repoPath: "/repo",
           runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-          },
-        },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: workflowStart.systemPrompt,
+          model: workflowStart.model!,
+        }),
+      ),
+    ).resolves.toEqual(summary);
+    expect(calls).toEqual(["prepare", "runtime", "store", "complete", "transition"]);
+    await expect(
+      Effect.runPromise(
+        Effect.scoped(taskLifecycle.acquireLifecycle("/repo", ["task-1"], "close task")),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  test("stops the runtime and removes a new worktree when session storage fails", async () => {
+    const calls: string[] = [];
+    const preparedTask = task("ready_for_dev");
+    const service = createTaskWorkflowSessionControlService({
+      ...createControlDeps(),
+      taskSessionStart: {
+        prepare: () =>
+          Effect.succeed({
+            canonicalRepoPath: "/repo",
+            cleanup: () =>
+              Effect.sync(() => {
+                calls.push("cleanup-worktree");
+                return "";
+              }),
+            preparedStatus: preparedTask.status,
+            role: "build" as const,
+            runtimeKind: "opencode" as const,
+            task: preparedTask,
+            workingDirectory: "/repo/worktree",
+          }),
+        complete: () => Effect.dieMessage("unexpected completion"),
       },
-    ]);
+      runtime: {
+        startSession: () => Effect.succeed(summary),
+        resumeSession: () => Effect.dieMessage("unexpected resume"),
+        forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () => Effect.sync(() => calls.push("stop-runtime")),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () => Effect.dieMessage("unexpected list"),
+        agentSessionUpsert: () =>
+          Effect.fail(new HostOperationError({ operation: "test.store", message: "store failed" })),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.startWorkflowSession({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: workflowStart.systemPrompt,
+          model: workflowStart.model!,
+        }),
+      ),
+    ).rejects.toThrow("store failed");
+    expect(calls).toEqual(["stop-runtime", "cleanup-worktree"]);
+  });
+
+  test("keeps a new worktree when session storage and runtime stop both fail", async () => {
+    const calls: string[] = [];
+    const preparedTask = task("ready_for_dev");
+    const service = createTaskWorkflowSessionControlService({
+      ...createControlDeps(),
+      taskSessionStart: {
+        prepare: () =>
+          Effect.succeed({
+            canonicalRepoPath: "/repo",
+            cleanup: () =>
+              Effect.sync(() => {
+                calls.push("cleanup-worktree");
+                return "";
+              }),
+            preparedStatus: preparedTask.status,
+            role: "build" as const,
+            runtimeKind: "opencode" as const,
+            task: preparedTask,
+            workingDirectory: "/repo/worktree",
+          }),
+        complete: () => Effect.dieMessage("unexpected completion"),
+      },
+      runtime: {
+        startSession: () => Effect.succeed(summary),
+        resumeSession: () => Effect.dieMessage("unexpected resume"),
+        forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () =>
+          Effect.sync(() => calls.push("stop-runtime")).pipe(
+            Effect.zipRight(
+              Effect.fail(
+                new HostOperationError({
+                  operation: "test.stop",
+                  message: "runtime stop failed",
+                }),
+              ),
+            ),
+          ),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () => Effect.dieMessage("unexpected list"),
+        agentSessionUpsert: () =>
+          Effect.fail(new HostOperationError({ operation: "test.store", message: "store failed" })),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.startWorkflowSession({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: workflowStart.systemPrompt,
+          model: workflowStart.model!,
+        }),
+      ),
+    ).rejects.toThrow("store failed Cleanup failed: runtime stop failed");
+    expect(calls).toEqual(["stop-runtime"]);
+  });
+
+  test("keeps the stored session and worktree when Builder completion fails", async () => {
+    const calls: string[] = [];
+    const preparedTask = task("ready_for_dev");
+    const service = createTaskWorkflowSessionControlService({
+      ...createControlDeps(),
+      taskSessionStart: {
+        prepare: () =>
+          Effect.succeed({
+            canonicalRepoPath: "/repo",
+            cleanup: () =>
+              Effect.sync(() => {
+                calls.push("cleanup-worktree");
+                return "";
+              }),
+            preparedStatus: preparedTask.status,
+            role: "build" as const,
+            runtimeKind: "opencode" as const,
+            task: preparedTask,
+            workingDirectory: "/repo/worktree",
+          }),
+        complete: () =>
+          Effect.fail(
+            new HostOperationError({ operation: "test.complete", message: "task changed" }),
+          ),
+      },
+      runtime: {
+        startSession: () => Effect.succeed(summary),
+        resumeSession: () => Effect.dieMessage("unexpected resume"),
+        forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () => Effect.sync(() => calls.push("stop-runtime")),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () => Effect.dieMessage("unexpected list"),
+        agentSessionUpsert: () => Effect.succeed(true),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.startWorkflowSession({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: workflowStart.systemPrompt,
+          model: workflowStart.model!,
+        }),
+      ),
+    ).rejects.toThrow("task changed");
+    expect(calls).toEqual(["stop-runtime"]);
   });
 
   test("does not store a repository session", async () => {
@@ -240,8 +567,12 @@ describe("createTaskWorkflowSessionControlService", () => {
 
     await Effect.runPromise(
       service.startSession({
-        ...workflowStart,
+        repoPath: workflowStart.repoPath,
+        runtimeKind: workflowStart.runtimeKind,
+        workingDirectory: "/repo/worktree",
         sessionScope: { kind: "repository" },
+        systemPrompt: workflowStart.systemPrompt,
+        model: workflowStart.model,
       }),
     );
 
@@ -462,7 +793,7 @@ describe("createTaskWorkflowSessionControlService", () => {
         agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
         agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
       },
-      taskLifecycle: createTaskSessionBootstrapCoordinator(),
+      taskLifecycle: createTaskSessionLifecycleCoordinator(),
     });
 
     await expect(
@@ -509,7 +840,7 @@ describe("createTaskWorkflowSessionControlService", () => {
 
   test("does not send a workflow message while another task lifecycle change runs", async () => {
     let runtimeCalls = 0;
-    const taskLifecycle = createTaskSessionBootstrapCoordinator();
+    const taskLifecycle = createTaskSessionLifecycleCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
@@ -548,46 +879,11 @@ describe("createTaskWorkflowSessionControlService", () => {
     expect(runtimeCalls).toBe(0);
   });
 
-  test("stops a new runtime session when its task record cannot be stored", async () => {
-    const stopped: string[] = [];
-    const service = createTaskWorkflowSessionControlService({
-      ...createControlDeps(),
-      runtime: {
-        startSession: () => Effect.succeed(summary),
-        resumeSession: () => Effect.dieMessage("unexpected resume"),
-        forkSession: () => Effect.dieMessage("unexpected fork"),
-        sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
-        stopSession: (input) =>
-          Effect.sync(() => {
-            stopped.push(input.externalSessionId);
-          }),
-        releaseSession: () => Effect.dieMessage("unexpected release"),
-      },
-      tasks: {
-        agentSessionsList: () => Effect.dieMessage("unexpected list"),
-        agentSessionUpsert: () =>
-          Effect.fail(
-            new HostOperationError({
-              operation: "task-session.store",
-              message: "task store unavailable",
-            }),
-          ),
-        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
-      },
-    });
-
-    await expect(Effect.runPromise(service.startSession(workflowStart))).rejects.toThrow(
-      "task store unavailable",
-    );
-    expect(stopped).toEqual(["session-1"]);
-  });
-
   test("updates a stored model only after the runtime accepts the workflow change", async () => {
     const calls: string[] = [];
     const runtimeInputs: unknown[] = [];
     const storedModels: unknown[] = [];
-    const taskLifecycle = createTaskSessionBootstrapCoordinator();
+    const taskLifecycle = createTaskSessionLifecycleCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
@@ -793,7 +1089,7 @@ describe("createTaskWorkflowSessionControlService", () => {
 
   test("checks workflow ownership before it changes the runtime model", async () => {
     let runtimeCalls = 0;
-    const taskLifecycle = createTaskSessionBootstrapCoordinator();
+    const taskLifecycle = createTaskSessionLifecycleCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
@@ -834,7 +1130,7 @@ describe("createTaskWorkflowSessionControlService", () => {
 
   test("does not change a workflow model while another task lifecycle change runs", async () => {
     let runtimeCalls = 0;
-    const taskLifecycle = createTaskSessionBootstrapCoordinator();
+    const taskLifecycle = createTaskSessionLifecycleCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
@@ -883,7 +1179,7 @@ describe("createTaskWorkflowSessionControlService", () => {
 
   test("does not resume a workflow session while another task lifecycle change runs", async () => {
     let runtimeCalls = 0;
-    const taskLifecycle = createTaskSessionBootstrapCoordinator();
+    const taskLifecycle = createTaskSessionLifecycleCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
@@ -932,7 +1228,7 @@ describe("createTaskWorkflowSessionControlService", () => {
 
   test("does not fork a workflow session while another task lifecycle change runs", async () => {
     let runtimeCalls = 0;
-    const taskLifecycle = createTaskSessionBootstrapCoordinator();
+    const taskLifecycle = createTaskSessionLifecycleCoordinator();
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader,
@@ -982,7 +1278,7 @@ describe("createTaskWorkflowSessionControlService", () => {
   });
 
   test("holds the task lifecycle gate until the fork record is stored", async () => {
-    const taskLifecycle = createTaskSessionBootstrapCoordinator();
+    const taskLifecycle = createTaskSessionLifecycleCoordinator();
     let resetWasBlocked = false;
     const service = createTaskWorkflowSessionControlService({
       ...createControlDeps(),
@@ -1029,7 +1325,7 @@ describe("createTaskWorkflowSessionControlService", () => {
   });
 
   test("holds the task lifecycle gate until the model record is stored", async () => {
-    const taskLifecycle = createTaskSessionBootstrapCoordinator();
+    const taskLifecycle = createTaskSessionLifecycleCoordinator();
     let resetWasBlocked = false;
     const service = createTaskWorkflowSessionControlService({
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),

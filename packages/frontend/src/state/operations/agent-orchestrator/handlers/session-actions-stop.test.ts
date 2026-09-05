@@ -759,11 +759,6 @@ describe("agent-orchestrator/handlers/session-actions stop", () => {
           }),
         ],
       },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
     });
 
     await actions.stopAgentSession(getSession(sessionsRef));

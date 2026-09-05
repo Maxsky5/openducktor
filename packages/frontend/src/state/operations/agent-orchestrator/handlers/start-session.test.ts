@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { AgentModelSelection, AgentSessionSummary } from "@openducktor/core";
+import type {
+  AgentSessionControlSummary,
+  AgentWorkflowSessionStartInput,
+} from "@openducktor/contracts";
+import type { AgentModelSelection } from "@openducktor/core";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { clearAppQueryClient } from "@/lib/query-client";
@@ -23,8 +27,8 @@ import {
   QA_SELECTION,
   sessionIdentity,
   taskFixture,
+  workflowSessionStartSummary,
 } from "./start-session.test-helpers";
-import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 
 describe("agent-orchestrator/handlers/start-session", () => {
   beforeEach(async () => {
@@ -49,53 +53,34 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("starts through a normalized workflow control without loading runtime policy settings", async () => {
-    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
-    const originalStartSession = adapter.startSession;
     let startInput: unknown;
-    adapter.startSession = async (input) => {
-      startInput = input;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "session-normalized",
-        startedAt: "2026-02-22T08:00:10.000Z",
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
-    };
     const { start } = createStartSessionTestHarness({
-      adapter,
       taskRef: { current: [taskFixture] },
+      startWorkflowSession: async (input) => {
+        startInput = input;
+        return workflowSessionStartSummary(input, {
+          externalSessionId: "session-normalized",
+        });
+      },
       loadSettingsSnapshot: async () => {
         throw new Error("session control must not load runtime policy settings");
       },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
     });
 
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        }),
-      ).resolves.toMatchObject({ externalSessionId: "session-normalized" });
-      expect(startInput).toMatchObject({
-        repoPath: "/tmp/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      });
-      expect(startInput).not.toHaveProperty("runtimePolicy");
-    } finally {
-      adapter.startSession = originalStartSession;
-    }
+    await expect(
+      start({
+        taskId: "task-1",
+        role: "build",
+        startMode: "fresh",
+        selectedModel: BUILD_SELECTION,
+      }),
+    ).resolves.toMatchObject({ externalSessionId: "session-normalized" });
+    expect(startInput).toMatchObject({
+      repoPath: "/tmp/repo",
+      runtimeKind: "opencode",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+    });
+    expect(startInput).not.toHaveProperty("runtimePolicy");
   });
 
   test("reuses an existing in-flight start promise", async () => {
@@ -140,31 +125,17 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("dedupes matching in-flight fresh starts", async () => {
     const startEntered = createDeferred<void>();
     const releaseStart = createDeferred<void>();
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
     let startCount = 0;
-    adapter.startSession = async (input) => {
-      startCount += 1;
-      startEntered.resolve();
-      await releaseStart.promise;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "session-manual-fresh",
-        startedAt: "2026-08-31T10:00:00.000Z",
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
-    };
     const { start } = createStartSessionTestHarness({
-      adapter,
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
+      startWorkflowSession: async (input) => {
+        startCount += 1;
+        startEntered.resolve();
+        await releaseStart.promise;
+        return workflowSessionStartSummary(input, {
+          externalSessionId: "session-manual-fresh",
+        });
+      },
     });
 
     try {
@@ -188,7 +159,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(firstSession).toEqual(secondSession);
     } finally {
       releaseStart.resolve();
-      adapter.startSession = originalStartSession;
     }
   });
 
@@ -198,12 +168,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const qaStarted = createDeferred<void>();
     const buildStarted = createDeferred<void>();
 
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      if (input.sessionScope.kind !== "workflow") {
-        throw new Error("Expected workflow session scope.");
-      }
+    const startWorkflowSession = async (input: AgentWorkflowSessionStartInput) => {
       startedRoles.push(input.sessionScope.role);
       if (input.sessionScope.role === "qa") {
         qaStarted.resolve();
@@ -211,21 +176,16 @@ describe("agent-orchestrator/handlers/start-session", () => {
       } else {
         buildStarted.resolve();
       }
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
+      return workflowSessionStartSummary(input, {
         externalSessionId: `${input.sessionScope.role}-external`,
-        startedAt: "2026-02-22T08:00:10.000Z",
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
+      });
     };
 
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
     const { start } = createStartSessionTestHarness({
-      adapter,
+      startWorkflowSession,
       taskRef: {
         current: [
           {
@@ -239,12 +199,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           },
         ],
       },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo",
-      }),
     });
 
     try {
@@ -277,7 +231,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(startedRoles).toEqual(["qa", "build"]);
     } finally {
       releaseQaStart.resolve();
-      adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
@@ -301,12 +254,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           clear: () => {},
         },
       },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
     });
 
     await expect(
@@ -350,12 +297,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           clear: () => {},
         },
       },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
     });
 
     await expect(
@@ -384,26 +325,16 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("waits for the host-controlled session start before resolving", async () => {
-    const startDeferred = createDeferred<AgentSessionSummary>();
+    const startDeferred = createDeferred<AgentSessionControlSummary>();
     let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
     const sessionsRef = { current: sessionCollection };
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => startDeferred.promise;
-
     const { start } = createStartSessionTestHarness({
-      adapter,
+      startWorkflowSession: async () => startDeferred.promise,
       onSessionCollectionChange: (collection) => {
         sessionCollection = collection;
       },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo",
-      }),
     });
 
     try {
@@ -423,7 +354,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         workingDirectory: "/tmp/repo",
         externalSessionId: "planner-external",
         startedAt: "2026-02-22T08:00:10.000Z",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
         status: "idle",
       });
 
@@ -433,7 +363,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(listAgentSessions(sessionCollection)).toHaveLength(1);
       expect(listAgentSessions(sessionCollection)[0]?.status).toBe("starting");
     } finally {
-      adapter.startSession = originalStartSession;
+      startDeferred.reject(new Error("test cleanup"));
     }
   });
 
@@ -441,19 +371,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
     const lifecycleEvents: string[] = [];
     const sessionsRef = { current: sessionCollection };
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "planner-external",
-      startedAt: "2026-02-22T08:00:10.000Z",
-      sessionAssociation: input.sessionScope,
-      status: "idle",
-    });
-
     const { start } = createStartSessionTestHarness({
-      adapter,
+      startWorkflowSession: async (input) =>
+        workflowSessionStartSummary(input, { externalSessionId: "planner-external" }),
       onSessionCollectionChange: (collection) => {
         sessionCollection = collection;
         lifecycleEvents.push(
@@ -462,12 +382,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo",
-      }),
     });
 
     try {
@@ -485,28 +399,18 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(getSession(sessionCollection, "planner-external")?.historyLoadState).toBe("loaded");
       expect(lifecycleEvents).not.toContain("status:idle");
     } finally {
-      adapter.startSession = originalStartSession;
+      sessionsRef.current = emptyAgentSessionCollection();
     }
   });
 
   test("publishes message-first starts after the host-controlled start finishes", async () => {
-    const startDeferred = createDeferred<AgentSessionSummary>();
+    const startDeferred = createDeferred<AgentSessionControlSummary>();
     const sessionStore = createAgentSessionsStore("/tmp/repo");
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => startDeferred.promise;
-
     const { start } = createStartSessionTestHarness({
-      adapter,
+      startWorkflowSession: async () => startDeferred.promise,
       replaceSession: sessionStore.replaceSession,
       readSessionSnapshot: sessionStore.getSessionSnapshot,
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo",
-      }),
     });
 
     try {
@@ -526,7 +430,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         workingDirectory: "/tmp/repo",
         externalSessionId: "message-first-session",
         startedAt: "2026-02-22T08:00:10.000Z",
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
         status: "idle",
       });
       await expect(startPromise).resolves.toEqual(
@@ -539,27 +442,18 @@ describe("agent-orchestrator/handlers/start-session", () => {
         }),
       ]);
     } finally {
-      adapter.startSession = originalStartSession;
+      startDeferred.reject(new Error("test cleanup"));
     }
   });
 
   test("does not attach a session when the host-controlled start fails", async () => {
     const sessionsRef = { current: emptyAgentSessionCollection() };
-    const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async () => {
-      throw new Error("persist failed");
-    };
-
     const { start } = createStartSessionTestHarness({
-      adapter,
       sessionsRef,
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo",
-      }),
+      startWorkflowSession: async () => {
+        throw new Error("persist failed");
+      },
     });
 
     await expect(
@@ -574,66 +468,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(listAgentSessions(sessionsRef.current)).toHaveLength(0);
   });
 
-  test("keeps the stored session when bootstrap completion fails", async () => {
+  test("does not continue registration cleanup when the runtime stop fails", async () => {
     const sessionsRef = { current: emptyAgentSessionCollection() };
-    let abortCalls = 0;
-    let stopCalls = 0;
     const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-bootstrap-fail",
-      sessionAssociation: input.sessionScope,
-      status: "running",
-      startedAt: "2026-02-22T08:00:00.000Z",
-    });
-    adapter.stopSession = async () => {
-      stopCalls += 1;
-    };
-
-    const { start } = createStartSessionTestHarness({
-      adapter,
-      sessionsRef,
-      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
-      ensureRuntime: async () => ({
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        bootstrap: {
-          complete: async () => {
-            throw new Error("bootstrap completion failed");
-          },
-          abort: async () => {
-            abortCalls += 1;
-          },
-        },
-      }),
-    });
-
-    await expect(
-      start({
-        taskId: "task-1",
-        role: "planner",
-        startMode: "fresh",
-        selectedModel: PLANNER_SELECTION,
-      }),
-    ).rejects.toThrow("bootstrap completion failed");
-    expect(stopCalls).toBe(1);
-    expect(abortCalls).toBe(0);
-    expect(getSession(sessionsRef.current, "external-bootstrap-fail")?.status).toBe("stopped");
-  });
-
-  test("keeps the host-stored session attached when rollback cannot stop it", async () => {
-    const sessionsRef = { current: emptyAgentSessionCollection() };
-    let abortCalls = 0;
-    const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-stop-fail",
-      sessionAssociation: input.sessionScope,
-      status: "running",
-      startedAt: "2026-02-22T08:00:00.000Z",
-    });
     adapter.stopSession = async () => {
       throw new Error("runtime unavailable");
     };
@@ -642,64 +479,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
-      ensureRuntime: async () => ({
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        bootstrap: {
-          complete: async () => {
-            throw new Error("bootstrap completion failed");
-          },
-          abort: async () => {
-            abortCalls += 1;
-          },
-        },
-      }),
-    });
-
-    await expect(
-      start({
-        taskId: "task-1",
-        role: "planner",
-        startMode: "fresh",
-        selectedModel: PLANNER_SELECTION,
-      }),
-    ).rejects.toThrow(
-      "Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.",
-    );
-    expect(getSession(sessionsRef.current, "external-stop-fail")).toBeDefined();
-    expect(abortCalls).toBe(0);
-  });
-
-  test("keeps worktree resources un-aborted when registration cleanup cannot stop the runtime", async () => {
-    const sessionsRef = { current: emptyAgentSessionCollection() };
-    let abortCalls = 0;
-    const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-registration-stop-fail",
-      sessionAssociation: input.sessionScope,
-      status: "running",
-      startedAt: "2026-02-22T08:00:00.000Z",
-    });
-    adapter.stopSession = async () => {
-      throw new Error("runtime unavailable");
-    };
-
-    const { start } = createStartSessionTestHarness({
-      adapter,
-      sessionsRef,
-      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
-      ensureRuntime: async () => ({
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        bootstrap: {
-          complete: async () => {},
-          abort: async () => {
-            abortCalls += 1;
-          },
-        },
-      }),
+      startWorkflowSession: async (input) =>
+        workflowSessionStartSummary(input, {
+          externalSessionId: "external-registration-stop-fail",
+          status: "running",
+        }),
       replaceSession: () => {
         throw new Error("registration failed");
       },
@@ -715,26 +499,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
     ).rejects.toThrow(
       'Failed to attach stored session "external-registration-stop-fail" to task "task-1": registration failed. Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.',
     );
-    expect(abortCalls).toBe(0);
   });
 
-  test("preserves fresh bootstrap resources when stale-session cleanup cannot stop the runtime", async () => {
+  test("does not continue stale-session cleanup when the runtime stop fails", async () => {
     const repoEpochRef = { current: 1 };
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
-    let abortCalls = 0;
     const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input) => {
-      repoEpochRef.current += 1;
-      currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-stale-stop-fail",
-        sessionAssociation: input.sessionScope,
-        status: "running",
-        startedAt: "2026-02-22T08:00:00.000Z",
-      };
-    };
     adapter.stopSession = async () => {
       throw new Error("runtime unavailable");
     };
@@ -744,16 +514,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
       repoEpochRef,
       currentWorkspaceRepoPathRef,
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
-      ensureRuntime: async () => ({
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        bootstrap: {
-          complete: async () => {},
-          abort: async () => {
-            abortCalls += 1;
-          },
-        },
-      }),
+      startWorkflowSession: async (input) => {
+        repoEpochRef.current += 1;
+        currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
+        return workflowSessionStartSummary(input, {
+          externalSessionId: "external-stale-stop-fail",
+          status: "running",
+        });
+      },
     });
 
     await expect(
@@ -766,268 +534,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     ).rejects.toThrow(
       "Workspace changed while starting session. Failed to stop the started session during rollback: runtime unavailable. Cleanup was not continued.",
     );
-    expect(abortCalls).toBe(0);
-  });
-
-  test("keeps the stored session and completes bootstrap when the repository changes before attach", async () => {
-    const sessionsRef = { current: emptyAgentSessionCollection() };
-    const repoEpochRef = { current: 1 };
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
-    let completeCalls = 0;
-    let abortCalls = 0;
-    const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input) => {
-      repoEpochRef.current += 1;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-falsy-rollback-errors",
-        sessionAssociation: input.sessionScope,
-        status: "running",
-        startedAt: "2026-02-22T08:00:00.000Z",
-      };
-    };
-    adapter.stopSession = async () => {};
-
-    const { start } = createStartSessionTestHarness({
-      adapter,
-      sessionsRef,
-      repoEpochRef,
-      currentWorkspaceRepoPathRef,
-      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
-      ensureRuntime: async () => ({
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        bootstrap: {
-          complete: async () => {
-            completeCalls += 1;
-          },
-          abort: async () => {
-            abortCalls += 1;
-          },
-        },
-      }),
-    });
-
-    await expect(
-      start({
-        taskId: "task-1",
-        role: "planner",
-        startMode: "fresh",
-        selectedModel: PLANNER_SELECTION,
-      }),
-    ).rejects.toThrow("The stored task session was kept.");
-    expect(completeCalls).toBe(1);
-    expect(abortCalls).toBe(0);
-    expect(getSession(sessionsRef.current, "external-falsy-rollback-errors")).toBeUndefined();
-  });
-
-  test("stops and keeps a fresh non-Builder session when the repository changes after bootstrap commits", async () => {
-    const completionStarted = createDeferred<void>();
-    const completion = createDeferred<void>();
-    const repoEpochRef = { current: 1 };
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
-    const sessionsRef = { current: emptyAgentSessionCollection() };
-    let abortCalls = 0;
-    let stopCalls = 0;
-    const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-stale-bootstrap",
-      sessionAssociation: input.sessionScope,
-      status: "running",
-      startedAt: "2026-02-22T08:00:00.000Z",
-    });
-    adapter.stopSession = async () => {
-      stopCalls += 1;
-    };
-
-    const { start } = createStartSessionTestHarness({
-      adapter,
-      sessionsRef,
-      repoEpochRef,
-      currentWorkspaceRepoPathRef,
-      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
-      ensureRuntime: async () => ({
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        bootstrap: {
-          complete: async () => {
-            completionStarted.resolve();
-            await completion.promise;
-          },
-          abort: async () => {
-            abortCalls += 1;
-          },
-        },
-      }),
-    });
-
-    const startPromise = start({
-      taskId: "task-1",
-      role: "planner",
-      startMode: "fresh",
-      selectedModel: PLANNER_SELECTION,
-    });
-    await completionStarted.promise;
-    repoEpochRef.current += 1;
-    currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
-    completion.resolve();
-
-    await expect(startPromise).rejects.toThrow("Workspace changed while starting session");
-    expect(stopCalls).toBe(1);
-    expect(abortCalls).toBe(0);
-    expect(getSession(sessionsRef.current, "external-stale-bootstrap")).toBeDefined();
-  });
-
-  test("stops and keeps a fresh Builder session when the repository changes after bootstrap commits", async () => {
-    const completionStarted = createDeferred<void>();
-    const completion = createDeferred<void>();
-    const repoEpochRef = { current: 1 };
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" };
-    const sessionsRef = { current: emptyAgentSessionCollection() };
-    let abortCalls = 0;
-    let stopCalls = 0;
-    const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-committed-builder",
-      sessionAssociation: input.sessionScope,
-      status: "running",
-      startedAt: "2026-02-22T08:00:00.000Z",
-    });
-    adapter.stopSession = async () => {
-      stopCalls += 1;
-    };
-
-    const { start } = createStartSessionTestHarness({
-      adapter,
-      sessionsRef,
-      repoEpochRef,
-      currentWorkspaceRepoPathRef,
-      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
-      ensureRuntime: async () => ({
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        bootstrap: {
-          complete: async () => {
-            completionStarted.resolve();
-            await completion.promise;
-          },
-          abort: async () => {
-            abortCalls += 1;
-          },
-        },
-      }),
-    });
-
-    const startPromise = start({
-      taskId: "task-1",
-      role: "build",
-      startMode: "fresh",
-      selectedModel: BUILD_SELECTION,
-    });
-    await completionStarted.promise;
-    repoEpochRef.current += 1;
-    currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
-    completion.resolve();
-
-    await expect(startPromise).rejects.toThrow("Workspace changed while starting session");
-    expect(stopCalls).toBe(1);
-    expect(abortCalls).toBe(0);
-    expect(getSession(sessionsRef.current, "external-committed-builder")).toBeDefined();
-  });
-
-  test("clears session observation state when bootstrap completion fails", async () => {
-    const clearedIdentities: AgentSessionIdentity[] = [];
-    const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-bootstrap-fail",
-      sessionAssociation: input.sessionScope,
-      status: "running",
-      startedAt: "2026-02-22T08:00:00.000Z",
-    });
-    adapter.stopSession = async () => {};
-
-    const { start } = createStartSessionTestHarness({
-      adapter,
-      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
-      clearSessionObservationState: (identity) => {
-        clearedIdentities.push(identity);
-      },
-      ensureRuntime: async () => ({
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        bootstrap: {
-          complete: async () => {
-            throw new Error("bootstrap completion failed");
-          },
-          abort: async () => {},
-        },
-      }),
-    });
-
-    await expect(
-      start({
-        taskId: "task-1",
-        role: "planner",
-        startMode: "fresh",
-        selectedModel: PLANNER_SELECTION,
-      }),
-    ).rejects.toThrow("bootstrap completion failed");
-    const identity = sessionIdentity("external-bootstrap-fail", "/tmp/repo/worktree");
-    expect(clearedIdentities).toEqual([identity]);
-  });
-
-  test("does not retry failed bootstrap completion", async () => {
-    const sessionsRef = { current: emptyAgentSessionCollection() };
-    let completeCalls = 0;
-    let abortCalls = 0;
-    const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-bootstrap-delete-fail",
-      sessionAssociation: input.sessionScope,
-      status: "running",
-      startedAt: "2026-02-22T08:00:00.000Z",
-    });
-    adapter.stopSession = async () => {};
-
-    const { start } = createStartSessionTestHarness({
-      adapter,
-      sessionsRef,
-      taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
-      ensureRuntime: async () => ({
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        bootstrap: {
-          complete: async () => {
-            completeCalls += 1;
-            throw new Error("bootstrap completion failed");
-          },
-          abort: async () => {
-            abortCalls += 1;
-          },
-        },
-      }),
-    });
-
-    await expect(
-      start({
-        taskId: "task-1",
-        role: "planner",
-        startMode: "fresh",
-        selectedModel: PLANNER_SELECTION,
-      }),
-    ).rejects.toThrow("bootstrap completion failed");
-    expect(completeCalls).toBe(1);
-    expect(abortCalls).toBe(0);
-    expect(getSession(sessionsRef.current, "external-bootstrap-delete-fail")).toBeDefined();
   });
 
   test("throws when task is missing after reuse checks", async () => {
@@ -1103,13 +609,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           }),
         ],
       },
-      ensureRuntime: async () => {
+      startWorkflowSession: async (input) => {
         runtimeCalls += 1;
-        return {
-          kind: "opencode",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo",
-        };
+        return workflowSessionStartSummary(input);
       },
     });
 
@@ -1183,7 +685,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("lets host bootstrap resolve the canonical worktree for qa start", async () => {
+  test("lets the host resolve the canonical worktree for qa start", async () => {
     const ensuredWorkingDirectories: Array<string | null | undefined> = [];
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
@@ -1232,13 +734,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           }),
         ],
       },
-      ensureRuntime: async (_repoPath, _taskId, _role, options) => {
-        ensuredWorkingDirectories.push(options?.targetWorkingDirectory);
-        return {
-          kind: "opencode",
-          runtimeKind: "opencode",
-          workingDirectory: options?.targetWorkingDirectory ?? "/tmp/repo",
-        };
+      startWorkflowSession: async (input) => {
+        ensuredWorkingDirectories.push(input.targetWorkingDirectory);
+        return workflowSessionStartSummary(input, { externalSessionId: "external-qa" });
       },
     });
 
@@ -1262,26 +760,18 @@ describe("agent-orchestrator/handlers/start-session", () => {
     let refreshCalls = 0;
     let startCalls = 0;
 
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-created",
-        startedAt: "2026-02-22T08:00:10.000Z",
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
-    };
-
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
     const { sessionsRef, start } = createStartSessionTestHarness({
-      adapter,
       taskRef: { current: [taskFixture] },
+      startWorkflowSession: async (input) => {
+        startCalls += 1;
+        return workflowSessionStartSummary(input, {
+          externalSessionId: "external-created",
+          startedAt: "2026-02-22T08:00:10.000Z",
+        });
+      },
       refreshTaskData: async () => {
         refreshCalls += 1;
       },
@@ -1302,7 +792,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       );
       expect(startCalls).toBe(1);
       expect(kickoffCalls).toBe(0);
-      expect(refreshCalls).toBe(0);
+      expect(refreshCalls).toBe(1);
       expect(getSession(sessionsRef.current, "external-created")).toBeDefined();
       const createdSession = getSession(sessionsRef.current, "external-created");
       expect(createdSession).toBeDefined();
@@ -1316,7 +806,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       });
       expect(createdHeaderMessage?.content).toContain("System prompt:");
     } finally {
-      adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
   });
@@ -1336,13 +825,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const { start } = createStartSessionTestHarness({
       adapter,
       taskRef: { current: [taskFixture] },
-      ensureRuntime: async () => {
+      startWorkflowSession: async (input) => {
         runtimeCalls += 1;
-        return {
-          kind: "opencode",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        };
+        return workflowSessionStartSummary(input);
       },
       loadTaskDocuments: async () => {
         throw new Error("prompt load failed");
@@ -1397,13 +882,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const { start } = createStartSessionTestHarness({
         adapter,
         taskRef: { current: [taskFixture] },
-        ensureRuntime: async () => {
+        startWorkflowSession: async (input) => {
           runtimeCalls += 1;
-          return {
-            kind: "opencode",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-          };
+          return workflowSessionStartSummary(input);
         },
       });
 
@@ -1436,27 +917,18 @@ describe("agent-orchestrator/handlers/start-session", () => {
       variant: "high",
       profileId: "Hephaestus",
     };
-    let observedStartInput: Parameters<OpencodeSdkAdapter["startSession"]>[0] | null = null;
+    let observedStartInput: AgentWorkflowSessionStartInput | null = null;
 
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
+    const startWorkflowSession = async (input: AgentWorkflowSessionStartInput) => {
       observedStartInput = input;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-created",
-        startedAt: "2026-02-22T08:00:10.000Z",
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
+      return workflowSessionStartSummary(input, { externalSessionId: "external-created" });
     };
 
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
     const { start } = createStartSessionTestHarness({
-      adapter,
+      startWorkflowSession,
       taskRef: { current: [taskFixture] },
     });
 
@@ -1470,11 +942,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-created" }));
       if (observedStartInput === null) {
-        throw new Error("Expected adapter.startSession to receive input.");
+        throw new Error("Expected startWorkflowSession to receive input.");
       }
       expect(observedStartInput).toMatchObject({ model: selectedModel });
     } finally {
-      adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
     }
   });

@@ -1,6 +1,5 @@
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { RuntimeInfo } from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import { SessionLaunchStopError } from "./session-launch-errors";
 import type {
@@ -16,29 +15,6 @@ const toStartedSessionTags = (startedCtx: StartedSessionContext): SessionStartTa
   externalSessionId: startedCtx.summary.externalSessionId,
 });
 
-type SessionBootstrap = NonNullable<RuntimeInfo["bootstrap"]>;
-
-export const rollbackBootstrapAfterStartFailure = async ({
-  cause,
-  bootstrap,
-}: {
-  cause: unknown;
-  bootstrap: { abort: () => Promise<void> };
-}): Promise<never> => {
-  if (cause instanceof SessionLaunchStopError) {
-    throw cause;
-  }
-  try {
-    await bootstrap.abort();
-  } catch (abortCause) {
-    throw new Error(
-      `${errorMessage(cause)}\nAlso failed to roll back task worktree bootstrap: ${errorMessage(abortCause)}`,
-      cause instanceof Error ? { cause } : undefined,
-    );
-  }
-  throw cause;
-};
-
 export const stopStoredWorkflowSessionAfterLaunchFailure = async ({
   message,
   cause,
@@ -49,7 +25,6 @@ export const stopStoredWorkflowSessionAfterLaunchFailure = async ({
   clearSessionObservationState,
   runtime,
   stopReason,
-  bootstrapToComplete,
 }: {
   message: string;
   cause: unknown;
@@ -60,7 +35,6 @@ export const stopStoredWorkflowSessionAfterLaunchFailure = async ({
   clearSessionObservationState: (identity: AgentSessionIdentity) => void;
   runtime: RuntimeDependencies;
   stopReason: string;
-  bootstrapToComplete?: SessionBootstrap;
 }): Promise<never> => {
   let stopError: unknown;
   try {
@@ -88,35 +62,14 @@ export const stopStoredWorkflowSessionAfterLaunchFailure = async ({
     clearSessionObservationState(identity);
   }
 
-  let bootstrapError: unknown;
-  if (bootstrapToComplete) {
-    try {
-      await bootstrapToComplete.complete();
-    } catch (error) {
-      bootstrapError = error;
-    }
-  }
-
   if (stopError !== undefined) {
-    const bootstrapFailure =
-      bootstrapError === undefined
-        ? ""
-        : ` Also failed to complete the task worktree bootstrap: ${errorMessage(bootstrapError)}.`;
     throw new SessionLaunchStopError(
-      `${message} Failed to stop the started session during rollback: ${errorMessage(stopError)}. Cleanup was not continued.${bootstrapFailure}`,
+      `${message} Failed to stop the started session during rollback: ${errorMessage(stopError)}. Cleanup was not continued.`,
       { cause: stopError },
     );
   }
 
   const progress = ["The started session was stopped.", "The stored task session was kept."];
-  if (bootstrapToComplete && bootstrapError === undefined) {
-    progress.push("The task worktree bootstrap was completed to keep its resources.");
-  } else if (bootstrapError !== undefined) {
-    progress.push(
-      `Failed to complete the task worktree bootstrap: ${errorMessage(bootstrapError)}.`,
-    );
-  }
-
   throw new Error(
     `${message} ${progress.join(" ")}`,
     cause instanceof Error ? { cause } : undefined,

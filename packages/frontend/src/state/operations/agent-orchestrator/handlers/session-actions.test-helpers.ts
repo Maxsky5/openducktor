@@ -1,4 +1,8 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type {
+  AgentSessionControlSummary,
+  AgentWorkflowSessionStartInput,
+} from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import {
@@ -121,11 +125,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
       return nextSession;
     },
     canonicalizePath: async (path) => path,
-    ensureRuntime: async () => ({
-      kind: "opencode",
-      runtimeKind: "opencode",
-      workingDirectory: "/tmp/repo",
-    }),
+    startWorkflowSession: defaultStartWorkflowSession,
     ensureExistingSessionRuntime: async () => {},
     loadTaskDocuments: async () => ({
       specMarkdown: "",
@@ -152,3 +152,13 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     adapter,
   });
 };
+
+const defaultStartWorkflowSession = async (
+  input: AgentWorkflowSessionStartInput,
+): Promise<AgentSessionControlSummary> => ({
+  externalSessionId: "session-1",
+  runtimeKind: input.runtimeKind,
+  workingDirectory: input.targetWorkingDirectory ?? "/tmp/repo",
+  startedAt: "2026-02-22T08:10:00.000Z",
+  status: "idle",
+});

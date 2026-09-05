@@ -273,7 +273,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalQaGetReport = host.qaGetReport;
     const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
 
-    const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
@@ -281,14 +280,16 @@ describe("use-agent-orchestrator-operations session state", () => {
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    const taskSessionBootstrapPrepare = async (
-      _repoPath: string,
-      _taskId: string,
-      role: "spec" | "planner" | "build" | "qa",
-      runtimeKind: "opencode" | "codex",
-    ) => {
+    const agentSessionWorkflowStart: typeof host.agentSessionWorkflowStart = async (input) => {
       buildStartCalls += 1;
-      return { ...buildBootstrapFixture, bootstrapId: "bootstrap-latest", role, runtimeKind };
+      startWorkingDirectory = buildBootstrapFixture.workingDirectory;
+      return {
+        externalSessionId: "external-updated-runs",
+        runtimeKind: input.runtimeKind,
+        workingDirectory: buildBootstrapFixture.workingDirectory,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        status: "idle",
+      };
     };
     host.workspaceGetRepoConfig = async () => ({
       workspaceId: "repo",
@@ -309,17 +310,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       agentDefaults: {},
     });
 
-    OpencodeSdkAdapter.prototype.startSession = async (input) => {
-      startWorkingDirectory = input.workingDirectory;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-updated-runs",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        sessionAssociation: input.sessionScope ?? { kind: "unbound" },
-        status: "idle",
-      };
-    };
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],
       defaultModelsByProvider: {},
@@ -335,7 +325,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         {
           agentSessionsList: async () => [],
         },
-        { taskSessionBootstrapPrepare },
+        { agentSessionWorkflowStart },
       ),
     });
 
@@ -362,7 +352,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.qaGetReport = originalQaGetReport;
       host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
 
-      OpencodeSdkAdapter.prototype.startSession = originalStartSession;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
     }

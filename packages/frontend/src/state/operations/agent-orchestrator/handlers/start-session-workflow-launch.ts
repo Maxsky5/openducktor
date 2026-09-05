@@ -2,7 +2,6 @@ import { workflowAgentSessionScope } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { EnsureRuntimeOptions, RuntimeInfo } from "../runtime/runtime";
 import { readFreshSessionRuntimeKind } from "../support/session-runtime-kind";
 import type { PreparedSessionLaunch } from "./prepared-session-launch";
 import type { PreparedSessionRegistrationInput } from "./session-launch-executor";
@@ -19,8 +18,7 @@ import { resolveStartTask } from "./start-session-policies";
 import { resolveLoadedSourceSession } from "./start-session-reuse-strategy";
 
 export type WorkflowPreparedLaunch = {
-  launch: Extract<PreparedSessionLaunch, { mode: "start" | "fork" }>;
-  bootstrap: RuntimeInfo["bootstrap"];
+  launch: Extract<PreparedSessionLaunch, { mode: "workflow_start" | "fork" }>;
 };
 
 const toWorkflowAssociation = (ctx: StartSessionContext) =>
@@ -47,46 +45,20 @@ export const prepareWorkflowFreshLaunch = async ({
 
   const systemPrompt = await loadStartSystemPrompt({ ctx, taskCard, deps });
 
-  const runtimeOptions: EnsureRuntimeOptions = {
-    workspaceId: ctx.workspaceId,
+  const launch: Extract<PreparedSessionLaunch, { mode: "workflow_start" }> = {
+    mode: "workflow_start",
+    repoPath: ctx.repoPath,
     runtimeKind: selectedModelRuntimeKind,
+    sessionAssociation: toWorkflowAssociation(ctx),
+    systemPrompt,
+    selectedModel: selectedModelWithRuntime,
+    holdForPostStartMessage: ctx.holdForPostStartMessage,
   };
-  if (targetWorkingDirectory !== undefined) {
-    runtimeOptions.targetWorkingDirectory = targetWorkingDirectory;
+  const target = targetWorkingDirectory?.trim();
+  if (target) {
+    launch.targetWorkingDirectory = target;
   }
-
-  // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- worktree bootstrap is a side effect; a stale repo or failed prompt must throw before it starts
-  const runtime = await deps.runtime.ensureRuntime(
-    ctx.repoPath,
-    ctx.taskId,
-    ctx.role,
-    runtimeOptions,
-  );
-  if (ctx.isStaleRepoOperation()) {
-    try {
-      await runtime.bootstrap?.abort();
-    } catch (error) {
-      throw new Error(
-        `${STALE_START_ERROR} Failed to roll back task worktree bootstrap: ${errorMessage(error)}`,
-        error instanceof Error ? { cause: error } : undefined,
-      );
-    }
-    throw new Error(STALE_START_ERROR);
-  }
-
-  return {
-    launch: {
-      mode: "start",
-      repoPath: ctx.repoPath,
-      runtimeKind: selectedModelRuntimeKind,
-      workingDirectory: runtime.workingDirectory,
-      sessionAssociation: toWorkflowAssociation(ctx),
-      systemPrompt,
-      selectedModel: selectedModelWithRuntime,
-      holdForPostStartMessage: ctx.holdForPostStartMessage,
-    },
-    bootstrap: runtime.bootstrap,
-  };
+  return { launch };
 };
 
 const readForkSourceRuntime = (sourceSession: AgentSessionState) => {
@@ -157,12 +129,10 @@ export const prepareWorkflowForkLaunch = async ({
       selectedModel,
       holdForPostStartMessage: ctx.holdForPostStartMessage,
     },
-    bootstrap: undefined,
   };
 };
 
 export const registerWorkflowSessionLaunch = async ({
-  bootstrap,
   ctx,
   summary,
   identity,
@@ -170,7 +140,6 @@ export const registerWorkflowSessionLaunch = async ({
   isStaleOperation,
   deps,
 }: PreparedSessionRegistrationInput & {
-  bootstrap: RuntimeInfo["bootstrap"];
   ctx: StartSessionContext;
   deps: Pick<StartSessionExecutionDependencies, "session" | "runtime" | "task">;
 }): Promise<void> => {
@@ -189,18 +158,18 @@ export const registerWorkflowSessionLaunch = async ({
       runtime: deps.runtime,
       stopReason: "start-session-stop-on-stale-before-attach",
     };
-    if (bootstrap) {
-      cleanupInput.bootstrapToComplete = bootstrap;
-    }
     await stopStoredWorkflowSessionAfterLaunchFailure(cleanupInput);
   }
 
-  let bootstrapCompletionAttempted = false;
   try {
     if (isStaleOperation()) {
       throw new Error(STALE_START_ERROR);
     }
     await deps.task.refreshSessionRecords(ctx.repoPath, ctx.taskId);
+    if (isStaleOperation()) {
+      throw new Error(STALE_START_ERROR);
+    }
+    await deps.task.refreshTaskData(ctx.repoPath, ctx.taskId);
     if (isStaleOperation()) {
       throw new Error(STALE_START_ERROR);
     }
@@ -212,8 +181,6 @@ export const registerWorkflowSessionLaunch = async ({
         cause instanceof Error ? { cause } : undefined,
       );
     }
-    bootstrapCompletionAttempted = !!bootstrap;
-    await bootstrap?.complete();
     if (isStaleOperation()) {
       throw new Error(STALE_START_ERROR);
     }
@@ -227,11 +194,8 @@ export const registerWorkflowSessionLaunch = async ({
       replaceSession: deps.session.replaceSession,
       clearSessionObservationState: deps.session.clearSessionObservationState,
       runtime: deps.runtime,
-      stopReason: "start-session-stop-after-bootstrap-failure",
+      stopReason: "start-session-stop-after-registration-failure",
     };
-    if (bootstrap && !bootstrapCompletionAttempted) {
-      cleanupInput.bootstrapToComplete = bootstrap;
-    }
     await stopStoredWorkflowSessionAfterLaunchFailure(cleanupInput);
   }
 };

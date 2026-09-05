@@ -1,5 +1,8 @@
 import type { AgentEnginePort, AgentSessionHistoryMessage } from "@openducktor/core";
-import type { AgentSessionControlSummary } from "@openducktor/contracts";
+import type {
+  AgentSessionControlSummary,
+  AgentWorkflowSessionStartInput,
+} from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -31,6 +34,9 @@ type SessionLaunchAdapter = Pick<
 
 export type SessionLaunchExecutorDependencies = {
   adapter: SessionLaunchAdapter;
+  startWorkflowSession: (
+    input: AgentWorkflowSessionStartInput,
+  ) => Promise<AgentSessionControlSummary>;
   loadSettingsSnapshot: LoadSettingsSnapshotForRuntimePolicy;
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
@@ -52,7 +58,6 @@ export type ExecutePreparedSessionLaunchInput = {
     summary: AgentSessionControlSummary;
     identity: AgentSessionIdentity;
     stopReason: string;
-    finishBootstrap: boolean;
   }) => Promise<never>;
   isCallerContextStale?: (() => boolean) | undefined;
 };
@@ -63,44 +68,63 @@ export type PreparedSessionLaunchResult = {
 };
 
 const callPreparedRuntimeLaunch = (
-  adapter: SessionLaunchAdapter,
+  deps: Pick<SessionLaunchExecutorDependencies, "adapter" | "startWorkflowSession">,
   launch: PreparedSessionLaunch,
 ): Promise<AgentSessionControlSummary> => {
-  const runtimeRef = {
-    repoPath: launch.repoPath,
-    runtimeKind: launch.runtimeKind,
-    workingDirectory: launch.workingDirectory,
-    sessionScope: launch.sessionAssociation,
-  };
-  if (launch.mode === "resume") {
-    const input: Parameters<SessionLaunchAdapter["resumeSession"]>[0] = {
-      ...runtimeRef,
-      externalSessionId: launch.externalSessionId,
-    };
-    if (launch.selectedModel) {
-      input.model = launch.selectedModel;
+  switch (launch.mode) {
+    case "workflow_start": {
+      const input: AgentWorkflowSessionStartInput = {
+        repoPath: launch.repoPath,
+        runtimeKind: launch.runtimeKind,
+        sessionScope: launch.sessionAssociation,
+        systemPrompt: launch.systemPrompt,
+        model: launch.selectedModel,
+      };
+      if (launch.targetWorkingDirectory) {
+        input.targetWorkingDirectory = launch.targetWorkingDirectory;
+      }
+      return deps.startWorkflowSession(input);
     }
-    if (launch.systemPrompt) {
-      input.systemPrompt = launch.systemPrompt;
+    case "start":
+      return deps.adapter.startSession({
+        repoPath: launch.repoPath,
+        runtimeKind: launch.runtimeKind,
+        workingDirectory: launch.workingDirectory,
+        sessionScope: launch.sessionAssociation,
+        systemPrompt: launch.systemPrompt,
+        model: launch.selectedModel,
+      });
+    case "resume": {
+      const input: Parameters<SessionLaunchAdapter["resumeSession"]>[0] = {
+        repoPath: launch.repoPath,
+        runtimeKind: launch.runtimeKind,
+        workingDirectory: launch.workingDirectory,
+        sessionScope: launch.sessionAssociation,
+        externalSessionId: launch.externalSessionId,
+      };
+      if (launch.selectedModel) {
+        input.model = launch.selectedModel;
+      }
+      if (launch.systemPrompt) {
+        input.systemPrompt = launch.systemPrompt;
+      }
+      return deps.adapter.resumeSession(input);
     }
-    return adapter.resumeSession(input);
+    case "fork": {
+      const input: Parameters<SessionLaunchAdapter["forkSession"]>[0] = {
+        repoPath: launch.repoPath,
+        runtimeKind: launch.runtimeKind,
+        workingDirectory: launch.workingDirectory,
+        sessionScope: launch.sessionAssociation,
+        systemPrompt: launch.systemPrompt,
+        parentExternalSessionId: launch.parentExternalSessionId,
+      };
+      if (launch.selectedModel) {
+        input.model = launch.selectedModel;
+      }
+      return deps.adapter.forkSession(input);
+    }
   }
-  if (launch.mode === "fork") {
-    const input: Parameters<SessionLaunchAdapter["forkSession"]>[0] = {
-      ...runtimeRef,
-      systemPrompt: launch.systemPrompt,
-      parentExternalSessionId: launch.parentExternalSessionId,
-    };
-    if (launch.selectedModel) {
-      input.model = launch.selectedModel;
-    }
-    return adapter.forkSession(input);
-  }
-  return adapter.startSession({
-    ...runtimeRef,
-    systemPrompt: launch.systemPrompt,
-    model: launch.selectedModel,
-  });
 };
 
 const launchedSessionStatus = (
@@ -207,7 +231,7 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
       repositoryStaleGuard() || (input.isCallerContextStale?.() ?? false);
     throwIfRepoStale(isStaleOperation, STALE_START_ERROR);
 
-    const summary = await callPreparedRuntimeLaunch(deps.adapter, launch);
+    const summary = await callPreparedRuntimeLaunch(deps, launch);
     const identity = toAgentSessionIdentity(summary);
 
     if (isStaleOperation()) {
@@ -216,8 +240,9 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
         cause: new Error(STALE_START_ERROR),
         summary,
         identity,
-        stopReason: `start-session-stop-on-stale-after-${launch.mode}`,
-        finishBootstrap: true,
+        stopReason: `start-session-stop-on-stale-after-${
+          launch.mode === "workflow_start" ? "start" : launch.mode
+        }`,
       });
     }
 
@@ -235,7 +260,6 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
           summary,
           identity,
           stopReason: "start-session-stop-after-fork-history-load-failure",
-          finishBootstrap: true,
         }),
       );
 
@@ -246,7 +270,6 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
           summary,
           identity,
           stopReason: "start-session-stop-on-stale-after-fork-history-load",
-          finishBootstrap: true,
         });
       }
       initialMessages = buildForkInitialMessages(launch, summary, forkHistory);
@@ -262,7 +285,6 @@ export const createExecutePreparedSessionLaunch = (deps: SessionLaunchExecutorDe
         summary,
         identity,
         stopReason: "start-session-stop-on-stale-after-local-registration",
-        finishBootstrap: false,
       });
     }
 

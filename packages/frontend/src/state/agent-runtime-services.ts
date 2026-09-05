@@ -1,4 +1,8 @@
-import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
+import type {
+  AgentRepositorySessionStartInput,
+  RuntimeInstanceSummary,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import type { AcceptedAgentUserMessage, AgentEnginePort } from "@openducktor/core";
 import { validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
 import { host } from "./operations/shared/host";
@@ -85,7 +89,24 @@ const createAgentEngine = (
   runtimeKinds: RuntimeKind[],
 ): AgentEnginePort => {
   return {
-    startSession: (input) => host.agentSessionControlStart(input),
+    startSession: (input) => {
+      if (input.sessionScope.kind === "workflow") {
+        return Promise.reject(
+          new Error("Workflow sessions must start through agentSessionWorkflowStart."),
+        );
+      }
+      const startInput: AgentRepositorySessionStartInput = {
+        repoPath: input.repoPath,
+        runtimeKind: input.runtimeKind,
+        workingDirectory: input.workingDirectory,
+        sessionScope: input.sessionScope,
+        systemPrompt: input.systemPrompt,
+      };
+      if (input.model) {
+        startInput.model = input.model;
+      }
+      return host.agentSessionControlStart(startInput);
+    },
     resumeSession: (input) => host.agentSessionControlResume(input),
     releaseSession: (input) => host.agentSessionControlRelease(input),
     forkSession: (input) => host.agentSessionControlFork(input),

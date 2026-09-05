@@ -1,8 +1,11 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type {
+  AgentSessionControlSummary,
+  AgentSessionRecord,
+  AgentWorkflowSessionStartInput,
+} from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
-import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { appQueryClient } from "@/lib/query-client";
 import {
   type AgentSessionCollection,
@@ -24,7 +27,6 @@ import type {
   AgentSessionState as BaseAgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import type { RuntimeInfo } from "../runtime/runtime";
 import { createSessionMessagesState } from "../support/messages";
 import { createTaskCardFixture } from "../test-utils";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
@@ -148,18 +150,21 @@ export const sessionFixture = (
   ...overrides,
 });
 
-const ensureRuntimeWithKind = async (
-  ...args: Parameters<StartSessionDependencies["runtime"]["ensureRuntime"]>
-): Promise<RuntimeInfo> => {
-  const [, , , options] = args;
-  const runtimeKind = options?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
-  const workingDirectory = options?.targetWorkingDirectory ?? "/tmp/repo";
+export const workflowSessionStartSummary = (
+  input: AgentWorkflowSessionStartInput,
+  overrides: Partial<AgentSessionControlSummary> = {},
+): AgentSessionControlSummary => ({
+  externalSessionId: "session-1",
+  runtimeKind: input.runtimeKind,
+  workingDirectory: input.targetWorkingDirectory ?? "/tmp/repo/worktree",
+  startedAt: "2026-02-22T08:10:00.000Z",
+  status: "idle",
+  ...overrides,
+});
 
-  return {
-    runtimeKind,
-    workingDirectory,
-  };
-};
+export const defaultStartWorkflowSession = async (
+  input: AgentWorkflowSessionStartInput,
+): Promise<AgentSessionControlSummary> => workflowSessionStartSummary(input);
 
 export type FlatStartSessionDependencies = Omit<
   StartSessionDependencies["repo"],
@@ -179,8 +184,8 @@ export type FlatStartSessionDependencies = Omit<
       "loadAgentSessionHistory" | "sessionStartGateRef" | "readSessionSnapshot"
     >
   > &
-  Omit<StartSessionDependencies["runtime"], "canonicalizePath"> &
-  Partial<Pick<StartSessionDependencies["runtime"], "canonicalizePath">> &
+  Omit<StartSessionDependencies["runtime"], "canonicalizePath" | "startWorkflowSession"> &
+  Partial<Pick<StartSessionDependencies["runtime"], "canonicalizePath" | "startWorkflowSession">> &
   StartSessionDependencies["task"] &
   StartSessionDependencies["model"];
 
@@ -209,7 +214,7 @@ export const toStartSessionDependencies = (
     runtime: {
       adapter: deps.adapter,
       canonicalizePath: deps.canonicalizePath ?? (async (path) => path),
-      ensureRuntime: deps.ensureRuntime ?? ensureRuntimeWithKind,
+      startWorkflowSession: deps.startWorkflowSession ?? defaultStartWorkflowSession,
     },
     task: {
       taskRef: deps.taskRef,
@@ -249,7 +254,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
       getAgentSession(sessionsRef.current, sourceSession),
     loadAgentSessionHistory = async () => null,
     canonicalizePath = async (path: string) => path,
-    ensureRuntime = ensureRuntimeWithKind,
+    startWorkflowSession: startWorkflowSessionOverride = defaultStartWorkflowSession,
     loadTaskDocuments = async () => ({
       specMarkdown: "",
       planMarkdown: "",
@@ -286,7 +291,7 @@ export const createStartSessionTestHarness = (options: StartSessionHarnessOption
     loadSourceSession,
     loadAgentSessionHistory,
     canonicalizePath,
-    ensureRuntime,
+    startWorkflowSession: startWorkflowSessionOverride,
     loadTaskDocuments,
     refreshSessionRecords,
     refreshTaskData,

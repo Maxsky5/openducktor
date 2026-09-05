@@ -11,7 +11,7 @@ export const createTaskReviewUseCases = ({
   devServerService,
   gitPort,
   taskStore,
-  taskSessionBootstrapCoordinator,
+  taskSessionLifecycleCoordinator,
   terminalService,
 }: CreateTaskServiceInput): Pick<
   TaskService,
@@ -109,7 +109,7 @@ export const createTaskReviewUseCases = ({
         operation: "approve task",
         repoPath,
         taskId,
-        taskSessionBootstrapCoordinator,
+        taskSessionLifecycleCoordinator,
         taskStore,
       });
       const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));

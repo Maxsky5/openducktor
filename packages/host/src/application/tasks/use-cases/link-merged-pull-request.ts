@@ -34,7 +34,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   gitProviderResolver,
   taskStore,
   settingsConfig,
-  taskSessionBootstrapCoordinator,
+  taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
   worktreeFiles,
@@ -167,7 +167,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
             operation: "link merged pull request",
             repoPath,
             taskId,
-            taskSessionBootstrapCoordinator,
+            taskSessionLifecycleCoordinator,
             taskStore,
           });
         }),

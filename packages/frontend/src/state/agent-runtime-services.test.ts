@@ -112,10 +112,19 @@ describe("agent runtime services", () => {
           repoPath: sessionRef.repoPath,
           runtimeKind: sessionRef.runtimeKind,
           workingDirectory: sessionRef.workingDirectory,
-          sessionScope,
+          sessionScope: { kind: "repository" },
           systemPrompt: "Build",
         }),
       ).resolves.toEqual(sessionSummary);
+      await expect(
+        agentEngine.startSession({
+          repoPath: sessionRef.repoPath,
+          runtimeKind: sessionRef.runtimeKind,
+          workingDirectory: sessionRef.workingDirectory,
+          sessionScope,
+          systemPrompt: "Build",
+        }),
+      ).rejects.toThrow("Workflow sessions must start through agentSessionWorkflowStart.");
       await agentEngine.resumeSession({ ...sessionRef, sessionScope });
       await agentEngine.forkSession({
         repoPath: sessionRef.repoPath,
@@ -141,7 +150,7 @@ describe("agent runtime services", () => {
         repoPath: "/repo",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
-        sessionScope,
+        sessionScope: { kind: "repository" },
         systemPrompt: "Build",
       });
       expect(resume).toHaveBeenCalledTimes(1);

@@ -35,7 +35,7 @@ export const createTaskFullResetUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-  taskSessionBootstrapCoordinator,
+  taskSessionLifecycleCoordinator,
 }: TaskServiceUseCaseInput) => ({
   resetTask(input: Parameters<TaskService["resetTask"]>[0]) {
     return Effect.gen(function* () {
@@ -50,7 +50,7 @@ export const createTaskFullResetUseCase = ({
       );
       const storeDependencies = requireTaskResetStoreDependencies(taskStore);
       const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
-      yield* taskSessionBootstrapCoordinator.acquireLifecycle(
+      yield* taskSessionLifecycleCoordinator.acquireLifecycle(
         canonicalInputRepo,
         [taskId],
         "reset task",
@@ -112,7 +112,7 @@ export const createTaskFullResetUseCase = ({
         workflowCleanupSessionRoles,
         "reset task",
       );
-      yield* taskSessionBootstrapCoordinator.acquireWorktreeLifecycle(worktreePaths);
+      yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle(worktreePaths);
       const branchNames = yield* collectRelatedTaskBranches(
         dependencies.gitPort,
         effectiveRepoPath,

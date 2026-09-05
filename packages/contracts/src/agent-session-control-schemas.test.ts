@@ -8,12 +8,52 @@ import {
   agentSessionControlSummarySchema,
   agentSessionControlUpdateModelInputSchema,
   agentSessionModelSettingsSchema,
+  agentRepositorySessionStartInputSchema,
+  agentWorkflowSessionStartInputSchema,
 } from "./agent-session-control-schemas";
 
 const workflowScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
 const repositoryScope = { kind: "repository" as const };
 
 describe("agent session control contracts", () => {
+  test("parses one host-owned workflow start request without a working directory", () => {
+    expect(
+      agentWorkflowSessionStartInputSchema.parse({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        sessionScope: workflowScope,
+        systemPrompt: "Build the feature",
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).toMatchObject({ sessionScope: workflowScope, runtimeKind: "opencode" });
+    expect(() =>
+      agentWorkflowSessionStartInputSchema.parse({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/task",
+        sessionScope: workflowScope,
+        systemPrompt: "Build the feature",
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).toThrow();
+  });
+
+  test("rejects a workflow start when the selected model belongs to another runtime", () => {
+    expect(
+      agentWorkflowSessionStartInputSchema.safeParse({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        sessionScope: workflowScope,
+        systemPrompt: "Build the feature",
+        model: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   test("parses a strict normalized start command", () => {
     expect(
       agentSessionControlStartInputSchema.parse({
@@ -24,6 +64,27 @@ describe("agent session control contracts", () => {
         systemPrompt: "Build the feature",
       }),
     ).toMatchObject({ runtimeKind: "codex", workingDirectory: "/repo/task" });
+  });
+
+  test("limits the public repository start command to repository scope", () => {
+    expect(
+      agentRepositorySessionStartInputSchema.safeParse({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        sessionScope: repositoryScope,
+        systemPrompt: "Repository chat",
+      }).success,
+    ).toBe(true);
+    expect(
+      agentRepositorySessionStartInputSchema.safeParse({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/task",
+        sessionScope: workflowScope,
+        systemPrompt: "Build the feature",
+      }).success,
+    ).toBe(false);
   });
 
   test("rejects runtime-native routing fields", () => {

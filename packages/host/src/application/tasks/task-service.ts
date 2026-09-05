@@ -11,7 +11,6 @@ import {
   type TaskMetadataDocument,
   type TaskMetadataPayload,
   type TaskPullRequestDetectResult,
-  type TaskSessionBootstrap,
   type TaskStopImpact,
   type TaskStopImpactRequest,
 } from "@openducktor/contracts";
@@ -73,8 +72,6 @@ import type {
   RepoPathInput,
   SetPlanInput,
   TaskIdInput,
-  TaskSessionBootstrapFinalizeInput,
-  TaskSessionBootstrapPrepareInput,
   TransitionTaskInput,
   UpdateTaskInput,
 } from "./task-inputs";
@@ -94,13 +91,16 @@ import { createTaskImplementationResetUseCase } from "./use-cases/reset-implemen
 import { createTaskFullResetUseCase } from "./use-cases/reset-task";
 import { createTaskReviewUseCases } from "./use-cases/review-task";
 import { createTaskPullRequestSyncUseCases } from "./use-cases/sync-pull-requests";
-import { createTaskSessionBootstrapUseCase } from "./use-cases/task-session-bootstrap";
 import { createTaskBuildStateUseCases } from "./use-cases/update-build-state";
 import {
-  createTaskSessionBootstrapCoordinator,
-  type TaskSessionBootstrapCoordinator,
-} from "./worktrees/task-session-bootstrap-coordinator";
+  createTaskSessionLifecycleCoordinator,
+  type TaskSessionLifecycleCoordinator,
+} from "./worktrees/task-session-lifecycle-coordinator";
 import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
+import {
+  createTaskSessionStartPreparationService,
+  type TaskSessionStartPreparationInput,
+} from "./worktrees/task-session-start-preparation-service";
 
 export type TaskServiceError =
   | DevServerServiceError
@@ -172,15 +172,6 @@ export type TaskService = {
   qaGetReport(input: TaskIdInput): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
   buildBlocked(input: BuildBlockedInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildStart(input: BuildStartInput): Effect.Effect<BuildSessionBootstrap, TaskServiceError>;
-  taskSessionBootstrapPrepare(
-    input: TaskSessionBootstrapPrepareInput,
-  ): Effect.Effect<TaskSessionBootstrap, TaskServiceError>;
-  taskSessionBootstrapComplete(
-    input: TaskSessionBootstrapFinalizeInput,
-  ): Effect.Effect<boolean, TaskServiceError>;
-  taskSessionBootstrapAbort(
-    input: TaskSessionBootstrapFinalizeInput,
-  ): Effect.Effect<boolean, TaskServiceError>;
   buildResumed(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildCompleted(input: BuildCompletedInput): Effect.Effect<TaskCard, TaskServiceError>;
   qaApproved(input: MarkdownDocumentInput): Effect.Effect<TaskCard, TaskServiceError>;
@@ -270,13 +261,13 @@ export type CreateTaskServiceInput = {
   runtimeDefinitionsService?: RuntimeDefinitionsService;
   runtimeRegistry?: RuntimeRegistryPort;
   worktreeFiles?: WorktreeFilePort;
-  taskSessionBootstrapCoordinator?: TaskSessionBootstrapCoordinator;
+  taskSessionLifecycleCoordinator?: TaskSessionLifecycleCoordinator;
 };
 export type TaskServiceUseCaseInput = Omit<
   CreateTaskServiceInput,
-  "taskSessionBootstrapCoordinator"
+  "taskSessionLifecycleCoordinator"
 > & {
-  taskSessionBootstrapCoordinator: TaskSessionBootstrapCoordinator;
+  taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
 };
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
   cause instanceof GitProviderCapabilityError ||
@@ -326,13 +317,14 @@ export const createTaskServiceWithMutationProgress = (
 const createTaskServiceImplementation = (
   input: CreateTaskServiceInput,
 ): TaskServiceWithMutationProgress => {
-  const taskSessionBootstrapCoordinator =
-    input.taskSessionBootstrapCoordinator ?? createTaskSessionBootstrapCoordinator();
+  const taskSessionLifecycleCoordinator =
+    input.taskSessionLifecycleCoordinator ?? createTaskSessionLifecycleCoordinator();
+  const gitPort = input.gitPort;
   const useCaseInput: TaskServiceUseCaseInput = {
     ...input,
-    taskSessionBootstrapCoordinator,
+    taskSessionLifecycleCoordinator,
   };
-  const taskSessionBootstrap = createTaskSessionBootstrapUseCase(useCaseInput);
+  const taskSessionStart = createTaskSessionStartPreparationService(useCaseInput);
   const service = {
     ...createTaskQueryUseCases(useCaseInput),
     ...createTaskStopImpactUseCase(useCaseInput),
@@ -348,45 +340,60 @@ const createTaskServiceImplementation = (
     ...createTaskImplementationResetUseCase(useCaseInput),
     ...createTaskFullResetUseCase(useCaseInput),
     ...createTaskDocumentUseCases(useCaseInput),
-    ...taskSessionBootstrap,
     buildStart: (startInput: BuildStartInput) =>
-      Effect.gen(function* () {
-        const bootstrap = yield* taskSessionBootstrap.taskSessionBootstrapPrepare({
-          ...startInput,
-          role: "build",
-        });
-        const completed = yield* Effect.either(
-          taskSessionBootstrap.taskSessionBootstrapComplete({
-            repoPath: startInput.repoPath,
-            taskId: startInput.taskId,
-            bootstrapId: bootstrap.bootstrapId,
-          }),
-        );
-        if (completed._tag === "Left") {
-          const abort = yield* Effect.either(
-            taskSessionBootstrap.taskSessionBootstrapAbort({
-              repoPath: startInput.repoPath,
-              taskId: startInput.taskId,
-              bootstrapId: bootstrap.bootstrapId,
-            }),
+      Effect.scoped(
+        Effect.gen(function* () {
+          if (!gitPort) {
+            return yield* Effect.fail(
+              new HostOperationErrorValue({
+                operation: "task.build_start",
+                message: "Git port is required for build_start.",
+              }),
+            );
+          }
+          const canonicalRepoPath = yield* gitPort.canonicalizePath(startInput.repoPath);
+          yield* taskSessionLifecycleCoordinator.acquireLifecycle(
+            canonicalRepoPath,
+            [startInput.taskId],
+            "start build",
           );
+          const preparationInput: TaskSessionStartPreparationInput = {
+            canonicalRepoPath,
+            taskId: startInput.taskId,
+            role: "build",
+            runtimeKind: startInput.runtimeKind,
+          };
+          const prepared = yield* taskSessionStart.prepare(preparationInput);
+          let cleanup = prepared.cleanup;
+          const completion = yield* Effect.gen(function* () {
+            yield* taskSessionStart.complete(prepared, (transitionInput) =>
+              input.taskStore.transitionTask(transitionInput),
+            );
+            // A committed build retains its worktree when cancellation arrives.
+            cleanup = () => Effect.succeed("");
+            return buildSessionBootstrapSchema.parse({
+              runtimeKind: prepared.runtimeKind,
+              workingDirectory: prepared.workingDirectory,
+            });
+          }).pipe(
+            Effect.either,
+            Effect.uninterruptible,
+            Effect.onInterrupt(() => cleanup().pipe(Effect.orDie, Effect.asVoid)),
+          );
+          if (completion._tag === "Right") {
+            return completion.right;
+          }
+          const cleanupError = yield* cleanup();
           return yield* Effect.fail(
             new HostOperationErrorValue({
               operation: "task.build_start.finalize",
-              message: `${errorMessage(completed.left)}${abort._tag === "Left" ? `\nAlso failed to roll back: ${errorMessage(abort.left)}` : ""}`,
-              cause: completed.left,
-              details: {
-                repoPath: startInput.repoPath,
-                taskId: startInput.taskId,
-              },
+              message: `${errorMessage(completion.left)}${cleanupError}`,
+              cause: completion.left,
+              details: { repoPath: canonicalRepoPath, taskId: startInput.taskId },
             }),
           );
-        }
-        return buildSessionBootstrapSchema.parse({
-          runtimeKind: bootstrap.runtimeKind,
-          workingDirectory: bootstrap.workingDirectory,
-        });
-      }),
+        }),
+      ),
     ...createTaskBuildStateUseCases(useCaseInput),
     ...createTaskReviewUseCases(useCaseInput),
     ...createTaskPullRequestSyncUseCases(useCaseInput),
@@ -403,12 +410,6 @@ const createTaskServiceImplementation = (
     buildCompleted: (input) => mapTaskMutationProgressErrors(service.buildCompleted(input)),
     buildResumed: (input) => mapTaskServiceErrors(service.buildResumed(input)),
     buildStart: (input) => mapTaskServiceErrors(service.buildStart(input)),
-    taskSessionBootstrapPrepare: (input) =>
-      mapTaskServiceErrors(service.taskSessionBootstrapPrepare(input)),
-    taskSessionBootstrapComplete: (input) =>
-      mapTaskServiceErrors(service.taskSessionBootstrapComplete(input)),
-    taskSessionBootstrapAbort: (input) =>
-      mapTaskServiceErrors(service.taskSessionBootstrapAbort(input)),
     completeDirectMerge: (input) => mapTaskServiceErrors(service.completeDirectMerge(input)),
     createTask: (input) => mapTaskMutationProgressErrors(service.createTask(input)),
     closeTask: (input) => mapTaskServiceErrors(service.closeTask(input)),

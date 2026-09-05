@@ -135,9 +135,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     repoRuntimeHealthStatus: agentClient.repoRuntimeHealthStatus.bind(agentClient),
     codexAppServerRequest: agentClient.codexAppServerRequest.bind(agentClient),
     buildStart: agentClient.buildStart.bind(agentClient),
-    taskSessionBootstrapPrepare: agentClient.taskSessionBootstrapPrepare.bind(agentClient),
-    taskSessionBootstrapComplete: agentClient.taskSessionBootstrapComplete.bind(agentClient),
-    taskSessionBootstrapAbort: agentClient.taskSessionBootstrapAbort.bind(agentClient),
     devServerGetState: agentClient.devServerGetState.bind(agentClient),
     devServerStart: agentClient.devServerStart.bind(agentClient),
     devServerStop: agentClient.devServerStop.bind(agentClient),
@@ -166,6 +163,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentSessionLiveClient.agentSessionControlSend.bind(agentSessionLiveClient),
     agentSessionControlStart:
       agentSessionLiveClient.agentSessionControlStart.bind(agentSessionLiveClient),
+    agentSessionWorkflowStart:
+      agentSessionLiveClient.agentSessionWorkflowStart.bind(agentSessionLiveClient),
     agentSessionControlStop:
       agentSessionLiveClient.agentSessionControlStop.bind(agentSessionLiveClient),
     agentSessionControlUpdateModel:

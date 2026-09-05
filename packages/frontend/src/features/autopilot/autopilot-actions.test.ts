@@ -488,57 +488,31 @@ describe("autopilot feature helpers", () => {
     );
 
     const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
     const releaseStarts = createDeferred<void>();
     const firstKickoffStarted = createDeferred<void>();
     const releaseFirstKickoff = createDeferred<void>();
     const secondSessionStarted = createDeferred<void>();
     const sessionStartGate = createSessionStartGate<AgentSessionIdentity>();
-    let isBootstrapActive = false;
-    let bootstrapPrepareCount = 0;
     let startCount = 0;
     const kickoffSessionIds: string[] = [];
-
-    adapter.startSession = async (input) => {
-      startCount += 1;
-      const sessionNumber = startCount;
-      await releaseStarts.promise;
-      if (sessionNumber === 2) {
-        secondSessionStarted.resolve();
-      }
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: `qa-session-${sessionNumber}`,
-        startedAt: `2026-08-31T10:00:0${sessionNumber}.000Z`,
-        sessionAssociation: input.sessionScope,
-        status: "idle",
-      };
-    };
 
     const { start } = createStartSessionTestHarness({
       adapter,
       taskRef: { current: [task] },
       sessionStartGateRef: { current: sessionStartGate },
-      ensureRuntime: async () => {
-        if (isBootstrapActive) {
-          throw new Error("Task session bootstrap is already in progress");
+      startWorkflowSession: async () => {
+        startCount += 1;
+        const sessionNumber = startCount;
+        await releaseStarts.promise;
+        if (sessionNumber === 2) {
+          secondSessionStarted.resolve();
         }
-        isBootstrapActive = true;
-        bootstrapPrepareCount += 1;
         return {
-          kind: "opencode",
           runtimeKind: "opencode",
-          runtimeId: "runtime-1",
           workingDirectory: "/tmp/repo/current-worktree",
-          bootstrap: {
-            complete: async () => {
-              isBootstrapActive = false;
-            },
-            abort: async () => {
-              isBootstrapActive = false;
-            },
-          },
+          externalSessionId: `qa-session-${sessionNumber}`,
+          startedAt: `2026-08-31T10:00:0${sessionNumber}.000Z`,
+          status: "idle",
         };
       },
     });
@@ -576,14 +550,12 @@ describe("autopilot feature helpers", () => {
 
       expect(secondStartOutcome).not.toBe("timeout");
       expect(args.resolveTaskWorktree).toHaveBeenCalledTimes(2);
-      expect(bootstrapPrepareCount).toBe(2);
       expect(startCount).toBe(2);
       expect(kickoffSessionIds).toHaveLength(2);
       expect(new Set(kickoffSessionIds)).toEqual(new Set(["qa-session-1", "qa-session-2"]));
     } finally {
       releaseStarts.resolve();
       releaseFirstKickoff.resolve();
-      adapter.startSession = originalStartSession;
     }
   });
 

@@ -12,7 +12,6 @@ import { createRuntimeSessionOperations } from "../../adapters/runtimes/runtime-
 import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import { createRuntimeWorkspaceStarterDispatcher } from "../../adapters/runtimes/runtime-workspace-starter-dispatcher";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
-import { createTaskWorkflowSessionControlService } from "../../application/agent-sessions/task-workflow-session-control-service";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
@@ -28,8 +27,7 @@ import { createRuntimeOrchestratorService } from "../../application/runtimes/run
 import { readSavedRuntimeExecutablePath } from "../../application/runtimes/saved-runtime-executable";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import type { TaskSyncLoopHandle } from "../../application/tasks/sync/task-sync-service";
-import { createTaskServiceWithMutationProgress } from "../../application/tasks/task-service";
-import { createTaskSessionBootstrapCoordinator } from "../../application/tasks/worktrees/task-session-bootstrap-coordinator";
+import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
@@ -75,7 +73,7 @@ import { createNodeHostDefaultPorts } from "./node-host-default-ports";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
-import { createNodeTaskEventServices } from "./node-task-event-services";
+import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createOpenCodeRuntimeComposition } from "./opencode-runtime-composition";
 import { createRuntimeActiveSessionResolver } from "./runtime-active-session-resolver";
 import { resolveWorkspaceRuntimeMcpBridgeConnection } from "./workspace-runtime-mcp-bridge-connection";
@@ -227,7 +225,7 @@ export const assembleNodeEffectHostCommandRouter = (
   if (clientVersion) {
     codexWorkspaceRuntimeStarterInput.clientVersion = clientVersion;
   }
-  const taskSessionBootstrapCoordinator = createTaskSessionBootstrapCoordinator();
+  const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
   const workspaceStarter = createRuntimeWorkspaceStarterDispatcher({
     claude: claudeRuntime.workspaceStarter,
     codex: createCodexWorkspaceRuntimeStarter(codexWorkspaceRuntimeStarterInput),
@@ -237,7 +235,7 @@ export const assembleNodeEffectHostCommandRouter = (
       processEnv,
       runtimeDistribution,
       liveSessionLifecycle: agentSessionLiveStateService,
-      taskSessionBootstrapCoordinator,
+      taskSessionLifecycleCoordinator,
       resolveMcpBridgeConnection: (runtimeInput) =>
         resolveRuntimeMcpBridge("opencode", runtimeInput.repoPath),
     }),
@@ -282,40 +280,34 @@ export const assembleNodeEffectHostCommandRouter = (
     sessionService: agentSessionLiveStateService,
     settingsConfig,
   });
-  const baseTaskService = createTaskServiceWithMutationProgress({
-    devServerService,
-    terminalService,
-    gitPort: git,
-    gitProviderResolver,
-    taskStore,
-    taskActivityGuard,
-    settingsConfig,
-    systemCommands,
-    toolDiscovery,
-    taskWorktreeService,
-    workspaceSettingsService,
-    runtimeDefinitionsService,
-    runtimeRegistry: effectiveRuntimeRegistry,
-    worktreeFiles,
-    taskSessionBootstrapCoordinator,
-  });
-  const { taskEventStream, taskService, taskSyncService } = createNodeTaskEventServices({
-    baseTaskService,
-    lifecycleLogger,
-    onBackgroundFailure,
-    taskEventPublicationReporter,
-    workspaceSettingsService,
-  });
-  const agentSessionCommandService = {
-    ...agentSessionLiveStateService,
-    ...createTaskWorkflowSessionControlService({
+  const { taskEventStream, taskService, taskSyncService, agentSessionCommandService } =
+    createNodeTaskSessionServices({
+      taskServiceInput: {
+        devServerService,
+        terminalService,
+        gitPort: git,
+        gitProviderResolver,
+        taskStore,
+        taskActivityGuard,
+        settingsConfig,
+        systemCommands,
+        toolDiscovery,
+        taskWorktreeService,
+        workspaceSettingsService,
+        runtimeDefinitionsService,
+        runtimeRegistry: effectiveRuntimeRegistry,
+        worktreeFiles,
+        taskSessionLifecycleCoordinator,
+      },
+      eventServiceInput: {
+        lifecycleLogger,
+        onBackgroundFailure,
+        taskEventPublicationReporter,
+        workspaceSettingsService,
+      },
       canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
-      runtime: agentSessionLiveStateService,
-      taskReader: taskStore,
-      tasks: taskService,
-      taskLifecycle: taskSessionBootstrapCoordinator,
-    }),
-  };
+      agentSessionLiveStateService,
+    });
   const odtMcpBridgeService = createOdtMcpBridgeService({
     taskAssetReadService,
     taskService,

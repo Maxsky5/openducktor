@@ -4,7 +4,9 @@ import { agentUserMessageEventSchema } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
+  agentSessionRepositoryScopeSchema,
   agentSessionScopeSchema,
+  agentSessionWorkflowScopeSchema,
 } from "./agent-session-schemas";
 import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandDescriptorSchema } from "./slash-command-schemas";
@@ -81,6 +83,34 @@ export const agentSessionControlStartInputSchema = z
   })
   .strict();
 export type AgentSessionControlStartInput = z.infer<typeof agentSessionControlStartInputSchema>;
+
+export const agentRepositorySessionStartInputSchema = agentSessionControlStartInputSchema.extend({
+  sessionScope: agentSessionRepositoryScopeSchema,
+});
+export type AgentRepositorySessionStartInput = z.infer<
+  typeof agentRepositorySessionStartInputSchema
+>;
+
+export const agentWorkflowSessionStartInputSchema = z
+  .object({
+    repoPath: nonEmptyStringSchema,
+    runtimeKind: runtimeKindSchema,
+    sessionScope: agentSessionWorkflowScopeSchema,
+    systemPrompt: z.string(),
+    model: agentModelSelectionSchema,
+    targetWorkingDirectory: nonEmptyStringSchema.optional(),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (input.model.runtimeKind && input.model.runtimeKind !== input.runtimeKind) {
+      context.addIssue({
+        code: "custom",
+        path: ["model", "runtimeKind"],
+        message: "Selected model runtimeKind must match the workflow session runtimeKind.",
+      });
+    }
+  });
+export type AgentWorkflowSessionStartInput = z.infer<typeof agentWorkflowSessionStartInputSchema>;
 
 export const agentSessionControlResumeInputSchema = agentSessionLiveRefSchema
   .extend({

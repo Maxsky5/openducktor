@@ -8,32 +8,8 @@ import type {
 import { type AgentModelSelection, type AgentRole, mergePromptOverrides } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { appQueryClient } from "@/lib/query-client";
-import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
-import { runOrchestratorSideEffect } from "../support/async-side-effects";
-
-export type RuntimeInfo = {
-  runtimeKind: RuntimeKind;
-  workingDirectory: string;
-  bootstrap?: {
-    complete: () => Promise<void>;
-    abort: () => Promise<void>;
-  };
-};
-
-export type EnsureRuntimeOptions = {
-  workspaceId?: string | null;
-  targetWorkingDirectory?: string | null;
-  runtimeKind?: RuntimeKind | null;
-};
-
-export type EnsureRuntime = (
-  repoPath: string,
-  taskId: string,
-  role: AgentRole,
-  options?: EnsureRuntimeOptions,
-) => Promise<RuntimeInfo>;
 
 export type EnsureExistingSessionRuntime = (
   repoPath: string,
@@ -45,18 +21,6 @@ export type TaskDocuments = {
   planMarkdown: string;
   qaMarkdown: string;
 };
-
-type EnsureRuntimeDependencies = {
-  queryClient?: QueryClient;
-  refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
-  hostClient?: RuntimeStartupHost;
-  repoConfigLoader?: RepoConfigLoader;
-};
-
-type RuntimeStartupHost = Pick<
-  typeof host,
-  "taskSessionBootstrapPrepare" | "taskSessionBootstrapComplete" | "taskSessionBootstrapAbort"
->;
 
 type RuntimeWorkspaceQueryHost = Pick<
   typeof host,
@@ -162,66 +126,6 @@ export const requireConfiguredRuntimeKind = (
     throw new Error(contextMessage);
   }
   return runtimeKind;
-};
-
-export const createEnsureRuntime = ({
-  refreshTaskData,
-  hostClient = host,
-  repoConfigLoader = defaultRepoConfigLoader,
-  queryClient = appQueryClient,
-}: EnsureRuntimeDependencies): EnsureRuntime => {
-  return async (repoPath, taskId, role, options): Promise<RuntimeInfo> => {
-    const targetWorkingDirectory = options?.targetWorkingDirectory?.trim() ?? "";
-    const workspaceId = options?.workspaceId?.trim() ?? "";
-    const explicitRuntimeKind = options?.runtimeKind;
-    let runtimeKind: RuntimeKind;
-    if (explicitRuntimeKind) {
-      runtimeKind = requireConfiguredRuntimeKind(
-        explicitRuntimeKind,
-        `Runtime kind is required to start ${role} sessions.`,
-      );
-    } else {
-      if (!workspaceId) {
-        throw new Error("Active workspace is required to resolve the default runtime.");
-      }
-      runtimeKind = await loadRepoDefaultRuntimeKind(workspaceId, role, repoConfigLoader);
-    }
-    const prepareBootstrap = hostClient.taskSessionBootstrapPrepare;
-    const completeBootstrap = hostClient.taskSessionBootstrapComplete;
-    const abortBootstrap = hostClient.taskSessionBootstrapAbort;
-    const bootstrap = await prepareBootstrap(
-      repoPath,
-      taskId,
-      role,
-      runtimeKind,
-      targetWorkingDirectory || undefined,
-    );
-    return {
-      runtimeKind,
-      workingDirectory: bootstrap.workingDirectory,
-      bootstrap: {
-        complete: async () => {
-          await completeBootstrap(repoPath, taskId, bootstrap.bootstrapId);
-          await queryClient.invalidateQueries({
-            queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
-          });
-          if (role === "build") {
-            runOrchestratorSideEffect(
-              "runtime-refresh-task-data-after-build-start",
-              refreshTaskData(repoPath, taskId),
-              { tags: { repoPath, taskId, role } },
-            );
-          }
-        },
-        abort: async () => {
-          await abortBootstrap(repoPath, taskId, bootstrap.bootstrapId);
-          await queryClient.invalidateQueries({
-            queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
-          });
-        },
-      },
-    };
-  };
 };
 
 export const createEnsureExistingSessionRuntime = (
