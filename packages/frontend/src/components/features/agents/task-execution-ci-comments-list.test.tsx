@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PullRequestReviewActivity } from "@openducktor/contracts";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import {
@@ -89,7 +89,7 @@ describe("TaskExecutionCiCommentsList", () => {
 
   test("renders Humans and Bots newest first without status groups", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
-      render(
+      const view = render(
         commentsList([
           {
             ...comment("new-human", "new-human-author"),
@@ -121,35 +121,36 @@ describe("TaskExecutionCiCommentsList", () => {
           },
         ]),
       );
+      const scoped = within(view.container);
       await frameDriver.flushFrames();
 
-      fireEvent.click(screen.getByRole("button", { name: /Humans/ }));
+      fireEvent.click(scoped.getByRole("button", { name: /Humans/ }));
       await frameDriver.flushMicrotasks();
-      let renderedComments = screen.getAllByRole("article");
+      let renderedComments = scoped.getAllByRole("article");
 
       expect(renderedComments[0]?.textContent).toContain("new-human-author");
       expect(renderedComments[1]?.textContent).toContain("middle-human-author");
       expect(renderedComments[2]?.textContent).toContain("old-human-author");
-      expect(screen.queryByRole("heading", { name: /^Needs review/ })).toBeNull();
-      expect(screen.queryByRole("heading", { name: /^Conversation/ })).toBeNull();
-      expect(screen.queryByRole("heading", { name: /^Resolved/ })).toBeNull();
+      expect(scoped.queryByRole("heading", { name: /^Needs review/ })).toBeNull();
+      expect(scoped.queryByRole("heading", { name: /^Conversation/ })).toBeNull();
+      expect(scoped.queryByRole("heading", { name: /^Resolved/ })).toBeNull();
 
-      fireEvent.click(screen.getByRole("button", { name: /Bots/ }));
+      fireEvent.click(scoped.getByRole("button", { name: /Bots/ }));
       await frameDriver.flushMicrotasks();
-      renderedComments = screen.getAllByRole("article");
+      renderedComments = scoped.getAllByRole("article");
 
       expect(renderedComments[0]?.textContent).toContain("new-bot[bot]");
       expect(renderedComments[1]?.textContent).toContain("middle-bot[bot]");
       expect(renderedComments[2]?.textContent).toContain("old-bot[bot]");
-      expect(screen.queryByRole("heading", { name: /^Needs review/ })).toBeNull();
-      expect(screen.queryByRole("heading", { name: /^Conversation/ })).toBeNull();
-      expect(screen.queryByRole("heading", { name: /^Resolved/ })).toBeNull();
+      expect(scoped.queryByRole("heading", { name: /^Needs review/ })).toBeNull();
+      expect(scoped.queryByRole("heading", { name: /^Conversation/ })).toBeNull();
+      expect(scoped.queryByRole("heading", { name: /^Resolved/ })).toBeNull();
     });
   });
 
   test("renders All comments newest first without status groups", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
-      render(
+      const view = render(
         commentsList([
           { ...comment("oldest", "oldest-author"), createdAt: "2026-07-08T10:00:00Z" },
           {
@@ -160,39 +161,41 @@ describe("TaskExecutionCiCommentsList", () => {
           { ...comment("middle", "middle-author"), createdAt: "2026-07-10T10:00:00Z" },
         ]),
       );
+      const scoped = within(view.container);
 
       await frameDriver.flushFrames();
 
-      const renderedComments = screen.getAllByRole("article");
+      const renderedComments = scoped.getAllByRole("article");
       expect(renderedComments[0]?.textContent).toContain("newest-author");
       expect(renderedComments[1]?.textContent).toContain("middle-author");
       expect(renderedComments[2]?.textContent).toContain("oldest-author");
-      expect(screen.queryByRole("heading", { name: /^Needs review/ })).toBeNull();
-      expect(screen.queryByRole("heading", { name: /^Conversation/ })).toBeNull();
-      expect(screen.queryByRole("heading", { name: /^Resolved/ })).toBeNull();
+      expect(scoped.queryByRole("heading", { name: /^Needs review/ })).toBeNull();
+      expect(scoped.queryByRole("heading", { name: /^Conversation/ })).toBeNull();
+      expect(scoped.queryByRole("heading", { name: /^Resolved/ })).toBeNull();
     });
   });
 
   test("renders every header immediately and stages comment bodies in bounded batches", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
       const comments = Array.from({ length: 10 }, (_, index) => comment(String(index)));
-      render(commentsList(comments));
+      const view = render(commentsList(comments));
+      const scoped = within(view.container);
 
-      expect(screen.getAllByRole("article")).toHaveLength(10);
-      expect(screen.queryByText("Comment 0")).toBeNull();
-      expect(screen.queryByText(/Rendering \d+ of/) === null).toBe(true);
+      expect(scoped.getAllByRole("article")).toHaveLength(10);
+      expect(scoped.queryByText("Comment 0")).toBeNull();
+      expect(scoped.queryByText(/Rendering \d+ of/) === null).toBe(true);
       expect(frameDriver.pendingFrameCount()).toBe(1);
 
       await frameDriver.flushFrame();
 
-      expect(screen.getByText("Comment 0")).toBeTruthy();
-      expect(screen.getByText("Comment 3")).toBeTruthy();
-      expect(screen.queryByText("Comment 4")).toBeNull();
+      expect(scoped.getByText("Comment 0")).toBeTruthy();
+      expect(scoped.getByText("Comment 3")).toBeTruthy();
+      expect(scoped.queryByText("Comment 4")).toBeNull();
       expect(frameDriver.pendingFrameCount()).toBe(1);
 
       await frameDriver.flushFrames();
 
-      expect(screen.getByText("Comment 9")).toBeTruthy();
+      expect(scoped.getByText("Comment 9")).toBeTruthy();
       expect(frameDriver.pendingFrameCount()).toBe(0);
     });
   });
