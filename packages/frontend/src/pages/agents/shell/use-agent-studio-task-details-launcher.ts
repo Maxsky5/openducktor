@@ -1,9 +1,10 @@
 import type { AgentSessionRecord, RepositoryGitProviderContext } from "@openducktor/contracts";
-import { type ComponentProps, type RefObject, useCallback, useMemo, useRef } from "react";
+import { type ComponentProps, type RefObject, useCallback, useMemo, useRef, useState } from "react";
 import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
+import type { TaskCreateModal } from "@/components/features/task-create/task-create-modal";
 import type {
   TaskDetailsSheetController,
   TaskDetailsSheetControllerHandle,
@@ -28,6 +29,7 @@ export type AgentStudioTaskDetailsSheetProps = Omit<
 >;
 
 export type AgentStudioTaskDetailsLauncherModel = {
+  taskEditor: ComponentProps<typeof TaskCreateModal> | null;
   openTaskDetails: () => void;
   taskDetailsSheetRef: RefObject<TaskDetailsSheetControllerHandle | null>;
   taskDetailsSheetProps: AgentStudioTaskDetailsSheetProps;
@@ -49,6 +51,46 @@ export function useAgentStudioTaskDetailsLauncher({
   gitProviderReadError = null,
 }: UseAgentStudioTaskDetailsLauncherArgs): AgentStudioTaskDetailsLauncherModel {
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
+  const [editTarget, setEditTarget] = useState<{ workspaceId: string; taskId: string } | null>(
+    null,
+  );
+  const workspaceId = activeWorkspace?.workspaceId;
+  const editingTask =
+    editTarget?.workspaceId === workspaceId
+      ? tasks.find((task) => task.id === editTarget?.taskId)
+      : undefined;
+
+  if (editTarget && !editingTask) {
+    setEditTarget(null);
+  }
+
+  const onEdit = useCallback(
+    (taskId: string): void => {
+      if (!workspaceId || !tasks.some((task) => task.id === taskId)) {
+        return;
+      }
+      taskDetailsSheetRef.current?.close();
+      setEditTarget({ workspaceId, taskId });
+    },
+    [tasks, workspaceId],
+  );
+
+  const onEditorOpenChange = useCallback(
+    (open: boolean): void => {
+      if (!open) {
+        setEditTarget((current) => (current === editTarget ? null : current));
+      }
+    },
+    [editTarget],
+  );
+
+  const taskEditor = useMemo<AgentStudioTaskDetailsLauncherModel["taskEditor"]>(
+    () =>
+      editingTask
+        ? { open: true, task: editingTask, tasks, onOpenChange: onEditorOpenChange }
+        : null,
+    [editingTask, onEditorOpenChange, tasks],
+  );
 
   const openTaskDetails = useCallback((): void => {
     if (!selectedTaskId) {
@@ -65,6 +107,7 @@ export function useAgentStudioTaskDetailsLauncher({
       historicalSessionsByTaskId: EMPTY_HISTORICAL_SESSIONS_BY_TASK_ID,
       activeTaskSessionContextByTaskId: EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID,
       workflowActionsEnabled: false,
+      onEdit,
       onDetectPullRequest,
       gitProviderContext,
       gitProviderReadError,
@@ -78,6 +121,7 @@ export function useAgentStudioTaskDetailsLauncher({
       gitProviderContext,
       gitProviderReadError,
       onDetectPullRequest,
+      onEdit,
       onUnlinkPullRequest,
       tasks,
       unlinkingPullRequestTaskId,
@@ -87,9 +131,10 @@ export function useAgentStudioTaskDetailsLauncher({
   return useMemo(
     () => ({
       openTaskDetails,
+      taskEditor,
       taskDetailsSheetRef,
       taskDetailsSheetProps,
     }),
-    [openTaskDetails, taskDetailsSheetProps],
+    [openTaskDetails, taskDetailsSheetProps, taskEditor],
   );
 }
