@@ -12,11 +12,12 @@ const URL_SCHEME = /^(?:https?|ircs?|mailto|xmpp|javascript|vbscript|data|blob):
 // oxlint-disable-next-line no-control-regex -- Control characters must never enter a filesystem path.
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 const SCHEME = /^[a-z][a-z\d+.-]*:/i;
+const ROOT_FILE_CITATION = /^(?:[^/:]+:[+-]?\d|[^/:]+\.[^/:]+:)/;
 
 export const isChatLocalDestination = (href: string): boolean =>
   !URL_SCHEME.test(href) &&
   !href.startsWith("#") &&
-  (DRIVE.test(href) || /^file:/i.test(href) || !SCHEME.test(href) || /^[^/:]+:\d/.test(href));
+  (DRIVE.test(href) || /^file:/i.test(href) || !SCHEME.test(href) || ROOT_FILE_CITATION.test(href));
 
 const segments = (path: string): string[] | null => {
   const result: string[] = [];
@@ -36,6 +37,12 @@ export function resolveChatFileLink(href: string, rootPath: string | null): Chat
   if (!rootPath) return invalid("The Task's Build Worktree is unavailable.");
   if (!href || CONTROL_CHARACTERS.test(href))
     return invalid("The file destination is empty or contains control characters.");
+  const isFileUri = /^file:/i.test(href);
+  if (isFileUri && !/^file:\/\/\//i.test(href))
+    return invalid("Use a local file URI without a remote authority.");
+  const hasDrive = DRIVE.test(href) || (isFileUri && /^file:\/\/\/[a-z]:\//i.test(href));
+  if (DRIVE.test(href) && !/^[a-z]:[/\\]/i.test(href))
+    return invalid("Drive-relative file paths are not supported.");
   let path = href;
   if (path.includes("?")) return invalid("File links do not support query strings.");
   const fragment = path.indexOf("#");
@@ -49,13 +56,7 @@ export function resolveChatFileLink(href: string, rootPath: string | null): Chat
   if (location) path = path.slice(0, location.index);
   if (/:(?![/\\])/.test(path.replace(/^file:/i, "").replace(DRIVE, "")))
     return invalid("The file line reference is invalid.");
-  const isFileUri = /^file:/i.test(path);
-  if (isFileUri) {
-    const match = /^file:\/\/\/([^]*)$/i.exec(path);
-    if (!match) return invalid("Use a local file URI without a remote authority.");
-    path = `/${match[1]}`;
-  }
-  const hasDrive = DRIVE.test(path) || (isFileUri && /^\/[a-z]:\//i.test(path));
+  if (isFileUri) path = path.slice("file://".length);
   try {
     path = decodeURIComponent(path);
   } catch {

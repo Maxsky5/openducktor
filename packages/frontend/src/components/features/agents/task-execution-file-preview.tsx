@@ -201,14 +201,21 @@ function FileConflictReviewDialog({
   result,
   onClose,
   onAccept,
+  onReturnFocus,
 }: {
   result: Extract<WorkspaceTextFileReadResult, { kind: "text" }> | null;
   onClose: () => void;
   onAccept: () => void;
+  onReturnFocus: () => void;
 }): ReactElement {
   return (
     <Dialog open={result !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          onReturnFocus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Review latest file</DialogTitle>
           <DialogDescription>
@@ -692,6 +699,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
         result={editor.conflictReview}
         onClose={editor.closeConflictReview}
         onAccept={editor.acceptLatestBaseline}
+        onReturnFocus={() => attachedEditorRef.current?.focus({ preventScroll: true })}
       />
     </section>
   );

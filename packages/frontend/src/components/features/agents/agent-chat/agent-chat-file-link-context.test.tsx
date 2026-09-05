@@ -97,3 +97,146 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
     }
   });
 }
+
+for (const [href, workingDirectory, message] of [
+  ["file:42", "/repo/a", "Use a local file URI without a remote authority."],
+  ["C:42", "C:/repo/a", "Drive-relative file paths are not supported."],
+  ["README.md:-1", "/repo/a", "The file line reference is invalid."],
+] as const) {
+  test(`malformed destination reports its target and cause: ${href}`, async () => {
+    const { spyOn } = await import("bun:test");
+    const { toast } = await import("sonner");
+    const external = await import("@/lib/open-external-url");
+    const error = spyOn(toast, "error").mockReturnValue("error");
+    const openExternal = spyOn(external, "openExternalUrl").mockResolvedValue();
+    const client = createQueryClient();
+    client.setQueryData(
+      taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
+      () => ({ workingDirectory }),
+    );
+    const onSelectFile = mock(() => {});
+    const view = render(
+      <QueryClientProvider client={client}>
+        <ChatFileLinkProvider
+          owner={{ repoPath: "/repo", taskId: "a", ownerKey: "main", onSelectFile }}
+        >
+          <AgentChatMarkdownRenderer markdown={`[file](${href})`} />
+        </ChatFileLinkProvider>
+      </QueryClientProvider>,
+    );
+    try {
+      fireEvent.click(view.getByRole("link"));
+      await waitFor(() =>
+        expect(error).toHaveBeenCalledWith(`Cannot open file: ${href}`, { description: message }),
+      );
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(onSelectFile).not.toHaveBeenCalled();
+      expect(openExternal).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      client.clear();
+      error.mockRestore();
+      openExternal.mockRestore();
+    }
+  });
+}
+
+for (const failure of ["missing-task", "absent-worktree", "rejected-worktree"] as const) {
+  test(`unavailable worktree reports the cause without selecting another root: ${failure}`, async () => {
+    const { spyOn } = await import("bun:test");
+    const { toast } = await import("sonner");
+    const error = spyOn(toast, "error").mockReturnValue("error");
+    const client = createQueryClient();
+    const taskId = failure === "missing-task" ? null : "a";
+    const options = taskWorktreeQueryOptions({
+      repoPath: "/repo",
+      taskId: "a",
+      hostClient: {
+        taskWorktreeGet: async () => {
+          throw new Error("Worktree lookup timed out");
+        },
+      },
+    });
+    if (failure === "absent-worktree") client.setQueryData(options.queryKey, () => null);
+    let pending: Promise<unknown> | undefined;
+    if (failure === "rejected-worktree")
+      pending = client.fetchQuery(options).catch(() => undefined);
+    const onSelectFile = mock(() => {});
+    const view = render(
+      <QueryClientProvider client={client}>
+        <ChatFileLinkProvider owner={{ repoPath: "/repo", taskId, ownerKey: "main", onSelectFile }}>
+          <AgentChatMarkdownRenderer markdown="[file](src/file.ts)" />
+        </ChatFileLinkProvider>
+      </QueryClientProvider>,
+    );
+    try {
+      fireEvent.click(view.getByRole("link"));
+      await pending;
+      await waitFor(() =>
+        expect(error).toHaveBeenCalledWith("Cannot open file: src/file.ts", {
+          description:
+            failure === "rejected-worktree"
+              ? "Worktree lookup timed out"
+              : "The Task's Build Worktree is unavailable.",
+        }),
+      );
+      expect(onSelectFile).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      client.clear();
+      error.mockRestore();
+    }
+  });
+}
+
+for (const departure of ["session", "task", "repository", "close"] as const) {
+  test(`late worktree failure is silent after ${departure}`, async () => {
+    const { spyOn } = await import("bun:test");
+    const { toast } = await import("sonner");
+    const error = spyOn(toast, "error").mockReturnValue("error");
+    const client = createQueryClient();
+    const deferred = Promise.withResolvers<null>();
+    const options = taskWorktreeQueryOptions({
+      repoPath: "/repo",
+      taskId: "a",
+      hostClient: { taskWorktreeGet: () => deferred.promise },
+    });
+    const pending = client.fetchQuery(options).catch(() => undefined);
+    const onSelectFile = mock(() => {});
+    const owner: ChatFileLinkOwner = {
+      repoPath: "/repo",
+      taskId: "a",
+      ownerKey: "main",
+      onSelectFile,
+    };
+    const content = (value: ChatFileLinkOwner) => (
+      <QueryClientProvider client={client}>
+        <ChatFileLinkProvider owner={value}>
+          <AgentChatMarkdownRenderer markdown="[file](src/file.ts)" />
+        </ChatFileLinkProvider>
+      </QueryClientProvider>
+    );
+    const view = render(content(owner));
+    try {
+      fireEvent.click(view.getByRole("link"));
+      if (departure === "close") view.unmount();
+      else {
+        const next = { ...owner };
+        if (departure === "session") next.ownerKey = "child";
+        if (departure === "task") next.taskId = "b";
+        if (departure === "repository") next.repoPath = "/other";
+        view.rerender(content(next));
+      }
+      await act(async () => {
+        deferred.reject(new Error("Old lookup failed"));
+        await pending;
+      });
+      expect(error).not.toHaveBeenCalled();
+      expect(onSelectFile).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      client.clear();
+      error.mockRestore();
+    }
+  });
+}

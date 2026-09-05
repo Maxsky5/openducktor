@@ -33,6 +33,10 @@ describe("chat file destinations", () => {
     });
   }
   for (const href of [
+    "file:42",
+    "README.md:-1",
+    "README.md:42:no",
+    "README.md:0",
     "../a",
     "%2e%2e/a",
     "src/%2e%2e/%2e%2e/a",
@@ -71,6 +75,7 @@ describe("chat file destinations", () => {
         kind: "file",
         file: { rootPath: "C:\\repo", relativePath: "src/a" },
       });
+    expect(resolveChatFileLink("C:42", "C:/repo").kind).toBe("invalid");
     expect(resolveChatFileLink("C:src/a", "C:\\repo").kind).toBe("invalid");
     expect(resolveChatFileLink("D:/repo/a", "C:\\repo").kind).toBe("invalid");
   });
