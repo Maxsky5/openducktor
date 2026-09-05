@@ -7,10 +7,7 @@ import {
   type AgentSessionViewSync,
 } from "@/state/queries/agent-session-view-sync";
 import { createTaskViewSync, type TaskViewSync } from "@/state/queries/task-view-sync";
-import {
-  createSettingsSnapshotFixture,
-  createTaskCardFixture,
-} from "@/test-utils/shared-test-fixtures";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { createTaskStreamController } from "./task-stream-controller";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
@@ -160,7 +157,6 @@ describe("task stream controller recovery", () => {
     const taskViewSync = createTaskViewSync({
       queryClient,
       ports: {
-        loadSettings: async () => createSettingsSnapshotFixture(),
         listTasks,
         loadFreshDocument: async () => ({ markdown: "", updatedAt: null }),
       },

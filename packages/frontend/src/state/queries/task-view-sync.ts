@@ -1,14 +1,12 @@
-import type { ExternalTaskSyncEvent, SettingsSnapshot, TaskCard } from "@openducktor/contracts";
+import type { ExternalTaskSyncEvent, TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { hostClient as host } from "@/lib/host-client";
 import { resolveLatestDocumentPayload } from "./document-utils";
 import { documentQueryKeys, type TaskDocument, type TaskDocumentSection } from "./documents";
 import { invalidateRepoTaskQueries, taskQueryKeys } from "./tasks";
-import { workspaceQueryKeys } from "./workspace";
 
 export type TaskViewSyncPorts = {
-  loadSettings: () => Promise<SettingsSnapshot>;
   listTasks: (repoPath: string) => Promise<TaskCard[]>;
   loadFreshDocument: (
     repoPath: string,
@@ -75,21 +73,6 @@ export const createTaskViewSync = ({
   ports: TaskViewSyncPorts;
 }): TaskViewSync => {
   const repoRefreshes = new Map<string, Promise<void>>();
-
-  const loadSettings = async (): Promise<SettingsSnapshot> => {
-    const queryKey = workspaceQueryKeys.settingsSnapshot();
-    const cached = queryClient.getQueryData<SettingsSnapshot>(queryKey);
-    const state = queryClient.getQueryState(queryKey);
-    if (
-      state?.status === "success" &&
-      state.fetchStatus === "idle" &&
-      !state.isInvalidated &&
-      cached
-    ) {
-      return cached;
-    }
-    return queryClient.fetchQuery({ queryKey, queryFn: ports.loadSettings, staleTime: 0 });
-  };
 
   const fetchTasks = async (repoPath: string): Promise<TaskCard[]> => {
     const queryKey = taskQueryKeys.repoData(repoPath);
@@ -207,7 +190,6 @@ export const createTaskViewSync = ({
     options: RefreshOptions,
   ): Promise<TaskCard[]> => {
     await options.prepare?.();
-    await loadSettings();
     if (options.impact.kind === "remove-documents") {
       removeDocuments(repoPath, options.impact.taskIds);
     }
@@ -235,7 +217,6 @@ export const createTaskViewSync = ({
   return {
     loadWorkspace: (repoPath) =>
       runForRepo(repoPath, async () => {
-        await loadSettings();
         const state = queryClient.getQueryState(taskQueryKeys.repoData(repoPath));
         if (state?.status !== "success") {
           await fetchTasks(repoPath);
@@ -352,7 +333,6 @@ const createProductionTaskViewSync = (queryClient: QueryClient): TaskViewSync =>
   createTaskViewSync({
     queryClient,
     ports: {
-      loadSettings: () => host.workspaceGetSettingsSnapshot(),
       listTasks: (repoPath) => host.tasksList(repoPath),
       loadFreshDocument: (repoPath, taskId, section) =>
         host.taskDocumentGetFresh(repoPath, taskId, section),

@@ -1,22 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { SettingsSnapshot, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import {
-  createSettingsSnapshotFixture,
-  createTaskCardFixture,
-} from "@/test-utils/shared-test-fixtures";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { documentQueryKeys } from "./documents";
 import { createTaskViewSync, type TaskViewSyncPorts } from "./task-view-sync";
 import { taskQueryKeys } from "./tasks";
 import { workspaceQueryKeys } from "./workspace";
 
-const doneVisibleDays = 1;
-const settings: SettingsSnapshot = createSettingsSnapshotFixture({
-  kanban: { doneVisibleDays },
-});
-
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
-  loadSettings: async () => settings,
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
   loadFreshDocument: async () => ({ markdown: "# Fresh", updatedAt: "2026-04-10T13:10:00.000Z" }),
   ...overrides,
@@ -24,7 +15,6 @@ const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPo
 
 const createSync = (ports: TaskViewSyncPorts) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), settings);
   return { queryClient, sync: createTaskViewSync({ queryClient, ports }) };
 };
 
@@ -344,6 +334,38 @@ describe("TaskViewSync", () => {
     );
 
     await expect(sync.refreshManually("/repo")).rejects.toThrow("task list unavailable");
+  });
+
+  test("refreshes tasks when the settings query fails", async () => {
+    const listTasks = mock(async () => [createTaskCardFixture({ id: "task-2" })]);
+    const { queryClient, sync } = createSync(createPorts({ listTasks }));
+    await expect(
+      queryClient.fetchQuery({
+        queryKey: workspaceQueryKeys.settingsSnapshot(),
+        queryFn: async () => {
+          throw new Error("settings unavailable");
+        },
+      }),
+    ).rejects.toThrow("settings unavailable");
+
+    await expect(sync.refreshManually("/repo")).resolves.toBeUndefined();
+    expect(listTasks).toHaveBeenCalledWith("/repo");
+  });
+
+  test("loads repository tasks when the settings query fails", async () => {
+    const listTasks = mock(async () => [createTaskCardFixture({ id: "task-2" })]);
+    const { queryClient, sync } = createSync(createPorts({ listTasks }));
+    await expect(
+      queryClient.fetchQuery({
+        queryKey: workspaceQueryKeys.settingsSnapshot(),
+        queryFn: async () => {
+          throw new Error("settings unavailable");
+        },
+      }),
+    ).rejects.toThrow("settings unavailable");
+
+    await expect(sync.loadWorkspace("/repo")).resolves.toBeUndefined();
+    expect(listTasks).toHaveBeenCalledWith("/repo");
   });
 
   test("reconciles snapshots without fetching cached documents that may be deleted", async () => {
