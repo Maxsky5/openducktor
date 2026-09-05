@@ -5,30 +5,30 @@ import {
   directMergeConflict,
   ensureCleanTaskWorktree,
 } from "../../../domain/task";
-import { HostValidationError } from "../../../effect/host-errors";
+import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import { loadOpenApprovalContext } from "../support/approval-readiness";
 import {
   requireDependencies,
   requireDirectMergeDependencies,
 } from "../support/required-task-dependencies";
-import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
 import { cleanupDirectMergeTaskState } from "../support/task-worktree-cleanup";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
-import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import type { TaskServiceUseCaseInput, TaskService } from "../task-service";
 
 export const createTaskDirectMergeUseCase = ({
   devServerService,
   gitPort,
   taskStore,
+  taskActivityGuard,
   settingsConfig,
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-}: CreateTaskServiceInput) => ({
+}: TaskServiceUseCaseInput) => ({
   directMerge(input: Parameters<TaskService["directMerge"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
@@ -47,6 +47,12 @@ export const createTaskDirectMergeUseCase = ({
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
+      const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(effectiveRepoPath);
+      yield* taskSessionLifecycleCoordinator.acquireLifecycle(
+        canonicalRepoPath,
+        [taskId],
+        "direct merge",
+      );
       const { current, currentTasks } = yield* taskListWithCurrent(
         taskStore,
         effectiveRepoPath,
@@ -61,6 +67,31 @@ export const createTaskDirectMergeUseCase = ({
             details: { repoPath: effectiveRepoPath, taskId },
           }),
         );
+      }
+
+      if (metadata.agentSessions.length > 0) {
+        if (!taskActivityGuard) {
+          return yield* Effect.fail(
+            new HostDependencyError({
+              dependency: "taskActivityGuard",
+              operation: "direct merge",
+              message: "Task activity guard is required to check sessions before direct merge.",
+            }),
+          );
+        }
+        const { liveSessionCount } = yield* taskActivityGuard.countLiveSessions({
+          repoPath: canonicalRepoPath,
+          taskSessions: [{ taskId, sessions: metadata.agentSessions }],
+        });
+        if (liveSessionCount > 0) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message: `Stop all running sessions for task ${taskId} before direct merge.`,
+              details: { repoPath: effectiveRepoPath, taskId },
+            }),
+          );
+        }
       }
 
       const approval = yield* loadOpenApprovalContext(
@@ -138,20 +169,17 @@ export const createTaskDirectMergeUseCase = ({
           }
 
           yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-          const task = yield* completeTaskClosure({
-            cleanup: cleanupDirectMergeTaskState(
-              dependencies,
-              taskStore,
-              effectiveRepoPath,
-              taskId,
-              directMerge,
-            ),
-            gitPort: dependencies.gitPort,
-            operation: "direct merge",
+          yield* cleanupDirectMergeTaskState(
+            dependencies,
+            taskStore,
+            effectiveRepoPath,
+            taskId,
+            directMerge,
+          );
+          const task = yield* taskStore.transitionTask({
             repoPath: effectiveRepoPath,
             taskId,
-            taskSessionLifecycleCoordinator,
-            taskStore,
+            status: "closed",
           });
           const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
 
@@ -164,6 +192,6 @@ export const createTaskDirectMergeUseCase = ({
         );
       }
       return postRecord.right;
-    });
+    }).pipe(Effect.scoped);
   },
 });

@@ -824,6 +824,10 @@ describe("createTaskService direct merge", () => {
       },
     };
     const service = createTaskService({
+      taskActivityGuard: {
+        countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+        cleanupTaskSessions: () => Effect.dieMessage("unexpected session cleanup"),
+      },
       devServerService: createDirectMergeDevServerService(calls),
       gitPort: createDirectMergeGitPort({
         calls,

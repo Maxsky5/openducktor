@@ -1,23 +1,23 @@
 import { Effect } from "effect";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
-import { HostValidationError } from "../../../effect/host-errors";
+import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import { requireMergedTaskCleanupDependencies } from "../support/required-task-dependencies";
-import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
 import { cleanupDirectMergeTaskState } from "../support/task-worktree-cleanup";
-import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import type { TaskServiceUseCaseInput, TaskService } from "../task-service";
 
 export const createTaskCompleteDirectMergeUseCase = ({
   devServerService,
   gitPort,
   taskStore,
+  taskActivityGuard,
   settingsConfig,
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
   worktreeFiles,
-}: CreateTaskServiceInput): Pick<TaskService, "completeDirectMerge"> => ({
+}: TaskServiceUseCaseInput): Pick<TaskService, "completeDirectMerge"> => ({
   completeDirectMerge(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
@@ -32,6 +32,12 @@ export const createTaskCompleteDirectMergeUseCase = ({
         },
         "task_direct_merge_complete",
       );
+      const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(repoPath);
+      yield* taskSessionLifecycleCoordinator.acquireLifecycle(
+        canonicalRepoPath,
+        [taskId],
+        "complete direct merge",
+      );
       const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       const directMerge = metadata.directMerge;
@@ -43,6 +49,32 @@ export const createTaskCompleteDirectMergeUseCase = ({
             details: { repoPath, taskId },
           }),
         );
+      }
+
+      if (metadata.agentSessions.length > 0) {
+        if (!taskActivityGuard) {
+          return yield* Effect.fail(
+            new HostDependencyError({
+              dependency: "taskActivityGuard",
+              operation: "complete direct merge",
+              message:
+                "Task activity guard is required to check sessions before completing direct merge.",
+            }),
+          );
+        }
+        const { liveSessionCount } = yield* taskActivityGuard.countLiveSessions({
+          repoPath: canonicalRepoPath,
+          taskSessions: [{ taskId, sessions: metadata.agentSessions }],
+        });
+        if (liveSessionCount > 0) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message: `Stop all running sessions for task ${taskId} before completing direct merge.`,
+              details: { repoPath, taskId },
+            }),
+          );
+        }
       }
 
       if (directMerge.targetBranch.remote !== undefined) {
@@ -85,30 +117,16 @@ export const createTaskCompleteDirectMergeUseCase = ({
       }
 
       let task = current;
-      const cleanup = cleanupDirectMergeTaskState(
-        dependencies,
-        taskStore,
-        repoPath,
-        taskId,
-        directMerge,
-      );
       if (current.status !== "closed") {
         yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-        task = yield* completeTaskClosure({
-          cleanup,
-          gitPort: dependencies.gitPort,
-          operation: "complete direct merge",
-          repoPath,
-          taskId,
-          taskSessionLifecycleCoordinator,
-          taskStore,
-        });
-      } else {
-        yield* Effect.scoped(cleanup);
+      }
+      yield* cleanupDirectMergeTaskState(dependencies, taskStore, repoPath, taskId, directMerge);
+      if (current.status !== "closed") {
+        task = yield* taskStore.transitionTask({ repoPath, taskId, status: "closed" });
       }
       const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
 
       return enrichTask(task, nextTasks);
-    });
+    }).pipe(Effect.scoped);
   },
 });

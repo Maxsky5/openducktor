@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { HostValidationError } from "../../../effect/host-errors";
+import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import {
   requireBuildCompletedDependencies,
   requireDependencies,
@@ -17,43 +17,63 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskBuildStateUseCases = ({
   taskStore,
+  gitPort,
+  taskSessionLifecycleCoordinator,
   settingsConfig,
   systemCommands,
   workspaceSettingsService,
 }: CreateTaskServiceInput) => ({
   buildBlocked(input: Parameters<TaskService["buildBlocked"]>[0]) {
-    return Effect.gen(function* () {
-      const { repoPath, taskId, reason } = input;
-      if (!reason.trim()) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "reason",
-            message: "build_blocked requires a non-empty reason",
-          }),
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const { repoPath, taskId, reason } = input;
+        if (!reason.trim()) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "reason",
+              message: "build_blocked requires a non-empty reason",
+            }),
+          );
+        }
+        if (!gitPort || !taskSessionLifecycleCoordinator) {
+          return yield* Effect.fail(
+            new HostDependencyError({
+              dependency: !gitPort ? "gitPort" : "taskSessionLifecycleCoordinator",
+              operation: "block build",
+              message:
+                "Git port and task session lifecycle coordinator are required to block a build.",
+            }),
+          );
+        }
+        const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath);
+        yield* taskSessionLifecycleCoordinator.acquireLifecycle(
+          canonicalRepoPath,
+          [taskId],
+          "block build",
         );
-      }
-      const currentTasks = yield* taskStore.listTasks({ repoPath });
-      const current = currentTasks.find((task) => task.id === taskId);
-      if (!current) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Task not found: ${taskId}`,
-            details: { repoPath, taskId },
-          }),
-        );
-      }
-      yield* validateTaskTransitionEffect(current, currentTasks, current.status, "blocked");
+        const currentTasks = yield* taskStore.listTasks({ repoPath });
+        const current = currentTasks.find((task) => task.id === taskId);
+        if (!current) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              field: "taskId",
+              message: `Task not found: ${taskId}`,
+              details: { repoPath, taskId },
+            }),
+          );
+        }
+        yield* validateTaskTransitionEffect(current, currentTasks, current.status, "blocked");
 
-      if (current.status === "blocked") {
-        return enrichTask(current, currentTasks);
-      }
+        if (current.status === "blocked") {
+          return enrichTask(current, currentTasks);
+        }
 
-      const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: "blocked" });
-      const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
+        const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: "blocked" });
+        const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
 
-      return enrichTask(updated, nextTasks);
-    });
+        return enrichTask(updated, nextTasks);
+      }),
+    );
   },
 
   buildResumed(input: Parameters<TaskService["buildResumed"]>[0]) {

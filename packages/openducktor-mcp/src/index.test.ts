@@ -204,7 +204,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
           ok: false,
           error: {
             code: "TASK_TRANSITION_NOT_ALLOWED",
-            message: "Transition not allowed for task-1 (bug): human_review -> blocked",
+            message: "Transition not allowed for task-1 (bug): closed -> blocked",
           },
         },
         400,
@@ -452,9 +452,7 @@ describe("MCP server tool results", () => {
       const error = expectToolError(contentResult);
 
       expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
-      expect(error.message).toBe(
-        "Transition not allowed for task-1 (bug): human_review -> blocked",
-      );
+      expect(error.message).toBe("Transition not allowed for task-1 (bug): closed -> blocked");
       expect(error.details).toBeUndefined();
     } finally {
       await client.close();

@@ -39,6 +39,10 @@ Read [the status model](task-workflow-status-model.md) for status and issue type
 
 For an epic, `subtasks` means replace the direct child proposal. Replacement is allowed only when all current direct children are `open`, `spec_ready`, or `ready_for_dev`. If `subtasks` is absent, keep the current children.
 
+## Direct merge
+
+Stop all running sessions for the task before direct merge or its completion. The host checks every linked role session before it changes Git. While either operation runs, the host rejects task session starts, resumes, forks, and new messages.
+
 ## Reset implementation
 
 `reset_implementation` discards the current build and QA attempt. It can run from `in_progress`, `blocked`, `ai_review`, or `human_review`.
