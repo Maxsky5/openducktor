@@ -585,7 +585,7 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to notifications" }));
     fireEvent.click(await screen.findByRole("button", { name: "Continue without a coding agent" }));
     await screen.findByRole("heading", {
-      name: "Choose how OpenDucktor gets your attention",
+      name: "Configure notifications",
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
@@ -668,7 +668,7 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to notifications" }));
     fireEvent.click(await screen.findByRole("button", { name: "Continue without a coding agent" }));
     await screen.findByRole("heading", {
-      name: "Choose how OpenDucktor gets your attention",
+      name: "Configure notifications",
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
