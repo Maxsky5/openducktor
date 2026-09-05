@@ -75,11 +75,14 @@ export function useAgentStudioTaskDetailsLauncher({
     [tasks, workspaceId],
   );
 
-  const onEditorOpenChange = useCallback((open: boolean): void => {
-    if (!open) {
-      setEditTarget(null);
-    }
-  }, []);
+  const onEditorOpenChange = useCallback(
+    (open: boolean): void => {
+      if (!open) {
+        setEditTarget((current) => (current === editTarget ? null : current));
+      }
+    },
+    [editTarget],
+  );
 
   const taskEditor = useMemo<AgentStudioTaskDetailsLauncherModel["taskEditor"]>(
     () =>
