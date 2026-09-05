@@ -8,8 +8,7 @@ import {
 import type { Event as ElectronEvent } from "electron";
 import { ELECTRON_NOTIFICATION_CLICKED_CHANNEL } from "../shared/electron-bridge-contract";
 
-// Linux does not expose Electron's failed event. A missing show confirmation
-// must still settle the request so Settings can offer recovery.
+// Limit the wait for show confirmation because Linux does not emit failed.
 const NOTIFICATION_SHOW_TIMEOUT_MS = 10_000;
 
 type ElectronNotificationInstance = {

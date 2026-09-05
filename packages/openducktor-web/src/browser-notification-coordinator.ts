@@ -180,7 +180,7 @@ export const createBrowserNotificationCoordinator = ({
   const occurrenceListeners = new Set<
     (occurrence: NotificationOccurrence, settings: NotificationSettings) => void
   >();
-  const claimAcknowledgements = new Map<string, Map<string, () => void>>();
+  const claimWaiters = new Map<string, Map<string, () => void>>();
   const publicationSettlements = new Map<string, Set<PublicationSettlement>>();
   const activeClaimPropagations = new Set<Promise<void>>();
   const tabLockName = `${TAB_LOCK_NAME_PREFIX}${tabId}`;
@@ -251,16 +251,16 @@ export const createBrowserNotificationCoordinator = ({
     recipientTabId: string,
   ): Promise<void> => {
     const controller = new AbortController();
-    let acknowledge = (): void => {};
-    const acknowledged = new Promise<void>((resolve) => {
-      acknowledge = () => {
+    let finishWaiting = (): void => {};
+    const waitFinished = new Promise<void>((resolve) => {
+      finishWaiting = () => {
         resolve();
         controller.abort();
       };
     });
-    const acknowledgements = claimAcknowledgements.get(claimId) ?? new Map();
-    acknowledgements.set(recipientTabId, acknowledge);
-    claimAcknowledgements.set(claimId, acknowledgements);
+    const tabWaiters = claimWaiters.get(claimId) ?? new Map();
+    tabWaiters.set(recipientTabId, finishWaiting);
+    claimWaiters.set(claimId, tabWaiters);
     const exited = locks
       .request(
         `${TAB_LOCK_NAME_PREFIX}${recipientTabId}`,
@@ -273,15 +273,15 @@ export const createBrowserNotificationCoordinator = ({
         throw cause;
       })
       .finally(() => {
-        const currentAcknowledgements = claimAcknowledgements.get(claimId);
-        if (currentAcknowledgements?.get(recipientTabId) === acknowledge) {
-          currentAcknowledgements.delete(recipientTabId);
-          if (currentAcknowledgements.size === 0) {
-            claimAcknowledgements.delete(claimId);
+        const currentWaiters = claimWaiters.get(claimId);
+        if (currentWaiters?.get(recipientTabId) === finishWaiting) {
+          currentWaiters.delete(recipientTabId);
+          if (currentWaiters.size === 0) {
+            claimWaiters.delete(claimId);
           }
         }
       });
-    return Promise.race([acknowledged, exited]);
+    return Promise.race([waitFinished, exited]);
   };
 
   const propagateClaim = async (occurrenceId: string, claimId: string): Promise<void> => {
@@ -360,7 +360,7 @@ export const createBrowserNotificationCoordinator = ({
     const parsed = coordinatorMessageSchema.safeParse(event.data);
     if (!parsed.success) return;
     if (parsed.data.type === "external_delivery_claim_ack") {
-      claimAcknowledgements.get(parsed.data.claimId)?.get(parsed.data.tabId)?.();
+      claimWaiters.get(parsed.data.claimId)?.get(parsed.data.tabId)?.();
       return;
     }
     if (parsed.data.type === "external_delivery_claim_released") {
@@ -541,9 +541,7 @@ export const createBrowserNotificationCoordinator = ({
         pendingOccurrences.delete(occurrenceId);
         return true;
       } catch (cause) {
-        // No external channel has run yet. Restore reservations in tabs that
-        // acknowledged before another recipient or the lock query failed.
-        for (const acknowledge of claimAcknowledgements.get(claimId)?.values() ?? []) acknowledge();
+        for (const finishWaiting of claimWaiters.get(claimId)?.values() ?? []) finishWaiting();
         channel?.postMessage({ type: "external_delivery_claim_released", occurrenceId, claimId });
         throw cause;
       } finally {
