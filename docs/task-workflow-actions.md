@@ -41,7 +41,7 @@ For an epic, `subtasks` means replace the direct child proposal. Replacement is 
 
 ## Direct merge
 
-Stop all running sessions for the task before direct merge. The host checks every linked role session before it changes Git. While the merge runs, the host rejects task session starts, resumes, forks, and new messages.
+Stop all running sessions for the task before direct merge or its completion. The host checks every linked role session before it changes Git. While either operation runs, the host rejects task session starts, resumes, forks, and new messages.
 
 ## Reset implementation
 
