@@ -670,44 +670,27 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("publishes a full-save preference change to mounted settings observers", async () => {
+  test.each([
+    {
+      name: "publishes a full-save preference change to mounted settings observers",
+      save: (operations: HookResult, snapshot: SettingsSnapshot) =>
+        operations.saveSettingsSnapshot(snapshot),
+    },
+    {
+      name: "keeps settings observers attached after a Git-only save",
+      save: (operations: HookResult, snapshot: SettingsSnapshot) =>
+        operations.saveGlobalGitConfig(snapshot.git),
+    },
+  ])("$name", async ({ save }) => {
     const initial = createSettingsSnapshot();
     const saved = { ...initial, system: { preferredOpenInToolId: "zed" as const } };
-    const originalGet = host.workspaceGetSettingsSnapshot;
-    const originalSave = host.workspaceSaveSettingsSnapshot;
+    const original = {
+      get: host.workspaceGetSettingsSnapshot,
+      save: host.workspaceSaveSettingsSnapshot,
+      saveGit: host.workspaceUpdateGlobalGitConfig,
+    };
     host.workspaceGetSettingsSnapshot = async () => saved;
     host.workspaceSaveSettingsSnapshot = async () => [];
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords: () => {},
-      applyWorkspaceRecord: () => {},
-    });
-    let unsubscribe = () => {};
-    try {
-      await harness.mount();
-      const queryClient = harness.getQueryClient();
-      queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), initial);
-      const observer = new QueryObserver(queryClient, settingsSnapshotQueryOptions());
-      let observed = initial;
-      unsubscribe = observer.subscribe((result) => {
-        if (result.data) observed = result.data;
-      });
-      await harness.run(async (operations) => operations.saveSettingsSnapshot(saved));
-      expect(observed.system).toEqual(saved.system);
-    } finally {
-      unsubscribe();
-      await harness.unmount();
-      host.workspaceGetSettingsSnapshot = originalGet;
-      host.workspaceSaveSettingsSnapshot = originalSave;
-    }
-  });
-
-  test("keeps settings observers attached after a Git-only save", async () => {
-    const initial = createSettingsSnapshot();
-    const saved = { ...initial, system: { preferredOpenInToolId: "zed" as const } };
-    const originalGet = host.workspaceGetSettingsSnapshot;
-    const originalSave = host.workspaceUpdateGlobalGitConfig;
-    host.workspaceGetSettingsSnapshot = async () => saved;
     host.workspaceUpdateGlobalGitConfig = async () => {};
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
@@ -724,13 +707,14 @@ describe("use-repo-settings-operations", () => {
       unsubscribe = observer.subscribe((result) => {
         if (result.data) observed = result.data;
       });
-      await harness.run(async (operations) => operations.saveGlobalGitConfig(saved.git));
+      await harness.run((operations) => save(operations, saved));
       expect(observed.system).toEqual(saved.system);
     } finally {
       unsubscribe();
       await harness.unmount();
-      host.workspaceGetSettingsSnapshot = originalGet;
-      host.workspaceUpdateGlobalGitConfig = originalSave;
+      host.workspaceGetSettingsSnapshot = original.get;
+      host.workspaceSaveSettingsSnapshot = original.save;
+      host.workspaceUpdateGlobalGitConfig = original.saveGit;
     }
   });
 
