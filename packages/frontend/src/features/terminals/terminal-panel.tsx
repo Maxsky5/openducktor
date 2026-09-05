@@ -155,6 +155,7 @@ export function TerminalPanel({
     tab: TerminalTab;
   } | null>(null);
   const [attentionByTab, setAttentionByTab] = useState<Record<string, string | null>>({});
+  const [exitByTab, setExitByTab] = useState<Record<string, string | null>>({});
   const [pendingCloseError, setPendingCloseError] = useState<{
     scopeKey: string | null;
     message: string;
@@ -209,9 +210,9 @@ export function TerminalPanel({
       exitText: string | null,
     ): void => {
       onLifecycle(scopeKey, terminalId, lifecycle);
-      if (exitText) setTabAttention(tabId, exitText);
+      setExitByTab((current) => ({ ...current, [tabId]: exitText }));
     },
-    [onLifecycle, setTabAttention],
+    [onLifecycle],
   );
   const closeTab = async (tab: TerminalTab): Promise<void> => {
     const scopeKey = model.scopeKey;
@@ -327,9 +328,13 @@ export function TerminalPanel({
               );
             })}
           </div>
-          {activeTab && attentionByTab[activeTab.tabId] ? (
-            <p className="border-t border-border bg-warning-surface px-3 py-1.5 text-xs text-warning-surface-foreground">
-              {attentionByTab[activeTab.tabId]}
+          {activeTab && (attentionByTab[activeTab.tabId] || exitByTab[activeTab.tabId]) ? (
+            <p
+              role="status"
+              aria-label="Terminal status"
+              className="border-t border-border bg-warning-surface px-3 py-1.5 text-xs text-warning-surface-foreground"
+            >
+              {attentionByTab[activeTab.tabId] ?? exitByTab[activeTab.tabId]}
             </p>
           ) : null}
           {closeError ? (

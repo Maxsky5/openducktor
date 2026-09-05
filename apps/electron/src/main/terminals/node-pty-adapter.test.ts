@@ -4,6 +4,83 @@ import { Effect } from "effect";
 import { createNodePtyPort } from "./node-pty-adapter";
 
 describe("createNodePtyPort", () => {
+  test("includes the native spawn error, shell, and directory in startup failures", async () => {
+    const port = createNodePtyPort({
+      nodePty: {
+        spawn: () => {
+          throw new Error("Access is denied");
+        },
+      },
+    });
+    const result = await Effect.runPromise(
+      Effect.either(
+        port.start(
+          {
+            shell: "C:\\Windows\\System32\\cmd.exe",
+            args: [],
+            cwd: "C:\\repo",
+            env: {},
+            grid: { columns: 80, rows: 24 },
+          },
+          { onOutput: () => undefined, onFailure: () => undefined, onExit: () => undefined },
+        ),
+      ),
+    );
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left.code).toBe("spawn_failed");
+      expect(result.left.message).toContain("Access is denied");
+      expect(result.left.message).toContain("C:\\Windows\\System32\\cmd.exe");
+      expect(result.left.message).toContain("C:\\repo");
+      expect(result.left.message).toContain("Check that");
+    }
+  });
+
+  test.each([0, 1])(
+    "reports a silent unsuccessful shell exit, but not a clean exit (%i)",
+    async (exitCode) => {
+      let exitListener: (event: { exitCode: number }) => void = () => undefined;
+      const events: string[] = [];
+      const port = createNodePtyPort({
+        processTreeTerminator: () => Effect.void,
+        nodePty: {
+          spawn: () => ({
+            pid: 42,
+            onData: () => ({ dispose: () => undefined }),
+            onExit: (listener) => {
+              exitListener = listener;
+              return { dispose: () => undefined };
+            },
+            write: () => undefined,
+            resize: () => undefined,
+            pause: () => undefined,
+            resume: () => undefined,
+          }),
+        },
+      });
+      await Effect.runPromise(
+        port.start(
+          { shell: "cmd.exe", args: [], cwd: "C:\\repo", env: {}, grid: { columns: 80, rows: 24 } },
+          {
+            onOutput: () => undefined,
+            onFailure: (failure) => events.push(failure.message),
+            onExit: () => events.push("exit"),
+          },
+        ),
+      );
+      exitListener({ exitCode });
+      await Bun.sleep(0);
+      expect(events.at(-1)).toBe("exit");
+      if (exitCode === 0) expect(events).toEqual(["exit"]);
+      else {
+        expect(events).toHaveLength(2);
+        expect(events[0]).toContain(
+          "cmd.exe exited with code 1 before producing output in C:\\repo",
+        );
+        expect(events[0]).toContain("outside OpenDucktor");
+      }
+    },
+  );
   test("maps raw output, resize, pause, resume, input, exit, and cleanup", async () => {
     const calls: string[] = [];
     let dataListener: (data: string | Buffer) => void = () => undefined;
@@ -84,14 +161,13 @@ describe("createNodePtyPort", () => {
     expect(calls).toContain("terminate-tree:42");
   });
 
-  test("surfaces an invalid raw-output contract before terminating the PTY", async () => {
+  test("preserves Windows UTF-8 text output without terminating the PTY", async () => {
     let dataListener: (data: string | Buffer) => void = () => undefined;
     const calls: string[] = [];
     const port = createNodePtyPort({
       processTreeTerminator: (input) =>
         Effect.sync(() => {
           calls.push(`terminate-tree:${input.pid}`);
-          exitListener({ exitCode: 1, signal: 15 });
         }),
       nodePty: {
         spawn: () => ({
@@ -109,19 +185,23 @@ describe("createNodePtyPort", () => {
       },
     });
     const failures: string[] = [];
+    const output: Uint8Array[] = [];
     await Effect.runPromise(
       port.start(
         { shell: "/bin/zsh", args: [], cwd: "/repo", env: {}, grid: { columns: 80, rows: 24 } },
         {
-          onOutput: () => undefined,
+          onOutput: (data) => output.push(data),
           onFailure: (failure) => failures.push(failure.message),
           onExit: () => undefined,
         },
       ),
     );
-    dataListener("unexpected text");
-    expect(failures).toEqual(["node-pty emitted text despite raw-buffer mode."]);
+    dataListener("\u001b[32mPrêt 日本語 🦆\u001b[0m\r\nC:\\repo>");
+    expect(failures).toEqual([]);
+    expect(output).toEqual([
+      new TextEncoder().encode("\u001b[32mPrêt 日本語 🦆\u001b[0m\r\nC:\\repo>"),
+    ]);
     await Bun.sleep(0);
-    expect(calls).toEqual(["terminate-tree:42"]);
+    expect(calls).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { posix } from "node:path";
+import type { TerminalServerMessage } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import type { FilesystemPort } from "../../ports/filesystem-port";
@@ -69,6 +70,7 @@ const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
     operations,
     emit: (data: Uint8Array) => handlers?.onOutput(data),
     exit: (exitCode: number | null = 0) => handlers?.onExit({ exitCode, signal: null }),
+    fail: (failure: TerminalPtyError) => handlers?.onFailure(failure),
     failTerminate: () => {
       terminateFails = true;
     },
@@ -121,6 +123,45 @@ const makeService = async (
 };
 
 describe("TerminalService", () => {
+  test("retains PTY failure details for live attachments and attachments after exit", async () => {
+    const { service, pty } = await makeService();
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    const live: TerminalServerMessage[] = [];
+    const attach = (attachmentId: string, events: TerminalServerMessage[]) =>
+      Effect.runPromise(
+        service.attach({
+          terminalId: "terminal-1",
+          attachmentId,
+          lastConsumedSequence: 0,
+          sink: (event) => events.push(event),
+        }),
+      );
+    await attach("live", live);
+    pty.fail(
+      new TerminalPtyError({
+        code: "spawn_failed",
+        operation: "start",
+        message: "Shell access denied.",
+      }),
+    );
+    pty.exit(1);
+    const late: TerminalServerMessage[] = [];
+    await attach("late", late);
+    const failures = (events: TerminalServerMessage[]) =>
+      events.filter((event) => event.type === "protocol_error");
+    expect(failures(live)).toEqual([
+      expect.objectContaining({
+        failure: expect.objectContaining({
+          code: "spawn_failed",
+          terminalId: "terminal-1",
+          workingDir: "/canonical/repo",
+          message: expect.stringContaining("Shell access denied."),
+        }),
+      }),
+    ]);
+    expect(failures(late)).toEqual(failures(live));
+    expect(late[0]).toMatchObject({ type: "snapshot", lifecycle: "exited" });
+  });
   beforeEach(() => {
     directoryAvailable = true;
   });

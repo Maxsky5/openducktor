@@ -1,5 +1,6 @@
 import {
   TERMINAL_PROTOCOL_VERSION,
+  type TerminalFailure,
   type TerminalServerMessage,
   type TerminalSummary,
 } from "@openducktor/contracts";
@@ -71,6 +72,7 @@ export class TerminalSessionOutput {
   private readonly attachments = new Map<string, TerminalAttachment>();
   private paused = false;
   private overflowed = false;
+  private failure: TerminalFailure | null = null;
 
   constructor(
     private readonly terminalId: string,
@@ -117,7 +119,16 @@ export class TerminalSessionOutput {
         title: summary.label,
         complete: requested >= this.earliestRetainedSequence,
       });
-      return this.flush(attachment, true, handle);
+      const events = this.flush(attachment, true, handle);
+      if (this.failure) {
+        this.publishTo(attachment, {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "protocol_error",
+          terminalId: this.terminalId,
+          failure: this.failure,
+        });
+      }
+      return events;
     } catch (cause) {
       if (previous) this.attachments.set(input.attachmentId, previous);
       else this.attachments.delete(input.attachmentId);
@@ -132,6 +143,16 @@ export class TerminalSessionOutput {
       events = mergeEvents(events, this.tryPublish(attachment, message).events);
     }
     return events;
+  }
+
+  publishFailure(failure: TerminalFailure): TerminalOutputEvents {
+    this.failure ??= failure;
+    return this.publish({
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "protocol_error",
+      terminalId: this.terminalId,
+      failure: this.failure,
+    });
   }
 
   accept(data: Uint8Array, handle: TerminalPtyHandle | null): TerminalOutputEvents {

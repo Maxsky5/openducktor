@@ -49,6 +49,7 @@ export const createNodePtyPort = ({
         let exitPublished = false;
         type NativeExit = { exitCode: number; signal: string | null };
         let nativeExit: NativeExit | null = null;
+        let receivedOutput = false;
         let cleanupPromise: Promise<void> | null = null;
         const pty = nodePty.spawn(plan.shell, [...plan.args], {
           cols: plan.grid.columns,
@@ -59,30 +60,24 @@ export const createNodePtyPort = ({
           rows: plan.grid.rows,
         });
         const dataSubscription = pty.onData((value) => {
-          if (!Buffer.isBuffer(value)) {
-            dataSubscription.dispose();
-            handlers.onFailure(
-              new TerminalPtyError({
-                code: "operation_failed",
-                operation: "start",
-                message: "node-pty emitted text despite raw-buffer mode.",
-              }),
-            );
-            Effect.runFork(
-              finalizeExit().pipe(
-                Effect.tapError((failure) => Effect.sync(() => handlers.onFailure(failure))),
-              ),
-            );
-            return;
-          }
-          handlers.onOutput(
-            new Uint8Array(value.buffer, value.byteOffset, value.byteLength).slice(),
-          );
+          // Windows node-pty decodes its ConPTY socket as UTF-8 even with encoding: null.
+          const data = Buffer.isBuffer(value) ? value : Buffer.from(value, "utf8");
+          receivedOutput ||= data.byteLength > 0;
+          handlers.onOutput(new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice());
         });
         const exitSubscription = pty.onExit(({ exitCode, signal }) => {
           if (closed) return;
           closed = true;
           nativeExit = { exitCode, signal: signal === undefined ? null : String(signal) };
+          if (!receivedOutput && exitCode !== 0 && !cleanupPromise) {
+            handlers.onFailure(
+              new TerminalPtyError({
+                code: "spawn_failed",
+                operation: "start",
+                message: `Terminal shell ${plan.shell} exited with code ${exitCode} before producing output in ${plan.cwd}. Check that the shell starts in this directory outside OpenDucktor.`,
+              }),
+            );
+          }
           for (const waiter of exitWaiters) waiter();
           Effect.runFork(
             finalizeExit().pipe(
@@ -178,7 +173,7 @@ export const createNodePtyPort = ({
         new TerminalPtyError({
           code: "spawn_failed",
           operation: "start",
-          message: `node-pty could not start ${plan.shell}.`,
+          message: `Could not start terminal shell ${plan.shell} in ${plan.cwd}: ${cause instanceof Error ? cause.message : String(cause)}. Check that the shell executable and working directory are accessible.`,
           cause,
         }),
     }),
