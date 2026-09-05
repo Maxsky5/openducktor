@@ -109,7 +109,7 @@ export const HOST_COMMAND_NAMES = [
   "terminal_prepare_path_input",
   "workspace_add",
   "workspace_detect_github_repository",
-  "workspace_get_git_provider_health",
+  "workspace_get_git_provider_context",
   "workspace_get_repo_config",
   "workspace_get_settings_snapshot",
   "workspace_list",

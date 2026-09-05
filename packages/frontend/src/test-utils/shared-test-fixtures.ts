@@ -5,6 +5,9 @@ import {
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_GENERAL_SETTINGS,
   DEFAULT_KANBAN_SETTINGS,
+  GITHUB_PROVIDER_DESCRIPTOR,
+  repositoryGitProviderContextSchema,
+  type RepositoryGitProviderContext,
   type SettingsSnapshot,
   type TaskCard,
   type TaskStoreCheck,
@@ -138,6 +141,66 @@ const BASE_REPO_RUNTIME_MCP_FIXTURE: NonNullable<RepoRuntimeHealthCheck["mcp"]> 
   toolIds: [],
   detail: null,
   failureKind: null,
+};
+
+const BASE_GIT_PROVIDER_CONTEXT_FIXTURE = {
+  descriptor: GITHUB_PROVIDER_DESCRIPTOR,
+  config: {
+    id: "github",
+    enabled: true,
+    autoDetected: false,
+    repository: { host: "github.com", owner: "example", name: "repo" },
+  },
+  health: {
+    providerId: "github",
+    enabled: true,
+    available: true,
+    executablePath: "gh",
+    version: "gh version 2.95.0",
+    authenticated: true,
+    account: "octocat",
+    repositoryMappingValid: true,
+  },
+} satisfies NonNullable<RepositoryGitProviderContext>;
+
+type GitProviderContextFixtureOptions = {
+  available?: boolean;
+  enabled?: boolean;
+  supportsPullRequests?: boolean;
+  supportsPullRequestReview?: boolean;
+};
+
+export const createGitProviderContextFixture = ({
+  available = true,
+  enabled = true,
+  supportsPullRequests = true,
+  supportsPullRequestReview = true,
+}: GitProviderContextFixtureOptions = {}): NonNullable<RepositoryGitProviderContext> => {
+  const context = {
+    ...BASE_GIT_PROVIDER_CONTEXT_FIXTURE,
+    descriptor: {
+      ...BASE_GIT_PROVIDER_CONTEXT_FIXTURE.descriptor,
+      capabilities: {
+        supportsPullRequests,
+        supportsPullRequestReview: supportsPullRequests && supportsPullRequestReview,
+      },
+    },
+    config: {
+      ...BASE_GIT_PROVIDER_CONTEXT_FIXTURE.config,
+      enabled,
+    },
+    health: {
+      ...BASE_GIT_PROVIDER_CONTEXT_FIXTURE.health,
+      enabled,
+      available,
+      reason: available ? undefined : "Sign in to GitHub CLI.",
+      authenticated: available,
+      account: available ? "octocat" : null,
+      repositoryMappingValid: available,
+    },
+  } satisfies NonNullable<RepositoryGitProviderContext>;
+
+  return repositoryGitProviderContextSchema.unwrap().parse(context);
 };
 
 export const createChatSettingsFixture = (

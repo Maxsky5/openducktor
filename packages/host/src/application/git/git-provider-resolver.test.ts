@@ -115,6 +115,11 @@ const repoConfig = (providerConfig?: { id: string; enabled: boolean }) =>
 const resolveEither = (resolver: GitProviderResolver, config: ReturnType<typeof repoConfig>) =>
   Effect.runPromise(resolver.resolve(config).pipe(Effect.either));
 
+const resolveConfiguredEither = (
+  resolver: GitProviderResolver,
+  config: ReturnType<typeof repoConfig>,
+) => Effect.runPromise(resolver.resolveConfigured(config).pipe(Effect.either));
+
 const createResolverSync = (providers: readonly GitProviderPort[]) =>
   Effect.runSync(createGitProviderResolver(providers));
 
@@ -146,6 +151,21 @@ describe("createGitProviderResolver", () => {
       expect(result.left).toBeInstanceOf(GitProviderResolutionError);
       expect(result.left.reason).toBe("disabled");
       expect(result.left.providerId).toBe("github");
+    }
+  });
+
+  test("resolves a configured provider without treating disabled health as missing support", async () => {
+    const github = provider({ providerDescriptor: descriptor({ id: "github" }) });
+    const resolver = createResolverSync([github]);
+
+    const result = await resolveConfiguredEither(
+      resolver,
+      repoConfig({ id: "github", enabled: false }),
+    );
+
+    expect(result._tag).toBe("Right");
+    if (result._tag === "Right") {
+      expect(result.right).toBe(github);
     }
   });
 

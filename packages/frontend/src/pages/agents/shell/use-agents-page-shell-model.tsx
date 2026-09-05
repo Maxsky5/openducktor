@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
+import { gitProviderReadError } from "@/lib/git-provider-health";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
@@ -25,9 +26,11 @@ type AgentsPageShellModel = {
   activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
+  gitProviderContextLoadError: Error | null;
   activeTabValue: string;
   onRetryNavigationPersistence: () => void;
   onRetryChatSettingsLoad: () => void;
+  onRetryGitProviderContext: () => void;
   onTabValueChange: (value: string) => void;
   taskTabsModel: ReturnType<
     typeof useAgentStudioOrchestrationController
@@ -55,10 +58,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { allRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
-  const { repoSettings, githubIntegrationEnabled, isLoadingRepoSettings } =
-    useAgentStudioRepoSettings({
-      activeWorkspaceId,
-    });
+  const { repoSettings, gitProvider, isLoadingRepoSettings } = useAgentStudioRepoSettings({
+    activeRepoPath: workspaceRepoPath,
+    activeWorkspaceId,
+  });
+  const providerReadError = gitProviderReadError(gitProvider.error);
   const {
     tasksAreCurrent,
     isForegroundLoadingTasks,
@@ -119,6 +123,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     linkMergedPullRequest,
     cancelLinkMergedPullRequest,
     unlinkPullRequest,
+    gitProviderContext: gitProvider.context,
+    gitProviderReadError: providerReadError,
   });
 
   const {
@@ -131,7 +137,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     branches: branches ?? [],
     runtimeDefinitions,
     repoSettings,
-    githubIntegrationEnabled,
+    gitProviderContext: gitProvider.context,
+    gitProviderReadError: providerReadError,
     workspaceRepoPath,
     isForegroundLoadingTasks,
     routeSession,
@@ -174,6 +181,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest: taskActions.onDetectPullRequest,
+      gitProviderContext: gitProvider.context,
+      gitProviderReadError: providerReadError,
       onResolveGitConflict: handleResolveRebaseConflict,
       onGitConflictQuickActionContextChange,
     });
@@ -197,9 +206,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     activeWorkspace,
     navigationPersistenceError,
     chatSettingsLoadError: orchestration.chatSettingsLoadError,
+    gitProviderContextLoadError: gitProvider.error,
     activeTabValue: orchestration.activeTabValue,
     onRetryNavigationPersistence: retryNavigationPersistence,
     onRetryChatSettingsLoad: orchestration.retryChatSettingsLoad,
+    onRetryGitProviderContext: gitProvider.retry,
     onTabValueChange: selection.handleSelectTab,
     taskTabsModel: orchestration.agentStudioTaskTabsModel,
     rightPanelToggleModel: orchestration.rightPanel.rightPanelToggleModel,

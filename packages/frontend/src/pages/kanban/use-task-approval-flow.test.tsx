@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import type { TaskApprovalContext, TaskApprovalContextLoadResult } from "@openducktor/contracts";
+import {
+  type RepositoryGitProviderContext,
+  type TaskApprovalContext,
+  type TaskApprovalContextLoadResult,
+} from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { act } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import {
   type AgentChatDraftSessionIdentity,
@@ -18,7 +23,10 @@ import {
 import { QueryProvider } from "@/lib/query-provider";
 import { hostClient } from "@/lib/host-client";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createGitProviderContextFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -102,7 +110,10 @@ const agentSessionsListMock = mock(defaultAgentSessionsList);
 const agentSessionsListForTasksMock = mock(defaultAgentSessionsListForTasks);
 const toastLoadingMock = mock(() => "toast-id");
 const toastSuccessMock = mock(() => "success-toast-id");
-const toastErrorMock = mock(() => "error-toast-id");
+const toastErrorMock = mock(
+  (_message: Parameters<typeof toast.error>[0], _options?: Parameters<typeof toast.error>[1]) =>
+    "error-toast-id",
+);
 
 type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
 
@@ -270,7 +281,6 @@ const createTaskApprovalContextFixture = (
   pullRequest: undefined,
   directMerge: undefined,
   suggestedSquashCommitMessage: undefined,
-  providers: [],
   ...overrides,
 });
 
@@ -322,11 +332,26 @@ const createUseTaskApprovalFlowArgs = (
     repoPath: "/repo",
   },
   tasks: [createTaskCardFixture({ id: "TASK-1", title: "Task" })],
+  gitProviderContext: null,
+  gitProviderContextError: null,
+  loadGitProviderContext: async () => null,
   requestPullRequestGeneration: async () => undefined,
   refreshTasks: async () => {},
   humanApproveTask: humanApproveTaskMock,
   openResetImplementation: openResetImplementationMock,
   ...overrides,
+});
+
+const mountApprovalFlow = (getArgs: () => Parameters<typeof useTaskApprovalFlow>[0]) =>
+  mountApprovalHarness(() => {
+    latestHarnessValue = useTaskApprovalFlow(getArgs());
+    return null;
+  });
+
+const createWorkspace = (suffix: "a" | "b") => ({
+  workspaceId: `workspace-${suffix}`,
+  workspaceName: `Repository ${suffix.toUpperCase()}`,
+  repoPath: `/repo-${suffix}`,
 });
 
 const expectApprovalModal = (): TaskApprovalApprovalModalModel => {
@@ -355,6 +380,14 @@ const expectMissingBuilderWorktreeModal = (): TaskApprovalMissingBuilderWorktree
   }
   return modal;
 };
+
+const toastActionSchema = z.object({
+  label: z.string(),
+  onClick: z.function(),
+});
+
+const latestToastAction = () =>
+  toastActionSchema.parse(toastErrorMock.mock.calls.at(-1)?.[1]?.action);
 
 describe("useTaskApprovalFlow", () => {
   beforeEach(() => {
@@ -391,6 +424,235 @@ describe("useTaskApprovalFlow", () => {
       restoreSpy();
     }
     restoreDependencySpies = [];
+  });
+
+  test("opens while provider context loads and then selects Pull Request mode", async () => {
+    const pendingProviderContext = createDeferred<RepositoryGitProviderContext>();
+    const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    let gitProviderContext: RepositoryGitProviderContext | undefined;
+    taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
+
+    const harness = await mountApprovalFlow(() =>
+      createUseTaskApprovalFlowArgs({
+        gitProviderContext,
+        loadGitProviderContext: async () => pendingProviderContext.promise,
+      }),
+    );
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
+    expect(expectApprovalModal().isLoading).toBe(true);
+    expect(expectApprovalModal().mode).toBe("direct_merge");
+    expect(taskApprovalContextGetMock).not.toHaveBeenCalled();
+
+    gitProviderContext = createGitProviderContextFixture();
+    pendingProviderContext.resolve(gitProviderContext);
+    await harness.update(undefined);
+    await act(async () => {
+      await pendingProviderContext.promise;
+      await Promise.resolve();
+    });
+
+    expect(taskApprovalContextGetMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(expectApprovalModal().isLoading).toBe(true);
+    expect(expectApprovalModal().mode).toBe("pull_request");
+
+    pendingApprovalContext.resolve(createReadyTaskApprovalContextResult());
+    await act(async () => {
+      await pendingApprovalContext.promise;
+      await Promise.resolve();
+    });
+
+    expect(expectApprovalModal().isLoading).toBe(false);
+    expect(expectApprovalModal().mode).toBe("pull_request");
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("discards a pending provider context after switching repositories", async () => {
+    const pendingProviderContext = createDeferred<RepositoryGitProviderContext>();
+    let activeWorkspace = createWorkspace("a");
+    const harness = await mountApprovalFlow(() =>
+      createUseTaskApprovalFlowArgs({
+        activeWorkspace,
+        loadGitProviderContext: async () => pendingProviderContext.promise,
+      }),
+    );
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+    });
+
+    activeWorkspace = createWorkspace("b");
+    await harness.update(undefined);
+    pendingProviderContext.resolve(createGitProviderContextFixture());
+    await act(async () => {
+      await pendingProviderContext.promise;
+      await Promise.resolve();
+    });
+
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+    expect(taskApprovalContextGetMock).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("closes approval when switching repositories during the approval-context read", async () => {
+    const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
+    let activeWorkspace = createWorkspace("a");
+    const harness = await mountApprovalFlow(() =>
+      createUseTaskApprovalFlowArgs({
+        activeWorkspace,
+        loadGitProviderContext: async () => createGitProviderContextFixture(),
+      }),
+    );
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    expect(expectApprovalModal().isLoading).toBe(true);
+
+    activeWorkspace = createWorkspace("b");
+    await harness.update(undefined);
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    pendingApprovalContext.resolve(createReadyTaskApprovalContextResult());
+    await act(async () => {
+      await pendingApprovalContext.promise;
+      await Promise.resolve();
+    });
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    await harness.unmount();
+  });
+
+  test("does not submit stale approval state after switching repositories", async () => {
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
+    let activeWorkspace = createWorkspace("a");
+    const harness = await mountApprovalFlow(() =>
+      createUseTaskApprovalFlowArgs({ activeWorkspace }),
+    );
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+    const staleConfirm = expectApprovalModal().onConfirm;
+
+    activeWorkspace = createWorkspace("b");
+    await harness.update(undefined);
+    await act(async () => {
+      staleConfirm();
+      await Promise.resolve();
+    });
+
+    expect(taskDirectMergeMock).not.toHaveBeenCalled();
+    expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    await harness.unmount();
+  });
+
+  test("opens Direct Merge after a provider read error and retries the full approval open", async () => {
+    let gitProviderContext: RepositoryGitProviderContext | undefined;
+    const loadGitProviderContext = mock(async (): Promise<RepositoryGitProviderContext> => {
+      throw new Error("provider context read failed");
+    });
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
+
+    const harness = await mountApprovalFlow(() =>
+      createUseTaskApprovalFlowArgs({ gitProviderContext, loadGitProviderContext }),
+    );
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+
+    await waitForTaskApprovalModalLoaded();
+    expect(expectApprovalModal().mode).toBe("direct_merge");
+    expect(taskApprovalContextGetMock).toHaveBeenCalledTimes(1);
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Failed to load Git provider context",
+      expect.objectContaining({
+        description: "provider context read failed",
+        action: expect.objectContaining({ label: "Retry" }),
+      }),
+    );
+    const retryAction = latestToastAction();
+
+    gitProviderContext = createGitProviderContextFixture();
+    loadGitProviderContext.mockImplementationOnce(async () => gitProviderContext ?? null);
+    await harness.update(undefined);
+    await act(async () => {
+      retryAction.onClick();
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    expect(loadGitProviderContext).toHaveBeenCalledTimes(2);
+    expect(expectApprovalModal().mode).toBe("pull_request");
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("opens an explicit Direct Merge approval when the provider context read fails", async () => {
+    const loadGitProviderContext = mock(async (): Promise<RepositoryGitProviderContext> => {
+      throw new Error("provider context read failed");
+    });
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
+    const harness = await mountApprovalFlow(() =>
+      createUseTaskApprovalFlowArgs({ loadGitProviderContext }),
+    );
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1", { mode: "direct_merge" });
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    expect(loadGitProviderContext).not.toHaveBeenCalled();
+    expect(expectApprovalModal().mode).toBe("direct_merge");
+    expect(toastErrorMock).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("ignores a provider-read Retry action after switching repositories", async () => {
+    const loadGitProviderContext = mock(async (): Promise<RepositoryGitProviderContext> => {
+      throw new Error("provider context read failed");
+    });
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
+    let activeWorkspace = createWorkspace("a");
+    const harness = await mountApprovalFlow(() =>
+      createUseTaskApprovalFlowArgs({ activeWorkspace, loadGitProviderContext }),
+    );
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    const retryAction = latestToastAction();
+
+    activeWorkspace = createWorkspace("b");
+    await harness.update(undefined);
+    loadGitProviderContext.mockImplementationOnce(async () => createGitProviderContextFixture());
+
+    await act(async () => {
+      retryAction.onClick();
+      await Promise.resolve();
+    });
+
+    expect(loadGitProviderContext).toHaveBeenCalledTimes(1);
+    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+
+    await harness.unmount();
   });
 
   test("opens immediately in loading state and does not fetch the settings snapshot", async () => {
@@ -462,6 +724,8 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
+          gitProviderContext: createGitProviderContextFixture(),
+          loadGitProviderContext: async () => createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -489,19 +753,11 @@ describe("useTaskApprovalFlow", () => {
 
     expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
     expect(expectApprovalModal().isLoading).toBe(true);
-    expect(expectApprovalModal().mode).toBe("direct_merge");
+    expect(expectApprovalModal().mode).toBe("pull_request");
 
     pendingApprovalContext.resolve(
       createReadyTaskApprovalContextResult({
         publishTarget: undefined,
-        providers: [
-          {
-            providerId: "github",
-            enabled: true,
-            available: true,
-            reason: undefined,
-          },
-        ],
       }),
     );
 
@@ -574,6 +830,168 @@ describe("useTaskApprovalFlow", () => {
     await act(async () => {
       await harness.unmount();
     });
+  });
+
+  test("keeps Pull Request mode visible but unavailable for a disabled provider", async () => {
+    const context = createGitProviderContextFixture();
+    const disabledContext = {
+      ...context,
+      config: { ...context.config, enabled: false },
+      health: {
+        ...context.health,
+        enabled: false,
+        available: false,
+        reason: "Enable GitHub for this repository.",
+      },
+    } satisfies RepositoryGitProviderContext;
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          gitProviderContext: disabledContext,
+          loadGitProviderContext: async () => disabledContext,
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    expect(expectApprovalModal().mode).toBe("pull_request");
+    expect(expectApprovalModal().pullRequestSupported).toBe(true);
+    expect(expectApprovalModal().pullRequestAvailable).toBe(false);
+    expect(expectApprovalModal().pullRequestUnavailableReason).toBe(
+      "Enable GitHub for this repository.",
+    );
+
+    await act(async () => {
+      await harness.unmount();
+    });
+  });
+
+  test("uses current provider health and read errors while the approval modal is open", async () => {
+    const healthyContext = createGitProviderContextFixture();
+    let gitProviderContext: RepositoryGitProviderContext | undefined = healthyContext;
+    let gitProviderContextError: Error | null = null;
+    const requestPullRequestGeneration = mock(async () => "builder-session-pr");
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          gitProviderContext,
+          gitProviderContextError,
+          loadGitProviderContext: async () => healthyContext,
+          requestPullRequestGeneration,
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    gitProviderContext = {
+      ...healthyContext,
+      health: {
+        ...healthyContext.health,
+        available: false,
+        reason: "Run `gh auth login` to connect GitHub.",
+      },
+    };
+    await harness.update(undefined);
+
+    expect(expectApprovalModal().pullRequestSupported).toBe(true);
+    expect(expectApprovalModal().pullRequestAvailable).toBe(false);
+    expect(expectApprovalModal().pullRequestUnavailableReason).toBe(
+      "Run `gh auth login` to connect GitHub.",
+    );
+
+    gitProviderContext = healthyContext;
+    gitProviderContextError = new Error("provider context refresh failed");
+    await harness.update(undefined);
+
+    expect(expectApprovalModal().mode).toBe("pull_request");
+    expect(expectApprovalModal().pullRequestSupported).toBe(true);
+    expect(expectApprovalModal().pullRequestAvailable).toBe(false);
+    expect(expectApprovalModal().pullRequestUnavailableReason).toBe(
+      "Could not load the current Git provider: provider context refresh failed",
+    );
+    await act(async () => {
+      expectApprovalModal().onConfirm();
+      await Promise.resolve();
+    });
+    expect(requestPullRequestGeneration).not.toHaveBeenCalled();
+    expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
+
+    gitProviderContext = undefined;
+    gitProviderContextError = null;
+    await harness.update(undefined);
+
+    expect(expectApprovalModal().mode).toBe("pull_request");
+    expect(expectApprovalModal().pullRequestSupported).toBe(true);
+    expect(expectApprovalModal().pullRequestAvailable).toBe(false);
+    expect(expectApprovalModal().pullRequestUnavailableReason).toBe(
+      "Checking the current Git provider.",
+    );
+
+    await harness.unmount();
+  });
+
+  test("uses current provider capabilities while the approval modal is open", async () => {
+    const healthyContext = createGitProviderContextFixture();
+    let gitProviderContext: RepositoryGitProviderContext | undefined = healthyContext;
+    const requestPullRequestGeneration = mock(async () => "builder-session-pr");
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
+
+    const Harness = (): ReactElement | null => {
+      latestHarnessValue = useTaskApprovalFlow(
+        createUseTaskApprovalFlowArgs({
+          gitProviderContext,
+          loadGitProviderContext: async () => healthyContext,
+          requestPullRequestGeneration,
+        }),
+      );
+      return null;
+    };
+
+    const harness = await mountApprovalHarness(Harness);
+    await act(async () => {
+      latestHarnessValue?.openTaskApproval("TASK-1");
+      await Promise.resolve();
+    });
+    await waitForTaskApprovalModalLoaded();
+
+    gitProviderContext = {
+      ...healthyContext,
+      descriptor: {
+        ...healthyContext.descriptor,
+        capabilities: {
+          ...healthyContext.descriptor.capabilities,
+          supportsPullRequests: false,
+        },
+      },
+    };
+    await harness.update(undefined);
+
+    expect(expectApprovalModal().pullRequestSupported).toBe(false);
+    expect(expectApprovalModal().pullRequestAvailable).toBe(false);
+    expect(expectApprovalModal().mode).toBe("direct_merge");
+    expect(requestPullRequestGeneration).not.toHaveBeenCalled();
+    expect(taskPullRequestUpsertMock).not.toHaveBeenCalled();
+
+    await harness.unmount();
   });
 
   test("reopens in direct merge completion stage when a local merge is already recorded", async () => {
@@ -701,7 +1119,16 @@ describe("useTaskApprovalFlow", () => {
     });
   });
 
-  test("completes the task from missing-builder-worktree recovery and closes the modal", async () => {
+  test("completes missing-builder recovery when Pull Request health is unavailable", async () => {
+    const healthyContext = createGitProviderContextFixture();
+    const unavailableContext = {
+      ...healthyContext,
+      health: {
+        ...healthyContext.health,
+        available: false,
+        reason: "Run `gh auth login` to connect GitHub.",
+      },
+    } satisfies RepositoryGitProviderContext;
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createMissingBuilderWorktreeApprovalContextResult(),
     );
@@ -709,6 +1136,8 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
+          gitProviderContext: unavailableContext,
+          loadGitProviderContext: async () => unavailableContext,
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -954,7 +1383,6 @@ describe("useTaskApprovalFlow", () => {
         taskId: "TASK-2",
         defaultMergeMethod: "rebase",
         hasUncommittedChanges: false,
-        providers: [],
       }),
     );
 
@@ -1513,22 +1941,13 @@ describe("useTaskApprovalFlow", () => {
 
   test("creates a pull request manually, refreshes tasks, and closes the modal", async () => {
     const refreshTasksMock = mock(async () => {});
-    taskApprovalContextGetMock.mockResolvedValueOnce(
-      createReadyTaskApprovalContextResult({
-        providers: [
-          {
-            providerId: "github",
-            enabled: true,
-            available: true,
-            reason: undefined,
-          },
-        ],
-      }),
-    );
+    taskApprovalContextGetMock.mockResolvedValueOnce(createReadyTaskApprovalContextResult());
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
+          gitProviderContext: createGitProviderContextFixture(),
+          loadGitProviderContext: async () => createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -1594,22 +2013,13 @@ describe("useTaskApprovalFlow", () => {
     const requestPullRequestGenerationMock = mock(
       async () => requestPullRequestGenerationDeferred.promise,
     );
-    taskApprovalContextGetMock.mockResolvedValue(
-      createReadyTaskApprovalContextResult({
-        providers: [
-          {
-            providerId: "github",
-            enabled: true,
-            available: true,
-            reason: undefined,
-          },
-        ],
-      }),
-    );
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
+          gitProviderContext: createGitProviderContextFixture(),
+          loadGitProviderContext: async () => createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -1661,24 +2071,14 @@ describe("useTaskApprovalFlow", () => {
 
   test("keeps the approval modal open when AI pull request generation is cancelled", async () => {
     const requestPullRequestGenerationMock = mock(async () => undefined);
-    taskApprovalContextGetMock.mockResolvedValue(
-      createReadyTaskApprovalContextResult({
-        providers: [
-          {
-            providerId: "github",
-            enabled: true,
-            available: true,
-            reason: undefined,
-          },
-        ],
-      }),
-    );
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
 
     const { useTaskApprovalFlow } = await import("./use-task-approval-flow");
 
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
+          gitProviderContext: createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -1735,14 +2135,6 @@ describe("useTaskApprovalFlow", () => {
       if (taskId === "TASK-1") {
         return createReadyTaskApprovalContextResult({
           taskId,
-          providers: [
-            {
-              providerId: "github",
-              enabled: true,
-              available: true,
-              reason: undefined,
-            },
-          ],
         });
       }
 
@@ -1752,6 +2144,7 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
+          gitProviderContext: createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",
@@ -1812,7 +2205,6 @@ describe("useTaskApprovalFlow", () => {
     secondApprovalContext.resolve(
       createReadyTaskApprovalContextResult({
         taskId: "TASK-2",
-        providers: [],
       }),
     );
 
@@ -1831,18 +2223,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("keeps the modal open when pull request generation cannot start", async () => {
-    taskApprovalContextGetMock.mockResolvedValue(
-      createReadyTaskApprovalContextResult({
-        providers: [
-          {
-            providerId: "github",
-            enabled: true,
-            available: true,
-            reason: undefined,
-          },
-        ],
-      }),
-    );
+    taskApprovalContextGetMock.mockResolvedValue(createReadyTaskApprovalContextResult());
     const requestPullRequestGenerationMock = mock(async () => {
       throw new Error("Generation crashed");
     });
@@ -1850,6 +2231,7 @@ describe("useTaskApprovalFlow", () => {
     const Harness = (): ReactElement | null => {
       latestHarnessValue = useTaskApprovalFlow(
         createUseTaskApprovalFlowArgs({
+          gitProviderContext: createGitProviderContextFixture(),
           activeWorkspace: {
             workspaceId: "workspace-repo",
             workspaceName: "Repo",

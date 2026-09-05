@@ -289,7 +289,7 @@ describe("HostClient", () => {
       "workspaceUpdateAgentModelFavorites",
       "workspaceUpdateGlobalGitConfig",
       "workspaceDetectGithubRepository",
-      "workspaceGetGitProviderHealth",
+      "workspaceGetGitProviderContext",
       "workspaceSaveSettingsSnapshot",
       "systemGetPlatform",
       "systemListOpenInTools",
@@ -1360,7 +1360,7 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("workspaceGetGitProviderHealth uses the provider health IPC route", async () => {
+  test("workspaceGetGitProviderContext uses the provider context IPC route", async () => {
     const health = {
       providerId: "github" as const,
       enabled: true,
@@ -1371,17 +1371,34 @@ describe("HostClient", () => {
       account: "octocat",
       repositoryMappingValid: true,
     };
+    const context = {
+      descriptor: {
+        id: "github",
+        label: "GitHub",
+        description: "GitHub repository hosting and Pull Request integration.",
+        capabilities: {
+          supportsPullRequests: true,
+          supportsPullRequestReview: true,
+        },
+      },
+      config: {
+        id: "github",
+        enabled: true,
+        autoDetected: false,
+      },
+      health,
+    };
     const { client, calls } = createClient((command) => {
-      if (command === "workspace_get_git_provider_health") {
-        return health;
+      if (command === "workspace_get_git_provider_context") {
+        return context;
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.workspaceGetGitProviderHealth("/repo")).resolves.toEqual(health);
+    await expect(client.workspaceGetGitProviderContext("/repo")).resolves.toEqual(context);
     expect(calls).toEqual([
       {
-        command: "workspace_get_git_provider_health",
+        command: "workspace_get_git_provider_context",
         args: { repoPath: "/repo" },
       },
     ]);

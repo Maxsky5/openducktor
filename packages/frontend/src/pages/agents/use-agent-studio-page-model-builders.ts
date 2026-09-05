@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskExecutionDocument } from "@/components/features/agents";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
@@ -43,6 +43,8 @@ type BuildWorkflowModelContextArgs = {
   isSessionWorking: boolean;
   hasActiveGitConflict: boolean;
   roleLabelByRole: Record<AgentRole, string>;
+  gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
 };
 
 const isTaskAwaitingHumanFeedback = (task: TaskCard | null): boolean => {
@@ -71,6 +73,8 @@ export const buildWorkflowModelContext = ({
   isSessionWorking,
   hasActiveGitConflict,
   roleLabelByRole,
+  gitProviderContext,
+  gitProviderReadError = null,
 }: BuildWorkflowModelContextArgs): WorkflowModelContext => {
   const roleEnabledByTask = buildRoleEnabledMapForTask(selectedTask);
   const roleWorkflowsByTask = buildRoleWorkflowMapForTask(selectedTask);
@@ -115,6 +119,8 @@ export const buildWorkflowModelContext = ({
     roleEnabledByTask,
     createSessionDisabled,
     hasActiveGitConflict,
+    gitProviderContext,
+    gitProviderReadError,
   });
 
   return {

@@ -15,6 +15,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
+import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
 import { runtimeQueryKeys } from "../../queries/runtime";
 import { repoTaskDataQueryOptions, type RepoTaskData, taskQueryKeys } from "../../queries/tasks";
 import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "../../queries/workspace";
@@ -996,7 +997,7 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("keeps exact runtime validation data and refreshes diagnostics after saving settings", async () => {
+  test("waits for provider context refresh after saving settings", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const snapshot = createSettingsSnapshot();
@@ -1013,17 +1014,19 @@ describe("use-repo-settings-operations", () => {
       applyWorkspaceRecords,
       applyWorkspaceRecord,
     });
+    const providerRefresh = createDeferred<void>();
+    const providerRefreshStarted = createDeferred<void>();
 
     try {
       await harness.mount();
       const queryClient = harness.getQueryClient();
-      const refreshResult = createDeferred<void>();
       const originalInvalidateQueries = queryClient.invalidateQueries.bind(queryClient);
       const invalidateQueries = spyOn(queryClient, "invalidateQueries").mockImplementation(
         async (filters, options) => {
           await originalInvalidateQueries(filters, options);
-          if (filters?.queryKey === checksQueryKeys.all) {
-            await refreshResult.promise;
+          if (filters?.queryKey === repositoryGitProviderContextQueryKeys.all) {
+            providerRefreshStarted.resolve();
+            await providerRefresh.promise;
           }
         },
       );
@@ -1032,8 +1035,17 @@ describe("use-repo-settings-operations", () => {
       queryClient.setQueryData(runtimeKey, { runtimes: [] });
       queryClient.setQueryData(checksKey, { ok: true });
 
-      await harness.getLatest().saveSettingsSnapshot(snapshot);
+      let saveFinished = false;
+      const save = harness
+        .getLatest()
+        .saveSettingsSnapshot(snapshot)
+        .then(() => {
+          saveFinished = true;
+        });
+      await providerRefreshStarted.promise;
+      await Promise.resolve();
 
+      expect(saveFinished).toBe(false);
       expect(queryClient.getQueryState(runtimeKey)?.isInvalidated).toBe(false);
       expect(queryClient.getQueryState(checksKey)?.isInvalidated).toBe(true);
       expect(invalidateQueries).not.toHaveBeenCalledWith({ queryKey: runtimeQueryKeys.all });
@@ -1041,10 +1053,13 @@ describe("use-repo-settings-operations", () => {
         queryKey: checksQueryKeys.all,
       });
       expect(invalidateQueries).toHaveBeenCalledWith({
-        queryKey: ["git-provider-health"],
+        queryKey: repositoryGitProviderContextQueryKeys.all,
       });
-      refreshResult.resolve();
+      providerRefresh.resolve();
+      await save;
+      expect(saveFinished).toBe(true);
     } finally {
+      providerRefresh.resolve();
       await harness.unmount();
       host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
       host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;

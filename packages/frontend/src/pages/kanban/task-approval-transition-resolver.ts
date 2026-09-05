@@ -1,7 +1,11 @@
-import type { TaskAction, TaskApprovalContext, TaskCard, TaskStatus } from "@openducktor/contracts";
+import type {
+  RepositoryGitProviderContext,
+  TaskAction,
+  TaskCard,
+  TaskStatus,
+} from "@openducktor/contracts";
 import type { TaskApprovalMode } from "./kanban-page-model-types";
 import {
-  determineDefaultTaskApprovalMode,
   isTaskApprovalReady,
   type TaskApprovalFlowOpenState,
   type TaskApprovalFlowReadyState,
@@ -101,22 +105,34 @@ export const resolveTaskApprovalWorkflowTransition = (
 };
 
 export const resolveTaskApprovalOpenMode = (args: {
-  cachedContext: TaskApprovalContext | undefined;
+  gitProviderContext: RepositoryGitProviderContext;
   requestedMode: TaskApprovalMode | undefined;
-  task: Pick<TaskCard, "availableActions" | "pullRequest" | "status"> | undefined;
 }): TaskApprovalMode => {
-  if (args.requestedMode) {
+  if (args.requestedMode === "direct_merge") {
     return args.requestedMode;
   }
 
-  if (args.task) {
-    const transition = resolveTaskApprovalWorkflowTransition(args.task, "approve");
-    if (transition.kind === "approved" && transition.completionPath === "pull_request") {
-      return "pull_request";
-    }
+  const supportsPullRequests =
+    args.gitProviderContext?.descriptor.capabilities.supportsPullRequests === true;
+  if (!supportsPullRequests) {
+    return "direct_merge";
   }
 
-  return determineDefaultTaskApprovalMode(args.cachedContext);
+  if (args.requestedMode === "pull_request") {
+    return args.requestedMode;
+  }
+
+  return "pull_request";
+};
+
+export const resolveCurrentTaskApprovalMode = (
+  mode: TaskApprovalMode,
+  gitProviderContext: RepositoryGitProviderContext | undefined,
+): TaskApprovalMode => {
+  const pullRequestsUnsupported =
+    gitProviderContext !== undefined &&
+    gitProviderContext?.descriptor.capabilities.supportsPullRequests !== true;
+  return mode === "pull_request" && pullRequestsUnsupported ? "direct_merge" : mode;
 };
 
 export const resolveTaskApprovalSubmissionRoute = (

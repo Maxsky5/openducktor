@@ -2,9 +2,74 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
+import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import { TaskDetailsSheetHeader } from "./task-details-sheet-header";
 
 describe("TaskDetailsSheetHeader", () => {
+  test("hides Detect PR without provider support", () => {
+    const task = createTaskCardFixture({ id: "TASK-3", status: "human_review" });
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        gitProviderContext: null,
+        onDetectPullRequest: () => {},
+      }),
+    );
+    expect(html).not.toContain("task-details-detect-pr-button");
+  });
+
+  test("disables Detect PR and shows the provider health error", () => {
+    const task = createTaskCardFixture({ id: "TASK-3", status: "human_review" });
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        gitProviderContext: createGitProviderContextFixture({ available: false }),
+        onDetectPullRequest: () => {},
+      }),
+    );
+    expect(html).toContain("task-details-detect-pr-button");
+    expect(html).toContain("disabled");
+    expect(html).toContain("Sign in to GitHub CLI.");
+    expect(html).toContain('aria-describedby="task-details-detect-pr-error"');
+  });
+
+  test("disables Detect PR and shows the provider read error", () => {
+    const task = createTaskCardFixture({ id: "TASK-3", status: "human_review" });
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        gitProviderReadError: "Could not load the current Git provider: connection failed",
+        onDetectPullRequest: () => {},
+      }),
+    );
+
+    expect(html).toContain("task-details-detect-pr-button");
+    expect(html).toContain("disabled");
+    expect(html).toContain("Could not load the current Git provider: connection failed");
+  });
+
+  test("hides unsupported Detect PR when the provider refresh fails", () => {
+    const task = createTaskCardFixture({ id: "TASK-3", status: "human_review" });
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, {
+        task,
+        subtasksCount: 0,
+        taskLabels: [],
+        gitProviderContext: createGitProviderContextFixture({ supportsPullRequests: false }),
+        gitProviderReadError: "Could not load the current Git provider: connection failed",
+        onDetectPullRequest: () => {},
+      }),
+    );
+
+    expect(html).not.toContain("task-details-detect-pr-button");
+  });
+
   test("renders qa rejected badge for qa-rework tasks", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
@@ -67,6 +132,7 @@ describe("TaskDetailsSheetHeader", () => {
         task,
         subtasksCount: 0,
         taskLabels: [],
+        gitProviderContext: createGitProviderContextFixture(),
         onDetectPullRequest: () => {},
       }),
     );
@@ -97,6 +163,7 @@ describe("TaskDetailsSheetHeader", () => {
         task,
         subtasksCount: 0,
         taskLabels: [],
+        gitProviderContext: createGitProviderContextFixture(),
         onDetectPullRequest: () => {},
         onUnlinkPullRequest: () => {},
       }),
@@ -179,6 +246,7 @@ describe("TaskDetailsSheetHeader", () => {
         task,
         subtasksCount: 0,
         taskLabels: [],
+        gitProviderContext: createGitProviderContextFixture(),
         onDetectPullRequest: () => {},
         isDetectingPullRequest: true,
       }),

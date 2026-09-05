@@ -36,6 +36,7 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   rebaseError?: string | null;
   resetError?: string | null;
   isDetectingPullRequest?: boolean;
+  detectPullRequestDisabledReason?: string | null;
   commitAll?: (message: string) => Promise<boolean>;
   requestFileReset?: (filePath: string) => void;
   requestHunkReset?: (filePath: string, hunkIndex: number) => void;

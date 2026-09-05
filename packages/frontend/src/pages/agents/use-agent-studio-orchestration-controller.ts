@@ -2,6 +2,8 @@ import type {
   ChatSettings,
   GitBranch,
   GitTargetBranch,
+  PullRequest,
+  RepositoryGitProviderContext,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
 import { useMemo } from "react";
@@ -56,13 +58,45 @@ type UseAgentStudioOrchestrationControllerArgs = {
   branches: GitBranch[];
   runtimeDefinitions: RuntimeDescriptor[];
   repoSettings: RepoSettingsInput | null;
-  githubIntegrationEnabled: boolean;
+  gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderReadError: string | null;
   workspaceRepoPath: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   taskExecutionFilePreview: UseTaskExecutionFilePreviewControllerResult;
   hasActiveGitConflict: boolean;
   composer: AgentStudioOrchestrationComposerContext;
   actions: AgentStudioOrchestrationActionsContext;
+};
+
+export const resolvePullRequestReviewAvailability = ({
+  gitProviderContext,
+  gitProviderReadError,
+  linkedPullRequest,
+}: {
+  gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
+  linkedPullRequest: PullRequest | undefined;
+}) => {
+  const supportsPullRequestReview =
+    gitProviderContext?.descriptor.capabilities.supportsPullRequestReview === true;
+  const readFailedWithoutContext = gitProviderContext == null && gitProviderReadError != null;
+  const canShowPullRequestReview = supportsPullRequestReview || readFailedWithoutContext;
+  const hasLinkedPullRequest =
+    linkedPullRequest !== undefined &&
+    (readFailedWithoutContext || linkedPullRequest.providerId === gitProviderContext?.config.id);
+  let unavailableReason: string | null = null;
+  if (canShowPullRequestReview && gitProviderReadError) {
+    unavailableReason = gitProviderReadError;
+  } else if (
+    supportsPullRequestReview &&
+    gitProviderContext &&
+    gitProviderContext.health.available === false
+  ) {
+    unavailableReason =
+      gitProviderContext.health.reason ??
+      `${gitProviderContext.descriptor.label} is not available for Pull Request review.`;
+  }
+  return { canShowPullRequestReview, hasLinkedPullRequest, unavailableReason };
 };
 
 type UseAgentStudioOrchestrationControllerResult = {
@@ -204,7 +238,8 @@ export function useAgentStudioOrchestrationController({
   branches,
   runtimeDefinitions,
   repoSettings,
-  githubIntegrationEnabled,
+  gitProviderContext,
+  gitProviderReadError,
   workspaceRepoPath,
   selection,
   taskExecutionFilePreview,
@@ -370,10 +405,14 @@ export function useAgentStudioOrchestrationController({
           onReplyApproval,
         },
         roleLabelByRole,
+        gitProviderContext,
+        gitProviderReadError,
       }),
     [
       approvalReplyErrorByRequestId,
       hasActiveGitConflict,
+      gitProviderContext,
+      gitProviderReadError,
       isSessionWorking,
       isSubmittingApprovalByRequestId,
       isSubmittingQuestionByRequestId,
@@ -467,12 +506,22 @@ export function useAgentStudioOrchestrationController({
     agentChatModel,
   } = useAgentStudioPageModels(pageModelsArgs);
 
+  const {
+    canShowPullRequestReview,
+    hasLinkedPullRequest,
+    unavailableReason: pullRequestReviewUnavailableReason,
+  } = resolvePullRequestReviewAvailability({
+    gitProviderContext,
+    gitProviderReadError,
+    linkedPullRequest: view.selectedTask?.pullRequest,
+  });
   const rightPanel = useAgentStudioRightPanel({
     role: selectedSessionContext.role,
     hasTaskContext: Boolean(selectedSessionContext.taskId),
     hasDocumentPanel: selectedSessionContext.documents.activeDocument !== null,
-    hasGithubIntegration: githubIntegrationEnabled,
-    hasLinkedGithubPullRequest: view.selectedTask?.pullRequest?.providerId === "github",
+    canShowPullRequestReview,
+    hasLinkedPullRequest,
+    pullRequestReviewUnavailableReason,
   });
   const { model: taskExecutionSelectedFilePreviewModel, onSelectFile: onSelectTaskExecutionFile } =
     taskExecutionFilePreview;

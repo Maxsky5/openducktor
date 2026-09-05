@@ -15,6 +15,9 @@ export {
 } from "../../ports/git-provider-errors";
 
 export type GitProviderResolver = {
+  resolveConfigured(
+    repoConfig: RepoConfig,
+  ): Effect.Effect<GitProviderPort, GitProviderResolutionError>;
   resolve(repoConfig: RepoConfig): Effect.Effect<GitProviderPort, GitProviderResolutionError>;
 };
 
@@ -44,16 +47,38 @@ export const createGitProviderResolver = (
       yield* checkProvider(provider);
     }
 
+    const resolveConfigured = (
+      repoConfig: RepoConfig,
+    ): Effect.Effect<GitProviderPort, GitProviderResolutionError> => {
+      const selection = repoConfig.git.provider;
+      if (!selection) {
+        return Effect.fail(
+          new GitProviderResolutionError({
+            reason: "not_configured",
+            message: "No Git provider is configured for this repository.",
+          }),
+        );
+      }
+
+      const provider = providersById.get(selection.id);
+      if (!provider) {
+        return Effect.fail(
+          new GitProviderResolutionError({
+            reason: "not_registered",
+            providerId: selection.id,
+            message: `Git provider '${selection.id}' has no registered implementation.`,
+          }),
+        );
+      }
+      return Effect.succeed(provider);
+    };
+
     return {
+      resolveConfigured,
       resolve(repoConfig) {
         const selection = repoConfig.git.provider;
         if (!selection) {
-          return Effect.fail(
-            new GitProviderResolutionError({
-              reason: "not_configured",
-              message: "No Git provider is configured for this repository.",
-            }),
-          );
+          return resolveConfigured(repoConfig);
         }
         if (!selection.enabled) {
           return Effect.fail(
@@ -64,18 +89,7 @@ export const createGitProviderResolver = (
             }),
           );
         }
-
-        const provider = providersById.get(selection.id);
-        if (!provider) {
-          return Effect.fail(
-            new GitProviderResolutionError({
-              reason: "not_registered",
-              providerId: selection.id,
-              message: `Git provider '${selection.id}' has no registered implementation.`,
-            }),
-          );
-        }
-        return Effect.succeed(provider);
+        return resolveConfigured(repoConfig);
       },
     } satisfies GitProviderResolver;
   });

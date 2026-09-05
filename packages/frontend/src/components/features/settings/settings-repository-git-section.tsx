@@ -10,14 +10,14 @@ import { Switch } from "@/components/ui/switch";
 import {
   type GithubCliStatus,
   type GithubRepositoryDraft,
-  type GitProviderHealthState,
+  type GitProviderState,
   useRepositoryGitSectionModel,
 } from "./use-repository-git-section-model";
 
 type RepositoryGitSectionProps = {
   selectedRepoPath: string | null;
   selectedRepoConfig: SettingsRepoConfig | null;
-  providerHealth: GitProviderHealthState;
+  providerState: GitProviderState;
   disabled: boolean;
   onDetectGithubRepository: () => Promise<GitProviderRepository | null>;
   onUpdateSelectedRepoConfig: (
@@ -41,12 +41,16 @@ type RepositoryGitStatusHeaderProps = {
   githubReady: boolean;
   githubReadinessLabel: string;
   githubReadinessMessage: string;
+  providerDescription: string;
+  providerTitle: string;
 };
 
 function RepositoryGitStatusHeader({
   githubReady,
   githubReadinessLabel,
   githubReadinessMessage,
+  providerDescription,
+  providerTitle,
 }: RepositoryGitStatusHeaderProps): ReactElement {
   return (
     <CardHeader className="gap-4 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
@@ -55,8 +59,9 @@ function RepositoryGitStatusHeader({
           <Github className="size-5" />
         </div>
         <div className="space-y-1">
-          <CardTitle>GitHub Pull Requests</CardTitle>
-          <CardDescription>{githubReadinessMessage}</CardDescription>
+          <CardTitle>{providerTitle}</CardTitle>
+          <CardDescription>{providerDescription}</CardDescription>
+          <p className="text-sm text-muted-foreground">{githubReadinessMessage}</p>
         </div>
       </div>
       <Badge variant={githubReady ? "success" : "warning"}>{githubReadinessLabel}</Badge>
@@ -209,7 +214,7 @@ function RepositoryGitManualConfigForm({
 export function RepositoryGitSection({
   selectedRepoPath,
   selectedRepoConfig,
-  providerHealth,
+  providerState,
   disabled,
   onDetectGithubRepository,
   onUpdateSelectedRepoConfig,
@@ -229,6 +234,8 @@ export function RepositoryGitSection({
     isDetecting,
     isManualConfigOpen,
     providerStatusLabel,
+    providerDescription,
+    providerLabel,
     repositoryDraft,
     repositorySlug,
     usesDefaultGithubHost,
@@ -241,7 +248,7 @@ export function RepositoryGitSection({
     disabled,
     onDetectGithubRepository,
     onUpdateSelectedRepoConfig,
-    providerHealth,
+    providerState,
     selectedRepoConfig,
     selectedRepoPath,
   });
@@ -261,6 +268,10 @@ export function RepositoryGitSection({
           githubReady={githubReady}
           githubReadinessLabel={githubReadinessLabel}
           githubReadinessMessage={githubReadinessMessage}
+          providerDescription={providerDescription}
+          providerTitle={
+            hasConfiguredNonGithubProvider ? providerLabel : `${providerLabel} Pull Requests`
+          }
         />
         <CardContent className="grid gap-5 py-5">
           {hasConfiguredNonGithubProvider ? (

@@ -25,9 +25,9 @@ export const createGitProviderCommandHandlers = ({ service }: { service: GitProv
           providerId: GITHUB_PROVIDER_DESCRIPTOR.id,
         });
       }),
-    workspace_get_git_provider_health: (args) =>
+    workspace_get_git_provider_context: (args) =>
       Effect.gen(function* () {
-        const repoPath = parseRepoPath(args, "workspace_get_git_provider_health");
-        return yield* service.getHealth(repoPath);
+        const repoPath = parseRepoPath(args, "workspace_get_git_provider_context");
+        return yield* service.getContext(repoPath);
       }),
   }) satisfies HostCommandHandlerDefinitions;

@@ -1,4 +1,8 @@
-import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
+import type {
+  GitBranch,
+  RepositoryGitProviderContext,
+  SystemOpenInToolId,
+} from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type {
@@ -9,6 +13,7 @@ import { toBranchSelectorOptions } from "@/components/features/repository/branch
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import type { GitConflict, GitDiffRefresh } from "@/features/agent-studio-git";
+import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
@@ -38,6 +43,7 @@ export type UseAgentsPageRightPanelModelArgs = {
   activeTabId: Parameters<typeof buildTaskExecutionPanelModel>[0]["activeTabId"];
   onActiveTabChange: Parameters<typeof buildTaskExecutionPanelModel>[0]["onActiveTabChange"];
   isPanelOpen: boolean;
+  pullRequestReviewUnavailableReason: string | null;
   documentsModel: Parameters<typeof buildTaskExecutionPanelModel>[0]["documentModel"];
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => TaskExecutionFileSelectionResult;
@@ -46,6 +52,8 @@ export type UseAgentsPageRightPanelModelArgs = {
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
+  gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
   onResolveGitConflict: Parameters<typeof useAgentStudioGitActions>[0]["onResolveGitConflict"];
   onGitConflictQuickActionContextChange?: (
     context: AgentStudioGitConflictQuickActionContext | null,
@@ -69,6 +77,8 @@ type BuildAgentsPageDiffModelArgs<GitActions extends object> = {
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
+  gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
   openDirectoryInTool?: (path: string, toolId: SystemOpenInToolId) => Promise<void>;
 };
 
@@ -77,6 +87,7 @@ type BuildAgentsPageDiffOptionalModel = {
   targetBranch?: BuildAgentsPageDiffModelSnapshot["targetBranchState"]["displayTargetBranch"];
   isDetectingPullRequest?: true;
   onDetectPullRequest?: () => void;
+  detectPullRequestDisabledReason?: string;
   isGitActionsLocked?: true;
   gitActionsLockReason?: string;
   showLockReasonBanner?: true;
@@ -107,15 +118,24 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
+  gitProviderContext,
+  gitProviderReadError = null,
   openDirectoryInTool = hostClient.systemOpenDirectoryInTool,
 }: BuildAgentsPageDiffModelArgs<GitActions>) {
   const { diffData, gitPanelContextMode, openInTarget, resolvedGitPanelBranch, targetBranchState } =
     buildToolsSnapshot;
   const targetBranchValidationError = targetBranchState.validationError;
+  const readFailedWithoutContext = gitProviderContext == null && gitProviderReadError != null;
   const pullRequestDetectionTask =
-    selectedTask && !selectedTask.pullRequest && canDetectTaskPullRequest(selectedTask)
+    (gitProviderContext?.descriptor.capabilities.supportsPullRequests === true ||
+      readFailedWithoutContext) &&
+    selectedTask &&
+    !selectedTask.pullRequest &&
+    canDetectTaskPullRequest(selectedTask)
       ? selectedTask
       : null;
+  const detectPullRequestDisabledReason =
+    gitProviderReadError ?? pullRequestHealthError(gitProviderContext);
   let targetBranchUpdateModel = {};
   if (gitPanelContextMode === "worktree" && selectedTask && setTaskTargetBranch) {
     const configuredTargetBranch = canonicalTargetBranch(targetBranchState.effectiveTargetBranch);
@@ -157,6 +177,9 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
   }
   if (pullRequestDetectionTask) {
     optionalModel.onDetectPullRequest = () => onDetectPullRequest(pullRequestDetectionTask.id);
+    if (detectPullRequestDisabledReason) {
+      optionalModel.detectPullRequestDisabledReason = detectPullRequestDisabledReason;
+    }
   }
 
   return {
@@ -251,6 +274,7 @@ export function useAgentsPageRightPanelModel({
   activeTabId,
   onActiveTabChange,
   isPanelOpen,
+  pullRequestReviewUnavailableReason,
   documentsModel,
   selectedFile,
   onSelectFile,
@@ -259,6 +283,8 @@ export function useAgentsPageRightPanelModel({
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
+  gitProviderContext,
+  gitProviderReadError = null,
   onResolveGitConflict,
   onGitConflictQuickActionContextChange,
 }: UseAgentsPageRightPanelModelArgs) {
@@ -338,6 +364,8 @@ export function useAgentsPageRightPanelModel({
       selectedTask: selectedView.selectedTask,
       detectingPullRequestTaskId,
       onDetectPullRequest,
+      gitProviderContext,
+      gitProviderReadError,
     };
     if (setTaskTargetBranch) {
       input.setTaskTargetBranch = setTaskTargetBranch;
@@ -348,6 +376,8 @@ export function useAgentsPageRightPanelModel({
     branches,
     gitActions,
     onDetectPullRequest,
+    gitProviderContext,
+    gitProviderReadError,
     detectingPullRequestTaskId,
     setTaskTargetBranch,
     selectedView.selectedTask,
@@ -407,7 +437,8 @@ export function useAgentsPageRightPanelModel({
       workspaceRepoPath &&
       selectedView.taskId &&
       linkedPullRequestProviderId &&
-      linkedPullRequestNumber
+      linkedPullRequestNumber &&
+      pullRequestReviewUnavailableReason === null
         ? {
             repoPath: workspaceRepoPath,
             taskId: selectedView.taskId,
@@ -417,7 +448,13 @@ export function useAgentsPageRightPanelModel({
             },
           }
         : null,
-    [linkedPullRequestNumber, linkedPullRequestProviderId, selectedView.taskId, workspaceRepoPath],
+    [
+      linkedPullRequestNumber,
+      linkedPullRequestProviderId,
+      pullRequestReviewUnavailableReason,
+      selectedView.taskId,
+      workspaceRepoPath,
+    ],
   );
   const hasLinkedPullRequest =
     linkedPullRequestProviderId !== null && linkedPullRequestNumber !== null;
@@ -435,9 +472,16 @@ export function useAgentsPageRightPanelModel({
         ? {
             isActive: activeTabId === "ci_checks" && isPanelOpen,
             queryInput: ciReviewQueryInput,
+            unavailableReason: pullRequestReviewUnavailableReason,
           }
         : null,
-    [activeTabId, ciReviewQueryInput, hasCiChecksTab, isPanelOpen],
+    [
+      activeTabId,
+      ciReviewQueryInput,
+      hasCiChecksTab,
+      isPanelOpen,
+      pullRequestReviewUnavailableReason,
+    ],
   );
   const rightPanelModel = useMemo(
     () =>

@@ -266,7 +266,9 @@ function TaskApprovalApprovalStage({
   sectionLabelClass: string;
 }): ReactElement {
   const { showSquashCommitMessageValidationError } = getApprovalSubmitValidation(model);
-  const actionOptions = APPROVAL_ACTION_OPTIONS.map((option) => ({
+  const actionOptions = APPROVAL_ACTION_OPTIONS.filter(
+    (option) => option.value !== "pull_request" || model.pullRequestSupported,
+  ).map((option) => ({
     value: option.value,
     label: option.label,
     disabled: option.value === "pull_request" && !model.pullRequestAvailable,

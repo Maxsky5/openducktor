@@ -12,15 +12,11 @@ import {
   getAutopilotSelectedValue,
   setAutopilotRuleAction,
 } from "@/features/autopilot/autopilot-catalog";
-
 type SettingsAutopilotSectionProps = {
   autopilot: AutopilotSettings;
   disabled: boolean;
   onUpdateAutopilot: (updater: (current: AutopilotSettings) => AutopilotSettings) => void;
 };
-
-const isAutopilotSelectValue = (value: string): value is AutopilotSelectValue =>
-  value === AUTOPILOT_DISABLED_VALUE || Object.hasOwn(AUTOPILOT_ACTION_DEFINITIONS, value);
 
 export function SettingsAutopilotSection({
   autopilot,
@@ -65,6 +61,7 @@ export function SettingsAutopilotSection({
         {AUTOPILOT_EVENT_DEFINITIONS.map((eventDefinition) => {
           const rule = getAutopilotRule(autopilot, eventDefinition.id);
           const selectedValue = getAutopilotSelectedValue(rule);
+          const labelId = `autopilot-${eventDefinition.id}-label`;
           const options = [
             {
               value: AUTOPILOT_DISABLED_VALUE,
@@ -84,27 +81,30 @@ export function SettingsAutopilotSection({
               className="grid gap-3 rounded-md border border-border/70 bg-muted/40 p-3 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start"
             >
               <div className="space-y-1">
-                <Label className="text-sm font-medium text-foreground">
+                <Label id={labelId} className="text-sm font-medium text-foreground">
                   {eventDefinition.label}
                 </Label>
                 <p className="text-xs text-muted-foreground">{eventDefinition.description}</p>
               </div>
-              <Combobox
-                value={selectedValue}
-                options={options}
-                disabled={disabled}
-                placeholder="Select an action"
-                searchPlaceholder="Search actions..."
-                triggerClassName="justify-between"
-                onValueChange={(value) => {
-                  if (!isAutopilotSelectValue(value)) {
-                    return;
-                  }
-                  onUpdateAutopilot((current) =>
-                    setAutopilotRuleAction(current, eventDefinition.id, value),
-                  );
-                }}
-              />
+              <div className="space-y-1">
+                <Combobox
+                  value={selectedValue}
+                  options={options}
+                  disabled={disabled}
+                  placeholder="Select an action"
+                  searchPlaceholder="Search actions..."
+                  triggerClassName="justify-between"
+                  triggerAriaLabelledBy={labelId}
+                  onValueChange={(value) => {
+                    if (!isAutopilotSelectValue(value)) {
+                      return;
+                    }
+                    onUpdateAutopilot((current) =>
+                      setAutopilotRuleAction(current, eventDefinition.id, value),
+                    );
+                  }}
+                />
+              </div>
             </div>
           );
         })}
@@ -117,3 +117,6 @@ export function SettingsAutopilotSection({
     </div>
   );
 }
+
+const isAutopilotSelectValue = (value: string): value is AutopilotSelectValue =>
+  value === AUTOPILOT_DISABLED_VALUE || Object.hasOwn(AUTOPILOT_ACTION_DEFINITIONS, value);

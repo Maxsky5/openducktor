@@ -6,10 +6,9 @@ import {
   normalizeApprovalTargetBranch,
   publishTargetFromTargetBranch,
 } from "../../../domain/task";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import { HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
-import type { GitProviderResolver } from "../../git/git-provider-resolver";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import { loadDefaultMergeMethod } from "./task-workflow-helpers";
@@ -105,38 +104,6 @@ export const loadOpenApprovalContext = (
       hasUncommittedChanges: worktreeStatus.fileStatusCounts.total > 0,
       uncommittedFileCount: worktreeStatus.fileStatusCounts.total,
       pullRequest: metadata.pullRequest,
-      providers: [],
       suggestedSquashCommitMessage,
     };
-  });
-export const providerStatuses = (resolver: GitProviderResolver, repoConfig: RepoConfig) =>
-  Effect.gen(function* () {
-    const selection = repoConfig.git.provider;
-    if (!selection) {
-      return [];
-    }
-    const providerResult = yield* Effect.either(resolver.resolve(repoConfig));
-    if (providerResult._tag === "Left") {
-      return [
-        {
-          providerId: selection.id,
-          enabled: selection.enabled,
-          available: false,
-          reason: errorMessage(providerResult.left),
-        },
-      ];
-    }
-    const health = yield* providerResult.right
-      .health()
-      .getStatus(repoConfig)
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new HostValidationError({
-              message: errorMessage(cause),
-              cause,
-            }),
-        ),
-      );
-    return [health];
   });

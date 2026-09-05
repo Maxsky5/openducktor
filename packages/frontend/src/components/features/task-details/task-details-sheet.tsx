@@ -81,12 +81,14 @@ export function TaskDetailsSheet({
   onResetTask,
   onCloseTask,
   onDetectPullRequest,
+  gitProviderContext,
+  gitProviderReadError = null,
   onUnlinkPullRequest,
   detectingPullRequestTaskId = null,
   unlinkingPullRequestTaskId = null,
   onDelete,
 }: TaskDetailsSheetProps): ReactElement {
-  const viewModelInput: Parameters<typeof useTaskDetailsSheetViewModel>[0] = {
+  const viewModelInput = getTaskDetailsViewModelInput({
     activeWorkspace,
     task,
     allTasks,
@@ -104,11 +106,9 @@ export function TaskDetailsSheet({
     onResetTask,
     onCloseTask,
     onDelete,
-  };
-  if (task) {
-    viewModelInput.resolveSessionOptionsByRole = (role: AgentRole) =>
-      resolveSessionTargetOptions(historicalSessions, taskSessions, role);
-  }
+    historicalSessions,
+    taskSessions,
+  });
   const viewModel = useTaskDetailsSheetViewModel(viewModelInput);
 
   const historicalSessionRoles = task ? resolveHistoricalSessionRoles(historicalSessions) : [];
@@ -133,24 +133,19 @@ export function TaskDetailsSheet({
 
   const canDetectPullRequestForTask = canDetectTaskPullRequest(task);
   const detailActions = detailActionsForHandlers({ onResetTask, onCloseTask });
-  const footerProps: TaskDetailsSheetFooterProps = { task, onOpenChange };
-  if (workflowActionsEnabled) {
-    footerProps.includeActions = detailActions;
-    footerProps.hasActiveSession = hasActiveSession;
-    footerProps.onWorkflowAction = viewModel.runWorkflowAction;
-    if (activeSessionRole) {
-      footerProps.activeSessionRole = activeSessionRole;
-    }
-    if (historicalSessionRoles.length > 0) {
-      footerProps.historicalSessionRoles = historicalSessionRoles;
-    }
-  }
-  if (onEdit) {
-    footerProps.onEdit = onEdit;
-  }
-  if (onDelete) {
-    footerProps.onDeleteSelect = viewModel.openDeleteDialog;
-  }
+  const footerProps = getTaskDetailsFooterProps({
+    task,
+    onOpenChange,
+    workflowActionsEnabled,
+    detailActions,
+    hasActiveSession,
+    activeSessionRole,
+    historicalSessionRoles,
+    onEdit,
+    onDelete,
+    runWorkflowAction: viewModel.runWorkflowAction,
+    openDeleteDialog: viewModel.openDeleteDialog,
+  });
 
   return (
     <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
@@ -169,6 +164,8 @@ export function TaskDetailsSheet({
             task={task}
             subtasksCount={viewModel.subtasks.length}
             taskLabels={viewModel.taskLabels}
+            gitProviderContext={gitProviderContext}
+            gitProviderReadError={gitProviderReadError}
             {...(onDetectPullRequest && canDetectPullRequestForTask
               ? {
                   onDetectPullRequest: () => onDetectPullRequest(task.id),
@@ -210,13 +207,132 @@ export function TaskDetailsSheet({
         <TaskDetailsSheetFooter {...footerProps} />
       </SheetContent>
 
-      {onDelete && viewModel.taskId ? (
+      <TaskDetailsDialogs
+        viewModel={viewModel}
+        showDelete={onDelete !== undefined}
+        showReset={onResetTask !== undefined}
+        showClose={onCloseTask !== undefined}
+      />
+    </Sheet>
+  );
+}
+
+type TaskDetailsViewModel = ReturnType<typeof useTaskDetailsSheetViewModel>;
+
+function getTaskDetailsViewModelInput(args: {
+  activeWorkspace: Exclude<TaskDetailsSheetProps["activeWorkspace"], undefined>;
+  task: TaskDetailsSheetProps["task"];
+  allTasks: TaskDetailsSheetProps["allTasks"];
+  open: boolean;
+  onOpenChange: TaskDetailsSheetProps["onOpenChange"];
+  onPlan: TaskDetailsSheetProps["onPlan"];
+  onQaStart: TaskDetailsSheetProps["onQaStart"];
+  onQaOpen: TaskDetailsSheetProps["onQaOpen"];
+  onBuild: TaskDetailsSheetProps["onBuild"];
+  onOpenSession: TaskDetailsSheetProps["onOpenSession"];
+  onDelegate: TaskDetailsSheetProps["onDelegate"];
+  onHumanApprove: TaskDetailsSheetProps["onHumanApprove"];
+  onHumanRequestChanges: TaskDetailsSheetProps["onHumanRequestChanges"];
+  onResetImplementation: TaskDetailsSheetProps["onResetImplementation"];
+  onResetTask: TaskDetailsSheetProps["onResetTask"];
+  onCloseTask: TaskDetailsSheetProps["onCloseTask"];
+  onDelete: TaskDetailsSheetProps["onDelete"];
+  historicalSessions: NonNullable<TaskDetailsSheetProps["historicalSessions"]>;
+  taskSessions: NonNullable<TaskDetailsSheetProps["taskSessions"]>;
+}): Parameters<typeof useTaskDetailsSheetViewModel>[0] {
+  const input: Parameters<typeof useTaskDetailsSheetViewModel>[0] = {
+    activeWorkspace: args.activeWorkspace,
+    task: args.task,
+    allTasks: args.allTasks,
+    open: args.open,
+    onOpenChange: args.onOpenChange,
+    onPlan: args.onPlan,
+    onQaStart: args.onQaStart,
+    onQaOpen: args.onQaOpen,
+    onBuild: args.onBuild,
+    onOpenSession: args.onOpenSession,
+    onDelegate: args.onDelegate,
+    onHumanApprove: args.onHumanApprove,
+    onHumanRequestChanges: args.onHumanRequestChanges,
+    onResetImplementation: args.onResetImplementation,
+    onResetTask: args.onResetTask,
+    onCloseTask: args.onCloseTask,
+    onDelete: args.onDelete,
+  };
+  if (args.task) {
+    input.resolveSessionOptionsByRole = (role: AgentRole) =>
+      resolveSessionTargetOptions(args.historicalSessions, args.taskSessions, role);
+  }
+  return input;
+}
+
+function getTaskDetailsFooterProps({
+  task,
+  onOpenChange,
+  workflowActionsEnabled,
+  detailActions,
+  hasActiveSession,
+  activeSessionRole,
+  historicalSessionRoles,
+  onEdit,
+  onDelete,
+  runWorkflowAction,
+  openDeleteDialog,
+}: {
+  task: NonNullable<TaskDetailsSheetProps["task"]>;
+  onOpenChange: TaskDetailsSheetProps["onOpenChange"];
+  workflowActionsEnabled: boolean;
+  detailActions: readonly TaskWorkflowAction[];
+  hasActiveSession: boolean;
+  activeSessionRole: AgentRole | undefined;
+  historicalSessionRoles: AgentRole[];
+  onEdit: TaskDetailsSheetProps["onEdit"];
+  onDelete: TaskDetailsSheetProps["onDelete"];
+  runWorkflowAction: TaskDetailsViewModel["runWorkflowAction"];
+  openDeleteDialog: TaskDetailsViewModel["openDeleteDialog"];
+}): TaskDetailsSheetFooterProps {
+  const footerProps: TaskDetailsSheetFooterProps = { task, onOpenChange };
+  if (workflowActionsEnabled) {
+    footerProps.includeActions = detailActions;
+    footerProps.hasActiveSession = hasActiveSession;
+    footerProps.onWorkflowAction = runWorkflowAction;
+    if (activeSessionRole) {
+      footerProps.activeSessionRole = activeSessionRole;
+    }
+    if (historicalSessionRoles.length > 0) {
+      footerProps.historicalSessionRoles = historicalSessionRoles;
+    }
+  }
+  if (onEdit) {
+    footerProps.onEdit = onEdit;
+  }
+  if (onDelete) {
+    footerProps.onDeleteSelect = openDeleteDialog;
+  }
+  return footerProps;
+}
+
+function TaskDetailsDialogs({
+  viewModel,
+  showDelete,
+  showReset,
+  showClose,
+}: {
+  viewModel: TaskDetailsViewModel;
+  showDelete: boolean;
+  showReset: boolean;
+  showClose: boolean;
+}): ReactElement {
+  const taskId = viewModel.taskId;
+  return (
+    <>
+      {showDelete && taskId ? (
         <TaskDeleteConfirmDialog
           open={viewModel.isDeleteDialogOpen}
           onOpenChange={viewModel.handleDeleteDialogOpenChange}
           onCancel={viewModel.closeDeleteDialog}
           onConfirm={viewModel.confirmDelete}
-          taskId={viewModel.taskId}
+          taskId={taskId}
           subtasksCount={viewModel.subtasks.length}
           impact={{
             hasSubtasks: viewModel.subtasks.length > 0,
@@ -229,20 +345,16 @@ export function TaskDetailsSheet({
             activeSessionCountError: viewModel.deleteActiveSessionCountError,
             error: viewModel.deleteImpactError,
           }}
-          deletion={{
-            isPending: viewModel.isDeletePending,
-            error: viewModel.deleteError,
-          }}
+          deletion={{ isPending: viewModel.isDeletePending, error: viewModel.deleteError }}
         />
       ) : null}
-
-      {onResetTask && viewModel.taskId ? (
+      {showReset && taskId ? (
         <TaskResetConfirmDialog
           open={viewModel.isResetDialogOpen}
           onOpenChange={viewModel.handleResetDialogOpenChange}
           onCancel={viewModel.closeResetDialog}
           onConfirm={viewModel.confirmReset}
-          taskId={viewModel.taskId}
+          taskId={taskId}
           impact={{
             isLoading: viewModel.isLoadingResetImpact,
             isLoadingStopImpact: viewModel.isLoadingResetStopImpact,
@@ -256,14 +368,13 @@ export function TaskDetailsSheet({
           reset={{ isPending: viewModel.isResetPending, error: viewModel.resetError }}
         />
       ) : null}
-
-      {onCloseTask && viewModel.taskId ? (
+      {showClose && taskId ? (
         <TaskCloseConfirmDialog
           open={viewModel.isCloseDialogOpen}
           onOpenChange={viewModel.handleCloseDialogOpenChange}
           onCancel={viewModel.closeCloseDialog}
           onConfirm={viewModel.confirmClose}
-          taskId={viewModel.taskId}
+          taskId={taskId}
           impact={{
             isLoading: viewModel.isLoadingCloseImpact,
             isLoadingStopImpact: viewModel.isLoadingCloseStopImpact,
@@ -277,6 +388,6 @@ export function TaskDetailsSheet({
           closing={{ isPending: viewModel.isClosePending, error: viewModel.closeError }}
         />
       ) : null}
-    </Sheet>
+    </>
   );
 }

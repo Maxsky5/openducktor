@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
+import { DEFAULT_AGENT_RUNTIMES, type RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
 import type { TaskExecutionSelectedFilePreviewModel } from "@/components/features/agents/task-execution-file-preview";
@@ -49,7 +49,12 @@ import {
 
 interface RepoSettingsStateContract {
   repoSettings: RepoSettingsInput | null;
-  githubIntegrationEnabled: boolean;
+  gitProvider: {
+    context: RepositoryGitProviderContext | undefined;
+    error: Error | null;
+    load: () => Promise<RepositoryGitProviderContext>;
+    retry: () => void;
+  };
   isLoadingRepoSettings: boolean;
 }
 
@@ -70,6 +75,7 @@ const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: AgentStudioQueryUpdate) => {});
 const handleSelectTab = mock((_value: string) => {});
 const retryChatSettingsLoad = mock(() => {});
+const retryGitProviderContext = mock(() => {});
 const handleResolveRebaseConflict = mock(async () => true);
 
 type QuerySyncState = {
@@ -167,6 +173,7 @@ type OrchestrationState = {
       isOpen: boolean;
       onToggle: () => void;
     };
+    pullRequestReviewUnavailableReason: string | null;
   };
   taskExecutionSelectedFilePreviewModel: TaskExecutionSelectedFilePreviewModel;
   onSelectTaskExecutionFile: (file: { rootPath: string; relativePath: string }) => void;
@@ -186,8 +193,10 @@ type AgentsPageShellModelState = {
   activeWorkspace: WorkspaceStateContextValue["activeWorkspace"];
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
+  gitProviderContextLoadError: Error | null;
   onRetryNavigationPersistence: () => void;
   onRetryChatSettingsLoad: () => void;
+  onRetryGitProviderContext: () => void;
   hasSelectedTask: boolean;
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
@@ -246,7 +255,12 @@ let agentSessions = [createSession()];
 let sessionStore = createAgentSessionsStore("/repo");
 let repoSettingsState: RepoSettingsStateContract = {
   repoSettings: null,
-  githubIntegrationEnabled: false,
+  gitProvider: {
+    context: null,
+    error: null,
+    load: async () => null,
+    retry: retryGitProviderContext,
+  },
   isLoadingRepoSettings: false,
 };
 const sessionIdentity = (externalSessionId: string) => ({
@@ -411,6 +425,7 @@ let orchestrationState: OrchestrationState = {
     onActiveTabChange: mock(() => {}),
     isPanelOpen: true,
     rightPanelToggleModel,
+    pullRequestReviewUnavailableReason: null,
   },
   taskExecutionSelectedFilePreviewModel: {
     selectedFile: null,
@@ -436,6 +451,7 @@ let lastOrchestrationSelectionSource: OrchestrationShellArgs["routeSession"]["se
   null;
 let lastOrchestrationSelectionLoadingTasks: boolean | null = null;
 let lastOrchestrationSelection: OrchestrationSelection | null = null;
+let lastOrchestrationGitProviderReadError: string | null = null;
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const syncAgentSessionsStore = (): void => {
@@ -552,7 +568,13 @@ const registerModuleMocks = (): void => {
       () => repoSettingsState,
     ),
     spyOn(orchestrationShellModule, "useAgentsPageOrchestrationShellModel").mockImplementation(
-      ({ activeWorkspaceId, isForegroundLoadingTasks, routeSession }: OrchestrationShellArgs) => {
+      ({
+        activeWorkspaceId,
+        gitProviderReadError,
+        isForegroundLoadingTasks,
+        routeSession,
+      }: OrchestrationShellArgs) => {
+        lastOrchestrationGitProviderReadError = gitProviderReadError;
         if (
           lastOrchestrationSelectionSource !== routeSession.selection ||
           lastOrchestrationSelectionLoadingTasks !== isForegroundLoadingTasks
@@ -645,7 +667,12 @@ beforeEach(async () => {
   syncAgentSessionsStore();
   repoSettingsState = {
     repoSettings: null,
-    githubIntegrationEnabled: false,
+    gitProvider: {
+      context: null,
+      error: null,
+      load: async () => null,
+      retry: retryGitProviderContext,
+    },
     isLoadingRepoSettings: false,
   };
   agentOperations = {
@@ -749,6 +776,7 @@ beforeEach(async () => {
       onActiveTabChange: mock(() => {}),
       isPanelOpen: true,
       rightPanelToggleModel,
+      pullRequestReviewUnavailableReason: null,
     },
     taskExecutionSelectedFilePreviewModel: {
       selectedFile: null,
@@ -766,6 +794,7 @@ beforeEach(async () => {
   lastOrchestrationSelectionSource = null;
   lastOrchestrationSelectionLoadingTasks = null;
   lastOrchestrationSelection = null;
+  lastOrchestrationGitProviderReadError = null;
 });
 
 afterEach(() => {
@@ -779,6 +808,31 @@ const createHookHarness = () =>
   });
 
 describe("useAgentsPageShellModel", () => {
+  test("passes provider read errors to each Pull Request action model", async () => {
+    repoSettingsState = {
+      ...repoSettingsState,
+      gitProvider: {
+        ...repoSettingsState.gitProvider,
+        error: new Error("connection failed"),
+      },
+    };
+    const harness = createHookHarness();
+
+    try {
+      await harness.mount();
+
+      const error = "Could not load the current Git provider: connection failed";
+      expect(lastOrchestrationGitProviderReadError).toBe(error);
+      expect(harness.getLatest().rightPanelBridge?.rightPanel.gitProviderReadError).toBe(error);
+      expect(
+        harness.getLatest().modalContent.taskDetailsLauncher.taskDetailsSheetProps
+          .gitProviderReadError,
+      ).toBe(error);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("surfaces hook state and wires modal/controller models", async () => {
     tasksState = {
       ...tasksState,
@@ -806,8 +860,10 @@ describe("useAgentsPageShellModel", () => {
       expect(state.activeWorkspace?.repoPath).toBe("/repo");
       expect(state.navigationPersistenceError).toBe(querySyncState.navigationPersistenceError);
       expect(state.chatSettingsLoadError).toBe(orchestrationState.chatSettingsLoadError);
+      expect(state.gitProviderContextLoadError).toBe(repoSettingsState.gitProvider.error);
       expect(state.onRetryNavigationPersistence).toBe(retryNavigationPersistence);
       expect(state.onRetryChatSettingsLoad).toBe(retryChatSettingsLoad);
+      expect(state.onRetryGitProviderContext).toBe(retryGitProviderContext);
       expect(state.hasSelectedTask).toBe(true);
       expect(state.isRightPanelVisible).toBe(true);
       expect(state.rightPanelBridge?.rightPanel.selectedView.taskId).toBe(

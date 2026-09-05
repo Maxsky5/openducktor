@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskAction, TaskApprovalContext, TaskCard } from "@openducktor/contracts";
+import { type TaskAction, type TaskApprovalContext, type TaskCard } from "@openducktor/contracts";
+import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import type { TaskApprovalFlowState } from "./task-approval-flow-state";
 import {
+  resolveCurrentTaskApprovalMode,
   resolveTaskApprovalOpenMode,
   resolveTaskApprovalSubmissionRoute,
   resolveTaskApprovalWorkflowTransition,
@@ -29,7 +31,6 @@ const approvalContext = (overrides: Partial<TaskApprovalContext> = {}): TaskAppr
   pullRequest: undefined,
   directMerge: undefined,
   suggestedSquashCommitMessage: undefined,
-  providers: [],
   ...overrides,
 });
 
@@ -48,6 +49,7 @@ const openState = (overrides: Partial<Extract<TaskApprovalFlowState, { kind: "op
     squashCommitMessageTouched: false,
     errorMessage: null,
     approvalContext: approvalContext(),
+    workspaceIdentity: { workspaceId: "workspace-repo", repoPath: "/repo" },
     ...overrides,
   }) satisfies TaskApprovalFlowState;
 
@@ -191,92 +193,67 @@ describe("resolveTaskApprovalOpenMode", () => {
     {
       name: "keeps an explicit requested mode",
       requestedMode: "direct_merge" as const,
-      cachedContext: approvalContext({
-        providers: [{ providerId: "github", enabled: true, available: true }],
-      }),
-      task: task({
-        status: "human_review",
-        availableActions: ["human_approve"],
-        pullRequest: {
-          providerId: "github",
-          number: 42,
-          url: "https://github.com/openai/openducktor/pull/42",
-          state: "open",
-          createdAt: "2026-05-28T12:00:00.000Z",
-          updatedAt: "2026-05-28T12:00:00.000Z",
-        },
-      }),
+      gitProviderContext: createGitProviderContextFixture(),
       expected: "direct_merge" as const,
     },
     {
-      name: "defaults PR-linked approval to pull request mode",
+      name: "defaults to Pull Request mode when the provider supports it",
       requestedMode: undefined,
-      cachedContext: undefined,
-      task: task({
-        status: "human_review",
-        availableActions: ["human_approve"],
-        pullRequest: {
-          providerId: "github",
-          number: 42,
-          url: "https://github.com/openai/openducktor/pull/42",
-          state: "open",
-          createdAt: "2026-05-28T12:00:00.000Z",
-          updatedAt: "2026-05-28T12:00:00.000Z",
-        },
-      }),
+      gitProviderContext: createGitProviderContextFixture(),
       expected: "pull_request" as const,
     },
     {
-      name: "uses cached provider availability when there is no PR-linked approval",
+      name: "keeps Pull Request mode when health is unavailable",
       requestedMode: undefined,
-      cachedContext: approvalContext({
-        providers: [{ providerId: "github", enabled: true, available: true }],
-      }),
-      task: task({ status: "human_review", availableActions: ["human_approve"] }),
+      gitProviderContext: createGitProviderContextFixture({ available: false }),
       expected: "pull_request" as const,
     },
     {
-      name: "uses cached provider availability when approval transition is unavailable",
+      name: "falls back to direct merge when no provider is configured",
       requestedMode: undefined,
-      cachedContext: approvalContext({
-        providers: [{ providerId: "github", enabled: true, available: true }],
-      }),
-      task: task({
-        status: "blocked",
-        availableActions: ["open_builder"],
-        pullRequest: {
-          providerId: "github",
-          number: 42,
-          url: "https://github.com/openai/openducktor/pull/42",
-          state: "open",
-          createdAt: "2026-05-28T12:00:00.000Z",
-          updatedAt: "2026-05-28T12:00:00.000Z",
-        },
-      }),
-      expected: "pull_request" as const,
-    },
-    {
-      name: "falls back to direct merge when task data is unavailable",
-      requestedMode: undefined,
-      cachedContext: undefined,
-      task: undefined,
+      gitProviderContext: null,
       expected: "direct_merge" as const,
     },
     {
-      name: "falls back to direct merge without a cached GitHub provider",
+      name: "falls back to direct merge when Pull Requests are unsupported",
       requestedMode: undefined,
-      cachedContext: approvalContext(),
-      task: task({ status: "blocked", availableActions: ["open_builder"] }),
+      gitProviderContext: createGitProviderContextFixture({ supportsPullRequests: false }),
       expected: "direct_merge" as const,
     },
-  ])("$name", ({ cachedContext, expected, requestedMode, task: taskFixture }) => {
+  ])("$name", ({ gitProviderContext, expected, requestedMode }) => {
     expect(
       resolveTaskApprovalOpenMode({
-        cachedContext,
+        gitProviderContext,
         requestedMode,
-        task: taskFixture,
       }),
     ).toBe(expected);
+  });
+});
+
+describe("resolveCurrentTaskApprovalMode", () => {
+  test.each([
+    {
+      name: "keeps Pull Request mode while the provider read is pending",
+      gitProviderContext: undefined,
+      expected: "pull_request" as const,
+    },
+    {
+      name: "keeps Pull Request mode when the provider supports it",
+      gitProviderContext: createGitProviderContextFixture({ available: false }),
+      expected: "pull_request" as const,
+    },
+    {
+      name: "uses Direct Merge when the current provider does not support Pull Requests",
+      gitProviderContext: createGitProviderContextFixture({ supportsPullRequests: false }),
+      expected: "direct_merge" as const,
+    },
+    {
+      name: "uses Direct Merge when no provider is configured",
+      gitProviderContext: null,
+      expected: "direct_merge" as const,
+    },
+  ])("$name", ({ expected, gitProviderContext }) => {
+    expect(resolveCurrentTaskApprovalMode("pull_request", gitProviderContext)).toBe(expected);
   });
 });
 

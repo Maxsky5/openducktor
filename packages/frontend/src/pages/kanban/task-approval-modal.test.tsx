@@ -39,6 +39,7 @@ const createApprovalModel = (
   mode: "direct_merge",
   mergeMethod: "merge_commit",
   pullRequestDraftMode: "manual",
+  pullRequestSupported: true,
   pullRequestAvailable: true,
   pullRequestUnavailableReason: null,
   hasUncommittedChanges: false,
@@ -272,5 +273,16 @@ describe("TaskApprovalModal", () => {
       "Pull request unavailable: GitHub is not configured for this repository.",
     );
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Create Pull Request<\/button>/);
+  });
+
+  test("hides pull request approval when the provider does not support it", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskApprovalModalPanel, {
+        model: createApprovalModel({ pullRequestSupported: false }),
+      }),
+    );
+
+    expect(html).not.toContain("Open Pull Request");
+    expect(html).toContain("Direct Merge");
   });
 });

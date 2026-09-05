@@ -226,9 +226,11 @@ export type AgentsPageLayoutModel = {
   activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
+  gitProviderContextLoadError: Error | null;
   activeTabValue: string;
   onRetryNavigationPersistence: () => void;
   onRetryChatSettingsLoad: () => void;
+  onRetryGitProviderContext: () => void;
   onTabValueChange: (value: string) => void;
   taskTabsModel: ComponentProps<typeof AgentStudioTaskTabs>["model"];
   rightPanelToggleModel: ComponentProps<typeof AgentStudioTaskTabs>["rightPanelToggleModel"];
@@ -254,9 +256,11 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     activeWorkspace,
     navigationPersistenceError,
     chatSettingsLoadError,
+    gitProviderContextLoadError,
     activeTabValue,
     onRetryNavigationPersistence,
     onRetryChatSettingsLoad,
+    onRetryGitProviderContext,
     onTabValueChange,
     taskTabsModel,
     rightPanelToggleModel,
@@ -360,9 +364,11 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
         activeWorkspace={activeWorkspace}
         navigationPersistenceError={navigationPersistenceError}
         chatSettingsLoadError={chatSettingsLoadError}
+        gitProviderContextLoadError={gitProviderContextLoadError}
         activeTabValue={activeTabValue}
         onRetryNavigationPersistence={onRetryNavigationPersistence}
         onRetryChatSettingsLoad={onRetryChatSettingsLoad}
+        onRetryGitProviderContext={onRetryGitProviderContext}
         onTabValueChange={onTabValueChange}
         taskTabs={taskTabsContent}
         workspace={workspaceContent}

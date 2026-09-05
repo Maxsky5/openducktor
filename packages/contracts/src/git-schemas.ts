@@ -181,6 +181,39 @@ export const gitProviderHealthSchema = gitProviderAvailabilitySchema.extend({
 });
 export type GitProviderHealth = z.infer<typeof gitProviderHealthSchema>;
 
+export const repositoryGitProviderContextSchema = z
+  .object({
+    descriptor: gitProviderDescriptorSchema,
+    config: gitProviderConfigSchema,
+    health: gitProviderHealthSchema,
+  })
+  .strict()
+  .superRefine((provider, context) => {
+    if (provider.config.id !== provider.descriptor.id) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Configured provider id must match the descriptor id.",
+        path: ["config", "id"],
+      });
+    }
+    if (provider.health.providerId !== provider.descriptor.id) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Health provider id must match the descriptor id.",
+        path: ["health", "providerId"],
+      });
+    }
+    if (provider.health.enabled !== provider.config.enabled) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Health and configuration must use the same enabled value.",
+        path: ["health", "enabled"],
+      });
+    }
+  })
+  .nullable();
+export type RepositoryGitProviderContext = z.infer<typeof repositoryGitProviderContextSchema>;
+
 export const taskApprovalContextSchema = z.object({
   taskId: z.string(),
   taskStatus: z.string(),
@@ -209,7 +242,6 @@ export const taskApprovalContextSchema = z.object({
     (value) => (value === null ? undefined : value),
     z.string().trim().min(1).optional(),
   ),
-  providers: z.array(gitProviderAvailabilitySchema).default([]),
 });
 export type TaskApprovalContext = z.infer<typeof taskApprovalContextSchema>;
 

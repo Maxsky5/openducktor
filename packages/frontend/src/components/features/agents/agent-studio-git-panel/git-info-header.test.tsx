@@ -88,6 +88,20 @@ describe("GitInfoHeader", () => {
     expect(screen.getByTestId("agent-studio-git-diff-scope-target")).toBeTruthy();
   });
 
+  test("disables Pull Request detection and shows the provider health error", () => {
+    rendered = renderGitInfoHeader(
+      createGitInfoHeaderProps({
+        onDetectPullRequest: () => {},
+        detectPullRequestDisabledReason: "Sign in to GitHub CLI.",
+      }),
+    );
+
+    const button = screen.getByTestId("agent-studio-git-detect-pr-button");
+    const error = screen.getByText("Sign in to GitHub CLI.");
+    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(button.getAttribute("aria-describedby")).toBe(error.id);
+  });
+
   test("closes the target branch editor when editing becomes unavailable", async () => {
     const editableProps = createGitInfoHeaderProps({
       targetBranchOptions: [

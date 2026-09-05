@@ -7,6 +7,7 @@ import type { GitConflict } from "@/features/agent-studio-git";
 import { useGitConflictResolution } from "@/features/git-conflict-resolution";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
 import { errorMessage } from "@/lib/errors";
+import { gitProviderReadError } from "@/lib/git-provider-health";
 import {
   useAgentOperations,
   useAgentSessionSummaries,
@@ -65,7 +66,11 @@ export function useKanbanPageModels({
   const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { repoSettings } = useAgentStudioRepoSettings({ activeWorkspaceId });
+  const { gitProvider, repoSettings } = useAgentStudioRepoSettings({
+    activeRepoPath: workspaceRepoPath,
+    activeWorkspaceId,
+  });
+  const providerReadError = gitProviderReadError(gitProvider.error);
   const { startAgentSession, sendAgentMessage } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
   const {
@@ -116,6 +121,19 @@ export function useKanbanPageModels({
       description,
     });
   }, [settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
+  useEffect(() => {
+    if (!gitProvider.error) {
+      return;
+    }
+
+    toast.error("Failed to load Git provider context", {
+      description: providerReadError,
+      action: {
+        label: "Retry",
+        onClick: gitProvider.retry,
+      },
+    });
+  }, [gitProvider.error, gitProvider.retry, providerReadError]);
   const canResolveHorizontalScrollbarVisibility =
     workspaceRepoPath !== null &&
     !settingsSnapshotQuery.isPending &&
@@ -286,6 +304,9 @@ export function useKanbanPageModels({
 
   const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
     activeWorkspace,
+    gitProviderContext: gitProvider.context,
+    gitProviderContextError: gitProvider.error,
+    loadGitProviderContext: gitProvider.load,
     tasks: kanbanTasks,
     requestPullRequestGeneration: onPullRequestGenerate,
     refreshTasks,
@@ -353,6 +374,8 @@ export function useKanbanPageModels({
       onResetTask,
       onCloseTask: closeTask,
       onDetectPullRequest,
+      gitProviderContext: gitProvider.context,
+      gitProviderReadError: providerReadError,
       onUnlinkPullRequest,
       detectingPullRequestTaskId,
       unlinkingPullRequestTaskId,

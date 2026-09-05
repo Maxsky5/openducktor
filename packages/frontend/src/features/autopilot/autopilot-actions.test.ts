@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type {
   AgentSessionRecord,
+  RepositoryGitProviderContext,
   RepoConfig,
   TaskCard,
   WorkspaceRecord,
@@ -28,10 +29,12 @@ import {
   workspaceQueryKeys,
 } from "@/state/queries/workspace";
 import {
+  createGitProviderContextFixture,
   createDeferred,
   createSettingsSnapshotFixture,
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
+import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 const runSessionStartWorkflowMock = mock(
@@ -118,7 +121,18 @@ const createQueryClient = (): QueryClient => {
   };
   queryClient.setQueryData(workspaceQueryKeys.list(), [workspace]);
   queryClient.setQueryData(repoConfigQueryOptions("repo").queryKey, createRepoConfig());
+  queryClient.setQueryData(
+    repositoryGitProviderContextQueryOptions("/repo").queryKey,
+    createGitProviderContextFixture(),
+  );
   return queryClient;
+};
+
+const setGitProviderContext = (
+  queryClient: QueryClient,
+  context: RepositoryGitProviderContext,
+): void => {
+  queryClient.setQueryData(repositoryGitProviderContextQueryOptions("/repo").queryKey, context);
 };
 
 const createExecuteArgs = (task: TaskCard) => {
@@ -297,6 +311,59 @@ describe("autopilot feature helpers", () => {
     expect(outcome).toEqual({
       kind: "skipped",
       message: 'No Builder session is available to fork for task "TASK-PR".',
+    });
+    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
+  });
+
+  test("skips pull request generation when no provider supports Pull Requests", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" }));
+    args.loadTaskSessionRecords.mockResolvedValue([createBuilderSessionRecord()]);
+    setGitProviderContext(args.queryClient, null);
+
+    const outcome = await executeAutopilotAction({
+      ...args,
+      actionId: "startGeneratePullRequest",
+    });
+
+    expect(outcome).toEqual({
+      kind: "skipped",
+      message: "The current Git provider does not support Pull Requests.",
+    });
+    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
+  });
+
+  test("skips pull request generation with the provider health error", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" }));
+    args.loadTaskSessionRecords.mockResolvedValue([createBuilderSessionRecord()]);
+    setGitProviderContext(args.queryClient, createGitProviderContextFixture({ available: false }));
+
+    const outcome = await executeAutopilotAction({
+      ...args,
+      actionId: "startGeneratePullRequest",
+    });
+
+    expect(outcome).toEqual({
+      kind: "skipped",
+      message: "Sign in to GitHub CLI.",
+    });
+    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
+  });
+
+  test("skips pull request generation when the provider context read fails", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-PR", status: "human_review" }));
+    args.queryClient.removeQueries({
+      queryKey: repositoryGitProviderContextQueryOptions("/repo").queryKey,
+    });
+
+    const outcome = await executeAutopilotAction({
+      ...args,
+      actionId: "startGeneratePullRequest",
+    });
+
+    expect(outcome).toEqual({
+      kind: "skipped",
+      message:
+        "Could not load the current Git provider: OpenDucktor shell bridge is not configured. Start through the desktop shell or @openducktor/web.",
     });
     expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
   });

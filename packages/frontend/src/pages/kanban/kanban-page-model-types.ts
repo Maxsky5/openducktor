@@ -2,6 +2,7 @@ import type {
   AgentSessionRecord,
   GitTargetBranch,
   KanbanEmptyColumnDisplay,
+  RepositoryGitProviderContext,
   TaskCard,
 } from "@openducktor/contracts";
 import type { AgentRole, KanbanColumn as KanbanColumnData } from "@openducktor/core";
@@ -41,6 +42,7 @@ export type TaskApprovalApprovalModalModel = TaskApprovalModalBase & {
   mode: TaskApprovalMode;
   mergeMethod: "merge_commit" | "squash" | "rebase";
   pullRequestDraftMode: PullRequestDraftMode;
+  pullRequestSupported: boolean;
   pullRequestAvailable: boolean;
   pullRequestUnavailableReason: string | null;
   hasUncommittedChanges: boolean;
@@ -135,6 +137,8 @@ export type KanbanPageTaskDetailsControllerModel = {
   onResetTask: (taskId: string) => Promise<void>;
   onCloseTask: (taskId: string) => Promise<void>;
   onDetectPullRequest: (taskId: string) => void;
+  gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderReadError: string | null;
   onUnlinkPullRequest: (taskId: string) => void;
   detectingPullRequestTaskId: string | null;
   unlinkingPullRequestTaskId: string | null;

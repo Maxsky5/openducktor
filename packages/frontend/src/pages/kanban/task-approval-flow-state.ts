@@ -7,6 +7,11 @@ export type TaskApprovalFlowStage =
   | "missing_builder_worktree";
 export type TaskApprovalMergeMethod = "merge_commit" | "squash" | "rebase";
 
+export type TaskApprovalWorkspaceIdentity = {
+  workspaceId: string;
+  repoPath: string;
+};
+
 export type TaskApprovalFlowOpenState = {
   kind: "open";
   phase: "loading" | "ready" | "submitting";
@@ -21,6 +26,7 @@ export type TaskApprovalFlowOpenState = {
   squashCommitMessageTouched: boolean;
   errorMessage: string | null;
   approvalContext: TaskApprovalContext | null;
+  workspaceIdentity: TaskApprovalWorkspaceIdentity;
 };
 
 export type TaskApprovalFlowReadyState = TaskApprovalFlowOpenState & {
@@ -41,6 +47,7 @@ type TaskApprovalFlowOpenPayload = {
   title: string;
   body: string;
   errorMessage: string | null;
+  workspaceIdentity: TaskApprovalWorkspaceIdentity;
 };
 
 export type TaskApprovalFlowAction =
@@ -67,13 +74,6 @@ export type TaskApprovalFlowAction =
 
 export const CLOSED_TASK_APPROVAL_STATE: TaskApprovalFlowState = {
   kind: "closed",
-};
-
-export const determineDefaultTaskApprovalMode = (
-  context: TaskApprovalContext | undefined,
-): TaskApprovalMode => {
-  const githubProvider = context?.providers?.find((entry) => entry.providerId === "github");
-  return githubProvider?.available ? "pull_request" : "direct_merge";
 };
 
 export const resolveTaskApprovalStage = (
@@ -109,6 +109,7 @@ const buildTaskApprovalLoadingState = (
   squashCommitMessageTouched: false,
   errorMessage: payload.errorMessage,
   approvalContext: null,
+  workspaceIdentity: payload.workspaceIdentity,
 });
 
 const buildTaskApprovalLoadedState = (
@@ -127,6 +128,7 @@ const buildTaskApprovalLoadedState = (
   squashCommitMessageTouched: false,
   errorMessage: payload.errorMessage,
   approvalContext: payload.approvalContext,
+  workspaceIdentity: payload.workspaceIdentity,
 });
 
 const buildMissingBuilderWorktreeState = (
@@ -145,6 +147,7 @@ const buildMissingBuilderWorktreeState = (
   squashCommitMessageTouched: false,
   errorMessage: payload.errorMessage,
   approvalContext: null,
+  workspaceIdentity: payload.workspaceIdentity,
 });
 
 export function taskApprovalFlowReducer(

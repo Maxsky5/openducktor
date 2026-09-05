@@ -156,8 +156,9 @@ const tabs = [
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   role: "spec",
   hasDocumentPanel: true,
-  hasGithubIntegration: false,
-  hasLinkedGithubPullRequest: false,
+  canShowPullRequestReview: false,
+  hasLinkedPullRequest: false,
+  pullRequestReviewUnavailableReason: null,
   ...overrides,
 });
 
@@ -278,11 +279,11 @@ describe("useAgentStudioRightPanel", () => {
     await harness.unmount();
   });
 
-  test("shows CI checks only for tasks with a linked GitHub pull request", async () => {
+  test("shows CI checks only when review is supported and a pull request is linked", async () => {
     const harness = createHookHarness(
       createHookArgs({
-        hasGithubIntegration: true,
-        hasLinkedGithubPullRequest: true,
+        canShowPullRequestReview: true,
+        hasLinkedPullRequest: true,
       }),
     );
 
@@ -297,8 +298,8 @@ describe("useAgentStudioRightPanel", () => {
 
     await harness.update(
       createHookArgs({
-        hasGithubIntegration: true,
-        hasLinkedGithubPullRequest: false,
+        canShowPullRequestReview: true,
+        hasLinkedPullRequest: false,
       }),
     );
     expect(harness.getLatest().tabs.map((tab) => tab.id)).toEqual([

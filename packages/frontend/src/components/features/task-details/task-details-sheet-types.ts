@@ -1,4 +1,8 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  RepositoryGitProviderContext,
+  TaskCard,
+} from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
@@ -28,6 +32,8 @@ export type TaskDetailsSheetProps = {
   onResetTask?: (taskId: string) => Promise<void>;
   onCloseTask?: (taskId: string) => Promise<void>;
   onDetectPullRequest?: (taskId: string) => void;
+  gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
   onUnlinkPullRequest?: (taskId: string) => void;
   detectingPullRequestTaskId?: string | null;
   unlinkingPullRequestTaskId?: string | null;

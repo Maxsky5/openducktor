@@ -213,6 +213,8 @@ describe("createTaskService direct merge", () => {
       devServerService: createDirectMergeDevServerService(calls),
       gitProviderResolver: {
         resolve: () => Effect.dieMessage("direct merge must not resolve a Git provider"),
+        resolveConfigured: () =>
+          Effect.dieMessage("direct merge must not resolve a configured Git provider"),
       },
       gitPort: extendGitPort(
         createDirectMergeGitPort({

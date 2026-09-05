@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { type AutopilotSettings, createDefaultAutopilotSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act } from "react";
+import { setAutopilotRuleAction } from "@/features/autopilot/autopilot-catalog";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
 
 const renderSection = (autopilot: AutopilotSettings, disabled = false) => {
@@ -74,5 +76,43 @@ describe("settings Autopilot section", () => {
       ...autopilot,
       alwaysStartQaReviewsFresh: true,
     });
+  });
+
+  test("keeps the global Pull Request action available without provider support", async () => {
+    renderSection(createDefaultAutopilotSettings());
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "When a task progresses to Human Review" }),
+      );
+    });
+    expect(
+      screen
+        .getByRole("option", { name: /Start Generate Pull Request/ })
+        .getAttribute("aria-disabled"),
+    ).toBe("false");
+  });
+
+  test("keeps a saved global Pull Request action visible", async () => {
+    const autopilot = setAutopilotRuleAction(
+      createDefaultAutopilotSettings(),
+      "taskProgressedToHumanReview",
+      "startGeneratePullRequest",
+    );
+    renderSection(autopilot);
+
+    expect(
+      screen.getByRole("button", { name: "When a task progresses to Human Review" }).textContent,
+    ).toContain("Start Generate Pull Request");
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "When a task progresses to Human Review" }),
+      );
+    });
+    expect(
+      screen
+        .getByRole("option", { name: /Start Generate Pull Request/ })
+        .getAttribute("aria-disabled"),
+    ).toBe("false");
   });
 });

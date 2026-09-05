@@ -1,4 +1,5 @@
 import { type RefObject, useCallback, useMemo } from "react";
+import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { RunSessionStartWorkflow } from "@/features/session-start";
 import type { useAgentOperations, useTasksState } from "@/state/app-state-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -15,7 +16,8 @@ type UseAgentsPageOrchestrationShellModelArgs = {
     typeof useAgentStudioOrchestrationController
   >[0]["runtimeDefinitions"];
   repoSettings: RepoSettingsInput | null;
-  githubIntegrationEnabled: boolean;
+  gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderReadError: string | null;
   workspaceRepoPath: string | null;
   isForegroundLoadingTasks: boolean;
   routeSession: AgentsPageRouteSessionModel;
@@ -53,7 +55,8 @@ export function useAgentsPageOrchestrationShellModel({
   branches,
   runtimeDefinitions,
   repoSettings,
-  githubIntegrationEnabled,
+  gitProviderContext,
+  gitProviderReadError,
   workspaceRepoPath,
   isForegroundLoadingTasks,
   routeSession,
@@ -100,7 +103,8 @@ export function useAgentsPageOrchestrationShellModel({
     branches,
     runtimeDefinitions,
     repoSettings,
-    githubIntegrationEnabled,
+    gitProviderContext,
+    gitProviderReadError,
     workspaceRepoPath,
     selection: orchestrationSelection,
     taskExecutionFilePreview: routeSession.taskExecutionFilePreview,

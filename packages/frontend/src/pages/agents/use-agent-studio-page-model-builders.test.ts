@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
@@ -170,6 +171,7 @@ describe("use-agent-studio-page-model-builders", () => {
       isSessionWorking: true,
       hasActiveGitConflict: false,
       roleLabelByRole,
+      gitProviderContext: createGitProviderContextFixture(),
     });
 
     const optionIds = context.sessionCreateOptions.map((option) => option.id);

@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
+  GITHUB_PROVIDER_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type GitProviderHealth,
+  type RepositoryGitProviderContext,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -10,7 +11,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
-import { gitProviderHealthQueryOptions } from "@/state/queries/git-provider-health";
+import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsModalContent } from "./settings-modal-content";
@@ -309,16 +310,23 @@ describe("settings modal content", () => {
     };
     const queryClient = createQueryClient();
     queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, savedSnapshot);
-    queryClient.setQueryData(gitProviderHealthQueryOptions("/repo").queryKey, {
-      providerId: "github",
-      enabled: true,
-      available: true,
-      executablePath: "gh",
-      version: "gh version 2.73.0",
-      authenticated: true,
-      account: "octocat",
-      repositoryMappingValid: true,
-    } satisfies GitProviderHealth);
+    queryClient.setQueryData(
+      repositoryGitProviderContextQueryKeys.repo("/repo"),
+      (): RepositoryGitProviderContext => ({
+        descriptor: GITHUB_PROVIDER_DESCRIPTOR,
+        config: savedSnapshot.workspaces.repo!.git.provider!,
+        health: {
+          providerId: "github",
+          enabled: true,
+          available: true,
+          executablePath: "gh",
+          version: "gh version 2.73.0",
+          authenticated: true,
+          account: "octocat",
+          repositoryMappingValid: true,
+        },
+      }),
+    );
 
     const html = renderToStaticMarkup(
       createElement(
@@ -590,19 +598,23 @@ describe("settings modal content", () => {
     const controller = createMockController(snapshot);
 
     const html = renderToStaticMarkup(
-      createElement(SettingsModalContent, {
-        section: "autopilot",
-        repositorySection: "configuration",
-        globalPromptRoleTab: "shared",
-        repoPromptRoleTab: "shared",
-        selectedReusablePromptId: null,
-        isInteractionDisabled: false,
-        controller,
-        onRepositorySectionChange: () => {},
-        onGlobalPromptRoleTabChange: () => {},
-        onRepoPromptRoleTabChange: () => {},
-        onSelectedReusablePromptIdChange: () => {},
-      }),
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(SettingsModalContent, {
+          section: "autopilot",
+          repositorySection: "configuration",
+          globalPromptRoleTab: "shared",
+          repoPromptRoleTab: "shared",
+          selectedReusablePromptId: null,
+          isInteractionDisabled: false,
+          controller,
+          onRepositorySectionChange: () => {},
+          onGlobalPromptRoleTabChange: () => {},
+          onRepoPromptRoleTabChange: () => {},
+          onSelectedReusablePromptIdChange: () => {},
+        }),
+      ),
     );
 
     expect(html).toContain("Autopilot");

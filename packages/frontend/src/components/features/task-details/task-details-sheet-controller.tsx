@@ -26,32 +26,15 @@ type TaskDetailsSheetControllerProps = Omit<
   ref?: Ref<TaskDetailsSheetControllerHandle>;
 };
 
-export function TaskDetailsSheetController({
-  activeWorkspace = null,
-  allTasks,
-  taskSessionsByTaskId,
-  historicalSessionsByTaskId,
-  activeTaskSessionContextByTaskId,
-  workflowActionsEnabled,
-  onOpenSession,
-  onPlan,
-  onQaStart,
-  onQaOpen,
-  onBuild,
-  onDelegate,
-  onEdit,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
-  onResetTask,
-  onCloseTask,
-  onDetectPullRequest,
-  onUnlinkPullRequest,
-  detectingPullRequestTaskId,
-  unlinkingPullRequestTaskId,
-  onDelete,
-  ref,
-}: TaskDetailsSheetControllerProps): ReactElement {
+export function TaskDetailsSheetController(props: TaskDetailsSheetControllerProps): ReactElement {
+  const {
+    allTasks,
+    taskSessionsByTaskId,
+    historicalSessionsByTaskId,
+    activeTaskSessionContextByTaskId,
+    ref,
+    ...sheetProps
+  } = props;
   const [taskId, setTaskId] = useState<string | null>(null);
 
   const task = useMemo(
@@ -89,7 +72,7 @@ export function TaskDetailsSheetController({
 
   return (
     <TaskDetailsSheet
-      activeWorkspace={activeWorkspace}
+      {...sheetProps}
       task={task}
       allTasks={allTasks}
       taskSessions={selectedTaskSessions}
@@ -104,24 +87,6 @@ export function TaskDetailsSheetController({
           setTaskId(null);
         }
       }}
-      {...(workflowActionsEnabled !== undefined ? { workflowActionsEnabled } : {})}
-      {...(onPlan ? { onPlan } : {})}
-      {...(onQaStart ? { onQaStart } : {})}
-      {...(onQaOpen ? { onQaOpen } : {})}
-      {...(onBuild ? { onBuild } : {})}
-      {...(onOpenSession ? { onOpenSession } : {})}
-      {...(onDelegate ? { onDelegate } : {})}
-      {...(onEdit ? { onEdit } : {})}
-      {...(onHumanApprove ? { onHumanApprove } : {})}
-      {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
-      {...(onResetImplementation ? { onResetImplementation } : {})}
-      {...(onResetTask ? { onResetTask } : {})}
-      {...(onCloseTask ? { onCloseTask } : {})}
-      {...(onDetectPullRequest ? { onDetectPullRequest } : {})}
-      {...(onUnlinkPullRequest ? { onUnlinkPullRequest } : {})}
-      {...(detectingPullRequestTaskId !== undefined ? { detectingPullRequestTaskId } : {})}
-      {...(unlinkingPullRequestTaskId !== undefined ? { unlinkingPullRequestTaskId } : {})}
-      {...(onDelete ? { onDelete } : {})}
     />
   );
 }

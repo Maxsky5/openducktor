@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_CHAT_SETTINGS } from "@openducktor/contracts";
+import { DEFAULT_CHAT_SETTINGS, repositoryGitProviderContextSchema } from "@openducktor/contracts";
 import {
   createSessionMessagesState,
   getSessionMessageCount,
@@ -8,6 +8,7 @@ import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
   createChatSettingsFixture,
+  createGitProviderContextFixture,
   createSettingsSnapshotFixture,
   createTaskCardFixture,
   TEST_EXTERNAL_SESSION_IDS,
@@ -46,6 +47,46 @@ describe("shared test fixtures", () => {
     expect(second.documentSummary.qaReport.verdict).toBe("not_reviewed");
     expect(second.agentWorkflows.builder.completed).toBe(false);
     expect(second.availableActions).toEqual([]);
+  });
+
+  test("createGitProviderContextFixture returns isolated nested objects", () => {
+    const first = createGitProviderContextFixture();
+    const second = createGitProviderContextFixture();
+
+    first.descriptor.capabilities.supportsPullRequests = false;
+    expect(second.descriptor.capabilities.supportsPullRequests).toBe(true);
+  });
+
+  test("createGitProviderContextFixture applies provider options", () => {
+    const context = createGitProviderContextFixture({
+      available: false,
+      enabled: false,
+      supportsPullRequests: false,
+      supportsPullRequestReview: false,
+    });
+
+    expect(context.descriptor.capabilities).toEqual({
+      supportsPullRequests: false,
+      supportsPullRequestReview: false,
+    });
+    expect(context.config.enabled).toBe(false);
+    expect(context.health).toMatchObject({
+      available: false,
+      enabled: false,
+      authenticated: false,
+      account: null,
+      repositoryMappingValid: false,
+    });
+  });
+
+  test("createGitProviderContextFixture keeps capabilities valid", () => {
+    const context = createGitProviderContextFixture({ supportsPullRequests: false });
+
+    expect(context.descriptor.capabilities).toEqual({
+      supportsPullRequests: false,
+      supportsPullRequestReview: false,
+    });
+    expect(repositoryGitProviderContextSchema.parse(context)).toEqual(context);
   });
 
   test("createAgentSessionFixture returns isolated nested objects", () => {

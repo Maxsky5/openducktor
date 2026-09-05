@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoConfig } from "@openducktor/contracts";
-import { createDeferred } from "@/test-utils/shared-test-fixtures";
+import type { RepoConfig, RepositoryGitProviderContext } from "@openducktor/contracts";
+import { createDeferred, createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -32,8 +32,11 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
 
 const createRepoConfigHost = (
   loadRepoConfig: (workspaceId: string) => Promise<RepoConfig> = async () => createRepoConfig(),
+  loadProviderContext: (repoPath: string) => Promise<RepositoryGitProviderContext> = async () =>
+    null,
 ): RepoConfigHost => ({
   workspaceGetRepoConfig: mock(loadRepoConfig),
+  workspaceGetGitProviderContext: mock(loadProviderContext),
 });
 
 const createHookHarness = (initialProps: HookArgs) =>
@@ -45,6 +48,7 @@ describe("useAgentStudioRepoSettings", () => {
     const hostClient = createRepoConfigHost(() => config.promise);
     const harness = createHookHarness({
       activeWorkspaceId: "workspace-repo",
+      activeRepoPath: "/repo",
       hostClient,
     });
 
@@ -67,6 +71,7 @@ describe("useAgentStudioRepoSettings", () => {
     const hostClient = createRepoConfigHost();
     const harness = createHookHarness({
       activeWorkspaceId: "workspace-repo",
+      activeRepoPath: "/repo",
       hostClient,
     });
 
@@ -95,63 +100,106 @@ describe("useAgentStudioRepoSettings", () => {
   });
 
   test.each([
-    ["enabled", true, true],
-    ["disabled", false, false],
-  ])("reports GitHub integration as %s", async (_label, enabled, expected) => {
-    const hostClient = createRepoConfigHost(async () =>
-      createRepoConfig({
-        git: {
-          provider: {
-            id: "github",
-            enabled,
-            autoDetected: false,
-          },
-        },
-      }),
-    );
-    const harness = createHookHarness({ activeWorkspaceId: "workspace-repo", hostClient });
+    ["no configured provider", null],
+    ["disabled provider", createGitProviderContextFixture({ enabled: false, available: false })],
+    ["healthy GitHub", createGitProviderContextFixture()],
+    ["supported but unhealthy GitHub", createGitProviderContextFixture({ available: false })],
+  ])("loads %s context through its repository query", async (_label, context) => {
+    const hostClient = createRepoConfigHost(undefined, async () => context);
+    const harness = createHookHarness({
+      activeWorkspaceId: "workspace-repo",
+      activeRepoPath: "/repo",
+      hostClient,
+    });
 
     await harness.mount();
-    await harness.waitFor((state) => state.repoSettings !== null);
+    await harness.waitFor((state) => state.gitProvider.context !== undefined);
 
-    expect(harness.getLatest().githubIntegrationEnabled).toBe(expected);
+    expect(hostClient.workspaceGetGitProviderContext).toHaveBeenCalledWith("/repo");
+    expect(harness.getLatest().gitProvider.context).toEqual(context);
 
     await harness.unmount();
   });
 
-  test("keeps GitHub integration disabled while config is loading or absent", async () => {
-    const config = createDeferred<RepoConfig>();
-    const hostClient = createRepoConfigHost(() => config.promise);
-    const harness = createHookHarness({ activeWorkspaceId: "workspace-repo", hostClient });
+  test("keeps pending, failed, and valid null provider reads distinct and supports retry", async () => {
+    const pendingContext = createDeferred<RepositoryGitProviderContext>();
+    const loadProviderContext = mock(() => pendingContext.promise);
+    const hostClient = createRepoConfigHost(undefined, loadProviderContext);
+    const harness = createHookHarness({
+      activeWorkspaceId: "workspace-repo",
+      activeRepoPath: "/repo",
+      hostClient,
+    });
 
     await harness.mount();
-    expect(harness.getLatest().githubIntegrationEnabled).toBe(false);
 
-    config.resolve(createRepoConfig());
-    await harness.waitFor((state) => !state.isLoadingRepoSettings);
-    expect(harness.getLatest().githubIntegrationEnabled).toBe(false);
+    expect(harness.getLatest().gitProvider).toMatchObject({
+      context: undefined,
+      error: null,
+    });
+
+    pendingContext.reject(new Error("provider context read failed"));
+    await harness.waitFor((state) => state.gitProvider.error !== null);
+
+    expect(harness.getLatest().gitProvider.context).toBeUndefined();
+    expect(harness.getLatest().gitProvider.error?.message).toBe("provider context read failed");
+
+    loadProviderContext.mockImplementationOnce(async () => null);
+    harness.getLatest().gitProvider.retry();
+    await harness.waitFor((state) => state.gitProvider.context === null);
+
+    expect(harness.getLatest().gitProvider.error).toBeNull();
+    expect(loadProviderContext).toHaveBeenCalledTimes(2);
 
     await harness.unmount();
   });
 
-  test("keeps GitHub integration disabled for another configured provider", async () => {
-    const hostClient = createRepoConfigHost(async () =>
-      createRepoConfig({
-        git: {
-          provider: {
-            id: "gitlab",
-            enabled: true,
-            autoDetected: false,
-          },
-        },
-      }),
-    );
-    const harness = createHookHarness({ activeWorkspaceId: "workspace-repo", hostClient });
+  test("keeps cached provider data visible when a refresh fails", async () => {
+    const context = createGitProviderContextFixture();
+    let refreshFails = false;
+    const loadProviderContext = mock(async () => {
+      if (refreshFails) {
+        throw new Error("provider context refresh failed");
+      }
+      return context;
+    });
+    const hostClient = createRepoConfigHost(undefined, loadProviderContext);
+    const harness = createHookHarness({
+      activeWorkspaceId: "workspace-repo",
+      activeRepoPath: "/repo",
+      hostClient,
+    });
 
     await harness.mount();
-    await harness.waitFor((state) => state.repoSettings !== null);
+    await harness.waitFor((state) => state.gitProvider.context !== undefined);
 
-    expect(harness.getLatest().githubIntegrationEnabled).toBe(false);
+    refreshFails = true;
+    harness.getLatest().gitProvider.retry();
+    await harness.waitFor((state) => state.gitProvider.error !== null);
+
+    expect(harness.getLatest().gitProvider.context).toEqual(context);
+    expect(harness.getLatest().gitProvider.error?.message).toBe("provider context refresh failed");
+
+    await harness.unmount();
+  });
+
+  test("loads fresh provider context for an approval request", async () => {
+    const cachedContext = createGitProviderContextFixture();
+    const freshContext = createGitProviderContextFixture({ available: false });
+    const loadProviderContext = mock(async () => cachedContext);
+    const hostClient = createRepoConfigHost(undefined, loadProviderContext);
+    const harness = createHookHarness({
+      activeWorkspaceId: "workspace-repo",
+      activeRepoPath: "/repo",
+      hostClient,
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.gitProvider.context !== undefined);
+    loadProviderContext.mockImplementationOnce(async () => freshContext);
+
+    await expect(harness.getLatest().gitProvider.load()).resolves.toEqual(freshContext);
+    expect(loadProviderContext).toHaveBeenCalledTimes(2);
 
     await harness.unmount();
   });
@@ -160,15 +208,18 @@ describe("useAgentStudioRepoSettings", () => {
     const hostClient = createRepoConfigHost();
     const harness = createHookHarness({
       activeWorkspaceId: "workspace-repo",
+      activeRepoPath: "/repo",
       hostClient,
     });
 
     await harness.mount();
     await harness.waitFor((state) => state.repoSettings !== null);
+    expect(hostClient.workspaceGetGitProviderContext).toHaveBeenCalledTimes(1);
 
-    await harness.update({ activeWorkspaceId: null, hostClient });
+    await harness.update({ activeWorkspaceId: null, activeRepoPath: null, hostClient });
 
     expect(harness.getLatest().repoSettings).toBeNull();
+    expect(hostClient.workspaceGetGitProviderContext).toHaveBeenCalledTimes(1);
 
     await harness.unmount();
   });
@@ -186,6 +237,7 @@ describe("useAgentStudioRepoSettings", () => {
 
     const harness = createHookHarness({
       activeWorkspaceId: "workspace-a",
+      activeRepoPath: "/repo-a",
       hostClient,
     });
 
@@ -194,6 +246,7 @@ describe("useAgentStudioRepoSettings", () => {
 
     await harness.update({
       activeWorkspaceId: "workspace-b",
+      activeRepoPath: "/repo-b",
       hostClient,
     });
     await harness.waitFor((state) => state.repoSettings?.branchPrefix === "feature-b/");

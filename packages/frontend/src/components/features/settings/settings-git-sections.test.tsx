@@ -1,15 +1,16 @@
-import { describe, expect, mock, test } from "bun:test";
-import type {
-  GitProviderConfig,
-  GitProviderHealth,
-  SettingsRepoConfig,
+import {
+  GITHUB_PROVIDER_DESCRIPTOR,
+  type GitProviderConfig,
+  type GitProviderHealth,
+  type SettingsRepoConfig,
 } from "@openducktor/contracts";
+import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsGitSection } from "./settings-git-section";
 import { RepositoryGitSection } from "./settings-repository-git-section";
-import type { GitProviderHealthState } from "./use-repository-git-section-model";
+import type { GitProviderState } from "./use-repository-git-section-model";
 
 const authenticatedGitProviderHealth: GitProviderHealth = {
   providerId: "github",
@@ -22,9 +23,17 @@ const authenticatedGitProviderHealth: GitProviderHealth = {
   repositoryMappingValid: true,
 };
 
-const loadedHealth = (health: GitProviderHealth): GitProviderHealthState => ({
+const loadedState = (health: GitProviderHealth): GitProviderState => ({
   status: "loaded",
-  health,
+  context: {
+    descriptor: GITHUB_PROVIDER_DESCRIPTOR,
+    config: {
+      id: GITHUB_PROVIDER_DESCRIPTOR.id,
+      enabled: health.enabled,
+      autoDetected: false,
+    },
+    health,
+  },
 });
 
 const createDeferred = <T,>() => {
@@ -94,7 +103,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: baseRepoConfig,
-        providerHealth: loadedHealth({
+        providerState: loadedState({
           ...authenticatedGitProviderHealth,
           available: false,
           authenticated: false,
@@ -115,6 +124,75 @@ describe("settings git sections", () => {
     expect(html).toContain("bg-success-surface");
   });
 
+  test("renders the configured provider label and description from its descriptor", () => {
+    const gitlabProvider = createGitlabProvider();
+    const html = renderToStaticMarkup(
+      createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: {
+          ...baseRepoConfig,
+          git: { provider: gitlabProvider },
+        },
+        providerState: {
+          status: "loaded",
+          context: {
+            descriptor: {
+              id: "gitlab",
+              label: "GitLab",
+              description: "GitLab repository hosting.",
+              capabilities: {
+                supportsPullRequests: true,
+                supportsPullRequestReview: false,
+              },
+            },
+            config: gitlabProvider,
+            health: {
+              providerId: "gitlab",
+              enabled: true,
+              available: true,
+              executablePath: "glab",
+              version: "1.0.0",
+              authenticated: true,
+              account: "tester",
+              repositoryMappingValid: true,
+            },
+          },
+        },
+        disabled: false,
+        onDetectGithubRepository: async () => null,
+        onUpdateSelectedRepoConfig: () => baseRepoConfig,
+      }),
+    );
+
+    expect(html).toContain(">GitLab<");
+    expect(html).not.toContain("GitLab Pull Requests");
+    expect(html).toContain("GitLab repository hosting.");
+  });
+
+  test("does not use GitHub copy when a configured provider read fails", () => {
+    const gitlabProvider = createGitlabProvider();
+    const html = renderToStaticMarkup(
+      createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: {
+          ...baseRepoConfig,
+          git: { provider: gitlabProvider },
+        },
+        providerState: {
+          status: "error",
+          message: "Could not load GitLab health.",
+        },
+        disabled: false,
+        onDetectGithubRepository: async () => null,
+        onUpdateSelectedRepoConfig: () => baseRepoConfig,
+      }),
+    );
+
+    expect(html).toContain(">Git provider gitlab<");
+    expect(html).toContain("This repository uses gitlab.");
+    expect(html).not.toContain("GitHub repository hosting and Pull Request integration.");
+  });
+
   test("does not report a missing CLI while GitHub is disabled", () => {
     const html = renderToStaticMarkup(
       createElement(RepositoryGitSection, {
@@ -128,7 +206,7 @@ describe("settings git sections", () => {
             },
           },
         },
-        providerHealth: { status: "idle" },
+        providerState: { status: "idle" },
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -144,7 +222,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: baseRepoConfig,
-        providerHealth: { status: "pending" },
+        providerState: { status: "pending" },
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -160,7 +238,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: baseRepoConfig,
-        providerHealth: { status: "error", message: "Health command failed." },
+        providerState: { status: "error", message: "Health command failed." },
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -177,7 +255,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: baseRepoConfig,
-        providerHealth: { status: "draft" },
+        providerState: { status: "draft" },
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -209,7 +287,7 @@ describe("settings git sections", () => {
             },
           },
         },
-        providerHealth: loadedHealth(authenticatedGitProviderHealth),
+        providerState: loadedState(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -242,7 +320,7 @@ describe("settings git sections", () => {
       return createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerHealth: loadedHealth(authenticatedGitProviderHealth),
+        providerState: loadedState(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: async () => null,
         onUpdateSelectedRepoConfig: (updater) => {
@@ -304,7 +382,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerHealth: loadedHealth(authenticatedGitProviderHealth),
+        providerState: loadedState(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository,
         onUpdateSelectedRepoConfig,
@@ -356,7 +434,7 @@ describe("settings git sections", () => {
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: repoConfig,
-          providerHealth: loadedHealth(authenticatedGitProviderHealth),
+          providerState: loadedState(authenticatedGitProviderHealth),
           disabled: false,
           onDetectGithubRepository,
           onUpdateSelectedRepoConfig: setRepoConfig,
@@ -406,7 +484,7 @@ describe("settings git sections", () => {
     const props = () => ({
       selectedRepoPath: "/repo",
       selectedRepoConfig: repoConfig,
-      providerHealth: loadedHealth(authenticatedGitProviderHealth),
+      providerState: loadedState(authenticatedGitProviderHealth),
       disabled: false,
       onDetectGithubRepository: () => pendingDetection.promise,
       onUpdateSelectedRepoConfig,
@@ -469,7 +547,7 @@ describe("settings git sections", () => {
       createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerHealth: loadedHealth(authenticatedGitProviderHealth),
+        providerState: loadedState(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: () => pendingDetection.promise,
         onUpdateSelectedRepoConfig,
@@ -530,7 +608,7 @@ describe("settings git sections", () => {
       return createElement(RepositoryGitSection, {
         selectedRepoPath: "/repo",
         selectedRepoConfig: repoConfig,
-        providerHealth: loadedHealth(authenticatedGitProviderHealth),
+        providerState: loadedState(authenticatedGitProviderHealth),
         disabled: false,
         onDetectGithubRepository: () => detection.promise,
         onUpdateSelectedRepoConfig: (updater) => {
@@ -584,7 +662,7 @@ describe("settings git sections", () => {
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: null,
-          providerHealth: loadedHealth(authenticatedGitProviderHealth),
+          providerState: loadedState(authenticatedGitProviderHealth),
           disabled: false,
           onDetectGithubRepository,
           onUpdateSelectedRepoConfig: () => baseRepoConfig,
@@ -613,7 +691,7 @@ describe("settings git sections", () => {
                 },
               },
             },
-            providerHealth: loadedHealth(authenticatedGitProviderHealth),
+            providerState: loadedState(authenticatedGitProviderHealth),
             disabled: false,
             onDetectGithubRepository,
             onUpdateSelectedRepoConfig: () => baseRepoConfig,

@@ -1,4 +1,6 @@
 import type { Dispatch } from "react";
+import type { RepositoryGitProviderContext } from "@openducktor/contracts";
+import { gitProviderReadError } from "@/lib/git-provider-health";
 import type {
   TaskApprovalApprovalModalModel,
   TaskApprovalCompletionModalModel,
@@ -6,6 +8,7 @@ import type {
   TaskApprovalModalModel,
 } from "./kanban-page-model-types";
 import type { TaskApprovalFlowAction, TaskApprovalFlowOpenState } from "./task-approval-flow-state";
+import { resolveCurrentTaskApprovalMode } from "./task-approval-transition-resolver";
 
 type BuildTaskApprovalModalModelArgs = {
   completeDirectMerge: () => void;
@@ -14,6 +17,8 @@ type BuildTaskApprovalModalModelArgs = {
   reset: () => void;
   resetMissingBuilderWorktree: () => void;
   state: TaskApprovalFlowOpenState;
+  gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderContextError: Error | null;
 };
 
 export const buildTaskApprovalModalModel = ({
@@ -23,9 +28,31 @@ export const buildTaskApprovalModalModel = ({
   reset,
   resetMissingBuilderWorktree,
   state,
+  gitProviderContext,
+  gitProviderContextError,
 }: BuildTaskApprovalModalModelArgs): TaskApprovalModalModel => {
   const approvalContext = state.approvalContext;
-  const githubProvider = approvalContext?.providers.find((entry) => entry.providerId === "github");
+  const mode = resolveCurrentTaskApprovalMode(state.mode, gitProviderContext);
+  const providerReadError = gitProviderReadError(gitProviderContextError);
+  let pullRequestSupported = false;
+  let pullRequestAvailable = false;
+  let pullRequestUnavailableReason: string | null = null;
+  if (gitProviderContext?.descriptor.capabilities.supportsPullRequests === true) {
+    pullRequestSupported = true;
+    pullRequestAvailable =
+      providerReadError === null &&
+      gitProviderContext.config.enabled &&
+      gitProviderContext.health.available;
+    if (!pullRequestAvailable) {
+      pullRequestUnavailableReason =
+        providerReadError ??
+        gitProviderContext.health.reason ??
+        `${gitProviderContext.descriptor.label} is not available for Pull Requests.`;
+    }
+  } else if (mode === "pull_request" && gitProviderContext === undefined) {
+    pullRequestSupported = true;
+    pullRequestUnavailableReason = providerReadError ?? "Checking the current Git provider.";
+  }
   const baseModal = {
     open: true,
     taskId: state.taskId,
@@ -62,11 +89,12 @@ export const buildTaskApprovalModalModel = ({
     ...baseModal,
     stage: "approval",
     isLoading: state.phase === "loading",
-    mode: state.mode,
+    mode,
     mergeMethod: state.mergeMethod,
     pullRequestDraftMode: state.pullRequestDraftMode,
-    pullRequestAvailable: githubProvider?.available ?? false,
-    pullRequestUnavailableReason: githubProvider?.reason ?? null,
+    pullRequestSupported,
+    pullRequestAvailable,
+    pullRequestUnavailableReason,
     hasUncommittedChanges: approvalContext?.hasUncommittedChanges ?? false,
     uncommittedFileCount: approvalContext?.uncommittedFileCount ?? 0,
     pullRequestUrl: approvalContext?.pullRequest?.url ?? null,

@@ -1,3 +1,4 @@
+import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { useCallback, useMemo } from "react";
 import type { useTasksState, useWorkspaceState } from "@/state/app-state-provider";
 import {
@@ -23,6 +24,8 @@ type UseAgentStudioShellTaskActionsArgs = {
   linkMergedPullRequest: ReturnType<typeof useTasksState>["linkMergedPullRequest"];
   cancelLinkMergedPullRequest: ReturnType<typeof useTasksState>["cancelLinkMergedPullRequest"];
   unlinkPullRequest: ReturnType<typeof useTasksState>["unlinkPullRequest"];
+  gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
 };
 
 export type AgentStudioShellTaskActionsModel = {
@@ -43,6 +46,8 @@ export function useAgentStudioShellTaskActions({
   linkMergedPullRequest,
   cancelLinkMergedPullRequest,
   unlinkPullRequest,
+  gitProviderContext,
+  gitProviderReadError = null,
 }: UseAgentStudioShellTaskActionsArgs): AgentStudioShellTaskActionsModel {
   const onDetectPullRequest = useCallback(
     (taskId: string): void => {
@@ -74,6 +79,8 @@ export function useAgentStudioShellTaskActions({
     unlinkingPullRequestTaskId,
     onDetectPullRequest,
     onUnlinkPullRequest,
+    gitProviderContext,
+    gitProviderReadError,
   });
 
   const mergedPullRequestModal = useAgentStudioPullRequestModalModel({

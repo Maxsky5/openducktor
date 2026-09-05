@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RepositoryGitProviderContext, TaskCard } from "@openducktor/contracts";
 import type { AgentRole, AgentSessionStartMode } from "@openducktor/core";
 import { resolveTaskCardActions } from "@/components/features/kanban/kanban-task-workflow";
 import { taskActionLabel } from "@/components/features/kanban/task-action-ui";
@@ -15,6 +15,7 @@ import {
   type AgentStudioWorkflowQuickAction,
   type TaskWorkflowAction,
 } from "@/features/task-workflow/task-workflow-actions";
+import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -92,8 +93,17 @@ const createQuickActionDisabledReason = (createSessionDisabled: boolean): string
 
 const PULL_REQUEST_QUICK_ACTION_STATUSES = new Set<TaskCard["status"]>(["human_review"]);
 
-const canShowPullRequestQuickAction = (task: TaskCard): boolean => {
-  return PULL_REQUEST_QUICK_ACTION_STATUSES.has(task.status);
+const canShowPullRequestQuickAction = (
+  task: TaskCard,
+  gitProviderContext: RepositoryGitProviderContext | undefined,
+  gitProviderReadError: string | null | undefined,
+): boolean => {
+  const readFailedWithoutContext = gitProviderContext == null && gitProviderReadError != null;
+  return (
+    PULL_REQUEST_QUICK_ACTION_STATUSES.has(task.status) &&
+    (gitProviderContext?.descriptor.capabilities.supportsPullRequests === true ||
+      readFailedWithoutContext)
+  );
 };
 
 const hasLinkedPullRequest = (task: TaskCard): boolean => {
@@ -148,6 +158,8 @@ export const buildAgentStudioQuickActions = (params: {
   roleEnabledByTask: Record<AgentRole, boolean>;
   createSessionDisabled: boolean;
   hasActiveGitConflict?: boolean;
+  gitProviderContext?: RepositoryGitProviderContext | undefined;
+  gitProviderReadError?: string | null;
 }): AgentStudioQuickActionOption[] => {
   const task = params.selectedTask;
   if (!task) {
@@ -229,14 +241,20 @@ export const buildAgentStudioQuickActions = (params: {
     });
   }
 
-  if (canShowPullRequestQuickAction(task) && params.roleEnabledByTask.build) {
+  if (
+    canShowPullRequestQuickAction(task, params.gitProviderContext, params.gitProviderReadError) &&
+    params.roleEnabledByTask.build
+  ) {
     const builderSessionOptions = buildReusableSessionOptions({
       sessions: params.sessionsForTask.filter((session) => session.taskId === task.id),
       role: "build",
     });
     const hasBuilderSource = builderSessionOptions.length > 0;
     const pullRequestDisabledReason =
-      disabledReason ?? (hasBuilderSource ? null : "Requires an existing Builder session.");
+      params.gitProviderReadError ??
+      pullRequestHealthError(params.gitProviderContext) ??
+      disabledReason ??
+      (hasBuilderSource ? null : "Requires an existing Builder session.");
     const option: AgentStudioQuickActionOption = {
       id: "quick:build_pull_request_generation",
       role: "build",
