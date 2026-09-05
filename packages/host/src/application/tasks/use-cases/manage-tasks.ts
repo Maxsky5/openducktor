@@ -104,6 +104,15 @@ export const createTaskCrudUseCases = ({
   transitionTask(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, status } = input;
+      if (status === "blocked") {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "status",
+            message: "task_transition cannot block tasks. Use build_blocked with a reason.",
+            details: { repoPath, taskId, status },
+          }),
+        );
+      }
       if (status === "closed") {
         return yield* Effect.fail(
           new HostValidationError({
