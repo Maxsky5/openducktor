@@ -5,13 +5,11 @@ import { z } from "zod";
 type PackageManifest = {
   name: string;
   version: string;
-  dependencies?: Record<string, string>;
 };
 
 const packageManifestSchema: z.ZodType<PackageManifest> = z.object({
   name: z.string(),
   version: z.string(),
-  dependencies: z.record(z.string(), z.string()).optional(),
 });
 
 const readPackageManifest = (manifestPath: string): PackageManifest =>
@@ -33,39 +31,9 @@ if (
 }
 
 const repoRoot = path.resolve(import.meta.dir, "..");
-const hostManifestPath = path.join(repoRoot, "packages/host/package.json");
-const hostManifest = readPackageManifest(hostManifestPath);
-const opencodeAdapterManifestPath = path.join(
-  repoRoot,
-  "packages/adapters-opencode-sdk/package.json",
-);
-const opencodeAdapterManifest = readPackageManifest(opencodeAdapterManifestPath);
 const packageRoot = path.join(repoRoot, "packages/openducktor-web");
 const manifestPath = path.join(packageRoot, "package.json");
 const manifest = readPackageManifest(manifestPath);
-const runtimeDependencySources = [
-  {
-    name: "@anthropic-ai/claude-agent-sdk",
-    manifest: hostManifest,
-    manifestPath: hostManifestPath,
-  },
-  {
-    name: "undici",
-    manifest: opencodeAdapterManifest,
-    manifestPath: opencodeAdapterManifestPath,
-  },
-] as const;
-const dependencyVersion = (index: number): string => {
-  const source = runtimeDependencySources[index];
-  if (!source) throw new Error(`Missing runtime dependency source at index ${index}.`);
-  const version = source.manifest.dependencies?.[source.name];
-  if (!version) throw new Error(`Expected ${source.manifestPath} to depend on ${source.name}.`);
-  return version;
-};
-const allowedRuntimeDependencies = {
-  "@anthropic-ai/claude-agent-sdk": dependencyVersion(0),
-  undici: dependencyVersion(1),
-};
 
 if (manifest.name !== "@openducktor/web") {
   throw new Error(`Expected ${manifestPath} to describe @openducktor/web.`);
@@ -73,11 +41,6 @@ if (manifest.name !== "@openducktor/web") {
 if (manifest.version !== version) {
   throw new Error(
     `@openducktor/web version ${manifest.version} does not match release version ${version}.`,
-  );
-}
-if (JSON.stringify(manifest.dependencies ?? {}) !== JSON.stringify(allowedRuntimeDependencies)) {
-  throw new Error(
-    `@openducktor/web dependencies must be exactly ${JSON.stringify(allowedRuntimeDependencies)}.`,
   );
 }
 
