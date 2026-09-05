@@ -1,3 +1,4 @@
+import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createTaskService as createRealTaskService } from "../tasks/task-service";
 import {
@@ -117,12 +118,13 @@ const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =
     ...input,
   });
 describe("createOdtMcpBridgeService", () => {
-  test.each(["ai_review", "human_review"] as const)(
+  test.each(["in_progress", "ai_review", "human_review"] as const)(
     "build_blocked transitions %s through the bridge and trims the reason",
     async (status) => {
       let current = taskCard({ status });
       const transitions: unknown[] = [];
       const taskService = createRealTaskService({
+        gitPort: createGitPortTestDouble({ canonicalizePath: (path) => Effect.succeed(path) }),
         taskStore: createTaskStoreTestDouble({
           listTasks: () => Effect.succeed([current]),
           transitionTask: (input) => {

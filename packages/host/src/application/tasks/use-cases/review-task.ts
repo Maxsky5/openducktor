@@ -98,12 +98,21 @@ export const createTaskReviewUseCases = ({
         );
       }
       const updated = yield* completeTaskClosure({
-        cleanup: runTaskRuntimeCleanup({
-          devServerService,
-          progress: createTaskCleanupProgressState(),
-          repoPath,
-          taskIds: [taskId],
-          terminalService,
+        cleanup: Effect.gen(function* () {
+          const latest = yield* taskListWithCurrent(taskStore, repoPath, taskId);
+          yield* validateTaskTransitionEffect(
+            latest.current,
+            latest.currentTasks,
+            latest.current.status,
+            "closed",
+          );
+          yield* runTaskRuntimeCleanup({
+            devServerService,
+            progress: createTaskCleanupProgressState(),
+            repoPath,
+            taskIds: [taskId],
+            terminalService,
+          });
         }),
         gitPort,
         operation: "approve task",

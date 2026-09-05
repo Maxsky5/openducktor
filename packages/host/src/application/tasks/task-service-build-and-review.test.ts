@@ -82,7 +82,10 @@ describe("createTaskService build and review", () => {
         },
       };
       const result = await Effect.runPromise(
-        createTaskService({ taskStore }).buildBlocked({
+        createTaskService({
+          taskStore,
+          gitPort: createBuildStartGitPort({ calls: [] }),
+        }).buildBlocked({
           repoPath: "/repo",
           taskId: current.id,
           reason: "Needs clarification",
@@ -109,7 +112,10 @@ describe("createTaskService build and review", () => {
       };
       await expect(
         Effect.runPromise(
-          createTaskService({ taskStore }).buildBlocked({
+          createTaskService({
+            taskStore,
+            gitPort: createBuildStartGitPort({ calls: [] }),
+          }).buildBlocked({
             repoPath: "/repo",
             taskId: "task-1",
             reason: "Needs clarification",
@@ -206,7 +212,10 @@ describe("createTaskService build and review", () => {
       },
     };
     const blocked = await Effect.runPromise(
-      createTaskService({ taskStore }).buildBlocked({
+      createTaskService({
+        taskStore,
+        gitPort: createBuildStartGitPort({ calls: [] }),
+      }).buildBlocked({
         repoPath: "/repo",
         taskId: "task-1",
         reason: " Waiting on API ",
@@ -305,7 +314,10 @@ describe("createTaskService build and review", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({ taskStore }).buildBlocked({
+        createTaskService({
+          taskStore,
+          gitPort: createBuildStartGitPort({ calls: [] }),
+        }).buildBlocked({
           repoPath: "/repo",
           taskId: "task-1",
           reason: " ",
@@ -1997,6 +2009,7 @@ describe("createTaskService build and review", () => {
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
       { type: "canonicalizePath", path: "/repo" },
+      { type: "list", input: { repoPath: "/repo" } },
       {
         type: "acquireTerminalCleanup",
         input: { repoPath: "/repo", taskIds: ["task-1"] },
