@@ -168,7 +168,6 @@ export const createTaskWorkflowSessionControlService = ({
   ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
 } => ({
   ...runtime,
-  startSession: (input) => runtime.startSession(input),
   startWorkflowSession: createStartTaskWorkflowSession({
     canonicalizeRepoPath,
     runtime,

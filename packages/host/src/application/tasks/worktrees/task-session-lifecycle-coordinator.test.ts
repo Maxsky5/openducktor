@@ -91,3 +91,43 @@ test("task lifecycle guard rejects overlap and releases at scope exit", async ()
     ),
   ).resolves.toBeUndefined();
 });
+
+test("constructing a task lifecycle Effect does not reserve the task", async () => {
+  const coordinator = createTaskSessionLifecycleCoordinator();
+  const start = coordinator.acquireLifecycle("/repo", ["task-1"], "start session");
+
+  await expect(
+    Effect.runPromise(
+      Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "close task")),
+    ),
+  ).resolves.toBeUndefined();
+  await expect(Effect.runPromise(Effect.scoped(start))).resolves.toBeUndefined();
+});
+
+test("each execution of a task lifecycle Effect checks and reserves the task", async () => {
+  const coordinator = createTaskSessionLifecycleCoordinator();
+  const start = coordinator.acquireLifecycle("/repo", ["task-1"], "start session");
+  await Effect.runPromise(Effect.scoped(start));
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* coordinator.acquireLifecycle("/repo", ["task-1"], "close task");
+        const overlap = yield* Effect.either(Effect.scoped(start));
+        expect(overlap._tag).toBe("Left");
+      }),
+    ),
+  );
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* start;
+        const overlap = yield* Effect.either(
+          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "close task")),
+        );
+        expect(overlap._tag).toBe("Left");
+      }),
+    ),
+  );
+});

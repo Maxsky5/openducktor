@@ -7,7 +7,7 @@ export type TaskSessionLifecycleCoordinator = ReturnType<
 >;
 
 export const createTaskSessionLifecycleCoordinator = () => {
-  const lifecycleLocks = new Map<string, string>();
+  const lifecycleLocks = new Set<string>();
   const worktreeGates = new Map<string, Effect.Semaphore>();
   const taskKey = (repoPath: string, taskId: string): string => `${repoPath}\0${taskId}`;
   const worktreeGate = (path: string): Effect.Semaphore => {
@@ -21,34 +21,33 @@ export const createTaskSessionLifecycleCoordinator = () => {
     return gate;
   };
 
-  const beginLifecycle = (repoPath: string, taskIds: string[], operation: string) => {
-    const existingLifecycle = taskIds.find((taskId) =>
-      lifecycleLocks.has(taskKey(repoPath, taskId)),
-    );
-    if (existingLifecycle) {
-      return Effect.fail(
-        new HostOperationError({
-          operation: `task.${operation}.lifecycle_guard`,
-          message: `Cannot ${operation} while another lifecycle operation is in progress for task ${existingLifecycle}.`,
-          details: { repoPath, taskIds },
-        }),
-      );
-    }
-    for (const taskId of taskIds) {
-      lifecycleLocks.set(taskKey(repoPath, taskId), operation);
-    }
-    return Effect.succeed(() => {
-      for (const taskId of taskIds) {
-        lifecycleLocks.delete(taskKey(repoPath, taskId));
-      }
-    });
-  };
-
   return {
     acquireLifecycle(repoPath: string, taskIds: string[], operation: string) {
-      return Effect.acquireRelease(beginLifecycle(repoPath, taskIds, operation), (release) =>
-        Effect.sync(release),
-      ).pipe(Effect.asVoid);
+      return Effect.acquireRelease(
+        Effect.gen(function* () {
+          const existingLifecycle = taskIds.find((taskId) =>
+            lifecycleLocks.has(taskKey(repoPath, taskId)),
+          );
+          if (existingLifecycle) {
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: `task.${operation}.lifecycle_guard`,
+                message: `Cannot ${operation} while another lifecycle operation is in progress for task ${existingLifecycle}.`,
+                details: { repoPath, taskIds },
+              }),
+            );
+          }
+          for (const taskId of taskIds) {
+            lifecycleLocks.add(taskKey(repoPath, taskId));
+          }
+        }),
+        () =>
+          Effect.sync(() => {
+            for (const taskId of taskIds) {
+              lifecycleLocks.delete(taskKey(repoPath, taskId));
+            }
+          }),
+      );
     },
     acquireWorktreeLifecycle(paths: readonly string[]) {
       const uniquePaths = [...new Set(paths.map(normalizePathForComparison))].sort();
