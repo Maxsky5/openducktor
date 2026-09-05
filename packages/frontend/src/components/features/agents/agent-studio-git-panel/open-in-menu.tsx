@@ -1,4 +1,4 @@
-import type { SystemOpenInToolId } from "@openducktor/contracts";
+import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, FolderOpen, LoaderCircle, RefreshCw } from "lucide-react";
 import { type ReactElement, type ReactNode, useId, useMemo, useState } from "react";
@@ -53,17 +53,11 @@ export function OpenInMenu({
   });
   const isTriggerDisabled = resolvedDisabledReason != null || pendingToolId !== null;
   const isDefaultActionDisabled =
-    isTriggerDisabled ||
-    settingsQuery.isPending ||
-    settingsQuery.isError ||
-    toolsQuery.isPending ||
-    toolsQuery.isError ||
-    defaultTool == null;
+    isTriggerDisabled || !settingsQuery.isSuccess || !toolsQuery.isSuccess;
   const hasMenuTrigger =
     settingsQuery.isError ||
     alternativeTools.length > 0 ||
-    toolsQuery.isPending ||
-    toolsQuery.isError ||
+    !toolsQuery.isSuccess ||
     defaultTool == null;
 
   const handleOpenInTool = async (toolId: SystemOpenInToolId): Promise<void> => {
@@ -101,22 +95,16 @@ export function OpenInMenu({
     }
   };
 
-  const defaultToolLabel = defaultTool ? getOpenInToolLabel(defaultTool.toolId) : "Open In";
-  const defaultToolIcon = defaultTool ? (
-    <OpenInToolIcon tool={defaultTool} />
-  ) : (
-    <FolderOpen className="size-3.5" />
+  const defaultButton = (
+    <OpenInDefaultButton
+      targetLabel={targetLabel}
+      tool={defaultTool}
+      onOpen={handleOpenInTool}
+      disabled={isDefaultActionDisabled}
+      pendingToolId={pendingToolId}
+      hasMenuTrigger={hasMenuTrigger}
+    />
   );
-  const defaultToolIsPending = defaultTool != null && pendingToolId === defaultTool.toolId;
-  const defaultButton = renderOpenInDefaultButton({
-    targetLabel,
-    defaultToolLabel,
-    defaultToolIcon,
-    onClick: defaultTool ? () => void handleOpenInTool(defaultTool.toolId) : null,
-    disabled: isDefaultActionDisabled,
-    isPending: defaultToolIsPending,
-    hasMenuTrigger,
-  });
   const menuTrigger = renderOpenInMenuTriggerButton({ disabled: isTriggerDisabled });
   const trigger = hasMenuTrigger ? (
     <OpenInActionGroup>
@@ -259,23 +247,24 @@ function renderOpenInMenuTriggerButton({ disabled }: { disabled: boolean }): Rea
   );
 }
 
-function renderOpenInDefaultButton({
+function OpenInDefaultButton({
   targetLabel,
-  defaultToolLabel,
-  defaultToolIcon,
-  onClick,
+  tool,
+  onOpen,
   disabled,
-  isPending,
+  pendingToolId,
   hasMenuTrigger,
 }: {
   targetLabel: string;
-  defaultToolLabel: string;
-  defaultToolIcon: ReactNode;
-  onClick: (() => void) | null;
+  tool: SystemOpenInToolInfo | null;
+  onOpen: (toolId: SystemOpenInToolId) => Promise<void>;
   disabled: boolean;
-  isPending: boolean;
+  pendingToolId: SystemOpenInToolId | null;
   hasMenuTrigger: boolean;
 }): ReactElement {
+  const label = tool ? getOpenInToolLabel(tool.toolId) : "Open In";
+  const icon = tool ? <OpenInToolIcon tool={tool} /> : <FolderOpen className="size-3.5" />;
+  const isPending = tool != null && pendingToolId === tool.toolId;
   return (
     <Button
       type="button"
@@ -287,12 +276,12 @@ function renderOpenInDefaultButton({
           : "h-7 gap-1.5 px-2 text-[11px]"
       }
       data-testid="agent-studio-git-open-in-default-button"
-      aria-label={`Open ${targetLabel} in ${defaultToolLabel}`}
-      onClick={onClick ?? undefined}
-      disabled={disabled}
+      aria-label={`Open ${targetLabel} in ${label}`}
+      onClick={tool ? () => void onOpen(tool.toolId) : undefined}
+      disabled={disabled || tool == null}
     >
-      {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : defaultToolIcon}
-      <span className="truncate">{defaultToolLabel}</span>
+      {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : icon}
+      <span className="truncate">{label}</span>
     </Button>
   );
 }

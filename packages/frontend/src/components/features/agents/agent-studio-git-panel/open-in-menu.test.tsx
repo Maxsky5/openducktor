@@ -15,6 +15,7 @@ import { workspaceQueryKeys } from "@/state/queries/workspace";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { OpenInMenu } from "./open-in-menu";
 
 enableReactActEnvironment();
@@ -124,6 +125,49 @@ describe("OpenInMenu", () => {
       expect(systemListOpenInTools).toHaveBeenCalledTimes(1);
     } finally {
       host.systemListOpenInTools = originalSystemListOpenInTools;
+    }
+  });
+
+  test("waits for the saved preference before enabling the default action", async () => {
+    const settings = createDeferred<ReturnType<typeof settingsSnapshotSchema.parse>>();
+    host.workspaceGetSettingsSnapshot = () => settings.promise;
+    const originalList = host.systemListOpenInTools;
+    host.systemListOpenInTools = async () => [{ toolId: "finder" }, { toolId: "zed" }];
+    const onOpenInTool = mock(async () => {});
+    try {
+      rendered = render(
+        <QueryProvider useIsolatedClient>
+          <TooltipProvider>
+            <OpenInMenu
+              contextMode="repository"
+              targetPath="/repo"
+              disabledReason={null}
+              onOpenInTool={onOpenInTool}
+            />
+          </TooltipProvider>
+        </QueryProvider>,
+      );
+      await screen.findByTestId("agent-studio-git-open-in-icon-finder");
+      const button = screen.getByTestId<HTMLButtonElement>(
+        "agent-studio-git-open-in-default-button",
+      );
+      expect(button.disabled).toBe(true);
+      await runWithReactAct(async () => {
+        fireEvent.click(button);
+      });
+      expect(onOpenInTool).not.toHaveBeenCalled();
+      await runWithReactAct(async () => {
+        settings.resolve(
+          settingsSnapshotSchema.parse({
+            theme: "light",
+            system: { preferredOpenInToolId: "zed" },
+          }),
+        );
+      });
+      await waitFor(() => expect(button.disabled).toBe(false));
+      expect(button.textContent).toContain("Zed");
+    } finally {
+      host.systemListOpenInTools = originalList;
     }
   });
 
