@@ -1,3 +1,4 @@
+import { useTaskExecutionFilePreviewController } from "../file-preview/use-task-execution-file-preview-controller";
 import {
   type PropsWithChildren,
   type ReactElement,
@@ -18,6 +19,8 @@ const DEFAULT_TITLE = "Conversation";
 const DEFAULT_DESCRIPTION = "Read-only conversation.";
 
 function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): ReactElement {
+  const preview = useTaskExecutionFilePreviewController();
+  const { requestContextTransition } = preview;
   const activeWorkspace = useActiveWorkspace();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [request, setRequest] = useState<OpenAgentSessionTranscriptRequest | null>(null);
@@ -38,27 +41,45 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
 
   const openSessionTranscript = useCallback(
     (nextRequest: OpenAgentSessionTranscriptRequest) => {
-      cancelContentFrame();
-      setContentRequest(null);
-      setRequest(nextRequest);
+      requestContextTransition(() => {
+        cancelContentFrame();
+        setContentRequest(null);
+        setRequest(nextRequest);
 
-      contentFrameRef.current = globalThis.requestAnimationFrame(() => {
         contentFrameRef.current = globalThis.requestAnimationFrame(() => {
-          contentFrameRef.current = null;
-          setContentRequest(nextRequest);
+          contentFrameRef.current = globalThis.requestAnimationFrame(() => {
+            contentFrameRef.current = null;
+            setContentRequest(nextRequest);
+          });
         });
       });
     },
-    [cancelContentFrame],
+    [cancelContentFrame, requestContextTransition],
   );
 
   const closeSessionTranscript = useCallback(() => {
-    cancelContentFrame();
-    setContentRequest(null);
-    setRequest(null);
-  }, [cancelContentFrame]);
+    requestContextTransition(() => {
+      cancelContentFrame();
+      setContentRequest(null);
+      setRequest(null);
+    });
+  }, [cancelContentFrame, requestContextTransition]);
 
   useEffect(() => cancelContentFrame, [cancelContentFrame]);
+  const previousRepoRef = useRef(workspaceRepoPath);
+  useEffect(() => {
+    if (previousRepoRef.current === workspaceRepoPath) return;
+    previousRepoRef.current = workspaceRepoPath;
+    requestContextTransition(
+      () => {
+        cancelContentFrame();
+        setContentRequest(null);
+        setRequest(null);
+      },
+      undefined,
+      { force: true },
+    );
+  }, [cancelContentFrame, requestContextTransition, workspaceRepoPath]);
 
   const contextValue = useMemo(
     () => ({
@@ -72,6 +93,7 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
     <AgentSessionTranscriptDialogContext.Provider value={contextValue}>
       {children}
       <AgentSessionTranscriptDialog
+        preview={preview}
         workspaceRepoPath={workspaceRepoPath}
         target={contentRequest?.target ?? null}
         open={open}

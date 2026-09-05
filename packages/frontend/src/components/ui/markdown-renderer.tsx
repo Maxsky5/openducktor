@@ -1,3 +1,8 @@
+import {
+  markdownLinkComponents,
+  markdownLinkUrlTransform,
+  type MarkdownLinkPolicy,
+} from "./markdown-link-policy";
 import { TASK_ASSET_URI_PREFIX, type TaskAssetRenderContext } from "@openducktor/contracts";
 import { lazy, memo, type ReactElement, type ReactNode, Suspense } from "react";
 import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
@@ -19,6 +24,7 @@ export type { MarkdownRendererVariant } from "./markdown-renderer-components";
 export type MarkdownPremiumRendererProps = {
   markdown: string;
   components: Components;
+  linkPolicy?: MarkdownLinkPolicy | undefined;
   fallback?: ReactNode;
 };
 
@@ -27,6 +33,7 @@ type MarkdownRendererProps = {
   variant?: MarkdownRendererVariant;
   className?: string;
   components?: Components;
+  linkPolicy?: MarkdownLinkPolicy | undefined;
   premiumCodeBlocks?: boolean;
   fallback?: ReactNode;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
@@ -65,15 +72,17 @@ const MARKDOWN_CLASSES = {
 const MarkdownSync = memo(function MarkdownSync({
   markdown,
   components,
+  linkPolicy,
 }: {
   markdown: string;
   components: Components;
+  linkPolicy?: MarkdownLinkPolicy | undefined;
 }): ReactElement {
   return (
     <Markdown
       remarkPlugins={REMARK_PLUGINS}
       skipHtml
-      urlTransform={MARKDOWN_URL_TRANSFORM}
+      urlTransform={markdownLinkUrlTransform(MARKDOWN_URL_TRANSFORM, linkPolicy)}
       components={components}
     >
       {markdown}
@@ -86,6 +95,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   variant = "document",
   className,
   components: componentOverrides,
+  linkPolicy,
   premiumCodeBlocks = false,
   fallback,
   taskAssetContext,
@@ -96,9 +106,11 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     return null;
   }
 
-  const components = componentOverrides
-    ? { ...MARKDOWN_COMPONENTS[variant], ...componentOverrides }
-    : MARKDOWN_COMPONENTS[variant];
+  const components = markdownLinkComponents(
+    MARKDOWN_COMPONENTS[variant],
+    componentOverrides,
+    linkPolicy,
+  );
   const hasMathCandidate = content.includes("$");
   const hasMermaidCandidate = content.includes("mermaid");
   const rendersTaskAsset = content.includes(TASK_ASSET_URI_PREFIX);
@@ -112,6 +124,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <MarkdownRendererRich
           markdown={content}
           components={components}
+          linkPolicy={linkPolicy}
           premiumCodeBlocks={premiumCodeBlocks}
           fallback={fallback}
           {...(taskAssetContext ? { taskAssetContext } : {})}
@@ -122,11 +135,18 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   } else if (premiumCodeBlocks) {
     renderedContent = (
       <Suspense fallback={fallback ?? null}>
-        <PremiumMarkdownRenderer markdown={content} components={components} fallback={fallback} />
+        <PremiumMarkdownRenderer
+          markdown={content}
+          components={components}
+          linkPolicy={linkPolicy}
+          fallback={fallback}
+        />
       </Suspense>
     );
   } else {
-    renderedContent = <MarkdownSync markdown={content} components={components} />;
+    renderedContent = (
+      <MarkdownSync markdown={content} components={components} linkPolicy={linkPolicy} />
+    );
   }
 
   if (hasMermaidCandidate) {
@@ -135,6 +155,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <MarkdownRendererMermaidCandidate
           markdown={content}
           components={components}
+          linkPolicy={linkPolicy}
           fallbackContent={renderedContent}
           premiumCodeBlocks={premiumCodeBlocks}
           fallback={fallback}
@@ -151,6 +172,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <MarkdownRendererMathCandidate
           markdown={content}
           components={components}
+          linkPolicy={linkPolicy}
           fallbackContent={renderedContent}
           premiumCodeBlocks={premiumCodeBlocks}
           fallback={fallback}

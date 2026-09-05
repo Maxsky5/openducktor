@@ -1,3 +1,4 @@
+import { CHAT_MARKDOWN_LINK_POLICY } from "./agent-chat-markdown-link";
 import { memo, type ReactElement } from "react";
 import { MarkdownRenderer, type MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,11 @@ export const AgentChatMarkdownRenderer = memo(function AgentChatMarkdownRenderer
   const preparedMarkdown = closeOpenStreamingCodeFence(content, streaming);
   const markdownClassName = cn(MARKDOWN_PROSE_WRAPPING_CLASSES, className);
   return (
-    <MarkdownRenderer markdown={preparedMarkdown} variant={variant} className={markdownClassName} />
+    <MarkdownRenderer
+      linkPolicy={CHAT_MARKDOWN_LINK_POLICY}
+      markdown={preparedMarkdown}
+      variant={variant}
+      className={markdownClassName}
+    />
   );
 });

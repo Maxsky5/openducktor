@@ -299,7 +299,6 @@ const basePanelModel = {
     isActive: false,
     selectedFile: null,
     onSelectFile: () => {},
-    onClearSelectedFile: () => {},
   },
   ciChecksModel: {
     isActive: false,
@@ -610,7 +609,6 @@ describe("TaskExecutionPanel", () => {
         isActive: true,
         selectedFile: null,
         onSelectFile: () => {},
-        onClearSelectedFile: () => {},
       },
       ciChecksModel: null,
     });
@@ -640,7 +638,6 @@ describe("TaskExecutionPanel", () => {
           isActive: true,
           selectedFile: null,
           onSelectFile: () => {},
-          onClearSelectedFile: () => {},
         },
         ciChecksModel: null,
       },
@@ -716,7 +713,6 @@ describe("TaskExecutionPanel", () => {
                 isActive: true,
                 selectedFile: null,
                 onSelectFile: () => {},
-                onClearSelectedFile: () => {},
               },
               ciChecksModel: null,
             },
@@ -770,7 +766,6 @@ describe("TaskExecutionPanel", () => {
                 isActive: true,
                 selectedFile: null,
                 onSelectFile,
-                onClearSelectedFile: () => {},
               },
             },
           }),
@@ -824,7 +819,6 @@ describe("TaskExecutionPanel", () => {
                   isActive: true,
                   selectedFile: { rootPath, relativePath: "src/first.ts" },
                   onSelectFile,
-                  onClearSelectedFile: () => {},
                 },
                 ciChecksModel: null,
               },
@@ -842,8 +836,8 @@ describe("TaskExecutionPanel", () => {
     expect(fileTreeSelectedPaths).toEqual(["src/first.ts"]);
   });
 
-  test("clears a selected preview when the canonical file tree root changes", async () => {
-    const onClearSelectedFile = mock(() => {});
+  test("keeps a chat preview when the file explorer reports another root", async () => {
+    const onSelectFile = mock(() => {});
     const requestedRoot = "/repo/task-worktree";
     const fileTree: WorkspaceFileTree = {
       rootPath: "/private/repo/new-task-worktree",
@@ -877,8 +871,7 @@ describe("TaskExecutionPanel", () => {
                   rootPath: "/private/repo/old-task-worktree",
                   relativePath: "src/index.ts",
                 },
-                onSelectFile: () => {},
-                onClearSelectedFile,
+                onSelectFile,
               },
             },
           }),
@@ -886,7 +879,8 @@ describe("TaskExecutionPanel", () => {
       ),
     );
 
-    await waitFor(() => expect(onClearSelectedFile).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(lastFileTreeOptions).not.toBeNull());
+    expect(onSelectFile).not.toHaveBeenCalled();
   });
 
   test("renders Dev Servers below the task execution panel", () => {

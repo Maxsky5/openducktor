@@ -1,3 +1,4 @@
+import { markdownLinkUrlTransform } from "./markdown-link-policy";
 import { memo, type ReactElement, useDeferredValue } from "react";
 import Markdown, { defaultUrlTransform, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -10,6 +11,7 @@ const MARKDOWN_URL_TRANSFORM: UrlTransform = (url) => defaultUrlTransform(url);
 const PremiumMarkdownRenderer = memo(function PremiumMarkdownRenderer({
   markdown,
   components,
+  linkPolicy,
   fallback,
 }: MarkdownPremiumRendererProps): ReactElement {
   const deferredMarkdown = useDeferredValue(markdown);
@@ -19,7 +21,7 @@ const PremiumMarkdownRenderer = memo(function PremiumMarkdownRenderer({
     <Markdown
       remarkPlugins={REMARK_PLUGINS}
       skipHtml
-      urlTransform={MARKDOWN_URL_TRANSFORM}
+      urlTransform={markdownLinkUrlTransform(MARKDOWN_URL_TRANSFORM, linkPolicy)}
       components={enhancedComponents}
     >
       {deferredMarkdown}

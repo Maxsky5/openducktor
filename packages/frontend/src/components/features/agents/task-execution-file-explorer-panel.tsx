@@ -21,7 +21,6 @@ import {
   buildTaskExecutionFileTreeGitStatusEntries,
   buildTaskExecutionFileTreeInputPaths,
   resolveTaskExecutionFileTreeSelectionEntry,
-  shouldClearTaskExecutionSelectedFile,
   type TaskExecutionFileExplorerPanelModel,
   type TaskExecutionFileSelectionResult,
   type TaskExecutionSelectedFile,
@@ -217,7 +216,6 @@ export function TaskExecutionFileExplorerPanel({
     isActive,
     selectedFile,
     onSelectFile,
-    onClearSelectedFile,
   },
 }: {
   model: TaskExecutionFileExplorerPanelModel;
@@ -303,12 +301,6 @@ export function TaskExecutionFileExplorerPanel({
       entriesByPath,
     );
   }, [entriesByPath, fileTree, requestedRootPath, selectedFile, treeData?.rootPath]);
-
-  useLayoutEffect(() => {
-    if (shouldClearTaskExecutionSelectedFile(selectedFile, treeData?.rootPath ?? null)) {
-      onClearSelectedFile();
-    }
-  }, [onClearSelectedFile, selectedFile, treeData?.rootPath]);
 
   useEffect(() => {
     const currentRootPath = treeData?.rootPath ?? requestedRootPath;

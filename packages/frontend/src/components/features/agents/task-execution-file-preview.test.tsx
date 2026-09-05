@@ -1,3 +1,7 @@
+import { ChatFileLinkProvider } from "./agent-chat/agent-chat-file-link-context";
+import { AgentChatMarkdownRenderer } from "./agent-chat/agent-chat-markdown-renderer";
+import { useTaskExecutionFilePreviewController } from "./file-preview/use-task-execution-file-preview-controller";
+import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   WorkspaceTextFileReadResult,
@@ -8,7 +12,13 @@ import { File, type CodeViewFileItem } from "@pierre/diffs";
 import type { Editor, EditorOptions } from "@pierre/diffs/edit";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, type PropsWithChildren, type ReactElement, useEffect } from "react";
+import {
+  createElement,
+  type PropsWithChildren,
+  type ReactElement,
+  useEffect,
+  useState,
+} from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -255,6 +265,38 @@ afterEach(() => {
   moduleSpies = [];
   configureShellBridge(createUnavailableShellBridge());
 });
+
+function ChatPreviewHarness(): ReactElement {
+  const [taskId, setTaskId] = useState("a");
+  const preview = useTaskExecutionFilePreviewController();
+  const client = useQueryClient();
+  useEffect(() => {
+    for (const id of ["a", "b"])
+      client.setQueryData(
+        taskWorktreeQueryOptions({ repoPath: "/repo", taskId: id }).queryKey,
+        () => ({ workingDirectory: `/repo/${id}` }),
+      );
+  }, [client]);
+  return (
+    <>
+      <button type="button" onClick={() => preview.requestContextTransition(() => setTaskId("b"))}>
+        Select Task B
+      </button>
+      <ChatFileLinkProvider
+        owner={{ repoPath: "/repo", taskId, ownerKey: taskId, onSelectFile: preview.onSelectFile }}
+      >
+        <div data-testid="chat-transcript" hidden={preview.model.selectedFile !== null}>
+          <AgentChatMarkdownRenderer markdown="[first file](src/first.ts:42) and [second file](src/second.ts)" />
+        </div>
+      </ChatFileLinkProvider>
+      <TaskExecutionSelectedFilePreview
+        key={preview.model.previewSessionKey}
+        model={preview.model}
+        onFileSaved={() => {}}
+      />
+    </>
+  );
+}
 
 describe("TaskExecutionSelectedFilePreview", () => {
   test("keeps the previous file visible while the next selected file is loading", async () => {
@@ -1242,4 +1284,89 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(event.defaultPrevented).toBe(true);
     expect(writeTextFileMock).not.toHaveBeenCalled();
   });
+});
+
+test("chat links open each Task's file through the shared preview and retain the transcript", async () => {
+  readTextFileMock.mockImplementation(async (file: TaskExecutionSelectedFile) =>
+    textFileResult(file, `contents from ${file.rootPath}`),
+  );
+  const view = render(
+    <PreviewTestProviders>
+      <ChatPreviewHarness />
+    </PreviewTestProviders>,
+  );
+  try {
+    const transcript = view.getByTestId("chat-transcript");
+    transcript.scrollTop = 123;
+    expect(readTextFileMock).not.toHaveBeenCalled();
+    fireEvent.click(view.getByText("first file"));
+    await screen.findByText("contents from /repo/a");
+    expect(transcript.hidden).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Close file preview" }));
+    expect(transcript.hidden).toBe(false);
+    expect(transcript.scrollTop).toBe(123);
+    fireEvent.click(screen.getByRole("button", { name: "Select Task B" }));
+    fireEvent.click(view.getByText("first file"));
+    await screen.findByText("contents from /repo/b");
+    expect(readTextFileMock).toHaveBeenCalledTimes(2);
+  } finally {
+    view.unmount();
+  }
+});
+
+test("chat selections keep dirty drafts until discard is accepted", async () => {
+  readTextFileMock.mockImplementation(async (file: TaskExecutionSelectedFile) =>
+    textFileResult(file, file.relativePath),
+  );
+  const view = render(
+    <PreviewTestProviders>
+      <ChatPreviewHarness />
+    </PreviewTestProviders>,
+  );
+  try {
+    fireEvent.click(view.getByText("first file"));
+    await screen.findByRole("button", { name: "Save file" });
+    const item = firstCodeViewItem();
+    act(() =>
+      latestCodeViewProps?.onItemEditChange?.(item, { ...item.file, contents: "keep this draft" }),
+    );
+    await waitForDirtyFile();
+    fireEvent.click(view.getByText("first file"));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitForDirtyFile();
+    fireEvent.click(view.getByText("second file"));
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    await waitForDirtyFile();
+    expect(readTextFileMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Save file" }));
+    await waitFor(() =>
+      expect(writeTextFileMock).toHaveBeenCalledWith(
+        expect.objectContaining({ contents: "keep this draft" }),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Save file" }).hasAttribute("disabled")).toBe(true),
+    );
+    const savedItem = firstCodeViewItem();
+    act(() =>
+      latestCodeViewProps?.onItemEditChange?.(savedItem, {
+        ...savedItem.file,
+        contents: "discard this draft",
+      }),
+    );
+    await waitForDirtyFile();
+    fireEvent.click(view.getByText("second file"));
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Code editor").textContent).toBe("src/second.ts"),
+    );
+  } finally {
+    view.unmount();
+  }
 });

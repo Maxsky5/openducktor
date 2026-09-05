@@ -1,3 +1,4 @@
+import { markdownLinkUrlTransform, type MarkdownLinkPolicy } from "./markdown-link-policy";
 import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import type { ReactElement, ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
@@ -12,6 +13,7 @@ import { usePremiumCodeComponents } from "./markdown-renderer-premium-code";
 export default function MarkdownRendererRich({
   markdown,
   components,
+  linkPolicy,
   resolveTaskAssetSrc,
   taskAssetContext,
   premiumCodeBlocks = false,
@@ -19,6 +21,7 @@ export default function MarkdownRendererRich({
 }: {
   markdown: string;
   components: Components;
+  linkPolicy?: MarkdownLinkPolicy | undefined;
   resolveTaskAssetSrc?: ShellBridge["resolveTaskAssetSrc"];
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
   premiumCodeBlocks?: boolean;
@@ -44,7 +47,7 @@ export default function MarkdownRendererRich({
     <Markdown
       remarkPlugins={[remarkGfm]}
       skipHtml
-      urlTransform={TASK_DESCRIPTION_URL_TRANSFORM}
+      urlTransform={markdownLinkUrlTransform(TASK_DESCRIPTION_URL_TRANSFORM, linkPolicy)}
       components={createTaskDescriptionComponents(componentInput)}
     >
       {content}

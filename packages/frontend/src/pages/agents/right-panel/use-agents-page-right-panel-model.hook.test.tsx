@@ -323,7 +323,6 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   documentsModel: { activeDocument: null },
   selectedFile: null,
   onSelectFile: () => {},
-  onClearSelectedFile: () => {},
   repoSettings: {
     defaultRuntimeKind: "opencode",
     worktreeBasePath: "",

@@ -1,4 +1,9 @@
-import type { ReactElement } from "react";
+import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { UseTaskExecutionFilePreviewControllerResult } from "../file-preview/use-task-execution-file-preview-controller";
+import { TaskExecutionSelectedFilePreview } from "../task-execution-file-preview";
+import { ChatFileLinkProvider } from "./agent-chat-file-link-context";
+import { useLayoutEffect, useRef, type ReactElement } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +16,10 @@ import { resolveAgentSessionDialogTitle } from "./agent-session-dialog-title";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import { useSessionTranscriptSurfaceModel } from "./readonly-transcript/use-session-transcript-surface-model";
 
+const onDialogFileSaved = (): void => {};
+
 type AgentSessionTranscriptDialogProps = {
+  preview: UseTaskExecutionFilePreviewControllerResult;
   workspaceRepoPath: string | null;
   target: AgentSessionTranscriptTarget | null;
   open: boolean;
@@ -21,6 +29,7 @@ type AgentSessionTranscriptDialogProps = {
 };
 
 type AgentSessionTranscriptDialogContentProps = {
+  preview: UseTaskExecutionFilePreviewControllerResult;
   workspaceRepoPath: string | null;
   target: AgentSessionTranscriptTarget;
   title: string;
@@ -47,6 +56,7 @@ function AgentSessionTranscriptDialogLoading({
 }
 
 function AgentSessionTranscriptDialogContent({
+  preview,
   workspaceRepoPath,
   target,
   title,
@@ -57,6 +67,12 @@ function AgentSessionTranscriptDialogContent({
     workspaceRepoPath,
     target,
   });
+  const chatRef = useRef<HTMLDivElement>(null);
+  const linkRef = useRef<HTMLElement | null>(null);
+  const hasPreview = preview.model.selectedFile !== null;
+  useLayoutEffect(() => {
+    if (!hasPreview && linkRef.current?.isConnected) linkRef.current.focus();
+  }, [hasPreview]);
   const resolvedTitle = resolveAgentSessionDialogTitle(
     title,
     model.thread.transcript.session?.title,
@@ -68,14 +84,43 @@ function AgentSessionTranscriptDialogContent({
         <DialogTitle>{resolvedTitle}</DialogTitle>
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
-      <div className="min-h-0 flex-1 bg-background">
-        <AgentChatSurface model={model} />
+
+      <div className="min-h-0 flex-1 bg-background" hidden={hasPreview} ref={chatRef}>
+        <ChatFileLinkProvider
+          owner={{
+            repoPath: workspaceRepoPath,
+            taskId: target.sessionScope?.kind === "workflow" ? target.sessionScope.taskId : null,
+            ownerKey: agentSessionIdentityKey(target),
+            onSelectFile: (file) => {
+              if (
+                document.activeElement instanceof HTMLElement &&
+                chatRef.current?.contains(document.activeElement)
+              )
+                linkRef.current = document.activeElement;
+              preview.onSelectFile(file);
+            },
+          }}
+        >
+          <AgentChatSurface model={model} />
+        </ChatFileLinkProvider>
       </div>
+      {hasPreview ? (
+        <DiffWorkerProvider>
+          <div className="min-h-0 flex-1 bg-background">
+            <TaskExecutionSelectedFilePreview
+              key={preview.model.previewSessionKey}
+              model={preview.model}
+              onFileSaved={onDialogFileSaved}
+            />
+          </div>
+        </DiffWorkerProvider>
+      ) : null}
     </>
   );
 }
 
 export function AgentSessionTranscriptDialog({
+  preview,
   workspaceRepoPath,
   target,
   open,
@@ -88,6 +133,7 @@ export function AgentSessionTranscriptDialog({
       <DialogContent className="flex h-[min(88vh,960px)] max-w-[min(96vw,1100px)] flex-col gap-0 overflow-hidden p-0">
         {target ? (
           <AgentSessionTranscriptDialogContent
+            preview={preview}
             workspaceRepoPath={workspaceRepoPath}
             target={target}
             title={title}

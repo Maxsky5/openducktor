@@ -1,4 +1,8 @@
 import {
+  ChatFileLinkProvider,
+  type ChatFileLinkOwner,
+} from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
+import {
   type ComponentProps,
   memo,
   type ReactElement,
@@ -223,6 +227,7 @@ const MemoizedAgentChatPane = memo(function AgentChatPane({
 });
 
 export type AgentsPageLayoutModel = {
+  chatFileLinkOwner: ChatFileLinkOwner;
   activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
@@ -253,6 +258,7 @@ type AgentsPageLayoutProps = {
 
 export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement {
   const {
+    chatFileLinkOwner,
     activeWorkspace,
     navigationPersistenceError,
     chatSettingsLoadError,
@@ -298,8 +304,12 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     [rightPanelToggleModel, taskTabsModel, terminalPanelToggleModel],
   );
   const chatContent = useMemo(
-    () => <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />,
-    [chatHeaderModel, chatModel],
+    () => (
+      <ChatFileLinkProvider owner={chatFileLinkOwner}>
+        <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />
+      </ChatFileLinkProvider>
+    ),
+    [chatHeaderModel, chatModel, chatFileLinkOwner],
   );
   const rightPanelContent = useMemo(
     () => (

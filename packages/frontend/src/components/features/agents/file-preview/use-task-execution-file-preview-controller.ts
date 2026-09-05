@@ -8,7 +8,7 @@ import type {
 import {
   createTaskExecutionFilePreviewState,
   taskExecutionFilePreviewReducer,
-} from "./task-execution-file-preview-state";
+} from "@/components/features/agents/file-preview/task-execution-file-preview-state";
 
 export type UseTaskExecutionFilePreviewControllerResult = {
   model: TaskExecutionSelectedFilePreviewModel;

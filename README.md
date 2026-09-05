@@ -103,6 +103,12 @@ Desktop-managed sessions use that MCP internally, and the same task surface is a
 
 That keeps the workflow task-centric and auditable: agents act through a controlled task interface, while OpenDucktor keeps task state, documents, approvals, and delivery history connected in one place.
 
+### File links in Agent Chat
+
+Click a Markdown file link in Agent Chat or a Subagent Transcript to open the existing file preview. Relative paths use the Task's Build Worktree. Absolute paths and local `file:///` links must stay within that same Build Worktree. Line references such as `:42`, `:42:7`, and `#L42-L50` open the file without scrolling to a line.
+
+The preview keeps its file access limits and unsaved-edit checks. Invalid links and unavailable files show an error. Plain paths and code blocks do not become links.
+
 ## Current Scope
 
 - Platform support today: macOS is the primary supported desktop target.

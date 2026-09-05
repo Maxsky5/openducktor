@@ -6,7 +6,7 @@ import {
   keepEditingTaskExecutionFilePreview,
   reportTaskExecutionFilePreviewLeavePolicy,
   requestTaskExecutionFilePreviewIntent,
-} from "./task-execution-file-preview-state";
+} from "@/components/features/agents/file-preview/task-execution-file-preview-state";
 
 const firstFile = { rootPath: "/repo", relativePath: "first.ts" };
 const secondFile = { rootPath: "/repo", relativePath: "second.ts" };
@@ -109,4 +109,25 @@ describe("task execution file preview state", () => {
     });
     expect(clearTaskExecutionFilePreviewState(saving)).toBe(saving);
   });
+});
+
+test("repeated file activation preserves dirty, saving, and pending selection state", () => {
+  const opened = requestTaskExecutionFilePreviewIntent(createTaskExecutionFilePreviewState(), {
+    type: "select",
+    file: firstFile,
+  });
+  for (const policy of ["allow", "confirm", "defer"] as const) {
+    const state = reportTaskExecutionFilePreviewLeavePolicy(opened, policy);
+    expect(
+      requestTaskExecutionFilePreviewIntent(state, { type: "select", file: { ...firstFile } }),
+    ).toBe(state);
+    const pending = requestTaskExecutionFilePreviewIntent(state, {
+      type: "select",
+      file: secondFile,
+    });
+    if (pending.pendingIntent)
+      expect(
+        requestTaskExecutionFilePreviewIntent(pending, { type: "select", file: firstFile }),
+      ).toBe(pending);
+  }
 });

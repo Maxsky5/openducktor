@@ -63,6 +63,12 @@ export const requestTaskExecutionFilePreviewIntent = (
   state: TaskExecutionFilePreviewState,
   intent: TaskExecutionFilePreviewIntent,
 ): TaskExecutionFilePreviewState => {
+  if (
+    intent.type === "select" &&
+    state.selectedFile?.rootPath === intent.file.rootPath &&
+    state.selectedFile.relativePath === intent.file.relativePath
+  )
+    return state;
   if (state.pendingIntent !== null) return state;
   if (state.leavePolicy === "defer") {
     return intent.type === "leave_context" ? { ...state, pendingIntent: intent } : state;

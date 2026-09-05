@@ -1,3 +1,4 @@
+import type { MarkdownLinkPolicy } from "./markdown-link-policy";
 import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import { lazy, type ReactElement, type ReactNode, Suspense } from "react";
 import type { Components } from "react-markdown";
@@ -9,6 +10,7 @@ const MarkdownRendererMath = lazy(() => import("./markdown-renderer-math"));
 export default function MarkdownRendererMathCandidate({
   markdown,
   components,
+  linkPolicy,
   fallbackContent,
   resolveTaskAssetSrc,
   taskAssetContext,
@@ -17,6 +19,7 @@ export default function MarkdownRendererMathCandidate({
 }: {
   markdown: string;
   components: Components;
+  linkPolicy?: MarkdownLinkPolicy | undefined;
   fallbackContent: ReactElement;
   resolveTaskAssetSrc?: ShellBridge["resolveTaskAssetSrc"];
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
@@ -32,6 +35,7 @@ export default function MarkdownRendererMathCandidate({
       <MarkdownRendererMath
         markdown={markdown}
         components={components}
+        linkPolicy={linkPolicy}
         premiumCodeBlocks={premiumCodeBlocks}
         fallback={fallback}
         {...(taskAssetContext ? { taskAssetContext } : {})}

@@ -68,7 +68,7 @@ export const createTaskWorktreeService = ({
       return yield* Effect.try({
         try: () =>
           taskWorktreeSummarySchema.parse({
-            workingDirectory: worktreePath,
+            workingDirectory: canonicalWorktreePath,
           }),
         catch: (cause) =>
           new HostValidationError({

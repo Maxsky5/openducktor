@@ -93,6 +93,20 @@ describe("createTaskWorktreeService", () => {
       workingDirectory: "/home/dev/worktrees/task-1",
     });
   });
+  test("returns the canonical worktree root used by file previews", async () => {
+    const service = createTaskWorktreeService({
+      settingsConfig: createSettingsConfig({
+        existingPaths: new Set(["/home/dev/worktrees/task-1"]),
+        canonicalPaths: { "/home/dev/worktrees/task-1": "/canonical/worktrees/task-1" },
+      }),
+      workspaceSettingsService: createWorkspaceSettingsService(
+        repoConfig({ worktreeBasePath: "~/worktrees" }),
+      ),
+    });
+    await expect(
+      Effect.runPromise(service.getTaskWorktree({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toEqual({ workingDirectory: "/canonical/worktrees/task-1" });
+  });
   test("returns null when the deterministic task worktree is absent", async () => {
     const service = createTaskWorktreeService({
       settingsConfig: createSettingsConfig(),
