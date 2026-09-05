@@ -7,7 +7,7 @@
   "scripts": {
     "build": "bunx tsc -p tsconfig.json",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
-    "test": "bun test --pass-with-no-tests --timeout 1000",
+    "test": "bun test --pass-with-no-tests --timeout 1000 && node --experimental-strip-types tests/opencode-command-fetch.node.mjs",
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "dependencies": {

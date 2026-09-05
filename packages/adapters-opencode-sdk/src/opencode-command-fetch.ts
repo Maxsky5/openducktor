@@ -1,7 +1,9 @@
+import type { Response as UndiciResponse } from "undici";
+
 type CommandFetchRequest = (
   input: Parameters<typeof globalThis.fetch>[0],
   init?: Parameters<typeof globalThis.fetch>[1],
-) => Promise<Response>;
+) => Promise<Response | UndiciResponse>;
 
 let nodeFetchPromise: Promise<CommandFetchRequest> | undefined;
 
@@ -45,13 +47,7 @@ const loadNodeFetch = async (): Promise<CommandFetchRequest> => {
       }
       request = new UndiciRequest(sourceRequest.url, requestInit);
     }
-    const response = await fetch(request, { dispatcher });
-    if (!(response instanceof globalThis.Response)) {
-      throw new TypeError(
-        "Undici returned a response that does not implement the host Response API.",
-      );
-    }
-    return response;
+    return fetch(request, { dispatcher });
   };
 };
 
