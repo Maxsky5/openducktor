@@ -76,7 +76,14 @@ const model: TerminalPanelModel = {
 };
 
 describe("TerminalPanel", () => {
-  test("keeps the terminal failure visible after exit and reattachment", async () => {
+  test.each([
+    { notice: "exit code", attention: null, expected: "Exited with code 1." },
+    {
+      notice: "failure",
+      attention: "Shell access denied. Check the shell executable.",
+      expected: "Shell access denied. Check the shell executable.",
+    },
+  ])("keeps the $notice visible after exit and reattachment", async ({ attention, expected }) => {
     const mount = spyOn(terminalMount, "mountInteractiveTerminal").mockReturnValue({
       activate: () => undefined,
       dispose: () => undefined,
@@ -115,14 +122,14 @@ describe("TerminalPanel", () => {
       await waitFor(() => expect(mount).toHaveBeenCalledTimes(1));
       const callbacks = mount.mock.calls[0]?.[0];
       if (!callbacks) throw new Error("Terminal did not mount");
-      act(() => callbacks.onAttention("Shell access denied. Check the shell executable."));
+      if (attention) act(() => callbacks.onAttention(attention));
       act(() => callbacks.onLifecycle("exited", "Exited with code 1."));
       expect(screen.getByRole("status", { name: "Terminal status" }).textContent).toContain(
-        "Shell access denied.",
+        expected,
       );
       act(() => callbacks.onLifecycle("exited", null));
       expect(screen.getByRole("status", { name: "Terminal status" }).textContent).toContain(
-        "Check the shell executable.",
+        expected,
       );
     } finally {
       unmount();

@@ -210,7 +210,9 @@ export function TerminalPanel({
       exitText: string | null,
     ): void => {
       onLifecycle(scopeKey, terminalId, lifecycle);
-      setExitByTab((current) => ({ ...current, [tabId]: exitText }));
+      if (exitText !== null) {
+        setExitByTab((current) => ({ ...current, [tabId]: exitText }));
+      }
     },
     [onLifecycle],
   );
