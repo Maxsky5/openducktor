@@ -80,3 +80,25 @@ describe("chat file destinations", () => {
     expect(resolveChatFileLink("D:/repo/a", "C:\\repo").kind).toBe("invalid");
   });
 });
+
+for (const path of ["c:/repo/src/app.ts", "file:///%43:/repo/src/app.ts"]) {
+  for (const suffix of ["", ":42", ":42:7", "#L42", "#L42-L50"]) {
+    test(`resolves native Windows destination ${path}${suffix}`, () => {
+      expect(resolveChatFileLink(path + suffix, "C:/repo")).toEqual({
+        kind: "file",
+        file: { rootPath: "C:/repo", relativePath: "src/app.ts" },
+      });
+    });
+  }
+}
+
+test("drive comparison preserves file names and POSIX case boundaries", () => {
+  expect(resolveChatFileLink("c:/repo/Src/App.ts", "C:/repo")).toEqual({
+    kind: "file",
+    file: { rootPath: "C:/repo", relativePath: "Src/App.ts" },
+  });
+  for (const href of ["/Repo/src/app.ts", "file:///Repo/src/app.ts"])
+    expect(resolveChatFileLink(href, "/repo").kind).toBe("invalid");
+  for (const href of ["d:/repo/src/app.ts", "file:///%44:/repo/src/app.ts"])
+    expect(resolveChatFileLink(href, "C:/repo").kind).toBe("invalid");
+});

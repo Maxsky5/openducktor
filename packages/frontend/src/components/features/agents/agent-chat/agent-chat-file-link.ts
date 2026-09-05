@@ -40,7 +40,6 @@ export function resolveChatFileLink(href: string, rootPath: string | null): Chat
   const isFileUri = /^file:/i.test(href);
   if (isFileUri && !/^file:\/\/\//i.test(href))
     return invalid("Use a local file URI without a remote authority.");
-  const hasDrive = DRIVE.test(href) || (isFileUri && /^file:\/\/\/[a-z]:\//i.test(href));
   if (DRIVE.test(href) && !/^[a-z]:[/\\]/i.test(href))
     return invalid("Drive-relative file paths are not supported.");
   let path = href;
@@ -63,6 +62,7 @@ export function resolveChatFileLink(href: string, rootPath: string | null): Chat
     return invalid("The file path has invalid percent encoding.");
   }
   if (CONTROL_CHARACTERS.test(path)) return invalid("The file path contains control characters.");
+  const hasDrive = /^[a-z]:[/\\]/i.test(path) || (isFileUri && /^\/[a-z]:\//i.test(path));
   const windows = /^[a-z]:[/\\]/i.test(rootPath);
   if (windows && isFileUri && /^\/[a-z]:\//i.test(path)) path = path.slice(1);
   if (path.startsWith("//") || path.startsWith("\\\\"))
@@ -78,8 +78,12 @@ export function resolveChatFileLink(href: string, rootPath: string | null): Chat
   const rootParts = segments(windows ? rootPath.replaceAll("\\", "/") : rootPath);
   if (!rootParts) return invalid("The Build Worktree path is invalid.");
   if (absolute) {
-    if (rootParts.some((part, index) => part !== parts[index]))
-      return invalid("The file is outside the Task's Build Worktree.");
+    const matchesRoot = rootParts.every((part, index) =>
+      windows && index === 0
+        ? part.toLowerCase() === parts[index]?.toLowerCase()
+        : part === parts[index],
+    );
+    if (!matchesRoot) return invalid("The file is outside the Task's Build Worktree.");
     parts.splice(0, rootParts.length);
   }
   if (!parts.length) return invalid("The destination must name a file.");

@@ -240,3 +240,43 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
     }
   });
 }
+
+for (const path of ["c:/repo/src/app.ts", "file:///%43:/repo/src/app.ts"]) {
+  for (const suffix of ["", ":42", ":42:7", "#L42", "#L42-L50"]) {
+    test(`Windows link activation selects the exact relative path: ${path}${suffix}`, async () => {
+      const { spyOn } = await import("bun:test");
+      const external = await import("@/lib/open-external-url");
+      const openExternal = spyOn(external, "openExternalUrl").mockResolvedValue();
+      const client = createQueryClient();
+      client.setQueryData(
+        taskWorktreeQueryOptions({ repoPath: "C:/repo", taskId: "a" }).queryKey,
+        () => ({ workingDirectory: "C:/repo" }),
+      );
+      const onSelectFile = mock(() => {});
+      const view = render(
+        <QueryClientProvider client={client}>
+          <ChatFileLinkProvider
+            owner={{ repoPath: "C:/repo", taskId: "a", ownerKey: "main", onSelectFile }}
+          >
+            <AgentChatMarkdownRenderer markdown={`[file](${path}${suffix})`} />
+          </ChatFileLinkProvider>
+        </QueryClientProvider>,
+      );
+      try {
+        fireEvent.click(view.getByRole("link"));
+        await waitFor(() =>
+          expect(onSelectFile).toHaveBeenCalledWith({
+            rootPath: "C:/repo",
+            relativePath: "src/app.ts",
+          }),
+        );
+        expect(onSelectFile).toHaveBeenCalledTimes(1);
+        expect(openExternal).not.toHaveBeenCalled();
+      } finally {
+        view.unmount();
+        client.clear();
+        openExternal.mockRestore();
+      }
+    });
+  }
+}
