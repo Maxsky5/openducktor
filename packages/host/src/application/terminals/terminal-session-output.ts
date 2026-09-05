@@ -23,6 +23,7 @@ type TerminalAttachment = {
   acknowledgedSequence: number;
   deliveredSequence: number;
   pendingBytes: number;
+  replaySummary: TerminalSummary | null;
 };
 
 export type TerminalSessionAttachInput = {
@@ -105,6 +106,7 @@ export class TerminalSessionOutput {
       acknowledgedSequence: requested,
       deliveredSequence: requested,
       pendingBytes: 0,
+      replaySummary: summary,
     };
     const previous = this.attachments.get(input.attachmentId);
     this.attachments.set(input.attachmentId, attachment);
@@ -119,25 +121,7 @@ export class TerminalSessionOutput {
         title: summary.label,
         complete: requested >= this.earliestRetainedSequence,
       });
-      let events = this.flush(attachment, true, handle);
-      if (!this.attachments.has(input.attachmentId)) return events;
-      if (summary.exit) {
-        const published = this.tryPublish(attachment, {
-          version: TERMINAL_PROTOCOL_VERSION,
-          type: "lifecycle",
-          terminalId: this.terminalId,
-          lifecycle: summary.lifecycle,
-          exitCode: summary.exit.exitCode,
-          signal: summary.exit.signal,
-          finalSequence: summary.exit.finalSequence,
-        });
-        events = mergeEvents(events, published.events);
-        if (!published.delivered) return events;
-      }
-      if (this.failureFrame) {
-        events = mergeEvents(events, this.tryPublish(attachment, this.failureFrame).events);
-      }
-      return events;
+      return this.flush(attachment, true, handle);
     } catch (cause) {
       if (previous) this.attachments.set(input.attachmentId, previous);
       else this.attachments.delete(input.attachmentId);
@@ -155,7 +139,7 @@ export class TerminalSessionOutput {
   }
 
   publishFailure(failure: TerminalFailure): TerminalOutputEvents {
-    this.failureFrame ??= {
+    this.failureFrame = {
       version: TERMINAL_PROTOCOL_VERSION,
       type: "protocol_error",
       terminalId: this.terminalId,
@@ -209,22 +193,26 @@ export class TerminalSessionOutput {
   resumeIfUnblocked(
     handle: TerminalPtyHandle | null,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
-    if (
-      !this.paused ||
-      ![...this.attachments.values()].every(
-        (candidate) => candidate.pendingBytes <= TERMINAL_LIMITS.resumeOutputBytes,
-      )
-    ) {
-      return Effect.succeed([]);
-    }
-    if (!handle) return Effect.succeed([]);
     return Effect.gen(this, function* () {
-      yield* handle.resumeOutput();
-      this.paused = false;
+      if (this.paused) {
+        if (
+          ![...this.attachments.values()].every(
+            (candidate) => candidate.pendingBytes <= TERMINAL_LIMITS.resumeOutputBytes,
+          )
+        )
+          return [];
+        if (handle) yield* handle.resumeOutput();
+        this.paused = false;
+      }
       let events: TerminalOutputEvents = [];
       // oxlint-disable-next-line unicorn/no-useless-spread -- flushing can change attachments
       for (const attachment of [...this.attachments.values()]) {
-        events = mergeEvents(events, this.flush(attachment, false, handle));
+        if (attachment.deliveredSequence < this.sequence || attachment.replaySummary) {
+          events = mergeEvents(
+            events,
+            this.flush(attachment, attachment.replaySummary !== null, handle),
+          );
+        }
       }
       return events;
     });
@@ -346,7 +334,26 @@ export class TerminalSessionOutput {
     for (const chunk of this.replay) {
       const delivered = this.deliver(attachment, chunk, replay, handle);
       events = mergeEvents(events, delivered.events);
-      if (!delivered.delivered) break;
+      if (!delivered.delivered) return events;
+    }
+    const summary = attachment.replaySummary;
+    if (!summary) return events;
+    attachment.replaySummary = null;
+    if (summary.exit) {
+      const published = this.tryPublish(attachment, {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "lifecycle",
+        terminalId: this.terminalId,
+        lifecycle: summary.lifecycle,
+        exitCode: summary.exit.exitCode,
+        signal: summary.exit.signal,
+        finalSequence: summary.exit.finalSequence,
+      });
+      events = mergeEvents(events, published.events);
+      if (!published.delivered) return events;
+    }
+    if (this.failureFrame) {
+      events = mergeEvents(events, this.tryPublish(attachment, this.failureFrame).events);
     }
     return events;
   }

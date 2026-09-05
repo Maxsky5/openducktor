@@ -41,16 +41,21 @@ describe("createNodePtyPort", () => {
     { exitCode: 1, signal: 0, requestedClose: false, failed: true },
     { exitCode: 0, signal: 15, requestedClose: false, failed: true },
     { exitCode: 0, signal: 15, requestedClose: true, failed: false },
+    { exitCode: -1, signal: 0, requestedClose: false, failed: true, pid: 0 },
   ])(
     "classifies silent exit $exitCode, signal $signal, requested close $requestedClose",
-    async ({ exitCode, signal, requestedClose, failed }) => {
+    async ({ exitCode, signal, requestedClose, failed, pid = 42 }) => {
       let exitListener: (event: { exitCode: number; signal: number }) => void = () => undefined;
       const events: string[] = [];
+      const terminatedPids: number[] = [];
       const port = createNodePtyPort({
-        processTreeTerminator: () => Effect.void,
+        processTreeTerminator: ({ pid }) =>
+          Effect.sync(() => {
+            terminatedPids.push(pid);
+          }),
         nodePty: {
           spawn: () => ({
-            pid: 42,
+            pid,
             onData: () => ({ dispose: () => undefined }),
             onExit: (listener) => {
               exitListener = listener;
@@ -76,6 +81,8 @@ describe("createNodePtyPort", () => {
       if (requestedClose) await Effect.runPromise(handle.terminate());
       exitListener({ exitCode, signal });
       await Bun.sleep(0);
+      await Effect.runPromise(handle.terminate());
+      expect(terminatedPids).toEqual(pid === 0 ? [] : [pid]);
       expect(events.at(-1)).toBe("exit");
       if (!failed) expect(events).toEqual(["exit"]);
       else {

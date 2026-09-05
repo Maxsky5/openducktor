@@ -26,6 +26,71 @@ const pausableHandle: TerminalPtyHandle = {
 };
 
 describe("TerminalSessionOutput", () => {
+  test("publishes and replays the latest failure", () => {
+    const output = new TerminalSessionOutput("terminal-1", TERMINAL_LIMITS.replayBytes);
+    const frames: TerminalServerMessage[] = [];
+    const input = {
+      terminalId: "terminal-1",
+      attachmentId: "client",
+      lastConsumedSequence: 0,
+      sink: (frame: TerminalServerMessage) => frames.push(frame),
+    };
+    output.attach(input, summary, null);
+    output.publishFailure({ code: "spawn_failed", message: "Shell failed." });
+    const failure = { code: "protocol_error" as const, message: "Process cleanup failed." };
+    output.publishFailure(failure);
+    expect(frames.at(-1)).toMatchObject({ type: "protocol_error", failure });
+    frames.length = 0;
+    output.attach(input, summary, null);
+    expect(frames.at(-1)).toMatchObject({ type: "protocol_error", failure });
+  });
+
+  test("continues bounded exited replay on ACK before publishing exit and failure", async () => {
+    const output = new TerminalSessionOutput("terminal-1", TERMINAL_LIMITS.replayBytes);
+    const bytes = new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes * 2 + 1);
+    output.accept(bytes, null);
+    output.publishFailure({ code: "spawn_failed", message: "Shell failed." });
+    const frames: TerminalServerMessage[] = [];
+    let delivered = 0;
+    output.attach(
+      {
+        terminalId: "terminal-1",
+        attachmentId: "client",
+        lastConsumedSequence: 0,
+        sink: (frame) => {
+          frames.push(frame);
+          if (frame.type === "output") delivered = frame.sequenceEnd;
+        },
+      },
+      {
+        ...summary,
+        lifecycle: "exited",
+        exit: {
+          exitCode: 1,
+          signal: null,
+          finalSequence: bytes.length,
+          exitedAt: "2026-07-17T00:00:01.000Z",
+        },
+      },
+      null,
+    );
+    for (let batch = 1; batch <= 2; batch += 1) {
+      expect(delivered).toBe(TERMINAL_LIMITS.pendingOutputBytes * batch);
+      expect(
+        frames.some((frame) => frame.type === "lifecycle" || frame.type === "protocol_error"),
+      ).toBe(false);
+      output.acknowledge("client", delivered);
+      expect(await Effect.runPromise(output.resumeIfUnblocked(null))).toEqual([]);
+    }
+    expect(delivered).toBe(bytes.length);
+    expect(frames.slice(-2).map((frame) => frame.type)).toEqual(["lifecycle", "protocol_error"]);
+    expect(frames.at(-2)).toMatchObject({ finalSequence: bytes.length, exitCode: 1 });
+    const count = frames.length;
+    output.acknowledge("client", delivered);
+    await Effect.runPromise(output.resumeIfUnblocked(null));
+    expect(frames).toHaveLength(count);
+  });
+
   test("replays final output and exit details before the retained failure", () => {
     const output = new TerminalSessionOutput("terminal-1", TERMINAL_LIMITS.replayBytes);
     output.accept(new TextEncoder().encode("done"), null);

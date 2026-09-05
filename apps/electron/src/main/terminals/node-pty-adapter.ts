@@ -141,7 +141,10 @@ export const createNodePtyPort = ({
           handlers.onExit(nativeExit);
         };
         const finalizeExit = (): Effect.Effect<void, TerminalPtyError> =>
-          ensureProcessTreeTerminated().pipe(Effect.tap(() => Effect.sync(publishExit)));
+          // node-pty releases ConPTY before reporting a connection failure with no process ID.
+          closed && pty.pid === 0
+            ? Effect.sync(publishExit)
+            : ensureProcessTreeTerminated().pipe(Effect.tap(() => Effect.sync(publishExit)));
         const requireOpen = (name: TerminalPtyError["operation"], run: () => void) =>
           operation(name, () => {
             if (closed) throw new Error("The terminal is already closed.");
