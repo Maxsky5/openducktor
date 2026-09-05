@@ -41,7 +41,6 @@ const TerminalViewport = memo(function TerminalViewport({
   active,
   platform,
   onRetryCreate,
-  onAttention,
   onLifecycle,
   onForgotten,
   onTitleChange,
@@ -53,26 +52,19 @@ const TerminalViewport = memo(function TerminalViewport({
   active: boolean;
   platform: AppPlatform | undefined;
   onRetryCreate: TerminalPanelModel["onRetryCreate"];
-  onAttention: (tabId: string, message: string | null) => void;
-  onLifecycle: (
-    scopeKey: string,
-    tabId: string,
-    terminalId: string,
-    lifecycle: TerminalLifecycle,
-    exitText: string | null,
-  ) => void;
+  onLifecycle: TerminalPanelModel["onLifecycle"];
   onForgotten: (scopeKey: string, terminalId: string, message: string) => void;
   onTitleChange: (scopeKey: string, terminalId: string, title: string) => void;
 }): ReactElement {
-  const handleAttention = useCallback(
-    (message: string | null) => onAttention(tab.tabId, message),
-    [onAttention, tab.tabId],
-  );
+  const [attention, setAttention] = useState<string | null>(null);
+  const [exitText, setExitText] = useState<string | null>(null);
+  const notice = attention ?? exitText;
   const handleLifecycle = useCallback(
-    (lifecycle: TerminalLifecycle, exitText: string | null) => {
-      if (tab.terminalId) onLifecycle(scopeKey, tab.tabId, tab.terminalId, lifecycle, exitText);
+    (lifecycle: TerminalLifecycle, text: string | null) => {
+      if (tab.terminalId) onLifecycle(scopeKey, tab.terminalId, lifecycle);
+      if (text !== null) setExitText(text);
     },
-    [onLifecycle, scopeKey, tab.tabId, tab.terminalId],
+    [onLifecycle, scopeKey, tab.terminalId],
   );
   const handleForgotten = useCallback(
     (message: string) => {
@@ -119,42 +111,92 @@ const TerminalViewport = memo(function TerminalViewport({
     );
   }
   return (
-    <Suspense
-      fallback={
-        <div
-          data-testid="terminal-loading-surface"
-          className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]"
-        />
-      }
-    >
-      <LazyInteractiveTerminal
-        terminalId={tab.terminalId}
-        controller={controller}
-        platform={platform}
-        active={active}
-        focusRequest={focusRequest}
-        onAttention={handleAttention}
-        onLifecycle={handleLifecycle}
-        onForgotten={handleForgotten}
-        onTitleChange={handleTitleChange}
-      />
-    </Suspense>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="min-h-0 flex-1">
+        <Suspense
+          fallback={
+            <div
+              data-testid="terminal-loading-surface"
+              className="h-full min-h-0 bg-[var(--dev-server-terminal-panel)]"
+            />
+          }
+        >
+          <LazyInteractiveTerminal
+            terminalId={tab.terminalId}
+            controller={controller}
+            platform={platform}
+            active={active}
+            focusRequest={focusRequest}
+            onAttention={setAttention}
+            onLifecycle={handleLifecycle}
+            onForgotten={handleForgotten}
+            onTitleChange={handleTitleChange}
+          />
+        </Suspense>
+      </div>
+      {notice ? (
+        <p
+          role="status"
+          aria-label="Terminal status"
+          className="shrink-0 border-t border-border bg-warning-surface px-3 py-1.5 text-xs text-warning-surface-foreground"
+        >
+          {notice}
+        </p>
+      ) : null}
+    </div>
   );
 });
 
-export function TerminalPanel({
+function MountedTerminals({
   model,
-  headerLeading,
+  onRetryCreate,
 }: {
   model: TerminalPanelModel;
-  headerLeading?: ReactNode;
+  onRetryCreate: TerminalPanelModel["onRetryCreate"];
 }): ReactElement {
-  const { onLifecycle } = model;
+  const activeTab = model.tabs.find((tab) => tab.tabId === model.activeTabId);
+  return (
+    <div className="relative min-h-0 flex-1 overflow-hidden">
+      {model.mountedTabs.map((mountedTab) => {
+        const active =
+          model.isVisible &&
+          mountedTab.scopeKey === model.scopeKey &&
+          mountedTab.tab.tabId === activeTab?.tabId;
+        return (
+          <TabsContent
+            key={`${mountedTab.scopeKey}:${mountedTab.tab.tabId}`}
+            forceMount
+            value={mountedTab.tab.tabId}
+            data-terminal-viewport
+            data-viewport-state={active ? "active" : "inactive"}
+            aria-hidden={!active}
+            inert={!active}
+            className="h-full min-h-0 data-[viewport-state=inactive]:pointer-events-none data-[viewport-state=inactive]:absolute data-[viewport-state=inactive]:top-0 data-[viewport-state=inactive]:left-[calc(100%+1px)] data-[viewport-state=inactive]:w-full"
+          >
+            <TerminalViewport
+              scopeKey={mountedTab.scopeKey}
+              tab={mountedTab.tab}
+              controller={model.controller}
+              focusRequest={active ? model.focusRequest : 0}
+              active={active}
+              platform={model.platform}
+              onRetryCreate={onRetryCreate}
+              onLifecycle={model.onLifecycle}
+              onForgotten={model.onForgotten}
+              onTitleChange={model.onTitleChange}
+            />
+          </TabsContent>
+        );
+      })}
+    </div>
+  );
+}
+
+function useTerminalClose(model: TerminalPanelModel) {
   const [pendingCloseCandidate, setPendingCloseCandidate] = useState<{
     scopeKey: string | null;
     tab: TerminalTab;
   } | null>(null);
-  const [attentionByTab, setAttentionByTab] = useState<Record<string, string | null>>({});
   const [pendingCloseError, setPendingCloseError] = useState<{
     scopeKey: string | null;
     message: string;
@@ -162,16 +204,11 @@ export function TerminalPanel({
   const [confirmingScopeKey, setConfirmingScopeKey] = useState<string | null | undefined>(
     undefined,
   );
+
   const currentScopeKey = useRef(model.scopeKey);
-  const retryCreateRef = useRef(model.onRetryCreate);
   useLayoutEffect(() => {
     currentScopeKey.current = model.scopeKey;
-    retryCreateRef.current = model.onRetryCreate;
-  }, [model.onRetryCreate, model.scopeKey]);
-  const retryTerminalCreation = useCallback((ownerScopeKey: string, tabId: string): void => {
-    if (ownerScopeKey !== currentScopeKey.current) return;
-    retryCreateRef.current(ownerScopeKey, tabId);
-  }, []);
+  }, [model.scopeKey]);
   const closeCandidate =
     pendingCloseCandidate?.scopeKey === model.scopeKey ? pendingCloseCandidate.tab : null;
   const closeError =
@@ -181,38 +218,6 @@ export function TerminalPanel({
     confirmingScopeKey !== undefined &&
     confirmingScopeKey === pendingCloseCandidate?.scopeKey;
 
-  useEffect(() => {
-    if (!model.platformError) return;
-    const toastId = "terminal:platform";
-    toast.error("Terminal shortcuts unavailable", {
-      id: toastId,
-      description: model.platformError,
-    });
-    return () => {
-      toast.dismiss(toastId);
-    };
-  }, [model.platformError]);
-  const activeTab = model.tabs.find((tab) => tab.tabId === model.activeTabId) ?? null;
-  const hasCurrentScopeMountedTabs = model.mountedTabs.some(
-    (mountedTab) => mountedTab.scopeKey === model.scopeKey,
-  );
-  const showsEmptyTerminalState = model.tabs.length === 0 && !hasCurrentScopeMountedTabs;
-  const setTabAttention = useCallback((tabId: string, message: string | null): void => {
-    setAttentionByTab((current) => ({ ...current, [tabId]: message }));
-  }, []);
-  const setTerminalLifecycle = useCallback(
-    (
-      scopeKey: string,
-      tabId: string,
-      terminalId: string,
-      lifecycle: TerminalLifecycle,
-      exitText: string | null,
-    ): void => {
-      onLifecycle(scopeKey, terminalId, lifecycle);
-      if (exitText) setTabAttention(tabId, exitText);
-    },
-    [onLifecycle, setTabAttention],
-  );
   const closeTab = async (tab: TerminalTab): Promise<void> => {
     const scopeKey = model.scopeKey;
     try {
@@ -251,6 +256,57 @@ export function TerminalPanel({
       setConfirmingScopeKey((current) => (current === candidate.scopeKey ? undefined : current));
     }
   };
+
+  return {
+    closeCandidate,
+    closeError,
+    isConfirmingClose,
+    closeTab,
+    confirmClose,
+    setPendingCloseCandidate,
+  };
+}
+
+export function TerminalPanel({
+  model,
+  headerLeading,
+}: {
+  model: TerminalPanelModel;
+  headerLeading?: ReactNode;
+}): ReactElement {
+  const {
+    closeCandidate,
+    closeError,
+    isConfirmingClose,
+    closeTab,
+    confirmClose,
+    setPendingCloseCandidate,
+  } = useTerminalClose(model);
+  const currentScopeKey = useRef(model.scopeKey);
+  const retryCreateRef = useRef(model.onRetryCreate);
+  useLayoutEffect(() => {
+    currentScopeKey.current = model.scopeKey;
+    retryCreateRef.current = model.onRetryCreate;
+  }, [model.onRetryCreate, model.scopeKey]);
+  const retryTerminalCreation = useCallback((ownerScopeKey: string, tabId: string): void => {
+    if (ownerScopeKey !== currentScopeKey.current) return;
+    retryCreateRef.current(ownerScopeKey, tabId);
+  }, []);
+  useEffect(() => {
+    if (!model.platformError) return;
+    const toastId = "terminal:platform";
+    toast.error("Terminal shortcuts unavailable", {
+      id: toastId,
+      description: model.platformError,
+    });
+    return () => {
+      toast.dismiss(toastId);
+    };
+  }, [model.platformError]);
+  const hasCurrentScopeMountedTabs = model.mountedTabs.some(
+    (mountedTab) => mountedTab.scopeKey === model.scopeKey,
+  );
+  const showsEmptyTerminalState = model.tabs.length === 0 && !hasCurrentScopeMountedTabs;
   return (
     <Tabs
       {...(model.activeTabId ? { value: model.activeTabId } : {})}
@@ -293,45 +349,7 @@ export function TerminalPanel({
       </div>
       {model.mountedTabs.length > 0 ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="relative min-h-0 flex-1 overflow-hidden">
-            {model.mountedTabs.map((mountedTab) => {
-              const active =
-                model.isVisible &&
-                mountedTab.scopeKey === model.scopeKey &&
-                mountedTab.tab.tabId === activeTab?.tabId;
-              return (
-                <TabsContent
-                  key={`${mountedTab.scopeKey}:${mountedTab.tab.tabId}`}
-                  forceMount
-                  value={mountedTab.tab.tabId}
-                  data-terminal-viewport
-                  data-viewport-state={active ? "active" : "inactive"}
-                  aria-hidden={!active}
-                  inert={!active}
-                  className="h-full min-h-0 data-[viewport-state=inactive]:pointer-events-none data-[viewport-state=inactive]:absolute data-[viewport-state=inactive]:top-0 data-[viewport-state=inactive]:left-[calc(100%+1px)] data-[viewport-state=inactive]:w-full"
-                >
-                  <TerminalViewport
-                    scopeKey={mountedTab.scopeKey}
-                    tab={mountedTab.tab}
-                    controller={model.controller}
-                    focusRequest={active ? model.focusRequest : 0}
-                    active={active}
-                    platform={model.platform}
-                    onRetryCreate={retryTerminalCreation}
-                    onAttention={setTabAttention}
-                    onLifecycle={setTerminalLifecycle}
-                    onForgotten={model.onForgotten}
-                    onTitleChange={model.onTitleChange}
-                  />
-                </TabsContent>
-              );
-            })}
-          </div>
-          {activeTab && attentionByTab[activeTab.tabId] ? (
-            <p className="border-t border-border bg-warning-surface px-3 py-1.5 text-xs text-warning-surface-foreground">
-              {attentionByTab[activeTab.tabId]}
-            </p>
-          ) : null}
+          <MountedTerminals model={model} onRetryCreate={retryTerminalCreation} />
           {closeError ? (
             <p className="border-t border-border px-3 py-1.5 text-xs text-destructive">
               Close failed: {closeError}

@@ -110,7 +110,18 @@ export const createTerminalSessionEngine = ({
               session.resources.consumeOutput(data);
               applyStreamEvents(session, session.output.accept(data, session.resources.handle));
             },
-            onFailure: () => handleFailure(session),
+            onFailure: (failure) => {
+              applyStreamEvents(
+                session,
+                session.output.publishFailure({
+                  code: failure.code === "operation_failed" ? "protocol_error" : failure.code,
+                  message: `${failure.message} Close this tab and create a new terminal after resolving the error.`,
+                  terminalId: summary.terminalId,
+                  workingDir: plan.cwd,
+                }),
+              );
+              handleFailure(session);
+            },
             onExit: ({ exitCode, signal }) => handleExit(session, exitCode, signal),
           }),
         );

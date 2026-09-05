@@ -1,5 +1,6 @@
 import {
   TERMINAL_PROTOCOL_VERSION,
+  type TerminalFailure,
   type TerminalServerMessage,
   type TerminalSummary,
 } from "@openducktor/contracts";
@@ -22,6 +23,7 @@ type TerminalAttachment = {
   acknowledgedSequence: number;
   deliveredSequence: number;
   pendingBytes: number;
+  replaySummary: TerminalSummary | null;
 };
 
 export type TerminalSessionAttachInput = {
@@ -71,6 +73,7 @@ export class TerminalSessionOutput {
   private readonly attachments = new Map<string, TerminalAttachment>();
   private paused = false;
   private overflowed = false;
+  private failureFrame: Extract<TerminalServerMessage, { type: "protocol_error" }> | null = null;
 
   constructor(
     private readonly terminalId: string,
@@ -103,6 +106,7 @@ export class TerminalSessionOutput {
       acknowledgedSequence: requested,
       deliveredSequence: requested,
       pendingBytes: 0,
+      replaySummary: summary,
     };
     const previous = this.attachments.get(input.attachmentId);
     this.attachments.set(input.attachmentId, attachment);
@@ -132,6 +136,16 @@ export class TerminalSessionOutput {
       events = mergeEvents(events, this.tryPublish(attachment, message).events);
     }
     return events;
+  }
+
+  publishFailure(failure: TerminalFailure): TerminalOutputEvents {
+    this.failureFrame = {
+      version: TERMINAL_PROTOCOL_VERSION,
+      type: "protocol_error",
+      terminalId: this.terminalId,
+      failure,
+    };
+    return this.publish(this.failureFrame);
   }
 
   accept(data: Uint8Array, handle: TerminalPtyHandle | null): TerminalOutputEvents {
@@ -179,22 +193,26 @@ export class TerminalSessionOutput {
   resumeIfUnblocked(
     handle: TerminalPtyHandle | null,
   ): Effect.Effect<TerminalOutputEvents, TerminalPtyError> {
-    if (
-      !this.paused ||
-      ![...this.attachments.values()].every(
-        (candidate) => candidate.pendingBytes <= TERMINAL_LIMITS.resumeOutputBytes,
-      )
-    ) {
-      return Effect.succeed([]);
-    }
-    if (!handle) return Effect.succeed([]);
     return Effect.gen(this, function* () {
-      yield* handle.resumeOutput();
-      this.paused = false;
+      if (this.paused) {
+        if (
+          ![...this.attachments.values()].every(
+            (candidate) => candidate.pendingBytes <= TERMINAL_LIMITS.resumeOutputBytes,
+          )
+        )
+          return [];
+        if (handle) yield* handle.resumeOutput();
+        this.paused = false;
+      }
       let events: TerminalOutputEvents = [];
       // oxlint-disable-next-line unicorn/no-useless-spread -- flushing can change attachments
       for (const attachment of [...this.attachments.values()]) {
-        events = mergeEvents(events, this.flush(attachment, false, handle));
+        if (attachment.deliveredSequence < this.sequence || attachment.replaySummary) {
+          events = mergeEvents(
+            events,
+            this.flush(attachment, attachment.replaySummary !== null, handle),
+          );
+        }
       }
       return events;
     });
@@ -316,7 +334,26 @@ export class TerminalSessionOutput {
     for (const chunk of this.replay) {
       const delivered = this.deliver(attachment, chunk, replay, handle);
       events = mergeEvents(events, delivered.events);
-      if (!delivered.delivered) break;
+      if (!delivered.delivered) return events;
+    }
+    const summary = attachment.replaySummary;
+    if (!summary) return events;
+    attachment.replaySummary = null;
+    if (summary.exit) {
+      const published = this.tryPublish(attachment, {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "lifecycle",
+        terminalId: this.terminalId,
+        lifecycle: summary.lifecycle,
+        exitCode: summary.exit.exitCode,
+        signal: summary.exit.signal,
+        finalSequence: summary.exit.finalSequence,
+      });
+      events = mergeEvents(events, published.events);
+      if (!published.delivered) return events;
+    }
+    if (this.failureFrame) {
+      events = mergeEvents(events, this.tryPublish(attachment, this.failureFrame).events);
     }
     return events;
   }

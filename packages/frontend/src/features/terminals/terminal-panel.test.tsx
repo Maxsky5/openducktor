@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { TerminalSummary } from "@openducktor/contracts";
 import {
   act,
@@ -9,6 +9,8 @@ import {
 } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import * as terminalMount from "./interactive-terminal-mount";
+import { createTerminalTransportController } from "./terminal-transport-controller";
 import { TerminalPanel } from "./terminal-panel";
 import type { TerminalPanelModel, TerminalTab } from "./use-terminals";
 
@@ -74,6 +76,81 @@ const model: TerminalPanelModel = {
 };
 
 describe("TerminalPanel", () => {
+  test.each([
+    { notice: "exit code", attention: null, expected: "Exited with code 1." },
+    {
+      notice: "failure",
+      attention: "Shell access denied. Check the shell executable.",
+      expected: "Shell access denied. Check the shell executable.",
+    },
+  ])("keeps the $notice visible after exit and reattachment", async ({ attention, expected }) => {
+    const mount = spyOn(terminalMount, "mountInteractiveTerminal").mockReturnValue({
+      activate: () => undefined,
+      dispose: () => undefined,
+    });
+    const controller = createTerminalTransportController(
+      {
+        connect: async () => ({
+          send: async () => undefined,
+          close: () => undefined,
+        }),
+      },
+      () => undefined,
+    );
+    const summary: TerminalSummary = {
+      terminalId: "terminal-failed",
+      label: "Shell 1",
+      context: {},
+      initialWorkingDir: "C:\\repo",
+      createdAt: "2026-07-12T00:00:00.000Z",
+      lifecycle: "running",
+      exit: null,
+    };
+    let unmount: () => void = () => undefined;
+    const panelModel: TerminalPanelModel = {
+      ...model,
+      ...tabsModel([readyTab(summary)]),
+      activeTabId: "tab:terminal-failed",
+      controller,
+    };
+    try {
+      const view = render(<TerminalPanel model={panelModel} />);
+      unmount = view.unmount;
+      await waitFor(() => expect(mount).toHaveBeenCalledTimes(1));
+      const callbacks = mount.mock.calls[0]?.[0];
+      if (!callbacks) throw new Error("Terminal did not mount");
+      if (attention) act(() => callbacks.onAttention(attention));
+      act(() => callbacks.onLifecycle("exited", "Exited with code 1."));
+      expect(screen.getByRole("status", { name: "Terminal status" }).textContent).toContain(
+        expected,
+      );
+      act(() => callbacks.onLifecycle("exited", null));
+      expect(screen.getByRole("status", { name: "Terminal status" }).textContent).toContain(
+        expected,
+      );
+      view.rerender(
+        <TerminalPanel
+          model={{ ...panelModel, scopeKey: "/repo:task-2", tabs: [], activeTabId: null }}
+        />,
+      );
+      expect(screen.queryByRole("status", { name: "Terminal status" })).toBeNull();
+      view.rerender(<TerminalPanel model={panelModel} />);
+      expect(screen.getByRole("status", { name: "Terminal status" }).textContent).toContain(
+        expected,
+      );
+      expect(mount).toHaveBeenCalledTimes(1);
+      view.rerender(
+        <TerminalPanel model={{ ...panelModel, ...tabsModel([]), activeTabId: null }} />,
+      );
+      view.rerender(<TerminalPanel model={panelModel} />);
+      await waitFor(() => expect(mount).toHaveBeenCalledTimes(2));
+      expect(screen.queryByRole("status", { name: "Terminal status" })).toBeNull();
+    } finally {
+      unmount();
+      mount.mockRestore();
+      await controller.dispose();
+    }
+  });
   test("shows an explicit lost-session state", () => {
     render(<TerminalPanel model={model} />);
     expect(screen.getByText("This terminal belonged to a previous host session.")).toBeTruthy();
