@@ -648,6 +648,7 @@ describe("notification runtime tests", () => {
       loadSettings: async () => {
         const settings = createDefaultNotificationSettings();
         settings.osFocus = "always_send";
+        settings.kinds["workflow.closed"].target = "both";
         settings.kinds["workflow.closed"].sound = "none";
         return settings;
       },
@@ -708,6 +709,7 @@ describe("notification runtime tests", () => {
         const settings = createDefaultNotificationSettings();
         settings.osFocus = "always_send";
         settings.soundFocus = "mute_while_focused";
+        settings.kinds["workflow.closed"].target = "both";
         return settings;
       },
       navigate: async () => {},
