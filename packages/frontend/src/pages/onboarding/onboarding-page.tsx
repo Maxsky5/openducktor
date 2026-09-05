@@ -16,6 +16,7 @@ import {
   WelcomeStage,
   WorkspaceStage,
 } from "./onboarding-stages";
+import { useOnboardingNotificationSetup } from "./use-onboarding-notification-setup";
 import { useOnboardingRuntimeSetup } from "./use-onboarding-runtime-setup";
 import { useOnboardingWorkspaceCompletion } from "./use-onboarding-workspace-completion";
 
@@ -46,6 +47,11 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
     [changeStage],
   );
   const runtimeSetup = useOnboardingRuntimeSetup({ onContinue: openNotificationsStage });
+  const notificationSetup = useOnboardingNotificationSetup({
+    settingsSnapshot: runtimeSetup.settingsSnapshot,
+    agentRuntimes: runtimeSetup.runtimeDraft,
+    onContinue: openWorkspaceStage,
+  });
   const workspaceCompletion = useOnboardingWorkspaceCompletion({
     settingsSnapshot: runtimeSetup.settingsSnapshot,
     onComplete,
@@ -77,9 +83,13 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
       ) : null}
       {stage === "notifications" ? (
         <NotificationsStage
-          notifications={runtimeSetup.settingsSnapshot?.notifications ?? null}
+          notifications={notificationSetup.notifications}
+          isSaving={notificationSetup.isSaving}
+          saveError={notificationSetup.saveError}
+          saveErrorRef={notificationSetup.saveErrorRef}
+          onUpdateNotifications={notificationSetup.updateNotifications}
           onBack={() => changeStage("runtimes")}
-          onContinue={openWorkspaceStage}
+          onContinue={() => void notificationSetup.saveNotifications()}
         />
       ) : null}
       {stage === "workspace" ? (

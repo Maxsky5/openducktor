@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Bell,
-  BellRing,
   Bot,
   FolderGit2,
   ListChecks,
@@ -30,12 +29,12 @@ import {
   WorkspaceCreationSubmitAction,
 } from "@/components/features/repository/workspace-creation-form";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
+import { SettingsNotificationsSection } from "@/components/features/settings/settings-notifications-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { RuntimeExecutableValidationResult } from "@/state/queries/use-runtime-executable-validation";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
-import { useNotificationTestControls } from "@/state/notifications/use-notification-test-controls";
 
 const SETUP_STEPS = [
   {
@@ -311,89 +310,78 @@ export function RuntimeStage({
 
 type NotificationsStageProps = {
   notifications: NotificationSettings | null;
+  isSaving: boolean;
+  saveError: string | null;
+  saveErrorRef: RefObject<HTMLParagraphElement | null>;
+  onUpdateNotifications: (updater: (current: NotificationSettings) => NotificationSettings) => void;
   onBack: () => void;
   onContinue: () => void;
 };
 
 export function NotificationsStage({
   notifications,
+  isSaving,
+  saveError,
+  saveErrorRef,
+  onUpdateNotifications,
   onBack,
   onContinue,
 }: NotificationsStageProps): ReactElement {
-  const { capability, capabilityDescription, isTesting, status, testNotification } =
-    useNotificationTestControls(notifications);
-
   return (
-    <Card className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm">
-      <CardHeader className="gap-3 border-b border-border px-6 py-5 sm:px-9 sm:py-6">
-        <CardTitle className="text-2xl sm:text-3xl">
-          Choose how OpenDucktor gets your attention
-        </CardTitle>
-        <CardDescription className="max-w-2xl text-sm leading-relaxed sm:text-base">
-          Test in-app and OS notifications now. You can change every notification type and sound
-          later in Settings.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid flex-1 gap-4 bg-muted/20 px-6 py-6 sm:px-9 lg:grid-cols-2">
-        <div className="flex flex-col justify-between gap-5 rounded-xl border border-border bg-card p-5">
-          <div>
-            <Bell className="size-5 text-muted-foreground" aria-hidden="true" />
-            <h3 className="mt-4 font-semibold text-foreground">In-app notifications</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              See a notice inside OpenDucktor and hear your current notification sound.
+    <>
+      {isSaving ? (
+        <span className="sr-only" role="status">
+          Saving notifications...
+        </span>
+      ) : null}
+      <Card
+        className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm"
+        inert={isSaving}
+        aria-busy={isSaving}
+      >
+        <CardHeader className="gap-3 border-b border-border px-6 py-5 sm:px-9 sm:py-6">
+          <CardTitle className="text-2xl sm:text-3xl">Configure notifications</CardTitle>
+          <CardDescription className="max-w-2xl text-sm leading-relaxed sm:text-base">
+            Set each notification type, delivery target, and sound now. You can change these choices
+            later in Settings.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 bg-muted/20 p-0">
+          {notifications ? (
+            <SettingsNotificationsSection
+              notifications={notifications}
+              disabled={isSaving}
+              onUpdateNotifications={onUpdateNotifications}
+            />
+          ) : (
+            <div className="grid gap-3 p-4" aria-label="Loading notification settings">
+              <Skeleton className="h-5 w-36" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-48 w-full" />
+            </div>
+          )}
+          {saveError ? (
+            <p
+              ref={saveErrorRef}
+              className="mx-4 mb-4 text-sm text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              role="alert"
+              tabIndex={-1}
+            >
+              {saveError}
             </p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isTesting || !notifications}
-            onClick={() => void testNotification("in_app")}
-          >
-            Test in-app
+          ) : null}
+        </CardContent>
+        <div className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:px-9">
+          <Button variant="outline" onClick={onBack} disabled={isSaving}>
+            <ArrowLeft data-icon="inline-start" /> Back
+          </Button>
+          <Button size="lg" onClick={onContinue} disabled={isSaving || !notifications}>
+            {isSaving ? "Saving notifications..." : "Continue to workspace"}
+            {!isSaving ? <ArrowRight data-icon="inline-end" /> : null}
           </Button>
         </div>
-        <div className="flex flex-col justify-between gap-5 rounded-xl border border-border bg-card p-5">
-          <div>
-            <BellRing className="size-5 text-muted-foreground" aria-hidden="true" />
-            <h3 className="mt-4 font-semibold text-foreground">OS notifications</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {capabilityDescription}
-            </p>
-            {capability?.supported && !capability.canGuaranteeSilent ? (
-              <p className="mt-2 text-xs text-warning-muted">
-                This platform cannot guarantee silent OS delivery.
-              </p>
-            ) : null}
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isTesting || !notifications || capability?.supported === false}
-            onClick={() => void testNotification("os")}
-          >
-            Test OS
-          </Button>
-        </div>
-        {status ? (
-          <p className="text-sm text-foreground lg:col-span-2" role="status">
-            {status}
-          </p>
-        ) : null}
-      </CardContent>
-      <div className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:px-9">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft data-icon="inline-start" /> Back
-        </Button>
-        <div className="flex gap-2 sm:ml-auto">
-          <Button variant="ghost" onClick={onContinue}>
-            Skip
-          </Button>
-          <Button size="lg" onClick={onContinue}>
-            Continue to workspace <ArrowRight data-icon="inline-end" />
-          </Button>
-        </div>
-      </div>
-    </Card>
+      </Card>
+    </>
   );
 }
 
