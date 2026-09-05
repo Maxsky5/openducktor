@@ -1,3 +1,4 @@
+import { settleImageGenerationMessages } from "@/state/operations/agent-orchestrator/support/image-generation-settlement";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/support/history-message-merge";
@@ -80,11 +81,14 @@ export const mergeReadonlyRuntimeHistory = (
   history: AgentSessionHistoryMessage[],
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, { role: null });
-  const mergedMessageState = mergeHistoryMessages(
-    session.externalSessionId,
-    createSessionMessagesState(session.externalSessionId, historyMessages),
-    session.messages,
-  );
+  const mergedMessageState = settleImageGenerationMessages({
+    ...session,
+    messages: mergeHistoryMessages(
+      session.externalSessionId,
+      createSessionMessagesState(session.externalSessionId, historyMessages),
+      session.messages,
+    ),
+  });
   const mergedMessages = mergedMessageState.items;
 
   if (

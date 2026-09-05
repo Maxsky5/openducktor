@@ -199,6 +199,14 @@ export type AgentSessionState = {
   /** Live-only parent link used to project descendant pending input to active ancestors. */
   liveParentExternalSessionId?: string | undefined;
   livePresence: "unobserved" | "present" | "absent";
+  /** Transient terminal-event cutoff for late image history; never persisted. */
+  imageGenerationEnd?: {
+    timestamp: string;
+    reason: "interrupted" | "turn_ended" | "runtime_failure";
+  };
+  imageGenerationTurnEnds?: Readonly<
+    Record<string, "interrupted" | "turn_ended" | "runtime_failure">
+  >;
   historyLoadState: AgentSessionHistoryLoadState;
   historyLoadFailure?: SessionHistoryFailure | null;
   messages: AgentSessionMessages;

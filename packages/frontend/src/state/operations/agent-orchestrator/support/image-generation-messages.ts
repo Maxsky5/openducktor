@@ -1,3 +1,4 @@
+import { settleImageGenerationMessage } from "./image-generation-settlement";
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 import { mergeAgentImageGeneration } from "@openducktor/core";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
@@ -16,7 +17,10 @@ export const createImageGenerationMessage = (
 });
 
 export const upsertImageGenerationMessage = (
-  owner: Pick<AgentSessionState, "externalSessionId" | "messages">,
+  owner: Pick<
+    AgentSessionState,
+    "externalSessionId" | "messages" | "imageGenerationEnd" | "imageGenerationTurnEnds"
+  >,
   part: AgentImageGenerationPart,
   timestamp: string,
 ): AgentSessionState["messages"] => {
@@ -26,5 +30,8 @@ export const upsertImageGenerationMessage = (
     message.meta = mergeAgentImageGeneration(current.meta, part, "live");
     message.timestamp = current.timestamp;
   }
-  return upsertSessionMessage(owner, message);
+  return upsertSessionMessage(
+    owner,
+    settleImageGenerationMessage(message, owner.imageGenerationEnd, owner.imageGenerationTurnEnds),
+  );
 };

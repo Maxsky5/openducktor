@@ -42,3 +42,16 @@ export const mergeAgentImageGeneration = (
   if (incoming.output?.representation === "inline") delete merged.savedPath;
   return merged;
 };
+
+export type AgentImageGenerationSettlement = "interrupted" | "turn_ended" | "runtime_failure";
+
+export const settleAgentImageGeneration = (
+  part: AgentImageGenerationPart,
+  reason: AgentImageGenerationSettlement,
+): AgentImageGenerationPart => {
+  if (part.status !== "running" && !(part.status === "incomplete" && reason === "interrupted"))
+    return part;
+  if (reason !== "interrupted") return { ...part, status: "incomplete", incompleteReason: reason };
+  const { incompleteReason: _incompleteReason, ...metadata } = part;
+  return { ...metadata, status: "interrupted" };
+};

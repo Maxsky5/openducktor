@@ -53,3 +53,53 @@ test("a confirmed interruption replaces provisional idle settlement", () => {
     { ...part("one"), status: "interrupted" },
   ]);
 });
+
+test("a terminal turn protects a delayed first start while allowing the next turn", () => {
+  const state = new CodexImageGenerationState();
+  state.settle("runtime", "thread", "turn", "interrupted");
+  expect(state.upsert("runtime", "thread", part("late")).status).toBe("interrupted");
+  expect(state.upsert("runtime", "thread", part("next", "next-turn")).status).toBe("running");
+  expect(state.upsert("runtime", "thread", { ...part("late"), status: "completed" }).status).toBe(
+    "completed",
+  );
+});
+
+test("history contributes running items to settlement and cannot downgrade live output", () => {
+  const state = new CodexImageGenerationState();
+  const history = state.prepareHistory("runtime", "thread");
+  expect(history(part("history")).status).toBe("running");
+  expect(state.settle("runtime", "thread", "turn", "interrupted")).toEqual([
+    { ...part("history"), status: "interrupted" },
+  ]);
+  expect(history(part("history")).status).toBe("interrupted");
+  expect(
+    state.upsert("runtime", "thread", { ...part("history"), status: "completed" }).status,
+  ).toBe("completed");
+  expect(history(part("history")).status).toBe("completed");
+});
+
+test("history captured before runtime disposal cannot populate a replacement tracker", () => {
+  const state = new CodexImageGenerationState();
+  const history = state.prepareHistory("runtime", "thread");
+  state.clearRuntime("runtime");
+  expect(history(part("old")).status).toBe("incomplete");
+  expect(state.upsert("runtime", "thread", part("old")).status).toBe("running");
+});
+
+test("the same image id in different turns remains independently scoped", () => {
+  const state = new CodexImageGenerationState();
+  state.upsert("runtime", "thread", part("same", "one"));
+  state.upsert("runtime", "thread", part("same", "two"));
+  state.settle("runtime", "thread", "one", "interrupted");
+  expect(state.upsert("runtime", "thread", part("same", "two")).status).toBe("running");
+  expect(state.upsert("runtime", "thread", part("same", "one")).status).toBe("interrupted");
+});
+
+test("history pending at disposal retains an already confirmed interruption", () => {
+  const state = new CodexImageGenerationState();
+  const history = state.prepareHistory("runtime", "thread");
+  state.settle("runtime", "thread", "turn", "interrupted");
+  state.clearRuntime("runtime");
+  expect(history(part("old")).status).toBe("interrupted");
+  expect(state.upsert("runtime", "thread", part("old")).status).toBe("running");
+});

@@ -1,3 +1,4 @@
+import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import {
@@ -57,7 +58,11 @@ const readSavedImage = (path: string, itemId: string) => {
   if (!isAbsolute(path) || path.includes("\0"))
     return Effect.fail(invalidImage(itemId, "the runtime returned an invalid saved-file path."));
   return Effect.acquireUseRelease(
-    Effect.tryPromise({ try: () => open(path, "r"), catch: imageReadError(itemId) }),
+    Effect.tryPromise({
+      try: () =>
+        open(path, constants.O_RDONLY | (process.platform === "win32" ? 0 : constants.O_NONBLOCK)),
+      catch: imageReadError(itemId),
+    }),
     (handle) =>
       Effect.gen(function* () {
         const metadata = yield* Effect.tryPromise({

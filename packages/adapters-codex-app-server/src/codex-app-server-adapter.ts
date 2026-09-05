@@ -629,12 +629,26 @@ export class CodexAppServerAdapter
           runtimeId: session.runtimeId,
         }
       : await this.runtimeClients.resolve(input, "load Codex session history");
-    return loadCodexSessionHistory({
+    const normalizeImage = this.runtimeEvents.prepareImageHistory(
+      runtime.runtimeId,
+      input.externalSessionId,
+    );
+    const history = await loadCodexSessionHistory({
       input,
       session,
       runtime,
       threadInventory: this.threadInventory,
     });
+    return history.map((message) =>
+      message.role === "assistant"
+        ? {
+            ...message,
+            parts: message.parts.map((part) =>
+              part.kind === "image_generation" ? normalizeImage(part) : part,
+            ),
+          }
+        : message,
+    );
   }
 
   async loadSessionContextUsage(

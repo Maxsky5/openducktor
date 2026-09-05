@@ -1,3 +1,7 @@
+import {
+  recordImageGenerationSessionEnd,
+  recordImageGenerationTurnEnd,
+} from "../support/image-generation-settlement";
 import type { AgentSessionTranscriptEvent } from "@openducktor/contracts";
 import { toast } from "sonner";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
@@ -101,6 +105,13 @@ const dispatchTranscriptEvent = (
       return;
     case "assistant_delta":
       handleAssistantDelta(context, event);
+      return;
+    case "image_generation_settled":
+      context.store.updateSession(context.session.identity, (session) =>
+        event.turnId !== undefined
+          ? recordImageGenerationTurnEnd(session, event.turnId, event.reason)
+          : recordImageGenerationSessionEnd(session, event.timestamp, event.reason),
+      );
       return;
     case "assistant_part":
       handleAssistantPart(context, event);

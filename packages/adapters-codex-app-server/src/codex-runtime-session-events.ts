@@ -1121,12 +1121,24 @@ export class CodexRuntimeSessionEvents {
     this.emitSessionEventForSession(session, event);
   }
 
+  prepareImageHistory(runtimeId: string, threadId: string) {
+    return this.imageGenerations.prepareHistory(runtimeId, threadId);
+  }
+
   settleImageGenerations(
     session: CodexSessionState,
     turnId: string | undefined,
     reason: CodexImageSettlement,
   ): AgentEvent[] {
-    const events: AgentEvent[] = [];
+    const settlement: AgentEvent = {
+      type: "image_generation_settled",
+      externalSessionId: session.threadId,
+      timestamp: new Date().toISOString(),
+      reason,
+    };
+    if (turnId !== undefined) settlement.turnId = turnId;
+    this.emitSessionEventForSession(session, settlement);
+    const events: AgentEvent[] = [withAgentSessionRef(codexSessionRef(session), settlement)];
     for (const part of this.imageGenerations.settle(
       session.runtimeId,
       session.threadId,

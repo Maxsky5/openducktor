@@ -1,3 +1,4 @@
+import { settleImageGenerationMessages } from "./image-generation-settlement";
 import { createImageGenerationMessage } from "./image-generation-messages";
 import type {
   AgentModelSelection,
@@ -428,6 +429,9 @@ export const applyLoadedSessionHistory = (
     ...session,
     historyLoadState: "loaded",
     historyLoadFailure: null,
-    messages: mergeHistoryMessages(session.externalSessionId, loadedMessages, session.messages),
+    messages: settleImageGenerationMessages({
+      ...session,
+      messages: mergeHistoryMessages(session.externalSessionId, loadedMessages, session.messages),
+    }),
   };
 };

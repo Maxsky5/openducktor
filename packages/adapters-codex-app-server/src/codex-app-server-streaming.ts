@@ -638,12 +638,12 @@ export const handleCodexPendingNotifications = async (
           continue;
         }
         if (isIdleStatus) {
+          context.settleImageGenerations(session, activeTurn?.turnId, "turn_ended");
           emitUnlinkedSpawnFailures(context, session, timestamp);
         }
         const liveStatus = codexThreadStatusSnapshot(notification.params.status);
         context.setSessionLiveStatus(session, liveStatus);
         if (activeTurn && isIdleStatus) {
-          context.settleImageGenerations(session, activeTurn.turnId, "turn_ended");
           const hasBufferedFinalAgentMessage =
             activeTurn.turnId !== undefined &&
             context.completedAgentMessagesByTurnKey.has(

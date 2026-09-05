@@ -99,8 +99,12 @@ for (const outcome of ["interrupted", "failed", "completed", "stop"] as const) {
       await flushCodexAdapterWork();
       if (outcome === "stop") {
         const settled = adapter.settleGeneratedImages("runtime-live", ref);
-        expect(settled).toHaveLength(1);
+        expect(settled).toHaveLength(2);
         expect(settled[0]).toMatchObject({
+          type: "image_generation_settled",
+          reason: "turn_ended",
+        });
+        expect(settled[1]).toMatchObject({
           type: "assistant_part",
           sessionRef: {
             repoPath: ref.repoPath,
@@ -110,7 +114,9 @@ for (const outcome of ["interrupted", "failed", "completed", "stop"] as const) {
           },
           part: { status: "incomplete" },
         });
-        expect(adapter.settleGeneratedImages("runtime-live", ref)).toEqual([]);
+        expect(adapter.settleGeneratedImages("runtime-live", ref)).toMatchObject([
+          { type: "image_generation_settled" },
+        ]);
         await adapter.stopSession(ref);
       } else
         emitNotification({
