@@ -95,6 +95,8 @@ describe("notification contracts", () => {
         taskId: "task-1",
         session: {
           externalSessionId: "session-1",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/worktree",
         },
       },
     } as const;
@@ -139,6 +141,8 @@ describe("notification contracts", () => {
       repoPath: "/repo",
       session: {
         externalSessionId: "session-1",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree",
       },
     } as const;
 

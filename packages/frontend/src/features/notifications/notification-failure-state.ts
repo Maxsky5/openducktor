@@ -2,11 +2,13 @@ import type { NotificationDispatchFailure } from "./notification-policy";
 
 export type NotificationFailureState = {
   coordination: NotificationDispatchFailure | null;
+  settings: NotificationDispatchFailure | null;
   os: NotificationDispatchFailure | null;
 };
 
 export const createNotificationFailureState = (): NotificationFailureState => ({
   coordination: null,
+  settings: null,
   os: null,
 });
 
@@ -14,6 +16,10 @@ export const recordNotificationFailure = (
   state: NotificationFailureState,
   failure: NotificationDispatchFailure,
 ): NotificationFailureState => {
+  if (failure.channel === "settings") {
+    if (state.settings) return state;
+    return { ...state, settings: failure };
+  }
   if (failure.channel === "coordination") {
     if (state.coordination) return state;
     return { ...state, coordination: failure };
@@ -41,4 +47,11 @@ export const clearCoordinationNotificationFailure = (
 
 export const selectNotificationFailure = (
   state: NotificationFailureState,
-): NotificationDispatchFailure | null => state.coordination ?? state.os;
+): NotificationDispatchFailure | null => state.settings ?? state.coordination ?? state.os;
+
+export const clearSettingsNotificationFailure = (
+  state: NotificationFailureState,
+): NotificationFailureState => {
+  if (!state.settings) return state;
+  return { ...state, settings: null };
+};

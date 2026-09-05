@@ -8,6 +8,10 @@ import {
 import type { Event as ElectronEvent } from "electron";
 import { ELECTRON_NOTIFICATION_CLICKED_CHANNEL } from "../shared/electron-bridge-contract";
 
+// Linux does not expose Electron's failed event. A missing show confirmation
+// must still settle the request so Settings can offer recovery.
+const NOTIFICATION_SHOW_TIMEOUT_MS = 10_000;
+
 type ElectronNotificationInstance = {
   on(event: "show" | "click" | "close", listener: () => void): void;
   on(event: "failed", listener: (event: ElectronEvent, error: string) => void): void;
@@ -45,7 +49,7 @@ export const createElectronNotificationService = ({
   getPermission,
   getWindows,
 }: CreateElectronNotificationServiceOptions) => {
-  const retainedNotifications = new Set<ElectronNotificationInstance>();
+  const retainedNotifications = new Map<ElectronNotificationInstance, () => void>();
   let latestFailureMessage: string | undefined;
 
   const getCapability = (): NotificationOsCapability => {
@@ -94,11 +98,14 @@ export const createElectronNotificationService = ({
 
     return await new Promise<NotificationDeliveryResult>((resolve) => {
       let settled = false;
+      let notification: ElectronNotificationInstance | undefined;
+      let confirmationTimer: ReturnType<typeof setTimeout> | undefined;
       const settle = (result: NotificationDeliveryResult): void => {
         if (settled) {
           return;
         }
         settled = true;
+        clearTimeout(confirmationTimer);
         if (result.status === "shown") {
           latestFailureMessage = undefined;
         } else if (result.status === "failed") {
@@ -108,21 +115,44 @@ export const createElectronNotificationService = ({
       };
 
       try {
-        const notification = new Notification({
+        const native = new Notification({
           title: request.title,
           body: request.body,
           silent: true,
         });
-        retainedNotifications.add(notification);
-        notification.on("show", () => settle({ status: "shown" }));
-        notification.on("failed", (_event, error) => {
-          retainedNotifications.delete(notification);
+        notification = native;
+        retainedNotifications.set(native, () =>
+          settle({
+            status: "failed",
+            message: "Notification delivery stopped before the system confirmed it was shown.",
+          }),
+        );
+        native.on("show", () => settle({ status: "shown" }));
+        native.on("failed", (_event, error) => {
+          retainedNotifications.delete(native);
           settle({ status: "failed", message: error.slice(0, 500) });
         });
-        notification.on("click", () => focusAndRoute(request));
-        notification.on("close", () => retainedNotifications.delete(notification));
-        notification.show();
+        native.on("click", () => focusAndRoute(request));
+        native.on("close", () => {
+          retainedNotifications.delete(native);
+          settle({
+            status: "failed",
+            message:
+              "The system closed the notification before confirming delivery. Check system notification settings and test again.",
+          });
+        });
+        confirmationTimer = setTimeout(() => {
+          settle({
+            status: "failed",
+            message:
+              "The system did not confirm notification delivery within 10 seconds. Check system notification settings and test again.",
+          });
+          retainedNotifications.delete(native);
+          native.close();
+        }, NOTIFICATION_SHOW_TIMEOUT_MS);
+        native.show();
       } catch (cause) {
+        if (notification) retainedNotifications.delete(notification);
         const message = cause instanceof Error ? cause.message : String(cause);
         settle({ status: "failed", message: message.slice(0, 500) });
       }
@@ -134,7 +164,8 @@ export const createElectronNotificationService = ({
     isAppFocused: () => getWindows().some((window) => !window.isDestroyed() && window.isFocused()),
     show,
     dispose(): void {
-      for (const notification of retainedNotifications) {
+      for (const [notification, settle] of retainedNotifications) {
+        settle();
         notification.close();
       }
       retainedNotifications.clear();

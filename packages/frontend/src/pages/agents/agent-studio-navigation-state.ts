@@ -79,6 +79,11 @@ export const resolveAgentStudioNavigationState = ({
     sessions,
     taskId: taskIdParam,
     sessionExternalId: sessionExternalIdParam,
+    sessionIdentity:
+      selectionState.taskId === taskIdParam &&
+      selectionState.sessionIdentity?.externalSessionId === sessionExternalIdParam
+        ? selectionState.sessionIdentity
+        : null,
   });
   const selectedSessionFromRoute =
     routeSessionResolution.kind === "found" ? routeSessionResolution.session : null;
@@ -201,7 +206,7 @@ const resolveNavigationViewSelection = ({
       : null;
   const sessionIdentity = isDetachedFromSelectedTask
     ? null
-    : (resolvedRouteSessionIdentity ?? selectionState.sessionIdentity);
+    : (selectionState.sessionIdentity ?? resolvedRouteSessionIdentity);
   const role = isDetachedFromSelectedTask ? "spec" : selectionState.role;
   const hasExplicitRoleSelection =
     !isDetachedFromSelectedTask && selectionState.hasExplicitRoleSelection;

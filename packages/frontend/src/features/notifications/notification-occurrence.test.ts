@@ -15,6 +15,8 @@ const occurrence = (overrides: Partial<NotificationOccurrence> = {}): Notificati
     repoPath: "/repo",
     session: {
       externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktree",
     },
   },
   ...overrides,

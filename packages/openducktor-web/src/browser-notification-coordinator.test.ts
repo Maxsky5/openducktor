@@ -13,8 +13,12 @@ type CoordinatorMessage =
       occurrence: NotificationOccurrence;
       settings: NotificationSettings;
     }
-  | { type: "external_delivery_claimed"; occurrenceId: string }
-  | { type: "external_delivery_claim_ack"; occurrenceId: string; tabId: string };
+  | {
+      type: "external_delivery_claimed" | "external_delivery_claim_released";
+      occurrenceId: string;
+      claimId: string;
+    }
+  | { type: "external_delivery_claim_ack"; occurrenceId: string; claimId: string; tabId: string };
 
 const EXTERNAL_DELIVERY_LOCK_NAME = "openducktor:notifications:external-delivery";
 const TAB_LOCK_NAME_PREFIX = "openducktor:notifications:tab:";
@@ -991,4 +995,67 @@ describe("browser notification coordinator", () => {
     second.dispose();
     expect(hub.channels.size).toBe(0);
   });
+});
+
+test("keeps the same occurrence pending after a failed lock query", async () => {
+  const hub = new FakeBroadcastHub();
+  const locks = new FakeLockManager();
+  const owner = createBrowserNotificationCoordinator({
+    createChannel: () => hub.createChannel(),
+    locks,
+    focusDocument: { hasFocus: () => false },
+    focusWindow: new FakeFocusWindow(),
+    tabId: "owner",
+  });
+  await waitFor(() => owner.isExternalDeliveryOwner());
+  await owner.publishOccurrence(occurrence, settings);
+  locks.rejectNextQuery(new Error("Query failed"));
+  await expect(owner.claimExternalDelivery(occurrence.occurrenceId)).rejects.toThrow(
+    "Query failed",
+  );
+  await expect(owner.claimExternalDelivery(occurrence.occurrenceId)).resolves.toBe(true);
+  await expect(owner.claimExternalDelivery(occurrence.occurrenceId)).resolves.toBe(false);
+  owner.dispose();
+});
+
+test("rolls back a partially propagated claim before a new owner replays it", async () => {
+  const hub = new FakeBroadcastHub(false);
+  const locks = new FakeLockManager();
+  let ownerChannel!: FakeBroadcastChannel;
+  let peerChannel!: FakeBroadcastChannel;
+  const owner = createBrowserNotificationCoordinator({
+    createChannel: () => (ownerChannel = hub.createChannel()),
+    locks,
+    focusDocument: { hasFocus: () => false },
+    focusWindow: new FakeFocusWindow(),
+    tabId: "owner",
+  });
+  const peer = createBrowserNotificationCoordinator({
+    createChannel: () => (peerChannel = hub.createChannel()),
+    locks,
+    focusDocument: { hasFocus: () => false },
+    focusWindow: new FakeFocusWindow(),
+    tabId: "peer",
+  });
+  await waitFor(
+    () => owner.isExternalDeliveryOwner() && locks.heldCount(`${TAB_LOCK_NAME_PREFIX}peer`) === 1,
+  );
+  await owner.publishOccurrence(occurrence, settings);
+  await hub.flushNext(peerChannel, "occurrence_selected");
+  locks.rejectNextRequest(`${TAB_LOCK_NAME_PREFIX}peer`, new Error("Claim acknowledgement failed"));
+  const claim = owner.claimExternalDelivery(occurrence.occurrenceId);
+  const failure = claim.catch((cause: unknown) => cause);
+  await expect(owner.claimExternalDelivery(occurrence.occurrenceId)).resolves.toBe(false);
+  await hub.flushNext(peerChannel, "external_delivery_claimed");
+  await failure;
+  await hub.flushNext(ownerChannel, "external_delivery_claim_ack");
+  owner.dispose();
+  await waitFor(() => peer.isExternalDeliveryOwner());
+  const replayed: string[] = [];
+  peer.subscribeOccurrences((item) => replayed.push(item.occurrenceId));
+  expect(replayed).toEqual([]);
+  await hub.flushNext(peerChannel, "external_delivery_claim_released");
+  expect(replayed).toEqual([occurrence.occurrenceId]);
+  await expect(peer.claimExternalDelivery(occurrence.occurrenceId)).resolves.toBe(true);
+  peer.dispose();
 });

@@ -48,8 +48,7 @@ export const createNotificationWorkspaceObserver = ({
     observations.set(workspace.repoPath, observation);
     const projector = createSessionOccurrenceProjector({
       repositoryLabel: workspace.repositoryLabel,
-      resolveAssociation: (ref) =>
-        taskObserver.resolveSessionAssociation(ref.repoPath, ref.externalSessionId),
+      resolveAssociation: (ref) => taskObserver.resolveSessionAssociation(ref),
       resolveTask: (taskId) => taskObserver.resolveTask(workspace.repoPath, taskId),
     });
 
@@ -73,7 +72,9 @@ export const createNotificationWorkspaceObserver = ({
         observation.stop = stop;
       })
       .catch((cause) => {
-        if (!observation.cancelled) {
+        if (!observation.cancelled && observations.get(workspace.repoPath) === observation) {
+          observations.delete(workspace.repoPath);
+          observation.cancelled = true;
           onFailure({ repoPath: workspace.repoPath, source: "session", cause });
         }
       });

@@ -99,6 +99,8 @@ describe("notification runtime tests", () => {
         repoPath: "/repo",
         session: {
           externalSessionId: "session-1",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/worktree",
         },
       },
     });
@@ -371,7 +373,7 @@ describe("notification runtime tests", () => {
       onFailure,
     });
 
-    await runtime.dispatch({
+    await runtime.publishAndWait({
       occurrenceId: "workflow.closed:/repo:task-1:event-1",
       kind: "workflow.closed",
       repoPath: "/repo",
@@ -413,7 +415,7 @@ describe("notification runtime tests", () => {
       sound: delivery.sound,
     });
 
-    await runtime.dispatch(workflowClosedOccurrence("event-claim-failure"));
+    await runtime.publishAndWait(workflowClosedOccurrence("event-claim-failure"));
 
     expect(delivery.deliverInApp).toHaveBeenCalledTimes(1);
     expect(showOsNotification).not.toHaveBeenCalled();
@@ -446,9 +448,9 @@ describe("notification runtime tests", () => {
     });
     const occurrence = workflowClosedOccurrence("event-coordination-recovery");
 
-    await runtime.dispatch(occurrence);
+    await runtime.publishAndWait(occurrence);
     expect(onCoordinationRecovered).not.toHaveBeenCalled();
-    await runtime.dispatch(occurrence);
+    await runtime.publishAndWait(occurrence);
 
     expect(onCoordinationRecovered).toHaveBeenCalledTimes(1);
   });
@@ -524,8 +526,8 @@ describe("notification runtime tests", () => {
     });
 
     const occurrence = workflowClosedOccurrence("event-owner-handoff");
-    await runtime.dispatch(occurrence);
-    await runtime.dispatch(occurrence);
+    await runtime.publishAndWait(occurrence);
+    await runtime.publishAndWait(occurrence);
 
     expect(delivery.deliverInApp).toHaveBeenCalledTimes(1);
     expect(showOsNotification).not.toHaveBeenCalled();
@@ -556,7 +558,7 @@ describe("notification runtime tests", () => {
       sound: delivery.sound,
     });
 
-    await runtime.dispatch({
+    await runtime.publishAndWait({
       occurrenceId: "workflow.closed:/repo:task-1:event-focus-failure",
       kind: "workflow.closed",
       repoPath: "/repo",
@@ -597,7 +599,7 @@ describe("notification runtime tests", () => {
       sound: delivery.sound,
     });
 
-    await runtime.dispatch(workflowClosedOccurrence("event-disabled"));
+    await runtime.publishAndWait(workflowClosedOccurrence("event-disabled"));
 
     expect(delivery.deliverInApp).not.toHaveBeenCalled();
     expect(withExternalDeliveryOwnership).not.toHaveBeenCalled();
@@ -627,7 +629,7 @@ describe("notification runtime tests", () => {
       sound: delivery.sound,
     });
 
-    await runtime.dispatch(workflowClosedOccurrence("event-local-only"));
+    await runtime.publishAndWait(workflowClosedOccurrence("event-local-only"));
 
     expect(delivery.deliverInApp).toHaveBeenCalledTimes(1);
     expect(withExternalDeliveryOwnership).not.toHaveBeenCalled();
@@ -658,7 +660,7 @@ describe("notification runtime tests", () => {
       sound: delivery.sound,
     });
 
-    await runtime.dispatch(workflowClosedOccurrence("event-always-os"));
+    await runtime.publishAndWait(workflowClosedOccurrence("event-always-os"));
 
     expect(isAppFocused).not.toHaveBeenCalled();
     expect(showOsNotification).toHaveBeenCalledTimes(1);
@@ -685,7 +687,7 @@ describe("notification runtime tests", () => {
       sound: delivery.sound,
     });
 
-    await runtime.dispatch(workflowClosedOccurrence("event-always-sound"));
+    await runtime.publishAndWait(workflowClosedOccurrence("event-always-sound"));
 
     expect(isAppFocused).not.toHaveBeenCalled();
     expect(delivery.playSound).toHaveBeenCalledTimes(1);
@@ -718,7 +720,7 @@ describe("notification runtime tests", () => {
       sound: delivery.sound,
     });
 
-    await runtime.dispatch(workflowClosedOccurrence("event-partial-focus-failure"));
+    await runtime.publishAndWait(workflowClosedOccurrence("event-partial-focus-failure"));
 
     expect(showOsNotification).toHaveBeenCalledTimes(1);
     expect(delivery.playSound).not.toHaveBeenCalled();
@@ -744,14 +746,66 @@ describe("notification runtime tests", () => {
     });
     const occurrence = workflowClosedOccurrence("event-complete");
 
-    await runtime.dispatch(occurrence);
+    await runtime.publishAndWait(occurrence);
     isAppFocused.mockImplementation(async () => {
       throw new Error("Late focus failure.");
     });
-    await runtime.dispatch(occurrence);
+    await runtime.publishAndWait(occurrence);
 
     expect(withExternalDeliveryOwnership).toHaveBeenCalledTimes(1);
     expect(isAppFocused).toHaveBeenCalledTimes(1);
     expect(onFailure).not.toHaveBeenCalled();
   });
+});
+
+test("publishes valid long source identities with bounded deterministic occurrence IDs", async () => {
+  const longPath = `/repo/${"nested/".repeat(200)}`;
+  const published: NotificationOccurrence[] = [];
+  const onFailure = mock(() => {});
+  const runtime = createNotificationRuntime({
+    bridge: createBridge({
+      publishOccurrence: async (item, settings) => {
+        published.push(item);
+        return { occurrence: item, settings };
+      },
+    }),
+    loadSettings: async () => createDefaultNotificationSettings(),
+    navigate: async () => {},
+    onFailure,
+  });
+  const item: NotificationOccurrence = {
+    occurrenceId: `workflow.closed:${longPath}:task-1:event-1`,
+    kind: "workflow.closed",
+    repoPath: longPath,
+    repositoryLabel: "Repo",
+    status: "Closed",
+    navigationTarget: { type: "kanban_task", repoPath: longPath, taskId: "task-1" },
+  };
+  await runtime.publishAndWait(item);
+  await runtime.publishAndWait(item);
+  expect(onFailure).not.toHaveBeenCalled();
+  expect(published).toHaveLength(2);
+  expect(published[0]?.occurrenceId.length).toBeLessThan(1024);
+  expect(published[1]?.occurrenceId).toBe(published[0]?.occurrenceId);
+  expect(published[0]?.repoPath).toBe(longPath);
+});
+
+test("reports malformed fire-and-forget publications without an unhandled rejection", async () => {
+  const onFailure = mock(() => {});
+  const runtime = createNotificationRuntime({
+    bridge: createBridge(),
+    loadSettings: async () => createDefaultNotificationSettings(),
+    navigate: async () => {},
+    onFailure,
+  });
+  const item: NotificationOccurrence = {
+    occurrenceId: "invalid-occurrence",
+    kind: "workflow.closed",
+    repoPath: "",
+    repositoryLabel: "Repo",
+    status: "Closed",
+    navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
+  };
+  expect(await runtime.publishAndWait(item)).toBe(false);
+  expect(onFailure).toHaveBeenCalledTimes(1);
 });

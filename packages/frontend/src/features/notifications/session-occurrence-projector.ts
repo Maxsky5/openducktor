@@ -36,6 +36,8 @@ type SessionProjection = {
 
 const toSessionIdentity = (ref: AgentSessionLiveSnapshot["ref"]): NotificationSessionIdentity => ({
   externalSessionId: ref.externalSessionId,
+  runtimeKind: ref.runtimeKind,
+  workingDirectory: ref.workingDirectory,
 });
 
 const createProjection = (

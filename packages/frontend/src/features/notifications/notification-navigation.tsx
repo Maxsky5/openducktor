@@ -10,7 +10,7 @@ import {
   ATTENTION_ID_QUERY_KEY,
   ATTENTION_KIND_QUERY_KEY,
   findNotificationAttentionTarget,
-  navigateToNotificationTarget,
+  openNotificationTarget,
 } from "./notification-navigation-logic";
 
 const staleTarget = (message: string): void => {
@@ -25,19 +25,27 @@ export function NotificationNavigationRegistrar(): null {
 
   useEffect(() => {
     return registerNavigator(async (target) => {
-      await navigateToNotificationTarget(target, {
-        activeWorkspaceId: activeWorkspace?.workspaceId ?? null,
-        workspaces,
-        selectWorkspace,
-        loadTasks: async (repoPath) => {
-          const taskOptions = unfilteredRepoTaskDataQueryOptions(repoPath);
-          return (await queryClient.fetchQuery({ ...taskOptions, staleTime: 0 })).tasks;
+      await openNotificationTarget(
+        target,
+        {
+          activeWorkspaceId: activeWorkspace?.workspaceId ?? null,
+          workspaces,
+          selectWorkspace,
+          loadTasks: async (repoPath) => {
+            const taskOptions = unfilteredRepoTaskDataQueryOptions(repoPath);
+            return (await queryClient.fetchQuery({ ...taskOptions, staleTime: 0 })).tasks;
+          },
+          loadTaskSessions: (repoPath, taskId) =>
+            loadAgentSessionListFromQuery(queryClient, repoPath, taskId, { forceFresh: true }),
+          navigate,
+          reportStale: staleTarget,
         },
-        loadTaskSessions: (repoPath, taskId) =>
-          loadAgentSessionListFromQuery(queryClient, repoPath, taskId, { forceFresh: true }),
-        navigate,
-        reportStale: staleTarget,
-      });
+        (message) =>
+          toast.error("Could not open notification", {
+            description: message,
+            action: { label: "Reload", onClick: () => window.location.reload() },
+          }),
+      );
     });
   }, [
     activeWorkspace?.workspaceId,
