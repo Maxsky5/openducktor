@@ -133,16 +133,15 @@ function readJsonVersion(relativePath: string): string {
 
 function writeJsonVersion(relativePath: string, version: string): void {
   const absolutePath = resolve(workspaceRoot, relativePath);
-  const parsed = versionedPackageManifestSchema.parse(
-    JSON.parse(readFileSync(absolutePath, "utf8")),
-  );
+  const manifest = JSON.parse(readFileSync(absolutePath, "utf8"));
+  const parsed = versionedPackageManifestSchema.parse(manifest);
 
   if (parsed.version === version) {
     return;
   }
 
-  parsed.version = version;
-  writeFileSync(absolutePath, `${JSON.stringify(parsed, null, 2)}\n`);
+  manifest.version = version;
+  writeFileSync(absolutePath, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 function collectCurrentVersions(): Array<{ file: string; version: string }> {
