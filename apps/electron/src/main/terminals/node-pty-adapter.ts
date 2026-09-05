@@ -69,12 +69,12 @@ export const createNodePtyPort = ({
           if (closed) return;
           closed = true;
           nativeExit = { exitCode, signal: signal === undefined ? null : String(signal) };
-          if (!receivedOutput && exitCode !== 0 && !cleanupPromise) {
+          if (!receivedOutput && (exitCode !== 0 || Boolean(signal)) && !cleanupPromise) {
             handlers.onFailure(
               new TerminalPtyError({
                 code: "spawn_failed",
                 operation: "start",
-                message: `Terminal shell ${plan.shell} exited with code ${exitCode} before producing output in ${plan.cwd}. Check that the shell starts in this directory outside OpenDucktor.`,
+                message: `Terminal shell ${plan.shell} exited with code ${exitCode}${signal ? ` (signal ${signal})` : ""} before producing output in ${plan.cwd}. Check that the shell starts in this directory outside OpenDucktor.`,
               }),
             );
           }

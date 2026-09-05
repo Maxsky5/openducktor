@@ -107,17 +107,14 @@ describe("TerminalPanel", () => {
       exit: null,
     };
     let unmount: () => void = () => undefined;
+    const panelModel: TerminalPanelModel = {
+      ...model,
+      ...tabsModel([readyTab(summary)]),
+      activeTabId: "tab:terminal-failed",
+      controller,
+    };
     try {
-      const view = render(
-        <TerminalPanel
-          model={{
-            ...model,
-            ...tabsModel([readyTab(summary)]),
-            activeTabId: "tab:terminal-failed",
-            controller,
-          }}
-        />,
-      );
+      const view = render(<TerminalPanel model={panelModel} />);
       unmount = view.unmount;
       await waitFor(() => expect(mount).toHaveBeenCalledTimes(1));
       const callbacks = mount.mock.calls[0]?.[0];
@@ -131,6 +128,23 @@ describe("TerminalPanel", () => {
       expect(screen.getByRole("status", { name: "Terminal status" }).textContent).toContain(
         expected,
       );
+      view.rerender(
+        <TerminalPanel
+          model={{ ...panelModel, scopeKey: "/repo:task-2", tabs: [], activeTabId: null }}
+        />,
+      );
+      expect(screen.queryByRole("status", { name: "Terminal status" })).toBeNull();
+      view.rerender(<TerminalPanel model={panelModel} />);
+      expect(screen.getByRole("status", { name: "Terminal status" }).textContent).toContain(
+        expected,
+      );
+      expect(mount).toHaveBeenCalledTimes(1);
+      view.rerender(
+        <TerminalPanel model={{ ...panelModel, ...tabsModel([]), activeTabId: null }} />,
+      );
+      view.rerender(<TerminalPanel model={panelModel} />);
+      await waitFor(() => expect(mount).toHaveBeenCalledTimes(2));
+      expect(screen.queryByRole("status", { name: "Terminal status" })).toBeNull();
     } finally {
       unmount();
       mount.mockRestore();

@@ -119,8 +119,24 @@ export class TerminalSessionOutput {
         title: summary.label,
         complete: requested >= this.earliestRetainedSequence,
       });
-      const events = this.flush(attachment, true, handle);
-      if (this.failureFrame) this.publishTo(attachment, this.failureFrame);
+      let events = this.flush(attachment, true, handle);
+      if (!this.attachments.has(input.attachmentId)) return events;
+      if (summary.exit) {
+        const published = this.tryPublish(attachment, {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "lifecycle",
+          terminalId: this.terminalId,
+          lifecycle: summary.lifecycle,
+          exitCode: summary.exit.exitCode,
+          signal: summary.exit.signal,
+          finalSequence: summary.exit.finalSequence,
+        });
+        events = mergeEvents(events, published.events);
+        if (!published.delivered) return events;
+      }
+      if (this.failureFrame) {
+        events = mergeEvents(events, this.tryPublish(attachment, this.failureFrame).events);
+      }
       return events;
     } catch (cause) {
       if (previous) this.attachments.set(input.attachmentId, previous);

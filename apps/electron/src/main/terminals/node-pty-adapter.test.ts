@@ -36,10 +36,15 @@ describe("createNodePtyPort", () => {
     }
   });
 
-  test.each([0, 1])(
-    "reports a silent unsuccessful shell exit, but not a clean exit (%i)",
-    async (exitCode) => {
-      let exitListener: (event: { exitCode: number }) => void = () => undefined;
+  test.each([
+    { exitCode: 0, signal: 0, requestedClose: false, failed: false },
+    { exitCode: 1, signal: 0, requestedClose: false, failed: true },
+    { exitCode: 0, signal: 15, requestedClose: false, failed: true },
+    { exitCode: 0, signal: 15, requestedClose: true, failed: false },
+  ])(
+    "classifies silent exit $exitCode, signal $signal, requested close $requestedClose",
+    async ({ exitCode, signal, requestedClose, failed }) => {
+      let exitListener: (event: { exitCode: number; signal: number }) => void = () => undefined;
       const events: string[] = [];
       const port = createNodePtyPort({
         processTreeTerminator: () => Effect.void,
@@ -58,7 +63,7 @@ describe("createNodePtyPort", () => {
           }),
         },
       });
-      await Effect.runPromise(
+      const handle = await Effect.runPromise(
         port.start(
           { shell: "cmd.exe", args: [], cwd: "C:\\repo", env: {}, grid: { columns: 80, rows: 24 } },
           {
@@ -68,14 +73,15 @@ describe("createNodePtyPort", () => {
           },
         ),
       );
-      exitListener({ exitCode });
+      if (requestedClose) await Effect.runPromise(handle.terminate());
+      exitListener({ exitCode, signal });
       await Bun.sleep(0);
       expect(events.at(-1)).toBe("exit");
-      if (exitCode === 0) expect(events).toEqual(["exit"]);
+      if (!failed) expect(events).toEqual(["exit"]);
       else {
         expect(events).toHaveLength(2);
         expect(events[0]).toContain(
-          "cmd.exe exited with code 1 before producing output in C:\\repo",
+          `cmd.exe exited with code ${exitCode}${signal ? ` (signal ${signal})` : ""} before producing output in C:\\repo`,
         );
         expect(events[0]).toContain("outside OpenDucktor");
       }
