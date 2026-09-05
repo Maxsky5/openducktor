@@ -85,36 +85,43 @@ function AgentSessionTranscriptDialogContent({
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
 
-      <div className="min-h-0 flex-1 bg-background" hidden={hasPreview} ref={chatRef}>
-        <ChatFileLinkProvider
-          owner={{
-            repoPath: workspaceRepoPath,
-            taskId: target.sessionScope?.kind === "workflow" ? target.sessionScope.taskId : null,
-            ownerKey: agentSessionIdentityKey(target),
-            onSelectFile: (file) => {
-              if (
-                document.activeElement instanceof HTMLElement &&
-                chatRef.current?.contains(document.activeElement)
-              )
-                linkRef.current = document.activeElement;
-              preview.onSelectFile(file);
-            },
-          }}
+      <div className="relative min-h-0 flex-1">
+        <div
+          className="h-full min-h-0 bg-background"
+          style={{ visibility: hasPreview ? "hidden" : undefined }}
+          inert={hasPreview}
+          ref={chatRef}
         >
-          <AgentChatSurface model={model} />
-        </ChatFileLinkProvider>
+          <ChatFileLinkProvider
+            owner={{
+              repoPath: workspaceRepoPath,
+              taskId: target.sessionScope?.kind === "workflow" ? target.sessionScope.taskId : null,
+              ownerKey: agentSessionIdentityKey(target),
+              onSelectFile: (file) => {
+                if (
+                  document.activeElement instanceof HTMLElement &&
+                  chatRef.current?.contains(document.activeElement)
+                )
+                  linkRef.current = document.activeElement;
+                preview.onSelectFile(file);
+              },
+            }}
+          >
+            <AgentChatSurface model={model} />
+          </ChatFileLinkProvider>
+        </div>
+        {hasPreview ? (
+          <DiffWorkerProvider>
+            <div className="absolute inset-0 min-h-0 bg-background">
+              <TaskExecutionSelectedFilePreview
+                key={preview.model.previewSessionKey}
+                model={preview.model}
+                onFileSaved={onDialogFileSaved}
+              />
+            </div>
+          </DiffWorkerProvider>
+        ) : null}
       </div>
-      {hasPreview ? (
-        <DiffWorkerProvider>
-          <div className="min-h-0 flex-1 bg-background">
-            <TaskExecutionSelectedFilePreview
-              key={preview.model.previewSessionKey}
-              model={preview.model}
-              onFileSaved={onDialogFileSaved}
-            />
-          </div>
-        </DiffWorkerProvider>
-      ) : null}
     </>
   );
 }

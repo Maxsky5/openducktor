@@ -87,12 +87,12 @@ export function AgentsPageWorkspacePanes({
     <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
       <ResizablePanel defaultSize={63} minSize={35}>
         <div
-          className="flex h-full min-h-0 flex-col overflow-hidden"
+          className="relative flex h-full min-h-0 flex-col overflow-hidden"
           style={PANEL_CONTAINMENT_STYLE}
         >
           {hasSelectedFilePreview ? (
             <div
-              className="h-full min-h-0 overflow-hidden"
+              className="absolute inset-0 h-full min-h-0 overflow-hidden"
               data-testid="task-execution-selected-file-preview-pane"
             >
               {selectedFilePreviewContent}
@@ -100,7 +100,8 @@ export function AgentsPageWorkspacePanes({
           ) : null}
           <div
             className="min-h-0 flex-1 overflow-hidden"
-            hidden={hasSelectedFilePreview}
+            style={{ visibility: hasSelectedFilePreview ? "hidden" : undefined }}
+            inert={hasSelectedFilePreview}
             data-testid="agent-studio-chat-pane"
           >
             {chatContent}
