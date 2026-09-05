@@ -24,7 +24,7 @@ export type TaskStreamControllerFactory = (input: {
   queryClient: QueryClient;
   getActiveRepoPath: () => string | null;
   onDegraded: (cause: unknown) => void;
-  onSnapshotFinished: (repoPath: string | null) => void;
+  onSnapshotFinished: (repoPath: string | null, succeeded: boolean) => void;
   onSnapshotStarted: (repoPath: string | null) => void;
 }) => TaskStreamController;
 
@@ -70,6 +70,7 @@ export function useAppLifecycle({
   const activeWorkspaceRef = useRef(activeWorkspace);
   const loadWorkspaceTasksRef = useRef(loadWorkspaceTasks);
   const shouldLoadWorkspaceTasksRef = useRef<Promise<boolean>>(loadTasksWithoutStream);
+  const failedStreamSnapshotReposRef = useRef<Set<string>>(new Set());
   const streamSnapshotReposRef = useRef<Set<string>>(new Set());
 
   useLayoutEffect(() => {
@@ -100,6 +101,7 @@ export function useAppLifecycle({
   }, [activeWorkspace?.repoPath, refreshRepoRuntimeHealth, runtimeKinds, startRepoRuntime]);
 
   useEffect(() => {
+    failedStreamSnapshotReposRef.current = new Set();
     streamSnapshotReposRef.current = new Set();
     let taskLoadDecisionMade = false;
     let resolveTaskLoadDecision!: (shouldLoadWorkspaceTasks: boolean) => void;
@@ -122,12 +124,16 @@ export function useAppLifecycle({
       },
       onSnapshotStarted: (repoPath) => {
         if (repoPath) {
+          failedStreamSnapshotReposRef.current.delete(repoPath);
           streamSnapshotReposRef.current.add(repoPath);
         }
       },
-      onSnapshotFinished: (repoPath) => {
+      onSnapshotFinished: (repoPath, succeeded) => {
         if (repoPath) {
           streamSnapshotReposRef.current.delete(repoPath);
+          if (!succeeded) {
+            failedStreamSnapshotReposRef.current.add(repoPath);
+          }
         }
       },
     });
@@ -164,10 +170,14 @@ export function useAppLifecycle({
       loadWorkspaceTasks: async (repoPath) => {
         const streamUnavailable = await shouldLoadWorkspaceTasks;
         const taskQueryState = queryClient.getQueryState(taskQueryKeys.repoData(repoPath));
+        const streamFailedForRepo = failedStreamSnapshotReposRef.current.has(repoPath);
         const streamOwnsRepo = streamSnapshotReposRef.current.has(repoPath);
         const queryOwnsRepo =
           taskQueryState?.status === "success" || taskQueryState?.fetchStatus === "fetching";
-        if ((streamUnavailable || (!streamOwnsRepo && !queryOwnsRepo)) && isCurrent()) {
+        if (
+          (streamUnavailable || (!streamFailedForRepo && !streamOwnsRepo && !queryOwnsRepo)) &&
+          isCurrent()
+        ) {
           await loadWorkspaceTasksRef.current(repoPath);
         }
       },

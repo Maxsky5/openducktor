@@ -155,7 +155,7 @@ describe("useAppLifecycle task stream", () => {
         start: async () => {
           onSnapshotStarted("/repo-a");
           queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
-          onSnapshotFinished("/repo-a");
+          onSnapshotFinished("/repo-a", true);
         },
         stop: async () => {},
       };
@@ -259,6 +259,7 @@ describe("useAppLifecycle task stream", () => {
     const factory: TaskStreamControllerFactory = ({
       getActiveRepoPath,
       onDegraded,
+      onSnapshotFinished,
       onSnapshotStarted,
     }) =>
       createTaskStreamController({
@@ -290,6 +291,7 @@ describe("useAppLifecycle task stream", () => {
         },
         getActiveRepoPath,
         onDegraded,
+        onSnapshotFinished,
         onSnapshotStarted,
       });
     const args = {

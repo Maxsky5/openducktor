@@ -48,7 +48,7 @@ export const createTaskStreamController = ({
   agentSessionViewSync: AgentSessionViewSync;
   getActiveRepoPath: () => string | null;
   onDegraded: (cause: unknown) => void;
-  onSnapshotFinished?: (repoPath: string | null) => void;
+  onSnapshotFinished?: (repoPath: string | null, succeeded: boolean) => void;
   onSnapshotStarted?: (repoPath: string | null) => void;
 }): TaskStreamController => {
   let current: OwnedSubscription | null = null;
@@ -160,11 +160,13 @@ export const createTaskStreamController = ({
     metadata.invalidateAllTaskMetadata();
     const activeRepoPath = getActiveRepoPath();
     onSnapshotStarted?.(activeRepoPath);
+    let succeeded = false;
     try {
       const taskIds = await taskViewSync.reconcileStreamSnapshot(activeRepoPath);
       await agentSessionViewSync.reconcileStreamSnapshot(activeRepoPath, taskIds);
+      succeeded = true;
     } finally {
-      onSnapshotFinished?.(activeRepoPath);
+      onSnapshotFinished?.(activeRepoPath, succeeded);
     }
     if (!isActive(owner, frameGeneration)) return false;
     processedCursor = frame.cursor;

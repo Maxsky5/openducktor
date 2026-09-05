@@ -49,14 +49,16 @@ type SubscriptionRecord = {
 const createHarness = ({
   onSubscribe,
   onSnapshotStarted = mock((_repoPath: string | null) => {}),
-  onSnapshotFinished = mock((_repoPath: string | null) => {}),
+  onSnapshotFinished = mock((_repoPath: string | null, _succeeded: boolean) => {}),
   taskViewSync: taskViewSyncOverrides,
   agentSessionViewSync: agentSessionViewSyncOverride,
   getActiveRepoPath = () => "/repo",
 }: {
   onSubscribe?: (record: SubscriptionRecord, index: number) => Promise<TaskStreamSubscription>;
   onSnapshotStarted?: ReturnType<typeof mock<(repoPath: string | null) => void>>;
-  onSnapshotFinished?: ReturnType<typeof mock<(repoPath: string | null) => void>>;
+  onSnapshotFinished?: ReturnType<
+    typeof mock<(repoPath: string | null, succeeded: boolean) => void>
+  >;
   taskViewSync?: Partial<TaskViewSync>;
   agentSessionViewSync?: AgentSessionViewSync;
   getActiveRepoPath?: () => string | null;
@@ -148,7 +150,7 @@ describe("task stream controller recovery", () => {
     snapshotRefresh.resolve();
     await flush();
 
-    expect(harness.onSnapshotFinished).toHaveBeenCalledWith("/repo");
+    expect(harness.onSnapshotFinished).toHaveBeenCalledWith("/repo", true);
   });
 
   test("uses one task list read to reconcile task and session snapshots", async () => {
@@ -449,7 +451,7 @@ describe("task stream controller recovery", () => {
     expect(harness.transport.subscribeTaskStream).toHaveBeenCalledTimes(2);
     expect(harness.records[1]?.unsubscribe).toHaveBeenCalledTimes(1);
     expect(harness.onDegraded).toHaveBeenCalledWith(changeFailure);
-    expect(harness.onSnapshotFinished).toHaveBeenCalledWith("/repo");
+    expect(harness.onSnapshotFinished).toHaveBeenCalledWith("/repo", false);
   });
 
   test("concurrent starts share acquisition and stop waits for acquisition and teardown", async () => {
