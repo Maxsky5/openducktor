@@ -13,6 +13,7 @@ import { errorMessage } from "@/lib/errors";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
+  AgentMessageSendOptions,
   AgentSessionContextLoadTarget,
   AgentSessionIdentity,
   AgentSessionState,
@@ -22,7 +23,11 @@ import type { AgentOperationsContextValue } from "@/types/state-slices";
 
 type SessionActions = {
   startAgentSession: StartAgentSession;
-  sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
+  sendAgentMessage: (
+    session: AgentSessionIdentity,
+    parts: AgentUserMessagePart[],
+    options?: AgentMessageSendOptions,
+  ) => Promise<void>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
@@ -73,8 +78,14 @@ export const createOrchestratorPublicOperations = ({
   loadAgentSessionHistory,
   loadAgentSessionContext,
   startAgentSession: sessionActions.startAgentSession,
-  sendAgentMessage: (session, parts: AgentUserMessagePart[]): Promise<void> =>
-    withErrorToast("Failed to send message", () => sessionActions.sendAgentMessage(session, parts)),
+  sendAgentMessage: (
+    session,
+    parts: AgentUserMessagePart[],
+    options?: AgentMessageSendOptions,
+  ): Promise<void> => {
+    const send = (): Promise<void> => sessionActions.sendAgentMessage(session, parts, options);
+    return options?.errorAttentionId ? send() : withErrorToast("Failed to send message", send);
+  },
   stopAgentSession: (session): Promise<void> =>
     withErrorToast("Failed to stop agent session", () => sessionActions.stopAgentSession(session)),
   updateAgentSessionModel: (session, selection): void => {

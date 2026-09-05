@@ -6,6 +6,10 @@ import type {
   HostEventChannel,
   HostEventEnvelope,
   HostEventPayload,
+  NotificationClickEvent,
+  NotificationDeliveryResult,
+  NotificationOsCapability,
+  NotificationOsDeliveryRequest,
   TaskEventCursor,
   TaskEventStreamAcknowledge,
   TaskEventStreamFrame,
@@ -15,6 +19,10 @@ import {
   hostInvokeFailureSchema,
   taskEventStreamAcknowledgeSchema,
   taskEventStreamFrameSchema,
+  notificationClickEventSchema,
+  notificationDeliveryResultSchema,
+  notificationOsCapabilitySchema,
+  notificationOsDeliveryRequestSchema,
 } from "@openducktor/contracts";
 import type { HostCommandName, HostCommandResult } from "@openducktor/host";
 import { z } from "zod";
@@ -43,6 +51,14 @@ export const ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL =
   "openducktor:task-stream:terminal-failure";
 export const ELECTRON_TASK_STREAM_ACKNOWLEDGE_CHANNEL = "openducktor:task-stream:acknowledge";
 export const ELECTRON_TASK_STREAM_UNSUBSCRIBE_CHANNEL = "openducktor:task-stream:unsubscribe";
+export const ELECTRON_NOTIFICATION_CLICKED_CHANNEL = "openducktor:notification:clicked";
+export const ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL =
+  "openducktor:notification:get-capability";
+export const ELECTRON_NOTIFICATION_REQUEST_PERMISSION_CHANNEL =
+  "openducktor:notification:request-permission";
+export const ELECTRON_NOTIFICATION_OPEN_SETTINGS_CHANNEL = "openducktor:notification:open-settings";
+export const ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL = "openducktor:notification:get-app-focus";
+export const ELECTRON_NOTIFICATION_SHOW_CHANNEL = "openducktor:notification:show";
 export const ELECTRON_WINDOW_TITLE_BAR_HEIGHT = 40;
 
 const ipcRecordSchema = z.record(z.string(), z.unknown()).refine((value) => {
@@ -151,6 +167,20 @@ export type OpenDucktorElectronTaskStreamApi = {
   }>;
 };
 
+export const electronNotificationCapabilitySchema = notificationOsCapabilitySchema;
+export const electronNotificationDeliveryRequestSchema = notificationOsDeliveryRequestSchema;
+export const electronNotificationDeliveryResultSchema = notificationDeliveryResultSchema;
+export const electronNotificationClickEventSchema = notificationClickEventSchema;
+
+export type OpenDucktorElectronNotificationApi = {
+  getCapability(): Promise<NotificationOsCapability>;
+  requestPermission(): Promise<NotificationOsCapability>;
+  openSystemSettings(): Promise<void>;
+  isAppFocused(): Promise<boolean>;
+  show(request: NotificationOsDeliveryRequest): Promise<NotificationDeliveryResult>;
+  subscribeClicks(listener: (event: NotificationClickEvent) => void): () => void;
+};
+
 export type OpenDucktorElectronApi = {
   platform: AppPlatform;
   invoke(
@@ -162,6 +192,7 @@ export type OpenDucktorElectronApi = {
     listener: (payload: HostEventPayload<Channel>) => void,
   ): () => void;
   appUpdates: OpenDucktorElectronAppUpdateApi;
+  notifications: OpenDucktorElectronNotificationApi;
   openExternalUrl(url: string): Promise<void>;
   resolveLocalAttachmentPreviewSrc(path: string): Promise<string>;
   terminals: OpenDucktorElectronTerminalApi;

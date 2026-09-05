@@ -62,22 +62,60 @@ type ExecuteSessionStartFromDecisionArgs = {
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: StartAgentSession;
   sendAgentMessage?: SendAgentMessage;
+  postStartErrorAttentionId?: string;
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
 };
 
 export type RunSessionStartWorkflowInput = Omit<
   ExecuteSessionStartFromDecisionArgs,
-  "queryClient" | "workspaceId" | "startAgentSession" | "sendAgentMessage"
+  | "queryClient"
+  | "workspaceId"
+  | "startAgentSession"
+  | "sendAgentMessage"
+  | "postStartErrorAttentionId"
 >;
 
 export type RunSessionStartWorkflow = (
   input: RunSessionStartWorkflowInput,
 ) => Promise<SessionStartWorkflowResult>;
 
+export type SessionStartNotificationInput = {
+  launchAttemptId: string;
+  workspaceId: string | null;
+  taskId: string;
+  taskTitle?: string;
+  role: SessionStartFlowRequest["role"];
+  session?: AgentSessionIdentity;
+};
+
+export type SessionStartNotificationPublisher = {
+  publishSessionStarted(
+    input: SessionStartNotificationInput & { session: AgentSessionIdentity },
+  ): void;
+  publishSessionError(input: SessionStartNotificationInput): Promise<boolean>;
+  reportFailure(cause: unknown, input: SessionStartNotificationInput): void;
+};
+
+export class SessionStartWorkflowError extends Error {
+  constructor(
+    readonly originalCause: Error,
+    readonly feedbackHandled: boolean,
+  ) {
+    super(originalCause.message);
+    this.name = "SessionStartWorkflowError";
+  }
+}
+
+export const isSessionStartFailureFeedbackHandled = (cause: unknown): boolean =>
+  cause instanceof SessionStartWorkflowError && cause.feedbackHandled;
+
 type CreateSessionStartWorkflowRunnerArgs = Pick<
   ExecuteSessionStartFromDecisionArgs,
   "queryClient" | "workspaceId" | "startAgentSession" | "sendAgentMessage"
->;
+> & {
+  notifications?: SessionStartNotificationPublisher;
+  createLaunchAttemptId?: () => string;
+};
 
 const launchActionSupportsReusableSessions = (
   launchActionId: SessionStartFlowRequest["launchActionId"],
@@ -196,6 +234,7 @@ export const executeSessionStartFromDecision = async ({
   persistTaskTargetBranch,
   startAgentSession,
   sendAgentMessage,
+  postStartErrorAttentionId,
   humanRequestChangesTask,
 }: ExecuteSessionStartFromDecisionArgs): Promise<SessionStartWorkflowResult> => {
   const intent: Parameters<typeof startSessionWorkflow>[0]["intent"] = {
@@ -251,6 +290,10 @@ export const executeSessionStartFromDecision = async ({
     workflowInput.sendAgentMessage = sendAgentMessage;
   }
 
+  if (postStartErrorAttentionId) {
+    workflowInput.postStartErrorAttentionId = postStartErrorAttentionId;
+  }
+
   if (humanRequestChangesTask) {
     workflowInput.humanRequestChangesTask = humanRequestChangesTask;
   }
@@ -263,19 +306,68 @@ export const createSessionStartWorkflowRunner = ({
   workspaceId,
   startAgentSession,
   sendAgentMessage,
+  notifications,
+  createLaunchAttemptId = () => crypto.randomUUID(),
 }: CreateSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow => {
-  return (input) => {
+  return async (input) => {
+    const launchAttemptId = createLaunchAttemptId();
+    const notificationInput: SessionStartNotificationInput = {
+      launchAttemptId,
+      workspaceId,
+      taskId: input.request.taskId,
+      role: input.request.role,
+    };
+    if (input.task?.title) notificationInput.taskTitle = input.task.title;
+    const reportNotificationFailure = (cause: unknown): void => {
+      try {
+        notifications?.reportFailure(cause, notificationInput);
+      } catch {
+        console.error("Session start notification failure reporting failed.", {
+          launchAttemptId,
+          taskId: input.request.taskId,
+          workspaceId,
+        });
+      }
+    };
     const args: ExecuteSessionStartFromDecisionArgs = {
       ...input,
       queryClient,
       workspaceId,
       startAgentSession,
+      postStartErrorAttentionId: launchAttemptId,
     };
 
     if (sendAgentMessage) {
       args.sendAgentMessage = sendAgentMessage;
     }
 
-    return executeSessionStartFromDecision(args);
+    let result: SessionStartWorkflowResult;
+    try {
+      result = await executeSessionStartFromDecision(args);
+    } catch (cause) {
+      let feedbackHandled = false;
+      try {
+        if (notifications) {
+          feedbackHandled = await notifications.publishSessionError(notificationInput);
+        }
+      } catch (notificationCause) {
+        reportNotificationFailure(notificationCause);
+      }
+      const startError = cause instanceof Error ? cause : new Error(String(cause));
+      throw new SessionStartWorkflowError(startError, feedbackHandled);
+    }
+
+    const { postStartActionError, ...session } = result;
+    const notificationWithSession = { ...notificationInput, session };
+    try {
+      if (postStartActionError) {
+        await notifications?.publishSessionError(notificationWithSession);
+      } else if (input.decision.startMode === "fresh" || input.decision.startMode === "fork") {
+        notifications?.publishSessionStarted(notificationWithSession);
+      }
+    } catch (cause) {
+      reportNotificationFailure(cause);
+    }
+    return result;
   };
 };

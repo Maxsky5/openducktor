@@ -252,6 +252,7 @@ export const resolveAgentStudioRouteSession = ({
   sessions,
   taskId,
   sessionExternalId,
+  sessionIdentity = null,
 }: {
   isWorkspaceRestorePending: boolean;
   isLoadingTasks: boolean;
@@ -259,12 +260,17 @@ export const resolveAgentStudioRouteSession = ({
   sessions: AgentSessionSummary[];
   taskId: string;
   sessionExternalId: string | null;
+  sessionIdentity?: AgentSessionIdentity | null;
 }): AgentStudioRouteSessionResolution => {
   if (isWorkspaceRestorePending || !sessionExternalId) {
     return { kind: "none" };
   }
 
-  const session = findAgentStudioTaskSessionSummary(sessions, taskId, sessionExternalId);
+  const session = sessionIdentity
+    ? sessions.find(
+        (entry) => entry.taskId === taskId && matchesAgentSessionIdentity(entry, sessionIdentity),
+      )
+    : findAgentStudioTaskSessionSummary(sessions, taskId, sessionExternalId);
   if (session) {
     return { kind: "found", session };
   }

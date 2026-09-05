@@ -4,6 +4,7 @@ export {
   type DevServerEventListener,
   type DevServerEventSubscription,
   type HostBridge,
+  type NotificationBridge,
   type RunEventListener,
   type ShellBridge,
   type ShellCapabilities,

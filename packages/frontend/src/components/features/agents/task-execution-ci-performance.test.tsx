@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { PullRequestReviewActivity, PullRequestReviewContext } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { type PropsWithChildren, type ReactElement, useState } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { QueryProvider } from "@/lib/query-provider";
@@ -230,14 +230,15 @@ describe("TaskExecutionPanel CI performance", () => {
         initiallyOpen: true,
         initialTabId: "git",
       });
-      const ciTab = screen.getByRole("tab", { name: /CI Checks/ });
+      const scoped = within(view.container);
+      const ciTab = scoped.getByRole("tab", { name: /CI Checks/ });
 
-      expect(screen.queryByText("Performance marker 0")).toBeNull();
+      expect(scoped.queryByText("Performance marker 0")).toBeNull();
       fireEvent.mouseDown(ciTab, { button: 0, ctrlKey: false });
 
       expect(ciTab.getAttribute("aria-selected")).toBe("true");
-      expect(screen.getAllByRole("article")).toHaveLength(100);
-      expect(screen.queryByText("Performance marker 0")).toBeNull();
+      expect(scoped.getAllByRole("article")).toHaveLength(100);
+      expect(scoped.queryByText("Performance marker 0")).toBeNull();
       expect(frameDriver.pendingFrameCount()).toBeGreaterThan(0);
 
       view.unmount();
@@ -285,14 +286,15 @@ describe("TaskExecutionPanel CI performance", () => {
         initiallyOpen: false,
         initialTabId: "ci_checks",
       });
+      const scoped = within(view.container);
 
-      fireEvent.click(screen.getByRole("button", { name: "Show task execution panel" }));
+      fireEvent.click(scoped.getByRole("button", { name: "Show task execution panel" }));
 
-      expect(screen.getByRole("tab", { name: /CI Checks/ }).getAttribute("aria-selected")).toBe(
+      expect(scoped.getByRole("tab", { name: /CI Checks/ }).getAttribute("aria-selected")).toBe(
         "true",
       );
-      expect(screen.getAllByRole("article")).toHaveLength(40);
-      expect(screen.queryByText("Performance marker 0")).toBeNull();
+      expect(scoped.getAllByRole("article")).toHaveLength(40);
+      expect(scoped.queryByText("Performance marker 0")).toBeNull();
       expect(frameDriver.pendingFrameCount()).toBeGreaterThan(0);
 
       view.unmount();

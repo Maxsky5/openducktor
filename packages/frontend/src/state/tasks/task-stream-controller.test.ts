@@ -9,6 +9,7 @@ import {
 import { createTaskViewSync, type TaskViewSync } from "@/state/queries/task-view-sync";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { createTaskStreamController } from "./task-stream-controller";
+import type { TaskStreamNotificationSink } from "./task-stream-controller";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
 const cursor = (sequence: number): TaskEventCursor => ({ epoch, sequence });
@@ -18,6 +19,7 @@ const event = (taskId: string): ExternalTaskSyncEvent => ({
   repoPath: "/repo",
   taskIds: [taskId],
   removedTaskIds: [],
+  taskSnapshots: [{ id: taskId, title: taskId, status: "open" }],
   emittedAt: "2026-04-10T13:10:00.000Z",
 });
 
@@ -53,6 +55,7 @@ const createHarness = ({
   taskViewSync: taskViewSyncOverrides,
   agentSessionViewSync: agentSessionViewSyncOverride,
   getActiveRepoPath = () => "/repo",
+  notificationSink,
 }: {
   onSubscribe?: (record: SubscriptionRecord, index: number) => Promise<TaskStreamSubscription>;
   onSnapshotStarted?: ReturnType<typeof mock<(repoPath: string | null) => void>>;
@@ -62,6 +65,7 @@ const createHarness = ({
   taskViewSync?: Partial<TaskViewSync>;
   agentSessionViewSync?: AgentSessionViewSync;
   getActiveRepoPath?: () => string | null;
+  notificationSink?: TaskStreamNotificationSink;
 } = {}) => {
   const records: SubscriptionRecord[] = [];
   const metadata = {
@@ -101,7 +105,7 @@ const createHarness = ({
   const onDegraded = mock((cause: unknown) => {
     void cause;
   });
-  const controller = createTaskStreamController({
+  const controllerOptions: Parameters<typeof createTaskStreamController>[0] = {
     transport,
     metadata,
     taskViewSync,
@@ -110,7 +114,11 @@ const createHarness = ({
     onDegraded,
     onSnapshotStarted,
     onSnapshotFinished,
-  });
+  };
+  if (notificationSink) {
+    controllerOptions.notificationSink = notificationSink;
+  }
+  const controller = createTaskStreamController(controllerOptions);
 
   return {
     controller,
@@ -199,6 +207,96 @@ describe("task stream controller recovery", () => {
     await flush();
 
     expect(harness.records[0]?.acknowledge).toHaveBeenCalledWith(cursor(0));
+  });
+
+  test("runs notification projection after reconcile without blocking acknowledgement on failure", async () => {
+    const notificationFailure = new Error("notification projection failed");
+    let taskViewReconciled = false;
+    let sessionViewReconciled = false;
+    const notificationSink: TaskStreamNotificationSink = {
+      onChange: mock(async () => {
+        expect(taskViewReconciled).toBe(true);
+        expect(sessionViewReconciled).toBe(true);
+        throw notificationFailure;
+      }),
+      onSnapshot: mock(async () => {}),
+      onFailure: mock(() => {}),
+    };
+    const harness = createHarness({
+      notificationSink,
+      taskViewSync: {
+        reconcileExternalEvent: mock(async () => {
+          taskViewReconciled = true;
+        }),
+      },
+    });
+    harness.agentSessionViewSync.reconcileExternalEvent = mock(async () => {
+      sessionViewReconciled = true;
+    });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "change", cursor: cursor(0), event: event("task-1") });
+    await flush();
+
+    expect(harness.taskViewSync.reconcileExternalEvent).toHaveBeenCalledTimes(1);
+    expect(notificationSink.onFailure).toHaveBeenCalledWith(notificationFailure);
+    expect(harness.records[0]?.acknowledge).toHaveBeenCalledWith(cursor(0));
+    expect(harness.onDegraded).not.toHaveBeenCalled();
+  });
+
+  test("acknowledges reconciled frames while notification projection stays ordered", async () => {
+    const firstNotification = deferred<void>();
+    const notificationEvents: string[] = [];
+    const notificationSink: TaskStreamNotificationSink = {
+      onChange: mock(async (change) => {
+        notificationEvents.push(change.taskIds[0] ?? "missing");
+        if (change.taskIds[0] === "task-1") {
+          await firstNotification.promise;
+        }
+      }),
+      onSnapshot: mock(async () => {}),
+      onFailure: mock(() => {}),
+    };
+    const harness = createHarness({ notificationSink });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "change", cursor: cursor(0), event: event("task-1") });
+    await flush();
+    harness.emit(0, { type: "change", cursor: cursor(1), event: event("task-2") });
+    await flush();
+
+    expect(harness.records[0]?.acknowledge.mock.calls).toEqual([[cursor(0)], [cursor(1)]]);
+    expect(notificationEvents).toEqual(["task-1"]);
+
+    firstNotification.resolve();
+    await flush();
+
+    expect(notificationEvents).toEqual(["task-1", "task-2"]);
+    expect(notificationSink.onFailure).not.toHaveBeenCalled();
+  });
+
+  test("acknowledges a reconciled snapshot while its notification projection is pending", async () => {
+    const snapshotNotification = deferred<void>();
+    const notificationSink: TaskStreamNotificationSink = {
+      onChange: mock(async () => {}),
+      onSnapshot: mock(async () => snapshotNotification.promise),
+      onFailure: mock(() => {}),
+    };
+    const harness = createHarness({ notificationSink });
+
+    await harness.controller.start();
+    harness.emit(0, {
+      type: "snapshot_required",
+      cursor: cursor(7),
+      reason: "buffer_gap",
+    });
+    await flush();
+
+    expect(harness.taskViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
+    expect(harness.records[0]?.acknowledge).toHaveBeenCalledWith(cursor(7));
+
+    snapshotNotification.resolve();
+    await flush();
   });
 
   test("application failure closes the subscription, recovers from a snapshot, and resumes", async () => {

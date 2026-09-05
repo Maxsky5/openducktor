@@ -4,6 +4,12 @@ import type {
   AppUpdateCommandResult,
   AppUpdateState,
   HostEventPayload,
+  NotificationClickEvent,
+  NotificationDeliveryResult,
+  NotificationOccurrence,
+  NotificationOsCapability,
+  NotificationOsDeliveryRequest,
+  NotificationSettings,
   TaskAssetRenderContext,
   TaskEventCursor,
   TaskEventStreamFrame,
@@ -75,9 +81,31 @@ export type TerminalBridge = {
   ): Promise<TerminalTransportConnection>;
 };
 
+export type NotificationBridge = {
+  getCapability(): Promise<NotificationOsCapability>;
+  requestPermission(): Promise<NotificationOsCapability>;
+  openSystemSettings(): Promise<void>;
+  isAppFocused(): Promise<boolean>;
+  withExternalDeliveryOwnership(
+    occurrenceId: string,
+    dispatch: (externalDeliveryOwner: boolean) => Promise<void>,
+  ): Promise<void>;
+  showOsNotification(request: NotificationOsDeliveryRequest): Promise<NotificationDeliveryResult>;
+  publishOccurrence(
+    occurrence: NotificationOccurrence,
+    settings: NotificationSettings,
+  ): Promise<{ occurrence: NotificationOccurrence; settings: NotificationSettings }>;
+  subscribeOccurrences(
+    listener: (occurrence: NotificationOccurrence, settings: NotificationSettings) => void,
+  ): () => void;
+  subscribeClicks(listener: (event: NotificationClickEvent) => void): () => void;
+  dispose(): void;
+};
+
 export type ShellBridge = HostBridge & {
   appUpdates: AppUpdateBridge;
   capabilities: ShellCapabilities;
+  notifications: NotificationBridge;
   openExternalUrl: (url: string) => Promise<void>;
   resolveLocalAttachmentPreviewSrc: (path: string) => Promise<string>;
   resolveTaskAssetSrc: (context: TaskAssetRenderContext) => Promise<string>;
@@ -91,6 +119,10 @@ const DEFAULT_UNAVAILABLE_MESSAGE =
   "OpenDucktor shell bridge is not configured. Start through the desktop shell or @openducktor/web.";
 
 const unavailable = async <T>(): Promise<T> => {
+  throw new Error(DEFAULT_UNAVAILABLE_MESSAGE);
+};
+
+const unavailableSync = (): never => {
   throw new Error(DEFAULT_UNAVAILABLE_MESSAGE);
 };
 
@@ -151,6 +183,31 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   capabilities: {
     canOpenExternalUrls: false,
     canPreviewLocalAttachments: false,
+  },
+  notifications: {
+    getCapability: async () => ({
+      platform: "unavailable",
+      supported: false,
+      permission: "not_applicable",
+      canGuaranteeSilent: false,
+    }),
+    requestPermission: async () => ({
+      platform: "unavailable",
+      supported: false,
+      permission: "not_applicable",
+      canGuaranteeSilent: false,
+    }),
+    openSystemSettings: failUnavailable,
+    isAppFocused: async () => false,
+    withExternalDeliveryOwnership: async (_occurrenceId, dispatch) => dispatch(false),
+    showOsNotification: async () => ({
+      status: "unsupported",
+      message: "OS notifications are unavailable because the OpenDucktor shell is not configured.",
+    }),
+    publishOccurrence: unavailableSync,
+    subscribeOccurrences: unavailableSync,
+    subscribeClicks: unavailableSync,
+    dispose: () => {},
   },
   openExternalUrl: failUnavailable,
   resolveLocalAttachmentPreviewSrc: failUnavailable,

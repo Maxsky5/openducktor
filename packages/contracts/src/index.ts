@@ -51,6 +51,7 @@ export * from "./host-command-contracts";
 export * from "./host-invoke-failure-schemas";
 export * from "./mcp-bridge-discovery";
 export * from "./metadata-schemas";
+export * from "./notification-schemas";
 export * from "./odt-mcp-schemas";
 export * from "./odt-tool-names";
 export * from "./prompt-schemas";

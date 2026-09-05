@@ -5,6 +5,13 @@ import {
 } from "./settings-modal-open-state";
 
 describe("resolveSettingsModalOpenState", () => {
+  test("opens notifications from an operational error action", () => {
+    expect(
+      resolveSettingsModalOpenState({ kind: "global", section: "notifications" }).navigation
+        .section,
+    ).toBe("notifications");
+  });
+
   test("opens a repository deep link at its complete destination", () => {
     expect(
       resolveSettingsModalOpenState({

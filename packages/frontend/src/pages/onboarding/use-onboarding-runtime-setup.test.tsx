@@ -12,6 +12,7 @@ import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shar
 import {
   createCheck,
   createOnboardingTestHarness,
+  continueFromNotificationsToWorkspace,
   enterRuntimeStage,
   opencodeSection,
   runtimeDefinitions,
@@ -454,7 +455,7 @@ describe("useOnboardingRuntimeSetup", () => {
         false,
       );
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
-      await screen.findByRole("heading", { name: "Open your first workspace" });
+      await continueFromNotificationsToWorkspace();
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
@@ -906,8 +907,10 @@ describe("useOnboardingRuntimeSetup", () => {
       fireEvent.click(
         screen.getByRole<HTMLButtonElement>("button", { name: "Continue without a coding agent" }),
       );
-      await screen.findByRole("heading", { name: "Open your first workspace" });
+      await continueFromNotificationsToWorkspace();
       expect(screen.queryByText("Repository boundary")).toBeNull();
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Back/ }));
+      expect(screen.getByRole("heading", { name: "Configure notifications" })).toBeTruthy();
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Back/ }));
       expect(screen.getByRole("heading", { name: "Configure coding agents" })).toBeTruthy();
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);
@@ -953,7 +956,7 @@ describe("useOnboardingRuntimeSetup", () => {
         name: "Scan for coding agents",
       });
       const continueButton = screen.getByRole<HTMLButtonElement>("button", {
-        name: "Continue to workspace",
+        name: "Continue to notifications",
       });
 
       await act(async () => {
@@ -974,7 +977,7 @@ describe("useOnboardingRuntimeSetup", () => {
       ).toBe(continueButton);
 
       await act(async () => save.resolve());
-      await screen.findByRole("heading", { name: "Open your first workspace" });
+      await continueFromNotificationsToWorkspace();
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }
@@ -1006,7 +1009,7 @@ describe("useOnboardingRuntimeSetup", () => {
       expect(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }).disabled).toBe(true);
 
       await act(async () => save.resolve());
-      await screen.findByRole("heading", { name: "Open your first workspace" });
+      await continueFromNotificationsToWorkspace();
     } finally {
       host.runtimeExecutablesCheck = originalCheck;
     }

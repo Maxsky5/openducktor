@@ -4,6 +4,7 @@ asar: true
 npmRebuild: false
 asarUnpack:
   - node_modules/node-pty/**/*
+  - node_modules/node-mac-permissions/**/*
 
 publish:
   provider: github
@@ -17,6 +18,9 @@ afterAllArtifactBuild: scripts/print-package-artifacts.cjs
 
 files:
   - dist/**/*
+  - node_modules/bindings/**/*
+  - node_modules/file-uri-to-path/**/*
+  - node_modules/node-mac-permissions/**/*
   - node_modules/node-pty/**/*
   - "!node_modules/node-pty/scripts/**/*"
 

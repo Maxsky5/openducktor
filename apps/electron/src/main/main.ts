@@ -58,6 +58,7 @@ import {
 import { createElectronUpdaterAdapter } from "./app-updates/electron-updater-adapter";
 import { createGitHubReleaseSource } from "./app-updates/github-release-source";
 import { resolveElectronAppVersion } from "./electron-app-version";
+import { configureElectronWindowsAppIdentity } from "./electron-app-identity";
 import { prepareElectronDevelopmentInstanceEffect } from "./electron-development-instance";
 import { registerElectronEditorClipboardIpc } from "./electron-editor-clipboard-ipc";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
@@ -83,6 +84,11 @@ import {
 import { createElectronMainLogger, initializeElectronMainLogger } from "./electron-main-logger";
 import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
 import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
+import { createElectronNotificationRuntime } from "./electron-notification-runtime";
+import {
+  readMacosNotificationAuthorizationStatus,
+  resolveElectronNotificationPermission,
+} from "./electron-notification-permission";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
@@ -99,6 +105,7 @@ const {
   nativeImage,
   nativeTheme,
   net,
+  Notification,
   protocol,
   session,
   shell,
@@ -150,6 +157,7 @@ const hostEventBus = createHostEventBus({
 });
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;
+let activeNotificationRuntime: ReturnType<typeof createElectronNotificationRuntime> | null = null;
 
 const isTaggedHostValidationError = (
   cause: unknown,
@@ -296,6 +304,11 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
   ElectronError
 > =>
   Effect.gen(function* () {
+    configureElectronWindowsAppIdentity(app, {
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+      processExecPath: process.execPath,
+    });
     const developmentInstanceClaim = yield* prepareElectronDevelopmentInstanceEffect({
       app,
       appName: APPLICATION_NAME,
@@ -789,10 +802,16 @@ const disposeActiveAppUpdateService = async (): Promise<void> => {
   await service?.dispose();
 };
 
+const disposeActiveNotificationRuntime = (): void => {
+  activeNotificationRuntime?.dispose();
+  activeNotificationRuntime = null;
+};
+
 const disposeActiveElectronRuntimeEffect = (
   reason: string,
 ): Effect.Effect<void, ElectronLifecycleError> =>
   Effect.gen(function* () {
+    yield* Effect.sync(disposeActiveNotificationRuntime);
     const updaterResult = yield* Effect.either(
       Effect.tryPromise({
         try: disposeActiveAppUpdateService,
@@ -894,6 +913,25 @@ const configureElectronReadyRuntimeEffect = ({
         resourcesPath: process.resourcesPath,
       });
       activeAppUpdateService = appUpdateService;
+      if (activeNotificationRuntime) {
+        throw new ElectronLifecycleError({
+          operation: "electron.main.configure-notifications",
+          message: "Electron notification service is already configured.",
+        });
+      }
+      const notificationRuntime = createElectronNotificationRuntime({
+        Notification,
+        getPermission: () =>
+          resolveElectronNotificationPermission(
+            process.platform,
+            readMacosNotificationAuthorizationStatus,
+          ),
+        getWindows: () => BrowserWindow.getAllWindows(),
+        ipcMain,
+        openExternal: (url) => shell.openExternal(url),
+        platform: process.platform,
+      });
+      activeNotificationRuntime = notificationRuntime;
       configureElectronLoopbackCorsPolicy(
         rendererSession,
         resolveElectronLoopbackCorsOrigin(rendererDevUrl),

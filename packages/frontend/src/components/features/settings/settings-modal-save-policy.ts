@@ -6,6 +6,7 @@ const DIRTY_SECTION_KEYS = [
   "general",
   "appearance",
   "chat",
+  "notifications",
   "reusablePrompts",
   "globalGit",
   "agentRuntimes",

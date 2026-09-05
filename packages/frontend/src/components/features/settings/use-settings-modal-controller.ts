@@ -119,6 +119,9 @@ export type SettingsModalController = {
   updateGlobalSystemSettings: (
     updater: (current: SettingsSnapshot["system"]) => SettingsSnapshot["system"],
   ) => void;
+  updateNotificationSettings: (
+    updater: (current: SettingsSnapshot["notifications"]) => SettingsSnapshot["notifications"],
+  ) => void;
   updateGlobalGeneralSettings: (
     updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
   ) => void;
@@ -304,6 +307,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig: applyGlobalGitConfigUpdate,
     updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
     updateGlobalSystemSettings: applyGlobalSystemSettingsUpdate,
+    updateNotificationSettings: applyNotificationSettingsUpdate,
     updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
     updateGlobalAppearanceSettings: applyGlobalAppearanceSettingsUpdate,
     updateAgentRuntimes: applyAgentRuntimesUpdate,
@@ -413,6 +417,7 @@ export const useSettingsModalController = ({
       updateGlobalGitConfig: applyGlobalGitConfigUpdate,
       updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
       updateGlobalSystemSettings: applyGlobalSystemSettingsUpdate,
+      updateNotificationSettings: applyNotificationSettingsUpdate,
       updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
       updateGlobalAppearanceSettings: applyGlobalAppearanceSettingsUpdate,
       updateAgentRuntimes: applyAgentRuntimesUpdate,
@@ -429,6 +434,7 @@ export const useSettingsModalController = ({
       applyGlobalGitConfigUpdate,
       applyGlobalChatSettingsUpdate,
       applyGlobalSystemSettingsUpdate,
+      applyNotificationSettingsUpdate,
       applyGlobalGeneralSettingsUpdate,
       applyGlobalAppearanceSettingsUpdate,
       applyAgentRuntimesUpdate,
@@ -446,6 +452,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalSystemSettings,
+    updateNotificationSettings,
     updateGlobalGeneralSettings,
     updateGlobalAppearanceSettings,
     updateAgentRuntimes,
@@ -542,6 +549,7 @@ export const useSettingsModalController = ({
     updateGlobalGitConfig,
     updateGlobalChatSettings,
     updateGlobalSystemSettings,
+    updateNotificationSettings,
     updateGlobalGeneralSettings,
     updateGlobalAppearanceSettings,
     updateAgentRuntimes,

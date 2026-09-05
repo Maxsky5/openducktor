@@ -125,6 +125,35 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
+  test("leaves post-start send error feedback to the notification policy", async () => {
+    const originalToastError = toast.error;
+    const toastError = mock(() => "");
+    toast.error = toastError;
+    const sendAgentMessage = mock(async () => {
+      throw new Error("send failed");
+    });
+    const operations = createPublicOperations({
+      agentEngine: createAgentEngine(),
+      sessionActions: createSessionActions({ sendAgentMessage }),
+    });
+
+    try {
+      await expect(
+        operations.sendAgentMessage(SESSION_IDENTITY, [{ kind: "text", text: "hello" }], {
+          errorAttentionId: "launch-post-error",
+        }),
+      ).rejects.toThrow("send failed");
+      expect(sendAgentMessage).toHaveBeenCalledWith(
+        SESSION_IDENTITY,
+        [{ kind: "text", text: "hello" }],
+        { errorAttentionId: "launch-post-error" },
+      );
+      expect(toastError).not.toHaveBeenCalled();
+    } finally {
+      toast.error = originalToastError;
+    }
+  });
+
   test("shows toast and rethrows stop errors", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");

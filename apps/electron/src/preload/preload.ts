@@ -3,6 +3,7 @@ import {
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
   type AppUpdateState,
+  type NotificationClickEvent,
 } from "@openducktor/contracts";
 import electron from "electron";
 import {
@@ -14,6 +15,12 @@ import {
   ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
+  ELECTRON_NOTIFICATION_CLICKED_CHANNEL,
+  ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL,
+  ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL,
+  ELECTRON_NOTIFICATION_OPEN_SETTINGS_CHANNEL,
+  ELECTRON_NOTIFICATION_REQUEST_PERMISSION_CHANNEL,
+  ELECTRON_NOTIFICATION_SHOW_CHANNEL,
   ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
   ELECTRON_TERMINAL_EVENT_CHANNEL,
   ELECTRON_TERMINAL_SEND_CHANNEL,
@@ -23,6 +30,11 @@ import {
   type OpenDucktorElectronApi,
   type OpenDucktorElectronAppUpdateApi,
   type OpenDucktorElectronTerminalApi,
+  type OpenDucktorElectronNotificationApi,
+  electronNotificationCapabilitySchema,
+  electronNotificationClickEventSchema,
+  electronNotificationDeliveryRequestSchema,
+  electronNotificationDeliveryResultSchema,
 } from "../shared/electron-bridge-contract";
 import { createElectronHostInvoke } from "./electron-host-invoke";
 import { subscribeElectronHostEvent } from "./electron-host-events";
@@ -95,6 +107,48 @@ const terminals: OpenDucktorElectronTerminalApi = {
   },
 };
 
+const notifications: OpenDucktorElectronNotificationApi = {
+  async getCapability() {
+    return electronNotificationCapabilitySchema.parse(
+      await ipcRenderer.invoke(ELECTRON_NOTIFICATION_GET_CAPABILITY_CHANNEL),
+    );
+  },
+  async requestPermission() {
+    return electronNotificationCapabilitySchema.parse(
+      await ipcRenderer.invoke(ELECTRON_NOTIFICATION_REQUEST_PERMISSION_CHANNEL),
+    );
+  },
+  async openSystemSettings() {
+    await ipcRenderer.invoke(ELECTRON_NOTIFICATION_OPEN_SETTINGS_CHANNEL);
+  },
+  async isAppFocused() {
+    return Boolean(await ipcRenderer.invoke(ELECTRON_NOTIFICATION_GET_APP_FOCUS_CHANNEL));
+  },
+  async show(request) {
+    const parsedRequest = electronNotificationDeliveryRequestSchema.parse(request);
+    return electronNotificationDeliveryResultSchema.parse(
+      await ipcRenderer.invoke(ELECTRON_NOTIFICATION_SHOW_CHANNEL, parsedRequest),
+    );
+  },
+  subscribeClicks(listener) {
+    const handleClick = (
+      _event: Electron.IpcRendererEvent,
+      value: NotificationClickEvent,
+    ): void => {
+      const parsed = electronNotificationClickEventSchema.safeParse(value);
+      if (!parsed.success) {
+        console.error("Received invalid notification click target from Electron main process.", {
+          issues: parsed.error.issues,
+        });
+        return;
+      }
+      listener(parsed.data);
+    };
+    ipcRenderer.on(ELECTRON_NOTIFICATION_CLICKED_CHANNEL, handleClick);
+    return () => ipcRenderer.off(ELECTRON_NOTIFICATION_CLICKED_CHANNEL, handleClick);
+  },
+};
+
 const electronApi: OpenDucktorElectronApi = {
   platform: appPlatformSchema.parse(process.platform),
   invoke: invokeHost,
@@ -102,6 +156,7 @@ const electronApi: OpenDucktorElectronApi = {
     return subscribeElectronHostEvent(ipcRenderer, channel, listener);
   },
   appUpdates,
+  notifications,
   openExternalUrl(url) {
     return ipcRenderer.invoke(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, url);
   },

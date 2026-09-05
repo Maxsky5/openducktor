@@ -367,6 +367,7 @@ const createUnserializedWorkspaceSettingsService = (
             reusablePrompts: snapshot.reusablePrompts,
             kanban: snapshot.kanban,
             autopilot: snapshot.autopilot,
+            notifications: snapshot.notifications,
             agentRuntimes: snapshot.agentRuntimes,
             agentModelFavorites: config.agentModelFavorites,
             workspaces,
