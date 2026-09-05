@@ -66,18 +66,18 @@ export const notificationKindSettingSchema = z.strictObject({
 export type NotificationKindSetting = z.infer<typeof notificationKindSettingSchema>;
 
 const DEFAULT_NOTIFICATION_KIND_SETTINGS = {
-  "agent.permission_requested": { enabled: true, target: "both", sound: "inherit" },
-  "agent.question_asked": { enabled: true, target: "both", sound: "inherit" },
+  "agent.permission_requested": { enabled: true, target: "both", sound: "bloom" },
+  "agent.question_asked": { enabled: true, target: "both", sound: "bloom" },
   "agent.session_error": { enabled: true, target: "both", sound: "inherit" },
   "agent.session_started": { enabled: true, target: "in_app", sound: "inherit" },
   "agent.session_idle": { enabled: false, target: "both", sound: "inherit" },
   "workflow.spec_ready": { enabled: true, target: "both", sound: "inherit" },
   "workflow.ready_for_dev": { enabled: true, target: "both", sound: "inherit" },
   "workflow.in_progress": { enabled: true, target: "both", sound: "inherit" },
-  "workflow.blocked": { enabled: true, target: "both", sound: "inherit" },
+  "workflow.blocked": { enabled: true, target: "both", sound: "bloom" },
   "workflow.ai_review": { enabled: true, target: "both", sound: "inherit" },
   "workflow.human_review": { enabled: true, target: "both", sound: "inherit" },
-  "workflow.closed": { enabled: true, target: "both", sound: "inherit" },
+  "workflow.closed": { enabled: true, target: "in_app", sound: "inherit" },
 } satisfies Record<NotificationKind, NotificationKindSetting>;
 
 export const notificationSettingsSchema = z

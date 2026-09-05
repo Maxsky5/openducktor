@@ -26,6 +26,13 @@ const expectedKinds = [
 
 describe("notification contracts", () => {
   test("ships the exact v1 catalogue and defaults", () => {
+    const bloomKinds = new Set([
+      "agent.permission_requested",
+      "agent.question_asked",
+      "workflow.blocked",
+    ]);
+    const inAppKinds = new Set(["agent.session_started", "workflow.closed"]);
+
     expect(NOTIFICATION_KIND_VALUES).toEqual(expectedKinds);
     expect(Object.keys(DEFAULT_NOTIFICATION_SETTINGS.kinds)).toEqual(expectedKinds);
     expect(DEFAULT_NOTIFICATION_SETTINGS.globalCue).toBe("chime");
@@ -35,8 +42,8 @@ describe("notification contracts", () => {
 
     for (const kind of expectedKinds) {
       const setting = DEFAULT_NOTIFICATION_SETTINGS.kinds[kind];
-      expect(setting.sound).toBe("inherit");
-      expect(setting.target).toBe(kind === "agent.session_started" ? "in_app" : "both");
+      expect(setting.sound).toBe(bloomKinds.has(kind) ? "bloom" : "inherit");
+      expect(setting.target).toBe(inAppKinds.has(kind) ? "in_app" : "both");
       expect(setting.enabled).toBe(kind !== "agent.session_idle");
     }
     expect(new Set<string>(NOTIFICATION_KIND_VALUES).has("workflow.open")).toBe(false);

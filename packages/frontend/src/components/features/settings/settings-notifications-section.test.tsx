@@ -210,7 +210,7 @@ describe("SettingsNotificationsSection", () => {
       "OS notifications are not enabled yet. Test OS to choose whether to allow them.",
     );
     const soundPicker = screen.getByRole("button", { name: "Sound for Permission Prompt" });
-    expect(soundPicker.textContent).toContain("Use global sound");
+    expect(soundPicker.textContent).toContain("Bloom");
 
     await act(async () => {
       fireEvent.click(soundPicker);
@@ -220,6 +220,6 @@ describe("SettingsNotificationsSection", () => {
     });
 
     expect(previewCue).toHaveBeenCalledWith("sparkle", 30);
-    expect(soundPicker.textContent).toContain("Use global sound");
+    expect(soundPicker.textContent).toContain("Bloom");
   });
 });
