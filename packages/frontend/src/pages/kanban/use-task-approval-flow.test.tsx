@@ -426,7 +426,7 @@ describe("useTaskApprovalFlow", () => {
     restoreDependencySpies = [];
   });
 
-  test("waits for a pending provider context before opening in Pull Request mode", async () => {
+  test("opens while provider context loads and then selects Pull Request mode", async () => {
     const pendingProviderContext = createDeferred<RepositoryGitProviderContext>();
     const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
     let gitProviderContext: RepositoryGitProviderContext | undefined;
@@ -443,7 +443,9 @@ describe("useTaskApprovalFlow", () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
     });
 
-    expect(latestHarnessValue?.taskApprovalModal).toBeNull();
+    expect(latestHarnessValue?.taskApprovalModal?.open).toBe(true);
+    expect(expectApprovalModal().isLoading).toBe(true);
+    expect(expectApprovalModal().mode).toBe("direct_merge");
     expect(taskApprovalContextGetMock).not.toHaveBeenCalled();
 
     gitProviderContext = createGitProviderContextFixture();

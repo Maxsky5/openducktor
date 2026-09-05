@@ -123,15 +123,34 @@ export function useTaskApprovalFlow({
       const body = task?.description ?? "";
       const pullRequestDraftMode = options?.pullRequestDraftMode ?? "generate_ai";
       const openErrorMessage = options?.errorMessage ?? null;
+      const initialMode =
+        options?.mode ??
+        (gitProviderContext
+          ? resolveTaskApprovalOpenMode({
+              gitProviderContext,
+              requestedMode: undefined,
+            })
+          : "direct_merge");
+
+      dispatch({
+        type: "open_loading",
+        taskId,
+        mode: initialMode,
+        pullRequestDraftMode,
+        title,
+        body,
+        errorMessage: openErrorMessage,
+        workspaceIdentity: requestWorkspace,
+      });
 
       void (async () => {
-        let effectiveMode = options?.mode;
-        if (effectiveMode !== "direct_merge") {
+        let effectiveMode = initialMode;
+        if (options?.mode !== "direct_merge") {
           try {
             const resolvedGitProviderContext = await loadGitProviderContext();
             effectiveMode = resolveTaskApprovalOpenMode({
               gitProviderContext: resolvedGitProviderContext,
-              requestedMode: effectiveMode,
+              requestedMode: options?.mode,
             });
           } catch (error) {
             if (isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
@@ -149,18 +168,9 @@ export function useTaskApprovalFlow({
         if (!isApprovalRequestCurrent(requestVersion, requestWorkspace)) {
           return;
         }
-
-        effectiveMode ??= "direct_merge";
-        dispatch({
-          type: "open_loading",
-          taskId,
-          mode: effectiveMode,
-          pullRequestDraftMode,
-          title,
-          body,
-          errorMessage: openErrorMessage,
-          workspaceIdentity: requestWorkspace,
-        });
+        if (effectiveMode !== initialMode) {
+          dispatch({ type: "set_mode", mode: effectiveMode });
+        }
 
         try {
           const approvalContextResult = await loadTaskApprovalContextFromQuery(
@@ -207,6 +217,7 @@ export function useTaskApprovalFlow({
     },
     [
       isApprovalRequestCurrent,
+      gitProviderContext,
       loadGitProviderContext,
       queryClient,
       reset,

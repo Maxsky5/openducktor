@@ -15,6 +15,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { type RenderResult, render, waitFor } from "@testing-library/react";
 import { act, type ComponentProps, isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router";
+import { z } from "zod";
 import { hostClient } from "@/lib/host-client";
 import { createQueryClient } from "@/lib/query-client";
 import { createAgentSessionCollection } from "@/state/agent-session-collection";
@@ -35,6 +36,7 @@ import {
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
 import { systemQueryKeys } from "@/state/queries/system";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import {
@@ -85,6 +87,10 @@ const resetTaskMock = mock(async () => {});
 const sonnerModule = await import("sonner");
 const toastSuccessMock = mock<typeof sonnerModule.toast.success>(() => "toast-success");
 const toastErrorMock = mock<typeof sonnerModule.toast.error>(() => "toast-error");
+const toastActionSchema = z.object({
+  label: z.string(),
+  onClick: z.function(),
+});
 let toastSpies: Array<{ mockRestore(): void }> = [];
 const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentModelCatalog> => ({
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -462,6 +468,7 @@ const renderPage = async (
   options: {
     seedSettingsSnapshot?: boolean;
     seedAgentSessionLists?: boolean;
+    seedGitProviderContext?: boolean;
     platform?: AppPlatform | null;
     tasks?: TaskCard[];
   } = {},
@@ -494,6 +501,9 @@ const renderPage = async (
   queryClient.setQueryData(workspaceQueryKeys.repoConfig("repo"), renderState.repoConfig);
   if (options.seedSettingsSnapshot !== false) {
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), renderState.settingsSnapshot);
+  }
+  if (options.seedGitProviderContext !== false) {
+    queryClient.setQueryData(repositoryGitProviderContextQueryKeys.repo("/repo"), null);
   }
   if (options.platform !== null) {
     queryClient.setQueryData(systemQueryKeys.platform(), options.platform ?? "darwin");
@@ -867,6 +877,41 @@ describe("KanbanPage session start modal flow", () => {
       }
     },
   );
+
+  kanbanTest("Git provider load failure offers a working retry action", async () => {
+    const originalWorkspaceGetGitProviderContext = hostClient.workspaceGetGitProviderContext;
+    const workspaceGetGitProviderContext = mock(originalWorkspaceGetGitProviderContext);
+    let renderer: KanbanPageHarness | null = null;
+
+    try {
+      workspaceGetGitProviderContext
+        .mockImplementationOnce(async () => {
+          throw new Error("provider unavailable");
+        })
+        .mockImplementationOnce(async () => null);
+      hostClient.workspaceGetGitProviderContext = workspaceGetGitProviderContext;
+      renderer = await renderPage({ seedGitProviderContext: false });
+      await waitForMockCall(toastErrorMock);
+
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "Failed to load Git provider context",
+        expect.objectContaining({
+          description: "Could not load the current Git provider: provider unavailable",
+          action: expect.objectContaining({ label: "Retry" }),
+        }),
+      );
+      const action = toastActionSchema.parse(toastErrorMock.mock.calls.at(-1)?.[1]?.action);
+
+      await act(async () => {
+        action.onClick();
+        await Promise.resolve();
+      });
+      await waitForMockCall(workspaceGetGitProviderContext, 2);
+    } finally {
+      hostClient.workspaceGetGitProviderContext = originalWorkspaceGetGitProviderContext;
+      await unmountPageIfRendered(renderer);
+    }
+  });
 
   kanbanTest("uses platform defaults for System horizontal scrollbar visibility", async () => {
     currentSettingsSnapshotFixture = createSettingsSnapshotFixture({

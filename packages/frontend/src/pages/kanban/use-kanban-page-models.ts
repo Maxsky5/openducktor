@@ -121,6 +121,19 @@ export function useKanbanPageModels({
       description,
     });
   }, [settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
+  useEffect(() => {
+    if (!gitProvider.error) {
+      return;
+    }
+
+    toast.error("Failed to load Git provider context", {
+      description: providerReadError,
+      action: {
+        label: "Retry",
+        onClick: gitProvider.retry,
+      },
+    });
+  }, [gitProvider.error, gitProvider.retry, providerReadError]);
   const canResolveHorizontalScrollbarVisibility =
     workspaceRepoPath !== null &&
     !settingsSnapshotQuery.isPending &&
