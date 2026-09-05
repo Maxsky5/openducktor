@@ -74,6 +74,7 @@ describe("Electron notification service", () => {
     FakeNativeNotification.supported = true;
     FakeNativeNotification.instances = [];
     const service = createElectronNotificationService({
+      platform: "darwin",
       Notification: FakeNativeNotification,
       getPermission: () => "granted",
       getWindows: () => [],
