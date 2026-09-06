@@ -59,6 +59,25 @@ When `qaRequired` is `true`, build completion moves to `ai_review` until the lat
 
 Store agent-written output as task documents, not user task fields. SQLite stores plain Markdown and an explicit `format`.
 
+### Role handoffs
+
+| Role | Owns |
+|---|---|
+| Spec | User problem, scope, required behavior, constraints, and observable acceptance criteria. |
+| Planner | Technical design, module responsibilities, architecture boundaries, interfaces, and data and state contracts. |
+| Builder | Implementation details, work order, tests, and verification within the required outcomes and design contracts. |
+| QA | Independent review of outcomes, contracts, correctness, and maintainability, with checks based on risk. |
+
+Spec and Planner describe what must hold. Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of these documents. Builder and QA choose verification methods and follow the repository's required checks. A required product behavior or quality limit remains part of the spec.
+
+Plans distinguish required design decisions from suggestions. Builder can adapt suggested steps and implementation order while preserving the required outcomes and contracts. QA reviews the finished result against those requirements.
+
+The built-in system and kickoff prompts live in `packages/core/src/services/agent-system-prompts.ts`. Prompt changes increment each affected template's `builtinVersion`. Existing custom overrides still apply and show a stale-version warning until the user reviews them. A new built-in version does not replace custom text.
+
+The prompt design uses the autonomy and testing guidance in the [OpenAI model guide](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra). The role contracts apply across supported models and runtimes.
+
+### Storage
+
 | Kind | Current UI read |
 |---|---|
 | `spec` | Latest entry. |
