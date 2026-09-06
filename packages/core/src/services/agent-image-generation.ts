@@ -1,9 +1,6 @@
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 
-const isNativeTerminal = (part: AgentImageGenerationPart): boolean =>
-  part.status === "completed" || part.status === "failed";
-
-/** The caller scopes both items to the same runtime session. */
+/** Merge one session's image item without letting old history replace a runtime result. */
 export const mergeAgentImageGeneration = (
   current: AgentImageGenerationPart,
   incoming: AgentImageGenerationPart,
@@ -55,3 +52,6 @@ export const settleAgentImageGeneration = (
   const { incompleteReason: _incompleteReason, ...metadata } = part;
   return { ...metadata, status: "interrupted" };
 };
+
+const isNativeTerminal = (part: AgentImageGenerationPart): boolean =>
+  part.status === "completed" || part.status === "failed";

@@ -10,16 +10,6 @@ export type AgentGeneratedImageQueryInput = AgentGeneratedImageReadInput & {
   savedPath?: string;
 };
 
-const imageReadIdentity = ({ ref, itemId, turnId }: AgentGeneratedImageReadInput) =>
-  [
-    ref.repoPath,
-    ref.runtimeKind,
-    ref.workingDirectory,
-    ref.externalSessionId,
-    turnId ?? null,
-    itemId,
-  ] as const;
-
 export const agentGeneratedImageQueryKeys = {
   all: ["agent-generated-images"] as const,
   image: (input: AgentGeneratedImageQueryInput) =>
@@ -72,3 +62,13 @@ export const agentGeneratedImageQueryOptions = (
     refetchOnReconnect: false,
     refetchOnMount: false,
   });
+
+const imageReadIdentity = ({ ref, itemId, turnId }: AgentGeneratedImageReadInput) =>
+  [
+    ref.repoPath,
+    ref.runtimeKind,
+    ref.workingDirectory,
+    ref.externalSessionId,
+    turnId ?? null,
+    itemId,
+  ] as const;

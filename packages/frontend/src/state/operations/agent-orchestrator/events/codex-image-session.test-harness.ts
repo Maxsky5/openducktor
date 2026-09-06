@@ -35,7 +35,7 @@ import {
 
 type RuntimeListener = Parameters<NonNullable<CodexAppServerAdapterOptions["subscribeEvents"]>>[1];
 
-// Exercise public transport, adapter mutation, and frontend consumer boundaries without a runtime process.
+/** The caller must call close to release subscriptions and history readers. */
 export const createCodexImageSessionHarness = async (runtimeIds = ["runtime-live"]) => {
   const sessionsRef = createSessionsRef(
     runtimeIds.map((id) =>
@@ -148,6 +148,7 @@ export const createCodexImageSessionHarness = async (runtimeIds = ["runtime-live
     consumer.close();
   };
   try {
+    // The resolver reads selectedRuntime, so each session must finish starting before the next.
     for (const id of runtimeIds) {
       selectedRuntime = id;
       await adapter.startSession(imageSessionInput(id));

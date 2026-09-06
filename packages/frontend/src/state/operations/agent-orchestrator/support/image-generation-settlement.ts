@@ -11,6 +11,7 @@ type ImageOwner = Pick<
   | "imageGenerationTurnStarts"
 >;
 
+/** Prefer a known turn end to timestamps, which history can only approximate. */
 export const settleImageGenerationMessage = (
   message: AgentChatMessage,
   end: AgentSessionState["imageGenerationEnd"],
@@ -51,6 +52,7 @@ export const recordImageGenerationEnd = (
   reason: NonNullable<AgentSessionState["imageGenerationEnd"]>["reason"],
   source: "session" | "image" = "session",
 ): AgentSessionState => {
+  // Generic session events lack turn identity and cannot replace image-specific turn ends.
   if (source === "session" && session.imageGenerationTurnEnds !== undefined) return session;
   const previous = session.imageGenerationEnd;
   const imageGenerationEnd =

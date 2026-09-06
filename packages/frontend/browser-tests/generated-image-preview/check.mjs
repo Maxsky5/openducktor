@@ -102,9 +102,9 @@ try {
     server.close(),
     ...(browserStarted ? [browser("close")] : []),
   ]);
-  errors.push(
-    ...cleanup.filter((result) => result.status === "rejected").map((result) => result.reason),
-  );
+  for (const result of cleanup) {
+    if (result.status === "rejected") errors.push(result.reason);
+  }
 }
 
 if (failure !== undefined) errors.unshift(failure);

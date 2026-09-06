@@ -631,7 +631,7 @@ export class CodexAppServerAdapter
           runtimeId: session.runtimeId,
         }
       : await this.runtimeClients.resolve(input, "load Codex session history");
-    const normalizeImage = this.runtimeEvents.prepareImageHistory(
+    const mergeImage = this.runtimeEvents.prepareImageHistory(
       runtime.runtimeId,
       input.externalSessionId,
     );
@@ -647,10 +647,7 @@ export class CodexAppServerAdapter
             ...message,
             parts: message.parts.map((part) =>
               part.kind === "image_generation"
-                ? normalizeImage(
-                    part,
-                    message.timestampIsApproximate ? undefined : message.timestamp,
-                  )
+                ? mergeImage(part, message.timestampIsApproximate ? undefined : message.timestamp)
                 : part,
             ),
           }

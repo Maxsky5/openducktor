@@ -10,14 +10,6 @@ import {
 import { noCodexMapperState, type CodexEventMapper } from "../codex-event-mapper";
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 
-const imageEvent = (
-  part: AgentImageGenerationPart,
-  ctx: CodexMappingContext,
-): CodexMappingResult => ({
-  handled: true,
-  events: [{ ...ctx, kind: "stream_part", mapper: "image_generation", part }],
-});
-
 export const imageGenerationMapper: CodexEventMapper = {
   name: "image_generation",
   createState: noCodexMapperState,
@@ -39,3 +31,11 @@ export const imageGenerationMapper: CodexEventMapper = {
     return imageEvent(codexImageGenerationPart(input.item, context), ctx);
   },
 };
+
+const imageEvent = (
+  part: AgentImageGenerationPart,
+  ctx: CodexMappingContext,
+): CodexMappingResult => ({
+  handled: true,
+  events: [{ ...ctx, kind: "stream_part", mapper: "image_generation", part }],
+});

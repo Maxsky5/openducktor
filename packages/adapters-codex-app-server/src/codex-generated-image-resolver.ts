@@ -6,12 +6,11 @@ import type { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexThreadHistoryReadResponse } from "./types";
 
-type RuntimeImageReads = {
-  pending: Map<string, Promise<CodexThreadHistoryReadResponse | undefined>>;
-};
-
 export class CodexGeneratedImageResolver {
-  private readonly runtimes = new Map<string, RuntimeImageReads>();
+  private readonly runtimes = new Map<
+    string,
+    Map<string, Promise<CodexThreadHistoryReadResponse | undefined>>
+  >();
 
   constructor(
     private readonly clients: CodexRuntimeClientResolver,
@@ -19,34 +18,35 @@ export class CodexGeneratedImageResolver {
   ) {}
 
   prepareRuntime(runtimeId: string): void {
-    if (!this.runtimes.has(runtimeId)) this.runtimes.set(runtimeId, { pending: new Map() });
+    if (!this.runtimes.has(runtimeId)) this.runtimes.set(runtimeId, new Map());
   }
 
   releaseRuntime(runtimeId: string): void {
     this.runtimes.delete(runtimeId);
   }
 
+  /** Share pending history reads, but reject results if the runtime changes during either await. */
   async resolve(input: AgentGeneratedImageReadInput): Promise<AgentGeneratedImageSource> {
-    const ownersAtStart = new Map(this.runtimes);
+    const snapshot = new Map(this.runtimes);
     const { client, runtimeId } = await this.clients.resolve(input.ref, "read generated image");
-    const owner = ownersAtStart.get(runtimeId);
+    const reads = snapshot.get(runtimeId);
     const unavailable = (reason: string): Error =>
       new Error(`Image '${input.itemId}' is unavailable: ${reason}`);
-    if (!owner || this.runtimes.get(runtimeId) !== owner)
+    if (!reads || this.runtimes.get(runtimeId) !== reads)
       throw unavailable("the runtime changed during the read. Reopen the session on its runtime.");
     const threadId = input.ref.externalSessionId;
-    let pending = owner.pending.get(threadId);
+    let pending = reads.get(threadId);
     if (!pending) {
       pending = this.history.readThreadWithTurns(client, threadId);
-      owner.pending.set(threadId, pending);
+      reads.set(threadId, pending);
     }
     let response: CodexThreadHistoryReadResponse | undefined;
     try {
       response = await pending;
     } finally {
-      if (owner.pending.get(threadId) === pending) owner.pending.delete(threadId);
+      if (reads.get(threadId) === pending) reads.delete(threadId);
     }
-    if (this.runtimes.get(runtimeId) !== owner)
+    if (this.runtimes.get(runtimeId) !== reads)
       throw unavailable("the runtime changed during the read. Reopen the session.");
     if (
       !response ||

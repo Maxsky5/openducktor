@@ -1166,12 +1166,12 @@ export class CodexRuntimeSessionEvents {
             part: this.imageGenerations.upsert(session.runtimeId, session.threadId, event.part),
           }
         : event;
-    const normalizedEvent = withAgentSessionRef(sessionRef, imageEvent);
-    this.deps.sessionEvents.emit(sessionRef, normalizedEvent);
-    if (isAgentSessionTranscriptEventType(normalizedEvent.type)) {
+    const sessionEvent = withAgentSessionRef(sessionRef, imageEvent);
+    this.deps.sessionEvents.emit(sessionRef, sessionEvent);
+    if (isAgentSessionTranscriptEventType(sessionEvent.type)) {
       this.activeMutationByRuntimeId
         .get(session.runtimeId)
-        ?.transcriptEvents.push(agentSessionTranscriptEventSchema.parse(normalizedEvent));
+        ?.transcriptEvents.push(agentSessionTranscriptEventSchema.parse(sessionEvent));
     }
   }
 
