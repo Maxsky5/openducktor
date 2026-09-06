@@ -2,7 +2,7 @@ import { describe, expect, test, mock } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { CHAT_MARKDOWN_LINK_POLICY } from "./agent-chat-markdown-link";
+import { CHAT_MARKDOWN_LINK_POLICY } from "./agent-chat-markdown-link-policy";
 import { ChatFileLinkContext } from "./agent-chat-file-link-context";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 
@@ -19,7 +19,7 @@ describe("chat Markdown links", () => {
     "[file](src/a.ts)\n\n![asset](odt-asset://example)",
   ]) {
     test(markdown, async () => {
-      const open = mock(() => {});
+      const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
       const view = render(
         <ChatFileLinkContext value={open}>
           <AgentChatMarkdownRenderer markdown={markdown} />
@@ -53,7 +53,7 @@ describe("chat Markdown links", () => {
     });
   }
   test("premium content forwards the policy", async () => {
-    const open = mock(() => {});
+    const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
     const view = render(
       <ChatFileLinkContext value={open}>
         <MarkdownRenderer
@@ -66,13 +66,13 @@ describe("chat Markdown links", () => {
     try {
       await waitFor(() => expect(view.getByRole("link")).toBeTruthy());
       fireEvent.click(view.getByRole("link"));
-      expect(open).toHaveBeenCalledWith("file:///repo/a.ts:42");
+      expect(open.mock.calls.at(-1)?.[0]).toBe("file:///repo/a.ts:42");
     } finally {
       view.unmount();
     }
   });
   test("streaming reads only after a complete link is activated", () => {
-    const open = mock(() => {});
+    const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
     const view = render(
       <ChatFileLinkContext value={open}>
         <AgentChatMarkdownRenderer markdown="[file](src/a" streaming />
@@ -88,7 +88,7 @@ describe("chat Markdown links", () => {
       );
       expect(open).not.toHaveBeenCalled();
       fireEvent.click(view.getByRole("link"));
-      expect(open).toHaveBeenCalledWith("src/a.ts");
+      expect(open.mock.calls.at(-1)?.[0]).toBe("src/a.ts");
     } finally {
       view.unmount();
     }
@@ -114,7 +114,7 @@ test("external links keep shell behavior and unsafe schemes do not become file l
   const external = await import("@/lib/open-external-url");
   const { spyOn } = await import("bun:test");
   const openExternal = spyOn(external, "openExternalUrl").mockResolvedValue();
-  const openFile = mock(() => {});
+  const openFile = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
   const view = render(
     <ChatFileLinkContext value={openFile}>
       <AgentChatMarkdownRenderer markdown="[web](https://example.com) [unsafe](javascript:42) [file](a.ts:42) [empty]()" />
@@ -128,8 +128,8 @@ test("external links keep shell behavior and unsafe schemes do not become file l
     expect(openFile).not.toHaveBeenCalled();
     fireEvent.click(view.getByText("file"));
     fireEvent.click(view.getByText("empty"));
-    expect(openFile).toHaveBeenNthCalledWith(1, "a.ts:42");
-    expect(openFile).toHaveBeenNthCalledWith(2, "");
+    expect(openFile.mock.calls[0]?.[0]).toBe("a.ts:42");
+    expect(openFile.mock.calls[1]?.[0]).toBe("");
     expect(openExternal).toHaveBeenCalledTimes(1);
   } finally {
     view.unmount();
@@ -145,7 +145,7 @@ test("the final lazy renderers all retain the file action", async () => {
     import("@/components/ui/markdown-renderer-mermaid-candidate"),
   ]);
   for (const { default: Renderer } of renderers) {
-    const open = mock(() => {});
+    const open = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
     const view = render(
       <ChatFileLinkContext value={open}>
         <Renderer
@@ -159,7 +159,7 @@ test("the final lazy renderers all retain the file action", async () => {
     try {
       await waitFor(() => expect(view.getByRole("link", { name: "file" })).toBeTruthy());
       fireEvent.click(view.getByRole("link", { name: "file" }));
-      expect(open).toHaveBeenCalledWith("file:///repo/a.ts:42");
+      expect(open.mock.calls.at(-1)?.[0]).toBe("file:///repo/a.ts:42");
     } finally {
       view.unmount();
     }

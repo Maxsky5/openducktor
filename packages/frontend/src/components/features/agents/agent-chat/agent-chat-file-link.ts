@@ -6,6 +6,10 @@ export type ChatFileLink =
   | { kind: "invalid"; message: string };
 
 type InvalidFileLink = Extract<ChatFileLink, { kind: "invalid" }>;
+type ChatFileDestination =
+  | { kind: "external" | "fragment" }
+  | { kind: "path"; path: string; absolute: boolean }
+  | InvalidFileLink;
 
 const DRIVE = /^[a-z]:/i;
 // Let the shared renderer handle URL schemes and block unsafe URLs.
@@ -20,10 +24,9 @@ const ENCODED_DRIVE = /^(?:[a-z]|%[46][1-9a-f]|%[57][0-9a]):/i;
 const ENCODED_SEPARATOR = /^(?:[/\\]|%2f|%5c)/i;
 
 /** Parse line suffixes before decoding so encoded colons and hashes stay in file names. */
-export function resolveChatFileLink(href: string, rootPath: string | null): ChatFileLink {
+export function parseChatFileLink(href: string): ChatFileDestination {
   if (href.startsWith("#")) return { kind: "fragment" };
   if (!isChatLocalDestination(href)) return { kind: "external" };
-  if (!rootPath) return invalid("The Task's Build Worktree is unavailable.");
   if (!href || CONTROL_CHARACTERS.test(href))
     return invalid("The file destination is empty or contains control characters.");
   const destination = parseFileDestination(href);
@@ -36,7 +39,22 @@ export function resolveChatFileLink(href: string, rootPath: string | null): Chat
   }
   if (CONTROL_CHARACTERS.test(path)) return invalid("The file path contains control characters.");
   if (/^file:/i.test(href) && /^\/[a-z]:[/\\]/i.test(path)) path = path.slice(1);
-  return resolveWorktreeFile(path, rootPath);
+  if (path.startsWith("//") || path.startsWith("\\\\"))
+    return invalid("Network file paths are not supported.");
+  const hasDrive = /^[a-z]:[/\\]/i.test(path);
+  const normalized = hasDrive ? path.replaceAll("\\", "/") : path;
+  if (!normalized || normalized.endsWith("/") || /(?:^|\/)\.{1,2}$/.test(normalized))
+    return invalid("The destination must name a file.");
+  return { kind: "path", path, absolute: path.startsWith("/") || hasDrive };
+}
+
+export function resolveChatFileLink(
+  destination: ChatFileDestination,
+  rootPath: string | null,
+): ChatFileLink {
+  if (destination.kind !== "path") return destination;
+  if (!rootPath) return invalid("The Task's Build Worktree is unavailable.");
+  return resolveWorktreeFile(destination.path, rootPath);
 }
 
 export const isChatLocalDestination = (href: string): boolean =>
@@ -69,7 +87,7 @@ function parseFileDestination(href: string): { kind: "path"; path: string } | In
   }
   const location = /:([1-9]\d*)(?::([1-9]\d*))?$/.exec(path);
   if (location) path = path.slice(0, location.index);
-  if (path.includes(":")) return invalid("The file line reference is invalid.");
+  if (/:[+-]?\d/.test(path)) return invalid("The file line reference is invalid.");
   return { kind: "path", path: prefix + path };
 }
 
@@ -89,6 +107,8 @@ function resolveWorktreeFile(path: string, rootPath: string): ChatFileLink {
   const rootParts = segments(windows ? rootPath.replaceAll("\\", "/") : rootPath);
   if (!rootParts) return invalid("The Build Worktree path is invalid.");
   if (absolute) {
+    // Compare a root prefix; contained files have additional path segments.
+    // react-doctor-disable-next-line react-doctor/js-length-check-first
     const matchesRoot = rootParts.every((part, index) =>
       windows ? part.toLowerCase() === parts[index]?.toLowerCase() : part === parts[index],
     );

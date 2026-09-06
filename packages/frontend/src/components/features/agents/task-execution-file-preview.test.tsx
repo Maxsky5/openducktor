@@ -1,4 +1,4 @@
-import { ChatFileLinkProvider } from "./agent-chat/agent-chat-file-link-context";
+import { ChatFileLinkProvider } from "./agent-chat/agent-chat-file-link-provider";
 import { AgentChatMarkdownRenderer } from "./agent-chat/agent-chat-markdown-renderer";
 import { useTaskExecutionFilePreviewController } from "./file-preview/use-task-execution-file-preview-controller";
 import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
@@ -223,6 +223,7 @@ beforeEach(async () => {
   configureShellBridge(
     createShellBridgeFixture({
       client: {
+        gitCanonicalizePath: async (path) => path,
         filesystemReadTextFile: readTextFileMock,
         filesystemWriteTextFile: writeTextFileMock,
       },

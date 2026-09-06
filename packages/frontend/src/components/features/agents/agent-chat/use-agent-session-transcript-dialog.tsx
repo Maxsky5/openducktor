@@ -12,6 +12,7 @@ import { useTaskExecutionFilePreviewController } from "../file-preview/use-task-
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 import {
   AgentSessionTranscriptDialogContext,
+  type AgentSessionTranscriptDialogContextValue,
   type OpenAgentSessionTranscriptRequest,
 } from "./agent-session-transcript-dialog-context";
 
@@ -29,6 +30,18 @@ export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren
     null,
   );
   const contentFrameRef = useRef<number | null>(null);
+  const fileSaveHandlerRef = useRef<((repoPath: string, taskId: string) => void) | null>(null);
+  const registerFileSaveHandler = useCallback<
+    AgentSessionTranscriptDialogContextValue["registerFileSaveHandler"]
+  >((handler) => {
+    fileSaveHandlerRef.current = handler;
+    return () => {
+      if (fileSaveHandlerRef.current === handler) fileSaveHandlerRef.current = null;
+    };
+  }, []);
+  const onFileSaved = useCallback((repoPath: string, taskId: string) => {
+    fileSaveHandlerRef.current?.(repoPath, taskId);
+  }, []);
   const open = request !== null;
 
   const cancelContentFrame = useCallback(() => {
@@ -80,8 +93,9 @@ export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren
     () => ({
       openSessionTranscript,
       closeSessionTranscript,
+      registerFileSaveHandler,
     }),
-    [closeSessionTranscript, openSessionTranscript],
+    [closeSessionTranscript, openSessionTranscript, registerFileSaveHandler],
   );
 
   return (
@@ -89,6 +103,7 @@ export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren
       {children}
       <AgentSessionTranscriptDialog
         preview={preview}
+        onFileSaved={onFileSaved}
         workspaceRepoPath={workspaceRepoPath}
         target={contentRequest?.target ?? null}
         open={open}

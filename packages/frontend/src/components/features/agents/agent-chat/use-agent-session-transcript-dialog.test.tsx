@@ -181,6 +181,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
       configureShellBridge(
         createShellBridgeFixture({
           client: {
+            gitCanonicalizePath: async (path) => path,
             filesystemReadTextFile: async (file) => ({
               kind: "unsupported",
               ...file,
@@ -202,6 +203,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
             target={target}
             open
             onOpenChange={() => undefined}
+            onFileSaved={() => undefined}
             title="Subagent activity"
             description="View what this subagent did."
           />
@@ -311,6 +313,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
         target={transcriptTarget}
         open
         onOpenChange={() => undefined}
+        onFileSaved={() => undefined}
         title="Subagent activity"
         description="View what this subagent did."
       />,
@@ -353,6 +356,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
       value={{
         openSessionTranscript: onOpen,
         closeSessionTranscript: () => undefined,
+        registerFileSaveHandler: () => () => {},
       }}
     >
       {children}

@@ -6,8 +6,8 @@ import type {
   WorkspaceFileTree,
 } from "@openducktor/contracts";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
-import { createElement, type PropsWithChildren, useState } from "react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { createElement, type PropsWithChildren, useEffect, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
@@ -16,6 +16,8 @@ import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
+import { useTaskExecutionFilePreviewController } from "./file-preview/use-task-execution-file-preview-controller";
+import { TaskExecutionSelectedFilePreview } from "./task-execution-file-preview";
 import type { AgentStudioDevServerPanelModel } from "./agent-studio-dev-server-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import type {
@@ -836,30 +838,42 @@ describe("TaskExecutionPanel", () => {
     expect(fileTreeSelectedPaths).toEqual(["src/first.ts"]);
   });
 
-  test("keeps a chat preview when the file explorer reports another root", async () => {
-    const onSelectFile = mock(() => {});
+  test("a late explorer root does not clear the mounted preview; owner departure does", async () => {
     const requestedRoot = "/repo/task-worktree";
-    const fileTree: WorkspaceFileTree = {
-      rootPath: "/private/repo/new-task-worktree",
-      entries: [],
-    };
+    const selectedFile = { rootPath: "/private/repo/task-a", relativePath: "src/index.ts" };
     const queryClient = createQueryClient();
-    queryClient.setQueryData(filesystemQueryKeys.tree(requestedRoot, "origin/main"), fileTree);
-
-    render(
-      createElement(
-        QueryClientProvider,
-        { client: queryClient },
-        createElement(
-          ThemeProvider,
-          null,
-          createElement(TaskExecutionPanel, {
-            model: {
+    const treeKey = filesystemQueryKeys.tree(requestedRoot, "origin/main");
+    queryClient.setQueryData(treeKey, { rootPath: selectedFile.rootPath, entries: [] });
+    queryClient.setQueryData(
+      filesystemQueryKeys.textFile(selectedFile.rootPath, selectedFile.relativePath),
+      {
+        kind: "unsupported",
+        ...selectedFile,
+        reason: "binary",
+        message: "Task A preview",
+        size: 3,
+        mtimeMs: 1,
+      },
+    );
+    function PreviewWithExplorer() {
+      const preview = useTaskExecutionFilePreviewController();
+      const { onSelectFile } = preview;
+      const [owner, setOwner] = useState("a");
+      useEffect(() => {
+        onSelectFile(selectedFile);
+      }, [onSelectFile]);
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => preview.requestContextTransition(() => setOwner("b"))}
+          >
+            Leave task {owner}
+          </button>
+          <TaskExecutionPanel
+            model={{
               ...basePanelModel,
-              tabs: [
-                { id: "git", label: "Git" },
-                { id: "file_explorer", label: "File explorer" },
-              ],
+              tabs: [{ id: "file_explorer", label: "File explorer" }],
               activeTabId: "file_explorer",
               documentModel: null,
               fileExplorerModel: {
@@ -867,20 +881,35 @@ describe("TaskExecutionPanel", () => {
                 targetBranch: "origin/main",
                 unavailableReason: null,
                 isActive: true,
-                selectedFile: {
-                  rootPath: "/private/repo/old-task-worktree",
-                  relativePath: "src/index.ts",
-                },
-                onSelectFile,
+                selectedFile: preview.model.selectedFile,
+                onSelectFile: preview.onSelectFile,
               },
-            },
-          }),
-        ),
-      ),
+            }}
+          />
+          <TaskExecutionSelectedFilePreview model={preview.model} onFileSaved={() => {}} />
+        </>
+      );
+    }
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <PreviewWithExplorer />
+        </ThemeProvider>
+      </QueryClientProvider>,
     );
-
-    await waitFor(() => expect(lastFileTreeOptions).not.toBeNull());
-    expect(onSelectFile).not.toHaveBeenCalled();
+    try {
+      await view.findByText("Task A preview");
+      await act(async () => {
+        queryClient.setQueryData(treeKey, { rootPath: "/private/repo/task-b", entries: [] });
+      });
+      expect(view.getByText("Task A preview")).toBeTruthy();
+      fireEvent.click(view.getByRole("button", { name: "Leave task a" }));
+      expect(view.queryByLabelText("Selected file preview")).toBeNull();
+      expect(view.getByRole("button", { name: "Leave task b" })).toBeTruthy();
+    } finally {
+      view.unmount();
+      queryClient.clear();
+    }
   });
 
   test("renders Dev Servers below the task execution panel", () => {

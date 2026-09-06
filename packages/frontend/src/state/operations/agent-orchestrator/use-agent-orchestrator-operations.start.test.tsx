@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
+import { taskWorktreeQueryKeys, taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 import {
   acceptedUserMessageForInput,
   BUILD_SELECTION,
@@ -46,6 +46,50 @@ describe("use-agent-orchestrator-operations start and send", () => {
       await harness.updateArgs({});
 
       expect(harness.getLatest().operations).toBe(firstOperations);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("successful workflow start clears a cached missing worktree for only its task", async () => {
+    const dependencies = createTestDependencies();
+    const keys = [null, taskFixture.updatedAt].map((taskVersion) =>
+      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/tmp/repo", taskId: "task-1", taskVersion }),
+    );
+    const otherKeys = [
+      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/tmp/repo", taskId: "task-2" }),
+      taskWorktreeQueryKeys.taskWorktree({ repoPath: "/other/repo", taskId: "task-1" }),
+    ];
+    for (const key of [...keys, ...otherKeys]) dependencies.queryClient.setQueryData(key, null);
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixture],
+      refreshTaskData: async () => {},
+      dependencies,
+    });
+    try {
+      await harness.mount();
+      await harness.run(async () => {
+        await harness.getLatest().operations.startAgentSession({
+          taskId: "task-1",
+          role: "build",
+          startMode: "fresh",
+          selectedModel: BUILD_SELECTION,
+        });
+      });
+      for (const key of keys)
+        expect(dependencies.queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+      for (const key of otherKeys)
+        expect(dependencies.queryClient.getQueryState(key)?.isInvalidated).toBe(false);
+      await expect(
+        dependencies.queryClient.fetchQuery(
+          taskWorktreeQueryOptions({
+            repoPath: "/tmp/repo",
+            taskId: "task-1",
+            hostClient: dependencies.hostPort,
+          }),
+        ),
+      ).resolves.toEqual({ workingDirectory: "/tmp/repo/worktree" });
     } finally {
       await harness.unmount();
     }

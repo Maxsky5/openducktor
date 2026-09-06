@@ -203,6 +203,21 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     ],
   );
 
+  const chatFileLinkOwner = useMemo<ChatFileLinkOwner>(
+    () => ({
+      repoPath: workspaceRepoPath,
+      taskId: selection.view.taskId || null,
+      ownerKey: orchestration.agentChatModel.thread.transcript.displayedSessionKey ?? "",
+      onSelectFile: orchestration.onSelectTaskExecutionFile,
+    }),
+    [
+      workspaceRepoPath,
+      selection.view.taskId,
+      orchestration.agentChatModel.thread.transcript.displayedSessionKey,
+      orchestration.onSelectTaskExecutionFile,
+    ],
+  );
+
   return {
     activeWorkspace,
     navigationPersistenceError,
@@ -218,12 +233,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     hasSelectedTask: Boolean(selection.view.taskId),
     chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
-    chatFileLinkOwner: {
-      repoPath: workspaceRepoPath,
-      taskId: selection.view.taskId || null,
-      ownerKey: orchestration.agentChatModel.thread.transcript.displayedSessionKey ?? "",
-      onSelectFile: orchestration.onSelectTaskExecutionFile,
-    },
+    chatFileLinkOwner,
     taskExecutionSelectedFilePreviewModel: orchestration.taskExecutionSelectedFilePreviewModel,
     isRightPanelVisible,
     rightPanelBridge,

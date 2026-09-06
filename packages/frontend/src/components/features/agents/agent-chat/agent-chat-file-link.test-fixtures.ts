@@ -12,6 +12,10 @@ export const validChatFileDestinations = [
   ["a%23L42", "/repo/task", "a#L42"],
   ["a%2520b", "/repo/task", "a%20b"],
   ["src/../a", "/repo/task", "a"],
+  ["dir/a:b.ts", "/repo/task", "dir/a:b.ts"],
+  ["Makefile", "/repo/task", "Makefile"],
+  ["ab", "/repo/task", "ab"],
+  ["./a", "/repo/task", "a"],
 
   [String.raw`C:\repo\task\src\app.ts`, "C:/Repo/Task", "src/app.ts"],
   ["C:%5Crepo%5Ctask%5Csrc%5Capp.ts", "C:/Repo/Task", "src/app.ts"],
@@ -56,6 +60,7 @@ export const invalidChatFileDestinations = [
   ["README.md:0", "/repo/task", "The file line reference is invalid."],
   ["a#bad", "/repo/task", "The file line reference is invalid."],
   ["a:0", "/repo/task", "Drive-relative file paths are not supported."],
+  ["a:42", "/repo/task", "Drive-relative file paths are not supported."],
   ["a:42:0", "/repo/task", "Drive-relative file paths are not supported."],
   ["a#L4-L2", "/repo/task", "The file line reference is invalid."],
   ["../a", "/repo/task", "The file path leaves the Build Worktree."],

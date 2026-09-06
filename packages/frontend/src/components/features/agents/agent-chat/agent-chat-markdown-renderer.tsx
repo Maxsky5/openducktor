@@ -1,4 +1,4 @@
-import { CHAT_MARKDOWN_LINK_POLICY } from "./agent-chat-markdown-link";
+import { CHAT_MARKDOWN_LINK_POLICY } from "./agent-chat-markdown-link-policy";
 import { memo, type ReactElement } from "react";
 import { MarkdownRenderer, type MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
 import { cn } from "@/lib/utils";

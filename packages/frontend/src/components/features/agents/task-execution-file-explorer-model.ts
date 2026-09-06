@@ -7,6 +7,7 @@ export type TaskExecutionSelectedFile = {
 };
 
 // biome-ignore lint/suspicious/noConfusingVoidType: Event handlers may omit a result; false reports a rejected selection.
+// false means the selection was not applied now, including changes queued behind a draft or save.
 export type TaskExecutionFileSelectionResult = false | void;
 
 export const taskExecutionSelectedFileKey = (file: TaskExecutionSelectedFile): string =>

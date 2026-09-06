@@ -1,25 +1,21 @@
 import type { ComponentProps, ComponentType, ReactElement } from "react";
 import type { ExtraProps } from "react-markdown";
 import { toast } from "sonner";
-import {
-  markdownLinkDestination,
-  type MarkdownLinkPolicy,
-} from "@/components/ui/markdown-link-policy";
+import { markdownLinkDestination } from "@/components/ui/markdown-link-policy";
 import { MARKDOWN_COMPONENTS } from "@/components/ui/markdown-renderer-components";
-import { isChatLocalDestination } from "./agent-chat-file-link";
 import { useChatFileLinkAction } from "./agent-chat-file-link-context";
 
 type ChatMarkdownLinkProps = ComponentProps<"a"> & ExtraProps;
 
-export const CHAT_MARKDOWN_LINK_POLICY: MarkdownLinkPolicy = {
-  anchor: ChatMarkdownLink,
-  handlesDestination: isChatLocalDestination,
-};
-
 // SAFETY: The shared anchor entry is a component, not a tag name.
 const ExternalAnchor = MARKDOWN_COMPONENTS.document.a as ComponentType<ChatMarkdownLinkProps>;
 
-function ChatMarkdownLink({ href, node, children, ...props }: ChatMarkdownLinkProps): ReactElement {
+export function ChatMarkdownLink({
+  href,
+  node,
+  children,
+  ...props
+}: ChatMarkdownLinkProps): ReactElement {
   const openFile = useChatFileLinkAction();
   const destination = markdownLinkDestination(node);
   if (destination === undefined)
@@ -28,14 +24,16 @@ function ChatMarkdownLink({ href, node, children, ...props }: ChatMarkdownLinkPr
         {children}
       </ExternalAnchor>
     );
-  const activate = () => {
-    if (openFile) openFile(destination);
+  const activate = (trigger: HTMLAnchorElement) => {
+    if (openFile) openFile(destination, trigger);
     else
       toast.error(`Cannot open file: ${destination}`, {
         description: "The Task's Build Worktree is unavailable.",
       });
   };
   return (
+    // Local citations open the preview. Enter and modified clicks use the handlers below.
+    // react-doctor-disable-next-line react-doctor/no-prevent-default, react-doctor/anchor-is-valid
     <a
       href="#"
       title={destination}
@@ -49,13 +47,13 @@ function ChatMarkdownLink({ href, node, children, ...props }: ChatMarkdownLinkPr
           !event.altKey &&
           event.button === 0
         )
-          activate();
+          activate(event.currentTarget);
       }}
       onKeyDown={(event) => {
         if (event.key !== "Enter") return;
         event.preventDefault();
         if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
-          activate();
+          activate(event.currentTarget);
       }}
       onAuxClick={(event) => event.preventDefault()}
       onContextMenu={(event) => event.preventDefault()}

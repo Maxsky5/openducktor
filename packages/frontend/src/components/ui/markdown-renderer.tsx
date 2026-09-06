@@ -4,7 +4,7 @@ import {
   type MarkdownLinkPolicy,
 } from "./markdown-link-policy";
 import { TASK_ASSET_URI_PREFIX, type TaskAssetRenderContext } from "@openducktor/contracts";
-import { lazy, memo, type ReactElement, type ReactNode, Suspense } from "react";
+import { lazy, memo, type ReactElement, type ReactNode, Suspense, useMemo } from "react";
 import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -101,16 +101,15 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   taskAssetContext,
   stripTaskDescriptionFrontMatter = false,
 }: MarkdownRendererProps): ReactElement | null {
+  const components = useMemo(
+    () => markdownLinkComponents(MARKDOWN_COMPONENTS[variant], componentOverrides, linkPolicy),
+    [variant, componentOverrides, linkPolicy],
+  );
   const content = prepareMarkdownRenderContent(markdown, stripTaskDescriptionFrontMatter);
   if (!content) {
     return null;
   }
 
-  const components = markdownLinkComponents(
-    MARKDOWN_COMPONENTS[variant],
-    componentOverrides,
-    linkPolicy,
-  );
   const hasMathCandidate = content.includes("$");
   const hasMermaidCandidate = content.includes("mermaid");
   const rendersTaskAsset = content.includes(TASK_ASSET_URI_PREFIX);

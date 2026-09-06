@@ -1,4 +1,12 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { act, fireEvent, screen } from "@testing-library/react";
+import { useRef, useState } from "react";
+import { AgentsPageRightPanelRuntime } from "../shell/agents-page-right-panel-runtime";
+import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import {
+  createDialogPreviewHarness,
+  dialogTextFile,
+} from "@/components/features/agents/agent-chat/agent-session-dialog-preview-test-harness";
 import type { GitConflict, PullRequest } from "@openducktor/contracts";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createQueryClient } from "@/lib/query-client";
@@ -505,3 +513,67 @@ describe("useAgentsPageRightPanelModel", () => {
     await harness.unmount();
   });
 });
+
+for (const outcome of [
+  "saved",
+  "failed",
+  "task-changed",
+  "repository-changed",
+  "unmounted",
+  "repository-view",
+] as const) {
+  test(`dialog file save refreshes only its mounted task worktree: ${outcome}`, async () => {
+    buildToolsSnapshotState.current.gitPanelContextMode =
+      outcome === "repository-view" ? "repository" : "worktree";
+    let changeSelection: (next: HookArgs | null) => void = () => {};
+    const initialArgs = createHookArgs({ selectedView: createSelectedView({ taskId: "a" }) });
+    function GitPanel({ args }: { args: HookArgs }) {
+      const refreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
+      return (
+        <AgentsPageRightPanelRuntime
+          {...args}
+          renderPanel={false}
+          refreshWorktreeRef={refreshWorktreeRef}
+        />
+      );
+    }
+    function SelectedGitPanel() {
+      const [args, setArgs] = useState<HookArgs | null>(initialArgs);
+      changeSelection = setArgs;
+      return args ? <GitPanel args={args} /> : null;
+    }
+    const h = createDialogPreviewHarness("src/file.ts", <SelectedGitPanel />);
+    const deferred = Promise.withResolvers<ReturnType<typeof dialogTextFile>>();
+    h.write.mockImplementation(() => deferred.promise);
+    try {
+      await h.open();
+      await h.selectFile();
+      await h.edit();
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save file" })));
+      expect(h.write).toHaveBeenCalledTimes(1);
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+      if (outcome === "task-changed")
+        act(() =>
+          changeSelection(createHookArgs({ selectedView: createSelectedView({ taskId: "b" }) })),
+        );
+      if (outcome === "repository-changed")
+        act(() =>
+          changeSelection({
+            ...initialArgs,
+            activeWorkspace: { workspaceId: "other", workspaceName: "Other", repoPath: "/other" },
+          }),
+        );
+      if (outcome === "unmounted") act(() => changeSelection(null));
+      await act(async () => {
+        if (outcome === "failed") deferred.reject(new Error("Write failed"));
+        else deferred.resolve(dialogTextFile("/repo/a", "Local draft"));
+      });
+      if (outcome === "saved") {
+        expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
+        expect(refreshWorktreeMock).toHaveBeenCalledWith("soft");
+      } else expect(refreshWorktreeMock).not.toHaveBeenCalled();
+    } finally {
+      h.dispose();
+    }
+  });
+}

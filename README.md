@@ -109,6 +109,10 @@ Click a Markdown file link in Agent Chat or a Subagent Transcript to open the ex
 
 The preview keeps its file access limits and unsaved-edit checks. Invalid links and unavailable files show an error. Plain paths and code blocks do not become links.
 
+Use `./a:42` for a single-letter filename with a line reference. The form `a:42` is ambiguous with a Windows drive-relative path. Filenames such as `dir/a:b.ts` are supported.
+
+In a transcript dialog, Escape closes the file preview before the conversation. Unsaved edits still require confirmation, and a save in progress blocks preview close. Closing the preview returns keyboard focus to its link.
+
 ## Current Scope
 
 - Platform support today: macOS is the primary supported desktop target.

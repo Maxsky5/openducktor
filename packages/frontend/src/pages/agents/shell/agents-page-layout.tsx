@@ -1,7 +1,5 @@
-import {
-  ChatFileLinkProvider,
-  type ChatFileLinkOwner,
-} from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
+import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
+import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import {
   type ComponentProps,
   memo,
@@ -281,6 +279,27 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     modalContent,
     terminalPanel,
   } = model;
+  const linkRef = useRef<HTMLElement | null>(null);
+  const hasSelectedFilePreview = taskExecutionSelectedFilePreviewModel.selectedFile !== null;
+  useLayoutEffect(() => {
+    linkRef.current = null;
+  }, [chatFileLinkOwner.repoPath, chatFileLinkOwner.taskId, chatFileLinkOwner.ownerKey]);
+  useLayoutEffect(() => {
+    if (!hasSelectedFilePreview && linkRef.current?.isConnected) {
+      linkRef.current.focus({ preventScroll: true });
+      linkRef.current = null;
+    }
+  }, [hasSelectedFilePreview]);
+  const fileLinkOwner = useMemo<ChatFileLinkOwner>(
+    () => ({
+      ...chatFileLinkOwner,
+      onSelectFile: (file, trigger) => {
+        linkRef.current = trigger;
+        chatFileLinkOwner.onSelectFile(file, trigger);
+      },
+    }),
+    [chatFileLinkOwner],
+  );
   const refreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
   const refreshWorktreeAfterFileSave = useCallback((): void => {
     void refreshWorktreeRef.current?.("soft");
@@ -306,11 +325,11 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
   );
   const chatContent = useMemo(
     () => (
-      <ChatFileLinkProvider owner={chatFileLinkOwner}>
+      <ChatFileLinkProvider owner={fileLinkOwner}>
         <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />
       </ChatFileLinkProvider>
     ),
-    [chatHeaderModel, chatModel, chatFileLinkOwner],
+    [chatHeaderModel, chatModel, fileLinkOwner],
   );
   const rightPanelContent = useMemo(
     () => (
@@ -331,7 +350,6 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     ),
     [refreshWorktreeAfterFileSave, taskExecutionSelectedFilePreviewModel],
   );
-  const hasSelectedFilePreview = taskExecutionSelectedFilePreviewModel.selectedFile !== null;
   const workspaceContent = useMemo(
     () => (
       <AgentsPageWorkspace

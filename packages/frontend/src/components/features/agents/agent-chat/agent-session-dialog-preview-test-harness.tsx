@@ -4,7 +4,13 @@ import type { HostClient } from "@openducktor/host-client";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { useEffect, useRef, type PropsWithChildren, type ReactElement } from "react";
+import {
+  useEffect,
+  useRef,
+  type PropsWithChildren,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import * as workers from "@/contexts/DiffWorkerProvider";
 import { createQueryClient } from "@/lib/query-client";
@@ -42,7 +48,7 @@ import { AgentSessionTranscriptDialogHost } from "./use-agent-session-transcript
 enableReactActEnvironment();
 
 /** Use the real dialog, transcript, controller, Query reader, and editor state. Mock shell I/O and Pierre's DOM renderer. */
-export function createDialogPreviewHarness() {
+export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: ReactNode) {
   const frames = createAnimationFrameTestDriver();
   frames.install();
   const client = createQueryClient();
@@ -62,7 +68,7 @@ export function createDialogPreviewHarness() {
         messages: createSessionMessagesState(target.externalSessionId, [
           buildMessage(
             "assistant",
-            `${target.externalSessionId} conversation. [Open file](src/file.ts)`,
+            `${target.externalSessionId} conversation. [Open file](${fileLink})`,
             { id: `${target.externalSessionId}-message` },
           ),
         ]),
@@ -75,10 +81,15 @@ export function createDialogPreviewHarness() {
   const write = mock<HostClient["filesystemWriteTextFile"]>(async ({ rootPath, contents }) =>
     dialogTextFile(rootPath, contents),
   );
+  const canonicalize = mock<HostClient["gitCanonicalizePath"]>(async (path) => path);
   const previousBridge = getShellBridge();
   configureShellBridge(
     createShellBridgeFixture({
-      client: { filesystemReadTextFile: read, filesystemWriteTextFile: write },
+      client: {
+        filesystemReadTextFile: read,
+        filesystemWriteTextFile: write,
+        gitCanonicalizePath: canonicalize,
+      },
     }),
   );
   let createEditor: Parameters<typeof pierre.EditProvider>[0]["createEditor"];
@@ -169,6 +180,7 @@ export function createDialogPreviewHarness() {
     <Providers repoPath={repoPath}>
       <AgentSessionTranscriptDialogHost>
         <CaptureActions />
+        {children}
       </AgentSessionTranscriptDialogHost>
     </Providers>
   );
@@ -177,6 +189,7 @@ export function createDialogPreviewHarness() {
     client,
     read,
     write,
+    canonicalize,
     frames,
     async open(target: AgentSessionTranscriptTarget = dialogTargets.main) {
       act(() =>

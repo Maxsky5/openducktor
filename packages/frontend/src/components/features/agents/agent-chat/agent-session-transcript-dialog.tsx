@@ -10,13 +10,11 @@ import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { UseTaskExecutionFilePreviewControllerResult } from "../file-preview/use-task-execution-file-preview-controller";
 import { TaskExecutionSelectedFilePreview } from "../task-execution-file-preview";
-import { ChatFileLinkProvider } from "./agent-chat-file-link-context";
+import { ChatFileLinkProvider } from "./agent-chat-file-link-provider";
 import { AgentChatSurface } from "./agent-chat";
 import { resolveAgentSessionDialogTitle } from "./agent-session-dialog-title";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import { useSessionTranscriptSurfaceModel } from "./readonly-transcript/use-session-transcript-surface-model";
-
-const onDialogFileSaved = (): void => {};
 
 type AgentSessionTranscriptDialogProps = {
   preview: UseTaskExecutionFilePreviewControllerResult;
@@ -26,6 +24,7 @@ type AgentSessionTranscriptDialogProps = {
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
+  onFileSaved: (repoPath: string, taskId: string) => void;
 };
 
 type AgentSessionTranscriptDialogContentProps = {
@@ -34,6 +33,7 @@ type AgentSessionTranscriptDialogContentProps = {
   target: AgentSessionTranscriptTarget;
   title: string;
   description: string;
+  onFileSaved: (repoPath: string, taskId: string) => void;
 };
 
 export function AgentSessionTranscriptDialog({
@@ -44,10 +44,18 @@ export function AgentSessionTranscriptDialog({
   onOpenChange,
   title,
   description,
+  onFileSaved,
 }: AgentSessionTranscriptDialogProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(88vh,960px)] max-w-[min(96vw,1100px)] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent
+        className="flex h-[min(88vh,960px)] max-w-[min(96vw,1100px)] flex-col gap-0 overflow-hidden p-0"
+        onEscapeKeyDown={(event) => {
+          if (!preview.model.selectedFile) return;
+          event.preventDefault();
+          preview.model.onClose();
+        }}
+      >
         {target ? (
           <AgentSessionTranscriptDialogContent
             preview={preview}
@@ -55,6 +63,7 @@ export function AgentSessionTranscriptDialog({
             target={target}
             title={title}
             description={description}
+            onFileSaved={onFileSaved}
           />
         ) : (
           <AgentSessionTranscriptDialogLoading title={title} description={description} />
@@ -89,17 +98,20 @@ function AgentSessionTranscriptDialogContent({
   target,
   title,
   description,
+  onFileSaved,
 }: AgentSessionTranscriptDialogContentProps): ReactElement {
   const { model } = useSessionTranscriptSurfaceModel({
     isOpen: true,
     workspaceRepoPath,
     target,
   });
-  const chatRef = useRef<HTMLDivElement>(null);
   const linkRef = useRef<HTMLElement | null>(null);
   const hasPreview = preview.model.selectedFile !== null;
   useLayoutEffect(() => {
-    if (!hasPreview && linkRef.current?.isConnected) linkRef.current.focus();
+    if (!hasPreview && linkRef.current?.isConnected) {
+      linkRef.current.focus({ preventScroll: true });
+      linkRef.current = null;
+    }
   }, [hasPreview]);
   const resolvedTitle = resolveAgentSessionDialogTitle(
     title,
@@ -118,19 +130,14 @@ function AgentSessionTranscriptDialogContent({
           className="h-full min-h-0 bg-background"
           style={{ visibility: hasPreview ? "hidden" : undefined }}
           inert={hasPreview}
-          ref={chatRef}
         >
           <ChatFileLinkProvider
             owner={{
               repoPath: workspaceRepoPath,
               taskId: target.sessionScope?.kind === "workflow" ? target.sessionScope.taskId : null,
               ownerKey: agentSessionIdentityKey(target),
-              onSelectFile: (file) => {
-                if (
-                  document.activeElement instanceof HTMLElement &&
-                  chatRef.current?.contains(document.activeElement)
-                )
-                  linkRef.current = document.activeElement;
+              onSelectFile: (file, trigger) => {
+                linkRef.current = trigger;
                 preview.onSelectFile(file);
               },
             }}
@@ -144,7 +151,10 @@ function AgentSessionTranscriptDialogContent({
               <TaskExecutionSelectedFilePreview
                 key={preview.model.previewSessionKey}
                 model={preview.model}
-                onFileSaved={onDialogFileSaved}
+                onFileSaved={() => {
+                  if (workspaceRepoPath && target.sessionScope?.kind === "workflow")
+                    onFileSaved(workspaceRepoPath, target.sessionScope.taskId);
+                }}
               />
             </div>
           </DiffWorkerProvider>

@@ -1,10 +1,32 @@
 import { expect, test } from "bun:test";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 import {
   createDialogPreviewHarness,
   dialogTargets,
   dialogTextFile,
 } from "./agent-session-dialog-preview-test-harness";
+
+for (const href of ["src/file.ts", "/alias/a/src/file.ts:42", "file:///real/a/src/file.ts#L42"]) {
+  test(`an aliased task worktree opens the canonical preview for ${href}`, async () => {
+    const h = createDialogPreviewHarness(href);
+    h.client.setQueryData(
+      taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" }).queryKey,
+      () => ({
+        workingDirectory: "/alias/a",
+      }),
+    );
+    h.canonicalize.mockImplementation(async (path) => path.replace("/alias/a", "/real/a"));
+    try {
+      await h.open();
+      await h.selectFile();
+      expect(screen.getByDisplayValue("Contents of /real/a")).toBeTruthy();
+      expect(h.read).toHaveBeenCalledWith({ rootPath: "/real/a", relativePath: "src/file.ts" });
+    } finally {
+      h.dispose();
+    }
+  });
+}
 
 for (const dismissal of ["close", "escape", "outside"] as const) {
   test(`dialog host guards dirty ${dismissal} dismissal and restores editor focus`, async () => {
@@ -36,6 +58,10 @@ for (const dismissal of ["close", "escape", "outside"] as const) {
       await dismiss();
       fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
       await waitFor(() => expect(screen.queryByLabelText("Selected file preview")).toBeNull());
+      if (dismissal === "escape") {
+        expect(screen.getByRole("link", { name: "Open file" })).toBeTruthy();
+        fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+      }
       expect(screen.queryByRole("dialog")).toBeNull();
       expect(h.write).not.toHaveBeenCalled();
     } finally {
@@ -333,3 +359,77 @@ for (const kind of ["file", "worktree"] as const) {
     }
   });
 }
+
+test("Escape closes the clean file preview before the transcript", async () => {
+  const h = createDialogPreviewHarness();
+  try {
+    await h.open();
+    const link = await h.selectFile();
+    fireEvent.keyDown(screen.getByLabelText("Code editor"), { key: "Escape" });
+    expect(screen.queryByLabelText("Selected file preview")).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Conversation main" })).toBeTruthy();
+    expect(document.activeElement).toBe(link);
+    fireEvent.keyDown(link, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  } finally {
+    h.dispose();
+  }
+});
+
+for (const outcome of ["success", "failure"] as const) {
+  test(`Escape cannot close a saving preview and works again after ${outcome}`, async () => {
+    const h = createDialogPreviewHarness();
+    const deferred = Promise.withResolvers<ReturnType<typeof dialogTextFile>>();
+    h.write.mockImplementationOnce(() => deferred.promise);
+    try {
+      await h.open();
+      const link = await h.selectFile();
+      await h.edit();
+      fireEvent.click(screen.getByRole("button", { name: "Save file" }));
+      await screen.findByRole("button", { name: "Saving file" });
+      fireEvent.keyDown(screen.getByLabelText("Code editor"), { key: "Escape" });
+      expect(screen.getByDisplayValue("Local draft")).toBeTruthy();
+      await act(async () => {
+        if (outcome === "success") deferred.resolve(dialogTextFile("/repo/a", "Local draft"));
+        else deferred.reject(new Error("Save denied"));
+      });
+      expect(screen.getByLabelText("Selected file preview")).toBeTruthy();
+      expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull();
+      fireEvent.keyDown(screen.getByLabelText("Code editor"), { key: "Escape" });
+      if (outcome === "failure") {
+        fireEvent.click(await screen.findByRole("button", { name: "Keep editing" }));
+        expect(screen.getByDisplayValue("Local draft")).toBeTruthy();
+        await waitFor(() =>
+          expect(document.activeElement === screen.getByLabelText("Code editor")).toBe(true),
+        );
+      } else {
+        expect(screen.queryByLabelText("Selected file preview")).toBeNull();
+        expect(document.activeElement).toBe(link);
+      }
+      expect(screen.getByRole("dialog", { name: "Conversation main" })).toBeTruthy();
+    } finally {
+      h.dispose();
+    }
+  });
+}
+
+test("closing a replacement transcript preview focuses its own link", async () => {
+  const { spyOn } = await import("bun:test");
+  const h = createDialogPreviewHarness();
+  try {
+    await h.open();
+    const oldLink = await h.selectFile();
+    const oldFocus = spyOn(oldLink, "focus");
+    try {
+      await h.open(dialogTargets.other);
+      const newLink = await h.selectFile();
+      fireEvent.click(screen.getByRole("button", { name: "Close file preview" }));
+      expect(document.activeElement).toBe(newLink);
+      expect(oldFocus).not.toHaveBeenCalled();
+    } finally {
+      oldFocus.mockRestore();
+    }
+  } finally {
+    h.dispose();
+  }
+});

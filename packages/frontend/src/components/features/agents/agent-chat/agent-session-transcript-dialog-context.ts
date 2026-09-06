@@ -10,6 +10,7 @@ export type OpenAgentSessionTranscriptRequest = {
 export type AgentSessionTranscriptDialogContextValue = {
   openSessionTranscript: (request: OpenAgentSessionTranscriptRequest) => void;
   closeSessionTranscript: () => void;
+  registerFileSaveHandler: (handler: (repoPath: string, taskId: string) => void) => () => void;
 };
 
 export const AgentSessionTranscriptDialogContext =
