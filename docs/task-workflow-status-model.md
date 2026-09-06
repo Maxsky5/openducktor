@@ -72,7 +72,7 @@ Spec and Planner describe what must hold. Keep test cases, test commands, eviden
 
 Plans distinguish required design decisions from suggestions. Builder can adapt suggested steps and implementation order while preserving the required outcomes and contracts. QA reviews the finished result against those requirements.
 
-The built-in system and kickoff prompts live in `packages/core/src/services/agent-system-prompts.ts`. Prompt changes increment each affected template's `builtinVersion`. Existing custom overrides still apply and show a stale-version warning until the user reviews them. A new built-in version does not replace custom text.
+The built-in system and kickoff prompts live in `packages/core/src/services/agent-system-prompts.ts`. Prompt changes increment each affected template's `builtinVersion`. Existing custom overrides remain active. Users must review, update, or disable old overrides themselves. The app does not display a version-mismatch warning. A new built-in version does not replace custom text.
 
 The prompt design uses the autonomy and testing guidance in the [OpenAI model guide](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra). The role contracts apply across supported models and runtimes.
 
