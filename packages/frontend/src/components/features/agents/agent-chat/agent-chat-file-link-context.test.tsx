@@ -242,6 +242,10 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
 }
 
 for (const [path, rootPath, relativePath] of [
+  [String.raw`C:\repo\task\src\app.ts`, "C:/Repo/Task", "src/app.ts"],
+  ["C:%5Crepo%5Ctask%5Csrc%5Capp.ts", "C:/Repo/Task", "src/app.ts"],
+  ["c:%5crepo%5ctask%5cSrc%5cApp.ts", "C:/Repo/Task", "Src/App.ts"],
+  ["C:%2Frepo%2Ftask%2Fsrc%2Fapp.ts", "C:/Repo/Task", "src/app.ts"],
   ["c:/repo/src/app.ts", "C:/repo", "src/app.ts"],
   ["file:///%43:/repo/src/app.ts", "C:/repo", "src/app.ts"],
   ["C:/repo/task/src/app.ts", "C:/Repo/Task", "src/app.ts"],
@@ -253,6 +257,8 @@ for (const [path, rootPath, relativePath] of [
     test(`Windows link activation selects the exact relative path: ${path}${suffix}`, async () => {
       const { spyOn } = await import("bun:test");
       const external = await import("@/lib/open-external-url");
+      const { toast } = await import("sonner");
+      const error = spyOn(toast, "error").mockReturnValue("error");
       const openExternal = spyOn(external, "openExternalUrl").mockResolvedValue();
       const client = createQueryClient();
       client.setQueryData(
@@ -279,10 +285,12 @@ for (const [path, rootPath, relativePath] of [
         );
         expect(onSelectFile).toHaveBeenCalledTimes(1);
         expect(openExternal).not.toHaveBeenCalled();
+        expect(error).not.toHaveBeenCalled();
       } finally {
         view.unmount();
         client.clear();
         openExternal.mockRestore();
+        error.mockRestore();
       }
     });
   }

@@ -40,7 +40,8 @@ export function resolveChatFileLink(href: string, rootPath: string | null): Chat
   const isFileUri = /^file:/i.test(href);
   if (isFileUri && !/^file:\/\/\//i.test(href))
     return invalid("Use a local file URI without a remote authority.");
-  if (DRIVE.test(href) && !/^[a-z]:[/\\]/i.test(href))
+  // Markdown encodes native backslashes; recognize separators before the single path decode.
+  if (DRIVE.test(href) && !/^[a-z]:(?:[/\\]|%2f|%5c)/i.test(href))
     return invalid("Drive-relative file paths are not supported.");
   let path = href;
   if (path.includes("?")) return invalid("File links do not support query strings.");

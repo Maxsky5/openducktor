@@ -82,6 +82,10 @@ describe("chat file destinations", () => {
 });
 
 for (const [path, rootPath, relativePath] of [
+  [String.raw`C:\repo\task\src\app.ts`, "C:/Repo/Task", "src/app.ts"],
+  ["C:%5Crepo%5Ctask%5Csrc%5Capp.ts", "C:/Repo/Task", "src/app.ts"],
+  ["c:%5crepo%5ctask%5cSrc%5cApp.ts", "C:/Repo/Task", "Src/App.ts"],
+  ["C:%2Frepo%2Ftask%2Fsrc%2Fapp.ts", "C:/Repo/Task", "src/app.ts"],
   ["c:/repo/src/app.ts", "C:/repo", "src/app.ts"],
   ["file:///%43:/repo/src/app.ts", "C:/repo", "src/app.ts"],
   ["C:/repo/task/src/app.ts", "C:/Repo/Task", "src/app.ts"],
@@ -119,5 +123,18 @@ for (const href of [
 ]) {
   test(`Windows root comparison rejects outside paths: ${href}`, () => {
     expect(resolveChatFileLink(href, "C:/Repo/Task").kind).toBe("invalid");
+  });
+}
+
+for (const href of [
+  "C:42",
+  "C:src/app.ts",
+  "C:%255Crepo%5Ctask%5Csrc%5Capp.ts",
+  "D:%5Crepo%5Ctask%5Csrc%5Capp.ts",
+  "C:%5Crepo%5Ctask-other%5Csrc%5Capp.ts",
+  "C:%5Crepo%5Ctask%5C%2e%2e%5Cother%5Capp.ts",
+]) {
+  test(`rejects invalid encoded Windows destination: ${href}`, () => {
+    expect(resolveChatFileLink(href, "C:/repo/task").kind).toBe("invalid");
   });
 }
