@@ -82,10 +82,10 @@ function GeneratedImagePreview({
           <span className="p-2">View image</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-[min(96vw,72rem)] gap-4">
+      <DialogContent className="my-0 max-w-[min(96vw,72rem)] gap-4">
         <DialogHeader>
           <DialogTitle>Generated image</DialogTitle>
-          <DialogDescription>{alt}</DialogDescription>
+          <DialogDescription>Preview of the generated image.</DialogDescription>
         </DialogHeader>
         <img
           src={src}

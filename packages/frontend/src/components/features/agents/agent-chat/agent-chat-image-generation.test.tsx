@@ -172,6 +172,28 @@ test("waits for PNG decode then shares one URL between thumbnail and accessible 
   );
 });
 
+test("keeps a long revised prompt in the transcript and a short accessible preview header", async () => {
+  const revisedPrompt =
+    "A detailed yellow duck beside a quiet lake with reeds and reflected morning light. ".repeat(
+      60,
+    );
+  const { view } = harness(undefined, true, { ...part, revisedPrompt });
+  await loadImage();
+  const trigger = screen.getByRole("button", { name: "Open generated image preview" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = await screen.findByRole("dialog", { name: "Generated image" });
+  expect(dialog.textContent).not.toContain(revisedPrompt);
+  expect(document.getElementById(dialog.getAttribute("aria-describedby")!)?.textContent).toBe(
+    "Preview of the generated image.",
+  );
+  expect(view.container.textContent).toContain(revisedPrompt);
+  expect(dialog.querySelector("img")?.alt).toBe(revisedPrompt);
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(document.activeElement).toBe(trigger);
+});
+
 test("truncated PNGs stay completed with a visible preview error", async () => {
   harness();
   await waitFor(() => expect(images).toHaveLength(1));
