@@ -81,12 +81,19 @@ describe("chat file destinations", () => {
   });
 });
 
-for (const path of ["c:/repo/src/app.ts", "file:///%43:/repo/src/app.ts"]) {
+for (const [path, rootPath, relativePath] of [
+  ["c:/repo/src/app.ts", "C:/repo", "src/app.ts"],
+  ["file:///%43:/repo/src/app.ts", "C:/repo", "src/app.ts"],
+  ["C:/repo/task/src/app.ts", "C:/Repo/Task", "src/app.ts"],
+  ["file:///C:/repo/task/src/app.ts", "C:/Repo/Task", "src/app.ts"],
+  ["c:/rEpO/tAsK/Src/App.ts", "C:\\Repo\\Task", "Src/App.ts"],
+  ["file:///%63:/rEpO/tAsK/Src/App.ts", "C:\\Repo\\Task", "Src/App.ts"],
+] as const) {
   for (const suffix of ["", ":42", ":42:7", "#L42", "#L42-L50"]) {
     test(`resolves native Windows destination ${path}${suffix}`, () => {
-      expect(resolveChatFileLink(path + suffix, "C:/repo")).toEqual({
+      expect(resolveChatFileLink(path + suffix, rootPath)).toEqual({
         kind: "file",
-        file: { rootPath: "C:/repo", relativePath: "src/app.ts" },
+        file: { rootPath, relativePath },
       });
     });
   }
@@ -102,3 +109,15 @@ test("drive comparison preserves file names and POSIX case boundaries", () => {
   for (const href of ["d:/repo/src/app.ts", "file:///%44:/repo/src/app.ts"])
     expect(resolveChatFileLink(href, "C:/repo").kind).toBe("invalid");
 });
+
+for (const href of [
+  "D:/repo/task/src/app.ts",
+  "C:/repo/task-other/src/app.ts",
+  "C:/repo/task/../other/src/app.ts",
+  "file:///C:/repo/task/%2e%2e/other/src/app.ts",
+  "C:/repo/src/app.ts",
+]) {
+  test(`Windows root comparison rejects outside paths: ${href}`, () => {
+    expect(resolveChatFileLink(href, "C:/Repo/Task").kind).toBe("invalid");
+  });
+}

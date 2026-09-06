@@ -79,9 +79,7 @@ export function resolveChatFileLink(href: string, rootPath: string | null): Chat
   if (!rootParts) return invalid("The Build Worktree path is invalid.");
   if (absolute) {
     const matchesRoot = rootParts.every((part, index) =>
-      windows && index === 0
-        ? part.toLowerCase() === parts[index]?.toLowerCase()
-        : part === parts[index],
+      windows ? part.toLowerCase() === parts[index]?.toLowerCase() : part === parts[index],
     );
     if (!matchesRoot) return invalid("The file is outside the Task's Build Worktree.");
     parts.splice(0, rootParts.length);

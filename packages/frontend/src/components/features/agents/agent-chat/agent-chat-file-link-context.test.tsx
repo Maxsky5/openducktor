@@ -241,7 +241,14 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
   });
 }
 
-for (const path of ["c:/repo/src/app.ts", "file:///%43:/repo/src/app.ts"]) {
+for (const [path, rootPath, relativePath] of [
+  ["c:/repo/src/app.ts", "C:/repo", "src/app.ts"],
+  ["file:///%43:/repo/src/app.ts", "C:/repo", "src/app.ts"],
+  ["C:/repo/task/src/app.ts", "C:/Repo/Task", "src/app.ts"],
+  ["file:///C:/repo/task/src/app.ts", "C:/Repo/Task", "src/app.ts"],
+  ["c:/rEpO/tAsK/Src/App.ts", "C:\\Repo\\Task", "Src/App.ts"],
+  ["file:///%63:/rEpO/tAsK/Src/App.ts", "C:\\Repo\\Task", "Src/App.ts"],
+] as const) {
   for (const suffix of ["", ":42", ":42:7", "#L42", "#L42-L50"]) {
     test(`Windows link activation selects the exact relative path: ${path}${suffix}`, async () => {
       const { spyOn } = await import("bun:test");
@@ -250,7 +257,7 @@ for (const path of ["c:/repo/src/app.ts", "file:///%43:/repo/src/app.ts"]) {
       const client = createQueryClient();
       client.setQueryData(
         taskWorktreeQueryOptions({ repoPath: "C:/repo", taskId: "a" }).queryKey,
-        () => ({ workingDirectory: "C:/repo" }),
+        () => ({ workingDirectory: rootPath }),
       );
       const onSelectFile = mock(() => {});
       const view = render(
@@ -266,8 +273,8 @@ for (const path of ["c:/repo/src/app.ts", "file:///%43:/repo/src/app.ts"]) {
         fireEvent.click(view.getByRole("link"));
         await waitFor(() =>
           expect(onSelectFile).toHaveBeenCalledWith({
-            rootPath: "C:/repo",
-            relativePath: "src/app.ts",
+            rootPath,
+            relativePath,
           }),
         );
         expect(onSelectFile).toHaveBeenCalledTimes(1);
