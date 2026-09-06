@@ -5,7 +5,10 @@ export type ChatFileLink =
   | { kind: "file"; file: TaskExecutionSelectedFile }
   | { kind: "invalid"; message: string };
 
-const invalid = (message: string): ChatFileLink => ({ kind: "invalid", message });
+const invalid = (message: string): Extract<ChatFileLink, { kind: "invalid" }> => ({
+  kind: "invalid",
+  message,
+});
 const DRIVE = /^[a-z]:/i;
 // URL schemes retain the shared renderer's sanitizer, including blocked executable URLs.
 const URL_SCHEME = /^(?:https?|ircs?|mailto|xmpp|javascript|vbscript|data|blob):/i;
@@ -31,19 +34,32 @@ const segments = (path: string): string[] | null => {
   return result;
 };
 
-export function resolveChatFileLink(href: string, rootPath: string | null): ChatFileLink {
-  if (href.startsWith("#")) return { kind: "fragment" };
-  if (!isChatLocalDestination(href)) return { kind: "external" };
-  if (!rootPath) return invalid("The Task's Build Worktree is unavailable.");
-  if (!href || CONTROL_CHARACTERS.test(href))
-    return invalid("The file destination is empty or contains control characters.");
+type InvalidFileLink = Extract<ChatFileLink, { kind: "invalid" }>;
+type ParsedFileDestination = {
+  kind: "path";
+  encodedPath: string;
+  isFileUri: boolean;
+};
+
+// ASCII drive letters, literal or percent-encoded. Encoded colons remain filename characters.
+const ENCODED_DRIVE = /^(?:[a-z]|%[46][1-9a-f]|%[57][0-9a]):/i;
+const ENCODED_SEPARATOR = /^(?:[/\\]|%2f|%5c)/i;
+
+function parseFileDestination(href: string): ParsedFileDestination | InvalidFileLink {
   const isFileUri = /^file:/i.test(href);
   if (isFileUri && !/^file:\/\/\//i.test(href))
     return invalid("Use a local file URI without a remote authority.");
-  // Markdown encodes native backslashes; recognize separators before the single path decode.
-  if (DRIVE.test(href) && !/^[a-z]:(?:[/\\]|%2f|%5c)/i.test(href))
-    return invalid("Drive-relative file paths are not supported.");
-  let path = href;
+  let path = isFileUri ? href.slice("file://".length) : href;
+  // Keep the drive outside citation parsing, including the leading slash of a file URI.
+  const drivePath = isFileUri ? path.slice(1) : path;
+  const drive = ENCODED_DRIVE.exec(drivePath)?.[0];
+  let prefix = "";
+  if (drive) {
+    path = drivePath.slice(drive.length);
+    if (!ENCODED_SEPARATOR.test(path))
+      return invalid("Drive-relative file paths are not supported.");
+    prefix = (isFileUri ? "/" : "") + drive;
+  }
   if (path.includes("?")) return invalid("File links do not support query strings.");
   const fragment = path.indexOf("#");
   if (fragment >= 0) {
@@ -54,18 +70,32 @@ export function resolveChatFileLink(href: string, rootPath: string | null): Chat
   }
   const location = /:([1-9]\d*)(?::([1-9]\d*))?$/.exec(path);
   if (location) path = path.slice(0, location.index);
-  if (/:(?![/\\])/.test(path.replace(/^file:/i, "").replace(DRIVE, "")))
-    return invalid("The file line reference is invalid.");
-  if (isFileUri) path = path.slice("file://".length);
+  if (path.includes(":")) return invalid("The file line reference is invalid.");
+  return { kind: "path", encodedPath: prefix + path, isFileUri };
+}
+
+export function resolveChatFileLink(href: string, rootPath: string | null): ChatFileLink {
+  if (href.startsWith("#")) return { kind: "fragment" };
+  if (!isChatLocalDestination(href)) return { kind: "external" };
+  if (!rootPath) return invalid("The Task's Build Worktree is unavailable.");
+  if (!href || CONTROL_CHARACTERS.test(href))
+    return invalid("The file destination is empty or contains control characters.");
+  const destination = parseFileDestination(href);
+  if (destination.kind === "invalid") return destination;
+  let path: string;
   try {
-    path = decodeURIComponent(path);
+    path = decodeURIComponent(destination.encodedPath);
   } catch {
     return invalid("The file path has invalid percent encoding.");
   }
   if (CONTROL_CHARACTERS.test(path)) return invalid("The file path contains control characters.");
-  const hasDrive = /^[a-z]:[/\\]/i.test(path) || (isFileUri && /^\/[a-z]:\//i.test(path));
+  if (destination.isFileUri && /^\/[a-z]:[/\\]/i.test(path)) path = path.slice(1);
+  return resolveWorktreeFile(path, rootPath);
+}
+
+function resolveWorktreeFile(path: string, rootPath: string): ChatFileLink {
+  const hasDrive = /^[a-z]:[/\\]/i.test(path);
   const windows = /^[a-z]:[/\\]/i.test(rootPath);
-  if (windows && isFileUri && /^\/[a-z]:\//i.test(path)) path = path.slice(1);
   if (path.startsWith("//") || path.startsWith("\\\\"))
     return invalid("Network file paths are not supported.");
   if (windows) path = path.replaceAll("\\", "/");

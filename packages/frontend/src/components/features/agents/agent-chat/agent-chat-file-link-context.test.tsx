@@ -5,6 +5,11 @@ import { createQueryClient } from "@/lib/query-client";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
 import { ChatFileLinkProvider, type ChatFileLinkOwner } from "./agent-chat-file-link-context";
+import {
+  chatFileLinkSuffixes,
+  validChatFileDestinations,
+  invalidChatFileDestinations,
+} from "./agent-chat-file-link.test-fixtures";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 
 enableReactActEnvironment();
@@ -98,11 +103,7 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
   });
 }
 
-for (const [href, workingDirectory, message] of [
-  ["file:42", "/repo/a", "Use a local file URI without a remote authority."],
-  ["C:42", "C:/repo/a", "Drive-relative file paths are not supported."],
-  ["README.md:-1", "/repo/a", "The file line reference is invalid."],
-] as const) {
+for (const [href, workingDirectory, message] of invalidChatFileDestinations) {
   test(`malformed destination reports its target and cause: ${href}`, async () => {
     const { spyOn } = await import("bun:test");
     const { toast } = await import("sonner");
@@ -125,10 +126,8 @@ for (const [href, workingDirectory, message] of [
       </QueryClientProvider>,
     );
     try {
-      fireEvent.click(view.getByRole("link"));
-      await waitFor(() =>
-        expect(error).toHaveBeenCalledWith(`Cannot open file: ${href}`, { description: message }),
-      );
+      await act(async () => fireEvent.click(view.getByRole("link")));
+      expect(error).toHaveBeenCalledWith(`Cannot open file: ${href}`, { description: message });
       expect(error).toHaveBeenCalledTimes(1);
       expect(onSelectFile).not.toHaveBeenCalled();
       expect(openExternal).not.toHaveBeenCalled();
@@ -241,20 +240,9 @@ for (const departure of ["session", "task", "repository", "close"] as const) {
   });
 }
 
-for (const [path, rootPath, relativePath] of [
-  [String.raw`C:\repo\task\src\app.ts`, "C:/Repo/Task", "src/app.ts"],
-  ["C:%5Crepo%5Ctask%5Csrc%5Capp.ts", "C:/Repo/Task", "src/app.ts"],
-  ["c:%5crepo%5ctask%5cSrc%5cApp.ts", "C:/Repo/Task", "Src/App.ts"],
-  ["C:%2Frepo%2Ftask%2Fsrc%2Fapp.ts", "C:/Repo/Task", "src/app.ts"],
-  ["c:/repo/src/app.ts", "C:/repo", "src/app.ts"],
-  ["file:///%43:/repo/src/app.ts", "C:/repo", "src/app.ts"],
-  ["C:/repo/task/src/app.ts", "C:/Repo/Task", "src/app.ts"],
-  ["file:///C:/repo/task/src/app.ts", "C:/Repo/Task", "src/app.ts"],
-  ["c:/rEpO/tAsK/Src/App.ts", "C:\\Repo\\Task", "Src/App.ts"],
-  ["file:///%63:/rEpO/tAsK/Src/App.ts", "C:\\Repo\\Task", "Src/App.ts"],
-] as const) {
-  for (const suffix of ["", ":42", ":42:7", "#L42", "#L42-L50"]) {
-    test(`Windows link activation selects the exact relative path: ${path}${suffix}`, async () => {
+for (const [path, rootPath, relativePath] of validChatFileDestinations) {
+  for (const suffix of chatFileLinkSuffixes) {
+    test(`link activation selects the exact relative path: ${path}${suffix}`, async () => {
       const { spyOn } = await import("bun:test");
       const external = await import("@/lib/open-external-url");
       const { toast } = await import("sonner");
@@ -276,13 +264,8 @@ for (const [path, rootPath, relativePath] of [
         </QueryClientProvider>,
       );
       try {
-        fireEvent.click(view.getByRole("link"));
-        await waitFor(() =>
-          expect(onSelectFile).toHaveBeenCalledWith({
-            rootPath,
-            relativePath,
-          }),
-        );
+        await act(async () => fireEvent.click(view.getByRole("link")));
+        expect(onSelectFile).toHaveBeenCalledWith({ rootPath, relativePath });
         expect(onSelectFile).toHaveBeenCalledTimes(1);
         expect(openExternal).not.toHaveBeenCalled();
         expect(error).not.toHaveBeenCalled();
