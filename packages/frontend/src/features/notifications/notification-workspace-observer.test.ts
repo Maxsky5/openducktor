@@ -471,3 +471,108 @@ test("retains full-identity workflow associations when the next session read fai
   expect(published).toMatchObject([{ kind: "agent.session_idle", task: { id: "task-1" } }]);
   observer.dispose();
 });
+
+test("creation snapshots preserve queued transitions and do not rewind existing tasks", async () => {
+  const existing = createTaskCardFixture({
+    id: "existing",
+    title: "Existing",
+    status: "in_progress",
+  });
+  const created = createTaskCardFixture({ id: "created", title: "Created", status: "open" });
+  let currentTasks = [existing];
+  const loadTasks = mock(async () => currentTasks);
+  const loadSessionRecords = mock(async () => ({}));
+  const published: NotificationOccurrence[] = [];
+  const taskObserver = createNotificationTaskObserver({
+    loadTasks,
+    loadSessionRecords,
+    publish: (occurrence) => published.push(occurrence),
+    onFailure: () => {},
+  });
+  await taskObserver.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+  currentTasks = [
+    { ...existing, status: "closed" },
+    { ...created, status: "in_progress" },
+  ];
+  const creation = {
+    kind: "external_task_created" as const,
+    eventId: "create",
+    repoPath: "/repo-a",
+    taskId: created.id,
+    taskSnapshot: { id: created.id, title: created.title, status: created.status },
+    emittedAt: "2026-09-06T00:00:00.000Z",
+  };
+  await taskObserver.sink.onChange(creation);
+  expect(loadTasks).toHaveBeenCalledTimes(1);
+  expect(loadSessionRecords).toHaveBeenLastCalledWith("/repo-a", [created.id]);
+  expect(taskObserver.resolveTask("/repo-a", existing.id)).toEqual({
+    id: existing.id,
+    title: existing.title,
+  });
+  expect(published).toEqual([]);
+  const update = {
+    kind: "tasks_updated" as const,
+    eventId: "update",
+    repoPath: "/repo-a",
+    taskIds: [existing.id, created.id],
+    removedTaskIds: [],
+    taskSnapshots: currentTasks.map(({ id, title, status }) => ({ id, title, status })),
+    emittedAt: "2026-09-06T00:00:01.000Z",
+  };
+  await taskObserver.sink.onChange(update);
+  expect(published.map((occurrence) => occurrence.kind)).toEqual([
+    "workflow.closed",
+    "workflow.in_progress",
+  ]);
+  await taskObserver.sink.onChange(creation);
+  await taskObserver.sink.onChange({ ...update, eventId: "same-status" });
+  expect(published).toHaveLength(2);
+  expect(loadTasks).toHaveBeenCalledTimes(1);
+});
+
+test.each(["fault", "transcript_gap"] as const)(
+  "reports %s and keeps the live subscription active without replaying reconnect inputs",
+  async (type) => {
+    let receive = (_envelope: AgentSessionLiveEnvelope): void => {};
+    const onFailure = mock(() => {});
+    const published: NotificationOccurrence[] = [];
+    const stop = mock(() => {});
+    const taskObserver = createNotificationTaskObserver({
+      loadTasks: async () => [createTaskCardFixture({ id: "task-1" })],
+      loadSessionRecords: loadWorkflowSessionRecords,
+      publish: (occurrence) => published.push(occurrence),
+      onFailure,
+    });
+    const observer = createNotificationWorkspaceObserver({
+      observe: async (_input, listener) => {
+        receive = listener;
+        return stop;
+      },
+      taskObserver,
+      publish: (occurrence) => published.push(occurrence),
+      onFailure,
+    });
+    await observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+    await flush();
+    receive(liveSnapshot([]));
+    const failure = { type, repoPath: "/repo-a", message: "Live data is incomplete." };
+    receive(failure);
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(onFailure).toHaveBeenCalledWith({
+      repoPath: "/repo-a",
+      source: "session",
+      cause: new Error(failure.message),
+    });
+    expect(published).toEqual([]);
+    expect(stop).not.toHaveBeenCalled();
+    receive({ ...liveSnapshot(["missed"]), isConnectionSnapshot: true });
+    expect(published).toEqual([]);
+    receive(liveUpsert(["missed", "new"]));
+    expect(published).toHaveLength(1);
+    expect(published[0]?.navigationTarget).toMatchObject({ requestId: "new" });
+    observer.dispose();
+    receive(failure);
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(stop).toHaveBeenCalledTimes(1);
+  },
+);

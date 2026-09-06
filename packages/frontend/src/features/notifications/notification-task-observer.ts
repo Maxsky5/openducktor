@@ -86,35 +86,16 @@ export const createNotificationTaskObserver = ({
     if (!workspace) {
       return;
     }
-    try {
-      const tasks = await loadTasks(event.repoPath);
-      await loadSessionRecords(
-        event.repoPath,
-        tasks.map((task) => task.id),
-      );
-      if (workspaces.get(event.repoPath) !== workspace) {
-        return;
-      }
-      let entry = entries.get(event.repoPath);
-      if (!entry || entry.label !== workspace.repositoryLabel) {
-        const projector = createTaskOccurrenceProjector({
-          repoPath: event.repoPath,
-          repositoryLabel: workspace.repositoryLabel,
-        });
-        projector.replaceBaseline(tasks);
-        entry = {
-          label: workspace.repositoryLabel,
-          projector,
-          tasks: new Map(tasks.map((task) => [task.id, task])),
-        };
-        entries.set(event.repoPath, entry);
-        return;
-      }
-      entry.projector.replaceBaseline(tasks);
-      entry.tasks = new Map(tasks.map((task) => [task.id, task]));
-    } catch (cause) {
-      reportFailure(event.repoPath, cause);
+    const entry = entries.get(event.repoPath);
+    if (!entry || entry.label !== workspace.repositoryLabel) {
+      await loadBaseline(workspace);
+      return;
     }
+    if (!entry.tasks.has(event.taskId)) {
+      entry.projector.addCreatedTask(event.taskSnapshot);
+      entry.tasks.set(event.taskId, event.taskSnapshot);
+    }
+    await loadSessionRecords(event.repoPath, [event.taskId]);
   };
 
   const refreshForChange = async (event: ExternalTaskSyncEvent): Promise<void> => {

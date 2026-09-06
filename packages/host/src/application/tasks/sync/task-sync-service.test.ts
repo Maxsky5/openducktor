@@ -370,12 +370,19 @@ describe("createTaskSyncService", () => {
         },
       },
     });
-    await Effect.runPromise(service.publishExternalTaskCreated("/repo", "task-1"));
+    await Effect.runPromise(
+      service.publishExternalTaskCreated("/repo", {
+        id: "task-1",
+        title: "Created",
+        status: "open",
+      }),
+    );
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       kind: "external_task_created",
       repoPath: "/repo",
       taskId: "task-1",
+      taskSnapshot: { id: "task-1", title: "Created", status: "open" },
     });
     expect(events[0]).toMatchObject({
       eventId: expect.any(String),

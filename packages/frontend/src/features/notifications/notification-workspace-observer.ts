@@ -56,6 +56,14 @@ export const createNotificationWorkspaceObserver = ({
       if (observation.cancelled) {
         return;
       }
+      if (envelope.type === "fault" || envelope.type === "transcript_gap") {
+        onFailure({
+          repoPath: workspace.repoPath,
+          source: "session",
+          cause: new Error(envelope.message),
+        });
+        return;
+      }
       try {
         for (const occurrence of projector.accept(envelope)) {
           publish(occurrence);

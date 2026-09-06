@@ -75,7 +75,10 @@ import type {
   TransitionTaskInput,
   UpdateTaskInput,
 } from "./task-inputs";
-import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
+import {
+  TaskMutationProgressFailure,
+  TaskCreationProgressFailure,
+} from "./task-mutation-progress-failure";
 import { createTaskCloseUseCase } from "./use-cases/close-task";
 import { createTaskCompleteDirectMergeUseCase } from "./use-cases/complete-direct-merge";
 import { createTaskDeleteUseCase } from "./use-cases/delete-task";
@@ -214,7 +217,7 @@ export type TaskServiceWithMutationProgress = Omit<
   ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
   createTask(
     input: CreateTaskUseCaseInput,
-  ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
+  ): Effect.Effect<TaskCard, TaskServiceError | TaskCreationProgressFailure>;
   deleteTask(
     input: DeleteTaskInput,
   ): Effect.Effect<TaskDeleteResult, TaskServiceError | TaskMutationProgressFailure>;
@@ -411,7 +414,14 @@ const createTaskServiceImplementation = (
     buildResumed: (input) => mapTaskServiceErrors(service.buildResumed(input)),
     buildStart: (input) => mapTaskServiceErrors(service.buildStart(input)),
     completeDirectMerge: (input) => mapTaskServiceErrors(service.completeDirectMerge(input)),
-    createTask: (input) => mapTaskMutationProgressErrors(service.createTask(input)),
+    createTask: (input) =>
+      service
+        .createTask(input)
+        .pipe(
+          Effect.mapError((cause) =>
+            cause instanceof TaskCreationProgressFailure ? cause : toTaskServiceError(cause),
+          ),
+        ),
     closeTask: (input) => mapTaskServiceErrors(service.closeTask(input)),
     deleteTask: (input) => mapTaskMutationProgressErrors(service.deleteTask(input)),
     detectPullRequest: (input) => mapTaskServiceErrors(service.detectPullRequest(input)),

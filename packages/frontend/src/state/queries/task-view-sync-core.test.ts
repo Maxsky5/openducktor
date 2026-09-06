@@ -288,6 +288,7 @@ describe("TaskViewSync", () => {
         eventId: "event-4",
         repoPath: "/repo",
         taskId: "task-1",
+        taskSnapshot: { id: "task-1", title: "Task", status: "open" },
         emittedAt: "2026-04-10T13:10:00.000Z",
       },
       "/repo",

@@ -16,6 +16,7 @@ const event = (id: string): ExternalTaskSyncEvent => ({
   kind: "external_task_created",
   repoPath: "/repo",
   taskId: `task-${id}`,
+  taskSnapshot: { id: `task-${id}`, title: "Task", status: "open" },
   emittedAt: "2026-04-10T13:00:00.000Z",
 });
 
@@ -250,6 +251,7 @@ describe("createTaskEventStream", () => {
         return repoPathReads === 1 ? "/validated-repo" : "/unchecked-repo";
       },
       taskId: "task-1",
+      taskSnapshot: { id: "task-1", title: "Task", status: "open" },
       emittedAt: "2026-04-10T13:00:00.000Z",
     };
 

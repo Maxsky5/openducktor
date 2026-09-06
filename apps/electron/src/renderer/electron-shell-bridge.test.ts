@@ -21,6 +21,7 @@ const taskStreamEvent = (sequence: number): ExternalTaskSyncEvent => ({
   kind: "external_task_created",
   repoPath: "/repo",
   taskId: `task-${sequence}`,
+  taskSnapshot: { id: `task-${sequence}`, title: "Task", status: "open" },
   emittedAt: "2026-04-10T13:00:00.000Z",
 });
 

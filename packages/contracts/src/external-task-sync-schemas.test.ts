@@ -18,6 +18,7 @@ describe("external-task-sync-schemas", () => {
       kind: "external_task_created",
       repoPath,
       taskId,
+      taskSnapshot: { id: taskId, title: "Task", status: "open" },
       emittedAt: "2026-04-10T13:00:00.000Z",
     });
 
@@ -71,6 +72,7 @@ describe("external-task-sync-schemas", () => {
       kind: "external_task_created" as const,
       repoPath: "/repo",
       taskId: "task-7",
+      taskSnapshot: { id: "task-7", title: "Task", status: "open" },
       emittedAt: "2026-04-10T13:00:00.000Z",
     };
 
@@ -180,6 +182,7 @@ describe("external-task-sync-schemas", () => {
           kind: "external_task_created",
           repoPath: "/repo",
           taskId: "task-7",
+          taskSnapshot: { id: "task-7", title: "Task", status: "open" },
           emittedAt: "2026-04-10T13:20:00.000Z",
         },
       }),
@@ -210,4 +213,27 @@ describe("external-task-sync-schemas", () => {
       }).success,
     ).toBe(false);
   });
+});
+
+test("creation events require a snapshot for the same task", () => {
+  const event = {
+    eventId: "create-1",
+    kind: "external_task_created",
+    repoPath: "/repo",
+    taskId: "task-1",
+    emittedAt: "2026-09-06T00:00:00.000Z",
+  };
+  expect(externalTaskSyncEventSchema.safeParse(event).success).toBe(false);
+  expect(
+    externalTaskSyncEventSchema.safeParse({
+      ...event,
+      taskSnapshot: { id: "task-2", title: "Other", status: "open" },
+    }).success,
+  ).toBe(false);
+  expect(
+    externalTaskSyncEventSchema.safeParse({
+      ...event,
+      taskSnapshot: { id: "task-1", title: "Created", status: "open" },
+    }).success,
+  ).toBe(true);
 });

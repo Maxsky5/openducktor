@@ -14,14 +14,6 @@ const strictTaskEventValueSchema = z
     message: "Task event values must not include leading or trailing whitespace.",
   });
 
-export const externalTaskCreatedEventSchema = z.object({
-  eventId: strictTaskEventValueSchema,
-  kind: z.literal("external_task_created"),
-  repoPath: strictTaskEventValueSchema,
-  taskId: strictTaskEventValueSchema,
-  emittedAt: z.string().min(1),
-});
-
 const taskChangeIdSchema = strictTaskEventValueSchema;
 const uniqueTaskChangeIdsSchema = z
   .array(taskChangeIdSchema)
@@ -56,6 +48,20 @@ export const taskEventTaskSnapshotSchema = z
   })
   .strict();
 export type TaskEventTaskSnapshot = z.infer<typeof taskEventTaskSnapshotSchema>;
+
+export const externalTaskCreatedEventSchema = z
+  .object({
+    eventId: strictTaskEventValueSchema,
+    kind: z.literal("external_task_created"),
+    repoPath: strictTaskEventValueSchema,
+    taskId: strictTaskEventValueSchema,
+    taskSnapshot: taskEventTaskSnapshotSchema,
+    emittedAt: z.string().min(1),
+  })
+  .refine((event) => event.taskId === event.taskSnapshot.id, {
+    message: "The created task snapshot must match the task ID.",
+    path: ["taskSnapshot", "id"],
+  });
 
 const taskEventTaskSnapshotsSchema = z
   .array(taskEventTaskSnapshotSchema)

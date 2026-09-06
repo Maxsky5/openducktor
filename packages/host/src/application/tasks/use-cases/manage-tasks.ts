@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
-import { TaskAssetError } from "../../../effect/task-asset-error";
+import { TaskAssetError, TaskCreatedAssetError } from "../../../effect/task-asset-error";
 import type { TaskStoreError } from "../../../ports/task-repository-ports";
 import {
   validateParentRelationshipsForCreateEffect,
@@ -8,7 +8,10 @@ import {
   validateTaskTransitionEffect,
 } from "../support/task-validation-effects";
 import { enrichTask } from "../support/task-workflow-helpers";
-import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
+import {
+  TaskMutationProgressFailure,
+  TaskCreationProgressFailure,
+} from "../task-mutation-progress-failure";
 import type {
   CreateTaskServiceInput,
   TaskService,
@@ -59,11 +62,9 @@ export const createTaskCrudUseCases = ({
         .createTask(createInput)
         .pipe(
           Effect.mapError((error) =>
-            preserveCommittedAssetMutation(
-              "create-task",
-              error instanceof TaskAssetError ? error.taskId : undefined,
-              error,
-            ),
+            error instanceof TaskCreatedAssetError
+              ? new TaskCreationProgressFailure(error.createdTask, error)
+              : error,
           ),
         );
 

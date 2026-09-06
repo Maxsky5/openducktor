@@ -27,7 +27,10 @@ export type TaskSyncLoopHandle = {
   stop(): Effect.Effect<void, HostOperationError>;
 };
 export type TaskSyncService = {
-  publishExternalTaskCreated(repoPath: string, taskId: string): Effect.Effect<void>;
+  publishExternalTaskCreated(
+    repoPath: string,
+    taskSnapshot: TaskEventTaskSnapshot,
+  ): Effect.Effect<void>;
   publishTasksUpdated(
     repoPath: string,
     changes: TaskChangeSet,
@@ -77,12 +80,13 @@ const nowIso = (): string => new Date().toISOString();
 const buildExternalTaskCreatedEvent = (
   eventIdFactory: () => string,
   repoPath: string,
-  taskId: string,
+  taskSnapshot: TaskEventTaskSnapshot,
 ): ExternalTaskSyncEvent => ({
   eventId: eventIdFactory(),
   kind: "external_task_created",
   repoPath,
-  taskId,
+  taskId: taskSnapshot.id,
+  taskSnapshot: { id: taskSnapshot.id, title: taskSnapshot.title, status: taskSnapshot.status },
   emittedAt: nowIso(),
 });
 const buildTasksUpdatedEvent = (
@@ -154,12 +158,12 @@ export const createTaskSyncService = ({
         });
       }
     });
-  const publishExternalTaskCreated = (repoPath: string, taskId: string) =>
+  const publishExternalTaskCreated = (repoPath: string, taskSnapshot: TaskEventTaskSnapshot) =>
     publish(
-      buildExternalTaskCreatedEvent(eventIdFactory, repoPath, taskId),
+      buildExternalTaskCreatedEvent(eventIdFactory, repoPath, taskSnapshot),
       "create-task",
       repoPath,
-      { taskIds: [taskId], removedTaskIds: [] },
+      { taskIds: [taskSnapshot.id], removedTaskIds: [] },
     );
   const publishTasksUpdated = (
     repoPath: string,

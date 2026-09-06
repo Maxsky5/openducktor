@@ -1,7 +1,10 @@
 import type { TaskChangeSet } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { TaskSyncService } from "./sync/task-sync-service";
-import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
+import {
+  TaskMutationProgressFailure,
+  TaskCreationProgressFailure,
+} from "./task-mutation-progress-failure";
 import type {
   TaskService,
   TaskServiceError,
@@ -182,16 +185,16 @@ export const createEventPublishingTaskService = ({
       Effect.gen(function* () {
         const result = yield* Effect.either(taskService.createTask(input));
         if (result._tag === "Left") {
-          if (result.left instanceof TaskMutationProgressFailure) {
-            const [taskId] = result.left.changes.taskIds;
-            if (taskId) {
-              yield* taskSyncService.publishExternalTaskCreated(input.repoPath, taskId);
-            }
+          if (result.left instanceof TaskCreationProgressFailure) {
+            yield* taskSyncService.publishExternalTaskCreated(
+              input.repoPath,
+              result.left.createdTask,
+            );
             return yield* Effect.fail(result.left.failure);
           }
           return yield* Effect.fail(result.left);
         }
-        yield* taskSyncService.publishExternalTaskCreated(input.repoPath, result.right.id);
+        yield* taskSyncService.publishExternalTaskCreated(input.repoPath, result.right);
         return result.right;
       }),
     deleteTask: (input) =>

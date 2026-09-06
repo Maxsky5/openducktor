@@ -111,5 +111,9 @@ export const createTaskOccurrenceProjector = ({
     return occurrences;
   };
 
-  return { projectChange, replaceBaseline };
+  const addCreatedTask = (task: TaskEventTaskSnapshot): void => {
+    if (!baseline.has(task.id)) baseline.set(task.id, task);
+  };
+
+  return { projectChange, replaceBaseline, addCreatedTask };
 };

@@ -4,7 +4,10 @@ import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { createEventPublishingTaskService } from "./event-publishing-task-service";
 import type { TaskSyncService } from "./sync/task-sync-service";
-import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
+import {
+  TaskMutationProgressFailure,
+  TaskCreationProgressFailure,
+} from "./task-mutation-progress-failure";
 import type { TaskServiceWithMutationProgress } from "./task-service";
 import { createTaskServiceWithMutationProgressTestDouble } from "../../test-support/task-service-test-double";
 
@@ -94,17 +97,16 @@ describe("createEventPublishingTaskService", () => {
       taskService: fakeTaskService({
         createTask: () =>
           Effect.fail(
-            new TaskMutationProgressFailure({
-              operation: "create-task",
-              changes: { taskIds: ["task-1"], removedTaskIds: [] },
+            new TaskCreationProgressFailure(
+              { id: "task-1", title: "Created", status: "open" },
               failure,
-            }),
+            ),
           ),
       }),
       taskSyncService: {
-        publishExternalTaskCreated: (_repoPath, taskId) =>
+        publishExternalTaskCreated: (_repoPath, taskSnapshot) =>
           Effect.sync(() => {
-            publishedTaskIds.push(taskId);
+            publishedTaskIds.push(taskSnapshot.id);
           }),
         publishTasksUpdated: () => Effect.dieMessage("unexpected task update publication"),
         syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),

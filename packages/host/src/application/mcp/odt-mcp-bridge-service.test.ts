@@ -472,9 +472,9 @@ describe("createOdtMcpBridgeService", () => {
       TaskSyncService,
       "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests"
     > = {
-      publishExternalTaskCreated(_repoPath, taskId) {
+      publishExternalTaskCreated(_repoPath, taskSnapshot) {
         return Effect.sync(() => {
-          events.push({ kind: "created", taskIds: [taskId] });
+          events.push({ kind: "created", taskIds: [taskSnapshot.id] });
         });
       },
       publishTasksUpdated(_repoPath, changes) {
