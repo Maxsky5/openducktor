@@ -64,11 +64,14 @@ export const createNotificationTaskObserver = ({
       if (workspaces.get(workspace.repoPath) !== workspace) {
         return;
       }
-      const projector = createTaskOccurrenceProjector({
-        repoPath: workspace.repoPath,
-        repositoryLabel: workspace.repositoryLabel,
-      });
-      projector.replaceBaseline(tasks);
+      const previous = entries.get(workspace.repoPath);
+      const projector =
+        previous?.label === workspace.repositoryLabel
+          ? previous.projector
+          : createTaskOccurrenceProjector({
+              repoPath: workspace.repoPath,
+              repositoryLabel: workspace.repositoryLabel,
+            });
       entries.set(workspace.repoPath, {
         label: workspace.repositoryLabel,
         projector,
@@ -92,7 +95,6 @@ export const createNotificationTaskObserver = ({
       return;
     }
     if (!entry.tasks.has(event.taskId)) {
-      entry.projector.addCreatedTask(event.taskSnapshot);
       entry.tasks.set(event.taskId, event.taskSnapshot);
     }
     await loadSessionRecords(event.repoPath, [event.taskId]);

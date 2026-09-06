@@ -258,6 +258,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskEventCursorSchema",
   "taskEventSnapshotRequiredFrameSchema",
   "taskEventSnapshotRequiredReasonSchema",
+  "taskEventStatusChangeSchema",
   "taskEventStreamAcknowledgeSchema",
   "taskEventStreamFrameSchema",
   "taskEventStreamSubscribeSchema",

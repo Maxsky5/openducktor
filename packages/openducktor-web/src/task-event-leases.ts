@@ -56,10 +56,14 @@ const freezeFrame = (frame: TaskEventStreamFrame): TaskEventStreamFrame => {
     const taskIds = [...frame.event.taskIds];
     const removedTaskIds = [...frame.event.removedTaskIds];
     const taskSnapshots = frame.event.taskSnapshots.map((task) => Object.freeze({ ...task }));
+    const statusChanges = frame.event.statusChanges.map((change) =>
+      Object.freeze({ ...change, task: Object.freeze({ ...change.task }) }),
+    );
     Object.freeze(taskIds);
     Object.freeze(removedTaskIds);
     Object.freeze(taskSnapshots);
-    return Object.freeze({ ...frame.event, removedTaskIds, taskIds, taskSnapshots });
+    Object.freeze(statusChanges);
+    return Object.freeze({ ...frame.event, removedTaskIds, taskIds, taskSnapshots, statusChanges });
   })();
   const frozenFrame: TaskEventStreamFrame = Object.freeze({
     ...frame,

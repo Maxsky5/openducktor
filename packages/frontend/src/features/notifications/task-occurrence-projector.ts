@@ -3,7 +3,6 @@ import type {
   ExternalTaskSyncEvent,
   NotificationKind,
   NotificationOccurrence,
-  TaskEventTaskSnapshot,
   TaskStatus,
 } from "@openducktor/contracts";
 
@@ -65,20 +64,17 @@ export const createTaskOccurrenceProjector = ({
   repoPath: string;
   repositoryLabel: string;
 }) => {
-  let baseline = new Map<string, TaskEventTaskSnapshot>();
-
-  const replaceBaseline = (tasks: readonly TaskEventTaskSnapshot[]): void => {
-    baseline = new Map(tasks.map((task) => [task.id, task]));
-  };
+  const processedEvents = new Set<string>();
 
   const projectChange = (
     event: Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }>,
   ): NotificationOccurrence[] => {
+    if (processedEvents.has(event.eventId)) return [];
+    processedEvents.add(event.eventId);
     const occurrences: NotificationOccurrence[] = [];
 
-    for (const current of event.taskSnapshots) {
-      const previous = baseline.get(current.id);
-      if (!previous || previous.status === current.status) {
+    for (const [index, { task: current, previousStatus }] of event.statusChanges.entries()) {
+      if (previousStatus === current.status) {
         continue;
       }
       const notification = workflowNotification(current.status);
@@ -94,7 +90,7 @@ export const createTaskOccurrenceProjector = ({
         if (preferredRole) navigationTarget.preferredRole = preferredRole;
       }
       const occurrence: NotificationOccurrence = {
-        occurrenceId: `${kind}:${repoPath}:${current.id}:${event.eventId}`,
+        occurrenceId: `${kind}:${repoPath}:${current.id}:${event.eventId}:${index}`,
         kind,
         repoPath,
         repositoryLabel,
@@ -106,14 +102,8 @@ export const createTaskOccurrenceProjector = ({
       occurrences.push(occurrence);
     }
 
-    for (const taskId of event.removedTaskIds) baseline.delete(taskId);
-    for (const task of event.taskSnapshots) baseline.set(task.id, task);
     return occurrences;
   };
 
-  const addCreatedTask = (task: TaskEventTaskSnapshot): void => {
-    if (!baseline.has(task.id)) baseline.set(task.id, task);
-  };
-
-  return { projectChange, replaceBaseline, addCreatedTask };
+  return { projectChange };
 };

@@ -288,6 +288,9 @@ describe("all-workspace notification observation", () => {
       repoPath: "/repo-a",
       taskIds: ["task-1"],
       removedTaskIds: [],
+      statusChanges: [
+        { previousStatus: "open", task: { id: "task-1", title: "Task A", status: "spec_ready" } },
+      ],
       taskSnapshots: [{ id: "task-1", title: "Task A", status: "spec_ready" }],
       emittedAt: "2026-08-31T10:01:00.000Z",
     });
@@ -295,7 +298,7 @@ describe("all-workspace notification observation", () => {
     expect(published).toMatchObject([
       {
         kind: "workflow.spec_ready",
-        occurrenceId: "workflow.spec_ready:/repo-a:task-1:event-1",
+        occurrenceId: "workflow.spec_ready:/repo-a:task-1:event-1:0",
       },
     ]);
   });
@@ -326,6 +329,7 @@ describe("all-workspace notification observation", () => {
       repoPath: "/repo-a",
       taskIds: ["task-1"],
       removedTaskIds: [],
+      statusChanges: [],
       taskSnapshots: [{ id: "task-1", title: "Task A", status: "open" }],
       emittedAt: "2026-08-31T10:01:00.000Z",
     });
@@ -355,6 +359,9 @@ describe("all-workspace notification observation", () => {
       repoPath: "/repo-a",
       taskIds: ["task-1"],
       removedTaskIds: [],
+      statusChanges: [
+        { previousStatus: "open", task: { id: "task-1", title: "Task A", status: "spec_ready" } },
+      ],
       taskSnapshots: [{ id: "task-1", title: "Task A", status: "spec_ready" }],
       emittedAt: "2026-08-31T10:01:00.000Z",
     });
@@ -364,6 +371,12 @@ describe("all-workspace notification observation", () => {
       repoPath: "/repo-a",
       taskIds: ["task-1"],
       removedTaskIds: [],
+      statusChanges: [
+        {
+          previousStatus: "spec_ready",
+          task: { id: "task-1", title: "Task A", status: "ready_for_dev" },
+        },
+      ],
       taskSnapshots: [{ id: "task-1", title: "Task A", status: "ready_for_dev" }],
       emittedAt: "2026-08-31T10:02:00.000Z",
     });
@@ -371,11 +384,11 @@ describe("all-workspace notification observation", () => {
     expect(published.map(({ kind, occurrenceId }) => ({ kind, occurrenceId }))).toEqual([
       {
         kind: "workflow.spec_ready",
-        occurrenceId: "workflow.spec_ready:/repo-a:task-1:event-spec-ready",
+        occurrenceId: "workflow.spec_ready:/repo-a:task-1:event-spec-ready:0",
       },
       {
         kind: "workflow.ready_for_dev",
-        occurrenceId: "workflow.ready_for_dev:/repo-a:task-1:event-ready-for-dev",
+        occurrenceId: "workflow.ready_for_dev:/repo-a:task-1:event-ready-for-dev:0",
       },
     ]);
   });
@@ -435,6 +448,7 @@ test("retains full-identity workflow associations when the next session read fai
       repoPath: "/repo-a",
       taskIds: ["task-1"],
       removedTaskIds: [],
+      statusChanges: [],
       taskSnapshots: [{ id: "task-1", title: "Task", status: "spec_ready" }],
       emittedAt: "2026-09-05T10:00:00.000Z",
     }),
@@ -516,6 +530,16 @@ test("creation snapshots preserve queued transitions and do not rewind existing 
     repoPath: "/repo-a",
     taskIds: [existing.id, created.id],
     removedTaskIds: [],
+    statusChanges: [
+      {
+        previousStatus: existing.status,
+        task: { id: existing.id, title: existing.title, status: "closed" as const },
+      },
+      {
+        previousStatus: created.status,
+        task: { id: created.id, title: created.title, status: "in_progress" as const },
+      },
+    ],
     taskSnapshots: currentTasks.map(({ id, title, status }) => ({ id, title, status })),
     emittedAt: "2026-09-06T00:00:01.000Z",
   };
@@ -525,7 +549,7 @@ test("creation snapshots preserve queued transitions and do not rewind existing 
     "workflow.in_progress",
   ]);
   await taskObserver.sink.onChange(creation);
-  await taskObserver.sink.onChange({ ...update, eventId: "same-status" });
+  await taskObserver.sink.onChange({ ...update, eventId: "same-status", statusChanges: [] });
   expect(published).toHaveLength(2);
   expect(loadTasks).toHaveBeenCalledTimes(1);
 });
@@ -576,3 +600,67 @@ test.each(["fault", "transcript_gap"] as const)(
     expect(stop).toHaveBeenCalledTimes(1);
   },
 );
+
+test("preserves buffered transitions when snapshot refresh has already read their final state", async () => {
+  const initial = createTaskCardFixture({ id: "task-1", title: "Task", status: "open" });
+  const final = { ...initial, status: "ready_for_dev" as const };
+  let completeRefresh = (_tasks: TaskCard[]) => {};
+  let loadCount = 0;
+  const published: NotificationOccurrence[] = [];
+  const observer = createNotificationTaskObserver({
+    loadTasks: async () => {
+      if (++loadCount === 1) return [initial];
+      return new Promise<TaskCard[]>((resolve) => {
+        completeRefresh = resolve;
+      });
+    },
+    loadSessionRecords: async () => ({}),
+    publish: (occurrence) => published.push(occurrence),
+    onFailure: (failure) => {
+      throw failure.cause;
+    },
+  });
+  await observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+  const refresh = observer.sink.onSnapshot();
+  completeRefresh([final]);
+  await refresh;
+  expect(published).toEqual([]);
+  const events = [
+    { eventId: "to-spec", previousStatus: "open", status: "spec_ready" },
+    { eventId: "to-dev", previousStatus: "spec_ready", status: "ready_for_dev" },
+  ] as const;
+  for (const { eventId, previousStatus, status } of events) {
+    const event = {
+      kind: "tasks_updated" as const,
+      repoPath: "/repo-a",
+      eventId,
+      taskIds: [initial.id],
+      removedTaskIds: [],
+      taskSnapshots: [final],
+      statusChanges: [
+        { previousStatus, task: { id: initial.id, title: "Committed task", status } },
+      ],
+      emittedAt: "2026-09-06T10:00:00.000Z",
+    };
+    await observer.sink.onChange(event);
+    await observer.sink.onChange(event);
+  }
+  expect(published.map(({ kind, task }) => ({ kind, task }))).toEqual([
+    { kind: "workflow.spec_ready", task: { id: initial.id, title: "Committed task" } },
+    { kind: "workflow.ready_for_dev", task: { id: initial.id, title: "Committed task" } },
+  ]);
+  const secondRefresh = observer.sink.onSnapshot();
+  completeRefresh([final]);
+  await secondRefresh;
+  await observer.sink.onChange({
+    kind: "tasks_updated",
+    repoPath: "/repo-a",
+    eventId: "to-dev",
+    taskIds: [initial.id],
+    removedTaskIds: [],
+    taskSnapshots: [final],
+    statusChanges: [{ previousStatus: "spec_ready", task: final }],
+    emittedAt: "2026-09-06T10:00:00.000Z",
+  });
+  expect(published).toHaveLength(2);
+});

@@ -10,6 +10,7 @@ const event = (): ExternalTaskSyncEvent => ({
   repoPath: "/repo",
   taskIds: ["task-1"],
   removedTaskIds: [],
+  statusChanges: [],
   taskSnapshots: [{ id: "task-1", title: "task-1", status: "open" }],
   emittedAt: "2026-09-03T20:00:00.000Z",
 });
@@ -143,6 +144,7 @@ describe("AgentSessionViewSync", () => {
         repoPath: "/repo",
         taskIds: ["task-1"],
         removedTaskIds: ["task-1"],
+        statusChanges: [],
         taskSnapshots: [],
         emittedAt: "2026-09-03T20:00:00.000Z",
       });

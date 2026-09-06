@@ -49,6 +49,12 @@ export const taskEventTaskSnapshotSchema = z
   .strict();
 export type TaskEventTaskSnapshot = z.infer<typeof taskEventTaskSnapshotSchema>;
 
+export const taskEventStatusChangeSchema = z.strictObject({
+  previousStatus: taskStatusSchema,
+  task: taskEventTaskSnapshotSchema,
+});
+export type TaskEventStatusChange = z.infer<typeof taskEventStatusChangeSchema>;
+
 export const externalTaskCreatedEventSchema = z
   .object({
     eventId: strictTaskEventValueSchema,
@@ -75,12 +81,22 @@ export const tasksUpdatedEventSchema = taskChangeSetSchema
     kind: z.literal("tasks_updated"),
     repoPath: strictTaskEventValueSchema,
     taskSnapshots: taskEventTaskSnapshotsSchema,
+    statusChanges: z.array(taskEventStatusChangeSchema),
     emittedAt: z.string().min(1),
   })
-  .superRefine(({ taskIds, removedTaskIds, taskSnapshots }, context) => {
+  .superRefine(({ taskIds, removedTaskIds, taskSnapshots, statusChanges }, context) => {
     const changedTaskIds = new Set(taskIds);
     const removedTaskIdSet = new Set(removedTaskIds);
     const snapshotTaskIds = new Set(taskSnapshots.map((task) => task.id));
+    for (const change of statusChanges) {
+      if (!changedTaskIds.has(change.task.id)) {
+        context.addIssue({
+          code: "custom",
+          message: "Task status changes must refer to a changed task ID.",
+          path: ["statusChanges"],
+        });
+      }
+    }
     for (const task of taskSnapshots) {
       if (!changedTaskIds.has(task.id) || removedTaskIdSet.has(task.id)) {
         context.addIssue({

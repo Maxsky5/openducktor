@@ -4,6 +4,7 @@ import {
   type TaskCard,
   type TaskChangeSet,
   type TaskEventTaskSnapshot,
+  type TaskEventStatusChange,
 } from "@openducktor/contracts";
 import { type Cause, Deferred, Effect, Exit, Fiber, Ref } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
@@ -12,6 +13,7 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../../workspaces/workspace-settings-service";
+import { collectTaskStatusChanges } from "../../../ports/task-status-changes";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { RepoPullRequestSyncResult, TaskService, TaskServiceError } from "../task-service";
 
@@ -35,6 +37,7 @@ export type TaskSyncService = {
     repoPath: string,
     changes: TaskChangeSet,
     operation: string,
+    statusChanges: readonly TaskEventStatusChange[],
   ): Effect.Effect<void>;
   syncRepoPullRequests(
     repoPath: string,
@@ -94,12 +97,14 @@ const buildTasksUpdatedEvent = (
   repoPath: string,
   changes: TaskChangeSet,
   taskSnapshots: readonly TaskEventTaskSnapshot[],
+  statusChanges: readonly TaskEventStatusChange[],
 ): ExternalTaskSyncEvent => ({
   eventId: eventIdFactory(),
   kind: "tasks_updated",
   repoPath,
   ...changes,
   taskSnapshots: [...taskSnapshots],
+  statusChanges: [...statusChanges],
   emittedAt: nowIso(),
 });
 const taskSnapshotsForChanges = (
@@ -169,6 +174,7 @@ export const createTaskSyncService = ({
     repoPath: string,
     changes: TaskChangeSet,
     operation: string,
+    statusChanges: readonly TaskEventStatusChange[],
   ): Effect.Effect<void> =>
     Effect.gen(function* () {
       const tasks = yield* Effect.either(taskService.listTasks({ repoPath }));
@@ -184,7 +190,7 @@ export const createTaskSyncService = ({
       }
       const taskSnapshots = taskSnapshotsForChanges(tasks.right, changes);
       yield* publish(
-        buildTasksUpdatedEvent(eventIdFactory, repoPath, changes, taskSnapshots),
+        buildTasksUpdatedEvent(eventIdFactory, repoPath, changes, taskSnapshots, statusChanges),
         operation,
         repoPath,
         changes,
@@ -194,18 +200,23 @@ export const createTaskSyncService = ({
     repoPath: string,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError> =>
     Effect.gen(function* () {
-      const syncResult = yield* Effect.either(
+      const { result: syncResult, statusChanges } = yield* collectTaskStatusChanges(
         taskService.repoPullRequestSyncDetailed({ repoPath }),
       );
       if (syncResult._tag === "Right") {
         const changes = { taskIds: syncResult.right.changedTaskIds, removedTaskIds: [] };
         if (changes.taskIds.length > 0) {
-          yield* publishTasksUpdated(repoPath, changes, "repo-pull-request-sync");
+          yield* publishTasksUpdated(repoPath, changes, "repo-pull-request-sync", statusChanges);
         }
         return syncResult.right;
       }
       if (syncResult.left instanceof TaskMutationProgressFailure) {
-        yield* publishTasksUpdated(repoPath, syncResult.left.changes, syncResult.left.operation);
+        yield* publishTasksUpdated(
+          repoPath,
+          syncResult.left.changes,
+          syncResult.left.operation,
+          statusChanges,
+        );
         return yield* Effect.fail(syncResult.left.failure);
       }
       return yield* Effect.fail(syncResult.left);

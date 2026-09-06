@@ -1,5 +1,6 @@
 import type { TaskChangeSet } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import type { TaskSyncService } from "./sync/task-sync-service";
 import {
   TaskMutationProgressFailure,
@@ -36,15 +37,25 @@ export const createEventPublishingTaskService = ({
     successChanges: (result: A) => TaskChangeSet = () => changes,
   ): Effect.Effect<A, TaskServiceError> =>
     Effect.gen(function* () {
-      const result = yield* Effect.either(mutation);
+      const { result, statusChanges } = yield* collectTaskStatusChanges(mutation);
       if (result._tag === "Left") {
         if (result.left instanceof TaskMutationProgressFailure) {
-          yield* taskSyncService.publishTasksUpdated(repoPath, result.left.changes, operation);
+          yield* taskSyncService.publishTasksUpdated(
+            repoPath,
+            result.left.changes,
+            operation,
+            statusChanges,
+          );
           return yield* Effect.fail(result.left.failure);
         }
         return yield* Effect.fail(result.left);
       }
-      yield* taskSyncService.publishTasksUpdated(repoPath, successChanges(result.right), operation);
+      yield* taskSyncService.publishTasksUpdated(
+        repoPath,
+        successChanges(result.right),
+        operation,
+        statusChanges,
+      );
       return result.right;
     });
 
@@ -56,10 +67,15 @@ export const createEventPublishingTaskService = ({
     mutated: (result: A) => boolean,
   ): Effect.Effect<A, TaskServiceError> =>
     Effect.gen(function* () {
-      const result = yield* Effect.either(mutation);
+      const { result, statusChanges } = yield* collectTaskStatusChanges(mutation);
       if (result._tag === "Left") {
         if (result.left instanceof TaskMutationProgressFailure) {
-          yield* taskSyncService.publishTasksUpdated(repoPath, result.left.changes, operation);
+          yield* taskSyncService.publishTasksUpdated(
+            repoPath,
+            result.left.changes,
+            operation,
+            statusChanges,
+          );
           return yield* Effect.fail(result.left.failure);
         }
         return yield* Effect.fail(result.left);
@@ -67,23 +83,29 @@ export const createEventPublishingTaskService = ({
       if (!mutated(result.right)) {
         return result.right;
       }
-      yield* taskSyncService.publishTasksUpdated(repoPath, changes, operation);
+      yield* taskSyncService.publishTasksUpdated(repoPath, changes, operation, statusChanges);
       return result.right;
     });
 
   const publishSetPlan = (input: Parameters<TaskService["setPlan"]>[0]) =>
     Effect.gen(function* () {
-      const result = yield* Effect.either(taskService.setPlan(input));
+      const { result, statusChanges } = yield* collectTaskStatusChanges(taskService.setPlan(input));
       if (result._tag === "Right") {
         yield* taskSyncService.publishTasksUpdated(
           input.repoPath,
           result.right.changes,
           "set-plan",
+          statusChanges,
         );
         return result.right;
       }
       if (result.left instanceof TaskMutationProgressFailure) {
-        yield* taskSyncService.publishTasksUpdated(input.repoPath, result.left.changes, "set-plan");
+        yield* taskSyncService.publishTasksUpdated(
+          input.repoPath,
+          result.left.changes,
+          "set-plan",
+          statusChanges,
+        );
         return yield* Effect.fail(result.left.failure);
       }
       return yield* Effect.fail(result.left);
@@ -91,17 +113,23 @@ export const createEventPublishingTaskService = ({
 
   const publishSetSpec = (input: Parameters<TaskService["setSpec"]>[0]) =>
     Effect.gen(function* () {
-      const result = yield* Effect.either(taskService.setSpec(input));
+      const { result, statusChanges } = yield* collectTaskStatusChanges(taskService.setSpec(input));
       if (result._tag === "Right") {
         yield* taskSyncService.publishTasksUpdated(
           input.repoPath,
           changeForTask(input.taskId),
           "set-spec",
+          statusChanges,
         );
         return result.right;
       }
       if (result.left instanceof TaskMutationProgressFailure) {
-        yield* taskSyncService.publishTasksUpdated(input.repoPath, result.left.changes, "set-spec");
+        yield* taskSyncService.publishTasksUpdated(
+          input.repoPath,
+          result.left.changes,
+          "set-spec",
+          statusChanges,
+        );
         return yield* Effect.fail(result.left.failure);
       }
       return yield* Effect.fail(result.left);

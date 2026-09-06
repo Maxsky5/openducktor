@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
+import { recordCommittedTaskStatusChange } from "../../ports/task-status-changes";
 import {
   clearAgentSessionsByRoles,
   deleteAgentSession,
@@ -192,27 +193,30 @@ export const createSqliteTaskRepository = ({
     },
     recordQaOutcome(input) {
       return withDatabase(input.repoPath, "sqliteTaskRepository.recordQaOutcome", ({ session }) =>
-        session.transaction("sqliteTaskRepository.recordQaOutcome", (transaction) =>
-          Effect.gen(function* () {
-            yield* requireTaskRow(transaction, input.taskId, input.repoPath);
-            const updatedAt = now();
-            yield* updateTaskStatus(transaction, {
-              status: input.status,
-              taskId: input.taskId,
-              updatedAt,
-            });
-            yield* insertDocument(transaction, {
-              kind: "qa_report",
-              markdown: input.markdown,
-              sourceTool: qaReportSourceTool(input.verdict),
-              taskId: input.taskId,
-              updatedAt,
-              updatedBy: "qa-agent",
-              verdict: input.verdict,
-            });
-            return yield* getTaskCard(transaction, input.taskId, input.repoPath);
-          }),
-        ),
+        session
+          .transaction("sqliteTaskRepository.recordQaOutcome", (transaction) =>
+            Effect.gen(function* () {
+              const previous = yield* requireTaskRow(transaction, input.taskId, input.repoPath);
+              const updatedAt = now();
+              yield* updateTaskStatus(transaction, {
+                status: input.status,
+                taskId: input.taskId,
+                updatedAt,
+              });
+              yield* insertDocument(transaction, {
+                kind: "qa_report",
+                markdown: input.markdown,
+                sourceTool: qaReportSourceTool(input.verdict),
+                taskId: input.taskId,
+                updatedAt,
+                updatedBy: "qa-agent",
+                verdict: input.verdict,
+              });
+              const task = yield* getTaskCard(transaction, input.taskId, input.repoPath);
+              return { task, previousStatus: previous.status };
+            }),
+          )
+          .pipe(Effect.flatMap(recordCommittedTaskStatusChange)),
       );
     },
     setDirectMerge(input) {
@@ -279,16 +283,20 @@ export const createSqliteTaskRepository = ({
     },
     transitionTask(input) {
       return withDatabase(input.repoPath, "sqliteTaskRepository.transitionTask", ({ session }) =>
-        session.transaction("sqliteTaskRepository.transitionTask", (transaction) =>
-          Effect.gen(function* () {
-            yield* updateTaskStatus(transaction, {
-              status: input.status,
-              taskId: input.taskId,
-              updatedAt: now(),
-            });
-            return yield* getTaskCard(transaction, input.taskId, input.repoPath);
-          }),
-        ),
+        session
+          .transaction("sqliteTaskRepository.transitionTask", (transaction) =>
+            Effect.gen(function* () {
+              const previous = yield* requireTaskRow(transaction, input.taskId, input.repoPath);
+              yield* updateTaskStatus(transaction, {
+                status: input.status,
+                taskId: input.taskId,
+                updatedAt: now(),
+              });
+              const task = yield* getTaskCard(transaction, input.taskId, input.repoPath);
+              return { task, previousStatus: previous.status };
+            }),
+          )
+          .pipe(Effect.flatMap(recordCommittedTaskStatusChange)),
       );
     },
     updateTask(input) {

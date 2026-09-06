@@ -253,3 +253,41 @@ test("cancels reconnect expiry and expires a detached lease exactly once", () =>
   expect(manager.get(lease.subscriptionId)).toBeUndefined();
   expect(fake.unsubscribeCalls).toBe(1);
 });
+
+test("retains immutable committed status changes while a lease waits for reconnection", () => {
+  const fake = createFakeStream();
+  const manager = createTaskEventLeaseManager({
+    encodeFrame: () => new Uint8Array(),
+    reportDeliveryFailure: () => {},
+    scheduleExpiry: createInactiveTimer,
+    taskEventStream: fake.stream,
+  });
+  const lease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
+  const statusChange = {
+    previousStatus: "open" as const,
+    task: { id: "task-1", title: "Committed title", status: "spec_ready" as const },
+  };
+  fake.emit({
+    type: "change",
+    cursor: cursor(1),
+    event: {
+      kind: "tasks_updated",
+      eventId: "status-change",
+      repoPath: "/repo",
+      taskIds: ["task-1"],
+      removedTaskIds: [],
+      taskSnapshots: [statusChange.task],
+      statusChanges: [statusChange],
+      emittedAt: "2026-09-06T10:00:00.000Z",
+    },
+  });
+  statusChange.task.title = "Changed after delivery";
+  const retained = lease.pendingFrames[0];
+  if (retained?.type !== "change" || retained.event.kind !== "tasks_updated")
+    throw new Error("Expected a retained update");
+  expect(retained.event.statusChanges[0]?.task.title).toBe("Committed title");
+  expect(Object.isFrozen(retained.event.statusChanges)).toBe(true);
+  expect(Object.isFrozen(retained.event.statusChanges[0])).toBe(true);
+  expect(Object.isFrozen(retained.event.statusChanges[0]?.task)).toBe(true);
+  manager.dispose();
+});

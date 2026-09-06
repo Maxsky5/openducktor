@@ -37,6 +37,7 @@ describe("external-task-sync-schemas", () => {
       repoPath: "/repo",
       taskIds: ["task-7", "task-8"],
       removedTaskIds: ["task-7"],
+      statusChanges: [],
       taskSnapshots: [{ id: "task-8", title: "Task 8", status: "ready_for_dev" }],
       emittedAt: "2026-04-10T13:05:00.000Z",
     });
@@ -59,6 +60,7 @@ describe("external-task-sync-schemas", () => {
       repoPath: "/repo",
       taskIds: ["task-8"],
       removedTaskIds: [],
+      statusChanges: [],
       taskSnapshots: [{ id: "task-8", title: "", status: "ready_for_dev" }],
       emittedAt: "2026-04-10T13:05:00.000Z",
     });
@@ -158,12 +160,14 @@ describe("external-task-sync-schemas", () => {
     expect(
       tasksUpdatedEventSchema.safeParse({
         ...event,
+        statusChanges: [],
         taskSnapshots: [{ id: "task-7", title: "Removed", status: "open" }],
       }).success,
     ).toBe(false);
     expect(
       tasksUpdatedEventSchema.safeParse({
         ...event,
+        statusChanges: [],
         taskSnapshots: [
           { id: "task-8", title: "Task 8", status: "open" },
           { id: "task-8", title: "Task 8", status: "spec_ready" },
@@ -236,4 +240,34 @@ test("creation events require a snapshot for the same task", () => {
       taskSnapshot: { id: "task-1", title: "Created", status: "open" },
     }).success,
   ).toBe(true);
+});
+
+test("requires source status changes and keeps them distinct from later task snapshots", () => {
+  const event = {
+    kind: "tasks_updated",
+    eventId: "committed-change",
+    repoPath: "/repo",
+    taskIds: ["task-1"],
+    removedTaskIds: [],
+    taskSnapshots: [{ id: "task-1", title: "Current", status: "ready_for_dev" }],
+    statusChanges: [
+      { previousStatus: "open", task: { id: "task-1", title: "At commit", status: "spec_ready" } },
+    ],
+    emittedAt: "2026-09-06T10:00:00.000Z",
+  };
+  expect(tasksUpdatedEventSchema.parse(event).statusChanges).toEqual(event.statusChanges);
+  expect(tasksUpdatedEventSchema.safeParse({ ...event, statusChanges: undefined }).success).toBe(
+    false,
+  );
+  expect(
+    tasksUpdatedEventSchema.safeParse({
+      ...event,
+      statusChanges: [
+        {
+          previousStatus: "open",
+          task: { id: "other-task", title: "Other", status: "spec_ready" },
+        },
+      ],
+    }).success,
+  ).toBe(false);
 });

@@ -1,20 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import type { ExternalTaskSyncEvent, TaskCard, TaskStatus } from "@openducktor/contracts";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import type { ExternalTaskSyncEvent, TaskStatus } from "@openducktor/contracts";
 import { createTaskOccurrenceProjector } from "./task-occurrence-projector";
-
-const task = (status: TaskStatus): TaskCard =>
-  createTaskCardFixture({ id: "task-1", title: "Build notifications", status });
 
 const event = (
   eventId: string,
   status: TaskStatus,
+  previousStatus: TaskStatus = "open",
 ): Extract<ExternalTaskSyncEvent, { kind: "tasks_updated" }> => ({
   eventId,
   kind: "tasks_updated",
   repoPath: "/repo",
   taskIds: ["task-1"],
   removedTaskIds: [],
+  statusChanges: [{ previousStatus, task: { id: "task-1", title: "Task", status } }],
   taskSnapshots: [{ id: "task-1", title: "Task", status }],
   emittedAt: "2026-08-31T10:00:00.000Z",
 });
@@ -32,12 +30,11 @@ describe("task occurrence projector", () => {
       repoPath: "/repo",
       repositoryLabel: "Repo",
     });
-    projector.replaceBaseline([task("open")]);
 
     expect(projector.projectChange(event(`event-${status}`, status))).toMatchObject([
       {
         kind,
-        occurrenceId: `${kind}:/repo:task-1:event-${status}`,
+        occurrenceId: `${kind}:/repo:task-1:event-${status}:0`,
         navigationTarget: {
           type: "agent_studio_task",
           repoPath: "/repo",
@@ -53,7 +50,6 @@ describe("task occurrence projector", () => {
       repoPath: "/repo",
       repositoryLabel: "Repo",
     });
-    projector.replaceBaseline([task("human_review")]);
 
     expect(projector.projectChange(event("event-closed", "closed"))).toMatchObject([
       {
@@ -63,20 +59,41 @@ describe("task occurrence projector", () => {
     ]);
   });
 
-  test("does not notify for initial tasks, snapshot replacement, unchanged status, or Open", () => {
+  test("does not notify for unchanged status, metadata-only updates, or Open", () => {
     const projector = createTaskOccurrenceProjector({
       repoPath: "/repo",
       repositoryLabel: "Repo",
     });
-    projector.replaceBaseline([task("blocked")]);
-    projector.replaceBaseline([task("blocked")]);
-    expect(projector.projectChange(event("event-same", "blocked"))).toEqual([]);
+    expect(projector.projectChange(event("event-same", "blocked", "blocked"))).toEqual([]);
     expect(projector.projectChange(event("event-open", "open"))).toEqual([]);
 
     const newTaskProjector = createTaskOccurrenceProjector({
       repoPath: "/repo",
       repositoryLabel: "Repo",
     });
-    expect(newTaskProjector.projectChange(event("event-created", "spec_ready"))).toEqual([]);
+    expect(
+      newTaskProjector.projectChange({
+        ...event("event-metadata", "spec_ready"),
+        statusChanges: [],
+      }),
+    ).toEqual([]);
   });
+});
+
+test("keeps repeated destinations within one mutation distinct and suppresses replay", () => {
+  const projector = createTaskOccurrenceProjector({ repoPath: "/repo", repositoryLabel: "Repo" });
+  const update = event("multi-change", "blocked");
+  update.statusChanges = [
+    { previousStatus: "in_progress", task: { id: "task-1", title: "Task", status: "blocked" } },
+    { previousStatus: "blocked", task: { id: "task-1", title: "Task", status: "in_progress" } },
+    { previousStatus: "in_progress", task: { id: "task-1", title: "Task", status: "blocked" } },
+  ];
+  const occurrences = projector.projectChange(update);
+  expect(occurrences.map((entry) => entry.kind)).toEqual([
+    "workflow.blocked",
+    "workflow.in_progress",
+    "workflow.blocked",
+  ]);
+  expect(new Set(occurrences.map((entry) => entry.occurrenceId)).size).toBe(3);
+  expect(projector.projectChange(update)).toEqual([]);
 });

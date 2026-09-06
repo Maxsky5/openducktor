@@ -107,6 +107,7 @@ describe("createTaskSyncService", () => {
           "/repo",
           { taskIds: ["task-1"], removedTaskIds: [] },
           "task-update",
+          [],
         ),
       ),
     ).resolves.toBeUndefined();
@@ -139,6 +140,7 @@ describe("createTaskSyncService", () => {
           "/repo",
           { taskIds: ["task-1"], removedTaskIds: [] },
           "task-update",
+          [],
         ),
       ),
     ).resolves.toBeUndefined();
@@ -173,7 +175,7 @@ describe("createTaskSyncService", () => {
     const changes = { taskIds: ["task-1", "task-1"], removedTaskIds: [] };
 
     await expect(
-      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update")),
+      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update", [])),
     ).resolves.toBeUndefined();
 
     expect(events).toEqual([]);
@@ -208,7 +210,7 @@ describe("createTaskSyncService", () => {
     const changes = { taskIds: ["task-1"], removedTaskIds: ["task-2"] };
 
     await expect(
-      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update")),
+      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update", [])),
     ).resolves.toBeUndefined();
 
     expect(events).toEqual([]);
@@ -243,7 +245,7 @@ describe("createTaskSyncService", () => {
     const changes = { taskIds: [], removedTaskIds: [] };
 
     await expect(
-      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update")),
+      Effect.runPromise(service.publishTasksUpdated("/repo", changes, "task-update", [])),
     ).resolves.toBeUndefined();
 
     expect(events).toEqual([]);
@@ -271,13 +273,14 @@ describe("createTaskSyncService", () => {
     });
     const changes = { taskIds: ["task-1", "task-2"], removedTaskIds: ["task-2"] };
 
-    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "delete-task"));
+    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "delete-task", []));
 
     expect(events).toEqual([
       expect.objectContaining({
         kind: "tasks_updated",
         taskIds: ["task-1", "task-2"],
         removedTaskIds: ["task-2"],
+        statusChanges: [],
         taskSnapshots: [{ id: "task-1", title: "Task 1", status: "ready_for_dev" }],
       }),
     ]);
@@ -299,8 +302,8 @@ describe("createTaskSyncService", () => {
     });
     const changes = { taskIds: ["task-1"], removedTaskIds: [] };
 
-    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "set-spec"));
-    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "set-plan"));
+    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "set-spec", []));
+    await Effect.runPromise(service.publishTasksUpdated("/repo", changes, "set-plan", []));
 
     expect(
       events.map((event) =>
