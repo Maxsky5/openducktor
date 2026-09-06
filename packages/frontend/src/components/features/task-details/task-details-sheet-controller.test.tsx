@@ -8,6 +8,7 @@ import {
 import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { taskQueryKeys } from "@/state/queries/tasks";
+import { collectDeleteImpactTaskIds, toSubtasks } from "./task-details-sheet-model";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
 import { QueryProvider } from "@/lib/query-provider";
@@ -43,9 +44,19 @@ async function importMockedTaskDetailsSheetController(): Promise<TaskDetailsShee
 describe("TaskDetailsSheetController", () => {
   test("opens a closed task outside the board and clears selection on workspace switch", async () => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
-    const task = createTaskCardFixture({ id: "closed-task", status: "closed" });
+    const child = createTaskCardFixture({
+      id: "closed-child",
+      status: "closed",
+      parentId: "closed-task",
+    });
+    const task = createTaskCardFixture({
+      id: "closed-task",
+      status: "closed",
+      issueType: "epic",
+      subtaskIds: [child.id],
+    });
     const client = new QueryClient();
-    client.setQueryData(taskQueryKeys.repoData(activeWorkspace.repoPath), { tasks: [task] });
+    client.setQueryData(taskQueryKeys.repoData(activeWorkspace.repoPath), { tasks: [task, child] });
     client.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
     const controller = (repoPath: string) =>
@@ -63,8 +74,13 @@ describe("TaskDetailsSheetController", () => {
     });
     await act(async () => ref.current?.openTask(task.id));
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ task, open: true, allTasks: [] }),
+      expect.objectContaining({ task, open: true, allTasks: [task, child] }),
     );
+    const sheet = taskDetailsSheetRenderMock.mock.calls.at(-1)?.[0];
+    if (!sheet) throw new Error("Expected task sheet props.");
+    const taskById = new Map(sheet.allTasks.map((entry) => [entry.id, entry]));
+    expect(toSubtasks(sheet.task, taskById)).toEqual([child]);
+    expect(collectDeleteImpactTaskIds(sheet.task, taskById)).toEqual([task.id, child.id]);
     await act(async () => rendered.rerender(controller("/repo-b")));
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ task: null, open: false }),

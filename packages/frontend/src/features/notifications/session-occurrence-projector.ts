@@ -59,7 +59,7 @@ const createProjection = (
   lastAssistantMessage: null,
   pendingApprovals: new Set(snapshot.pendingApprovals.map(pendingInputIdentity)),
   pendingQuestions: new Set(snapshot.pendingQuestions.map(pendingInputIdentity)),
-  running: snapshot.activity === "running",
+  running: snapshot.activity !== "idle",
   ref: snapshot.ref,
 });
 
@@ -147,16 +147,6 @@ export const createSessionOccurrenceProjector = ({
       taskId: projection.association.taskId,
     };
     return target;
-  };
-
-  const startRunningCycle = (projection: SessionProjection): void => {
-    if (projection.running) {
-      return;
-    }
-    projection.running = true;
-    projection.errorNotified = false;
-    projection.idleNotified = false;
-    projection.lastAssistantMessage = null;
   };
 
   const finishIdleCycle = (projection: SessionProjection): NotificationOccurrence[] => {
@@ -248,7 +238,13 @@ export const createSessionOccurrenceProjector = ({
     projection.association = association;
     projection.isSubagent = snapshot.parentExternalSessionId !== undefined;
     projection.ref = snapshot.ref;
-    projection.executionEpisodeId = snapshot.executionEpisodeId;
+    if (projection.executionEpisodeId !== snapshot.executionEpisodeId) {
+      projection.executionEpisodeId = snapshot.executionEpisodeId;
+      projection.errorNotified = false;
+      projection.idleNotified = false;
+      projection.lastAssistantMessage = null;
+      projection.running = false;
+    }
     if (projection.isSubagent) {
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
       projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
@@ -275,10 +271,10 @@ export const createSessionOccurrenceProjector = ({
     projection.pendingApprovals = nextApprovals;
     projection.pendingQuestions = nextQuestions;
 
-    if (snapshot.activity === "running") {
-      startRunningCycle(projection);
-    } else if (snapshot.activity === "idle") {
+    if (snapshot.activity === "idle") {
       occurrences.push(...finishIdleCycle(projection));
+    } else if (!projection.errorNotified && !projection.idleNotified) {
+      projection.running = true;
     }
     return occurrences;
   };

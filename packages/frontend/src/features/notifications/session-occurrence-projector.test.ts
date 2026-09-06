@@ -421,7 +421,7 @@ describe("session occurrence projector", () => {
 
     projector.accept({
       type: "session_upsert",
-      session: snapshot({ activity: "running" }),
+      session: snapshot({ activity: "running", executionEpisodeId: "episode-2" }),
     });
     projector.accept({
       type: "transcript_event",
@@ -564,4 +564,76 @@ describe("session occurrence projector", () => {
       }),
     ).toEqual([]);
   });
+});
+
+test.each(["retrying", "waiting_for_permission", "waiting_for_question"] as const)(
+  "resets terminal notification state when a new episode starts with %s",
+  (activity) => {
+    for (const terminal of ["error", "idle"] as const) {
+      const projector = createProjector();
+      projector.accept({
+        type: "snapshot",
+        repoPath: "/repo",
+        sessions: [snapshot({ activity: "running" })],
+      });
+      const error = transcript({
+        type: "session_error",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-09-06T00:00:00.000Z",
+        message: "First episode failed",
+      });
+      expect(projector.accept({ type: "transcript_event", event: error })).toHaveLength(1);
+      projector.accept({ type: "session_upsert", session: snapshot({ activity }) });
+      expect(projector.accept({ type: "transcript_event", event: error })).toEqual([]);
+      expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({ activity, executionEpisodeId: "episode-2" }),
+      });
+      const finish: AgentSessionLiveEnvelope =
+        terminal === "error"
+          ? { type: "transcript_event", event: { ...error, timestamp: "2026-09-06T00:01:00.000Z" } }
+          : { type: "session_upsert", session: snapshot({ executionEpisodeId: "episode-2" }) };
+      const notices = projector.accept(finish);
+      expect(notices).toHaveLength(1);
+      expect(notices[0]).toMatchObject({
+        kind: terminal === "error" ? "agent.session_error" : "agent.session_idle",
+        occurrenceId: expect.stringContaining("episode-2"),
+      });
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({ activity, executionEpisodeId: "episode-2" }),
+      });
+      expect(projector.accept(finish)).toEqual([]);
+    }
+  },
+);
+
+test("clears assistant text when an active snapshot moves directly to a new episode", () => {
+  const projector = createProjector();
+  projector.accept({
+    type: "snapshot",
+    repoPath: "/repo",
+    sessions: [snapshot({ activity: "running" })],
+  });
+  projector.accept({
+    type: "transcript_event",
+    event: transcript({
+      type: "assistant_message",
+      externalSessionId: ref.externalSessionId,
+      messageId: "old",
+      message: "Old episode output",
+      timestamp: "2026-09-06T00:00:00.000Z",
+    }),
+  });
+  projector.accept({
+    type: "session_upsert",
+    session: snapshot({ activity: "waiting_for_question", executionEpisodeId: "episode-2" }),
+  });
+  expect(
+    projector.accept({
+      type: "session_upsert",
+      session: snapshot({ executionEpisodeId: "episode-2" }),
+    }),
+  ).toMatchObject([{ kind: "agent.session_idle", status: "Agent Session is idle." }]);
 });

@@ -21,6 +21,7 @@ const coordinatorMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("occurrence_selected"),
+    claimId: z.string().min(1).optional(),
     occurrence: notificationOccurrenceSchema,
     settings: notificationSettingsSchema.removeDefault(),
   }),
@@ -182,7 +183,7 @@ export const createBrowserNotificationCoordinator = ({
   const selectedOccurrences = new Map<string, PendingOccurrence>();
   const pendingOccurrences = new Map<string, PendingOccurrence>();
   const claimedOccurrences = new Map<string, string>();
-  const claimingOccurrences = new Set<string>();
+  const claimingOccurrences = new Map<string, string>();
   const occurrenceListeners = new Set<
     (occurrence: NotificationOccurrence, settings: NotificationSettings) => void
   >();
@@ -336,8 +337,12 @@ export const createBrowserNotificationCoordinator = ({
     }
   };
 
-  const acceptSelection = (selection: PendingOccurrence): boolean => {
+  const acceptSelection = (selection: PendingOccurrence, claimId?: string): boolean => {
     const occurrenceId = selection.occurrence.occurrenceId;
+    if (claimId !== undefined) {
+      claimedOccurrences.set(occurrenceId, claimId);
+      pendingOccurrences.delete(occurrenceId);
+    }
     if (selectedOccurrences.has(occurrenceId)) return false;
     selectedOccurrences.set(occurrenceId, selection);
     candidateOccurrences.delete(occurrenceId);
@@ -352,12 +357,23 @@ export const createBrowserNotificationCoordinator = ({
     return true;
   };
 
+  const broadcastSelection = (selection: PendingOccurrence): void => {
+    const occurrenceId = selection.occurrence.occurrenceId;
+    const claimId = claimedOccurrences.get(occurrenceId) ?? claimingOccurrences.get(occurrenceId);
+    const message: Extract<CoordinatorMessage, { type: "occurrence_selected" }> = {
+      type: "occurrence_selected",
+      ...selection,
+    };
+    if (claimId !== undefined) message.claimId = claimId;
+    channel?.postMessage(message);
+  };
+
   const selectCandidate = (candidate: PendingOccurrence): void => {
     const occurrenceId = candidate.occurrence.occurrenceId;
     acceptSelection(candidate);
     const selection = selectedOccurrences.get(occurrenceId);
     if (selection) {
-      channel?.postMessage({ type: "occurrence_selected", ...selection });
+      broadcastSelection(selection);
     }
   };
 
@@ -406,13 +422,13 @@ export const createBrowserNotificationCoordinator = ({
     const pending = { occurrence: parsed.data.occurrence, settings: parsed.data.settings };
     const occurrenceId = pending.occurrence.occurrenceId;
     if (parsed.data.type === "occurrence_selected") {
-      acceptSelection(pending);
+      acceptSelection(pending, parsed.data.claimId);
       return;
     }
     const selected = selectedOccurrences.get(occurrenceId);
     if (selected) {
       if (externalDeliveryOwner) {
-        channel?.postMessage({ type: "occurrence_selected", ...selected });
+        broadcastSelection(selected);
       }
       return;
     }
@@ -561,8 +577,8 @@ export const createBrowserNotificationCoordinator = ({
         claimingOccurrences.has(occurrenceId)
       )
         return false;
-      claimingOccurrences.add(occurrenceId);
       const claimId = crypto.randomUUID();
+      claimingOccurrences.set(occurrenceId, claimId);
       try {
         await trackClaimPropagation(occurrenceId, claimId);
         claimedOccurrences.set(occurrenceId, claimId);

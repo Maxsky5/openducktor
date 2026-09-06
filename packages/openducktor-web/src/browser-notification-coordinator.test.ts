@@ -10,6 +10,7 @@ import { createBrowserNotificationCoordinator } from "./browser-notification-coo
 type CoordinatorMessage =
   | {
       type: "occurrence_candidate" | "occurrence_selected";
+      claimId?: string;
       occurrence: NotificationOccurrence;
       settings: NotificationSettings;
     }
@@ -1157,5 +1158,118 @@ test("rolls back a partially propagated claim before a new owner replays it", as
   await hub.flushNext(peerChannel, "external_delivery_claim_released");
   expect(replayed).toEqual([occurrence.occurrenceId]);
   await expect(peer.claimExternalDelivery(occurrence.occurrenceId)).resolves.toBe(true);
+  peer.dispose();
+});
+
+test.each(["completed", "pending", "released"] as const)(
+  "carries %s claim state to a tab that joins after the claim broadcast",
+  async (phase) => {
+    const hub = new FakeBroadcastHub(false);
+    const locks = new FakeLockManager();
+    let failPeerWait = false;
+    let rejectPeerWait = (_cause: Error): void => {};
+    let ownerChannel!: FakeBroadcastChannel;
+    let peerChannel!: FakeBroadcastChannel;
+    let lateChannel!: FakeBroadcastChannel;
+    const owner = createBrowserNotificationCoordinator({
+      createChannel: () => (ownerChannel = hub.createChannel()),
+      locks: {
+        query: () => locks.query(),
+        request: (name, options, callback) => {
+          if (failPeerWait && name === `${TAB_LOCK_NAME_PREFIX}peer`) {
+            return new Promise<void>((_resolve, reject) => {
+              rejectPeerWait = reject;
+            });
+          }
+          return locks.request(name, options, callback);
+        },
+      },
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "owner",
+    });
+    const peer = createBrowserNotificationCoordinator({
+      createChannel: () => (peerChannel = hub.createChannel()),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "peer",
+    });
+    await waitFor(() => owner.isExternalDeliveryOwner() && hub.channels.size === 2);
+    await owner.publishOccurrence(occurrence, settings);
+    await hub.flushNext(peerChannel, "occurrence_selected");
+    failPeerWait = phase === "released";
+    const claim = owner.claimExternalDelivery(occurrence.occurrenceId);
+    const claimResult = claim.catch((cause: unknown) => cause);
+    await hub.flushNext(peerChannel, "external_delivery_claimed");
+    if (phase === "completed") {
+      await hub.flushNext(ownerChannel, "external_delivery_claim_ack");
+      expect(await claimResult).toBe(true);
+    }
+    const late = createBrowserNotificationCoordinator({
+      createChannel: () => (lateChannel = hub.createChannel()),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "late",
+    });
+    await waitFor(() => hub.channels.size === 3);
+    const publication = late.publishOccurrence(occurrence, settings);
+    await hub.flushNext(ownerChannel, "occurrence_candidate");
+    await hub.flushNext(lateChannel, "occurrence_selected");
+    await publication;
+    if (phase === "pending") {
+      await hub.flushNext(ownerChannel, "external_delivery_claim_ack");
+      expect(await claimResult).toBe(true);
+    }
+    if (phase === "released") {
+      rejectPeerWait(new Error("Claim failed after late selection"));
+      expect(await claimResult).toBeInstanceOf(Error);
+    }
+    owner.dispose();
+    peer.dispose();
+    await waitFor(() => late.isExternalDeliveryOwner());
+    const replayed: string[] = [];
+    late.subscribeOccurrences((item) => replayed.push(item.occurrenceId));
+    expect(replayed).toEqual([]);
+    if (phase === "released") {
+      await hub.flushNext(lateChannel, "external_delivery_claim_released");
+      expect(replayed).toEqual([occurrence.occurrenceId]);
+    }
+    expect(await late.claimExternalDelivery(occurrence.occurrenceId)).toBe(phase === "released");
+    late.dispose();
+  },
+);
+
+test("applies a claim from a repeated selection before returning the cached selection", async () => {
+  const hub = new FakeBroadcastHub();
+  const locks = new FakeLockManager();
+  let peerChannel!: FakeBroadcastChannel;
+  const owner = createBrowserNotificationCoordinator({
+    createChannel: () => hub.createChannel(),
+    locks,
+    focusDocument: { hasFocus: () => false },
+    focusWindow: new FakeFocusWindow(),
+    tabId: "owner",
+  });
+  await waitFor(() => owner.isExternalDeliveryOwner());
+  const peer = createBrowserNotificationCoordinator({
+    createChannel: () => (peerChannel = hub.createChannel()),
+    locks,
+    focusDocument: { hasFocus: () => false },
+    focusWindow: new FakeFocusWindow(),
+    tabId: "peer",
+  });
+  await waitFor(() => hub.channels.size === 2);
+  await peer.publishOccurrence(occurrence, settings);
+  peerChannel.emit({
+    type: "occurrence_selected",
+    occurrence,
+    settings,
+    claimId: "completed-claim",
+  });
+  owner.dispose();
+  await waitFor(() => peer.isExternalDeliveryOwner());
+  expect(await peer.claimExternalDelivery(occurrence.occurrenceId)).toBe(false);
   peer.dispose();
 });

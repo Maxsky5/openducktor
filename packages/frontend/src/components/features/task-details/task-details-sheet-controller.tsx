@@ -49,10 +49,8 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
     ...unfilteredRepoTaskDataQueryOptions(repoPath ?? ""),
     enabled: repoPath !== null && taskId !== null && !boardTask,
   });
-  const task =
-    boardTask ??
-    (taskId ? taskQuery.data?.tasks.find((entry) => entry.id === taskId) : null) ??
-    null;
+  const sheetTasks = boardTask ? allTasks : (taskQuery.data?.tasks ?? allTasks);
+  const task = sheetTasks.find((entry) => entry.id === taskId) ?? null;
   useEffect(() => {
     if (!taskId || taskQuery.isFetching || taskQuery.isPending) return;
     if (taskQuery.data?.tasks.some((entry) => entry.id === taskId)) return;
@@ -101,7 +99,7 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
     <TaskDetailsSheet
       {...sheetProps}
       task={task}
-      allTasks={allTasks}
+      allTasks={sheetTasks}
       taskSessions={selectedTaskSessions}
       historicalSessions={selectedHistoricalSessions}
       hasActiveSession={Boolean(selectedActiveSessionContext)}
