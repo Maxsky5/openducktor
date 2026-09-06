@@ -1,13 +1,15 @@
-import type { ComponentProps, ComponentType } from "react";
+import type { ComponentProps, ComponentType, ReactElement } from "react";
 import type { ExtraProps } from "react-markdown";
 import { toast } from "sonner";
-import { MARKDOWN_COMPONENTS } from "@/components/ui/markdown-renderer-components";
 import {
   markdownLinkDestination,
   type MarkdownLinkPolicy,
 } from "@/components/ui/markdown-link-policy";
+import { MARKDOWN_COMPONENTS } from "@/components/ui/markdown-renderer-components";
 import { isChatLocalDestination } from "./agent-chat-file-link";
 import { useChatFileLinkAction } from "./agent-chat-file-link-context";
+
+type ChatMarkdownLinkProps = ComponentProps<"a"> & ExtraProps;
 
 export const CHAT_MARKDOWN_LINK_POLICY: MarkdownLinkPolicy = {
   anchor: ChatMarkdownLink,
@@ -15,11 +17,9 @@ export const CHAT_MARKDOWN_LINK_POLICY: MarkdownLinkPolicy = {
 };
 
 // SAFETY: The shared anchor entry is a component, not a tag name.
-const ExternalAnchor = MARKDOWN_COMPONENTS.document.a as ComponentType<
-  ComponentProps<"a"> & ExtraProps
->;
+const ExternalAnchor = MARKDOWN_COMPONENTS.document.a as ComponentType<ChatMarkdownLinkProps>;
 
-function ChatMarkdownLink({ href, node, children, ...props }: ComponentProps<"a"> & ExtraProps) {
+function ChatMarkdownLink({ href, node, children, ...props }: ChatMarkdownLinkProps): ReactElement {
   const openFile = useChatFileLinkAction();
   const destination = markdownLinkDestination(node);
   if (destination === undefined)

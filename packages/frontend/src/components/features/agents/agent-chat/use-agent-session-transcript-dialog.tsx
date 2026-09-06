@@ -1,4 +1,3 @@
-import { useTaskExecutionFilePreviewController } from "../file-preview/use-task-execution-file-preview-controller";
 import {
   type PropsWithChildren,
   type ReactElement,
@@ -9,6 +8,7 @@ import {
   useState,
 } from "react";
 import { useActiveWorkspace } from "@/state/app-state-provider";
+import { useTaskExecutionFilePreviewController } from "../file-preview/use-task-execution-file-preview-controller";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 import {
   AgentSessionTranscriptDialogContext,

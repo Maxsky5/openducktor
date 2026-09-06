@@ -1,8 +1,3 @@
-import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { UseTaskExecutionFilePreviewControllerResult } from "../file-preview/use-task-execution-file-preview-controller";
-import { TaskExecutionSelectedFilePreview } from "../task-execution-file-preview";
-import { ChatFileLinkProvider } from "./agent-chat-file-link-context";
 import { useLayoutEffect, useRef, type ReactElement } from "react";
 import {
   Dialog,
@@ -11,6 +6,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { UseTaskExecutionFilePreviewControllerResult } from "../file-preview/use-task-execution-file-preview-controller";
+import { TaskExecutionSelectedFilePreview } from "../task-execution-file-preview";
+import { ChatFileLinkProvider } from "./agent-chat-file-link-context";
 import { AgentChatSurface } from "./agent-chat";
 import { resolveAgentSessionDialogTitle } from "./agent-session-dialog-title";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";

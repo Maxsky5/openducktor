@@ -2,8 +2,9 @@ import type { Components, UrlTransform } from "react-markdown";
 
 const destinations = new WeakMap<Parameters<UrlTransform>[2], string>();
 
-export const markdownLinkDestination = (node: Parameters<UrlTransform>[2] | undefined) =>
-  node ? destinations.get(node) : undefined;
+export const markdownLinkDestination = (
+  node: Parameters<UrlTransform>[2] | undefined,
+): string | undefined => (node ? destinations.get(node) : undefined);
 
 /** Optional anchor policy. Images and default URL handling retain their own transform. */
 export type MarkdownLinkPolicy = {
