@@ -113,7 +113,10 @@ test("uses the settings navigation target in both explicit tests", async () => {
     expect.objectContaining({ navigationTarget: { type: "notification_settings" } }),
   );
   expect(showOsNotification).toHaveBeenCalledWith(
-    expect.objectContaining({ navigationTarget: { type: "notification_settings" } }),
+    expect.objectContaining({
+      purpose: "test",
+      navigationTarget: { type: "notification_settings" },
+    }),
   );
 });
 
@@ -537,6 +540,7 @@ describe("notification runtime tests", () => {
       loadSettings: async () => {
         const settings = createDefaultNotificationSettings();
         settings.volumePercent = 0;
+        settings.kinds["workflow.closed"].target = "both";
         return settings;
       },
       navigate: async () => {},
@@ -577,6 +581,7 @@ describe("notification runtime tests", () => {
       loadSettings: async () => {
         const settings = createDefaultNotificationSettings();
         settings.volumePercent = 0;
+        settings.kinds["workflow.closed"].target = "both";
         return settings;
       },
       navigate: async () => {},
@@ -687,6 +692,7 @@ describe("notification runtime tests", () => {
       loadSettings: async () => {
         const settings = createDefaultNotificationSettings();
         settings.volumePercent = 0;
+        settings.kinds["workflow.closed"].target = "both";
         return settings;
       },
       navigate: async () => {},
@@ -708,6 +714,7 @@ describe("notification runtime tests", () => {
     const loadSettings = mock(async () => {
       const settings = createDefaultNotificationSettings();
       settings.volumePercent = 0;
+      settings.kinds["workflow.closed"].target = "both";
       return settings;
     });
     const showOsNotification = mock(async (_request: NotificationOsDeliveryRequest) => ({
@@ -776,35 +783,44 @@ describe("notification runtime tests", () => {
     expect(isAppFocused).not.toHaveBeenCalled();
   });
 
-  test("does not claim external delivery for an in-app notice without sound", async () => {
-    const delivery = createDeliveryAdapters();
-    const withExternalDeliveryOwnership = mock(
-      async (_occurrenceId: string, dispatch: (owner: boolean) => Promise<void>) => dispatch(true),
-    );
-    const isAppFocused = mock(async () => false);
-    const runtime = createNotificationRuntime({
-      bridge: createBridge({ withExternalDeliveryOwnership, isAppFocused }),
-      loadSettings: async () => {
-        const settings = createDefaultNotificationSettings();
-        settings.kinds["workflow.closed"] = {
-          enabled: true,
-          target: "in_app",
-          sound: "none",
-        };
-        return settings;
-      },
-      navigate: async () => {},
-      onFailure: () => {},
-      inApp: delivery.inApp,
-      sound: delivery.sound,
-    });
+  test.each([
+    ["none", 30],
+    ["inherit", 0],
+  ] as const)(
+    "does not coordinate an in-app notice with cue %s at volume %s",
+    async (sound, volumePercent) => {
+      const delivery = createDeliveryAdapters();
+      const withExternalDeliveryOwnership = mock(
+        async (_occurrenceId: string, dispatch: (owner: boolean) => Promise<void>) =>
+          dispatch(true),
+      );
+      const isAppFocused = mock(async () => false);
+      const runtime = createNotificationRuntime({
+        bridge: createBridge({ withExternalDeliveryOwnership, isAppFocused }),
+        loadSettings: async () => {
+          const settings = createDefaultNotificationSettings();
+          settings.kinds["workflow.closed"] = {
+            enabled: true,
+            target: "in_app",
+            sound,
+          };
+          settings.volumePercent = volumePercent;
+          return settings;
+        },
+        navigate: async () => {},
+        onFailure: () => {},
+        inApp: delivery.inApp,
+        sound: delivery.sound,
+      });
 
-    await runtime.publishAndWait(workflowClosedOccurrence("event-local-only"));
+      await runtime.publishAndWait(workflowClosedOccurrence("event-local-only"));
 
-    expect(delivery.deliverInApp).toHaveBeenCalledTimes(1);
-    expect(withExternalDeliveryOwnership).not.toHaveBeenCalled();
-    expect(isAppFocused).not.toHaveBeenCalled();
-  });
+      expect(delivery.deliverInApp).toHaveBeenCalledTimes(1);
+      expect(withExternalDeliveryOwnership).not.toHaveBeenCalled();
+      expect(isAppFocused).not.toHaveBeenCalled();
+      expect(delivery.playSound).not.toHaveBeenCalled();
+    },
+  );
 
   test("sends always-send OS notices without reading focus", async () => {
     const delivery = createDeliveryAdapters();

@@ -291,3 +291,36 @@ test("retains immutable committed status changes while a lease waits for reconne
   expect(Object.isFrozen(retained.event.statusChanges[0]?.task)).toBe(true);
   manager.dispose();
 });
+
+test("protects created task snapshots retained for an SSE connection", () => {
+  const fake = createFakeStream();
+  const encoded: TaskEventStreamFrame[] = [];
+  const manager = createTaskEventLeaseManager({
+    encodeFrame: (frame) => {
+      encoded.push(frame);
+      return new Uint8Array();
+    },
+    reportDeliveryFailure: () => {},
+    scheduleExpiry: createInactiveTimer,
+    taskEventStream: fake.stream,
+  });
+  try {
+    const lease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
+    const published = change(1);
+    fake.emit(published);
+    if (published.type !== "change" || published.event.kind !== "external_task_created")
+      throw new Error("Expected created task");
+    published.event.taskSnapshot.title = "Changed after delivery";
+    const retained = lease.pendingFrames[0];
+    if (retained?.type !== "change" || retained.event.kind !== "external_task_created")
+      throw new Error("Expected retained created task");
+    expect(Reflect.set(retained.event.taskSnapshot, "status", "closed")).toBe(false);
+    const connection = createController();
+    manager.attach(lease, connection.controller);
+    expect(encoded).toMatchObject([
+      { event: { taskSnapshot: { id: "task-1", title: "Task", status: "open" } } },
+    ]);
+  } finally {
+    manager.dispose();
+  }
+});

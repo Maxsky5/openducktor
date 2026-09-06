@@ -203,6 +203,7 @@ export const notificationOsCapabilitySchema = z.strictObject({
 export type NotificationOsCapability = z.infer<typeof notificationOsCapabilitySchema>;
 
 export const notificationOsDeliveryRequestSchema = z.strictObject({
+  purpose: z.enum(["notification", "test"]).optional(),
   occurrenceId: z.string().trim().min(1).max(1024),
   title: z.string().trim().min(1).max(180),
   body: z.string().trim().min(1).max(500),

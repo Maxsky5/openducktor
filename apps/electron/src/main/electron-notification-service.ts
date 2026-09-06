@@ -100,6 +100,20 @@ export const createElectronNotificationService = ({
       };
     }
 
+    const permission = getPermission();
+    if (permission === "denied") {
+      return {
+        status: "denied",
+        message: "OS notification permission was denied. Enable notifications in system settings.",
+      };
+    }
+    if (permission === "prompt" && request.purpose !== "test") {
+      return {
+        status: "denied",
+        message: "OS notification permission is required. Use Test OS in notification settings.",
+      };
+    }
+
     return await new Promise<NotificationDeliveryResult>((resolve) => {
       let settled = false;
       let notification: ElectronNotificationInstance | undefined;

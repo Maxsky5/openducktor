@@ -148,6 +148,15 @@ describe("notification contracts", () => {
     } as const;
 
     expect(notificationOsDeliveryRequestSchema.parse(request)).toEqual(request);
+    for (const purpose of ["notification", "test"] as const) {
+      expect(notificationOsDeliveryRequestSchema.parse({ ...request, purpose })).toEqual({
+        ...request,
+        purpose,
+      });
+    }
+    expect(() =>
+      notificationOsDeliveryRequestSchema.parse({ ...request, purpose: "background_test" }),
+    ).toThrow();
     expect(() =>
       notificationOsDeliveryRequestSchema.parse({ ...request, silent: false }),
     ).toThrow();

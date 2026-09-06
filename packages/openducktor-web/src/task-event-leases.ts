@@ -50,8 +50,11 @@ const freezeFrame = (frame: TaskEventStreamFrame): TaskEventStreamFrame => {
     return Object.freeze({ ...frame, cursor: freezeCursor(frame.cursor) });
   }
   const event = (() => {
-    if (frame.event.kind !== "tasks_updated") {
-      return Object.freeze({ ...frame.event });
+    if (frame.event.kind === "external_task_created") {
+      return Object.freeze({
+        ...frame.event,
+        taskSnapshot: Object.freeze({ ...frame.event.taskSnapshot }),
+      });
     }
     const taskIds = [...frame.event.taskIds];
     const removedTaskIds = [...frame.event.removedTaskIds];

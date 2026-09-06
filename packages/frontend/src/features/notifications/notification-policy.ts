@@ -124,6 +124,7 @@ export const createNotificationPolicy = ({
     const deliveries: PendingDelivery[] = [];
     const osSelected = targetIncludesOs(kindSettings.target);
     const cue = resolveNotificationCue(kindSettings.sound, settings.globalCue);
+    const soundSelected = cue !== null && settings.volumePercent > 0;
     if (context.phase === "local" && !localOccurrences.has(occurrence.occurrenceId)) {
       localOccurrences.add(occurrence.occurrenceId);
       if (targetIncludesInApp(kindSettings.target)) {
@@ -138,7 +139,10 @@ export const createNotificationPolicy = ({
       if (osSelected && (settings.osFocus === "always_send" || context.appFocused === false)) {
         deliveries.push({ channel: "os", run: () => os.deliver(copy, occurrence) });
       }
-      if (cue && (settings.soundFocus === "always_play" || context.appFocused === false)) {
+      if (
+        soundSelected &&
+        (settings.soundFocus === "always_play" || context.appFocused === false)
+      ) {
         deliveries.push({ channel: "sound", run: () => sound.play(cue, settings.volumePercent) });
       }
     }
@@ -161,11 +165,11 @@ export const createNotificationPolicy = ({
       return { externalPlan: null, inAppDelivered };
     }
     const externalPlan =
-      osSelected || cue
+      osSelected || soundSelected
         ? {
             requiresFocus:
               (osSelected && settings.osFocus === "suppress_if_focused") ||
-              (Boolean(cue) && settings.soundFocus === "mute_while_focused"),
+              (soundSelected && settings.soundFocus === "mute_while_focused"),
           }
         : null;
     return { externalPlan, inAppDelivered };

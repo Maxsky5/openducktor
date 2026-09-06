@@ -43,6 +43,46 @@ const acknowledge = (
 ) => stream.acknowledge({ subscriptionId, cursor });
 
 describe("createTaskEventStream", () => {
+  test("protects created task snapshots across subscribers and replay", async () => {
+    const { stream } = createStream();
+    const received: TaskEventStreamFrame[] = [];
+    const mutationResults: boolean[] = [];
+    const first = stream.subscribe({ cursor: null }, (frame) => {
+      if (frame.type === "change" && frame.event.kind === "external_task_created") {
+        mutationResults.push(Reflect.set(frame.event.taskSnapshot, "title", "Changed by sink"));
+        mutationResults.push(Reflect.set(frame.event.taskSnapshot, "status", "closed"));
+      }
+    });
+    const second = stream.subscribe({ cursor: null }, (frame) => {
+      if (frame.type === "change") received.push(frame);
+    });
+    await flush();
+    acknowledge(stream, first.subscriptionId, { epoch, sequence: 0 });
+    acknowledge(stream, second.subscriptionId, { epoch, sequence: 0 });
+
+    const published = event("1");
+    stream.publish(published);
+    if (published.kind !== "external_task_created") throw new Error("Expected created task");
+    published.taskSnapshot.title = "Changed by publisher";
+    await flush();
+    const replayed = stream.subscribe({ cursor: { epoch, sequence: 0 } }, (frame) =>
+      received.push(frame),
+    );
+    await flush();
+
+    expect(mutationResults).toEqual([false, false]);
+    expect(received).toHaveLength(2);
+    for (const frame of received) {
+      expect(frame).toMatchObject({
+        type: "change",
+        event: { taskSnapshot: { id: "task-1", title: "Task", status: "open" } },
+      });
+    }
+    first.unsubscribe();
+    second.unsubscribe();
+    replayed.unsubscribe();
+  });
+
   test("delivers ordered live changes and replays from the acknowledged cursor", async () => {
     const { stream } = createStream();
     const initial: TaskEventStreamFrame[] = [];

@@ -70,6 +70,81 @@ const request = {
 };
 
 describe("Electron notification service", () => {
+  test.each([
+    ["denied", undefined],
+    ["denied", "notification"],
+    ["denied", "test"],
+    ["prompt", undefined],
+    ["prompt", "notification"],
+  ] as const)(
+    "blocks %s permission for purpose %s before native construction",
+    async (permission, purpose) => {
+      FakeNativeNotification.supported = true;
+      FakeNativeNotification.instances = [];
+      const service = createElectronNotificationService({
+        Notification: FakeNativeNotification,
+        getPermission: () => permission,
+        getWindows: () => [],
+      });
+      const result = await service.show({ ...request, purpose });
+      expect(result).toEqual({
+        status: "denied",
+        message: expect.stringContaining(permission === "prompt" ? "Test OS" : "system settings"),
+      });
+      expect(FakeNativeNotification.instances).toHaveLength(0);
+      service.dispose();
+    },
+  );
+
+  test.each(["granted", "not_applicable"] as const)(
+    "allows normal and test delivery with %s permission",
+    async (permission) => {
+      FakeNativeNotification.supported = true;
+      FakeNativeNotification.instances = [];
+      const service = createElectronNotificationService({
+        Notification: FakeNativeNotification,
+        getPermission: () => permission,
+        getWindows: () => [],
+      });
+      try {
+        for (const purpose of [undefined, "notification", "test"] as const) {
+          const pending = service.show({ ...request, purpose });
+          FakeNativeNotification.instances.at(-1)?.emit("show");
+          expect(await pending).toEqual({ status: "shown" });
+        }
+        expect(FakeNativeNotification.instances).toHaveLength(3);
+      } finally {
+        service.dispose();
+      }
+    },
+  );
+
+  test("keeps a pending permission test separate from normal delivery", async () => {
+    FakeNativeNotification.supported = true;
+    FakeNativeNotification.instances = [];
+    let permission: "prompt" | "granted" = "prompt";
+    const service = createElectronNotificationService({
+      Notification: FakeNativeNotification,
+      getPermission: () => permission,
+      getWindows: () => [],
+    });
+    try {
+      const pendingTest = service.show({ ...request, purpose: "test" });
+      expect(await service.show(request)).toMatchObject({ status: "denied" });
+      expect(FakeNativeNotification.instances).toHaveLength(1);
+      FakeNativeNotification.instances[0]?.emit("show");
+      expect(await pendingTest).toEqual({ status: "shown" });
+      expect(await service.show(request)).toMatchObject({ status: "denied" });
+
+      permission = "granted";
+      const normal = service.show(request);
+      FakeNativeNotification.instances[1]?.emit("show");
+      expect(await normal).toEqual({ status: "shown" });
+    } finally {
+      service.dispose();
+    }
+  });
+
   test("reports native support and uses silent delivery", async () => {
     FakeNativeNotification.supported = true;
     FakeNativeNotification.instances = [];

@@ -214,6 +214,7 @@ export const createNotificationRuntime = ({
       }
 
       const result = await bridge.showOsNotification({
+        purpose: "test",
         occurrenceId: testOccurrence.occurrenceId,
         title: "Notifications are working",
         body: "This is an OS notification test.",

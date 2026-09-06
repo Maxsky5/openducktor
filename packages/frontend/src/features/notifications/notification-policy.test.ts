@@ -56,6 +56,31 @@ const dispatchAsOwner = async (
 };
 
 describe("notification policy", () => {
+  test.each(["in_app", "os", "both"] as const)(
+    "keeps %s delivery while zero volume disables sound and its focus requirement",
+    async (target) => {
+      const harness = createHarness(target);
+      harness.settings.volumePercent = 0;
+      harness.settings.osFocus = "always_send";
+      harness.sound.mockImplementation(async () => {
+        throw new Error("Audio unavailable");
+      });
+
+      const local = await harness.policy.dispatch(occurrence, { phase: "local" }, harness.settings);
+      expect(local.externalPlan).toEqual(target === "in_app" ? null : { requiresFocus: false });
+      await harness.policy.dispatch(
+        occurrence,
+        { phase: "external", appFocused: false },
+        harness.settings,
+      );
+
+      expect(harness.inApp).toHaveBeenCalledTimes(target === "os" ? 0 : 1);
+      expect(harness.os).toHaveBeenCalledTimes(target === "in_app" ? 0 : 1);
+      expect(harness.sound).not.toHaveBeenCalled();
+      expect(harness.onFailure).not.toHaveBeenCalled();
+    },
+  );
+
   test.each([
     ["in_app", 1, 0],
     ["os", 0, 1],
