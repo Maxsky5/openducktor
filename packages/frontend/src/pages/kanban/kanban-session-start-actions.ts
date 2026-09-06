@@ -5,6 +5,7 @@ import type {
   ResolvedSessionStartDecision,
   RunSessionStartWorkflow,
 } from "@/features/session-start";
+import { isSessionStartFailureFeedbackHandled } from "@/features/session-start/session-start-orchestration";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 
@@ -55,6 +56,14 @@ export const startKanbanSessionFlow = async ({
     workflowInput.persistTaskTargetBranch = setTaskTargetBranch;
   }
   const workflow = await runSessionStartWorkflow(workflowInput);
+  if (
+    workflow.postStartActionError &&
+    !isSessionStartFailureFeedbackHandled(workflow.postStartActionError)
+  ) {
+    toast.error(`Session started, but the first message failed for ${request.taskId}.`, {
+      description: workflow.postStartActionError.message,
+    });
+  }
   if (startInBackground) {
     if (openAgentStudioTabOnBackgroundSessionStart) {
       if (!workspaceId) {

@@ -525,7 +525,7 @@ const runtimeDefinitionsValue = () => ({
 });
 
 const notificationContextValue: NotificationContextValue = {
-  osFailure: null,
+  deliveryFailure: null,
   getCapability: async () => ({
     platform: "unavailable",
     supported: false,

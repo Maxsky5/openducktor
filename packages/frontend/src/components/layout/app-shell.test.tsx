@@ -78,7 +78,7 @@ const activeRepoConfig = {
 } satisfies RepoConfig;
 
 const notificationContextValue = {
-  osFailure: null,
+  deliveryFailure: null,
   getCapability: async () => ({
     platform: "unavailable" as const,
     supported: false,

@@ -122,7 +122,7 @@ describe("session occurrence projector", () => {
     };
     first.accept(baseline);
     second.accept(baseline);
-    const idle = { type: "session_upsert" as const, session: snapshot() };
+    const idle = terminalEnvelope("session_idle");
     const [initial] = first.accept(idle);
     expect(initial).toBeDefined();
     expect(second.accept(idle)[0]?.occurrenceId).toBe(initial?.occurrenceId);
@@ -131,10 +131,7 @@ describe("session occurrence projector", () => {
       type: "session_upsert",
       session: snapshot({ activity: "running", executionEpisodeId: "episode-2" }),
     });
-    const [next] = first.accept({
-      type: "session_upsert",
-      session: snapshot({ executionEpisodeId: "episode-2" }),
-    });
+    const [next] = first.accept(terminalEnvelope("session_idle"));
     expect(next).toBeDefined();
     expect(next?.occurrenceId).not.toBe(initial?.occurrenceId);
   });
@@ -505,12 +502,7 @@ describe("session occurrence projector", () => {
       sessions: [snapshot({ activity: "running" })],
     });
 
-    expect(
-      projector.accept({
-        type: "session_upsert",
-        session: snapshot({ activity: "idle" }),
-      }),
-    ).toMatchObject([
+    expect(projector.accept(terminalEnvelope("session_idle"))).toMatchObject([
       {
         kind: "agent.session_idle",
         occurrenceId: expect.stringContaining("episode-1"),
@@ -593,7 +585,7 @@ test.each(["retrying", "waiting_for_permission", "waiting_for_question"] as cons
       const finish: AgentSessionLiveEnvelope =
         terminal === "error"
           ? { type: "transcript_event", event: { ...error, timestamp: "2026-09-06T00:01:00.000Z" } }
-          : { type: "session_upsert", session: snapshot({ executionEpisodeId: "episode-2" }) };
+          : terminalEnvelope("session_idle");
       const notices = projector.accept(finish);
       expect(notices).toHaveLength(1);
       expect(notices[0]).toMatchObject({
@@ -630,12 +622,9 @@ test("clears assistant text when an active snapshot moves directly to a new epis
     type: "session_upsert",
     session: snapshot({ activity: "waiting_for_question", executionEpisodeId: "episode-2" }),
   });
-  expect(
-    projector.accept({
-      type: "session_upsert",
-      session: snapshot({ executionEpisodeId: "episode-2" }),
-    }),
-  ).toMatchObject([{ kind: "agent.session_idle", status: "Agent Session is idle." }]);
+  expect(projector.accept(terminalEnvelope("session_idle"))).toMatchObject([
+    { kind: "agent.session_idle", status: "Agent Session is idle." },
+  ]);
 });
 
 const terminalEnvelope = (
@@ -669,7 +658,6 @@ for (const ownership of ["snapshot", "session_upsert"] as const) {
     "session_idle",
     "session_finished",
     "session_status",
-    "session_upsert",
   ] as const)(`retains live %s until ownership arrives through ${ownership}`, (type) => {
     let owned = false;
     const projector = createSessionOccurrenceProjector({
@@ -681,6 +669,7 @@ for (const ownership of ["snapshot", "session_upsert"] as const) {
     projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [] });
     projector.accept({ type: "session_upsert", session: snapshot({ activity: "running" }) });
     const terminal = terminalEnvelope(type);
+    expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
     expect(projector.accept(terminal)).toEqual([]);
     expect(projector.accept(terminal)).toEqual([]);
     owned = true;
@@ -768,6 +757,7 @@ test.each(["Session stopped", "Runtime stopped", "  RUNTIME STOPPED  "])(
   (message) => {
     const projector = createProjector();
     projector.accept({ type: "session_upsert", session: snapshot({ activity: "running" }) });
+    expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
     expect(
       projector.accept({
         type: "transcript_event",
@@ -783,6 +773,44 @@ test.each(["Session stopped", "Runtime stopped", "  RUNTIME STOPPED  "])(
     expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
   },
 );
+
+test.each([
+  "session_error",
+  "turn_error",
+  "session_idle",
+  "session_finished",
+  "session_status",
+] as const)("classifies %s after its idle upsert without an early completion", (type) => {
+  const projector = createProjector();
+  projector.accept({
+    type: "snapshot",
+    repoPath: "/repo",
+    sessions: [snapshot({ activity: "running" })],
+  });
+  expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
+  const terminal = terminalEnvelope(type);
+  expect(projector.accept(terminal).map((occurrence) => occurrence.kind)).toEqual([
+    type === "session_error" || type === "turn_error"
+      ? "agent.session_error"
+      : "agent.session_idle",
+  ]);
+  expect(projector.accept(terminal)).toEqual([]);
+  expect(projector.accept(terminalEnvelope("session_idle"))).toEqual([]);
+  expect(projector.accept({ type: "session_upsert", session: snapshot() })).toEqual([]);
+});
+
+test("does not infer a completion from an idle upsert after reconnect", () => {
+  const projector = createProjector();
+  projector.accept({ type: "session_upsert", session: snapshot({ activity: "running" }) });
+  projector.accept({ type: "session_upsert", session: snapshot() });
+  projector.accept({
+    type: "snapshot",
+    repoPath: "/repo",
+    isConnectionSnapshot: true,
+    sessions: [snapshot()],
+  });
+  expect(projector.accept(terminalEnvelope("session_idle"))).toEqual([]);
+});
 
 test("retains a request that first arrives with the ownership-resolving upsert", () => {
   let owned = false;

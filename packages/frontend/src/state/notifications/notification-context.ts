@@ -13,7 +13,7 @@ import type { TaskStreamNotificationSink } from "@/state/tasks/task-stream-contr
 export type NotificationNavigator = (target: NotificationNavigationTarget) => Promise<void>;
 
 export type NotificationContextValue = {
-  osFailure: NotificationDispatchFailure | null;
+  deliveryFailure: NotificationDispatchFailure | null;
   getCapability(): Promise<NotificationOsCapability>;
   openSystemSettings(): Promise<void>;
   previewCue(cue: NotificationCue, volumePercent: number): Promise<void>;

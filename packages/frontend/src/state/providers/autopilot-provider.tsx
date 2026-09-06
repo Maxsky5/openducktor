@@ -98,6 +98,13 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
                 toast.info(`Autopilot skipped ${observedEvent.task.id}.`, {
                   description: outcome.message,
                 });
+              } else if (
+                outcome.postStartActionError &&
+                !isSessionStartFailureFeedbackHandled(outcome.postStartActionError)
+              ) {
+                toast.error(`Autopilot message failed for ${observedEvent.task.id}.`, {
+                  description: outcome.postStartActionError.message,
+                });
               }
             } catch (error) {
               if (!isSessionStartFailureFeedbackHandled(error)) {

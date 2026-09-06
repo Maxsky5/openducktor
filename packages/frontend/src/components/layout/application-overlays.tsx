@@ -13,7 +13,7 @@ import {
 import { useNotificationContext } from "@/state/notifications/notification-context";
 
 function NotificationFailurePromptHost(): ReactElement {
-  const { osFailure } = useNotificationContext();
+  const { deliveryFailure } = useNotificationContext();
   const { openSettings } = useSettingsModal();
   const openNotificationSettings = useCallback(
     () => openSettings({ deepLink: { kind: "global", section: "notifications" } }),
@@ -22,7 +22,7 @@ function NotificationFailurePromptHost(): ReactElement {
   const reloadApplication = useCallback(() => window.location.reload(), []);
   return (
     <NotificationFailurePrompt
-      failure={osFailure}
+      failure={deliveryFailure}
       onOpenSettings={openNotificationSettings}
       onReload={reloadApplication}
     />

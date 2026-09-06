@@ -132,7 +132,7 @@ const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentModelCatalog> => 
 }));
 
 const notificationContextValue = {
-  osFailure: null,
+  deliveryFailure: null,
   getCapability: async () => ({
     platform: "unavailable" as const,
     supported: false,

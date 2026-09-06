@@ -1,8 +1,14 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { NotificationOccurrence } from "@openducktor/contracts";
+import {
+  createDefaultNotificationSettings,
+  type NotificationOccurrence,
+} from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
+import { toast } from "sonner";
+import { createNotificationPolicy } from "@/features/notifications/notification-policy";
+import { startKanbanSessionFlow } from "@/pages/kanban/kanban-session-start-actions";
 import { createMessageCardElement } from "@/components/features/agents/agent-chat/agent-chat-message-card-test-harness";
 import { buildSessionStartErrorOccurrence } from "@/features/notifications/session-start-occurrences";
 import {
@@ -59,6 +65,85 @@ const baseInput = {
 };
 
 describe("session-start notifications", () => {
+  test.each([
+    "disabled",
+    "os_suppressed",
+    "in_app",
+    "delivery_failed",
+    "publisher_failed",
+  ] as const)(
+    "preserves background kickoff failure feedback with %s notifications",
+    async (scenario) => {
+      const settings = createDefaultNotificationSettings();
+      settings.volumePercent = 0;
+      settings.kinds["agent.session_error"] = {
+        enabled: scenario !== "disabled",
+        target: scenario === "os_suppressed" ? "os" : "in_app",
+        sound: "none",
+      };
+      const deliverInApp = mock(async () => {
+        if (scenario === "delivery_failed") throw new Error("Toast delivery failed");
+      });
+      const deliverOs = mock(async () => {});
+      const policy = createNotificationPolicy({
+        loadSettings: async () => settings,
+        inApp: { deliver: deliverInApp },
+        os: { deliver: deliverOs },
+        sound: { play: async () => {} },
+        onFailure: () => {},
+      });
+      const notifications = createPublisher();
+      notifications.publishSessionError = async (input) => {
+        if (scenario === "publisher_failed") throw new Error("Publication failed");
+        const occurrence = buildSessionStartErrorOccurrence(
+          { repoPath: "/repo", repositoryLabel: "Repo" },
+          input,
+        );
+        const local = await policy.dispatch(occurrence, { phase: "local" }, settings);
+        if (local.externalPlan)
+          await policy.dispatch(occurrence, { phase: "external", appFocused: true }, settings);
+        return local.inAppDelivered;
+      };
+      const runSessionStartWorkflow = createSessionStartWorkflowRunner({
+        queryClient: new QueryClient(),
+        workspaceId: "workspace-1",
+        startAgentSession: async () => session,
+        sendAgentMessage: async () => {
+          throw new Error("First message failed");
+        },
+        notifications,
+      });
+      const showError = spyOn(toast, "error").mockImplementation(() => "error-toast");
+      try {
+        const started = await startKanbanSessionFlow({
+          request: { ...baseInput.request, postStartAction: "send_message", message: "Continue" },
+          decision: baseInput.decision,
+          tasks: [baseInput.task],
+          workspaceId: "workspace-1",
+          startInBackground: true,
+          openAgentStudioTabOnBackgroundSessionStart: false,
+          roleLabels: { spec: "Spec", planner: "Planner", build: "Builder", qa: "QA" },
+          runSessionStartWorkflow,
+          saveAgentStudioTab: async () => {},
+          humanRequestChangesTask: async () => {},
+          openSessionInAgentStudio: () => {},
+        });
+        expect(started).toMatchObject(session);
+        expect(showError).toHaveBeenCalledTimes(scenario === "in_app" ? 0 : 1);
+        if (scenario !== "in_app") {
+          expect(showError).toHaveBeenCalledWith(
+            "Session started, but the first message failed for task-1.",
+            { description: "First message failed" },
+          );
+        }
+        expect(deliverOs).not.toHaveBeenCalled();
+        expect(notifications.publishSessionStarted).not.toHaveBeenCalled();
+      } finally {
+        showError.mockRestore();
+      }
+    },
+  );
+
   test("publishes Started only for a successful fresh or fork start", async () => {
     const notifications = createPublisher();
     const runner = createSessionStartWorkflowRunner({

@@ -17,7 +17,7 @@ afterEach(cleanup);
 const createNotificationContext = (
   overrides: Partial<NotificationContextValue> = {},
 ): NotificationContextValue => ({
-  osFailure: null,
+  deliveryFailure: null,
   getCapability: async () => ({
     platform: "browser",
     supported: true,
@@ -59,6 +59,35 @@ function NotificationsHarness({ context }: { context: NotificationContextValue }
 }
 
 describe("SettingsNotificationsSection", () => {
+  test.each([
+    ["sound", "Last sound error"],
+    ["settings", "Last notification settings error"],
+    ["coordination", "Last browser notification coordination error"],
+    ["os", "Last OS error"],
+  ] as const)("labels a %s failure separately from OS permission", async (channel, label) => {
+    render(
+      <NotificationsHarness
+        context={createNotificationContext({
+          deliveryFailure: {
+            channel,
+            kind: "agent.session_error",
+            occurrenceId: "failed",
+            repoPath: "/repo",
+            message: "Delivery detail",
+          },
+        })}
+      />,
+    );
+    const failure = screen.getByRole("alert");
+    expect(failure.textContent).toBe(`${label}: Delivery detail`);
+    const permissionTitle = await screen.findByText("Turn on OS notifications");
+    expect(permissionTitle.closest('[role="status"]')?.contains(failure)).toBe(false);
+    if (channel !== "os") expect(screen.queryByText(/Last OS error/)).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Test OS" }).hasAttribute("disabled")).toBe(false),
+    );
+  });
+
   test("reports preview failure and clears it after a successful preview", async () => {
     let fail = true;
     render(

@@ -6,7 +6,7 @@ import type {
   NotificationOccurrence,
   TaskCard,
 } from "@openducktor/contracts";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import { createDeferred, createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { createNotificationTaskObserver as createTaskObserver } from "./notification-task-observer";
 import { createNotificationWorkspaceObserver } from "./notification-workspace-observer";
 
@@ -158,6 +158,112 @@ test("reads new ownership from Query before the queued task notification sink ru
 });
 
 describe("all-workspace notification observation", () => {
+  test("projects queued changes after the initial baseline without a second read", async () => {
+    const baseline = createDeferred<TaskCard[]>();
+    const loadTasks = mock(async () => baseline.promise);
+    const published: NotificationOccurrence[] = [];
+    const observer = createNotificationTaskObserver({
+      loadTasks,
+      loadSessionRecords: async () => ({}),
+      publish: (occurrence) => published.push(occurrence),
+      onFailure: (failure) => {
+        throw failure.cause;
+      },
+    });
+    const sync = observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+    const changes = [
+      { eventId: "blocked", previousStatus: "in_progress", status: "blocked" },
+      { eventId: "closed", previousStatus: "blocked", status: "closed" },
+    ] as const;
+    const events = changes.map(({ eventId, previousStatus, status }) => ({
+      kind: "tasks_updated" as const,
+      repoPath: "/repo-a",
+      eventId,
+      taskIds: ["task-1"],
+      removedTaskIds: [],
+      taskSnapshots: [{ id: "task-1", title: "Task", status }],
+      statusChanges: [{ previousStatus, task: { id: "task-1", title: "Task", status } }],
+      emittedAt: "2026-09-06T10:00:00.000Z",
+    }));
+    const pending = events.map((event) => observer.sink.onChange(event));
+    await flush();
+    expect(loadTasks).toHaveBeenCalledTimes(1);
+    expect(published).toEqual([]);
+    baseline.resolve([createTaskCardFixture({ id: "task-1", status: "closed" })]);
+    await Promise.all([sync, ...pending]);
+    for (const event of events) await observer.sink.onChange(event);
+    expect(published.map((occurrence) => occurrence.kind)).toEqual([
+      "workflow.blocked",
+      "workflow.closed",
+    ]);
+    expect(loadTasks).toHaveBeenCalledTimes(1);
+  });
+
+  test("drops waiting changes when the workspace is removed and registered again", async () => {
+    const baseline = createDeferred<TaskCard[]>();
+    const published = mock(() => {});
+    const loadTasks = mock(async () => baseline.promise);
+    const observer = createNotificationTaskObserver({
+      loadTasks,
+      loadSessionRecords: async () => ({}),
+      publish: published,
+      onFailure: (failure) => {
+        throw failure.cause;
+      },
+    });
+    const workspace = { repoPath: "/repo-a", repositoryLabel: "Repo A" };
+    const firstSync = observer.syncWorkspaces([workspace]);
+    const pending = observer.sink.onChange({
+      kind: "tasks_updated",
+      repoPath: workspace.repoPath,
+      eventId: "old-change",
+      taskIds: ["task-1"],
+      removedTaskIds: [],
+      taskSnapshots: [{ id: "task-1", title: "Old task", status: "closed" }],
+      statusChanges: [
+        { previousStatus: "blocked", task: { id: "task-1", title: "Old task", status: "closed" } },
+      ],
+      emittedAt: "2026-09-06T10:00:00.000Z",
+    });
+    await observer.syncWorkspaces([]);
+    loadTasks.mockImplementation(async () => []);
+    await observer.syncWorkspaces([workspace]);
+    baseline.resolve([createTaskCardFixture({ id: "task-1", title: "Old task" })]);
+    await Promise.all([firstSync, pending]);
+    expect(published).not.toHaveBeenCalled();
+    expect(observer.resolveTask(workspace.repoPath, "task-1")).toBeNull();
+  });
+
+  test("reports a failed initial baseline without silently consuming a waiting change", async () => {
+    const baseline = createDeferred<TaskCard[]>();
+    const onFailure = mock(() => {});
+    const observer = createNotificationTaskObserver({
+      loadTasks: async () => baseline.promise,
+      loadSessionRecords: async () => ({}),
+      publish: () => {},
+      onFailure,
+    });
+    const sync = observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+    const pending = observer.sink.onChange({
+      kind: "tasks_updated",
+      repoPath: "/repo-a",
+      eventId: "waiting",
+      taskIds: ["task-1"],
+      removedTaskIds: [],
+      taskSnapshots: [],
+      statusChanges: [],
+      emittedAt: "2026-09-06T10:00:00.000Z",
+    });
+    baseline.reject(new Error("Task read failed"));
+    await sync;
+    await expect(pending).rejects.toThrow(
+      "Task notification baseline is unavailable. Reload to reconnect.",
+    );
+    expect(onFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ cause: expect.objectContaining({ message: "Task read failed" }) }),
+    );
+  });
+
   test("does not restore a workspace removed while its baseline is loading", async () => {
     let finishBaseline: ((tasks: TaskCard[]) => void) | undefined;
     const baseline = new Promise<TaskCard[]>((resolve) => {
@@ -482,6 +588,16 @@ test("retains full-identity workflow associations when the next session read fai
   };
   listener({ type: "session_upsert", session: live });
   listener({ type: "session_upsert", session: { ...live, activity: "idle" } });
+  expect(published).toEqual([]);
+  listener({
+    type: "transcript_event",
+    event: {
+      type: "session_idle",
+      sessionRef: ref,
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-09-05T10:01:00.000Z",
+    },
+  });
   expect(published).toMatchObject([{ kind: "agent.session_idle", task: { id: "task-1" } }]);
   observer.dispose();
 });

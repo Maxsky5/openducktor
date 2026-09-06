@@ -367,7 +367,15 @@ export const createSessionStartWorkflowRunner = ({
     const notificationWithSession = { ...notificationInput, session };
     try {
       if (postStartActionError) {
-        await notifications?.publishSessionError(notificationWithSession);
+        const feedbackHandled =
+          (await notifications?.publishSessionError(notificationWithSession)) ?? false;
+        return {
+          ...result,
+          postStartActionError: new SessionStartWorkflowError(
+            postStartActionError,
+            feedbackHandled,
+          ),
+        };
       } else if (input.decision.startMode === "fresh" || input.decision.startMode === "fork") {
         notifications?.publishSessionStarted(notificationWithSession);
       }

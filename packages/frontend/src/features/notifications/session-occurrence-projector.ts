@@ -321,9 +321,7 @@ export const createSessionOccurrenceProjector = ({
     projection.pendingApprovals = nextApprovals;
     projection.pendingQuestions = nextQuestions;
 
-    if (snapshot.activity === "idle") {
-      occurrences.push(...finishIdleCycle(projection));
-    } else if (!projection.errorNotified && !projection.idleNotified) {
+    if (snapshot.activity !== "idle" && !projection.errorNotified && !projection.idleNotified) {
       projection.running = true;
     }
     return [...reconcileTerminalOwnership(projection), ...occurrences];

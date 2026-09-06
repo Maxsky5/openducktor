@@ -28,7 +28,7 @@ export const runtimeDefinitions = [
 ];
 
 const notificationContextValue = {
-  osFailure: null,
+  deliveryFailure: null,
   getCapability: async () => ({
     platform: "browser" as const,
     supported: true,

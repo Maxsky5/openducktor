@@ -48,6 +48,14 @@ const soundFocusOptions: SegmentedOption<NotificationSettings["soundFocus"]>[] =
   { value: "always_play", label: "Always play" },
 ];
 
+const deliveryFailureLabels = {
+  in_app: "Last in-app error",
+  os: "Last OS error",
+  sound: "Last sound error",
+  settings: "Last notification settings error",
+  coordination: "Last browser notification coordination error",
+};
+
 type PermissionNoticePresentation = {
   title: string;
   className: string;
@@ -367,11 +375,6 @@ export function SettingsNotificationsSection({
                 This platform cannot guarantee silent OS delivery.
               </p>
             ) : null}
-            {notificationRuntime.osFailure ? (
-              <p className="mt-1 text-sm leading-5">
-                Last OS error: {notificationRuntime.osFailure.message}
-              </p>
-            ) : null}
           </div>
         </div>
         {canOpenSystemSettings ? (
@@ -386,6 +389,13 @@ export function SettingsNotificationsSection({
           </Button>
         ) : null}
       </div>
+
+      {notificationRuntime.deliveryFailure ? (
+        <p className="text-sm text-destructive" role="alert">
+          {deliveryFailureLabels[notificationRuntime.deliveryFailure.channel]}:{" "}
+          {notificationRuntime.deliveryFailure.message}
+        </p>
+      ) : null}
 
       <section className="grid gap-3">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

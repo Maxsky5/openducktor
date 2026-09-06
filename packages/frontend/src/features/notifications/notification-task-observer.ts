@@ -109,8 +109,17 @@ export const createNotificationTaskObserver = ({
     if (!workspace) return;
     let entry = entries.get(event.repoPath);
     if (!entry || entry.label !== workspace.repositoryLabel) {
-      await loadBaseline(workspace);
-      return;
+      const pending = baselineLoads.get(event.repoPath);
+      if (pending?.workspace === workspace) {
+        await pending.promise;
+      } else {
+        await loadBaseline(workspace);
+      }
+      if (workspaces.get(event.repoPath) !== workspace) return;
+      entry = entries.get(event.repoPath);
+      if (!entry || entry.label !== workspace.repositoryLabel) {
+        throw new Error("Task notification baseline is unavailable. Reload to reconnect.");
+      }
     }
     const occurrences = entry.projector.projectChange(event);
     for (const taskId of event.removedTaskIds) entry.tasks.delete(taskId);
@@ -147,7 +156,7 @@ export const createNotificationTaskObserver = ({
       for (const workspace of nextWorkspaces) {
         let owner = workspaces.get(workspace.repoPath);
         if (!owner || owner.repositoryLabel !== workspace.repositoryLabel) {
-          owner = workspace;
+          owner = { ...workspace };
           workspaces.set(workspace.repoPath, owner);
         }
         const pending = baselineLoads.get(workspace.repoPath);

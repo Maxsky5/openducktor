@@ -216,7 +216,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
 
   const value = useMemo<NotificationContextValue>(
     () => ({
-      osFailure: selectNotificationFailure(failureState),
+      deliveryFailure: selectNotificationFailure(failureState),
       getCapability: runtime.getCapability,
       openSystemSettings: runtime.openSystemSettings,
       previewCue: runtime.previewCue,
