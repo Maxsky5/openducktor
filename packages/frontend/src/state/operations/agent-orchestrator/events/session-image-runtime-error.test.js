@@ -182,3 +182,131 @@ for (const request of [
     }
   });
 }
+
+test("replayed failed turns settle their own images without settling a newer turn", async () => {
+  const stream = createRuntimeStreamSubscription();
+  const threadId = "thread/start-runtime-live";
+  const sessionsRef = createSessionsRef([
+    buildSession({
+      runtimeKind: "codex",
+      repoPath: "/repo",
+      workingDirectory: "/repo",
+      externalSessionId: threadId,
+    }),
+  ]);
+  const consumer = createAgentSessionTranscriptEventConsumer(
+    {
+      readSession: (identity) => getAgentSession(sessionsRef.current, identity),
+      ensureSession: (_identity, create) => create(),
+      updateSession: createSessionUpdater(sessionsRef),
+      updateSessionTodos: () => {},
+      sessionTurnState: createSessionTurnState(),
+    },
+    { batchWindowMs: 0 },
+  );
+  const events = [];
+  const { adapter } = createHarness({
+    subscribeEvents: stream.subscribeEvents,
+    onLiveSessionMutation: (mutation) => {
+      for (const event of mutation.transcriptEvents) {
+        events.push(event);
+        consumer.handle(event);
+      }
+    },
+  });
+  const startImage = async (turnId, itemId) => {
+    stream.emitNotification({
+      method: "turn/started",
+      params: { threadId, turn: codexTurnFixture({ id: turnId, status: "inProgress", items: [] }) },
+    });
+    await flushCodexAdapterWork();
+    stream.emitNotification({
+      method: "item/started",
+      params: {
+        threadId,
+        turnId,
+        startedAtMs: Date.now(),
+        item: {
+          type: "imageGeneration",
+          id: itemId,
+          status: "in_progress",
+          result: "",
+          revisedPrompt: null,
+          transparentBackground: null,
+          failure: null,
+        },
+      },
+    });
+    await flushCodexAdapterWork();
+  };
+  const oldFailure = {
+    method: "turn/completed",
+    params: {
+      threadId,
+      turn: codexTurnFixture({
+        id: "old-turn",
+        status: "failed",
+        items: [],
+        error: { message: "Old turn failed", codexErrorInfo: null, additionalDetails: null },
+      }),
+    },
+  };
+  try {
+    await adapter.startSession(codexStartSessionInput());
+    await startImage("old-turn", "old-image");
+    stream.emitNotification(oldFailure);
+    await flushCodexAdapterWork();
+    expect(getSessionMessages(sessionsRef, threadId)[0]?.meta).toMatchObject({
+      itemId: "old-image",
+      status: "incomplete",
+      incompleteReason: "runtime_failure",
+    });
+    await startImage("new-turn", "new-image");
+    const newImage = getSessionMessages(sessionsRef, threadId).find(
+      (message) => message.meta?.itemId === "new-image",
+    );
+    expect(newImage?.meta).toMatchObject({ status: "running", turnId: "new-turn" });
+    const beforeReplay = events.length;
+    stream.emitNotification(oldFailure);
+    await flushCodexAdapterWork();
+    expect(
+      events.slice(beforeReplay).filter((event) => event.type === "image_generation_settled"),
+    ).toEqual([expect.objectContaining({ turnId: "old-turn", reason: "runtime_failure" })]);
+    expect(
+      events
+        .slice(beforeReplay)
+        .some((event) => event.type === "assistant_part" && event.part.itemId === "new-image"),
+    ).toBe(false);
+    expect(
+      getSessionMessages(sessionsRef, threadId).find(
+        (message) => message.meta?.itemId === "new-image",
+      ),
+    ).toBe(newImage);
+    stream.emitNotification({
+      method: "item/completed",
+      params: {
+        threadId,
+        turnId: "new-turn",
+        completedAtMs: Date.now(),
+        item: {
+          type: "imageGeneration",
+          id: "new-image",
+          status: "completed",
+          result: "",
+          revisedPrompt: null,
+          transparentBackground: null,
+          failure: null,
+        },
+      },
+    });
+    await flushCodexAdapterWork();
+    expect(
+      getSessionMessages(sessionsRef, threadId).find(
+        (message) => message.meta?.itemId === "new-image",
+      )?.meta,
+    ).toMatchObject({ status: "completed" });
+  } finally {
+    adapter.releaseRuntime("runtime-live");
+    consumer.close();
+  }
+});

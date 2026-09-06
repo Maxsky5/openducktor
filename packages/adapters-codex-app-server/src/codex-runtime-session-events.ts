@@ -820,12 +820,7 @@ export class CodexRuntimeSessionEvents {
       if (session.runtimeId !== runtimeId) {
         continue;
       }
-      this.emitSessionEventForSession(session, {
-        type: "session_error",
-        externalSessionId: session.threadId,
-        timestamp: new Date().toISOString(),
-        message,
-      });
+      this.emitSessionErrorForSession(session, message);
     }
   }
 
@@ -1064,6 +1059,10 @@ export class CodexRuntimeSessionEvents {
         this.emitSessionEvent(externalSessionId, event),
       emitRetainedSessionEvent: (session, event) => {
         if (this.deps.sessions.get(session.threadId) === session) {
+          if (event.type === "session_error") {
+            this.emitSessionErrorForSession(session, event.message);
+            return;
+          }
           this.emitSessionEventForSession(session, event);
         }
       },
@@ -1107,6 +1106,8 @@ export class CodexRuntimeSessionEvents {
   }
 
   private emitSessionErrorForSession(session: CodexSessionState, cause: unknown): void {
+    // Runtime/request failures affect the session. Streaming settles turn failures by turn ID.
+    this.settleImageGenerations(session, undefined, "runtime_failure");
     this.emitSessionEventForSession(session, {
       type: "session_error",
       externalSessionId: session.threadId,
@@ -1167,9 +1168,6 @@ export class CodexRuntimeSessionEvents {
   }
 
   private emitSessionEventForSession(session: CodexSessionState, event: AgentEvent): void {
-    if (event.type === "session_error") {
-      this.settleImageGenerations(session, undefined, "runtime_failure");
-    }
     const sessionRef = codexSessionRef(session);
     const imageEvent =
       event.type === "assistant_part" && event.part.kind === "image_generation"
