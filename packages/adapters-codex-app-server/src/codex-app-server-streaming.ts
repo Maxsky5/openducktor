@@ -1,4 +1,4 @@
-import type { CodexImageSettlement } from "./codex-image-generation-state";
+import type { CodexImageGenerationEnd } from "./codex-image-generation-state";
 import type { CodexAppServerThreadStatus, CodexAppServerTurn } from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
@@ -68,11 +68,7 @@ export type CodexStreamingContext = {
   latestTodosBySessionId: Map<string, AgentSessionTodoItem[]>;
   eventMapperPipeline: CodexEventMapperPipeline;
   startImageGenerationTurn(session: CodexSessionState, turnId: string, timestamp: string): void;
-  settleImageGenerations(
-    session: CodexSessionState,
-    turnId: string | undefined,
-    reason: CodexImageSettlement,
-  ): void;
+  settleImageGenerations(session: CodexSessionState, end: CodexImageGenerationEnd): void;
   recordStartedItemTimestamp(
     runtimeId: string,
     threadId: string,
@@ -640,7 +636,12 @@ export const handleCodexPendingNotifications = async (
           continue;
         }
         if (isIdleStatus) {
-          context.settleImageGenerations(session, activeTurn?.turnId, "turn_ended");
+          context.settleImageGenerations(
+            session,
+            activeTurn?.turnId
+              ? { scope: "turn", turnId: activeTurn.turnId, reason: "turn_ended" }
+              : { scope: "session", reason: "turn_ended" },
+          );
           emitUnlinkedSpawnFailures(context, session, timestamp);
         }
         const liveStatus = codexThreadStatusSnapshot(notification.params.status);
@@ -754,15 +755,16 @@ export const handleCodexPendingNotifications = async (
       emitUnlinkedSpawnFailures(context, session, timestamp);
       const turn = notification.params.turn;
       const turnId = turn.id;
-      context.settleImageGenerations(
-        session,
+      context.settleImageGenerations(session, {
+        scope: "turn",
         turnId,
-        turn.status === "interrupted"
-          ? "interrupted"
-          : turn.status === "failed"
-            ? "runtime_failure"
-            : "turn_ended",
-      );
+        reason:
+          turn.status === "interrupted"
+            ? "interrupted"
+            : turn.status === "failed"
+              ? "runtime_failure"
+              : "turn_ended",
+      });
       if (turn.status === "completed") {
         const completedAgentMessage = context.completedAgentMessagesByTurnKey.get(
           codexTurnKey(session.threadId, turnId),

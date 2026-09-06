@@ -93,7 +93,7 @@ export type CodexServerRequestHandlerContext = {
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
-  emitRetainedSessionEvent(session: CodexSessionState, event: AgentEvent): void;
+  emitRetainedSessionFailure(session: CodexSessionState, message: string): void;
   emitRoutedRequestEvent?(targetSession: CodexSessionState, event: AgentEvent): void;
 };
 
@@ -276,12 +276,10 @@ export const handleCodexServerRequest = async (
         forgetHandled();
         throw error;
       }
-      context.emitRetainedSessionEvent(routeContext.policySession, {
-        type: "session_error",
-        externalSessionId: routeContext.policySession.threadId,
-        timestamp: new Date().toISOString(),
-        message: `Rejected Codex MCP request '${mcpElicitationApproval.tool?.name}' because ${workflowToolDecision.reason}.`,
-      });
+      context.emitRetainedSessionFailure(
+        routeContext.policySession,
+        `Rejected Codex MCP request '${mcpElicitationApproval.tool?.name}' because ${workflowToolDecision.reason}.`,
+      );
       return false;
     }
     if (workflowToolDecision.kind === "allow") {
@@ -505,11 +503,9 @@ export const handleCodexServerRequest = async (
     forgetHandled();
     throw error;
   }
-  context.emitRetainedSessionEvent(routeContext.policySession, {
-    type: "session_error",
-    externalSessionId: routeContext.policySession.threadId,
-    timestamp: new Date().toISOString(),
-    message: "Rejected Codex dynamic tool request because OpenDucktor workflow tools must use MCP.",
-  });
+  context.emitRetainedSessionFailure(
+    routeContext.policySession,
+    "Rejected Codex dynamic tool request because OpenDucktor workflow tools must use MCP.",
+  );
   return false;
 };

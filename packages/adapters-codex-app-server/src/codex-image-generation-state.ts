@@ -6,6 +6,9 @@ import {
 } from "@openducktor/core";
 
 export type CodexImageSettlement = AgentImageGenerationSettlement;
+export type CodexImageGenerationEnd =
+  | { scope: "turn"; turnId: string; reason: CodexImageSettlement }
+  | { scope: "session"; reason: Exclude<CodexImageSettlement, "interrupted"> };
 type ThreadImages = {
   items: Map<string, AgentImageGenerationPart>;
   terminalTurns: Map<string, CodexImageSettlement>;
@@ -87,17 +90,17 @@ export class CodexImageGenerationState {
   settle(
     runtimeId: string,
     threadId: string,
-    turnId: string | undefined,
-    reason: CodexImageSettlement,
+    end: CodexImageGenerationEnd,
     timestamp: string,
   ): AgentImageGenerationPart[] {
+    const { reason } = end;
     const state = this.thread(runtimeId, threadId);
     const recordTurn = (id: string) => {
       if (state.terminalTurns.get(id) !== "interrupted") state.terminalTurns.set(id, reason);
     };
-    if (turnId !== undefined) {
-      recordTurn(turnId);
-      state.startedTurns.delete(turnId);
+    if (end.scope === "turn") {
+      recordTurn(end.turnId);
+      state.startedTurns.delete(end.turnId);
     } else {
       state.sessionEnd = { timestamp, reason };
       for (const id of state.startedTurns) recordTurn(id);
@@ -105,7 +108,7 @@ export class CodexImageGenerationState {
     }
     const settled: AgentImageGenerationPart[] = [];
     for (const item of state.items.values()) {
-      if (turnId !== undefined && item.turnId !== turnId) continue;
+      if (end.scope === "turn" && item.turnId !== end.turnId) continue;
       if (item.turnId !== undefined) recordTurn(item.turnId);
       const next = settleAgentImageGeneration(item, reason);
       if (next === item) continue;

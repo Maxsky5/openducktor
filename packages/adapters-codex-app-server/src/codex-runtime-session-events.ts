@@ -1,6 +1,6 @@
 import {
   CodexImageGenerationState,
-  type CodexImageSettlement,
+  type CodexImageGenerationEnd,
 } from "./codex-image-generation-state";
 import {
   agentSessionTranscriptEventSchema,
@@ -743,7 +743,7 @@ export class CodexRuntimeSessionEvents {
       return;
     }
     if (owner) {
-      this.emitSessionErrorForSession(owner.targetSession, cause);
+      this.emitRuntimeSessionFailure(owner.targetSession, cause);
     }
   }
 
@@ -820,7 +820,7 @@ export class CodexRuntimeSessionEvents {
       if (session.runtimeId !== runtimeId) {
         continue;
       }
-      this.emitSessionErrorForSession(session, message);
+      this.emitRuntimeSessionFailure(session, message);
     }
   }
 
@@ -947,8 +947,7 @@ export class CodexRuntimeSessionEvents {
           turnId,
         });
       },
-      settleImageGenerations: (session, turnId, reason) =>
-        this.settleImageGenerations(session, turnId, reason),
+      settleImageGenerations: (session, end) => this.settleImageGenerations(session, end),
       recordStartedItemTimestamp: (runtimeId, threadId, itemId, startedAtMs) =>
         this.recordStartedItemTimestamp(runtimeId, threadId, itemId, startedAtMs),
       takeStartedItemTimestamp: (runtimeId, threadId, itemId) =>
@@ -1057,13 +1056,9 @@ export class CodexRuntimeSessionEvents {
         this.deps.flushQueuedUserMessagesLater(activeTurn),
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
-      emitRetainedSessionEvent: (session, event) => {
+      emitRetainedSessionFailure: (session, message) => {
         if (this.deps.sessions.get(session.threadId) === session) {
-          if (event.type === "session_error") {
-            this.emitSessionErrorForSession(session, event.message);
-            return;
-          }
-          this.emitSessionEventForSession(session, event);
+          this.emitRuntimeSessionFailure(session, message);
         }
       },
       emitRoutedRequestEvent: (eventTargetSession, event) =>
@@ -1102,12 +1097,12 @@ export class CodexRuntimeSessionEvents {
     if (!session) {
       return;
     }
-    this.emitSessionErrorForSession(session, cause);
+    this.emitRuntimeSessionFailure(session, cause);
   }
 
-  private emitSessionErrorForSession(session: CodexSessionState, cause: unknown): void {
+  private emitRuntimeSessionFailure(session: CodexSessionState, cause: unknown): void {
     // Runtime/request failures affect the session. Streaming settles turn failures by turn ID.
-    this.settleImageGenerations(session, undefined, "runtime_failure");
+    this.settleImageGenerations(session, { scope: "session", reason: "runtime_failure" });
     this.emitSessionEventForSession(session, {
       type: "session_error",
       externalSessionId: session.threadId,
@@ -1134,25 +1129,20 @@ export class CodexRuntimeSessionEvents {
     return this.imageGenerations.prepareHistory(runtimeId, threadId);
   }
 
-  settleImageGenerations(
-    session: CodexSessionState,
-    turnId: string | undefined,
-    reason: CodexImageSettlement,
-  ): AgentEvent[] {
+  settleImageGenerations(session: CodexSessionState, end: CodexImageGenerationEnd): AgentEvent[] {
     const settlement: AgentEvent = {
       type: "image_generation_settled",
       externalSessionId: session.threadId,
       timestamp: new Date().toISOString(),
-      reason,
+      reason: end.reason,
     };
-    if (turnId !== undefined) settlement.turnId = turnId;
+    if (end.scope === "turn") settlement.turnId = end.turnId;
     this.emitSessionEventForSession(session, settlement);
     const events: AgentEvent[] = [withAgentSessionRef(codexSessionRef(session), settlement)];
     for (const part of this.imageGenerations.settle(
       session.runtimeId,
       session.threadId,
-      turnId,
-      reason,
+      end,
       settlement.timestamp,
     )) {
       const event: AgentEvent = {

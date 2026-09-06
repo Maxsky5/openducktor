@@ -321,11 +321,10 @@ export class CodexAppServerAdapter
       )
         continue;
       events.push(
-        ...this.runtimeEvents.settleImageGenerations(
-          session,
-          undefined,
-          sessionRef ? "turn_ended" : "runtime_failure",
-        ),
+        ...this.runtimeEvents.settleImageGenerations(session, {
+          scope: "session",
+          reason: sessionRef ? "turn_ended" : "runtime_failure",
+        }),
       );
     }
     return events;
@@ -338,7 +337,10 @@ export class CodexAppServerAdapter
       releaseSessions: () => {
         for (const session of this.localSessions.values()) {
           if (session.runtimeId === runtimeId)
-            this.runtimeEvents.settleImageGenerations(session, undefined, "runtime_failure");
+            this.runtimeEvents.settleImageGenerations(session, {
+              scope: "session",
+              reason: "runtime_failure",
+            });
         }
         this.localSessions.releaseRuntime(runtimeId);
       },
@@ -1229,7 +1231,7 @@ export class CodexAppServerAdapter
   }
 
   private releaseSessionTree(session: CodexSessionState): void {
-    this.runtimeEvents.settleImageGenerations(session, undefined, "turn_ended");
+    this.runtimeEvents.settleImageGenerations(session, { scope: "session", reason: "turn_ended" });
     const descendants = this.subagents.descendantRoutesForParent(
       session.threadId,
       session.runtimeId,
@@ -1248,7 +1250,11 @@ export class CodexAppServerAdapter
       });
       if (this.localSessions.has(route.childExternalSessionId)) {
         const child = this.localSessions.get(route.childExternalSessionId);
-        if (child) this.runtimeEvents.settleImageGenerations(child, undefined, "turn_ended");
+        if (child)
+          this.runtimeEvents.settleImageGenerations(child, {
+            scope: "session",
+            reason: "turn_ended",
+          });
         this.localSessions.release(route.childExternalSessionId);
       }
     }
