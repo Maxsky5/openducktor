@@ -41,38 +41,7 @@ import { AgentSessionTranscriptDialogHost } from "./use-agent-session-transcript
 
 enableReactActEnvironment();
 
-export const dialogTargets = {
-  main: {
-    externalSessionId: "main",
-    runtimeKind: "opencode",
-    workingDirectory: "/repo/main",
-    sessionScope: { kind: "workflow", taskId: "a", role: "build" },
-  },
-  child: {
-    externalSessionId: "child",
-    runtimeKind: "codex",
-    workingDirectory: "/repo/child",
-    sessionScope: { kind: "workflow", taskId: "a", role: "build" },
-  },
-  other: {
-    externalSessionId: "other",
-    runtimeKind: "opencode",
-    workingDirectory: "/repo/other",
-    sessionScope: { kind: "workflow", taskId: "b", role: "build" },
-  },
-} satisfies Record<string, AgentSessionTranscriptTarget>;
-
-export const dialogTextFile = (rootPath: string, contents = `Contents of ${rootPath}`) => ({
-  kind: "text" as const,
-  rootPath,
-  relativePath: "src/file.ts",
-  contents,
-  size: contents.length,
-  mtimeMs: 1,
-  revision: `revision:${contents}`,
-});
-
-/** Keep the actual dialog host, transcript, controller, Query reader, and editor state. Replace only shell I/O and Pierre's DOM renderer. */
+/** Use the real dialog, transcript, controller, Query reader, and editor state. Mock shell I/O and Pierre's DOM renderer. */
 export function createDialogPreviewHarness() {
   const frames = createAnimationFrameTestDriver();
   frames.install();
@@ -244,3 +213,34 @@ export function createDialogPreviewHarness() {
     },
   };
 }
+
+export const dialogTargets = {
+  main: {
+    externalSessionId: "main",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo/main",
+    sessionScope: { kind: "workflow", taskId: "a", role: "build" },
+  },
+  child: {
+    externalSessionId: "child",
+    runtimeKind: "codex",
+    workingDirectory: "/repo/child",
+    sessionScope: { kind: "workflow", taskId: "a", role: "build" },
+  },
+  other: {
+    externalSessionId: "other",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo/other",
+    sessionScope: { kind: "workflow", taskId: "b", role: "build" },
+  },
+} satisfies Record<string, AgentSessionTranscriptTarget>;
+
+export const dialogTextFile = (rootPath: string, contents = `Contents of ${rootPath}`) => ({
+  kind: "text" as const,
+  rootPath,
+  relativePath: "src/file.ts",
+  contents,
+  size: contents.length,
+  mtimeMs: 1,
+  revision: `revision:${contents}`,
+});

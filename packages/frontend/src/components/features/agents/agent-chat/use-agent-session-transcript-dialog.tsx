@@ -18,7 +18,8 @@ import {
 const DEFAULT_TITLE = "Conversation";
 const DEFAULT_DESCRIPTION = "Read-only conversation.";
 
-function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): ReactElement {
+/** Keep transcript changes behind the preview's draft and save checks. */
+export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren): ReactElement {
   const preview = useTaskExecutionFilePreviewController();
   const { requestContextTransition } = preview;
   const activeWorkspace = useActiveWorkspace();
@@ -57,29 +58,23 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
     [cancelContentFrame, requestContextTransition],
   );
 
+  const reset = useCallback(() => {
+    cancelContentFrame();
+    setContentRequest(null);
+    setRequest(null);
+  }, [cancelContentFrame]);
+
   const closeSessionTranscript = useCallback(() => {
-    requestContextTransition(() => {
-      cancelContentFrame();
-      setContentRequest(null);
-      setRequest(null);
-    });
-  }, [cancelContentFrame, requestContextTransition]);
+    requestContextTransition(reset);
+  }, [reset, requestContextTransition]);
 
   useEffect(() => cancelContentFrame, [cancelContentFrame]);
   const previousRepoRef = useRef(workspaceRepoPath);
   useEffect(() => {
     if (previousRepoRef.current === workspaceRepoPath) return;
     previousRepoRef.current = workspaceRepoPath;
-    requestContextTransition(
-      () => {
-        cancelContentFrame();
-        setContentRequest(null);
-        setRequest(null);
-      },
-      undefined,
-      { force: true },
-    );
-  }, [cancelContentFrame, requestContextTransition, workspaceRepoPath]);
+    requestContextTransition(reset, undefined, { force: true });
+  }, [reset, requestContextTransition, workspaceRepoPath]);
 
   const contextValue = useMemo(
     () => ({
@@ -107,8 +102,4 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
       />
     </AgentSessionTranscriptDialogContext.Provider>
   );
-}
-
-export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren): ReactElement {
-  return <AgentSessionTranscriptDialogProvider>{children}</AgentSessionTranscriptDialogProvider>;
 }

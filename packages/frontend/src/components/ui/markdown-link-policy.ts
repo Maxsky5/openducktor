@@ -19,7 +19,7 @@ export const markdownLinkUrlTransform = (
   return (url, key, node) => {
     if (node.tagName !== "a" || key !== "href" || !policy.handlesDestination(url))
       return transform(url, key, node);
-    // Associate the destination with the node without exposing a navigation URL.
+    // Keep the destination off the anchor's navigation URL.
     destinations.set(node, url);
     return "#";
   };

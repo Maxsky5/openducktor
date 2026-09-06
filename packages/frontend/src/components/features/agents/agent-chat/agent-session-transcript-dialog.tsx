@@ -36,6 +36,34 @@ type AgentSessionTranscriptDialogContentProps = {
   description: string;
 };
 
+export function AgentSessionTranscriptDialog({
+  preview,
+  workspaceRepoPath,
+  target,
+  open,
+  onOpenChange,
+  title,
+  description,
+}: AgentSessionTranscriptDialogProps): ReactElement {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex h-[min(88vh,960px)] max-w-[min(96vw,1100px)] flex-col gap-0 overflow-hidden p-0">
+        {target ? (
+          <AgentSessionTranscriptDialogContent
+            preview={preview}
+            workspaceRepoPath={workspaceRepoPath}
+            target={target}
+            title={title}
+            description={description}
+          />
+        ) : (
+          <AgentSessionTranscriptDialogLoading title={title} description={description} />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AgentSessionTranscriptDialogLoading({
   title,
   description,
@@ -123,33 +151,5 @@ function AgentSessionTranscriptDialogContent({
         ) : null}
       </div>
     </>
-  );
-}
-
-export function AgentSessionTranscriptDialog({
-  preview,
-  workspaceRepoPath,
-  target,
-  open,
-  onOpenChange,
-  title,
-  description,
-}: AgentSessionTranscriptDialogProps): ReactElement {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(88vh,960px)] max-w-[min(96vw,1100px)] flex-col gap-0 overflow-hidden p-0">
-        {target ? (
-          <AgentSessionTranscriptDialogContent
-            preview={preview}
-            workspaceRepoPath={workspaceRepoPath}
-            target={target}
-            title={title}
-            description={description}
-          />
-        ) : (
-          <AgentSessionTranscriptDialogLoading title={title} description={description} />
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }

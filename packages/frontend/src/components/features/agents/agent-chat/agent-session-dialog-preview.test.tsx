@@ -260,7 +260,7 @@ test("nested conflict and discard dialogs keep focus and the draft in the conver
 test("closing before the content frame prevents the old target from mounting after reopen", async () => {
   const h = createDialogPreviewHarness();
   try {
-    // Start opening without draining the host's two-frame content installation.
+    // Start opening before the host's two content frames run.
     const opening = h.open();
     h.close();
     await opening;

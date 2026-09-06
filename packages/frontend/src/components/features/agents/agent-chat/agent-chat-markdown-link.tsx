@@ -9,7 +9,12 @@ import {
 import { isChatLocalDestination } from "./agent-chat-file-link";
 import { useChatFileLinkAction } from "./agent-chat-file-link-context";
 
-// SAFETY: This registry entry is the shared HTML anchor renderer, not a tag-name override.
+export const CHAT_MARKDOWN_LINK_POLICY: MarkdownLinkPolicy = {
+  anchor: ChatMarkdownLink,
+  handlesDestination: isChatLocalDestination,
+};
+
+// SAFETY: The shared anchor entry is a component, not a tag name.
 const ExternalAnchor = MARKDOWN_COMPONENTS.document.a as ComponentType<
   ComponentProps<"a"> & ExtraProps
 >;
@@ -59,8 +64,3 @@ function ChatMarkdownLink({ href, node, children, ...props }: ComponentProps<"a"
     </a>
   );
 }
-
-export const CHAT_MARKDOWN_LINK_POLICY: MarkdownLinkPolicy = {
-  anchor: ChatMarkdownLink,
-  handlesDestination: isChatLocalDestination,
-};
