@@ -1107,7 +1107,6 @@ export class CodexRuntimeSessionEvents {
   }
 
   private emitSessionErrorForSession(session: CodexSessionState, cause: unknown): void {
-    this.settleImageGenerations(session, undefined, "runtime_failure");
     this.emitSessionEventForSession(session, {
       type: "session_error",
       externalSessionId: session.threadId,
@@ -1168,6 +1167,9 @@ export class CodexRuntimeSessionEvents {
   }
 
   private emitSessionEventForSession(session: CodexSessionState, event: AgentEvent): void {
+    if (event.type === "session_error") {
+      this.settleImageGenerations(session, undefined, "runtime_failure");
+    }
     const sessionRef = codexSessionRef(session);
     const imageEvent =
       event.type === "assistant_part" && event.part.kind === "image_generation"
