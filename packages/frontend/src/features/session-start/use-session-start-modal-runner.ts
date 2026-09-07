@@ -53,6 +53,7 @@ type SessionStartModalRunResult = {
 };
 
 type PendingModalRun = {
+  scopeKey: string | null;
   request: SessionStartModalRunRequest;
   execute: (result: SessionStartModalRunResult) => Promise<() => void>;
   cancel: () => void;
@@ -171,8 +172,9 @@ export function useSessionStartModalRunner({
   const scopeRef = useRef(scopeKey);
   const selectionRef = useRef<AgentModelSelection | null>(null);
   const pendingRunRef = useRef<PendingModalRun | null>(null);
-  const [isStarting, setIsStarting] = useState(false);
-  const confirmingRef = useRef(false);
+  const confirmationsRef = useRef(new Map<string | null, PendingModalRun>());
+  const [confirmations, setConfirmations] = useState(confirmationsRef.current);
+  const isStarting = confirmations.has(scopeKey);
   const [promptRetry, setPromptRetry] = useState(0);
   const [promptState, setPromptState] = useState<{
     key: string;
@@ -288,7 +290,7 @@ export function useSessionStartModalRunner({
       request: SessionStartModalRunRequest,
       execute: (result: SessionStartModalRunResult) => Promise<T>,
     ): Promise<T | undefined> => {
-      if (confirmingRef.current) {
+      if (confirmationsRef.current.has(scopeKey)) {
         throw new Error("A session start is already in progress.");
       }
       resolvePendingRun();
@@ -309,6 +311,7 @@ export function useSessionStartModalRunner({
 
       return new Promise<T | undefined>((resolve) => {
         pendingRunRef.current = {
+          scopeKey,
           request: identifiedRequest,
           execute: async (result) => {
             const value = await execute(result);
@@ -318,7 +321,7 @@ export function useSessionStartModalRunner({
         };
       });
     },
-    [openStartModal, resolvePendingRun],
+    [openStartModal, resolvePendingRun, scopeKey],
   );
 
   const confirmModal = useCallback(
@@ -326,7 +329,7 @@ export function useSessionStartModalRunner({
       if (
         !input ||
         input === true ||
-        confirmingRef.current ||
+        confirmationsRef.current.has(scopeKey) ||
         promptLoading ||
         (needsPrompt && promptState?.error)
       ) {
@@ -339,12 +342,16 @@ export function useSessionStartModalRunner({
         return;
       }
 
-      if (pendingRun.request.requestId !== intent?.requestId || scopeRef.current !== scopeKey)
+      if (
+        pendingRun.request.requestId !== intent?.requestId ||
+        pendingRun.scopeKey !== scopeKey ||
+        scopeRef.current !== scopeKey
+      )
         return;
       const requestContext = pendingRun.request;
 
-      confirmingRef.current = true;
-      setIsStarting(true);
+      confirmationsRef.current = new Map(confirmationsRef.current).set(scopeKey, pendingRun);
+      setConfirmations(confirmationsRef.current);
       try {
         const decision = buildSessionStartModalDecision({
           input,
@@ -392,8 +399,12 @@ export function useSessionStartModalRunner({
           });
         }
       } finally {
-        confirmingRef.current = false;
-        setIsStarting(false);
+        if (confirmationsRef.current.get(scopeKey) === pendingRun) {
+          const remaining = new Map(confirmationsRef.current);
+          remaining.delete(scopeKey);
+          confirmationsRef.current = remaining;
+          setConfirmations(remaining);
+        }
       }
     },
     [

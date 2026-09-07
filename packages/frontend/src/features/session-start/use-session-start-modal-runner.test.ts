@@ -602,3 +602,126 @@ test("ignores out-of-order branch prompt results and blocks unresolved confirmat
     await harness.unmount();
   }
 });
+
+for (const changedScope of ["task", "workspace", "role"] as const) {
+  test(`confirmation in another ${changedScope} retains its own pending state`, async () => {
+    let finishA!: () => void;
+    let finishB!: () => void;
+    const pendingA = new Promise<void>((resolve) => {
+      finishA = resolve;
+    });
+    const pendingB = new Promise<void>((resolve) => {
+      finishB = resolve;
+    });
+    const executeA = mock(async () => {
+      await pendingA;
+      return "A";
+    });
+    const executeB = mock(async () => {
+      await pendingB;
+      return "B";
+    });
+    const props = {
+      favoriteState: {
+        favorites: [],
+        isLoading: false,
+        readError: null,
+        isMutationPending: false,
+        mutationError: null,
+        canMutate: false,
+        toggleFavorite: () => {},
+        retryRead: () => {},
+        retryMutation: () => {},
+      },
+      repoSettings: null,
+      workspaceRepoPath: "/repo",
+      scopeKey: "/repo:TASK-1:build",
+    };
+    const harness = createHookHarness(useSessionStartModalRunner, props, {
+      runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        loadRepoRuntimeCatalog: async () => CATALOG,
+      }),
+    });
+    const request = {
+      source: "agent_studio",
+      taskId: "TASK-1",
+      role: "build",
+      launchActionId: "build_implementation_start",
+      postStartAction: "none",
+      selectedModel: SELECTED_MODEL,
+    } as const;
+    const input = {
+      startMode: "fresh",
+      sourceSessionOptionValue: null,
+      runInBackground: false,
+    } as const;
+    await harness.mount();
+    try {
+      let resultA!: Promise<string | undefined>;
+      let resultB!: Promise<string | undefined>;
+      await harness.run((runner) => {
+        resultA = runner.runSessionStartRequest(request, executeA);
+      });
+      await harness.waitFor((runner) =>
+        Boolean(runner.sessionStartModal && !runner.sessionStartModal.isSelectionCatalogLoading),
+      );
+      await harness.run((runner) => {
+        void runner.sessionStartModal?.onConfirm(input);
+      });
+      expect(executeA).toHaveBeenCalledTimes(1);
+      await harness.update({
+        ...props,
+        workspaceRepoPath: changedScope === "workspace" ? "/other" : "/repo",
+        scopeKey:
+          changedScope === "workspace"
+            ? "/other:TASK-1:build"
+            : changedScope === "task"
+              ? "/repo:TASK-2:build"
+              : "/repo:TASK-1:qa",
+      });
+      expect(await resultA).toBeUndefined();
+      await harness.run((runner) => {
+        resultB = runner.runSessionStartRequest(
+          { ...request, taskId: changedScope === "task" ? "TASK-2" : "TASK-1" },
+          executeB,
+        );
+      });
+      await harness.waitFor((runner) =>
+        Boolean(runner.sessionStartModal && !runner.sessionStartModal.isSelectionCatalogLoading),
+      );
+      expect(harness.getLatest().sessionStartModal?.isStarting).toBe(false);
+      await harness.run((runner) => {
+        void runner.sessionStartModal?.onConfirm(input);
+      });
+      expect(executeB).toHaveBeenCalledTimes(1);
+      await harness.run(() => {
+        finishA();
+      });
+      expect(harness.getLatest().sessionStartModal?.isStarting).toBe(true);
+      await harness.run((runner) => {
+        void runner.sessionStartModal?.onConfirm(input);
+        expect(() => runner.runSessionStartRequest(request, executeB)).toThrow(
+          "A session start is already in progress.",
+        );
+        runner.sessionStartModal?.onOpenChange(false);
+      });
+      expect(harness.getLatest().sessionStartModal?.open).toBe(true);
+      expect(executeB).toHaveBeenCalledTimes(1);
+      await harness.run(() => {
+        finishB();
+      });
+      expect(await resultB).toBe("B");
+      expect(executeA).toHaveBeenCalledTimes(1);
+      expect(executeB).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().sessionStartModal?.open).not.toBe(true);
+    } finally {
+      await harness.run(() => {
+        finishA();
+        finishB();
+      });
+      await harness.unmount();
+    }
+  });
+}
