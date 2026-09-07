@@ -135,7 +135,7 @@ describe("launcher internals", () => {
         packageRoot: "/web-package",
         workspaceMode: false,
       }).fs?.allow,
-    ).toEqual(["/web-package", "/frontend/src"]);
+    ).toEqual(["/web-package", path.join("/web-package", "../frontend/src")]);
   });
 
   test("does not restrict Vite hosts for IP external URLs", () => {
