@@ -9,6 +9,7 @@ import type {
   ClaudeSession,
   ClaudeSessionStore,
 } from "./claude-agent-sdk-types";
+import { clearClaudeStreamToolInputTree } from "./claude-agent-sdk-tool-input-stream";
 import { claudeSessionRef } from "./claude-agent-sdk-utils";
 
 export type CreateClaudeAgentSdkSessionStoreInput = {
@@ -45,6 +46,7 @@ export const createClaudeAgentSdkSessionStore = ({
     }
   };
   const close = (session: ClaudeSession): void => {
+    clearClaudeStreamToolInputTree(session);
     rejectPendingApprovals(session, "Claude session was stopped.");
     const queuedMessageIds = session.queuedSdkMessages.flatMap((message) =>
       message.uuid ? [message.uuid] : [],

@@ -1,3 +1,4 @@
+import { HostValidationError } from "../../effect/host-errors";
 import type { ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import {
@@ -35,15 +36,6 @@ const toolStreamStateFor = (session: ClaudeToolInputStreamSession): ToolStreamSt
   return state;
 };
 
-const tryParseJsonRecord = (json: string) => {
-  try {
-    const parsed = claudeProtocolObjectSchema.safeParse(JSON.parse(json));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-};
-
 const toolInputFingerprint = (input: ClaudeProtocolObject): string => JSON.stringify(input);
 
 export const rememberClaudeStreamToolStart = (
@@ -60,6 +52,10 @@ export const rememberClaudeStreamToolStart = (
     entry.lastEmittedInputFingerprint = toolInputFingerprint(toolUse.input);
   }
   const state = toolStreamStateFor(session);
+  const previous = state.toolsByBlockIndex.get(blockIndex);
+  if (previous) {
+    state.toolsByCallId.delete(previous.toolUse.callId);
+  }
   state.toolsByBlockIndex.set(blockIndex, entry);
   state.toolsByCallId.set(toolUse.callId, entry);
 };
@@ -68,16 +64,41 @@ export const appendClaudeStreamToolInputJson = (
   session: ClaudeToolInputStreamSession,
   blockIndex: number,
   partialJson: string,
+): void => {
+  const entry = toolStreamStates.get(session)?.toolsByBlockIndex.get(blockIndex);
+  if (entry) {
+    entry.partialInputJson += partialJson;
+  }
+};
+
+export const completeClaudeStreamToolInput = (
+  session: ClaudeToolInputStreamSession,
+  blockIndex: number,
 ): ClaudeDecodedToolUse | null => {
-  const entry = toolStreamStateFor(session).toolsByBlockIndex.get(blockIndex);
-  if (!entry) {
+  const state = toolStreamStates.get(session);
+  const entry = state?.toolsByBlockIndex.get(blockIndex);
+  if (!state || !entry) {
+    return null;
+  }
+  state.toolsByBlockIndex.delete(blockIndex);
+  const json = entry.partialInputJson;
+  entry.partialInputJson = "";
+  if (json.length === 0) {
     return null;
   }
 
-  entry.partialInputJson += partialJson;
-  const parsedInput = tryParseJsonRecord(entry.partialInputJson);
-  if (!parsedInput) {
-    return null;
+  // The SDK delivers complete tool input at content_block_stop.
+  let parsedInput: ClaudeProtocolObject;
+  try {
+    parsedInput = claudeProtocolObjectSchema.parse(JSON.parse(json));
+  } catch (cause) {
+    state.toolsByCallId.delete(entry.toolUse.callId);
+    throw new HostValidationError({
+      field: "claudeStreamToolInput",
+      message: `Claude SDK sent invalid completed tool input for "${entry.toolUse.callId}" (${entry.toolUse.toolName}, block ${blockIndex}). Retry the turn.`,
+      cause,
+      details: { callId: entry.toolUse.callId, blockIndex, toolName: entry.toolUse.toolName },
+    });
   }
 
   const nextFingerprint = toolInputFingerprint(parsedInput);
@@ -98,12 +119,40 @@ export const consumeClaudeStreamEmittedToolInput = (
   callId: string,
   input: ClaudeToolInput,
 ): boolean => {
-  const state = toolStreamStateFor(session);
-  const entry = state.toolsByCallId.get(callId);
-  if (!entry) {
+  const state = toolStreamStates.get(session);
+  const entry = state?.toolsByCallId.get(callId);
+  if (!state || !entry) {
     return false;
   }
   state.toolsByCallId.delete(callId);
-  state.toolsByBlockIndex.delete(entry.blockIndex);
+  if (state.toolsByBlockIndex.get(entry.blockIndex) === entry) {
+    state.toolsByBlockIndex.delete(entry.blockIndex);
+  }
   return entry.lastEmittedInputFingerprint === toolInputFingerprint(input);
+};
+
+export const discardClaudeStreamToolInputBlocks = (session: ClaudeToolInputStreamSession): void => {
+  const state = toolStreamStates.get(session);
+  if (!state) {
+    return;
+  }
+  for (const entry of state.toolsByBlockIndex.values()) {
+    state.toolsByCallId.delete(entry.toolUse.callId);
+  }
+  state.toolsByBlockIndex.clear();
+};
+
+type ClaudeToolInputStreamTree = ClaudeToolInputStreamSession & {
+  subagentEventSessionsByToolUseId?: ReadonlyMap<string, ClaudeToolInputStreamTree>;
+};
+
+export const clearClaudeStreamToolInputs = (session: ClaudeToolInputStreamSession): void => {
+  toolStreamStates.delete(session);
+};
+
+export const clearClaudeStreamToolInputTree = (session: ClaudeToolInputStreamTree): void => {
+  clearClaudeStreamToolInputs(session);
+  for (const child of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+    clearClaudeStreamToolInputTree(child);
+  }
 };
