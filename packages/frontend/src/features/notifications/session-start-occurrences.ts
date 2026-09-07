@@ -55,6 +55,7 @@ export const buildSessionStartedOccurrence = (
 export const buildSessionStartErrorOccurrence = (
   workspace: SessionStartWorkspace,
   input: SessionStartNotificationInput,
+  message?: string,
 ): NotificationOccurrence => {
   const sessionSuffix = input.session ? `:${agentSessionIdentityKey(input.session)}` : "";
   const occurrence: NotificationOccurrence = {
@@ -64,7 +65,9 @@ export const buildSessionStartErrorOccurrence = (
     repositoryLabel: workspace.repositoryLabel,
     task: task(input),
     role: input.role,
-    status: "Agent Session failed to start or send its first message.",
+    status:
+      message?.trim().replace(/\s+/g, " ").slice(0, 240) ||
+      "The session failed. Open it for details.",
     navigationTarget: input.session
       ? input.errorAttentionId
         ? {

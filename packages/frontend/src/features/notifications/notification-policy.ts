@@ -128,9 +128,7 @@ export const createNotificationPolicy = ({
     if (context.phase === "local" && !localOccurrences.has(occurrence.occurrenceId)) {
       localOccurrences.add(occurrence.occurrenceId);
       if (targetIncludesInApp(kindSettings.target)) {
-        const localCopy = context.errorMessage
-          ? { ...copy, body: `${context.errorMessage}\n${copy.body}` }
-          : copy;
+        const localCopy = context.errorMessage ? { ...copy, body: context.errorMessage } : copy;
         deliveries.push({ channel: "in_app", run: () => inApp.deliver(localCopy, occurrence) });
       }
     }

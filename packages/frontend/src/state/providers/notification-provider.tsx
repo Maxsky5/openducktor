@@ -200,7 +200,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
       },
       async publishSessionError(input, localErrorMessage) {
         return await runtime.publishAndWait(
-          buildSessionStartErrorOccurrence(resolveWorkspace(input), input),
+          buildSessionStartErrorOccurrence(resolveWorkspace(input), input, localErrorMessage),
           localErrorMessage,
         );
       },

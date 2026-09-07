@@ -56,6 +56,32 @@ const dispatchAsOwner = async (
 };
 
 describe("notification policy", () => {
+  test("delivers the same useful copy through both channels", async () => {
+    const harness = createHarness("both");
+    await dispatchAsOwner(harness);
+    const copy = { title: "Builder - Build notifications", body: occurrence.status };
+    expect(harness.inApp).toHaveBeenCalledWith(copy, occurrence);
+    expect(harness.os).toHaveBeenCalledWith(copy, occurrence);
+  });
+
+  test("shows local error details once without a generic body appended", async () => {
+    const harness = createHarness("both");
+    const error = {
+      ...occurrence,
+      kind: "agent.session_error" as const,
+      status: "The session failed. Open it for details.",
+    };
+    await harness.policy.dispatch(
+      error,
+      { phase: "local", errorMessage: "Connection failed." },
+      harness.settings,
+    );
+    expect(harness.inApp).toHaveBeenCalledWith(
+      { title: "Builder - Build notifications", body: "Connection failed." },
+      error,
+    );
+  });
+
   test.each(["in_app", "os", "both"] as const)(
     "keeps %s delivery while zero volume disables sound and its focus requirement",
     async (target) => {

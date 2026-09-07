@@ -1,5 +1,4 @@
-import type { AgentRole, NotificationOccurrence } from "@openducktor/contracts";
-import { NOTIFICATION_KIND_LABELS } from "./catalogue";
+import type { AgentRole, NotificationKind, NotificationOccurrence } from "@openducktor/contracts";
 
 const ROLE_LABELS = {
   spec: "Spec",
@@ -7,6 +6,28 @@ const ROLE_LABELS = {
   build: "Builder",
   qa: "QA",
 } satisfies Record<AgentRole, string>;
+
+const WORKFLOW_COPY = {
+  "workflow.spec_ready": { title: "Spec ready", body: "Task is ready for planning." },
+  "workflow.ready_for_dev": {
+    title: "Ready for dev",
+    body: "The plan is ready. Start Builder to implement it.",
+  },
+  "workflow.in_progress": { title: "In progress", body: "Work has started on this task." },
+  "workflow.blocked": {
+    title: "Blocked",
+    body: "This task needs your input before work can continue.",
+  },
+  "workflow.ai_review": {
+    title: "Ready for QA",
+    body: "The implementation is ready for QA review.",
+  },
+  "workflow.human_review": {
+    title: "Review",
+    body: "Review the changes and approve or request updates.",
+  },
+  "workflow.closed": { title: "Closed", body: "This task is closed." },
+} satisfies Record<Extract<NotificationKind, `workflow.${string}`>, NotificationCopy>;
 
 export type NotificationCopy = {
   title: string;
@@ -21,20 +42,20 @@ const toPlainNotificationText = (text: string): string =>
     .replace(/\s+/g, " ")
     .trim();
 
+const isWorkflowKind = (kind: NotificationKind): kind is keyof typeof WORKFLOW_COPY =>
+  kind.startsWith("workflow.");
+
 export const buildNotificationCopy = (occurrence: NotificationOccurrence): NotificationCopy => {
-  const eventLabel = NOTIFICATION_KIND_LABELS[occurrence.kind];
-  const taskTitle = occurrence.task?.title
-    ? `: ${toPlainNotificationText(occurrence.task.title)}`
-    : "";
-  const context = [toPlainNotificationText(occurrence.repositoryLabel)];
-  if (occurrence.role) {
-    context.push(ROLE_LABELS[occurrence.role]);
-  } else if (occurrence.sessionLabel) {
-    context.push(toPlainNotificationText(occurrence.sessionLabel));
-  }
+  const workflowCopy = isWorkflowKind(occurrence.kind) ? WORKFLOW_COPY[occurrence.kind] : undefined;
+  const agentLabel = occurrence.role ? ROLE_LABELS[occurrence.role] : occurrence.sessionLabel;
+  const label = workflowCopy?.title ?? toPlainNotificationText(agentLabel ?? "Agent");
+  const taskTitle = toPlainNotificationText(occurrence.task?.title ?? "");
+  const body =
+    workflowCopy?.body ??
+    (occurrence.kind === "agent.session_started" ? "Session started." : occurrence.status);
 
   return {
-    title: `${eventLabel}${taskTitle}`.slice(0, 180),
-    body: `${toPlainNotificationText(occurrence.status)}\n${context.join(" · ")}`.slice(0, 500),
+    title: `${label}${taskTitle ? ` - ${taskTitle}` : ""}`.slice(0, 180),
+    body: toPlainNotificationText(body).slice(0, 500),
   };
 };

@@ -43,6 +43,102 @@ const createProjector = () =>
   });
 
 describe("session occurrence projector", () => {
+  test("uses live question and permission details and keeps request identity", () => {
+    const projector = createProjector();
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    const next = snapshot({
+      pendingApprovals: [
+        {
+          requestId: "approval-1",
+          requestType: "command_execution",
+          title: "Run command",
+          summary: "Install dependencies",
+          command: { command: "bun install" },
+        },
+      ],
+      pendingQuestions: [
+        {
+          requestId: "question-1",
+          questions: [
+            {
+              header: "Providers",
+              question: "Which **providers** should we support?",
+              options: [],
+              multiple: false,
+              custom: true,
+            },
+            {
+              header: "Scope",
+              question: "Should this include mobile?",
+              options: [],
+              multiple: false,
+              custom: true,
+            },
+          ],
+        },
+      ],
+    });
+    next.pendingApprovals.push(...next.pendingApprovals);
+    next.pendingQuestions.push(...next.pendingQuestions);
+    const occurrences = projector.accept({ type: "session_upsert", session: next });
+    expect(occurrences.map(buildNotificationCopy)).toEqual([
+      { title: "Builder - Build notifications", body: "Install dependencies: bun install" },
+      {
+        title: "Builder - Build notifications",
+        body: "Which providers should we support? +1 more question",
+      },
+    ]);
+    expect(occurrences.map((item) => item.navigationTarget)).toMatchObject([
+      { type: "pending_input", inputKind: "permission", requestId: "approval-1" },
+      { type: "pending_input", inputKind: "question", requestId: "question-1" },
+    ]);
+    expect(projector.accept({ type: "session_upsert", session: next })).toEqual([]);
+  });
+
+  test("keeps the remaining question count within the status limit", () => {
+    const projector = createProjector();
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    const question = {
+      header: "Scope",
+      question: "q".repeat(400),
+      options: [],
+      multiple: false,
+      custom: true,
+    };
+    const [occurrence] = projector.accept({
+      type: "session_upsert",
+      session: snapshot({
+        pendingQuestions: [
+          { requestId: "long-question", questions: [question, question, question] },
+        ],
+      }),
+    });
+    expect(occurrence?.status.length).toBe(240);
+    expect(occurrence?.status.endsWith(" +2 more questions")).toBe(true);
+  });
+
+  test.each([
+    { title: "Read files" },
+    { title: "Allow action", action: { name: "read_file", description: "Read package.json" } },
+    { title: "Allow tool", tool: { name: "read_file" } },
+  ])("shows permission details for $title", (details) => {
+    const projector = createProjector();
+    projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    const [occurrence] = projector.accept({
+      type: "session_upsert",
+      session: snapshot({
+        pendingApprovals: [{ requestId: "approval", requestType: "permission_grant", ...details }],
+      }),
+    });
+    expect(occurrence?.status).toBe(
+      {
+        "Read files": "Read files",
+        "Allow action": "Allow action: Read package.json",
+        "Allow tool": "Allow tool: read_file",
+      }[details.title],
+    );
+  });
+
   test.each(["snapshot", "session_upsert"] as const)(
     "reconciles live pending inputs when ownership arrives through %s",
     (type) => {
@@ -55,9 +151,27 @@ describe("session occurrence projector", () => {
       });
       const pending = snapshot({
         pendingApprovals: [
-          { requestId: "permission", requestType: "permission_grant", title: "Read" },
+          {
+            requestId: "permission",
+            requestType: "permission_grant",
+            title: "Allow command",
+            command: { command: "bun install" },
+          },
         ],
-        pendingQuestions: [{ requestId: "question", questions: [] }],
+        pendingQuestions: [
+          {
+            requestId: "question",
+            questions: [
+              {
+                header: "Providers",
+                question: "Which providers should we support?",
+                options: [],
+                multiple: false,
+                custom: true,
+              },
+            ],
+          },
+        ],
       });
       projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [] });
       expect(projector.accept({ type: "session_upsert", session: pending })).toEqual([]);
@@ -66,9 +180,9 @@ describe("session occurrence projector", () => {
         type === "snapshot"
           ? { type, repoPath: "/repo", sessions: [pending] }
           : { type, session: pending };
-      expect(projector.accept(event).map((entry) => entry.kind)).toEqual([
-        "agent.permission_requested",
-        "agent.question_asked",
+      expect(projector.accept(event).map(buildNotificationCopy)).toEqual([
+        { title: "Builder", body: "Allow command: bun install" },
+        { title: "Builder", body: "Which providers should we support?" },
       ]);
       expect(projector.accept(event)).toEqual([]);
       expect(projector.accept({ type: "session_upsert", session: pending })).toEqual([]);
@@ -264,19 +378,19 @@ describe("session occurrence projector", () => {
       type: "turn_error",
       externalSessionId: ref.externalSessionId,
       timestamp: "2026-08-31T10:01:00.000Z",
-      message: "secret runtime error",
+      message: "Runtime connection failed.",
     });
     const terminalError = transcript({
       type: "session_error",
       externalSessionId: ref.externalSessionId,
       timestamp: "2026-08-31T10:01:01.000Z",
-      message: "same secret runtime error",
+      message: "Runtime connection failed again.",
     });
 
     expect(projector.accept({ type: "transcript_event", event: turnError })).toMatchObject([
       {
         kind: "agent.session_error",
-        status: "Agent Session reported an error.",
+        status: "Runtime connection failed.",
         navigationTarget: {
           type: "session_error",
           errorId: "2026-08-31T10:01:00.000Z",
@@ -346,9 +460,7 @@ describe("session occurrence projector", () => {
 
     expect(occurrence).toBeDefined();
     if (!occurrence) throw new Error("Expected an idle notification occurrence.");
-    expect(buildNotificationCopy(occurrence).body).toBe(
-      "Work is complete. The checks pass.\nRepo · Builder",
-    );
+    expect(buildNotificationCopy(occurrence).body).toBe("Work is complete. The checks pass.");
   });
 
   test("does not use a retracted assistant message in idle notification copy", () => {
@@ -387,7 +499,7 @@ describe("session occurrence projector", () => {
       }),
     });
 
-    expect(occurrence).toMatchObject({ status: "Agent Session is idle." });
+    expect(occurrence).toMatchObject({ status: "Ready for your next message." });
   });
 
   test("does not reuse assistant text from a prior running cycle", () => {
@@ -439,7 +551,7 @@ describe("session occurrence projector", () => {
       }),
     });
 
-    expect(occurrence).toMatchObject({ status: "Agent Session is idle." });
+    expect(occurrence).toMatchObject({ status: "Ready for your next message." });
   });
 
   test("emits idle only after observed running and excludes retry, output, and user stop", () => {
@@ -623,7 +735,7 @@ test("clears assistant text when an active snapshot moves directly to a new epis
     session: snapshot({ activity: "waiting_for_question", executionEpisodeId: "episode-2" }),
   });
   expect(projector.accept(terminalEnvelope("session_idle"))).toMatchObject([
-    { kind: "agent.session_idle", status: "Agent Session is idle." },
+    { kind: "agent.session_idle", status: "Ready for your next message." },
   ]);
 });
 
@@ -908,7 +1020,7 @@ test.each(["connection", "new episode"] as const)(
       ],
     });
     expect(projector.accept(terminalEnvelope("session_idle"))).toMatchObject([
-      { kind: "agent.session_idle", status: "Agent Session is idle." },
+      { kind: "agent.session_idle", status: "Ready for your next message." },
     ]);
   },
 );

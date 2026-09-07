@@ -1,5 +1,7 @@
 import type {
   AgentSessionLiveEnvelope,
+  AgentSessionLivePendingApprovalRequest,
+  AgentSessionLivePendingQuestionRequest,
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
   AgentSessionWorkflowScope,
@@ -72,6 +74,30 @@ const isExpectedUserStop = (
 
 const toNotificationStatus = (message: string): string =>
   message.trim().replace(/\s+/g, " ").slice(0, 240);
+
+const pendingRequestsByIdentity = <Request extends { requestId: string }>(requests: Request[]) =>
+  new Map(requests.map((request) => [pendingInputIdentity(request), request]));
+
+const permissionStatus = (request: AgentSessionLivePendingApprovalRequest): string => {
+  const summary = request.summary?.trim() || request.title.trim();
+  const action =
+    request.command?.command ??
+    request.action?.description ??
+    request.action?.name ??
+    request.tool?.title ??
+    request.tool?.name;
+  return (
+    toNotificationStatus([summary, action].filter(Boolean).join(": ")) ||
+    "Approval is needed to continue."
+  );
+};
+
+const questionStatus = (request: AgentSessionLivePendingQuestionRequest): string => {
+  const question = request.questions[0]?.question.trim() || "Your answer is needed to continue.";
+  const remaining = request.questions.length - 1;
+  const suffix = remaining > 0 ? ` +${remaining} more question${remaining === 1 ? "" : "s"}` : "";
+  return `${toNotificationStatus(question).slice(0, 240 - suffix.length)}${suffix}`;
+};
 
 const executionEpisodeId = (projection: SessionProjection): string => {
   if (!projection.executionEpisodeId) {
@@ -201,7 +227,7 @@ export const createSessionOccurrenceProjector = ({
       sessionOccurrence(projection, {
         kind: "agent.session_idle",
         suffix: executionEpisodeId(projection),
-        status: projection.lastAssistantMessage?.text ?? "Agent Session is idle.",
+        status: projection.lastAssistantMessage?.text ?? "Ready for your next message.",
         navigationTarget: { type: "agent_session", ...sessionTarget(projection) },
       }),
     );
@@ -210,6 +236,7 @@ export const createSessionOccurrenceProjector = ({
   const finishErrorEpisode = (
     projection: SessionProjection,
     errorId: string,
+    message: string,
   ): NotificationOccurrence[] => {
     if (projection.errorNotified) {
       return [];
@@ -221,7 +248,7 @@ export const createSessionOccurrenceProjector = ({
       sessionOccurrence(projection, {
         kind: "agent.session_error",
         suffix: executionEpisodeId(projection),
-        status: "Agent Session reported an error.",
+        status: toNotificationStatus(message) || "The session failed. Open it for details.",
         navigationTarget: { type: "session_error", ...sessionTarget(projection), errorId },
       }),
     );
@@ -229,26 +256,26 @@ export const createSessionOccurrenceProjector = ({
 
   const projectPendingInput = (
     projection: SessionProjection,
-    input: {
-      inputKind: "permission" | "question";
-      requestIdentity: string;
-    },
+    input:
+      | { inputKind: "permission"; request: AgentSessionLivePendingApprovalRequest }
+      | { inputKind: "question"; request: AgentSessionLivePendingQuestionRequest },
   ): NotificationOccurrence => {
+    const requestIdentity = pendingInputIdentity(input.request);
     const kind =
       input.inputKind === "permission" ? "agent.permission_requested" : "agent.question_asked";
     const status =
       input.inputKind === "permission"
-        ? "Permission Prompt is Waiting for Input."
-        : "Structured Question is Waiting for Input.";
+        ? permissionStatus(input.request)
+        : questionStatus(input.request);
     return sessionOccurrence(projection, {
       kind,
-      suffix: input.requestIdentity,
+      suffix: requestIdentity,
       status,
       navigationTarget: {
         type: "pending_input",
         ...sessionTarget(projection),
         inputKind: input.inputKind,
-        requestId: input.requestIdentity,
+        requestId: requestIdentity,
       },
     });
   };
@@ -273,7 +300,7 @@ export const createSessionOccurrenceProjector = ({
       if (unownedInputs.has(key)) observeUnownedInputs(snapshot, true);
       const owned = createProjection(snapshot, association);
       sessions.set(key, owned);
-      return association ? reconcilePendingOwnership(owned) : [];
+      return association ? reconcilePendingOwnership(owned, snapshot) : [];
     }
 
     const ownershipResolved = !projection.association && association !== null;
@@ -300,26 +327,22 @@ export const createSessionOccurrenceProjector = ({
       observeUnownedInputs(snapshot, true);
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
       projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
-      occurrences.push(...reconcilePendingOwnership(projection));
+      occurrences.push(...reconcilePendingOwnership(projection, snapshot));
     }
-    const nextApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
-    const nextQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
-    for (const identity of nextApprovals) {
+    const nextApprovals = pendingRequestsByIdentity(snapshot.pendingApprovals);
+    const nextQuestions = pendingRequestsByIdentity(snapshot.pendingQuestions);
+    for (const [identity, request] of nextApprovals) {
       if (association && !projection.pendingApprovals.has(identity)) {
-        occurrences.push(
-          projectPendingInput(projection, { inputKind: "permission", requestIdentity: identity }),
-        );
+        occurrences.push(projectPendingInput(projection, { inputKind: "permission", request }));
       }
     }
-    for (const identity of nextQuestions) {
+    for (const [identity, request] of nextQuestions) {
       if (association && !projection.pendingQuestions.has(identity)) {
-        occurrences.push(
-          projectPendingInput(projection, { inputKind: "question", requestIdentity: identity }),
-        );
+        occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
       }
     }
-    projection.pendingApprovals = nextApprovals;
-    projection.pendingQuestions = nextQuestions;
+    projection.pendingApprovals = new Set(nextApprovals.keys());
+    projection.pendingQuestions = new Set(nextQuestions.keys());
 
     if (snapshot.activity !== "idle" && !projection.errorNotified && !projection.idleNotified) {
       projection.running = true;
@@ -327,24 +350,23 @@ export const createSessionOccurrenceProjector = ({
     return [...reconcileTerminalOwnership(projection), ...occurrences];
   };
 
-  const reconcilePendingOwnership = (projection: SessionProjection): NotificationOccurrence[] => {
+  const reconcilePendingOwnership = (
+    projection: SessionProjection,
+    snapshot: AgentSessionLiveSnapshot,
+  ): NotificationOccurrence[] => {
     const key = agentSessionIdentityKey(projection.ref);
     const pending = unownedInputs.get(key);
     unownedInputs.delete(key);
     if (!pending || projection.isSubagent) return [];
     const occurrences: NotificationOccurrence[] = [];
-    for (const requestIdentity of pending.liveApprovals) {
-      if (projection.pendingApprovals.has(requestIdentity)) {
-        occurrences.push(
-          projectPendingInput(projection, { inputKind: "permission", requestIdentity }),
-        );
+    for (const [identity, request] of pendingRequestsByIdentity(snapshot.pendingApprovals)) {
+      if (pending.liveApprovals.has(identity)) {
+        occurrences.push(projectPendingInput(projection, { inputKind: "permission", request }));
       }
     }
-    for (const requestIdentity of pending.liveQuestions) {
-      if (projection.pendingQuestions.has(requestIdentity)) {
-        occurrences.push(
-          projectPendingInput(projection, { inputKind: "question", requestIdentity }),
-        );
+    for (const [identity, request] of pendingRequestsByIdentity(snapshot.pendingQuestions)) {
+      if (pending.liveQuestions.has(identity)) {
+        occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
       }
     }
     return occurrences;
@@ -388,7 +410,7 @@ export const createSessionOccurrenceProjector = ({
       return finishIdleCycle(projection);
     }
     if (event.type === "turn_error" || event.type === "session_error") {
-      return finishErrorEpisode(projection, event.timestamp);
+      return finishErrorEpisode(projection, event.timestamp, event.message);
     }
     return [];
   };
@@ -422,7 +444,7 @@ export const createSessionOccurrenceProjector = ({
           }
           sessions.set(key, projection);
           if (association) {
-            occurrences.push(...reconcilePendingOwnership(projection));
+            occurrences.push(...reconcilePendingOwnership(projection, snapshot));
           } else {
             observeUnownedInputs(snapshot, false);
           }
