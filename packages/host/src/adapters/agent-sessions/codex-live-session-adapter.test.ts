@@ -537,6 +537,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -566,6 +568,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
 
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: runtime.runtimeId,
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: true,
@@ -598,6 +602,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -646,6 +652,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots,
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -691,6 +699,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
 
     const firstMutation = harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -707,6 +717,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
 
     const removeMutation = harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [ref],
       snapshots: [],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -732,6 +744,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await expect(
       harness.getOptions().onLiveSessionMutation?.({
         runtimeId: "runtime-1",
+        snapshotMode: "delta",
+        removedRefs: [],
         snapshots: [liveSnapshot()],
         transcriptEvents: [
           // @ts-expect-error This malformed event verifies contract validation before commit.
@@ -827,28 +841,34 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await expect(
       onLiveSessionMutation?.({
         runtimeId: runtime.runtimeId,
+        snapshotMode: "delta",
+        removedRefs: [],
         snapshots: [liveSnapshot()],
         transcriptEvents: [],
         catalogInvalidated: false,
         fault: "Codex event processing failed.",
         faultRef: { ...ref, repoPath: "/other-repo" },
       }),
-    ).rejects.toThrow("fault ref outside repo");
+    ).rejects.toThrow("faultRef outside repo");
     await expect(
       onLiveSessionMutation?.({
         runtimeId: runtime.runtimeId,
+        snapshotMode: "delta",
+        removedRefs: [],
         snapshots: [liveSnapshot()],
         transcriptEvents: [],
         catalogInvalidated: false,
         fault: "Codex event processing failed.",
         faultRef: { ...ref, runtimeKind: "opencode" },
       }),
-    ).rejects.toThrow("fault ref outside Codex runtime");
+    ).rejects.toThrow("faultRef outside Codex runtime");
     expect(changes).toEqual([]);
 
     await expect(
       onLiveSessionMutation?.({
         runtimeId: runtime.runtimeId,
+        snapshotMode: "delta",
+        removedRefs: [],
         snapshots: [liveSnapshot()],
         transcriptEvents: [],
         catalogInvalidated: false,
@@ -903,6 +923,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
 
     const mutation = harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -931,6 +953,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -984,6 +1008,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,

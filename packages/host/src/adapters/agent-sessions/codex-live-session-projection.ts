@@ -33,6 +33,8 @@ type NormalizedCodexLiveSessionMutation = Pick<
   "catalogInvalidated" | "fault" | "faultRef"
 > & {
   readonly snapshots: AgentSessionLiveSnapshot[];
+  readonly snapshotMode: "full" | "delta";
+  readonly removedRefs: AgentSessionLiveRef[];
   readonly transcriptEvents: Array<z.output<typeof agentSessionTranscriptEventSchema>>;
 };
 
@@ -96,18 +98,18 @@ export const createCodexLiveSessionProjection = ({
       ),
     );
 
-  const normalizeFaultRef = (faultRef: AgentSessionLiveRef) =>
+  const normalizeMutationRef = (ref: AgentSessionLiveRef, field: "faultRef" | "removedRefs") =>
     parseProjectionValue(
       agentSessionLiveRefSchema,
-      faultRef,
-      "codex-live-session.normalize-fault-ref",
+      ref,
+      `codex-live-session.normalize-${field}`,
     ).pipe(
       Effect.flatMap((parsed) => {
         if (parsed.repoPath !== runtime.repoPath) {
           return Effect.fail(
             new HostValidationError({
-              field: "faultRef.repoPath",
-              message: `Codex runtime '${runtime.runtimeId}' produced a fault ref outside repo '${runtime.repoPath}'.`,
+              field: `${field}.repoPath`,
+              message: `Codex runtime '${runtime.runtimeId}' produced ${field} outside repo '${runtime.repoPath}'.`,
               details: { runtimeId: runtime.runtimeId, ref: parsed },
             }),
           );
@@ -115,8 +117,8 @@ export const createCodexLiveSessionProjection = ({
         if (parsed.runtimeKind !== "codex") {
           return Effect.fail(
             new HostValidationError({
-              field: "faultRef.runtimeKind",
-              message: `Codex runtime '${runtime.runtimeId}' produced a fault ref outside Codex runtime.`,
+              field: `${field}.runtimeKind`,
+              message: `Codex runtime '${runtime.runtimeId}' produced ${field} outside Codex runtime.`,
               details: { runtimeId: runtime.runtimeId, ref: parsed },
             }),
           );
@@ -137,6 +139,12 @@ export const createCodexLiveSessionProjection = ({
         );
       }
       const snapshots = yield* normalizeSnapshots(mutation.snapshots);
+      const removedRefs =
+        mutation.snapshotMode === "delta"
+          ? yield* Effect.forEach(mutation.removedRefs, (ref) =>
+              normalizeMutationRef(ref, "removedRefs"),
+            )
+          : [];
       const transcriptEvents = yield* Effect.forEach(mutation.transcriptEvents, (event) =>
         parseProjectionValue(
           agentSessionTranscriptEventSchema,
@@ -144,9 +152,13 @@ export const createCodexLiveSessionProjection = ({
           "codex-live-session.normalize-transcript-event",
         ),
       );
-      const faultRef = mutation.faultRef ? yield* normalizeFaultRef(mutation.faultRef) : undefined;
+      const faultRef = mutation.faultRef
+        ? yield* normalizeMutationRef(mutation.faultRef, "faultRef")
+        : undefined;
       const normalized: NormalizedCodexLiveSessionMutation = {
         snapshots,
+        snapshotMode: mutation.snapshotMode,
+        removedRefs,
         transcriptEvents,
         catalogInvalidated: mutation.catalogInvalidated,
       };
@@ -178,10 +190,17 @@ export const createCodexLiveSessionProjection = ({
                 changes.push({ type: "session_upsert", snapshot });
               }
             }
-            for (const [key, snapshot] of snapshotsByRef) {
-              if (!incomingKeys.has(key)) {
+            const removals =
+              normalized.snapshotMode === "full"
+                ? [...snapshotsByRef.values()]
+                    .filter((snapshot) => !incomingKeys.has(refKey(snapshot.ref)))
+                    .map((snapshot) => snapshot.ref)
+                : normalized.removedRefs;
+            for (const ref of removals) {
+              const key = refKey(ref);
+              if (snapshotsByRef.has(key)) {
                 snapshotsByRef.delete(key);
-                changes.push({ type: "session_removed", ref: snapshot.ref });
+                changes.push({ type: "session_removed", ref });
               }
             }
             for (const event of normalized.transcriptEvents) {

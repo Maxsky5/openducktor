@@ -196,7 +196,10 @@ export class CodexAppServerAdapter
     this.runtimeClients = new CodexRuntimeClientResolver(options);
     const onLiveSessionMutation = options.onLiveSessionMutation;
     const onCatalogInvalidated = options.onCatalogInvalidated;
-    const runtimeEventsDepsBase = {
+    const runtimeEventsDepsBase: Omit<
+      ConstructorParameters<typeof CodexRuntimeSessionEvents>[0],
+      "subscribeEvents" | "onRuntimeEventQueueFailure"
+    > = {
       respondServerRequest: options.respondServerRequest,
       sessions: {
         get: (externalSessionId: string) => this.localSessions.get(externalSessionId),
@@ -214,19 +217,21 @@ export class CodexAppServerAdapter
       flushQueuedUserMessagesLater: (activeTurn: ActiveCodexTurn) =>
         this.flushQueuedUserMessagesLater(activeTurn),
     };
+    if (onLiveSessionMutation) {
+      runtimeEventsDepsBase.onLiveSessionMutation = ({ changedSessionIds, ...mutation }) =>
+        onLiveSessionMutation({
+          ...mutation,
+          snapshotMode: "delta",
+          removedRefs: [],
+          snapshots: this.changedLiveSessionSnapshots(mutation.runtimeId, changedSessionIds),
+        });
+    }
     if (options.subscribeEvents) {
       const runtimeEventsDeps: ConstructorParameters<typeof CodexRuntimeSessionEvents>[0] = {
         ...runtimeEventsDepsBase,
         subscribeEvents: options.subscribeEvents,
         onRuntimeEventQueueFailure: options.onRuntimeEventQueueFailure,
       };
-      if (onLiveSessionMutation) {
-        runtimeEventsDeps.onLiveSessionMutation = async (mutation) =>
-          onLiveSessionMutation({
-            ...mutation,
-            snapshots: this.listLiveSessionSnapshots(mutation.runtimeId),
-          });
-      }
       if (onCatalogInvalidated) {
         runtimeEventsDeps.onCatalogInvalidated = onCatalogInvalidated;
       }
@@ -235,13 +240,6 @@ export class CodexAppServerAdapter
       const runtimeEventsDeps: ConstructorParameters<typeof CodexRuntimeSessionEvents>[0] = {
         ...runtimeEventsDepsBase,
       };
-      if (onLiveSessionMutation) {
-        runtimeEventsDeps.onLiveSessionMutation = async (mutation) =>
-          onLiveSessionMutation({
-            ...mutation,
-            snapshots: this.listLiveSessionSnapshots(mutation.runtimeId),
-          });
-      }
       if (onCatalogInvalidated) {
         runtimeEventsDeps.onCatalogInvalidated = onCatalogInvalidated;
       }
@@ -628,6 +626,44 @@ export class CodexAppServerAdapter
     };
     for (const session of sessions) {
       appendRoutedDescendants(session, session.threadId);
+    }
+    return snapshots;
+  }
+
+  private changedLiveSessionSnapshots(
+    runtimeId: string,
+    changedSessionIds: ReadonlySet<string>,
+  ): AgentSessionLiveSnapshot[] {
+    const snapshots: AgentSessionLiveSnapshot[] = [];
+    for (const threadId of changedSessionIds) {
+      const session = this.localSessions.get(threadId);
+      if (session) {
+        if (session.runtimeId === runtimeId) {
+          snapshots.push(this.toLiveSessionSnapshot(session));
+        }
+        continue;
+      }
+      const route = this.subagents.routeForChild(threadId, runtimeId);
+      if (!route) {
+        continue;
+      }
+      const visited = new Set([threadId]);
+      let ancestorId = route.parentExternalSessionId;
+      while (!visited.has(ancestorId)) {
+        visited.add(ancestorId);
+        const ancestor = this.localSessions.get(ancestorId);
+        if (ancestor) {
+          if (ancestor.runtimeId === runtimeId) {
+            snapshots.push(this.toRoutedChildLiveSessionSnapshot(ancestor, route));
+          }
+          break;
+        }
+        const ancestorRoute = this.subagents.routeForChild(ancestorId, runtimeId);
+        if (!ancestorRoute) {
+          break;
+        }
+        ancestorId = ancestorRoute.parentExternalSessionId;
+      }
     }
     return snapshots;
   }
