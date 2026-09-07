@@ -1,6 +1,7 @@
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback, useRef } from "react";
+import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type {
@@ -16,6 +17,8 @@ import type {
 import {
   buildSessionStartModalRequest,
   createSessionStartGate,
+  isSessionStartFailureFeedbackHandled,
+  sessionStartPostActionErrorTitle,
   useSessionStartModalRunner,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -188,6 +191,14 @@ export function useAgentStudioSessionStartFlow({
           }
 
           const workflow = await runSessionStartWorkflow(workflowInput);
+          if (
+            workflow.postStartActionError &&
+            !isSessionStartFailureFeedbackHandled(workflow.postStartActionError)
+          ) {
+            toast.error(sessionStartPostActionErrorTitle(request.postStartAction), {
+              description: workflow.postStartActionError.message,
+            });
+          }
 
           scheduleQueryUpdate(
             buildAgentStudioSelectionQueryUpdate({

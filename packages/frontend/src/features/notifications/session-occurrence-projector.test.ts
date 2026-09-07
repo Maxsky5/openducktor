@@ -833,21 +833,82 @@ test("retains a request that first arrives with the ownership-resolving upsert",
   expect(projector.accept(update)).toEqual([]);
 });
 
-test("keeps observed activity when ownership refresh overtakes the terminal frame", () => {
-  let owned = false;
-  const projector = createSessionOccurrenceProjector({
-    repositoryLabel: "Repo",
-    resolveAssociation: () =>
-      owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
-    resolveTask: () => ({ id: "task-1" }),
-  });
-  projector.accept({ type: "session_upsert", session: snapshot({ activity: "running" }) });
-  owned = true;
-  expect(projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] })).toEqual(
-    [],
-  );
-  expect(projector.accept(terminalEnvelope("session_idle"))).toMatchObject([
-    { kind: "agent.session_idle" },
-  ]);
-  expect(projector.accept(terminalEnvelope("session_idle"))).toEqual([]);
-});
+test.each([false, true])(
+  "keeps observed activity when refresh overtakes the terminal frame, owned=%s",
+  (initiallyOwned) => {
+    let owned = initiallyOwned;
+    const projector = createSessionOccurrenceProjector({
+      repositoryLabel: "Repo",
+      resolveAssociation: () =>
+        owned ? { kind: "workflow", taskId: "task-1", role: "build" } : null,
+      resolveTask: () => ({ id: "task-1" }),
+    });
+    projector.accept({ type: "session_upsert", session: snapshot({ activity: "running" }) });
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "assistant_message",
+        externalSessionId: ref.externalSessionId,
+        messageId: "final",
+        message: "The change is complete.",
+        timestamp: "2026-09-07T10:00:00.000Z",
+      }),
+    });
+    owned = true;
+    expect(
+      projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] }),
+    ).toEqual([]);
+    expect(projector.accept(terminalEnvelope("session_idle"))).toMatchObject([
+      { kind: "agent.session_idle", status: "The change is complete." },
+    ]);
+    expect(projector.accept(terminalEnvelope("session_idle"))).toEqual([]);
+  },
+);
+
+test.each(["session_idle", "session_error"] as const)(
+  "keeps the %s notification flag across an owned refresh",
+  (type) => {
+    const projector = createProjector();
+    projector.accept({ type: "session_upsert", session: snapshot({ activity: "running" }) });
+    expect(projector.accept(terminalEnvelope(type))).toHaveLength(1);
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ activity: "running" })],
+    });
+    expect(projector.accept(terminalEnvelope(type))).toEqual([]);
+    expect(projector.accept(terminalEnvelope("session_idle"))).toEqual([]);
+  },
+);
+
+test.each(["connection", "new episode"] as const)(
+  "clears owned assistant text on a %s snapshot",
+  (reset) => {
+    const projector = createProjector();
+    projector.accept({ type: "session_upsert", session: snapshot({ activity: "running" }) });
+    projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "assistant_message",
+        externalSessionId: ref.externalSessionId,
+        messageId: "old",
+        message: "Old output",
+        timestamp: "2026-09-07T10:00:00.000Z",
+      }),
+    });
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      isConnectionSnapshot: reset === "connection",
+      sessions: [
+        snapshot({
+          activity: "running",
+          executionEpisodeId: reset === "connection" ? "episode-1" : "episode-2",
+        }),
+      ],
+    });
+    expect(projector.accept(terminalEnvelope("session_idle"))).toMatchObject([
+      { kind: "agent.session_idle", status: "Agent Session is idle." },
+    ]);
+  },
+);

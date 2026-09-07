@@ -59,11 +59,11 @@ export const useNotificationTestControls = (settings: NotificationSettings | nul
       }
 
       const result = await runtime.testOs(settings);
-      await capabilityQuery.refetch();
       setStatus(result.status === "shown" ? "OS test sent." : result.message);
     } catch (cause) {
       setStatus(errorMessage(cause));
     } finally {
+      if (target === "os") await capabilityQuery.refetch();
       setIsTesting(false);
     }
   };

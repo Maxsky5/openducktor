@@ -413,7 +413,6 @@ export const createSessionOccurrenceProjector = ({
           if (
             !envelope.isConnectionSnapshot &&
             previous &&
-            !previous.association &&
             previous.executionEpisodeId === projection.executionEpisodeId
           ) {
             projection.errorNotified = previous.errorNotified;
