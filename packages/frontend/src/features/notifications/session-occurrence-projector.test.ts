@@ -43,6 +43,33 @@ const createProjector = () =>
   });
 
 describe("session occurrence projector", () => {
+  test.each([
+    ["API request failed", "API request failed"],
+    ['{"message":"API request failed"}', "API request failed"],
+    ['{"error":{"message":"API request failed"}}', "API request failed"],
+    ['{"message":', '{"message":'],
+    [JSON.stringify({ message: "x".repeat(300) }), "x".repeat(240)],
+  ])("extracts runtime error text before truncation: %s", (message, expected) => {
+    const projector = createProjector();
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ activity: "running" })],
+    });
+    const [occurrence] = projector.accept({
+      type: "transcript_event",
+      event: transcript({
+        type: "session_error",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-08-31T10:01:00.000Z",
+        message,
+      }),
+    });
+    expect(occurrence?.status).toBe(expected);
+    if (!occurrence) throw new Error("Expected error occurrence.");
+    expect(buildNotificationCopy(occurrence).body).toBe(expected);
+  });
+
   test("uses live question and permission details and keeps request identity", () => {
     const projector = createProjector();
     projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });

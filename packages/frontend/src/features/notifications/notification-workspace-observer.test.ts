@@ -89,6 +89,124 @@ const liveUpsert = (pendingRequestIds: string[]): AgentSessionLiveEnvelope => {
   return { type: "session_upsert", session };
 };
 
+test.each([
+  ["tasks", "permission"],
+  ["tasks", "question"],
+  ["sessions", "permission"],
+  ["sessions", "question"],
+] as const)(
+  "keeps a live %s-baseline %s request until associations are ready",
+  async (source, kind) => {
+    const baseline = createDeferred<void>();
+    const published: NotificationOccurrence[] = [];
+    let receive = (_envelope: AgentSessionLiveEnvelope) => {};
+    const pendingSnapshot = (ids: string[]): AgentSessionLiveSnapshotEnvelope => {
+      const envelope = liveSnapshot(kind === "permission" ? ids : []);
+      const session = envelope.sessions[0];
+      if (!session) throw new Error("Missing session fixture.");
+      if (kind === "question")
+        session.pendingQuestions = ids.map((requestId) => ({
+          requestId,
+          questions: [
+            {
+              header: "Provider",
+              question: "Which provider?",
+              options: [],
+              multiple: false,
+              custom: true,
+            },
+          ],
+        }));
+      return envelope;
+    };
+    const taskObserver = createNotificationTaskObserver({
+      loadTasks: async () => {
+        if (source === "tasks") await baseline.promise;
+        return [createTaskCardFixture({ id: "task-1" })];
+      },
+      loadSessionRecords: async (...args) => {
+        if (source === "sessions") await baseline.promise;
+        return loadWorkflowSessionRecords(...args);
+      },
+      publish: () => {},
+      onFailure: (failure) => {
+        throw failure.cause;
+      },
+    });
+    const observer = createNotificationWorkspaceObserver({
+      observe: async (_input, listener) => {
+        receive = listener;
+        listener(pendingSnapshot(["existing"]));
+        return () => {};
+      },
+      taskObserver,
+      publish: (occurrence) => published.push(occurrence),
+      onFailure: (failure) => {
+        throw failure.cause;
+      },
+    });
+    const sync = observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+    await flush();
+    const session = pendingSnapshot(["existing", "new"]).sessions[0];
+    if (!session) throw new Error("Missing session fixture.");
+    const event = { type: "session_upsert" as const, session };
+    receive(event);
+    receive(event);
+    expect(published).toEqual([]);
+    baseline.resolve();
+    await sync;
+    expect(published).toHaveLength(1);
+    expect(published[0]).toMatchObject({
+      kind: kind === "permission" ? "agent.permission_requested" : "agent.question_asked",
+      task: { id: "task-1" },
+      navigationTarget: { type: "pending_input", inputKind: kind, requestId: "new" },
+    });
+    receive(event);
+    expect(published).toHaveLength(1);
+    observer.dispose();
+  },
+);
+
+test.each(["failure", "removed", "disposed"] as const)(
+  "drops buffered live events after startup is %s",
+  async (outcome) => {
+    const baseline = createDeferred<TaskCard[]>();
+    const published = mock(() => {});
+    const stop = mock(() => {});
+    const onFailure = mock(() => {});
+    let receive = (_envelope: AgentSessionLiveEnvelope) => {};
+    const taskObserver = createNotificationTaskObserver({
+      loadTasks: async () => baseline.promise,
+      loadSessionRecords: loadWorkflowSessionRecords,
+      publish: () => {},
+      onFailure,
+    });
+    const observer = createNotificationWorkspaceObserver({
+      observe: async (_input, listener) => {
+        receive = listener;
+        listener(liveSnapshot([]));
+        return stop;
+      },
+      taskObserver,
+      publish: published,
+      onFailure,
+    });
+    const sync = observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+    receive(liveUpsert(["new"]));
+    await flush();
+    if (outcome === "removed") await observer.syncWorkspaces([]);
+    if (outcome === "disposed") observer.dispose();
+    if (outcome === "failure") baseline.reject(new Error("Baseline failed"));
+    else baseline.resolve([createTaskCardFixture({ id: "task-1" })]);
+    await sync;
+    receive(liveUpsert(["new", "later"]));
+    expect(published).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(onFailure).toHaveBeenCalledTimes(outcome === "failure" ? 1 : 0);
+    observer.dispose();
+  },
+);
+
 test.each(["tasks", "sessions"])(
   "recovers a failed %s baseline on the next workspace sync",
   async (source) => {
@@ -116,11 +234,11 @@ test.each(["tasks", "sessions"])(
     });
     const workspaces = [{ repoPath: "/repo-a", repositoryLabel: "Repo" }];
     await observer.syncWorkspaces(workspaces);
-    expect(observe).not.toHaveBeenCalled();
+    expect(observe).toHaveBeenCalledTimes(1);
     expect(onFailure).toHaveBeenCalledTimes(1);
     fail = false;
     await observer.syncWorkspaces(workspaces);
-    expect(observe).toHaveBeenCalledTimes(1);
+    expect(observe).toHaveBeenCalledTimes(2);
     expect(taskObserver.resolveTask("/repo-a", "task-1")?.id).toBe("task-1");
     observer.dispose();
   },
@@ -269,7 +387,8 @@ describe("all-workspace notification observation", () => {
     const baseline = new Promise<TaskCard[]>((resolve) => {
       finishBaseline = resolve;
     });
-    const observe = mock(async () => () => {});
+    const stop = mock(() => {});
+    const observe = mock(async () => stop);
     const taskObserver = createNotificationTaskObserver({
       loadTasks: async () => baseline,
       loadSessionRecords: loadWorkflowSessionRecords,
@@ -289,11 +408,12 @@ describe("all-workspace notification observation", () => {
     finishBaseline?.([createTaskCardFixture({ id: "task-1", title: "Task A", status: "open" })]);
     await add;
 
-    expect(observe).not.toHaveBeenCalled();
+    expect(observe).toHaveBeenCalledTimes(1);
+    expect(stop).toHaveBeenCalledTimes(1);
     expect(taskObserver.resolveTask("/repo-a", "task-1")).toBeNull();
   });
 
-  test("does not observe a workspace before its pending baseline finishes", async () => {
+  test("opens one live subscription while concurrent syncs wait for the baseline", async () => {
     let finishBaseline: ((tasks: TaskCard[]) => void) | undefined;
     const baseline = new Promise<TaskCard[]>((resolve) => {
       finishBaseline = resolve;
@@ -318,7 +438,7 @@ describe("all-workspace notification observation", () => {
     const secondSync = observer.syncWorkspaces(workspaces);
     await flush();
 
-    expect(observe).not.toHaveBeenCalled();
+    expect(observe).toHaveBeenCalledTimes(1);
     finishBaseline?.([]);
     await Promise.all([firstSync, secondSync]);
     expect(observe).toHaveBeenCalledTimes(1);

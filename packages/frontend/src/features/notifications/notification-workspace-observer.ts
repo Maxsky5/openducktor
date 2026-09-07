@@ -10,6 +10,8 @@ type Observation = {
   label: string;
   cancelled: boolean;
   stop: (() => void) | null;
+  pending: AgentSessionLiveEnvelope[] | null;
+  flush(): void;
 };
 
 export const createNotificationWorkspaceObserver = ({
@@ -35,6 +37,7 @@ export const createNotificationWorkspaceObserver = ({
       return;
     }
     observation.cancelled = true;
+    observation.pending = null;
     observation.stop?.();
     observations.delete(repoPath);
   };
@@ -44,6 +47,12 @@ export const createNotificationWorkspaceObserver = ({
       label: workspace.repositoryLabel,
       cancelled: false,
       stop: null,
+      pending: [],
+      flush() {
+        const pending = observation.pending;
+        observation.pending = null;
+        for (const envelope of pending ?? []) accept(envelope);
+      },
     };
     observations.set(workspace.repoPath, observation);
     const projector = createSessionOccurrenceProjector({
@@ -52,7 +61,7 @@ export const createNotificationWorkspaceObserver = ({
       resolveTask: (taskId) => taskObserver.resolveTask(workspace.repoPath, taskId),
     });
 
-    void observe({ repoPath: workspace.repoPath }, (envelope) => {
+    const accept = (envelope: AgentSessionLiveEnvelope): void => {
       if (observation.cancelled) {
         return;
       }
@@ -71,6 +80,15 @@ export const createNotificationWorkspaceObserver = ({
       } catch (cause) {
         onFailure({ repoPath: workspace.repoPath, source: "session", cause });
       }
+    };
+
+    void observe({ repoPath: workspace.repoPath }, (envelope) => {
+      if (observation.cancelled) return;
+      if (observation.pending && envelope.type !== "fault" && envelope.type !== "transcript_gap") {
+        observation.pending.push(envelope);
+        return;
+      }
+      accept(envelope);
     })
       .then((stop) => {
         if (observation.cancelled) {
@@ -81,8 +99,7 @@ export const createNotificationWorkspaceObserver = ({
       })
       .catch((cause) => {
         if (!observation.cancelled && observations.get(workspace.repoPath) === observation) {
-          observations.delete(workspace.repoPath);
-          observation.cancelled = true;
+          stopObservation(workspace.repoPath);
           onFailure({ repoPath: workspace.repoPath, source: "session", cause });
         }
       });
@@ -97,12 +114,7 @@ export const createNotificationWorkspaceObserver = ({
           stopObservation(repoPath);
         }
       }
-      await taskObserver.syncWorkspaces(workspaces);
-      if (version !== syncVersion) {
-        return;
-      }
       for (const workspace of workspaces) {
-        if (!taskObserver.hasBaseline(workspace.repoPath)) continue;
         const current = observations.get(workspace.repoPath);
         if (current?.label === workspace.repositoryLabel) {
           continue;
@@ -111,6 +123,15 @@ export const createNotificationWorkspaceObserver = ({
           stopObservation(workspace.repoPath);
         }
         startObservation(workspace);
+      }
+      await taskObserver.syncWorkspaces(workspaces);
+      if (version !== syncVersion) return;
+      for (const workspace of workspaces) {
+        if (taskObserver.hasBaseline(workspace.repoPath)) {
+          observations.get(workspace.repoPath)?.flush();
+        } else {
+          stopObservation(workspace.repoPath);
+        }
       }
     },
     dispose(): void {

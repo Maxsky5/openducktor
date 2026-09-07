@@ -73,7 +73,7 @@ describe("notification policy", () => {
     };
     await harness.policy.dispatch(
       error,
-      { phase: "local", errorMessage: "Connection failed." },
+      { phase: "local", errorMessage: '{"message":"Connection failed."}' },
       harness.settings,
     );
     expect(harness.inApp).toHaveBeenCalledWith(

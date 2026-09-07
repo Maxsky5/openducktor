@@ -1,3 +1,4 @@
+import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionLivePendingApprovalRequest,
@@ -248,7 +249,9 @@ export const createSessionOccurrenceProjector = ({
       sessionOccurrence(projection, {
         kind: "agent.session_error",
         suffix: executionEpisodeId(projection),
-        status: toNotificationStatus(message) || "The session failed. Open it for details.",
+        status:
+          toNotificationStatus(normalizeSessionErrorMessage(message)) ||
+          "The session failed. Open it for details.",
         navigationTarget: { type: "session_error", ...sessionTarget(projection), errorId },
       }),
     );

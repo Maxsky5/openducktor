@@ -1,3 +1,4 @@
+import { normalizeSessionErrorMessage } from "../../lib/session-error-message";
 import {
   notificationOccurrenceSchema,
   notificationSettingsSchema,
@@ -128,7 +129,9 @@ export const createNotificationPolicy = ({
     if (context.phase === "local" && !localOccurrences.has(occurrence.occurrenceId)) {
       localOccurrences.add(occurrence.occurrenceId);
       if (targetIncludesInApp(kindSettings.target)) {
-        const localCopy = context.errorMessage ? { ...copy, body: context.errorMessage } : copy;
+        const localCopy = context.errorMessage
+          ? { ...copy, body: normalizeSessionErrorMessage(context.errorMessage) || copy.body }
+          : copy;
         deliveries.push({ channel: "in_app", run: () => inApp.deliver(localCopy, occurrence) });
       }
     }

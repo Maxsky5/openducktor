@@ -1,3 +1,4 @@
+import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
 import type { NotificationOccurrence, NotificationSessionIdentity } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { SessionStartNotificationInput } from "@/features/session-start/session-start-orchestration";
@@ -66,8 +67,9 @@ export const buildSessionStartErrorOccurrence = (
     task: task(input),
     role: input.role,
     status:
-      message?.trim().replace(/\s+/g, " ").slice(0, 240) ||
-      "The session failed. Open it for details.",
+      normalizeSessionErrorMessage(message ?? "")
+        .replace(/\s+/g, " ")
+        .slice(0, 240) || "The session failed. Open it for details.",
     navigationTarget: input.session
       ? input.errorAttentionId
         ? {

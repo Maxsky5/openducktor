@@ -34,28 +34,31 @@ const occurrence = (kind: NotificationKind): NotificationOccurrence => ({
 });
 
 describe("notification copy", () => {
-  test.each([undefined, "", "  Connection failed.\nStart the runtime.  "])(
-    "uses available start failure details in shared copy: %s",
-    (message) => {
-      const event = buildSessionStartErrorOccurrence(
-        { repoPath: "/repo", repositoryLabel: "Repo" },
-        {
-          taskId: "task-1",
-          taskTitle: "Build notifications",
-          role: "build",
-          workspaceId: "workspace-1",
-          launchAttemptId: "launch-1",
-        },
-        message,
-      );
-      expect(buildNotificationCopy(event)).toEqual({
-        title: "Builder - Build notifications",
-        body: message
-          ? "Connection failed. Start the runtime."
-          : "The session failed. Open it for details.",
-      });
-    },
-  );
+  test.each([
+    undefined,
+    "",
+    "  Connection failed.\nStart the runtime.  ",
+    '{"message":"Connection failed. Start the runtime."}',
+    '{"error":{"message":"Connection failed. Start the runtime."}}',
+  ])("uses available start failure details in shared copy: %s", (message) => {
+    const event = buildSessionStartErrorOccurrence(
+      { repoPath: "/repo", repositoryLabel: "Repo" },
+      {
+        taskId: "task-1",
+        taskTitle: "Build notifications",
+        role: "build",
+        workspaceId: "workspace-1",
+        launchAttemptId: "launch-1",
+      },
+      message,
+    );
+    expect(buildNotificationCopy(event)).toEqual({
+      title: "Builder - Build notifications",
+      body: message
+        ? "Connection failed. Start the runtime."
+        : "The session failed. Open it for details.",
+    });
+  });
 
   test("shows the event and Task title without the Task ID", () => {
     const occurrence: NotificationOccurrence = {
