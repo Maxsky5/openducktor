@@ -74,7 +74,9 @@ for (const outcome of ["interrupted", "failed", "completed", "stop"] as const) {
     await adapter.startSession(codexStartSessionInput());
     const ref = codexSessionRuntimeRef();
     const parts: AgentImageGenerationPart[] = [];
+    const events: AgentEvent[] = [];
     const unsubscribe = await adapter.subscribeEvents(ref, (event) => {
+      events.push(event);
       if (event.type === "assistant_part" && event.part.kind === "image_generation")
         parts.push(event.part);
     });
@@ -98,8 +100,11 @@ for (const outcome of ["interrupted", "failed", "completed", "stop"] as const) {
       });
       await flushCodexAdapterWork();
       if (outcome === "stop") {
+        events.length = 0;
         const settled = adapter.settleGeneratedImages("runtime-live", ref);
         expect(settled).toHaveLength(2);
+        expect(events).toEqual(settled);
+        for (const [index, event] of settled.entries()) expect(events[index]).toBe(event);
         expect(settled[0]).toMatchObject({
           type: "image_generation_settled",
           reason: "turn_ended",

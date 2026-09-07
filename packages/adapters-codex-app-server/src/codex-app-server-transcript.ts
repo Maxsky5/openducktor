@@ -1,4 +1,3 @@
-import { codexImageGenerationPart } from "./codex-image-generation";
 import type { AgentModelSelection, AgentStreamPart } from "@openducktor/core";
 import {
   arrayFromCodexJsonValue,
@@ -804,11 +803,6 @@ export const toStreamPart = (
   timingOptions?: CodexToolTimingOptions,
 ): AgentStreamPart[] => {
   const partId = value.id;
-  if (value.type === "imageGeneration") {
-    return [
-      codexImageGenerationPart(value, { liveStart: timingOptions?.allowStartedAtOnly === true }),
-    ];
-  }
   if (codexItemTypeMatches(value, "reasoning")) {
     return codexReasoningStreamParts(value, messageId, partId);
   }

@@ -1188,8 +1188,7 @@ export class CodexRuntimeSessionEvents {
       reason: end.reason,
     };
     if (end.scope === "turn") settlement.turnId = end.turnId;
-    this.emitSessionEventForSession(session, settlement);
-    const events: AgentEvent[] = [withAgentSessionRef(codexSessionRef(session), settlement)];
+    const events = [this.publishSessionEvent(session, settlement)];
     for (const part of this.imageGenerations.settle(
       session.runtimeId,
       session.threadId,
@@ -1202,14 +1201,12 @@ export class CodexRuntimeSessionEvents {
         timestamp: new Date().toISOString(),
         part,
       };
-      this.emitSessionEventForSession(session, event);
-      events.push(withAgentSessionRef(codexSessionRef(session), event));
+      events.push(this.publishSessionEvent(session, event));
     }
     return events;
   }
 
   private emitSessionEventForSession(session: CodexSessionState, event: AgentEvent): void {
-    const sessionRef = codexSessionRef(session);
     const imageEvent =
       event.type === "assistant_part" && event.part.kind === "image_generation"
         ? {
@@ -1217,13 +1214,19 @@ export class CodexRuntimeSessionEvents {
             part: this.imageGenerations.upsert(session.runtimeId, session.threadId, event.part),
           }
         : event;
-    const sessionEvent = withAgentSessionRef(sessionRef, imageEvent);
+    this.publishSessionEvent(session, imageEvent);
+  }
+
+  private publishSessionEvent(session: CodexSessionState, event: AgentEvent): AgentEvent {
+    const sessionRef = codexSessionRef(session);
+    const sessionEvent = withAgentSessionRef(sessionRef, event);
     this.deps.sessionEvents.emit(sessionRef, sessionEvent);
     if (isAgentSessionTranscriptEventType(sessionEvent.type)) {
       this.activeMutationByRuntimeId
         .get(session.runtimeId)
         ?.transcriptEvents.push(agentSessionTranscriptEventSchema.parse(sessionEvent));
     }
+    return sessionEvent;
   }
 
   private markSnapshotChanged(runtimeId: string, threadId: string): void {
