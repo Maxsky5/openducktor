@@ -68,5 +68,11 @@
   "engines": {
     "node": ">=22.6.0"
   },
-  "packageManager": "bun@1.3.14"
+  "packageManager": "bun@1.3.14",
+  "trustedDependencies": [
+    "electron-winstaller",
+    "esbuild",
+    "node-mac-permissions",
+    "node-pty"
+  ]
 }
