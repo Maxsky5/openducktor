@@ -155,7 +155,7 @@ const AGENT_PROMPT_DEFINITIONS = {
   "system.shared.workflow_guards": {
     id: "system.shared.workflow_guards",
     purpose: "system",
-    builtinVersion: 7,
+    builtinVersion: 6,
     template: joinPromptBlocks(
       "Workflow constraints you must obey:",
       bulletSection("Lifecycle contract", [
@@ -185,7 +185,7 @@ const AGENT_PROMPT_DEFINITIONS = {
   "system.shared.tool_protocol": {
     id: "system.shared.tool_protocol",
     purpose: "system",
-    builtinVersion: 8,
+    builtinVersion: 7,
     template: joinPromptBlocks(
       "OpenDucktor workflow tools are native MCP tools.\nCall them directly as tool invocations; do not emit XML wrappers or pseudo-tool payloads.",
       lineSection("Allowed tools for this role", ["{{role.allowedTools}}"]),
@@ -240,7 +240,7 @@ const AGENT_PROMPT_DEFINITIONS = {
   "system.role.spec.base": {
     id: "system.role.spec.base",
     purpose: "system",
-    builtinVersion: 8,
+    builtinVersion: 5,
     template: joinPromptBlocks(
       "You are the Spec Agent for OpenDucktor. Define what the task must achieve and persist the canonical spec with odt_set_spec.",
       bulletSection("Specification", [
@@ -336,7 +336,7 @@ const AGENT_PROMPT_DEFINITIONS = {
   "kickoff.spec_initial": {
     id: "kickoff.spec_initial",
     purpose: "kickoff",
-    builtinVersion: 6,
+    builtinVersion: 3,
     template:
       "Read the task, current artifacts, repo guidance, and relevant behavior. Use the available question or user-input tool to ask about unresolved product decisions and follow up on choices their answers expose. Follow the Spec role interview and confirmation rules, then persist the goal, scope, constraints, and observable acceptance criteria with odt_set_spec. Leave implementation and verification procedures to later roles. Use taskId {{task.id}} for every odt_* tool call.",
   },

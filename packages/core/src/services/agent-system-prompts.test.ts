@@ -187,21 +187,21 @@ describe("buildAgentSystemPrompt", () => {
       {
         type: "override_base_version_mismatch",
         templateId: "system.role.spec.base",
-        builtinVersion: 8,
+        builtinVersion: 5,
         overrideBaseVersion: 999,
       },
     ]);
   });
 
   test.each([
-    ["system.shared.workflow_guards", 6, 7, "build"],
-    ["system.shared.tool_protocol", 7, 8, "build"],
+    ["system.shared.workflow_guards", 5, 6, "build"],
+    ["system.shared.tool_protocol", 6, 7, "build"],
     ["system.shared.task_context", 3, 4, "build"],
-    ["system.role.spec.base", 7, 8, "spec"],
+    ["system.role.spec.base", 4, 5, "spec"],
     ["system.role.planner.base", 5, 6, "planner"],
     ["system.role.build.base", 3, 4, "build"],
     ["system.role.qa.base", 3, 4, "qa"],
-    ["kickoff.spec_initial", 5, 6, "spec"],
+    ["kickoff.spec_initial", 2, 3, "spec"],
     ["kickoff.planner_initial", 2, 3, "planner"],
     ["kickoff.build_implementation_start", 2, 3, "build"],
     ["kickoff.build_after_qa_rejected", 2, 3, "build"],
