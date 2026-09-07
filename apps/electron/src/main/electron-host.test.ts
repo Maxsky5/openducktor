@@ -320,6 +320,8 @@ const createRuntimeHealth = (): RuntimeHealthPort => ({
 });
 
 const createTaskStore = (): TaskStorePort => ({
+  listAgentSessionsForTasks: ({ taskIds }) =>
+    Effect.succeed(taskIds.map((taskId) => ({ taskId, agentSessions: [] }))),
   getTask: () =>
     Effect.succeed({
       id: "task-1",

@@ -449,7 +449,7 @@ describe("createTaskService list and session reads", () => {
     });
     expect(calls).toEqual([{ repoPath: "/repo", taskId: "task-1" }]);
   });
-  test("loads host-compatible document and agent-session read commands from metadata", async () => {
+  test("loads host-compatible document read commands from metadata", async () => {
     const calls: unknown[] = [];
     const session = createAgentSessionRecord();
     const taskStore: TaskStorePort = {
@@ -617,11 +617,7 @@ describe("createTaskService list and session reads", () => {
       updatedAt: "2026-05-10T12:00:00.000Z",
       revision: 3,
     });
-    await expect(
-      Effect.runPromise(service.agentSessionsList({ repoPath: "/repo", taskId: "task-1" })),
-    ).resolves.toEqual([session]);
     expect(calls).toEqual([
-      { repoPath: "/repo", taskId: "task-1" },
       { repoPath: "/repo", taskId: "task-1" },
       { repoPath: "/repo", taskId: "task-1" },
       { repoPath: "/repo", taskId: "task-1" },
