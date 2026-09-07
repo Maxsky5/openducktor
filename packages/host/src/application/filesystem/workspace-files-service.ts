@@ -47,6 +47,8 @@ type ProjectedWorkspaceGitChange = {
   status: string;
 };
 
+const FILE_TREE_METADATA_CONCURRENCY = 4;
+
 const PIERRE_GIT_STATUSES: ReadonlySet<string> = new Set([
   "added",
   "deleted",
@@ -265,11 +267,16 @@ export const createWorkspaceFilesService = (
           ]),
         );
         const fileEntries: WorkspaceFileTreeEntry[] = [];
-        for (const filePath of filePaths) {
+        const fileMetadata = yield* Effect.forEach(
+          filePaths,
+          (filePath) =>
+            Effect.either(statFile(filesystem, canonicalRoot, filePath)).pipe(
+              Effect.map((metadataResult) => ({ filePath, metadataResult })),
+            ),
+          { concurrency: FILE_TREE_METADATA_CONCURRENCY },
+        );
+        for (const { filePath, metadataResult } of fileMetadata) {
           const gitStatus = gitStatusByPath.get(filePath) ?? null;
-          const metadataResult = yield* Effect.either(
-            statFile(filesystem, canonicalRoot, filePath),
-          );
           if (metadataResult._tag === "Left") {
             if (gitStatus !== "deleted") {
               return yield* Effect.fail(metadataResult.left);
