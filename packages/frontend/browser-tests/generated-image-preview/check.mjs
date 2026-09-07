@@ -42,7 +42,7 @@ const checkLayout = `(() => {
   if (bounds.top < 0 || bounds.bottom > innerHeight || bounds.left < 0 || bounds.right > innerWidth) throw new Error('Dialog exceeds viewport');
   if (getComputedStyle(image).objectFit !== 'contain') throw new Error('Image aspect ratio is not preserved');
   if (image.alt.length < 4150) throw new Error('Long prompt fixture is missing');
-  if (document.querySelector('#root').textContent.indexOf(image.alt) < 0) throw new Error('Full prompt is missing from transcript');
+  if (document.querySelector('#root').textContent.includes(image.alt)) throw new Error('Prompt should remain collapsed while previewing');
   if (dialog.textContent.includes(image.alt)) throw new Error('Full prompt consumes dialog space');
   return { viewport: [innerWidth, innerHeight], image: [box.width, box.height], theme: document.documentElement.className };
 })()`;
@@ -64,6 +64,33 @@ try {
       await browser("open", url);
       await browser("wait", trigger);
       await browser("eval", `document.documentElement.className = '${theme}'`);
+      await browser(
+        "eval",
+        `(() => {
+        const root = document.querySelector('#root');
+        const image = root.querySelector('img');
+        const button = root.querySelector('[data-slot="collapsible-trigger"]');
+        if (button.getAttribute('aria-expanded') !== 'false' || root.textContent.includes(image.alt)) throw new Error('Prompt is not collapsed by default');
+        const box = image.getBoundingClientRect();
+        if (box.width < 300 || box.height < 200) throw new Error('Card preview is too small');
+        if (root.scrollWidth > innerWidth) throw new Error('Card exceeds viewport');
+      })()`,
+      );
+      const name = `${theme}-${width}x${height}`;
+      await browser("screenshot", join(artifacts, `${name}-card.png`));
+      await browser("focus", '[data-slot="collapsible-trigger"]');
+      await browser("press", "Enter");
+      await browser(
+        "eval",
+        `(() => {
+        const root = document.querySelector('#root');
+        if (!root.textContent.includes(root.querySelector('img').alt)) throw new Error('Prompt did not expand in full');
+        if (root.querySelector('[data-slot="collapsible-trigger"]').getAttribute('aria-expanded') !== 'true') throw new Error('Expanded state is missing');
+        if (root.scrollWidth > innerWidth) throw new Error('Expanded prompt exceeds viewport');
+      })()`,
+      );
+      await browser("screenshot", join(artifacts, `${name}-prompt.png`));
+      await browser("press", "Enter");
       await browser("focus", trigger);
       await browser("press", "Enter");
       await browser("wait", '[role="dialog"] img');
@@ -73,7 +100,6 @@ try {
       );
       const result = await browser("eval", checkLayout);
       console.log(result.trim());
-      const name = `${theme}-${width}x${height}`;
       await writeFile(join(artifacts, `${name}.json`), result);
       await browser("screenshot", join(artifacts, `${name}.png`));
       await browser("press", "Escape");
@@ -85,6 +111,19 @@ try {
         "eval",
         `if (document.querySelector('[role="dialog"]') || document.activeElement !== document.querySelector('${trigger}')) throw new Error('Escape did not close and restore focus')`,
       );
+      await browser("open", `${url}?running`);
+      await browser("wait", '[role="status"]');
+      await browser("eval", `document.documentElement.className = '${theme}'`);
+      await browser(
+        "eval",
+        `(() => {
+        const root = document.querySelector('#root');
+        if (!root.textContent.includes('Your image will appear here when it is ready.')) throw new Error('Generating placeholder is missing');
+        if (root.querySelector('img') || root.querySelector('[role="progressbar"]')) throw new Error('Generating state claims output or progress');
+        if (root.scrollWidth > innerWidth) throw new Error('Generating card exceeds viewport');
+      })()`,
+      );
+      await browser("screenshot", join(artifacts, `${name}-running.png`));
     }
   }
 } catch (error) {

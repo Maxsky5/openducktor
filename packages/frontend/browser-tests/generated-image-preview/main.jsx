@@ -30,8 +30,10 @@ const part = {
   itemId: "image",
   messageId: "image",
   partId: "image",
-  status: "completed",
+  status: new URLSearchParams(location.search).has("running") ? "running" : "completed",
   revisedPrompt,
+  savedPath: "/runtime/generated/duck.png",
+  transparentBackground: false,
   output: { itemId: "image", representation: "inline" },
 };
 const operations = {

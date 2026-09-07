@@ -172,12 +172,21 @@ test("waits for PNG decode then shares one URL between thumbnail and accessible 
   );
 });
 
-test("keeps a long revised prompt in the transcript and a short accessible preview header", async () => {
+test("reveals the full prompt on request and keeps the preview header short", async () => {
   const revisedPrompt =
     "A detailed yellow duck beside a quiet lake with reeds and reflected morning light. ".repeat(
       60,
     );
   const { view } = harness(undefined, true, { ...part, revisedPrompt });
+  expect(view.container.textContent).not.toContain(revisedPrompt);
+  const promptButton = screen.getByRole("button", { name: "View prompt" });
+  expect(promptButton.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(promptButton);
+  expect(promptButton.getAttribute("aria-expanded")).toBe("true");
+  expect(view.container.textContent).toContain(revisedPrompt);
+  expect(screen.getByText(part.savedPath!)).toBeTruthy();
+  fireEvent.click(promptButton);
+  expect(view.container.textContent).not.toContain(revisedPrompt);
   await loadImage();
   const trigger = screen.getByRole("button", { name: "Open generated image preview" });
   trigger.focus();
@@ -187,7 +196,7 @@ test("keeps a long revised prompt in the transcript and a short accessible previ
   expect(document.getElementById(dialog.getAttribute("aria-describedby")!)?.textContent).toBe(
     "Preview of the generated image.",
   );
-  expect(view.container.textContent).toContain(revisedPrompt);
+  expect(view.container.textContent).not.toContain(revisedPrompt);
   expect(dialog.querySelector("img")?.alt).toBe(revisedPrompt);
   fireEvent.keyDown(dialog, { key: "Escape" });
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -202,7 +211,7 @@ test("truncated PNGs stay completed with a visible preview error", async () => {
   });
   expect(screen.getByText("Image generated")).toBeTruthy();
   expect(screen.getByRole("alert").textContent).toContain("PNG could not be displayed");
-  expect(screen.queryByRole("button")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Open generated image preview" })).toBeNull();
 });
 
 for (const field of ["externalSessionId", "repoPath"] as const) {
@@ -256,7 +265,7 @@ for (const status of ["running", "failed", "interrupted", "incomplete"] as const
     const { output: _output, ...metadata } = part;
     render(<AgentChatImageGeneration part={{ ...metadata, status }} />);
     expect(screen.queryByText("Loading image preview…")).toBeNull();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open generated image preview" })).toBeNull();
   });
 }
 
@@ -283,3 +292,28 @@ for (const resetsAtEpochSeconds of [undefined, 2000000000]) {
     expect(read).not.toHaveBeenCalled();
   });
 }
+
+test("shows a generating placeholder without reading image bytes", () => {
+  const { read } = harness(undefined, true, { ...part, status: "running" });
+  expect(screen.getByRole("status").textContent).toBe("Generating image…");
+  expect(screen.getByText("Your image will appear here when it is ready.")).toBeTruthy();
+  expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
+  expect(read).not.toHaveBeenCalled();
+});
+
+test("closes prompt details when the session or image changes", () => {
+  const { view, content } = harness(undefined, true, { ...part, status: "running" });
+  const runningPart = { ...part, status: "running" as const };
+  fireEvent.click(screen.getByRole("button", { name: "View prompt" }));
+  expect(screen.getByText(part.revisedPrompt!)).toBeTruthy();
+  view.rerender(content({ ...ref, externalSessionId: "another-session" }, runningPart));
+  expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "View prompt" }));
+  view.rerender(
+    content(
+      { ...ref, externalSessionId: "another-session" },
+      { ...runningPart, itemId: "another-image" },
+    ),
+  );
+  expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
+});

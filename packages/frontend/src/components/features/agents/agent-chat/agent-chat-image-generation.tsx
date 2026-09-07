@@ -1,7 +1,8 @@
 import type { AgentImageGenerationPart, AgentSessionLiveRef } from "@openducktor/contracts";
-import { LoaderCircle } from "lucide-react";
+import { ChevronDown, ImageIcon, LoaderCircle, Maximize2, TextAlignStart } from "lucide-react";
 import { type ReactElement, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -28,24 +29,19 @@ export function AgentChatImageGeneration({
 }): ReactElement {
   const sessionRef = useContext(AgentChatImageSessionContext);
   return (
-    <div className="my-2 flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card p-3 text-foreground">
+    <div className="my-2 flex w-full min-w-0 max-w-lg flex-col gap-3 rounded-xl border border-border bg-card p-3 text-foreground shadow-sm">
       <p role="status" className="inline-flex items-center gap-2 text-sm font-medium">
         {part.status === "running" ? (
-          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-        ) : null}
+          <LoaderCircle
+            aria-hidden="true"
+            className="size-4 motion-safe:animate-spin text-muted-foreground"
+          />
+        ) : (
+          <ImageIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+        )}
         {statusLabel(part)}
       </p>
-      {part.revisedPrompt ? (
-        <p className="whitespace-pre-wrap break-words text-sm">{part.revisedPrompt}</p>
-      ) : null}
-      {part.savedPath !== undefined ? (
-        <p className="break-all font-mono text-xs text-muted-foreground">{part.savedPath}</p>
-      ) : null}
-      {part.transparentBackground !== undefined ? (
-        <p className="text-xs text-muted-foreground">
-          Transparent background: {part.transparentBackground ? "yes" : "no"}
-        </p>
-      ) : null}
+      {part.status === "running" ? <GeneratingImage /> : null}
       {part.status === "completed" && sessionRef ? (
         <CompletedImage part={part} sessionRef={sessionRef} />
       ) : null}
@@ -65,7 +61,75 @@ export function AgentChatImageGeneration({
           The runtime did not confirm an image result. Check the session in the runtime.
         </p>
       ) : null}
+      <ImageDetails key={JSON.stringify([sessionRef, part.turnId, part.itemId])} part={part} />
     </div>
+  );
+}
+
+function GeneratingImage(): ReactElement {
+  return (
+    <div className="flex aspect-[4/3] max-h-64 flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border bg-muted/40 px-6 text-center">
+      <div className="flex size-14 items-center justify-center rounded-2xl border border-border bg-card shadow-sm">
+        <ImageIcon aria-hidden="true" className="size-6 text-muted-foreground" />
+      </div>
+      <p className="max-w-56 text-sm text-muted-foreground">
+        Your image will appear here when it is ready.
+      </p>
+    </div>
+  );
+}
+
+function ImageDetails({ part }: { part: AgentImageGenerationPart }): ReactElement | null {
+  if (
+    !part.revisedPrompt &&
+    part.savedPath === undefined &&
+    part.transparentBackground === undefined
+  )
+    return null;
+  return (
+    <Collapsible>
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="group w-full justify-start gap-2 text-muted-foreground"
+        >
+          <TextAlignStart aria-hidden="true" className="size-4" />
+          {part.revisedPrompt ? "View prompt" : "View details"}
+          <ChevronDown
+            aria-hidden="true"
+            className="ml-auto size-4 transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-180"
+          />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-2 flex flex-col gap-4 rounded-lg bg-muted/50 p-3">
+          {part.revisedPrompt ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Generation prompt</p>
+              <p
+                className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed"
+                tabIndex={0}
+              >
+                {part.revisedPrompt}
+              </p>
+            </div>
+          ) : null}
+          {part.savedPath !== undefined ? (
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium text-muted-foreground">Saved file</p>
+              <p className="break-all font-mono text-xs text-muted-foreground">{part.savedPath}</p>
+            </div>
+          ) : null}
+          {part.transparentBackground !== undefined ? (
+            <p className="text-xs text-muted-foreground">
+              Transparent background: {part.transparentBackground ? "yes" : "no"}
+            </p>
+          ) : null}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -152,7 +216,7 @@ function GeneratedImagePreview({
   if (!preview.src)
     return (
       <p role="status" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-        <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+        <LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />
         Loading image preview…
       </p>
     );
@@ -168,10 +232,18 @@ function GeneratedImagePreview({
           type="button"
           variant="outline"
           aria-label="Open generated image preview"
-          className="h-auto w-40 max-w-full flex-col gap-0 overflow-hidden p-0"
+          className="h-auto w-full min-w-0 flex-col gap-0 overflow-hidden rounded-lg bg-muted/40 p-0"
         >
-          <img src={src} alt={alt} className="h-28 w-full object-contain" onError={onImageError} />
-          <span className="p-2">View image</span>
+          <img
+            src={src}
+            alt={alt}
+            className="max-h-80 w-full object-contain"
+            onError={onImageError}
+          />
+          <span className="flex w-full items-center justify-center gap-2 border-t border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+            <Maximize2 aria-hidden="true" className="size-3.5" />
+            View image
+          </span>
         </Button>
       </DialogTrigger>
       <DialogContent className="my-0 max-w-[min(96vw,72rem)] gap-4">
