@@ -17,11 +17,16 @@ import { normalizeProcessEnvironment } from "../process/process-environment";
 
 const execFileAsync = promisify(execFile);
 const failedGitCommandSchema = z
-  .object({ stdout: z.string().optional(), stderr: z.string().optional() })
+  .object({
+    stdout: z.string().optional(),
+    stderr: z.string().optional(),
+    code: z.union([z.number(), z.string().transform(() => null)]).optional(),
+  })
   .passthrough();
 export type GitCommandResult = {
   stdout: string;
   stderr: string;
+  exitCode?: number | null;
 };
 export type GitCommandError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 export type GitCommandRunner = (
@@ -157,11 +162,11 @@ const runSpawnedGit = (
       finish(Effect.fail(toHostOperationError(cause, "git.spawn", { args, workingDirectory })));
     const onClose = (code: number | null) => {
       if (code === 0) {
-        finish(Effect.succeed({ ok: true, stdout, stderr }));
+        finish(Effect.succeed({ ok: true, stdout, stderr, exitCode: code }));
         return;
       }
       if (options.allowFailure) {
-        finish(Effect.succeed({ ok: false, stdout, stderr }));
+        finish(Effect.succeed({ ok: false, stdout, stderr, exitCode: code }));
         return;
       }
       finish(
@@ -217,11 +222,12 @@ export const createDefaultGitRunner = (
       const launch = createProcessCommandLaunch(command, args, commandEnv, platform);
       const exit = yield* Effect.either(
         Effect.tryPromise({
-          try: () =>
+          try: (signal) =>
             execFileAsync(launch.command, launch.args, {
               cwd: workingDirectory,
               env: launch.env,
               maxBuffer: 16 * 1024 * 1024,
+              signal,
               windowsHide: launch.windowsHide,
               windowsVerbatimArguments: launch.windowsVerbatimArguments,
             }),
@@ -229,7 +235,7 @@ export const createDefaultGitRunner = (
         }),
       );
       if (exit._tag === "Right") {
-        return { ok: true, stdout: exit.right.stdout, stderr: exit.right.stderr };
+        return { ok: true, stdout: exit.right.stdout, stderr: exit.right.stderr, exitCode: 0 };
       }
       if (options?.allowFailure) {
         const failed = exit.left;
@@ -242,6 +248,7 @@ export const createDefaultGitRunner = (
           ok: false,
           stdout,
           stderr,
+          exitCode: parsedFailure.success ? (parsedFailure.data.code ?? null) : null,
         };
       }
       return yield* Effect.fail(

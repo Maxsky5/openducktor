@@ -185,12 +185,12 @@ const ensureNoIndexDiffOutput = (
   },
   commandDescription: string,
 ): Effect.Effect<string, HostOperationError> => {
-  if (result.ok || result.stdout.trim().length > 0) {
+  if (result.ok || result.exitCode === 1) {
     return Effect.succeed(result.stdout);
   }
   return Effect.fail(
     gitOperationError(
-      `${commandDescription} failed: ${combineOutput(result.stdout, result.stderr)}`,
+      `${commandDescription} failed (exit ${result.exitCode ?? "unknown"}): ${combineOutput(result.stdout, result.stderr)}`,
       commandDescription,
     ),
   );
@@ -199,35 +199,56 @@ const loadNoIndexDiffPayload = (
   runner: GitCommandRunner,
   workingDirectory: string,
   filePath: string,
-): Effect.Effect<
-  {
-    numstat: string;
-    diff: string;
-  },
-  GitDiffError
-> =>
+): Effect.Effect<FileDiff, GitDiffError> =>
   Effect.gen(function* () {
-    const numstatResult = yield* runGitAllowFailure(runner, workingDirectory, [
+    const result = yield* runGitAllowFailure(runner, workingDirectory, [
       "diff",
       "--no-index",
       "--numstat",
+      "-z",
+      "--patch",
       "--",
       "/dev/null",
       filePath,
     ]);
-    const diffResult = yield* runGitAllowFailure(runner, workingDirectory, [
-      "diff",
-      "--no-index",
-      "--",
-      "/dev/null",
-      filePath,
-    ]);
+    const output = yield* ensureNoIndexDiffOutput(
+      result,
+      `git diff --no-index --numstat -z --patch -- /dev/null ${filePath}`,
+    );
+    // -z keeps paths verbatim. A two-path numstat record starts with an empty path.
+    const header = /^(\d+|-)\t(\d+|-)\t([^\0]*)\0/.exec(output);
+    let offset = header?.[0].length ?? 0;
+    let file = header?.[3];
+    if (file === "") {
+      const oldPathEnd = output.indexOf("\0", offset);
+      const newPathEnd = output.indexOf("\0", oldPathEnd + 1);
+      if (output.slice(offset, oldPathEnd) === "/dev/null" && newPathEnd >= 0) {
+        file = output.slice(oldPathEnd + 1, newPathEnd);
+        offset = newPathEnd + 1;
+      }
+    }
+    const patch = output.slice(offset + 1);
+    if (
+      !header ||
+      file !== filePath ||
+      output[offset] !== "\0" ||
+      !patch.startsWith("diff --git ")
+    ) {
+      return yield* Effect.fail(
+        gitResourceError(
+          `git diff --no-index produced no matching diff entry for ${filePath}: ${combineOutput(output, result.stderr)}`,
+          "git.diff.no-index",
+          filePath,
+        ),
+      );
+    }
     return {
-      numstat: yield* ensureNoIndexDiffOutput(
-        numstatResult,
-        `git diff --no-index --numstat /dev/null ${filePath}`,
-      ),
-      diff: yield* ensureNoIndexDiffOutput(diffResult, `git diff --no-index /dev/null ${filePath}`),
+      file: filePath,
+      type: "added",
+      additions: header[1] === "-" ? 0 : Number(header[1]),
+      deletions: header[2] === "-" ? 0 : Number(header[2]),
+      // Keep the line endings and final blank line of the existing FileDiff contract.
+      diff: `${patch.replace(/\r?\n/g, "\n")}\n`,
     };
   });
 const expandUntrackedStatusPaths = (
@@ -236,46 +257,43 @@ const expandUntrackedStatusPaths = (
   statusPath: string,
 ) =>
   Effect.gen(function* () {
-    const trimmedPath = statusPath.trim();
-    if (!trimmedPath) {
+    if (!statusPath) {
       return [];
     }
     const pathStats = yield* Effect.tryPromise({
-      try: () => stat(path.join(workingDirectory, trimmedPath)),
+      try: () => stat(path.join(workingDirectory, statusPath)),
       catch: (cause) =>
         toHostOperationError(cause, "git.expandUntrackedStatusPaths.stat", {
-          statusPath: trimmedPath,
+          statusPath,
           workingDirectory,
         }),
     }).pipe(Effect.catchAll(() => Effect.succeed(undefined)));
     if (!pathStats?.isDirectory()) {
-      return [trimmedPath];
+      return [statusPath];
     }
     const result = yield* runGitAllowFailure(runner, workingDirectory, [
       "ls-files",
       "--others",
       "--exclude-standard",
+      "-z",
       "--",
-      trimmedPath,
+      statusPath,
     ]);
     if (!result.ok) {
       return yield* Effect.fail(
         gitOperationError(
-          `git ls-files --others --exclude-standard -- ${trimmedPath} failed: ${combineOutput(result.stdout, result.stderr)}`,
+          `git ls-files --others --exclude-standard -- ${statusPath} failed: ${combineOutput(result.stdout, result.stderr)}`,
           "git.ls-files",
         ),
       );
     }
-    const filePaths = result.stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
+    const filePaths = result.stdout.split("\0").filter(Boolean);
     if (filePaths.length === 0) {
       return yield* Effect.fail(
         gitResourceError(
-          `git ls-files --others --exclude-standard -- ${trimmedPath} returned no files`,
+          `git ls-files --others --exclude-standard -- ${statusPath} returned no files`,
           "git.ls-files",
-          trimmedPath,
+          statusPath,
         ),
       );
     }
@@ -314,39 +332,28 @@ export const buildFileDiffs = (
         filesWithDiffs.add(file);
       }
     }
-    for (const status of fileStatuses) {
-      if (status.status !== "untracked") {
-        continue;
-      }
+    const untrackedPaths = new Set<string>();
+    const statusPaths = new Set(
+      fileStatuses.filter((status) => status.status === "untracked").map((status) => status.path),
+    );
+    for (const statusPath of statusPaths) {
       for (const filePath of yield* expandUntrackedStatusPaths(
         runner,
         workingDirectory,
-        status.path,
+        statusPath,
       )) {
         if (filesWithDiffs.has(filePath)) {
           continue;
         }
-        const payload = yield* loadNoIndexDiffPayload(runner, workingDirectory, filePath);
-        const [untrackedDiff] = yield* buildFileDiffs(
-          runner,
-          workingDirectory,
-          [],
-          payload.numstat,
-          payload.diff,
-        );
-        if (!untrackedDiff || untrackedDiff.file !== filePath) {
-          return yield* Effect.fail(
-            gitResourceError(
-              `git diff --no-index produced no matching diff entry for ${filePath}`,
-              "git.diff.no-index",
-              filePath,
-            ),
-          );
-        }
-        results.push(untrackedDiff);
-        filesWithDiffs.add(filePath);
+        untrackedPaths.add(filePath);
       }
     }
+    const untrackedDiffs = yield* Effect.forEach(
+      untrackedPaths,
+      (filePath) => loadNoIndexDiffPayload(runner, workingDirectory, filePath),
+      { concurrency: 4 },
+    );
+    results.push(...untrackedDiffs);
     results.sort((left, right) => left.file.localeCompare(right.file));
     return results;
   });

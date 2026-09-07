@@ -1,0 +1,106 @@
+[
+  {
+    "file": "plain.txt",
+    "content": "hello\n",
+    "combined": "1\t0\t\u0000/dev/null\u0000plain.txt\u0000\u0000diff --git a/plain.txt b/plain.txt\nnew file mode 100644\nindex 0000000..ce01362\n--- /dev/null\n+++ b/plain.txt\n@@ -0,0 +1 @@\n+hello\n",
+    "numstat": "1\t0\t/dev/null => plain.txt\n",
+    "patch": "diff --git a/plain.txt b/plain.txt\nnew file mode 100644\nindex 0000000..ce01362\n--- /dev/null\n+++ b/plain.txt\n@@ -0,0 +1 @@\n+hello\n",
+    "additions": 1
+  },
+  {
+    "file": "empty.txt",
+    "content": "",
+    "combined": "0\t0\t\u0000/dev/null\u0000empty.txt\u0000\u0000diff --git a/empty.txt b/empty.txt\nnew file mode 100644\nindex 0000000..e69de29\n",
+    "numstat": "0\t0\t/dev/null => empty.txt\n",
+    "patch": "diff --git a/empty.txt b/empty.txt\nnew file mode 100644\nindex 0000000..e69de29\n",
+    "additions": 0
+  },
+  {
+    "file": "binary.bin",
+    "content": "\u0000x",
+    "combined": "-\t-\t\u0000/dev/null\u0000binary.bin\u0000\u0000diff --git a/binary.bin b/binary.bin\nnew file mode 100644\nindex 0000000..718882c\nBinary files /dev/null and b/binary.bin differ\n",
+    "numstat": "-\t-\t/dev/null => binary.bin\n",
+    "patch": "diff --git a/binary.bin b/binary.bin\nnew file mode 100644\nindex 0000000..718882c\nBinary files /dev/null and b/binary.bin differ\n",
+    "additions": 0
+  },
+  {
+    "file": "no-newline.txt",
+    "content": "hello",
+    "combined": "1\t0\t\u0000/dev/null\u0000no-newline.txt\u0000\u0000diff --git a/no-newline.txt b/no-newline.txt\nnew file mode 100644\nindex 0000000..b6fc4c6\n--- /dev/null\n+++ b/no-newline.txt\n@@ -0,0 +1 @@\n+hello\n\\ No newline at end of file\n",
+    "numstat": "1\t0\t/dev/null => no-newline.txt\n",
+    "patch": "diff --git a/no-newline.txt b/no-newline.txt\nnew file mode 100644\nindex 0000000..b6fc4c6\n--- /dev/null\n+++ b/no-newline.txt\n@@ -0,0 +1 @@\n+hello\n\\ No newline at end of file\n",
+    "additions": 1
+  },
+  {
+    "file": "crlf.txt",
+    "content": "hello\r\n",
+    "combined": "1\t0\t\u0000/dev/null\u0000crlf.txt\u0000\u0000diff --git a/crlf.txt b/crlf.txt\nnew file mode 100644\nindex 0000000..ef0493b\n--- /dev/null\n+++ b/crlf.txt\n@@ -0,0 +1 @@\n+hello\r\n",
+    "numstat": "1\t0\t/dev/null => crlf.txt\n",
+    "patch": "diff --git a/crlf.txt b/crlf.txt\nnew file mode 100644\nindex 0000000..ef0493b\n--- /dev/null\n+++ b/crlf.txt\n@@ -0,0 +1 @@\n+hello\r\n",
+    "additions": 1
+  },
+  {
+    "file": " space name.txt ",
+    "content": "text\n",
+    "combined": "1\t0\t\u0000/dev/null\u0000 space name.txt \u0000\u0000diff --git a/ space name.txt  b/ space name.txt \nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ b/ space name.txt \t\n@@ -0,0 +1 @@\n+text\n",
+    "numstat": "1\t0\t/dev/null =>  space name.txt \n",
+    "patch": "diff --git a/ space name.txt  b/ space name.txt \nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ b/ space name.txt \t\n@@ -0,0 +1 @@\n+text\n",
+    "additions": 1
+  },
+  {
+    "file": "tab\tname.txt",
+    "content": "text\n",
+    "combined": "1\t0\t\u0000/dev/null\u0000tab\tname.txt\u0000\u0000diff --git \"a/tab\\tname.txt\" \"b/tab\\tname.txt\"\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ \"b/tab\\tname.txt\"\n@@ -0,0 +1 @@\n+text\n",
+    "numstat": "1\t0\t/dev/null => \"tab\\tname.txt\"\n",
+    "patch": "diff --git \"a/tab\\tname.txt\" \"b/tab\\tname.txt\"\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ \"b/tab\\tname.txt\"\n@@ -0,0 +1 @@\n+text\n",
+    "additions": 1
+  },
+  {
+    "file": "line\nname.txt",
+    "content": "text\n",
+    "combined": "1\t0\t\u0000/dev/null\u0000line\nname.txt\u0000\u0000diff --git \"a/line\\nname.txt\" \"b/line\\nname.txt\"\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ \"b/line\\nname.txt\"\n@@ -0,0 +1 @@\n+text\n",
+    "numstat": "1\t0\t/dev/null => \"line\\nname.txt\"\n",
+    "patch": "diff --git \"a/line\\nname.txt\" \"b/line\\nname.txt\"\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ \"b/line\\nname.txt\"\n@@ -0,0 +1 @@\n+text\n",
+    "additions": 1
+  },
+  {
+    "file": "quote\"name.txt",
+    "content": "text\n",
+    "combined": "1\t0\t\u0000/dev/null\u0000quote\"name.txt\u0000\u0000diff --git \"a/quote\\\"name.txt\" \"b/quote\\\"name.txt\"\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ \"b/quote\\\"name.txt\"\n@@ -0,0 +1 @@\n+text\n",
+    "numstat": "1\t0\t/dev/null => \"quote\\\"name.txt\"\n",
+    "patch": "diff --git \"a/quote\\\"name.txt\" \"b/quote\\\"name.txt\"\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ \"b/quote\\\"name.txt\"\n@@ -0,0 +1 @@\n+text\n",
+    "additions": 1
+  },
+  {
+    "file": "back\\slash.txt",
+    "content": "text\n",
+    "combined": "1\t0\t\u0000/dev/null\u0000back\\slash.txt\u0000\u0000diff --git \"a/back\\\\slash.txt\" \"b/back\\\\slash.txt\"\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ \"b/back\\\\slash.txt\"\n@@ -0,0 +1 @@\n+text\n",
+    "numstat": "1\t0\t/dev/null => \"back\\\\slash.txt\"\n",
+    "patch": "diff --git \"a/back\\\\slash.txt\" \"b/back\\\\slash.txt\"\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ \"b/back\\\\slash.txt\"\n@@ -0,0 +1 @@\n+text\n",
+    "additions": 1
+  },
+  {
+    "file": "café.txt",
+    "content": "text\n",
+    "combined": "1\t0\t\u0000/dev/null\u0000café.txt\u0000\u0000diff --git \"a/caf\\303\\251.txt\" \"b/caf\\303\\251.txt\"\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ \"b/caf\\303\\251.txt\"\n@@ -0,0 +1 @@\n+text\n",
+    "numstat": "1\t0\t/dev/null => \"caf\\303\\251.txt\"\n",
+    "patch": "diff --git \"a/caf\\303\\251.txt\" \"b/caf\\303\\251.txt\"\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ \"b/caf\\303\\251.txt\"\n@@ -0,0 +1 @@\n+text\n",
+    "additions": 1
+  },
+  {
+    "file": "literal => {name}.txt",
+    "content": "text\n",
+    "combined": "1\t0\t\u0000/dev/null\u0000literal => {name}.txt\u0000\u0000diff --git a/literal => {name}.txt b/literal => {name}.txt\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ b/literal => {name}.txt\t\n@@ -0,0 +1 @@\n+text\n",
+    "numstat": "1\t0\t/dev/null => literal => {name}.txt\n",
+    "patch": "diff --git a/literal => {name}.txt b/literal => {name}.txt\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ b/literal => {name}.txt\t\n@@ -0,0 +1 @@\n+text\n",
+    "additions": 1
+  },
+  {
+    "file": "-option.txt",
+    "content": "text\n",
+    "combined": "1\t0\t\u0000/dev/null\u0000-option.txt\u0000\u0000diff --git a/-option.txt b/-option.txt\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ b/-option.txt\n@@ -0,0 +1 @@\n+text\n",
+    "numstat": "1\t0\t/dev/null => -option.txt\n",
+    "patch": "diff --git a/-option.txt b/-option.txt\nnew file mode 100644\nindex 0000000..8e27be7\n--- /dev/null\n+++ b/-option.txt\n@@ -0,0 +1 @@\n+text\n",
+    "additions": 1
+  }
+]
