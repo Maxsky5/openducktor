@@ -135,7 +135,7 @@ for (const order of ["history-first", "terminal-first"] as const) {
       part: {
         ...part,
         status: "completed",
-        output: { itemId: part.itemId, representation: "inline" },
+        output: { revision: "output-v1" },
       },
     });
     expect(getSessionMessages(sessionsRef)[0]?.meta).toMatchObject({ status: "completed" });

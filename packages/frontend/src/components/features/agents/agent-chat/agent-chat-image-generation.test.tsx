@@ -36,7 +36,7 @@ const part: AgentImageGenerationPart = {
   status: "completed",
   revisedPrompt: "A yellow duck",
   savedPath: "/runtime/duck.png",
-  output: { itemId: "image", representation: "saved_file" },
+  output: { revision: "output-v2" },
 };
 const png =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=";
@@ -251,6 +251,27 @@ test("switching during decode revokes the old URL and ignores a captured stale c
   expect(screen.getByRole("img").getAttribute("src")).toBe("blob:image-2");
 });
 
+test("a changed output revision replaces the preview and ignores the previous decode", async () => {
+  const { view, content, read } = harness();
+  await waitFor(() => expect(images).toHaveLength(1));
+  const staleLoad = images[0]!.onload!;
+  view.rerender(content(ref, { ...part, output: { revision: "new-output" } }));
+  expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
+  await act(async () => {
+    staleLoad.call(images[0]!, new Event("load"));
+  });
+  expect(screen.queryByRole("img")).toBeNull();
+  await loadImage(1);
+  expect(screen.getByRole("img").getAttribute("src")).toBe("blob:image-2");
+  expect(read).toHaveBeenCalledTimes(2);
+  view.rerender(
+    content(ref, { ...part, savedPath: "/display-only.png", output: { revision: "new-output" } }),
+  );
+  expect(screen.getByText("/display-only.png")).toBeTruthy();
+  expect(screen.getByRole("img").getAttribute("src")).toBe("blob:image-2");
+  expect(read).toHaveBeenCalledTimes(2);
+});
+
 test("unsupported runtime and completed output without a source never read bytes", () => {
   const first = harness(undefined, false);
   expect(first.read).not.toHaveBeenCalled();
@@ -276,7 +297,6 @@ for (const resetsAtEpochSeconds of [undefined, 2000000000]) {
     const failure: NonNullable<AgentImageGenerationPart["failure"]> = {
       kind: "usage_limit",
       message: "Image generation quota reached.",
-      limitId: "image_generation",
     };
     if (resetsAtEpochSeconds !== undefined) failure.resetsAtEpochSeconds = resetsAtEpochSeconds;
     const { output: _output, ...metadata } = part;

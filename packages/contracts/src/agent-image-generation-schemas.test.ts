@@ -17,28 +17,49 @@ test("image generation is an optional output capability", () => {
   );
 });
 
-test("image output requires matching completed identity and carries no image bytes", () => {
+test("image output requires completion and an opaque revision without runtime source fields", () => {
   const part = {
     kind: "image_generation",
     messageId: "image",
     partId: "image",
     itemId: "image",
     status: "completed",
-    output: { itemId: "image", representation: "inline" },
+    output: { revision: "output-v1" },
   };
   expect(agentImageGenerationPartSchema.safeParse(part).success).toBe(true);
   for (const status of ["failed", "running", "incomplete", "interrupted"]) {
     expect(agentImageGenerationPartSchema.safeParse({ ...part, status }).success).toBe(false);
   }
-  expect(
-    agentImageGenerationPartSchema.safeParse({
-      ...part,
-      output: { itemId: "other", representation: "inline" },
-    }).success,
-  ).toBe(false);
+  for (const output of [
+    {},
+    { revision: "" },
+    { revision: "output-v1", itemId: "image" },
+    { revision: "output-v1", representation: "inline" },
+    { revision: "output-v1", base64: "bytes" },
+  ]) {
+    expect(agentImageGenerationPartSchema.safeParse({ ...part, output }).success).toBe(false);
+  }
   expect(agentImageGenerationPartSchema.safeParse({ ...part, base64: "bytes" }).success).toBe(
     false,
   );
+});
+
+test("normalized failures do not expose native limit identifiers", () => {
+  const part = {
+    kind: "image_generation",
+    messageId: "message",
+    partId: "part",
+    itemId: "image",
+    status: "failed",
+    failure: { kind: "usage_limit", message: "Image quota exhausted.", resetsAtEpochSeconds: 1 },
+  };
+  expect(agentImageGenerationPartSchema.safeParse(part).success).toBe(true);
+  expect(
+    agentImageGenerationPartSchema.safeParse({
+      ...part,
+      failure: { ...part.failure, limitId: "native-limit" },
+    }).success,
+  ).toBe(false);
 });
 
 test("image reads accept identity but reject path and URL authority", () => {

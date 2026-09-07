@@ -45,13 +45,30 @@ test("saved output wins, inline bytes stay outside the transcript, and null meta
   expect(part).toMatchObject({
     revisedPrompt: "A duck",
     savedPath: "/image.png",
-    output: { representation: "saved_file", itemId: "image" },
   });
   expect(part.transparentBackground).toBeUndefined();
+  expect(part.output!.revision.length).toBeGreaterThan(0);
+  expect(Object.keys(part.output!)).toEqual(["revision"]);
   expect(JSON.stringify(part)).not.toContain("private-bytes");
-  expect(
-    codexImageGenerationPart({ ...item("completed"), result: "bytes" }).output?.representation,
-  ).toBe("inline");
+  expect(part.output).toEqual(codexImageGenerationPart({ ...native, result: "" }).output);
+  expect(part.output).not.toEqual(
+    codexImageGenerationPart({ ...native, savedPath: "/other.png" }).output,
+  );
+});
+
+test("inline output revisions track reported bytes without exposing them", () => {
+  const native = { ...item("completed"), result: "private-bytes" };
+  const first = codexImageGenerationPart(native).output;
+  expect(first).toEqual({ revision: expect.any(String) });
+  expect(first!.revision.length).toBeGreaterThan(0);
+  expect(codexImageGenerationPart({ ...native, revisedPrompt: "A duck" }).output).toEqual(first);
+  expect(codexImageGenerationPart({ ...native, result: "different-bytes" }).output).not.toEqual(
+    first,
+  );
+  expect(codexImageGenerationPart({ ...native, savedPath: native.result }).output).not.toEqual(
+    first,
+  );
+  expect(JSON.stringify(first)).not.toContain(native.result);
 });
 
 test("usage limits preserve only supplied reset times", () => {
@@ -62,6 +79,7 @@ test("usage limits preserve only supplied reset times", () => {
     });
     expect(part.failure?.kind).toBe("usage_limit");
     expect(part.failure?.resetsAtEpochSeconds).toBe(resetsAt ?? undefined);
+    expect(part.failure).not.toHaveProperty("limitId");
   }
 });
 

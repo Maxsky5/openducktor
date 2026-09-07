@@ -11,6 +11,7 @@
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "dependencies": {
+    "@noble/hashes": "^2.3.0",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",

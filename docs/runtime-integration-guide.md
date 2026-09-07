@@ -266,6 +266,8 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 
 Adapters emit `image_generation` parts with stable item and turn identity. Keep generation status separate from preview availability. A completed image can have an unavailable preview. Preserve native completed and failed outcomes across live events and history loads. When a turn ends, mark any unfinished generation incomplete unless the runtime confirms an interruption.
 
+An output carries an opaque `revision`. Keep it stable across live replay and history for the same reported output, and change it when that output changes. Shared code compares revisions without interpreting them. Keep file paths as optional display metadata; a path does not authorize an image read. Do not put native source representations or usage-limit identifiers in image parts.
+
 | Transcript event | Rule |
 |---|---|
 | `image_generation_turn_started` | Record the new turn so earlier session ends do not mark its images incomplete. Do not revive an ended turn. |
@@ -280,7 +282,7 @@ During cleanup, the host calls an adapter's optional `settleRuntimeTranscript` h
 
 `agent_session_read_generated_image` accepts repository, runtime, working directory, session, and image item identity, with an optional turn ID. The renderer does not choose a file path or URL. The host resolves the image source through public runtime history without resuming the turn. Codex reads `thread/read` with `includeTurns: false`, then pages through `thread/turns/list` with `itemsView: full`. Concurrent reads can share a pending history request. The adapter removes that request from its cache when the history read finishes.
 
-Use a runtime-supplied saved path before inline output. If that file is missing, unreadable, or invalid, report a preview error. Do not substitute inline bytes. The host accepts PNG output up to 32 MiB and bounds both encoded and decoded sizes. It reads regular files through a read-only handle and rejects files that grow during the read. The frontend decodes the image before showing a preview. Reads use the existing authenticated browser invoke or Electron IPC transport.
+The Codex adapter selects a runtime-supplied saved path before inline output. It derives the output revision from a SHA-256 digest of the selected source kind and path or inline data. It does not read files to build transcript parts, so the revision does not detect external edits to the same saved path. If that file is missing, unreadable, or invalid, report a preview error. Do not substitute inline bytes. The host accepts PNG output up to 32 MiB and bounds both encoded and decoded sizes. It reads regular files through a read-only handle and rejects files that grow during the read. The frontend decodes the image before showing a preview. Reads use the existing authenticated browser invoke or Electron IPC transport.
 
 Keep image bytes out of transcript state and durable session records. The runtime owns image retention; OpenDucktor keeps no image archive. A known generation outcome can remain visible after its preview becomes unavailable. See [the Query cache strategy](tanstack-query-cache-strategy.md#generated-images) for preview lifetime.
 

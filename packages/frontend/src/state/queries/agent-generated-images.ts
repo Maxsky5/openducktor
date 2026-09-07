@@ -7,7 +7,6 @@ import { queryOptions } from "@tanstack/react-query";
 
 export type AgentGeneratedImageQueryInput = AgentGeneratedImageReadInput & {
   output: NonNullable<AgentImageGenerationPart["output"]>;
-  savedPath?: string;
 };
 
 export const agentGeneratedImageQueryKeys = {
@@ -16,8 +15,7 @@ export const agentGeneratedImageQueryKeys = {
     [
       ...agentGeneratedImageQueryKeys.all,
       ...imageReadIdentity(input),
-      input.output,
-      input.savedPath ?? null,
+      input.output.revision,
     ] as const,
 };
 

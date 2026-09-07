@@ -23,7 +23,7 @@ const image = (
 });
 const completed = {
   ...image("completed"),
-  output: { itemId: "image", representation: "inline" as const },
+  output: { revision: "output-v1" },
 };
 
 test("start, completion, and replay keep one row in its first position before following text", () => {

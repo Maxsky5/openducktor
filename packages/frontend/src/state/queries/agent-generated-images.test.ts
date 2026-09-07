@@ -16,7 +16,7 @@ const input = {
   },
   itemId: "image",
   turnId: "turn",
-  output: { itemId: "image", representation: "inline" as const },
+  output: { revision: "output-v1" },
 };
 const payload = (request: AgentGeneratedImageReadInput) => ({
   ...request,
@@ -25,7 +25,7 @@ const payload = (request: AgentGeneratedImageReadInput) => ({
   base64: "AAAA",
 });
 
-test("keys include every scope and output field", () => {
+test("keys include every scope and the opaque output revision", () => {
   const key = agentGeneratedImageQueryKeys.image(input);
   for (const ref of [
     { ...input.ref, repoPath: "/other" },
@@ -38,10 +38,30 @@ test("keys include every scope and output field", () => {
   for (const change of [
     { itemId: "other" },
     { turnId: "other" },
-    { output: { itemId: "image", representation: "saved_file" as const } },
-    { savedPath: "/runtime/duck.png" },
+    { output: { revision: "output-v2" } },
   ]) {
     expect(agentGeneratedImageQueryKeys.image({ ...input, ...change })).not.toEqual(key);
+  }
+});
+
+test("a new output revision fetches new bytes while replay reuses the cached image", async () => {
+  const client = new QueryClient();
+  const read = mock(async (request: AgentGeneratedImageReadInput) => payload(request));
+  try {
+    const first = await client.fetchQuery(agentGeneratedImageQueryOptions(input, read));
+    expect(await client.fetchQuery(agentGeneratedImageQueryOptions({ ...input }, read))).toBe(
+      first,
+    );
+    const changed = { ...input, output: { revision: "next" } };
+    const next = await client.fetchQuery(agentGeneratedImageQueryOptions(changed, read));
+    expect(next).not.toBe(first);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(read.mock.calls).toEqual([
+      [{ ref: input.ref, itemId: input.itemId, turnId: input.turnId }],
+      [{ ref: input.ref, itemId: input.itemId, turnId: input.turnId }],
+    ]);
+  } finally {
+    client.clear();
   }
 });
 

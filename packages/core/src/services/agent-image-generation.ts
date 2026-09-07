@@ -23,7 +23,7 @@ export const mergeAgentImageGeneration = (
   if (source === "history" && isNativeTerminal(current)) {
     if (current.status !== incoming.status) return current;
     const merged = { ...incoming, ...current };
-    if (current.output && current.output.representation !== incoming.output?.representation) {
+    if (current.output && current.output.revision !== incoming.output?.revision) {
       if (current.savedPath === undefined) delete merged.savedPath;
     }
     return merged;
@@ -36,7 +36,12 @@ export const mergeAgentImageGeneration = (
     if (incoming.incompleteReason === undefined && incompleteReason !== undefined)
       merged.incompleteReason = incompleteReason;
   }
-  if (incoming.output?.representation === "inline") delete merged.savedPath;
+  if (
+    incoming.output &&
+    incoming.output.revision !== current.output?.revision &&
+    incoming.savedPath === undefined
+  )
+    delete merged.savedPath;
   return merged;
 };
 

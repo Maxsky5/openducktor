@@ -1,3 +1,5 @@
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import type {
   AgentImageGenerationPart,
   CodexAppServerThreadItem,
@@ -33,8 +35,13 @@ export const codexImageGenerationPart = (
     part.status = "completed";
     if (item.savedPath !== undefined || item.result.length > 0) {
       part.output = {
-        itemId: item.id,
-        representation: item.savedPath !== undefined ? "saved_file" : "inline",
+        revision: bytesToHex(
+          sha256
+            .create()
+            .update(utf8ToBytes(item.savedPath !== undefined ? "saved_file\0" : "inline\0"))
+            .update(utf8ToBytes(item.savedPath ?? item.result))
+            .digest(),
+        ),
       };
     }
     return part;
@@ -50,7 +57,6 @@ export const codexImageGenerationPart = (
       part.failure = {
         kind: "usage_limit",
         message: "The runtime image generation usage limit was reached.",
-        limitId: item.failure.limitId,
       };
       if (item.failure.resetsAt !== null) part.failure.resetsAtEpochSeconds = item.failure.resetsAt;
     }

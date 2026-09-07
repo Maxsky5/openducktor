@@ -193,7 +193,6 @@ function CompletedImage({
     output: part.output,
   };
   if (part.turnId !== undefined) input.turnId = part.turnId;
-  if (part.savedPath !== undefined) input.savedPath = part.savedPath;
   return (
     <GeneratedImagePreview
       key={JSON.stringify(agentGeneratedImageQueryKeys.image(input))}

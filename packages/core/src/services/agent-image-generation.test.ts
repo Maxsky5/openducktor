@@ -14,7 +14,7 @@ const part = (status: AgentImageGenerationPart["status"]): AgentImageGenerationP
 test("old starts and incomplete history cannot downgrade native completion", () => {
   const completed = {
     ...part("completed"),
-    output: { itemId: "image", representation: "inline" as const },
+    output: { revision: "output-v1" },
   };
   expect(mergeAgentImageGeneration(completed, part("running"), "live")).toEqual(completed);
   expect(mergeAgentImageGeneration(completed, part("incomplete"), "history")).toEqual(completed);
@@ -32,7 +32,7 @@ test("history fills absent metadata while preserving newer live output", () => {
   const live = {
     ...part("completed"),
     savedPath: "/new.png",
-    output: { itemId: "image", representation: "saved_file" as const },
+    output: { revision: "output-v2" },
   };
   const old = { ...part("completed"), revisedPrompt: "A duck", savedPath: "/old.png" };
   expect(mergeAgentImageGeneration(live, old, "history")).toEqual({
@@ -57,17 +57,41 @@ test("confirmed interruption cannot be replaced by unconfirmed history", () => {
   );
 });
 
-test("history cannot attach a different saved-file source to a newer inline result", () => {
+test("history cannot attach a file from an older output revision", () => {
   const live = {
     ...part("completed"),
-    output: { itemId: "image", representation: "inline" as const },
+    output: { revision: "output-v1" },
   };
   const old = {
     ...part("completed"),
     savedPath: "/old.png",
-    output: { itemId: "image", representation: "saved_file" as const },
+    output: { revision: "output-v2" },
   };
   expect(mergeAgentImageGeneration(live, old, "history")).toEqual(live);
+});
+
+test("a new live output revision replaces stale file metadata", () => {
+  const old = {
+    ...part("completed"),
+    revisedPrompt: "A duck",
+    savedPath: "/old.png",
+    output: { revision: "first" },
+  };
+  const next = { ...part("completed"), output: { revision: "second" } };
+  expect(mergeAgentImageGeneration(old, next, "live")).toEqual({
+    ...next,
+    revisedPrompt: "A duck",
+  });
+  expect(mergeAgentImageGeneration(old, { ...next, savedPath: "/new.png" }, "live").savedPath).toBe(
+    "/new.png",
+  );
+});
+
+test("matching revisions can fill file metadata without replacing the output", () => {
+  const current = { ...part("completed"), output: { revision: "same" } };
+  const withPath = { ...current, savedPath: "/image.png" };
+  expect(mergeAgentImageGeneration(current, withPath, "history")).toEqual(withPath);
+  expect(mergeAgentImageGeneration(withPath, current, "live")).toEqual(withPath);
 });
 
 test("completion replay without media preserves the known output and metadata", () => {
@@ -75,7 +99,7 @@ test("completion replay without media preserves the known output and metadata", 
     ...part("completed"),
     revisedPrompt: "A duck",
     transparentBackground: false,
-    output: { itemId: "image", representation: "inline" },
+    output: { revision: "output-v1" },
   };
   expect(mergeAgentImageGeneration(completed, part("completed"), "live")).toEqual(completed);
 });

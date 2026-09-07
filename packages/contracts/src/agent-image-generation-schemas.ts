@@ -7,8 +7,7 @@ import {
 
 export const agentGeneratedImageOutputSchema = z
   .object({
-    representation: z.enum(["saved_file", "inline"]),
-    itemId: z.string().min(1),
+    revision: z.string().min(1),
   })
   .strict();
 
@@ -27,7 +26,6 @@ export const agentImageGenerationPartSchema = z
       .object({
         kind: z.enum(["generation_failed", "usage_limit"]),
         message: z.string(),
-        limitId: z.string().optional(),
         resetsAtEpochSeconds: z.number().int().optional(),
       })
       .strict()
@@ -39,11 +37,11 @@ export const agentImageGenerationPartSchema = z
   })
   .strict()
   .superRefine((part, context) => {
-    if (part.output && (part.status !== "completed" || part.output.itemId !== part.itemId)) {
+    if (part.output && part.status !== "completed") {
       context.addIssue({
         code: "custom",
         path: ["output"],
-        message: "Image output requires a completed item with matching identity.",
+        message: "Image output requires a completed item.",
       });
     }
     if (part.failure && part.status !== "failed") {
