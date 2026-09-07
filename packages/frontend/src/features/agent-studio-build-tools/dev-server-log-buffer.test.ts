@@ -1298,3 +1298,18 @@ test("same-run reconciliation tracks removed entries, not numeric sequence gaps"
   replace([0], "frontend:2");
   expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBeNull();
 });
+
+test("empty replacement changes terminal generation only when the run changes", () => {
+  const store = createDevServerTerminalBufferStore();
+  const firstRun = buildChunk(0).runIdentity;
+  const secondRun = { runId: "frontend:2", runOrder: testRunOrder("frontend:2") };
+  replaceDevServerTerminalBuffer(store, "frontend", [], firstRun);
+  const firstToken = getDevServerTerminalBuffer(store, "frontend")?.resetToken;
+  replaceDevServerTerminalBuffer(store, "frontend", [], firstRun);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.resetToken).toBe(firstToken);
+  replaceDevServerTerminalBuffer(store, "frontend", [], secondRun);
+  const secondToken = getDevServerTerminalBuffer(store, "frontend")?.resetToken;
+  expect(secondToken).toBe((firstToken ?? 0) + 1);
+  replaceDevServerTerminalBuffer(store, "frontend", [], secondRun);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.resetToken).toBe(secondToken);
+});

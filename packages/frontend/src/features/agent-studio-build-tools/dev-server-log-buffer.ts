@@ -227,7 +227,11 @@ export const replaceDevServerTerminalBuffer = (
 ): void => {
   const buffer = getOrCreateDevServerTerminalBufferState(store, scriptId);
   const trimmedChunks = trimDevServerTerminalChunks(terminalChunks);
-  const shouldResetTerminal = buffer.size > 0 || trimmedChunks.length > 0;
+  // Empty replay can still leave a rendered loss notice and a consumed cursor.
+  const shouldResetTerminal =
+    !areDevServerRunIdentitiesEqual(buffer.runIdentity, runIdentity) ||
+    buffer.size > 0 ||
+    trimmedChunks.length > 0;
 
   buffer.entries.length = 0;
   buffer.head = 0;
