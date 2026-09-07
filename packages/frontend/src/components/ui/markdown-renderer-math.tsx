@@ -1,3 +1,4 @@
+import { markdownLinkUrlTransform, type MarkdownLinkPolicy } from "./markdown-link-policy";
 import "katex/dist/katex.min.css";
 import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import type { ReactElement, ReactNode } from "react";
@@ -16,6 +17,7 @@ import { remarkTaskListBlockMath } from "./markdown-task-list-math";
 export default function MarkdownRendererMath({
   markdown,
   components,
+  linkPolicy,
   resolveTaskAssetSrc,
   taskAssetContext,
   premiumCodeBlocks = false,
@@ -23,6 +25,7 @@ export default function MarkdownRendererMath({
 }: {
   markdown: string;
   components: Components;
+  linkPolicy?: MarkdownLinkPolicy | undefined;
   resolveTaskAssetSrc?: ShellBridge["resolveTaskAssetSrc"];
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
   premiumCodeBlocks?: boolean;
@@ -49,7 +52,7 @@ export default function MarkdownRendererMath({
       remarkPlugins={[remarkGfm, remarkMath, remarkTaskListBlockMath]}
       rehypePlugins={[rehypeKatex]}
       skipHtml
-      urlTransform={TASK_DESCRIPTION_URL_TRANSFORM}
+      urlTransform={markdownLinkUrlTransform(TASK_DESCRIPTION_URL_TRANSFORM, linkPolicy)}
       components={createTaskDescriptionComponents(componentInput)}
     >
       {content}

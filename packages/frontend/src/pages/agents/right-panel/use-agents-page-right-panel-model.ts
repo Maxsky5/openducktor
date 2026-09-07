@@ -47,7 +47,6 @@ export type UseAgentsPageRightPanelModelArgs = {
   documentsModel: Parameters<typeof buildTaskExecutionPanelModel>[0]["documentModel"];
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => TaskExecutionFileSelectionResult;
-  onClearSelectedFile: () => void;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
@@ -278,7 +277,6 @@ export function useAgentsPageRightPanelModel({
   documentsModel,
   selectedFile,
   onSelectFile,
-  onClearSelectedFile,
   repoSettings,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
@@ -416,7 +414,6 @@ export function useAgentsPageRightPanelModel({
       isActive: activeTabId === "file_explorer" && isPanelOpen,
       selectedFile,
       onSelectFile,
-      onClearSelectedFile,
     }),
     [
       activeTabId,
@@ -424,7 +421,6 @@ export function useAgentsPageRightPanelModel({
       fileExplorerTargetBranch,
       isPanelOpen,
       onSelectFile,
-      onClearSelectedFile,
       selectedFile,
     ],
   );

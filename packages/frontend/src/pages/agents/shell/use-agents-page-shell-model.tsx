@@ -1,3 +1,4 @@
+import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import { useMemo } from "react";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
 import { gitProviderReadError } from "@/lib/git-provider-health";
@@ -23,6 +24,7 @@ import { useAgentsPageOrchestrationShellModel } from "./use-agents-page-orchestr
 import { useAgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
 
 type AgentsPageShellModel = {
+  chatFileLinkOwner: ChatFileLinkOwner;
   activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
@@ -176,7 +178,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       documentsModel: orchestration.taskExecutionDocumentPanelModel,
       selectedFile: orchestration.taskExecutionSelectedFilePreviewModel.selectedFile,
       onSelectFile: orchestration.onSelectTaskExecutionFile,
-      onClearSelectedFile: orchestration.taskExecutionSelectedFilePreviewModel.onClose,
       repoSettings: orchestration.repoSettings,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
@@ -202,6 +203,21 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     ],
   );
 
+  const chatFileLinkOwner = useMemo<ChatFileLinkOwner>(
+    () => ({
+      repoPath: workspaceRepoPath,
+      taskId: selection.view.taskId || null,
+      ownerKey: orchestration.agentChatModel.thread.transcript.displayedSessionKey ?? "",
+      onSelectFile: orchestration.onSelectTaskExecutionFile,
+    }),
+    [
+      workspaceRepoPath,
+      selection.view.taskId,
+      orchestration.agentChatModel.thread.transcript.displayedSessionKey,
+      orchestration.onSelectTaskExecutionFile,
+    ],
+  );
+
   return {
     activeWorkspace,
     navigationPersistenceError,
@@ -217,6 +233,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     hasSelectedTask: Boolean(selection.view.taskId),
     chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
+    chatFileLinkOwner,
     taskExecutionSelectedFilePreviewModel: orchestration.taskExecutionSelectedFilePreviewModel,
     isRightPanelVisible,
     rightPanelBridge,

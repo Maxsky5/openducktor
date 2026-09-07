@@ -1,4 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { ThemeProvider } from "@/components/layout/theme-provider";
+import * as diffWorkers from "@/contexts/DiffWorkerProvider";
+import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
+import type { ComponentProps } from "react";
+import { useTaskExecutionFilePreviewController } from "../file-preview/use-task-execution-file-preview-controller";
+import { describe, expect, test, spyOn } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -35,7 +42,7 @@ import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage, buildSession, presentRegularToolCall } from "./agent-chat-test-fixtures";
-import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
+import { AgentSessionTranscriptDialog as TranscriptDialog } from "./agent-session-transcript-dialog";
 import {
   AgentSessionTranscriptDialogContext,
   type OpenAgentSessionTranscriptRequest,
@@ -43,6 +50,13 @@ import {
 } from "./agent-session-transcript-dialog-context";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import { AgentSessionTranscriptDialogHost } from "./use-agent-session-transcript-dialog";
+
+function AgentSessionTranscriptDialog(
+  props: Omit<ComponentProps<typeof TranscriptDialog>, "preview">,
+) {
+  const preview = useTaskExecutionFilePreviewController();
+  return <TranscriptDialog {...props} preview={preview} />;
+}
 
 const transcriptTarget: AgentSessionTranscriptTarget = {
   externalSessionId: "session-child-1",
@@ -98,7 +112,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
   for (const runtimeKind of ["codex", "opencode"] as const) {
     test(`updates an already-open ${runtimeKind} subagent transcript`, async () => {
       const sessionStore = createAgentSessionsStore("/repo-a");
-      const target = { ...transcriptTarget, runtimeKind };
+      const target = {
+        ...transcriptTarget,
+        runtimeKind,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } as const,
+      };
       const childSession = createAgentSessionFixture({
         externalSessionId: "session-child-1",
         runtimeKind,
@@ -107,7 +125,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
         workingDirectory: "/repo-a",
         historyLoadState: "loaded",
         messages: createSessionMessagesState("session-child-1", [
-          buildMessage("assistant", "Current child message", {
+          buildMessage("assistant", "Current child message. [Preview child file](src/file.bin)", {
             id: "child-message-1",
           }),
         ]),
@@ -155,20 +173,46 @@ describe("AgentSessionTranscriptDialogHost", () => {
           </RuntimeDefinitionsContext.Provider>
         </QueryClientProvider>
       );
+      queryClient.setQueryData(
+        taskWorktreeQueryOptions({ repoPath: "/repo-a", taskId: "task-1" }).queryKey,
+        () => ({ workingDirectory: "/repo-a/task-worktree" }),
+      );
+      const previousBridge = getShellBridge();
+      configureShellBridge(
+        createShellBridgeFixture({
+          client: {
+            gitCanonicalizePath: async (path) => path,
+            filesystemReadTextFile: async (file) => ({
+              kind: "unsupported",
+              ...file,
+              reason: "binary",
+              message: "Binary child file",
+              size: 3,
+              mtimeMs: 1,
+            }),
+          },
+        }),
+      );
+      const workerSpy = spyOn(diffWorkers, "DiffWorkerProvider").mockImplementation(
+        ({ children }) => <>{children}</>,
+      );
       const rendered = render(
-        <AgentSessionTranscriptDialog
-          workspaceRepoPath="/repo-a"
-          target={target}
-          open
-          onOpenChange={() => undefined}
-          title="Subagent activity"
-          description="View what this subagent did."
-        />,
+        <ThemeProvider>
+          <AgentSessionTranscriptDialog
+            workspaceRepoPath="/repo-a"
+            target={target}
+            open
+            onOpenChange={() => undefined}
+            onFileSaved={() => undefined}
+            title="Subagent activity"
+            description="View what this subagent did."
+          />
+        </ThemeProvider>,
         { wrapper },
       );
 
       try {
-        expect(await screen.findByText("Current child message")).toBeTruthy();
+        expect(await screen.findByText(/Current child message/)).toBeTruthy();
 
         await act(async () => {
           sessionStore.updateSession(target, (current) => ({
@@ -185,8 +229,20 @@ describe("AgentSessionTranscriptDialogHost", () => {
         await waitFor(() => {
           expect(screen.getByText("New child message while open")).toBeTruthy();
         });
+        const link = screen.getByRole("link", { name: "Preview child file" });
+        link.focus();
+        fireEvent.click(link);
+        await screen.findByText("Binary child file");
+        expect(screen.getByLabelText("Selected file preview")).toBeTruthy();
+        expect(screen.queryByRole("link", { name: "Preview child file" })).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Close file preview" }));
+        expect(screen.getByRole("link", { name: "Preview child file" })).toBe(link);
+        expect(document.activeElement).toBe(link);
       } finally {
         rendered.unmount();
+        workerSpy.mockRestore();
+        configureShellBridge(previousBridge);
+        queryClient.clear();
       }
     });
   }
@@ -257,6 +313,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
         target={transcriptTarget}
         open
         onOpenChange={() => undefined}
+        onFileSaved={() => undefined}
         title="Subagent activity"
         description="View what this subagent did."
       />,
@@ -299,6 +356,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
       value={{
         openSessionTranscript: onOpen,
         closeSessionTranscript: () => undefined,
+        registerFileSaveHandler: () => () => {},
       }}
     >
       {children}

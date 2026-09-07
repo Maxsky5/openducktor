@@ -235,14 +235,13 @@ export function useAgentOrchestratorOperations({
         startWorkflowSession: async (input) => {
           try {
             return await runtimeHostPort.agentSessionWorkflowStart(input);
-          } catch (cause) {
+          } finally {
             await queryClient.invalidateQueries({
               queryKey: taskWorktreeQueryKeys.taskWorktree({
                 repoPath: input.repoPath,
                 taskId: input.sessionScope.taskId,
               }),
             });
-            throw cause;
           }
         },
         ensureExistingSessionRuntime,

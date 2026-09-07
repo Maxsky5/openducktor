@@ -31,7 +31,7 @@ import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
 import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
 import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
-import type { UseTaskExecutionFilePreviewControllerResult } from "./use-task-execution-file-preview-controller";
+import type { UseTaskExecutionFilePreviewControllerResult } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 
 export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionControllerResult;
 

@@ -1,5 +1,18 @@
+import {
+  markdownLinkComponents,
+  markdownLinkUrlTransform,
+  type MarkdownLinkPolicy,
+} from "./markdown-link-policy";
 import { TASK_ASSET_URI_PREFIX, type TaskAssetRenderContext } from "@openducktor/contracts";
-import { lazy, memo, type ReactElement, type ReactNode, Suspense } from "react";
+import {
+  type ComponentProps,
+  lazy,
+  memo,
+  type ReactElement,
+  type ReactNode,
+  Suspense,
+  useMemo,
+} from "react";
 import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -19,6 +32,7 @@ export type { MarkdownRendererVariant } from "./markdown-renderer-components";
 export type MarkdownPremiumRendererProps = {
   markdown: string;
   components: Components;
+  linkPolicy?: MarkdownLinkPolicy | undefined;
   fallback?: ReactNode;
 };
 
@@ -27,6 +41,7 @@ type MarkdownRendererProps = {
   variant?: MarkdownRendererVariant;
   className?: string;
   components?: Components;
+  linkPolicy?: MarkdownLinkPolicy | undefined;
   premiumCodeBlocks?: boolean;
   fallback?: ReactNode;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
@@ -65,15 +80,17 @@ const MARKDOWN_CLASSES = {
 const MarkdownSync = memo(function MarkdownSync({
   markdown,
   components,
+  linkPolicy,
 }: {
   markdown: string;
   components: Components;
+  linkPolicy?: MarkdownLinkPolicy | undefined;
 }): ReactElement {
   return (
     <Markdown
       remarkPlugins={REMARK_PLUGINS}
       skipHtml
-      urlTransform={MARKDOWN_URL_TRANSFORM}
+      urlTransform={markdownLinkUrlTransform(MARKDOWN_URL_TRANSFORM, linkPolicy)}
       components={components}
     >
       {markdown}
@@ -86,24 +103,32 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   variant = "document",
   className,
   components: componentOverrides,
+  linkPolicy,
   premiumCodeBlocks = false,
   fallback,
   taskAssetContext,
   stripTaskDescriptionFrontMatter = false,
 }: MarkdownRendererProps): ReactElement | null {
+  const components = useMemo(
+    () => markdownLinkComponents(MARKDOWN_COMPONENTS[variant], componentOverrides, linkPolicy),
+    [variant, componentOverrides, linkPolicy],
+  );
   const content = prepareMarkdownRenderContent(markdown, stripTaskDescriptionFrontMatter);
   if (!content) {
     return null;
   }
 
-  const components = componentOverrides
-    ? { ...MARKDOWN_COMPONENTS[variant], ...componentOverrides }
-    : MARKDOWN_COMPONENTS[variant];
   const hasMathCandidate = content.includes("$");
   const hasMermaidCandidate = content.includes("mermaid");
   const rendersTaskAsset = content.includes(TASK_ASSET_URI_PREFIX);
   const needsRichRenderer = rendersTaskAsset || taskAssetContext !== undefined;
   const resolveTaskAssetSrc = taskAssetContext ? getShellBridge().resolveTaskAssetSrc : undefined;
+  const taskAssetProps: Pick<
+    ComponentProps<typeof MarkdownRendererRich>,
+    "taskAssetContext" | "resolveTaskAssetSrc"
+  > = {};
+  if (taskAssetContext) taskAssetProps.taskAssetContext = taskAssetContext;
+  if (resolveTaskAssetSrc) taskAssetProps.resolveTaskAssetSrc = resolveTaskAssetSrc;
 
   let renderedContent: ReactElement;
   if (needsRichRenderer) {
@@ -112,50 +137,44 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         <MarkdownRendererRich
           markdown={content}
           components={components}
+          linkPolicy={linkPolicy}
           premiumCodeBlocks={premiumCodeBlocks}
           fallback={fallback}
-          {...(taskAssetContext ? { taskAssetContext } : {})}
-          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+          {...taskAssetProps}
         />
       </Suspense>
     );
   } else if (premiumCodeBlocks) {
     renderedContent = (
       <Suspense fallback={fallback ?? null}>
-        <PremiumMarkdownRenderer markdown={content} components={components} fallback={fallback} />
-      </Suspense>
-    );
-  } else {
-    renderedContent = <MarkdownSync markdown={content} components={components} />;
-  }
-
-  if (hasMermaidCandidate) {
-    renderedContent = (
-      <Suspense fallback={renderedContent}>
-        <MarkdownRendererMermaidCandidate
+        <PremiumMarkdownRenderer
           markdown={content}
           components={components}
-          fallbackContent={renderedContent}
-          premiumCodeBlocks={premiumCodeBlocks}
+          linkPolicy={linkPolicy}
           fallback={fallback}
-          {...(taskAssetContext ? { taskAssetContext } : {})}
-          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
         />
       </Suspense>
     );
+  } else {
+    renderedContent = (
+      <MarkdownSync markdown={content} components={components} linkPolicy={linkPolicy} />
+    );
   }
 
-  if (hasMathCandidate && !hasMermaidCandidate) {
+  const CandidateRenderer = hasMermaidCandidate
+    ? MarkdownRendererMermaidCandidate
+    : MarkdownRendererMathCandidate;
+  if (hasMermaidCandidate || hasMathCandidate) {
     renderedContent = (
       <Suspense fallback={renderedContent}>
-        <MarkdownRendererMathCandidate
+        <CandidateRenderer
           markdown={content}
           components={components}
+          linkPolicy={linkPolicy}
           fallbackContent={renderedContent}
           premiumCodeBlocks={premiumCodeBlocks}
           fallback={fallback}
-          {...(taskAssetContext ? { taskAssetContext } : {})}
-          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+          {...taskAssetProps}
         />
       </Suspense>
     );

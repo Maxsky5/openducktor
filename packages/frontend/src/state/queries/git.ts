@@ -17,6 +17,7 @@ const WORKTREE_STATUS_STALE_TIME_MS = 0;
 
 export const gitQueryKeys = {
   all: ["git"] as const,
+  canonicalPath: (path: string) => [...gitQueryKeys.all, "canonical-path", path] as const,
   branches: (repoPath: string) => [...gitQueryKeys.all, "branches", repoPath] as const,
   currentBranch: (repoPath: string) => [...gitQueryKeys.all, "current-branch", repoPath] as const,
   worktreeStatus: (
@@ -48,6 +49,16 @@ export const gitQueryKeys = {
       workingDir ?? "",
     ] as const,
 };
+
+export const canonicalPathQueryOptions = (
+  path: string,
+  hostClient: Pick<typeof host, "gitCanonicalizePath"> = host,
+) =>
+  queryOptions({
+    queryKey: gitQueryKeys.canonicalPath(path),
+    queryFn: () => hostClient.gitCanonicalizePath(path),
+    staleTime: 0,
+  });
 
 export const repoBranchesQueryOptions = (
   repoPath: string,

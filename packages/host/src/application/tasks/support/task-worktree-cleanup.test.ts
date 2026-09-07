@@ -26,6 +26,7 @@ import {
   task,
 } from "../test-support/task-workflow-harness";
 import { requireBuildStartDependencies } from "./required-task-dependencies";
+import { createTaskWorktreeService } from "../worktrees/task-worktree-service";
 import {
   cleanupMergedTaskState,
   findLatestCleanupTarget,
@@ -416,8 +417,20 @@ describe("task worktree cleanup", () => {
 
   test("rejects a task worktree symlink alias before calling Git", async () => {
     const calls: unknown[] = [];
-    const symlinkPath = "/worktrees/repo/task-link";
+    const symlinkPath = "/worktrees/repo/task-1";
     const targetPath = "/worktrees/repo/task-target";
+    const settingsConfig = {
+      ...createBuildSettingsConfig(new Set(["/repo", symlinkPath, targetPath])),
+      canonicalizePath: (path: string) => Effect.succeed(path === symlinkPath ? targetPath : path),
+    };
+    const taskWorktreeService = createTaskWorktreeService({
+      settingsConfig,
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: emptyHooks,
+      }),
+    });
 
     await expect(
       Effect.runPromise(
@@ -432,18 +445,19 @@ describe("task worktree cleanup", () => {
                 },
                 currentBranches: {
                   [symlinkPath]: { name: "odt/task-1", detached: false },
+                  [targetPath]: { name: "odt/task-1", detached: false },
                 },
               }),
-              settingsConfig: createBuildSettingsConfig(new Set(["/repo", symlinkPath])),
-              taskWorktreeService: createDirectMergeTaskWorktreeService(symlinkPath),
+              settingsConfig,
+              taskWorktreeService,
               terminalService: createTerminalCleanupService(calls),
               worktreeFiles: {
                 ...createBuildStartWorktreeFiles(calls),
-                resolvePathWithinRoot: () =>
+                resolvePathWithinRoot: (_root, candidate) =>
                   Effect.succeed({
                     canonicalPath: targetPath,
-                    cleanupPath: symlinkPath,
-                    isSymlink: true,
+                    cleanupPath: candidate,
+                    isSymlink: candidate === symlinkPath,
                     kind: "descendant",
                   }),
               },
@@ -460,6 +474,9 @@ describe("task worktree cleanup", () => {
 
     expect(calls).not.toContainEqual(
       expect.objectContaining({ type: "removeWorktree", worktreePath: symlinkPath }),
+    );
+    expect(calls).not.toContainEqual(
+      expect.objectContaining({ type: "removeWorktree", worktreePath: targetPath }),
     );
   });
 

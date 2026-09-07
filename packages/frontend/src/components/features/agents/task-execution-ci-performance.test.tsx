@@ -143,7 +143,6 @@ const basePanelModel = {
     isActive: false,
     selectedFile: null,
     onSelectFile: () => {},
-    onClearSelectedFile: () => {},
   },
   ciChecksModel: {
     isActive: false,

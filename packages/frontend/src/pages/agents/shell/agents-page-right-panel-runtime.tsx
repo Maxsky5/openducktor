@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { memo, type ReactElement, useCallback, useEffect } from "react";
+import { memo, type ReactElement, useCallback, useEffect, useLayoutEffect } from "react";
+import { useOptionalAgentSessionTranscriptDialog } from "@/components/features/agents/agent-chat/agent-session-transcript-dialog-context";
 import { MemoizedTaskExecutionPanel } from "@/components/features/agents/task-execution-panel";
 import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
@@ -26,6 +27,20 @@ export const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRun
   renderPanel?: boolean;
 }): ReactElement | null {
   const { rightPanelModel, refreshWorktree } = useAgentsPageRightPanelModel(args);
+
+  const registerFileSaveHandler =
+    useOptionalAgentSessionTranscriptDialog()?.registerFileSaveHandler;
+  const repoPath = args.activeWorkspace?.repoPath ?? null;
+  const taskId = args.selectedView.taskId;
+  const contextMode = rightPanelModel?.gitModel.contextMode;
+  useLayoutEffect(
+    () =>
+      registerFileSaveHandler?.((savedRepoPath, savedTaskId) => {
+        if (savedRepoPath === repoPath && savedTaskId === taskId && contextMode === "worktree")
+          void refreshWorktree("soft");
+      }),
+    [registerFileSaveHandler, repoPath, taskId, contextMode, refreshWorktree],
+  );
 
   useEffect(() => {
     refreshWorktreeRef.current = refreshWorktree;

@@ -1,3 +1,4 @@
+import type { MarkdownLinkPolicy } from "./markdown-link-policy";
 import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import type { ReactElement, ReactNode } from "react";
 import type { Components } from "react-markdown";
@@ -10,6 +11,7 @@ import MarkdownRendererRich from "./markdown-renderer-rich";
 export default function MarkdownRendererMermaidCandidate({
   markdown,
   components,
+  linkPolicy,
   fallbackContent,
   resolveTaskAssetSrc,
   taskAssetContext,
@@ -18,6 +20,7 @@ export default function MarkdownRendererMermaidCandidate({
 }: {
   markdown: string;
   components: Components;
+  linkPolicy?: MarkdownLinkPolicy | undefined;
   fallbackContent: ReactElement;
   resolveTaskAssetSrc?: ShellBridge["resolveTaskAssetSrc"];
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
@@ -33,6 +36,7 @@ export default function MarkdownRendererMermaidCandidate({
     <Renderer
       markdown={markdown}
       components={components}
+      linkPolicy={linkPolicy}
       premiumCodeBlocks={premiumCodeBlocks}
       fallback={fallback}
       {...(taskAssetContext ? { taskAssetContext } : {})}

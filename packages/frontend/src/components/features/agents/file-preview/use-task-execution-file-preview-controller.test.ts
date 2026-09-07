@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { enableReactActEnvironment } from "./agent-studio-test-utils";
-import { useTaskExecutionFilePreviewController } from "./use-task-execution-file-preview-controller";
+import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { useTaskExecutionFilePreviewController } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 
 enableReactActEnvironment();
 

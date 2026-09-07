@@ -7,6 +7,7 @@ export type TaskExecutionSelectedFile = {
 };
 
 // biome-ignore lint/suspicious/noConfusingVoidType: Event handlers may omit a result; false reports a rejected selection.
+// false means the selection was not applied now, including changes queued behind a draft or save.
 export type TaskExecutionFileSelectionResult = false | void;
 
 export const taskExecutionSelectedFileKey = (file: TaskExecutionSelectedFile): string =>
@@ -19,7 +20,6 @@ export type TaskExecutionFileExplorerPanelModel = {
   isActive: boolean;
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => TaskExecutionFileSelectionResult;
-  onClearSelectedFile: () => void;
 };
 
 export const buildTaskExecutionFileTreeInputPaths = (
@@ -49,12 +49,6 @@ export const buildTaskExecutionFileTreeGitStatusEntries = (
 
   return gitStatusEntries;
 };
-
-export const shouldClearTaskExecutionSelectedFile = (
-  selectedFile: TaskExecutionSelectedFile | null,
-  resolvedRootPath: string | null,
-): boolean =>
-  selectedFile !== null && resolvedRootPath !== null && selectedFile.rootPath !== resolvedRootPath;
 
 export const normalizeTaskExecutionFileTreeSelectionPath = (path: string): string =>
   path.startsWith("f::") ? path.slice(3) : path;

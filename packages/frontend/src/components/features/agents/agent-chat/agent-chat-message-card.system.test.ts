@@ -255,6 +255,7 @@ describe("AgentChatMessageCard system messages", () => {
         transcriptDialog: {
           openSessionTranscript: () => {},
           closeSessionTranscript: () => {},
+          registerFileSaveHandler: () => () => {},
         },
       }),
     );

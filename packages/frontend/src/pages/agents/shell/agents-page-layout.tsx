@@ -1,3 +1,5 @@
+import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
+import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import {
   type ComponentProps,
   memo,
@@ -83,12 +85,12 @@ export function AgentsPageWorkspacePanes({
     <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 overflow-hidden">
       <ResizablePanel defaultSize={63} minSize={35}>
         <div
-          className="flex h-full min-h-0 flex-col overflow-hidden"
+          className="relative flex h-full min-h-0 flex-col overflow-hidden"
           style={PANEL_CONTAINMENT_STYLE}
         >
           {hasSelectedFilePreview ? (
             <div
-              className="h-full min-h-0 overflow-hidden"
+              className="absolute inset-0 h-full min-h-0 overflow-hidden"
               data-testid="task-execution-selected-file-preview-pane"
             >
               {selectedFilePreviewContent}
@@ -96,7 +98,8 @@ export function AgentsPageWorkspacePanes({
           ) : null}
           <div
             className="min-h-0 flex-1 overflow-hidden"
-            hidden={hasSelectedFilePreview}
+            style={{ visibility: hasSelectedFilePreview ? "hidden" : undefined }}
+            inert={hasSelectedFilePreview}
             data-testid="agent-studio-chat-pane"
           >
             {chatContent}
@@ -223,6 +226,7 @@ const MemoizedAgentChatPane = memo(function AgentChatPane({
 });
 
 export type AgentsPageLayoutModel = {
+  chatFileLinkOwner: ChatFileLinkOwner;
   activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
@@ -253,6 +257,7 @@ type AgentsPageLayoutProps = {
 
 export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement {
   const {
+    chatFileLinkOwner,
     activeWorkspace,
     navigationPersistenceError,
     chatSettingsLoadError,
@@ -274,6 +279,27 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     modalContent,
     terminalPanel,
   } = model;
+  const linkRef = useRef<HTMLElement | null>(null);
+  const hasSelectedFilePreview = taskExecutionSelectedFilePreviewModel.selectedFile !== null;
+  useLayoutEffect(() => {
+    linkRef.current = null;
+  }, [chatFileLinkOwner.repoPath, chatFileLinkOwner.taskId, chatFileLinkOwner.ownerKey]);
+  useLayoutEffect(() => {
+    if (!hasSelectedFilePreview && linkRef.current?.isConnected) {
+      linkRef.current.focus({ preventScroll: true });
+      linkRef.current = null;
+    }
+  }, [hasSelectedFilePreview]);
+  const fileLinkOwner = useMemo<ChatFileLinkOwner>(
+    () => ({
+      ...chatFileLinkOwner,
+      onSelectFile: (file, trigger) => {
+        linkRef.current = trigger;
+        chatFileLinkOwner.onSelectFile(file, trigger);
+      },
+    }),
+    [chatFileLinkOwner],
+  );
   const refreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
   const refreshWorktreeAfterFileSave = useCallback((): void => {
     void refreshWorktreeRef.current?.("soft");
@@ -298,8 +324,12 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     [rightPanelToggleModel, taskTabsModel, terminalPanelToggleModel],
   );
   const chatContent = useMemo(
-    () => <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />,
-    [chatHeaderModel, chatModel],
+    () => (
+      <ChatFileLinkProvider owner={fileLinkOwner}>
+        <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />
+      </ChatFileLinkProvider>
+    ),
+    [chatHeaderModel, chatModel, fileLinkOwner],
   );
   const rightPanelContent = useMemo(
     () => (
@@ -320,7 +350,6 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     ),
     [refreshWorktreeAfterFileSave, taskExecutionSelectedFilePreviewModel],
   );
-  const hasSelectedFilePreview = taskExecutionSelectedFilePreviewModel.selectedFile !== null;
   const workspaceContent = useMemo(
     () => (
       <AgentsPageWorkspace

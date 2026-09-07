@@ -12,7 +12,7 @@ import { useAgentStudioWorkspaceStateLoad } from "../use-agent-studio-workspace-
 import {
   type UseTaskExecutionFilePreviewControllerResult,
   useTaskExecutionFilePreviewController,
-} from "../use-task-execution-file-preview-controller";
+} from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 import type { SelectAgentStudioSelection } from "./agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
 

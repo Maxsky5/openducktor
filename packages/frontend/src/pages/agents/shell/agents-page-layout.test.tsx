@@ -48,13 +48,17 @@ describe("AgentsPageWorkspacePanes", () => {
     expect(view.getByTestId("task-execution-selected-file-preview-pane").className).toContain(
       "h-full",
     );
-    expect(view.getByTestId("agent-studio-chat-pane").hasAttribute("hidden")).toBe(true);
+    expect(view.getByTestId("agent-studio-chat-pane").hasAttribute("hidden")).toBe(false);
+    expect(view.getByTestId("agent-studio-chat-pane").style.visibility).toBe("hidden");
+    expect(view.getByTestId("agent-studio-chat-pane").hasAttribute("inert")).toBe(true);
   });
 
   test("shows the chat pane when no file preview is selected", () => {
     const view = renderWorkspacePanes(false);
 
     expect(view.queryByTestId("mock-file-preview")).toBeNull();
+    expect(view.getByTestId("agent-studio-chat-pane").style.visibility).toBe("");
+    expect(view.getByTestId("agent-studio-chat-pane").hasAttribute("inert")).toBe(false);
     expect(view.getByTestId("agent-studio-chat-pane").hasAttribute("hidden")).toBe(false);
   });
 });
