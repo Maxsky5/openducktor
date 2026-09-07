@@ -183,12 +183,10 @@ export const allowedOriginsForFrontendOrigin = (
 ): Set<string> => {
   const parsed = new URL(frontendOrigin);
   const port = String(frontendPort ?? Number(portOfHttpOrigin(parsed)));
-  return new Set([
-    parsed.origin,
-    `http://127.0.0.1:${port}`,
-    `http://localhost:${port}`,
-    `http://[::1]:${port}`,
-  ]);
+  const loopbackOrigins = ["127.0.0.1", "localhost", "[::1]"].map(
+    (host) => new URL(`http://${host}:${port}`).origin,
+  );
+  return new Set([parsed.origin, ...loopbackOrigins]);
 };
 
 export const stopTypescriptHostBackendServicesEffect = ({

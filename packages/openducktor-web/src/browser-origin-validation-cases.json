@@ -63,5 +63,10 @@
     "name": "credentials are rejected",
     "input": "http://user:pass@127.0.0.1:14327",
     "errorIncludes": "credentials"
+  },
+  {
+    "name": "port zero origin is rejected",
+    "input": "http://127.0.0.1:0",
+    "errorIncludes": "port 0"
   }
 ]

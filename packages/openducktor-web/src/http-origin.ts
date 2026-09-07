@@ -100,6 +100,12 @@ export const parseHttpOriginEffect = (
         details: { rawUrl },
       });
     }
+    if (parsed.port === "0") {
+      return yield* originError(options.field, {
+        message: `${originDescription} must not use port 0.`,
+        details: { rawUrl },
+      });
+    }
 
     return parsed;
   });

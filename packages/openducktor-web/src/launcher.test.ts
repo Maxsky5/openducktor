@@ -162,6 +162,32 @@ describe("launcher internals", () => {
     ).toEqual(["localhost", ".localhost", "machine.ts.net"]);
   });
 
+  test("allows a non-IP bind hostname in Vite next to the external hostname", () => {
+    expect(
+      viteServerOptions({
+        backendPort: 14327,
+        externalUrl: "https://machine.ts.net",
+        frontendPort: 1420,
+        host: "runner.internal",
+        packageRoot: "/web-package",
+        workspaceMode: false,
+      }).allowedHosts,
+    ).toEqual(["localhost", ".localhost", "machine.ts.net", "runner.internal"]);
+  });
+
+  test("does not add an IP bind hostname to the Vite allowlist", () => {
+    expect(
+      viteServerOptions({
+        backendPort: 14327,
+        externalUrl: "https://machine.ts.net",
+        frontendPort: 1420,
+        host: "10.0.0.5",
+        packageRoot: "/web-package",
+        workspaceMode: false,
+      }).allowedHosts,
+    ).toEqual(["localhost", ".localhost", "machine.ts.net"]);
+  });
+
   test("allows only loopback, bind, and external hosts on remote frontend servers", () => {
     const hostnames = allowedHostnamesFor({
       bindHost: "0.0.0.0",
@@ -240,6 +266,7 @@ describe("launcher internals", () => {
 
   test("probes readiness over loopback when the bind covers all interfaces", () => {
     expect(readinessHostForBind("0.0.0.0")).toBe(LOCALHOST);
+    expect(readinessHostForBind("[::]")).toBe("::1");
     expect(readinessHostForBind("127.0.0.1")).toBe("127.0.0.1");
     expect(readinessHostForBind("::1")).toBe("::1");
     expect(readinessHostForBind("10.0.0.5")).toBe("10.0.0.5");

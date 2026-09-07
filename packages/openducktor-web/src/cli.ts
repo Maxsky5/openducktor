@@ -146,9 +146,15 @@ const parseBasePathEffect = (
       });
     }
     const trimmed = raw.trim().replace(/\/+$/u, "");
-    if (trimmed === "" || !/^\/[A-Za-z0-9._~-]+(\/[A-Za-z0-9._~-]+)*$/u.test(trimmed)) {
+    const segments = trimmed.split("/");
+    if (
+      trimmed === "" ||
+      !/^\/[A-Za-z0-9._~-]+(\/[A-Za-z0-9._~-]+)*$/u.test(trimmed) ||
+      segments.includes(".") ||
+      segments.includes("..")
+    ) {
       return yield* new WebValidationError({
-        message: `Invalid ${flag} value: ${raw}. Expected a path starting with / with no empty segments, query string, or fragment.`,
+        message: `Invalid ${flag} value: ${raw}. Expected a path starting with / with no empty, dot, or double-dot segments, query string, or fragment.`,
         field: flag,
         details: { raw },
       });

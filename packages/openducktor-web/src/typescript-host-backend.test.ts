@@ -456,6 +456,9 @@ describe("TypeScript web host backend", () => {
         "http://[::1]:1420",
       ]),
     );
+    expect(allowedOriginsForFrontendOrigin("http://100.64.0.1:80")).toEqual(
+      new Set(["http://100.64.0.1", "http://127.0.0.1", "http://localhost", "http://[::1]"]),
+    );
   });
 
   test("preserves structured host command failure kind in invoke error responses", async () => {

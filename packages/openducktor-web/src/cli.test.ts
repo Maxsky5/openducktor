@@ -210,6 +210,26 @@ describe("web CLI argument parsing", () => {
     expect(parseEmptyPort).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
   });
 
+  test("rejects unusable network values before launch", () => {
+    const parsePortZeroExternalUrl = () => parseCliArgs(["--external-url", "http://example.com:0"]);
+    expect(parsePortZeroExternalUrl).toThrow("must not use port 0");
+    expect(parsePortZeroExternalUrl).toThrow(
+      expect.objectContaining({ _tag: "WebValidationError" }),
+    );
+
+    const parseDotSegmentBasePath = () => parseCliArgs(["--base-path", "/api/."]);
+    expect(parseDotSegmentBasePath).toThrow("Invalid --base-path value: /api/.");
+    expect(parseDotSegmentBasePath).toThrow(
+      expect.objectContaining({ _tag: "WebValidationError" }),
+    );
+
+    const parseDotDotSegmentBasePath = () => parseCliArgs(["--base-path", "/foo/../api"]);
+    expect(parseDotDotSegmentBasePath).toThrow("Invalid --base-path value: /foo/../api");
+    expect(parseDotDotSegmentBasePath).toThrow(
+      expect.objectContaining({ _tag: "WebValidationError" }),
+    );
+  });
+
   test("returns help before launcher setup", async () => {
     await expect(Effect.runPromise(parseCliArgsEffect(["--help"]))).resolves.toEqual({
       _tag: "Help",
