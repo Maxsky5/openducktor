@@ -600,16 +600,16 @@ export class CodexAppServerAdapter
           runtimeId: session.runtimeId,
         }
       : await this.runtimeClients.resolve(input, "load Codex session history");
-    const mergeImage = this.runtimeEvents.prepareImageHistory(
-      runtime.runtimeId,
-      input.externalSessionId,
-    );
+    const mergeImage = this.options.subscribeEvents
+      ? this.runtimeEvents.prepareImageHistory(runtime.runtimeId, input.externalSessionId)
+      : undefined;
     const history = await loadCodexSessionHistory({
       input,
       session,
       runtime,
       threadInventory: this.threadInventory,
     });
+    if (!mergeImage) return history;
     return history.map((message) =>
       message.role === "assistant"
         ? {

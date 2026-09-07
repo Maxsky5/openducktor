@@ -8,6 +8,22 @@ import {
 
 const timestamp = "2026-09-06T10:00:00.000Z";
 
+test("runtime failure replaces idle and survives later turn and session idle events", () => {
+  const idle = reduce({}, { type: "turn_ended", turnId: "turn", reason: "turn_ended" });
+  const failed = reduce(idle, { type: "turn_ended", turnId: "turn", reason: "runtime_failure" });
+  expect(resolve(failed, { turnId: "turn" }, "turn")).toBe("runtime_failure");
+  expect(reduce(failed, { type: "turn_ended", turnId: "turn", reason: "turn_ended" })).toBe(failed);
+  const sessionIdle = reduce(failed, {
+    type: "session_ended",
+    timestamp,
+    reason: "turn_ended",
+    turnIds: ["turn"],
+  });
+  expect(resolve(sessionIdle, { turnId: "turn" }, "session")).toBe("runtime_failure");
+  const interrupted = reduce(failed, { type: "turn_ended", turnId: "turn", reason: "interrupted" });
+  expect(resolve(interrupted, { turnId: "turn" }, "turn")).toBe("interrupted");
+});
+
 for (const reason of ["turn_ended", "runtime_failure", "interrupted"] as const) {
   test(`${reason} survives late starts without ending another turn`, () => {
     const before = reduce({}, { type: "turn_started", turnId: "old" });

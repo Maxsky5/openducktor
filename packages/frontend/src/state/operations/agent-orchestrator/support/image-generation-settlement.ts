@@ -83,6 +83,11 @@ export const recordImageGenerationSessionEnd = (
   timestamp: string,
   reason: NonNullable<AgentSessionState["imageGenerationEnd"]>["reason"],
 ): AgentSessionState => {
+  if (
+    session.imageGenerationEnd &&
+    Date.parse(timestamp) <= Date.parse(session.imageGenerationEnd.timestamp)
+  )
+    return session;
   const turnIds: string[] = [];
   for (const message of session.messages.items) {
     if (message.meta?.kind !== "image_generation" || !message.meta.turnId) continue;
@@ -95,7 +100,6 @@ export const recordImageGenerationSessionEnd = (
     reason,
     turnIds,
   });
-  // Compare session cutoffs separately because older events can arrive after newer ones.
   return recordImageGenerationEnd(withImageTurns(session, next), timestamp, reason, "image");
 };
 

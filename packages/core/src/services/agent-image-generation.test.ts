@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
-import { mergeAgentImageGeneration } from "./agent-image-generation";
+import { mergeAgentImageGeneration, settleAgentImageGeneration } from "./agent-image-generation";
 
 const part = (status: AgentImageGenerationPart["status"]): AgentImageGenerationPart => ({
   kind: "image_generation",
@@ -9,6 +9,18 @@ const part = (status: AgentImageGenerationPart["status"]): AgentImageGenerationP
   itemId: "image",
   turnId: "turn",
   status,
+});
+
+test("runtime failure replaces provisional idle without replacing confirmed outcomes", () => {
+  const idle = settleAgentImageGeneration(part("running"), "turn_ended");
+  const failed = settleAgentImageGeneration(idle, "runtime_failure");
+  expect(failed).toMatchObject({ status: "incomplete", incompleteReason: "runtime_failure" });
+  expect(settleAgentImageGeneration(failed, "turn_ended")).toBe(failed);
+  expect(settleAgentImageGeneration(failed, "runtime_failure")).toBe(failed);
+  for (const status of ["completed", "failed", "interrupted"] as const) {
+    const confirmed = part(status);
+    expect(settleAgentImageGeneration(confirmed, "runtime_failure")).toBe(confirmed);
+  }
 });
 
 test("old starts and incomplete history cannot downgrade native completion", () => {

@@ -16,7 +16,7 @@ export type AgentImageGenerationLifecycleEvent =
       turnIds: Iterable<string>;
     };
 
-/** The caller selects affected turns. Keep a confirmed interruption when later end events arrive. */
+/** The caller selects affected turns. Keep definitive reasons when later idle events arrive. */
 export const reduceAgentImageGenerationLifecycle = (
   state: AgentImageGenerationLifecycle,
   event: AgentImageGenerationLifecycleEvent,
@@ -31,18 +31,19 @@ export const reduceAgentImageGenerationLifecycle = (
   }
   if (event.type === "turn_ended") {
     const previous = state.turnEnds?.get(event.turnId);
-    if (previous === event.reason || previous === "interrupted") return state;
+    const reason = mergeSettlementReason(previous, event.reason);
+    if (previous === reason) return state;
     const turnStarts = new Set(state.turnStarts);
     turnStarts.delete(event.turnId);
     return {
       ...state,
-      turnEnds: new Map(state.turnEnds).set(event.turnId, event.reason),
+      turnEnds: new Map(state.turnEnds).set(event.turnId, reason),
       turnStarts,
     };
   }
   const turnEnds = new Map(state.turnEnds);
   for (const turnId of [...(state.turnStarts ?? []), ...event.turnIds]) {
-    if (turnEnds.get(turnId) !== "interrupted") turnEnds.set(turnId, event.reason);
+    turnEnds.set(turnId, mergeSettlementReason(turnEnds.get(turnId), event.reason));
   }
   return {
     turnEnds,
@@ -50,6 +51,14 @@ export const reduceAgentImageGenerationLifecycle = (
     sessionEnd: { timestamp: event.timestamp, reason: event.reason },
   };
 };
+
+const mergeSettlementReason = (
+  previous: AgentImageGenerationSettlement | undefined,
+  incoming: AgentImageGenerationSettlement,
+): AgentImageGenerationSettlement =>
+  previous === "interrupted" || (previous === "runtime_failure" && incoming === "turn_ended")
+    ? previous
+    : incoming;
 
 /** Live runtime items use exact turns. History and frontend messages can also use a session cutoff. */
 export const resolveAgentImageGenerationSettlement = (

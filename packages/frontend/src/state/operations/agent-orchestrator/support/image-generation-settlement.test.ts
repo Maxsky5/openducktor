@@ -26,6 +26,59 @@ const part: AgentImageGenerationPart = {
   status: "running",
 };
 
+for (const delayed of ["2026-09-06T09:00:00.000Z", timestamp]) {
+  test(`session cutoff ${delayed} cannot end a turn started after the latest cutoff`, () => {
+    let session = createAgentSessionFixture();
+    session = recordImageGenerationSessionEnd(session, timestamp, "runtime_failure");
+    session = recordImageGenerationTurnEnd(session, "failed", "runtime_failure");
+    session = recordImageGenerationTurnEnd(session, "stopped", "interrupted");
+    session = recordImageGenerationTurnStart(session, "new");
+    session = {
+      ...session,
+      messages: upsertImageGenerationMessage(
+        session,
+        { ...part, turnId: "new" },
+        "2026-09-06T10:01:00.000Z",
+      ),
+    };
+    expect(recordImageGenerationSessionEnd(session, delayed, "turn_ended")).toBe(session);
+    const history = applyLoadedSessionHistory(session, [
+      {
+        messageId: "late",
+        role: "assistant",
+        text: "",
+        timestamp,
+        parts: [{ ...part, turnId: "new" }],
+      },
+    ]);
+    expect(
+      history.messages.items.find((message) => message.meta?.kind === "image_generation")?.meta,
+    ).toMatchObject({ status: "running" });
+    expect(session.imageGenerationTurnEnds?.get("failed")).toBe("runtime_failure");
+    expect(session.imageGenerationTurnEnds?.get("stopped")).toBe("interrupted");
+    expect(session.imageGenerationTurnStarts?.has("new")).toBe(true);
+  });
+}
+
+test("late failed-turn settlement corrects an idle image and stays correct through history replay", () => {
+  let session = createAgentSessionFixture();
+  session = { ...session, messages: upsertImageGenerationMessage(session, part, timestamp) };
+  session = recordImageGenerationTurnEnd(session, "turn", "turn_ended");
+  session = recordImageGenerationTurnEnd(session, "turn", "runtime_failure");
+  expect(session.messages.items[0]?.meta).toMatchObject({
+    status: "incomplete",
+    incompleteReason: "runtime_failure",
+  });
+  session = recordImageGenerationTurnEnd(session, "turn", "turn_ended");
+  session = applyLoadedSessionHistory(session, [
+    { messageId: "image", role: "assistant", text: "", timestamp, parts: [part] },
+  ]);
+  expect(session.messages.items[0]?.meta).toMatchObject({
+    status: "incomplete",
+    incompleteReason: "runtime_failure",
+  });
+});
+
 for (const reason of ["turn_ended", "runtime_failure"] as const) {
   test(`session-wide ${reason} settles late readonly history and preserves native outcomes`, () => {
     const initial = createAgentSessionFixture();

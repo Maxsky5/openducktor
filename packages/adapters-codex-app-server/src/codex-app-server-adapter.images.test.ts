@@ -10,6 +10,72 @@ import {
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
 
+test("failed completion corrects provisional idle before later idle replay", async () => {
+  const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+  const { adapter } = createHarness({ subscribeEvents });
+  await adapter.startSession(codexStartSessionInput());
+  const ref = codexSessionRuntimeRef();
+  const parts: AgentImageGenerationPart[] = [];
+  const unsubscribe = await adapter.subscribeEvents(ref, (event) => {
+    if (event.type === "assistant_part" && event.part.kind === "image_generation")
+      parts.push(event.part);
+  });
+  try {
+    emitNotification({
+      method: "turn/started",
+      params: {
+        threadId: ref.externalSessionId,
+        turn: codexTurnFixture({ id: "turn", status: "inProgress" }),
+      },
+    });
+    emitNotification({
+      method: "item/started",
+      params: {
+        threadId: ref.externalSessionId,
+        turnId: "turn",
+        startedAtMs: 0,
+        item: {
+          type: "imageGeneration",
+          id: "image",
+          status: "in_progress",
+          result: "",
+          revisedPrompt: null,
+          transparentBackground: null,
+          failure: null,
+        },
+      },
+    });
+    const idle = {
+      method: "thread/status/changed",
+      params: { threadId: ref.externalSessionId, status: { type: "idle" } },
+    };
+    emitNotification(idle);
+    await flushCodexAdapterWork();
+    expect(parts.at(-1)).toMatchObject({ status: "incomplete", incompleteReason: "turn_ended" });
+    emitNotification({
+      method: "turn/completed",
+      params: {
+        threadId: ref.externalSessionId,
+        turn: codexTurnFixture({ id: "turn", status: "failed" }),
+      },
+    });
+    await flushCodexAdapterWork();
+    expect(parts.at(-1)).toMatchObject({
+      status: "incomplete",
+      incompleteReason: "runtime_failure",
+    });
+    emitNotification(idle);
+    await flushCodexAdapterWork();
+    expect(parts.at(-1)).toMatchObject({
+      status: "incomplete",
+      incompleteReason: "runtime_failure",
+    });
+  } finally {
+    unsubscribe();
+    adapter.releaseRuntime("runtime-live");
+  }
+});
+
 test("ordered live image events retain terminal output through replay and turn completion", async () => {
   const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
   const mutations: AgentImageGenerationPart[] = [];

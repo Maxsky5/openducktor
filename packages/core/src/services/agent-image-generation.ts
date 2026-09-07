@@ -51,7 +51,14 @@ export const settleAgentImageGeneration = (
   part: AgentImageGenerationPart,
   reason: AgentImageGenerationSettlement,
 ): AgentImageGenerationPart => {
-  if (part.status !== "running" && !(part.status === "incomplete" && reason === "interrupted"))
+  if (
+    part.status !== "running" &&
+    !(
+      part.status === "incomplete" &&
+      (reason === "interrupted" ||
+        (part.incompleteReason === "turn_ended" && reason === "runtime_failure"))
+    )
+  )
     return part;
   if (reason !== "interrupted") return { ...part, status: "incomplete", incompleteReason: reason };
   const { incompleteReason: _incompleteReason, ...metadata } = part;
