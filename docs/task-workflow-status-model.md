@@ -68,7 +68,7 @@ Store agent-written output as task documents, not user task fields. SQLite store
 | Builder | Implementation details, work order, tests, and verification within the required outcomes and design contracts. |
 | QA | Independent review of outcomes, contracts, correctness, and maintainability, with checks based on risk. |
 
-Spec researches facts and asks the user about unresolved product decisions. It uses the runtime's question or user-input tool for questions and confirmations. It groups independent questions, waits for answers before dependent questions, and follows up on consequences. New or changed product decisions need user confirmation before saving, unless the user delegates them. A fully specified task can proceed without a confirmation round.
+Spec researches facts and asks the user about unresolved product decisions. It uses the available question or user-input tool for questions and confirmations. It groups independent questions, waits for answers before dependent questions, and follows up on consequences. New or changed product decisions need user confirmation before saving, unless the user delegates them. A fully specified task can proceed without a confirmation round.
 
 Spec and Planner describe what must hold. Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of these documents. Builder and QA choose verification methods and follow the repository's required checks. A required product behavior or quality limit remains part of the spec.
 

@@ -99,7 +99,7 @@ describe("buildAgentSystemPrompt", () => {
       "The user owns product decisions",
       "Research facts from the repo and available sources yourself",
       "Ask small rounds of independent questions",
-      "Use the runtime's question or user-input tool for clarification questions and confirmation requests",
+      "Use the available question or user-input tool for clarification questions and confirmation requests",
       "do not ask these questions as plain chat text",
       "Wait for answers before deciding dependent questions",
       "Revisit consequences after each answer",
@@ -187,7 +187,7 @@ describe("buildAgentSystemPrompt", () => {
       {
         type: "override_base_version_mismatch",
         templateId: "system.role.spec.base",
-        builtinVersion: 7,
+        builtinVersion: 8,
         overrideBaseVersion: 999,
       },
     ]);
@@ -197,11 +197,11 @@ describe("buildAgentSystemPrompt", () => {
     ["system.shared.workflow_guards", 6, 7, "build"],
     ["system.shared.tool_protocol", 7, 8, "build"],
     ["system.shared.task_context", 3, 4, "build"],
-    ["system.role.spec.base", 6, 7, "spec"],
+    ["system.role.spec.base", 7, 8, "spec"],
     ["system.role.planner.base", 5, 6, "planner"],
     ["system.role.build.base", 3, 4, "build"],
     ["system.role.qa.base", 3, 4, "qa"],
-    ["kickoff.spec_initial", 4, 5, "spec"],
+    ["kickoff.spec_initial", 5, 6, "spec"],
     ["kickoff.planner_initial", 2, 3, "planner"],
     ["kickoff.build_implementation_start", 2, 3, "build"],
     ["kickoff.build_after_qa_rejected", 2, 3, "build"],
@@ -360,7 +360,7 @@ describe("kickoff and permission prompts", () => {
 
     expectPromptToContainAll(specPrompt, [
       "observable acceptance criteria",
-      "Use the runtime's question or user-input tool to ask about unresolved product decisions",
+      "Use the available question or user-input tool to ask about unresolved product decisions",
       "Follow the Spec role interview and confirmation rules",
       "Leave implementation and verification procedures to later roles",
       "odt_set_spec",
