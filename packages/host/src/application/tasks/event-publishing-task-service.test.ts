@@ -3,8 +3,11 @@ import type { TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { createEventPublishingTaskService } from "./event-publishing-task-service";
-import type { TaskSyncService } from "./sync/task-sync-service";
-import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
+import { createTaskSyncService, type TaskSyncService } from "./sync/task-sync-service";
+import {
+  TaskMutationProgressFailure,
+  TaskCreationProgressFailure,
+} from "./task-mutation-progress-failure";
 import type { TaskServiceWithMutationProgress } from "./task-service";
 import { createTaskServiceWithMutationProgressTestDouble } from "../../test-support/task-service-test-double";
 
@@ -40,8 +43,9 @@ const sync = (
   events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }>,
 ): Pick<
   TaskSyncService,
-  "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests"
+  "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests" | "runMutation"
 > => ({
+  runMutation: (_repoPath, mutation) => mutation,
   publishExternalTaskCreated: () => Effect.void,
   publishTasksUpdated: (_repoPath, changes) =>
     Effect.sync(() => {
@@ -51,12 +55,86 @@ const sync = (
 });
 
 describe("createEventPublishingTaskService", () => {
+  test.each(["updateTask", "directMerge", "setPlan", "setSpec"] as const)(
+    "preserves the %s failure when snapshot publication also fails",
+    async (method) => {
+      const mutationFailure = new HostOperationError({
+        operation: method,
+        message: "Committed work still needs cleanup.",
+      });
+      const snapshotFailure = new HostOperationError({
+        operation: "task.list",
+        message: "Snapshot unavailable",
+      });
+      const progress = new TaskMutationProgressFailure({
+        operation: "update-task",
+        changes: { taskIds: ["task-1"], removedTaskIds: [] },
+        failure: mutationFailure,
+      });
+      const base = fakeTaskService({
+        updateTask: () => Effect.fail(progress),
+        directMerge: () => Effect.fail(progress),
+        setPlan: () => Effect.fail(progress),
+        setSpec: () => Effect.fail(progress),
+        listTasks: () => Effect.fail(snapshotFailure),
+      });
+      const taskSyncService = createTaskSyncService({
+        taskService: base,
+        taskEventStream: {
+          publish: () => {
+            throw new Error("Unexpected event");
+          },
+          subscribe: () => {
+            throw new Error("Unexpected subscription");
+          },
+          acknowledge: () => {},
+        },
+        publicationReporter: { report: () => Effect.void },
+        onBackgroundFailure: () => Effect.void,
+        workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+      });
+      const service = createEventPublishingTaskService({ taskService: base, taskSyncService });
+      const calls = {
+        updateTask: service
+          .updateTask({ repoPath: "/repo", taskId: "task-1", patch: {} })
+          .pipe(Effect.asVoid),
+        directMerge: service
+          .directMerge({
+            repoPath: "/repo",
+            taskId: "task-1",
+            input: { mergeMethod: "merge_commit" },
+          })
+          .pipe(Effect.asVoid),
+        setPlan: service
+          .setPlan({
+            repoPath: "/repo",
+            taskId: "task-1",
+            markdown: "Plan",
+            subtasks: [],
+            hasExplicitSubtasks: false,
+          })
+          .pipe(Effect.asVoid),
+        setSpec: service
+          .setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "Spec" })
+          .pipe(Effect.asVoid),
+      };
+      const failure = await Effect.runPromise(calls[method].pipe(Effect.flip));
+      expect(failure.message).toContain(mutationFailure.message);
+      expect(failure.message).toContain("Reload the workspace");
+      expect(failure).toMatchObject({
+        cause: { mutationFailure, snapshotFailure },
+        details: { durableState: "committed" },
+      });
+    },
+  );
+
   test("returns committed create and update results after publication acceptance failures", async () => {
     const reports: unknown[] = [];
     const taskSyncService: Pick<
       TaskSyncService,
-      "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests"
+      "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests" | "runMutation"
     > = {
+      runMutation: (_repoPath, mutation) => mutation,
       publishExternalTaskCreated: () => Effect.void,
       publishTasksUpdated: () =>
         Effect.sync(() => {
@@ -94,17 +172,17 @@ describe("createEventPublishingTaskService", () => {
       taskService: fakeTaskService({
         createTask: () =>
           Effect.fail(
-            new TaskMutationProgressFailure({
-              operation: "create-task",
-              changes: { taskIds: ["task-1"], removedTaskIds: [] },
+            new TaskCreationProgressFailure(
+              { id: "task-1", title: "Created", status: "open" },
               failure,
-            }),
+            ),
           ),
       }),
       taskSyncService: {
-        publishExternalTaskCreated: (_repoPath, taskId) =>
+        runMutation: (_repoPath, mutation) => mutation,
+        publishExternalTaskCreated: (_repoPath, taskSnapshot) =>
           Effect.sync(() => {
-            publishedTaskIds.push(taskId);
+            publishedTaskIds.push(taskSnapshot.id);
           }),
         publishTasksUpdated: () => Effect.dieMessage("unexpected task update publication"),
         syncRepoPullRequests: () => Effect.succeed({ ran: true, changedTaskIds: [] }),

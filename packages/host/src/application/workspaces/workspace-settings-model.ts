@@ -203,6 +203,7 @@ export const toSettingsSnapshot = (config: LoadedGlobalConfig): SettingsSnapshot
     reusablePrompts: config.reusablePrompts,
     kanban: config.kanban,
     autopilot: config.autopilot,
+    notifications: config.notifications,
     agentRuntimes: config.agentRuntimes,
     agentModelFavorites: config.agentModelFavorites,
     workspaces: config.workspaces,

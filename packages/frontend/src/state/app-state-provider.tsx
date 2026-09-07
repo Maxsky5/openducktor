@@ -46,6 +46,7 @@ import { RepoRuntimeHealthProvider } from "./providers/repo-runtime-health-provi
 import { SpecStateProvider } from "./providers/spec-state-provider";
 import { TasksStateProvider } from "./providers/tasks-state-provider";
 import { WorkspaceStateProvider } from "./providers/workspace-state-provider";
+import { NotificationProvider } from "./providers/notification-provider";
 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
   const { agentEngine, runtimeCatalogOperations, startRepoRuntime } = useMemo(
@@ -71,13 +72,15 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
           <ChecksStateProvider>
             <TasksStateProvider>
               <WorkspaceStateProvider>
-                <DelegationStateProvider>
-                  <AgentStudioStateProvider agentEngine={agentEngine}>
-                    <AppLifecycleStateProvider startRepoRuntime={startRepoRuntime}>
-                      <AutopilotProvider>{children}</AutopilotProvider>
-                    </AppLifecycleStateProvider>
-                  </AgentStudioStateProvider>
-                </DelegationStateProvider>
+                <NotificationProvider>
+                  <DelegationStateProvider>
+                    <AgentStudioStateProvider agentEngine={agentEngine}>
+                      <AppLifecycleStateProvider startRepoRuntime={startRepoRuntime}>
+                        <AutopilotProvider>{children}</AutopilotProvider>
+                      </AppLifecycleStateProvider>
+                    </AgentStudioStateProvider>
+                  </DelegationStateProvider>
+                </NotificationProvider>
               </WorkspaceStateProvider>
             </TasksStateProvider>
           </ChecksStateProvider>

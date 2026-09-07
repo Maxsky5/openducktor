@@ -33,6 +33,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@electron/osx-sign": "1.3.3",
     "@openducktor/build-tools": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/frontend": "workspace:*",
@@ -51,6 +52,9 @@
     "react-dom": "^19.2.8",
     "vite": "^8.2.2",
     "zod": "^4.4.3"
+  },
+  "optionalDependencies": {
+    "node-mac-permissions": "github:codebytere/node-mac-permissions#b2b0a18e4d21d6926fde1cd84d9124a0b8e6b755"
   },
   "productName": "OpenDucktor"
 }

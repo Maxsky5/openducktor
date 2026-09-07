@@ -5,6 +5,7 @@ import {
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_GENERAL_SETTINGS,
   DEFAULT_KANBAN_SETTINGS,
+  DEFAULT_NOTIFICATION_SETTINGS,
   GITHUB_PROVIDER_DESCRIPTOR,
   repositoryGitProviderContextSchema,
   type RepositoryGitProviderContext,
@@ -210,7 +211,7 @@ export const createChatSettingsFixture = (
 export const createSettingsSnapshotFixture = (
   overrides: SettingsSnapshotFixtureOverrides = {},
 ): SettingsSnapshot => {
-  const { appearance, chat, general, git, kanban, ...snapshotOverrides } = overrides;
+  const { appearance, chat, general, git, kanban, notifications, ...snapshotOverrides } = overrides;
   const merged = {
     theme: "light",
     git: {
@@ -235,6 +236,14 @@ export const createSettingsSnapshotFixture = (
     autopilot: {
       alwaysStartQaReviewsFresh: false,
       rules: [],
+    },
+    notifications: {
+      ...DEFAULT_NOTIFICATION_SETTINGS,
+      ...notifications,
+      kinds: {
+        ...DEFAULT_NOTIFICATION_SETTINGS.kinds,
+        ...notifications?.kinds,
+      },
     },
     agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     agentModelFavorites: [],

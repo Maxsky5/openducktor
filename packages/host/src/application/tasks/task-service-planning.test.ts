@@ -561,6 +561,7 @@ describe("createTaskService planning", () => {
     const service = createEventPublishingTaskService({
       taskService: createTaskServiceWithMutationProgress({ taskStore }),
       taskSyncService: {
+        runMutation: (_repoPath, mutation) => mutation,
         publishExternalTaskCreated: () => Effect.void,
         publishTasksUpdated: (_repoPath, changes) =>
           Effect.sync(() => {

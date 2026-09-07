@@ -1,6 +1,9 @@
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { type ReactElement, type Ref, useImperativeHandle, useMemo, useState } from "react";
+import { type ReactElement, type Ref, useEffect, useImperativeHandle, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";
 import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskSession,
@@ -27,6 +30,10 @@ type TaskDetailsSheetControllerProps = Omit<
 };
 
 export function TaskDetailsSheetController(props: TaskDetailsSheetControllerProps): ReactElement {
+  return <WorkspaceTaskDetailsSheetController key={props.activeWorkspace?.repoPath} {...props} />;
+}
+
+function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerProps): ReactElement {
   const {
     allTasks,
     taskSessionsByTaskId,
@@ -35,19 +42,39 @@ export function TaskDetailsSheetController(props: TaskDetailsSheetControllerProp
     ref,
     ...sheetProps
   } = props;
+  const repoPath = sheetProps.activeWorkspace?.repoPath ?? null;
   const [taskId, setTaskId] = useState<string | null>(null);
-
-  const task = useMemo(
-    () => (taskId ? (allTasks.find((entry) => entry.id === taskId) ?? null) : null),
-    [allTasks, taskId],
-  );
-  // Reset during render so React discards this stale task pass instead of committing it.
-  if (taskId && !task) {
-    setTaskId(null);
-  }
+  const boardTask = allTasks.find((entry) => entry.id === taskId);
+  const taskQuery = useQuery({
+    ...unfilteredRepoTaskDataQueryOptions(repoPath ?? ""),
+    enabled: repoPath !== null && taskId !== null && !boardTask,
+  });
+  const sheetTasks = boardTask || !taskQuery.isSuccess ? allTasks : taskQuery.data.tasks;
+  const task = sheetTasks.find((entry) => entry.id === taskId) ?? null;
+  useEffect(() => {
+    if (!taskId || boardTask || taskQuery.isFetching || taskQuery.isPending) return;
+    if (taskQuery.isSuccess && taskQuery.data.tasks.some((entry) => entry.id === taskId)) return;
+    toast.error(
+      taskQuery.isError ? "Could not load notification task" : "Notification task no longer exists",
+      {
+        id: `task-details-unavailable:${repoPath}:${taskId}`,
+        description: taskQuery.isError
+          ? "Reload and open the task again."
+          : "The task was removed from this workspace.",
+      },
+    );
+  }, [
+    boardTask,
+    repoPath,
+    taskId,
+    taskQuery.data,
+    taskQuery.isError,
+    taskQuery.isFetching,
+    taskQuery.isPending,
+    taskQuery.isSuccess,
+  ]);
   const open = task !== null;
 
-  // The handle only captures React's stable state dispatch.
   useImperativeHandle(
     ref,
     () => ({
@@ -74,7 +101,7 @@ export function TaskDetailsSheetController(props: TaskDetailsSheetControllerProp
     <TaskDetailsSheet
       {...sheetProps}
       task={task}
-      allTasks={allTasks}
+      allTasks={sheetTasks}
       taskSessions={selectedTaskSessions}
       historicalSessions={selectedHistoricalSessions}
       hasActiveSession={Boolean(selectedActiveSessionContext)}

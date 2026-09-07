@@ -101,6 +101,7 @@ export const agentSessionLiveSnapshotSchema = z
     activity: agentSessionActivitySchema,
     title: nonEmptyStringSchema,
     startedAt: isoTimestampSchema,
+    executionEpisodeId: nonEmptyStringSchema.optional(),
     parentExternalSessionId: nonEmptyStringSchema.optional(),
     pendingApprovals: z.array(agentSessionLivePendingApprovalRequestSchema),
     pendingQuestions: z.array(agentSessionLivePendingQuestionRequestSchema),
@@ -141,6 +142,7 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
       type: z.literal("snapshot"),
       repoPath: nonEmptyStringSchema,
       sessions: z.array(agentSessionLiveSnapshotSchema),
+      isConnectionSnapshot: z.boolean().optional(),
     })
     .strict(),
   z

@@ -394,6 +394,9 @@ describe("asset-aware task store compensation", () => {
 
     expect(error.failedPhase).toBe("purge_create_quarantine");
     expect(error.durableState).toBe("committed_cleanup_pending");
+    expect(error).toMatchObject({
+      createdTask: { id: error.taskId, title: "Purge failure", status: "open" },
+    });
   });
 
   test("reports staging discard as the failed create cleanup phase", async () => {
@@ -446,6 +449,9 @@ describe("asset-aware task store compensation", () => {
 
     expect(error.failedPhase).toBe("discard_committed_staging");
     expect(error.durableState).toBe("committed_cleanup_pending");
+    expect(error).toMatchObject({
+      createdTask: { id: error.taskId, title: "Discard failure", status: "open" },
+    });
   });
 
   test("reuses the resolved workspace while compensating a failed update", async () => {

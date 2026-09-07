@@ -15,9 +15,13 @@ export { resolveLaunchStartMode } from "./session-start-mode";
 export {
   buildSessionStartModalRequest,
   createSessionStartWorkflowRunner,
+  isSessionStartFailureFeedbackHandled,
   type ResolvedSessionStartDecision,
   type RunSessionStartWorkflow,
   type RunSessionStartWorkflowInput,
+  type SessionStartNotificationInput,
+  type SessionStartNotificationPublisher,
+  SessionStartWorkflowError,
   type SessionStartFlowRequest,
   type SessionStartLaunchRequest,
 } from "./session-start-orchestration";

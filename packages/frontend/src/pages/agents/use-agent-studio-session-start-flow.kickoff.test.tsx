@@ -166,55 +166,78 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("useAgentStudioSessionStartFlow kickoff failures", () => {
-  test("keeps the started session and shows a toast when kickoff send fails", async () => {
-    const startAgentSession = mock(async () => sessionIdentity("session-new"));
-    const sendAgentMessage = mock(async () => {
-      throw new Error("kickoff failed");
-    });
-    const harness = createHookHarness(
-      createBaseArgs({
-        runSessionStartWorkflow: createRunSessionStartWorkflow({
-          startAgentSession,
-          sendAgentMessage,
+  test.each([
+    { fails: true, feedbackHandled: false },
+    { fails: true, feedbackHandled: true },
+    { fails: false, feedbackHandled: false },
+  ])(
+    "keeps the session with fails=$fails and feedbackHandled=$feedbackHandled",
+    async ({ fails, feedbackHandled }) => {
+      const startAgentSession = mock(async () => sessionIdentity("session-new"));
+      const sendAgentMessage = mock(async () => {
+        if (fails) throw new Error("kickoff failed");
+      });
+      const scheduleQueryUpdate = mock(() => {});
+      const harness = createHookHarness(
+        createBaseArgs({
+          scheduleQueryUpdate,
+          runSessionStartWorkflow: createRunSessionStartWorkflow({
+            startAgentSession,
+            sendAgentMessage,
+            notifications: {
+              publishSessionStarted: () => {},
+              publishSessionError: async () => feedbackHandled,
+              reportFailure: () => {},
+            },
+          }),
         }),
-      }),
-    );
+      );
 
-    await harness.mount();
-    await harness.run(async (state) => {
-      void state.startLaunchKickoff();
-    });
-    await harness.waitFor(
-      (state) =>
-        state.sessionStartModal !== null &&
-        state.sessionStartModal.isSelectionCatalogLoading === false,
-    );
-    await withMockedToast(async ({ toastErrorMock }) => {
+      await harness.mount();
       await harness.run(async (state) => {
-        state.sessionStartModal?.onSelectModelPair({
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
+        void state.startLaunchKickoff();
+      });
+      await harness.waitFor(
+        (state) =>
+          state.sessionStartModal !== null &&
+          state.sessionStartModal.isSelectionCatalogLoading === false,
+      );
+      await withMockedToast(async ({ toastErrorMock }) => {
+        await harness.run(async (state) => {
+          state.sessionStartModal?.onSelectModelPair({
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+          });
+          state.sessionStartModal?.onSelectRuntimeProfile("spec");
+          state.sessionStartModal?.onSelectVariant("default");
+          await state.sessionStartModal?.onConfirm({
+            runInBackground: false,
+            startMode: "fresh",
+            sourceSessionOptionValue: null,
+          });
         });
-        state.sessionStartModal?.onSelectRuntimeProfile("spec");
-        state.sessionStartModal?.onSelectVariant("default");
-        await state.sessionStartModal?.onConfirm({
-          runInBackground: false,
-          startMode: "fresh",
-          sourceSessionOptionValue: null,
-        });
+
+        expect(startAgentSession).toHaveBeenCalledTimes(1);
+        expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+        expect(scheduleQueryUpdate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            task: "task-1",
+            session: "session-new",
+          }),
+        );
+        if (fails && !feedbackHandled) {
+          expect(toastErrorMock).toHaveBeenCalledTimes(1);
+          expect(toastErrorMock).toHaveBeenCalledWith(
+            "Session started, but the kickoff prompt failed to send.",
+            { description: "kickoff failed" },
+          );
+        } else {
+          expect(toastErrorMock).not.toHaveBeenCalled();
+        }
       });
 
-      expect(startAgentSession).toHaveBeenCalledTimes(1);
-      expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-      expect(toastErrorMock).toHaveBeenCalledWith(
-        "Session started, but the kickoff prompt failed to send.",
-        {
-          description: "kickoff failed",
-        },
-      );
-    });
-
-    await harness.unmount();
-  });
+      await harness.unmount();
+    },
+  );
 });

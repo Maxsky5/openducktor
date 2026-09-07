@@ -106,6 +106,7 @@ export type AgentChatMessageMeta =
       tone: "error";
       reason: "session_error";
       title: string;
+      attentionId?: string;
     }
   | {
       kind: "session_notice";
@@ -130,6 +131,10 @@ export type AgentChatMessage = {
   /** The timestamp is retained for ordering but hidden from the transcript clock label. */
   timestampIsApproximate?: true;
   meta?: AgentChatMessageMeta;
+};
+
+export type AgentMessageSendOptions = {
+  errorAttentionId?: string;
 };
 
 export type SessionMessagesState = {

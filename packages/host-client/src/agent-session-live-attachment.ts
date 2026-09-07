@@ -47,7 +47,7 @@ export const createAgentSessionLiveAttachment = (
         awaitingSnapshot = false;
         const buffered = pending;
         pending = [];
-        listener(envelope);
+        listener({ ...envelope, isConnectionSnapshot: true });
         for (const bufferedEnvelope of buffered) {
           if (
             bufferedEnvelope.type === "session_upsert" ||

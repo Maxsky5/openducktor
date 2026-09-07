@@ -1,15 +1,19 @@
 import {
   type ExternalTaskSyncEvent,
   externalTaskSyncEventSchema,
+  type TaskCard,
   type TaskChangeSet,
+  type TaskEventTaskSnapshot,
+  type TaskEventStatusChange,
 } from "@openducktor/contracts";
 import { type Cause, Deferred, Effect, Exit, Fiber, Ref } from "effect";
-import { HostOperationError } from "../../../effect/host-errors";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../../effect/host-errors";
 import type { TaskEventStreamPort } from "../../../events/task-event-stream";
 import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../../workspaces/workspace-settings-service";
+import { collectTaskStatusChanges } from "../../../ports/task-status-changes";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { RepoPullRequestSyncResult, TaskService, TaskServiceError } from "../task-service";
 
@@ -25,12 +29,18 @@ export type TaskSyncLoopHandle = {
   stop(): Effect.Effect<void, HostOperationError>;
 };
 export type TaskSyncService = {
-  publishExternalTaskCreated(repoPath: string, taskId: string): Effect.Effect<void>;
+  runMutation<A, E, R>(repoPath: string, mutation: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
+  publishExternalTaskCreated(
+    repoPath: string,
+    taskSnapshot: TaskEventTaskSnapshot,
+  ): Effect.Effect<void>;
   publishTasksUpdated(
     repoPath: string,
     changes: TaskChangeSet,
     operation: string,
-  ): Effect.Effect<void>;
+    statusChanges: readonly TaskEventStatusChange[],
+    mutationFailure?: TaskServiceError,
+  ): Effect.Effect<void, HostOperationErrorAggregate>;
   syncRepoPullRequests(
     repoPath: string,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError>;
@@ -38,14 +48,18 @@ export type TaskSyncService = {
   startPullRequestSyncLoop(): Effect.Effect<TaskSyncLoopHandle, never>;
 };
 export type TaskSyncError = HostOperationError | TaskServiceError | WorkspaceSettingsError;
-export type TaskEventPublicationFailure = {
+type TaskEventPublicationFailureBase = {
   operation: string;
   repoPath: string;
   changes: TaskChangeSet;
-  event: ExternalTaskSyncEvent;
-  stage: "acceptance";
   cause: unknown;
 };
+export type TaskEventPublicationFailure =
+  | (TaskEventPublicationFailureBase & {
+      stage: "acceptance";
+      event: ExternalTaskSyncEvent;
+    })
+  | (TaskEventPublicationFailureBase & { stage: "snapshot" });
 export type TaskEventPublicationReporter = {
   report(failure: TaskEventPublicationFailure): Effect.Effect<void, never>;
 };
@@ -56,7 +70,7 @@ export type CreateTaskSyncServiceInput = {
   onBackgroundFailure(failure: HostOperationError): Effect.Effect<void, never>;
   publicationReporter: TaskEventPublicationReporter;
   taskEventStream: TaskEventStreamPort;
-  taskService: Pick<TaskService, "repoPullRequestSyncDetailed">;
+  taskService: Pick<TaskService, "listTasks" | "repoPullRequestSyncDetailed">;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "listWorkspaces">;
 };
 const defaultTaskSyncLifecycleLogger: TaskSyncLifecycleLogger = {
@@ -71,25 +85,49 @@ const nowIso = (): string => new Date().toISOString();
 const buildExternalTaskCreatedEvent = (
   eventIdFactory: () => string,
   repoPath: string,
-  taskId: string,
+  taskSnapshot: TaskEventTaskSnapshot,
 ): ExternalTaskSyncEvent => ({
   eventId: eventIdFactory(),
   kind: "external_task_created",
   repoPath,
-  taskId,
+  taskId: taskSnapshot.id,
+  taskSnapshot: { id: taskSnapshot.id, title: taskSnapshot.title, status: taskSnapshot.status },
   emittedAt: nowIso(),
 });
 const buildTasksUpdatedEvent = (
   eventIdFactory: () => string,
   repoPath: string,
   changes: TaskChangeSet,
+  taskSnapshots: readonly TaskEventTaskSnapshot[],
+  statusChanges: readonly TaskEventStatusChange[],
+  operation: string,
 ): ExternalTaskSyncEvent => ({
   eventId: eventIdFactory(),
   kind: "tasks_updated",
   repoPath,
   ...changes,
+  taskSnapshots: [...taskSnapshots],
+  statusChanges: statusChanges.map((change) => {
+    if (change.task.status === "human_review" && operation === "build-completed") {
+      return { ...change, sourceRole: "build" };
+    }
+    if (change.task.status === "human_review" && operation === "qa-approved") {
+      return { ...change, sourceRole: "qa" };
+    }
+    return change;
+  }),
   emittedAt: nowIso(),
 });
+const taskSnapshotsForChanges = (
+  tasks: readonly TaskCard[],
+  changes: TaskChangeSet,
+): TaskEventTaskSnapshot[] => {
+  const changedTaskIds = new Set(changes.taskIds);
+  const removedTaskIds = new Set(changes.removedTaskIds);
+  return tasks
+    .filter((task) => changedTaskIds.has(task.id) && !removedTaskIds.has(task.id))
+    .map(({ id, title, status }) => ({ id, title, status }));
+};
 export const createTaskSyncService = ({
   eventIdFactory = () => crypto.randomUUID(),
   intervalMs = DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS,
@@ -100,6 +138,16 @@ export const createTaskSyncService = ({
   taskService,
   workspaceSettingsService,
 }: CreateTaskSyncServiceInput): TaskSyncService => {
+  const mutationGates = new Map<string, Effect.Semaphore>();
+  const runMutation: TaskSyncService["runMutation"] = (repoPath, mutation) =>
+    Effect.suspend(() => {
+      let gate = mutationGates.get(repoPath);
+      if (!gate) {
+        gate = Effect.runSync(Effect.makeSemaphore(1));
+        mutationGates.set(repoPath, gate);
+      }
+      return gate.withPermits(1)(mutation);
+    });
   const publish = (
     event: ExternalTaskSyncEvent,
     operation: string,
@@ -136,41 +184,82 @@ export const createTaskSyncService = ({
         });
       }
     });
-  const publishExternalTaskCreated = (repoPath: string, taskId: string) =>
+  const publishExternalTaskCreated = (repoPath: string, taskSnapshot: TaskEventTaskSnapshot) =>
     publish(
-      buildExternalTaskCreatedEvent(eventIdFactory, repoPath, taskId),
+      buildExternalTaskCreatedEvent(eventIdFactory, repoPath, taskSnapshot),
       "create-task",
       repoPath,
-      { taskIds: [taskId], removedTaskIds: [] },
+      { taskIds: [taskSnapshot.id], removedTaskIds: [] },
     );
-  const publishTasksUpdated = (repoPath: string, changes: TaskChangeSet, operation: string) => {
-    return publish(
-      buildTasksUpdatedEvent(eventIdFactory, repoPath, changes),
-      operation,
-      repoPath,
-      changes,
-    );
-  };
+  const publishTasksUpdated = (
+    repoPath: string,
+    changes: TaskChangeSet,
+    operation: string,
+    statusChanges: readonly TaskEventStatusChange[],
+    mutationFailure?: TaskServiceError,
+  ): Effect.Effect<void, HostOperationErrorAggregate> =>
+    Effect.gen(function* () {
+      const tasks = yield* Effect.either(taskService.listTasks({ repoPath }));
+      if (tasks._tag === "Left") {
+        yield* publicationReporter.report({
+          operation,
+          repoPath,
+          changes,
+          stage: "snapshot",
+          cause: tasks.left,
+        });
+        const recoveryMessage =
+          "Task changes were saved, but their update event could not be sent. Reload the workspace before continuing. Do not repeat the change.";
+        return yield* new HostOperationError({
+          operation: `${operation}.publish-task-update`,
+          message: mutationFailure
+            ? `${mutationFailure.message} ${recoveryMessage}`
+            : recoveryMessage,
+          cause: mutationFailure ? { mutationFailure, snapshotFailure: tasks.left } : tasks.left,
+          details: { durableState: "committed", stage: "snapshot", repoPath, changes },
+        });
+      }
+      const taskSnapshots = taskSnapshotsForChanges(tasks.right, changes);
+      yield* publish(
+        buildTasksUpdatedEvent(
+          eventIdFactory,
+          repoPath,
+          changes,
+          taskSnapshots,
+          statusChanges,
+          operation,
+        ),
+        operation,
+        repoPath,
+        changes,
+      );
+    });
   const syncRepoPullRequests = (
     repoPath: string,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError> =>
     Effect.gen(function* () {
-      const syncResult = yield* Effect.either(
+      const { result: syncResult, statusChanges } = yield* collectTaskStatusChanges(
         taskService.repoPullRequestSyncDetailed({ repoPath }),
       );
       if (syncResult._tag === "Right") {
         const changes = { taskIds: syncResult.right.changedTaskIds, removedTaskIds: [] };
         if (changes.taskIds.length > 0) {
-          yield* publishTasksUpdated(repoPath, changes, "repo-pull-request-sync");
+          yield* publishTasksUpdated(repoPath, changes, "repo-pull-request-sync", statusChanges);
         }
         return syncResult.right;
       }
       if (syncResult.left instanceof TaskMutationProgressFailure) {
-        yield* publishTasksUpdated(repoPath, syncResult.left.changes, syncResult.left.operation);
+        yield* publishTasksUpdated(
+          repoPath,
+          syncResult.left.changes,
+          syncResult.left.operation,
+          statusChanges,
+          syncResult.left.failure,
+        );
         return yield* Effect.fail(syncResult.left.failure);
       }
       return yield* Effect.fail(syncResult.left);
-    });
+    }).pipe((mutation) => runMutation(repoPath, mutation));
   const syncActiveWorkspacePullRequests = (): Effect.Effect<void, TaskSyncError> =>
     Effect.gen(function* () {
       const activeWorkspace = (yield* workspaceSettingsService.listWorkspaces()).find(
@@ -237,6 +326,7 @@ export const createTaskSyncService = ({
       ),
     );
   return {
+    runMutation,
     publishExternalTaskCreated,
     publishTasksUpdated,
     syncRepoPullRequests,

@@ -1,10 +1,10 @@
+import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
 import { describe, expect, test } from "bun:test";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   isStopAbortSessionErrorMessage,
   normalizeRetryStatusMessage,
-  normalizeSessionErrorMessage,
   resolveToolMessageId,
 } from "./tool-messages";
 

@@ -16,6 +16,7 @@ const event = (id: string): ExternalTaskSyncEvent => ({
   kind: "external_task_created",
   repoPath: "/repo",
   taskId: `task-${id}`,
+  taskSnapshot: { id: `task-${id}`, title: "Task", status: "open" },
   emittedAt: "2026-04-10T13:00:00.000Z",
 });
 
@@ -42,6 +43,46 @@ const acknowledge = (
 ) => stream.acknowledge({ subscriptionId, cursor });
 
 describe("createTaskEventStream", () => {
+  test("protects created task snapshots across subscribers and replay", async () => {
+    const { stream } = createStream();
+    const received: TaskEventStreamFrame[] = [];
+    const mutationResults: boolean[] = [];
+    const first = stream.subscribe({ cursor: null }, (frame) => {
+      if (frame.type === "change" && frame.event.kind === "external_task_created") {
+        mutationResults.push(Reflect.set(frame.event.taskSnapshot, "title", "Changed by sink"));
+        mutationResults.push(Reflect.set(frame.event.taskSnapshot, "status", "closed"));
+      }
+    });
+    const second = stream.subscribe({ cursor: null }, (frame) => {
+      if (frame.type === "change") received.push(frame);
+    });
+    await flush();
+    acknowledge(stream, first.subscriptionId, { epoch, sequence: 0 });
+    acknowledge(stream, second.subscriptionId, { epoch, sequence: 0 });
+
+    const published = event("1");
+    stream.publish(published);
+    if (published.kind !== "external_task_created") throw new Error("Expected created task");
+    published.taskSnapshot.title = "Changed by publisher";
+    await flush();
+    const replayed = stream.subscribe({ cursor: { epoch, sequence: 0 } }, (frame) =>
+      received.push(frame),
+    );
+    await flush();
+
+    expect(mutationResults).toEqual([false, false]);
+    expect(received).toHaveLength(2);
+    for (const frame of received) {
+      expect(frame).toMatchObject({
+        type: "change",
+        event: { taskSnapshot: { id: "task-1", title: "Task", status: "open" } },
+      });
+    }
+    first.unsubscribe();
+    second.unsubscribe();
+    replayed.unsubscribe();
+  });
+
   test("delivers ordered live changes and replays from the acknowledged cursor", async () => {
     const { stream } = createStream();
     const initial: TaskEventStreamFrame[] = [];
@@ -195,11 +236,25 @@ describe("createTaskEventStream", () => {
       repoPath: "/repo",
       taskIds: ["task-1"],
       removedTaskIds: [],
+      statusChanges: [
+        {
+          previousStatus: "open",
+          task: { id: "task-1", title: "Committed title", status: "spec_ready" },
+        },
+      ],
+      taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
       emittedAt: "2026-04-10T13:00:00.000Z",
     };
 
     stream.publish(published);
+    if (published.kind !== "tasks_updated") throw new Error("expected task update event");
     published.taskIds.push("task-2");
+    const publishedSnapshot = published.taskSnapshots[0];
+    if (!publishedSnapshot) throw new Error("expected task snapshot");
+    publishedSnapshot.title = "Changed after publication";
+    const publishedStatusChange = published.statusChanges[0];
+    if (!publishedStatusChange) throw new Error("expected status change");
+    publishedStatusChange.task.title = "Changed after publication";
     await flush();
     const change = frames[1];
     expect(change).toMatchObject({ type: "change", cursor: { epoch, sequence: 1 } });
@@ -207,10 +262,22 @@ describe("createTaskEventStream", () => {
       throw new Error("expected task update frame");
     }
     expect(change.event.taskIds).toEqual(["task-1"]);
+    expect(change.event.taskSnapshots).toEqual([{ id: "task-1", title: "Task 1", status: "open" }]);
     expect(Object.isFrozen(change)).toBe(true);
     expect(Object.isFrozen(change.cursor)).toBe(true);
     expect(Object.isFrozen(change.event)).toBe(true);
     expect(Object.isFrozen(change.event.taskIds)).toBe(true);
+    expect(Object.isFrozen(change.event.taskSnapshots)).toBe(true);
+    expect(Object.isFrozen(change.event.taskSnapshots[0])).toBe(true);
+    expect(change.event.statusChanges).toEqual([
+      {
+        previousStatus: "open",
+        task: { id: "task-1", title: "Committed title", status: "spec_ready" },
+      },
+    ]);
+    expect(Object.isFrozen(change.event.statusChanges)).toBe(true);
+    expect(Object.isFrozen(change.event.statusChanges[0])).toBe(true);
+    expect(Object.isFrozen(change.event.statusChanges[0]?.task)).toBe(true);
   });
 
   test("rejects task event identifiers with surrounding whitespace", () => {
@@ -242,6 +309,7 @@ describe("createTaskEventStream", () => {
         return repoPathReads === 1 ? "/validated-repo" : "/unchecked-repo";
       },
       taskId: "task-1",
+      taskSnapshot: { id: "task-1", title: "Task", status: "open" },
       emittedAt: "2026-04-10T13:00:00.000Z",
     };
 

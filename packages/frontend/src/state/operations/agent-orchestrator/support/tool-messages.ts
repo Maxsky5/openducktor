@@ -1,5 +1,5 @@
-import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
-import { z } from "zod";
+import type { AgentToolData } from "@openducktor/contracts";
+import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
 import { isRunningToolStatus } from "../agent-tool-messages";
 import {
   findLastToolSessionMessage,
@@ -13,8 +13,6 @@ export const normalizeToolInput = (input: AgentToolData | undefined): AgentToolD
   }
   return Object.keys(input).length > 0 ? input : undefined;
 };
-
-const stringValueSchema = z.string();
 
 export const normalizeToolText = (value: string | undefined): string | undefined => {
   const trimmed = value?.trim();
@@ -73,40 +71,6 @@ export const resolveToolMessageId = (
       isRunningToolStatus(entry.meta.status),
   );
   return byRunningTool?.id ?? fallbackId;
-};
-
-export const normalizeSessionErrorMessage = (value: string): string => {
-  const trimmed = value.trim();
-  const withoutQuotes = trimmed
-    .replace(/^["'“”]+/, "")
-    .replace(/["'“”]+$/, "")
-    .trim();
-
-  if (!withoutQuotes.startsWith("{")) {
-    return withoutQuotes;
-  }
-
-  try {
-    const parsed = z.json().parse(JSON.parse(withoutQuotes));
-    const record = agentToolDataSchema.safeParse(parsed);
-    if (!record.success) {
-      return withoutQuotes;
-    }
-    const messageResult = stringValueSchema.safeParse(record.data.message);
-    if (messageResult.success && messageResult.data.trim().length > 0) {
-      return messageResult.data.trim();
-    }
-    const nestedError = agentToolDataSchema.safeParse(record.data.error);
-    if (nestedError.success) {
-      const nestedMessageResult = stringValueSchema.safeParse(nestedError.data.message);
-      if (nestedMessageResult.success) {
-        return nestedMessageResult.data.trim();
-      }
-    }
-    return withoutQuotes;
-  } catch {
-    return withoutQuotes;
-  }
 };
 
 // Keep this intentionally narrow and rely on stop intent as a second gate so

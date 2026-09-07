@@ -1,4 +1,4 @@
-import type { TaskChangeSet } from "@openducktor/contracts";
+import type { TaskChangeSet, TaskEventTaskSnapshot } from "@openducktor/contracts";
 import { Data } from "effect";
 import type { TaskServiceError } from "./task-service";
 
@@ -29,3 +29,16 @@ export const createTaskMutationProgressFailure = (
     changes: { taskIds: [taskId], removedTaskIds: [] },
     failure,
   });
+
+export class TaskCreationProgressFailure extends TaskMutationProgressFailure {
+  readonly createdTask: TaskEventTaskSnapshot;
+
+  constructor(createdTask: TaskEventTaskSnapshot, failure: TaskServiceError) {
+    super({
+      operation: "create-task",
+      changes: { taskIds: [createdTask.id], removedTaskIds: [] },
+      failure,
+    });
+    this.createdTask = createdTask;
+  }
+}

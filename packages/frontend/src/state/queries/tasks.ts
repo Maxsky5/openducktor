@@ -30,6 +30,8 @@ export const repoTaskDataQueryOptions = createRepoTaskDataQueryOptions((repoPath
   host.tasksList(repoPath),
 );
 
+export const unfilteredRepoTaskDataQueryOptions = repoTaskDataQueryOptions;
+
 export const loadRepoTaskDataFromQuery = (
   queryClient: QueryClient,
   repoPath: string,

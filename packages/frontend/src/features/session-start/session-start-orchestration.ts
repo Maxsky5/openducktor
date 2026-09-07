@@ -1,6 +1,7 @@
 import type { GitTargetBranch, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
+import { AgentMessageSendError } from "@/lib/agent-message-send-error";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -62,22 +63,64 @@ type ExecuteSessionStartFromDecisionArgs = {
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: StartAgentSession;
   sendAgentMessage?: SendAgentMessage;
+  postStartErrorAttentionId?: string;
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
 };
 
 export type RunSessionStartWorkflowInput = Omit<
   ExecuteSessionStartFromDecisionArgs,
-  "queryClient" | "workspaceId" | "startAgentSession" | "sendAgentMessage"
+  | "queryClient"
+  | "workspaceId"
+  | "startAgentSession"
+  | "sendAgentMessage"
+  | "postStartErrorAttentionId"
 >;
 
 export type RunSessionStartWorkflow = (
   input: RunSessionStartWorkflowInput,
 ) => Promise<SessionStartWorkflowResult>;
 
+export type SessionStartNotificationInput = {
+  launchAttemptId: string;
+  workspaceId: string | null;
+  taskId: string;
+  taskTitle?: string;
+  role: SessionStartFlowRequest["role"];
+  session?: AgentSessionIdentity;
+  errorAttentionId?: string;
+};
+
+export type SessionStartNotificationPublisher = {
+  publishSessionStarted(
+    input: SessionStartNotificationInput & { session: AgentSessionIdentity },
+  ): void;
+  publishSessionError(
+    input: SessionStartNotificationInput,
+    localErrorMessage?: string,
+  ): Promise<boolean>;
+  reportFailure(cause: unknown, input: SessionStartNotificationInput): void;
+};
+
+export class SessionStartWorkflowError extends Error {
+  constructor(
+    readonly originalCause: Error,
+    readonly feedbackHandled: boolean,
+  ) {
+    super(originalCause.message);
+    this.name = "SessionStartWorkflowError";
+  }
+}
+
+export const isSessionStartFailureFeedbackHandled = (cause: unknown): boolean =>
+  cause instanceof SessionStartWorkflowError && cause.feedbackHandled;
+
 type CreateSessionStartWorkflowRunnerArgs = Pick<
   ExecuteSessionStartFromDecisionArgs,
   "queryClient" | "workspaceId" | "startAgentSession" | "sendAgentMessage"
->;
+> & {
+  notifications?: SessionStartNotificationPublisher;
+  createLaunchAttemptId?: () => string;
+};
 
 const launchActionSupportsReusableSessions = (
   launchActionId: SessionStartFlowRequest["launchActionId"],
@@ -196,6 +239,7 @@ export const executeSessionStartFromDecision = async ({
   persistTaskTargetBranch,
   startAgentSession,
   sendAgentMessage,
+  postStartErrorAttentionId,
   humanRequestChangesTask,
 }: ExecuteSessionStartFromDecisionArgs): Promise<SessionStartWorkflowResult> => {
   const intent: Parameters<typeof startSessionWorkflow>[0]["intent"] = {
@@ -251,6 +295,10 @@ export const executeSessionStartFromDecision = async ({
     workflowInput.sendAgentMessage = sendAgentMessage;
   }
 
+  if (postStartErrorAttentionId) {
+    workflowInput.postStartErrorAttentionId = postStartErrorAttentionId;
+  }
+
   if (humanRequestChangesTask) {
     workflowInput.humanRequestChangesTask = humanRequestChangesTask;
   }
@@ -263,19 +311,85 @@ export const createSessionStartWorkflowRunner = ({
   workspaceId,
   startAgentSession,
   sendAgentMessage,
+  notifications,
+  createLaunchAttemptId = () => crypto.randomUUID(),
 }: CreateSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow => {
-  return (input) => {
+  return async (input) => {
+    const launchAttemptId = createLaunchAttemptId();
+    const notificationInput: SessionStartNotificationInput = {
+      launchAttemptId,
+      workspaceId,
+      taskId: input.request.taskId,
+      role: input.request.role,
+    };
+    if (input.task?.title) notificationInput.taskTitle = input.task.title;
+    const reportNotificationFailure = (cause: unknown): void => {
+      try {
+        notifications?.reportFailure(cause, notificationInput);
+      } catch {
+        console.error("Session start notification failure reporting failed.", {
+          launchAttemptId,
+          taskId: input.request.taskId,
+          workspaceId,
+        });
+      }
+    };
     const args: ExecuteSessionStartFromDecisionArgs = {
       ...input,
       queryClient,
       workspaceId,
       startAgentSession,
+      postStartErrorAttentionId: launchAttemptId,
     };
 
     if (sendAgentMessage) {
       args.sendAgentMessage = sendAgentMessage;
     }
 
-    return executeSessionStartFromDecision(args);
+    let result: SessionStartWorkflowResult;
+    try {
+      result = await executeSessionStartFromDecision(args);
+    } catch (cause) {
+      const startError = cause instanceof Error ? cause : new Error(String(cause));
+      let feedbackHandled = false;
+      try {
+        if (notifications) {
+          feedbackHandled = await notifications.publishSessionError(
+            notificationInput,
+            startError.message,
+          );
+        }
+      } catch (notificationCause) {
+        reportNotificationFailure(notificationCause);
+      }
+      throw new SessionStartWorkflowError(startError, feedbackHandled);
+    }
+
+    const { postStartActionError, ...session } = result;
+    const notificationWithSession = { ...notificationInput, session };
+    try {
+      if (postStartActionError) {
+        if (postStartActionError instanceof AgentMessageSendError) {
+          notificationWithSession.errorAttentionId = postStartActionError.errorAttentionId;
+        }
+        const feedbackHandled =
+          (await notifications?.publishSessionError(
+            notificationWithSession,
+            postStartActionError.message,
+          )) ?? false;
+        return {
+          ...result,
+          postStartActionError: new SessionStartWorkflowError(
+            postStartActionError,
+            feedbackHandled,
+          ),
+        };
+      } else if (input.decision.startMode === "fresh" || input.decision.startMode === "fork") {
+        notifications?.publishSessionStarted(notificationWithSession);
+      }
+    } catch (cause) {
+      reportNotificationFailure(cause);
+    }
+    return result;
   };
 };

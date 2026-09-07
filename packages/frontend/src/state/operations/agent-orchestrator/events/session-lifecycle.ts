@@ -1,3 +1,4 @@
+import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
 import type {
   AgentChatMessage,
   AgentChatMessageMeta,
@@ -26,7 +27,6 @@ import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
   isStopAbortSessionErrorMessage,
   normalizeRetryStatusMessage,
-  normalizeSessionErrorMessage,
 } from "../support/tool-messages";
 import { toUserChatMessage } from "../support/user-message-event";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";

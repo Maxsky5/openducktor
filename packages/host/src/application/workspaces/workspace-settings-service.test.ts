@@ -5,6 +5,7 @@ import {
   DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
   DEFAULT_CODEX_RUNTIME_POLICY,
+  DEFAULT_NOTIFICATION_SETTINGS,
   type GlobalConfig,
   type RepoConfig,
 } from "@openducktor/contracts";
@@ -55,6 +56,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
       { eventId: "taskProgressedToHumanReview", actionIds: [] },
     ],
   },
+  notifications: DEFAULT_NOTIFICATION_SETTINGS,
   agentRuntimes: {
     opencode: { enabled: true, executablePath: "/bin/opencode" },
     codex: {
@@ -160,6 +162,7 @@ describe("createWorkspaceSettingsService", () => {
     expect(snapshot.agentRuntimes?.codex?.roleOverrides).toEqual({});
     expect(snapshot.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
     expect(snapshot.autopilot.alwaysStartQaReviewsFresh).toBe(false);
+    expect(snapshot.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
     expect(snapshot.agentModelFavorites).toEqual([]);
     expect(snapshot.workspaces).toEqual({});
   });
@@ -697,6 +700,48 @@ describe("createWorkspaceSettingsService", () => {
       openTaskIds: ["task-1"],
       activeTask: { taskId: "task-1", role: "qa" },
     });
+  });
+
+  test("saves and reloads notification settings", async () => {
+    const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+    const notifications = {
+      ...snapshot.notifications,
+      globalCue: "arrival" as const,
+      volumePercent: 65,
+      osFocus: "always_send" as const,
+      kinds: {
+        ...snapshot.notifications.kinds,
+        "agent.session_idle": {
+          enabled: true,
+          target: "os" as const,
+          sound: "pulse" as const,
+        },
+      },
+    };
+
+    await Effect.runPromise(service.saveSettingsSnapshot({ ...snapshot, notifications }));
+
+    const reloaded = await Effect.runPromise(service.getSettingsSnapshot());
+    expect(reloaded.notifications).toEqual(notifications);
+  });
+
+  test("preserves notifications during unrelated settings writes", async () => {
+    const notifications = {
+      ...DEFAULT_NOTIFICATION_SETTINGS,
+      volumePercent: 70,
+    };
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({ notifications }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    await Effect.runPromise(service.setTheme("dark"));
+
+    expect((await Effect.runPromise(service.getSettingsSnapshot())).notifications).toEqual(
+      notifications,
+    );
   });
   test("does not let a failed theme write escape through a concurrent settings save", async () => {
     let rejectThemeWrite: ((reason: Error) => void) | undefined;

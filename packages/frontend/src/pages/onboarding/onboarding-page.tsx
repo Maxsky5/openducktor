@@ -10,7 +10,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { OnboardingLayout, type OnboardingStage } from "./onboarding-layout";
-import { RuntimeStage, WelcomeStage, WorkspaceStage } from "./onboarding-stages";
+import {
+  NotificationsStage,
+  RuntimeStage,
+  WelcomeStage,
+  WorkspaceStage,
+} from "./onboarding-stages";
+import { useOnboardingNotificationSetup } from "./use-onboarding-notification-setup";
 import { useOnboardingRuntimeSetup } from "./use-onboarding-runtime-setup";
 import { useOnboardingWorkspaceCompletion } from "./use-onboarding-workspace-completion";
 
@@ -36,7 +42,16 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
     });
   }, []);
   const openWorkspaceStage = useCallback((): void => changeStage("workspace"), [changeStage]);
-  const runtimeSetup = useOnboardingRuntimeSetup({ onContinue: openWorkspaceStage });
+  const openNotificationsStage = useCallback(
+    (): void => changeStage("notifications"),
+    [changeStage],
+  );
+  const runtimeSetup = useOnboardingRuntimeSetup({ onContinue: openNotificationsStage });
+  const notificationSetup = useOnboardingNotificationSetup({
+    settingsSnapshot: runtimeSetup.settingsSnapshot,
+    agentRuntimes: runtimeSetup.runtimeDraft,
+    onContinue: openWorkspaceStage,
+  });
   const workspaceCompletion = useOnboardingWorkspaceCompletion({
     settingsSnapshot: runtimeSetup.settingsSnapshot,
     onComplete,
@@ -66,12 +81,23 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps): ReactElemen
           onContinue={() => void runtimeSetup.saveRuntimes()}
         />
       ) : null}
+      {stage === "notifications" ? (
+        <NotificationsStage
+          notifications={notificationSetup.notifications}
+          isSaving={notificationSetup.isSaving}
+          saveError={notificationSetup.saveError}
+          saveErrorRef={notificationSetup.saveErrorRef}
+          onUpdateNotifications={notificationSetup.updateNotifications}
+          onBack={() => changeStage("runtimes")}
+          onContinue={() => void notificationSetup.saveNotifications()}
+        />
+      ) : null}
       {stage === "workspace" ? (
         <WorkspaceStage
           workspaces={workspaceCompletion.workspaces}
           addWorkspace={workspaceCompletion.addFirstWorkspace}
           isFinalizing={workspaceCompletion.isFinalizing}
-          onBack={() => changeStage("runtimes")}
+          onBack={() => changeStage("notifications")}
         />
       ) : null}
 

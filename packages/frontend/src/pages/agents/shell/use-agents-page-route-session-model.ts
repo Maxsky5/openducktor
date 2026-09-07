@@ -1,3 +1,7 @@
+import {
+  notificationRouteSessionIdentity,
+  notificationRouteStateSchema,
+} from "@/features/notifications/notification-route-state";
 import { startTransition, useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -46,7 +50,7 @@ export function useAgentsPageRouteSessionModel({
   repoSettings,
   isLoadingRepoSettings,
 }: UseAgentsPageRouteSessionModelArgs): AgentsPageRouteSessionModel {
-  const { key: locationKey } = useLocation();
+  const { key: locationKey, state: locationState } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
@@ -98,9 +102,20 @@ export function useAgentsPageRouteSessionModel({
     [updateQuery],
   );
 
+  const routeSessionIdentity = useMemo(() => {
+    const state = notificationRouteStateSchema.safeParse(locationState);
+    return notificationRouteSessionIdentity(
+      state.success ? state.data.notificationTarget : null,
+      workspaceRepoPath,
+      taskIdParam,
+      sessionExternalIdParam,
+    );
+  }, [locationState, workspaceRepoPath, taskIdParam, sessionExternalIdParam]);
+
   const taskExecutionFilePreview = useTaskExecutionFilePreviewController();
   const { selection: selectionState, selectAgentStudioSelection: applyAgentStudioSelection } =
     useAgentStudioSelectionState({
+      routeSessionIdentity,
       isWorkspaceRestorePending,
       taskIdParam,
       sessionExternalIdParam,

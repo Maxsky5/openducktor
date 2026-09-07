@@ -21,6 +21,7 @@ const taskStreamEvent = (sequence: number): ExternalTaskSyncEvent => ({
   kind: "external_task_created",
   repoPath: "/repo",
   taskId: `task-${sequence}`,
+  taskSnapshot: { id: `task-${sequence}`, title: "Task", status: "open" },
   emittedAt: "2026-04-10T13:00:00.000Z",
 });
 
@@ -92,6 +93,26 @@ const createElectronApi = () => {
           appUpdateListener = listener;
           return unsubscribeAppUpdates;
         }),
+      },
+      notifications: {
+        getCapability: mock(async () => ({
+          platform: "electron" as const,
+          supported: true,
+          permission: "granted" as const,
+          canGuaranteeSilent: true,
+          canOpenSystemSettings: true,
+        })),
+        requestPermission: mock(async () => ({
+          platform: "electron" as const,
+          supported: true,
+          permission: "granted" as const,
+          canGuaranteeSilent: true,
+          canOpenSystemSettings: true,
+        })),
+        openSystemSettings: mock(async () => {}),
+        isAppFocused: mock(async () => false),
+        show: mock(async () => ({ status: "shown" as const })),
+        subscribeClicks: mock(() => unsubscribe),
       },
       openExternalUrl: mock(async () => {}),
       resolveLocalAttachmentPreviewSrc: mock(async () => "file:///tmp/brief.md"),
@@ -344,7 +365,10 @@ describe("electron shell bridge", () => {
     expect(listener).not.toHaveBeenCalled();
     subscription(snapshot);
 
-    expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([snapshot, transcriptEvent]);
+    expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
+      { ...snapshot, isConnectionSnapshot: true },
+      transcriptEvent,
+    ]);
   });
 
   test("uses the preload bridge for app update state and actions", async () => {
@@ -388,11 +412,13 @@ describe("electron shell bridge", () => {
     setElectronApi(electronApi);
 
     const bridge = createElectronShellBridge();
+    await bridge.notifications.openSystemSettings();
     await bridge.openExternalUrl("https://openducktor.local/docs");
     await expect(bridge.resolveLocalAttachmentPreviewSrc("brief.md")).resolves.toBe(
       "file:///tmp/brief.md",
     );
 
+    expect(electronApi.notifications.openSystemSettings).toHaveBeenCalledTimes(1);
     expect(electronApi.openExternalUrl).toHaveBeenCalledWith("https://openducktor.local/docs");
     expect(electronApi.resolveLocalAttachmentPreviewSrc).toHaveBeenCalledWith("brief.md");
   });

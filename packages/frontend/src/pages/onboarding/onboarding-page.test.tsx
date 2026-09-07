@@ -15,8 +15,9 @@ describe("OnboardingPage", () => {
     const progress = screen.getByRole("navigation", { name: "Onboarding progress" });
     const currentStepLabel = within(progress).getByText("Welcome");
     expect(progress.getAttribute("data-orientation")).toBe("horizontal");
-    expect(progress.querySelectorAll("[data-progress-connector]")).toHaveLength(2);
+    expect(progress.querySelectorAll("[data-progress-connector]")).toHaveLength(3);
     expect(within(progress).getByText("Coding agents")).toBeTruthy();
+    expect(within(progress).getByText("Notifications")).toBeTruthy();
     expect(currentStepLabel.className).toContain("text-foreground");
     expect(currentStepLabel.className).not.toContain("text-primary");
     expect(screen.queryByRole("complementary")).toBeNull();

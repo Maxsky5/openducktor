@@ -4,6 +4,7 @@ import path from "node:path";
 import { ElectronOperationError } from "../effect/electron-errors";
 import {
   configureElectronAppIdentity,
+  configureElectronWindowsAppIdentity,
   resolveElectronProfileKind,
   resolveElectronProfilePath,
 } from "./electron-app-identity";
@@ -71,6 +72,46 @@ describe("resolveElectronProfilePath", () => {
     expect(() =>
       resolveElectronProfilePath(defaultConfigPath, "development", "electron-invalid"),
     ).toThrow("OPENDUCKTOR_DEV_INSTANCE must match");
+  });
+});
+
+describe("configureElectronWindowsAppIdentity", () => {
+  test("uses the executable path for Windows development notifications", () => {
+    const appUserModelIds: string[] = [];
+
+    configureElectronWindowsAppIdentity(
+      {
+        setAppUserModelId(id) {
+          appUserModelIds.push(id);
+        },
+      },
+      {
+        isPackaged: false,
+        platform: "win32",
+        processExecPath: "C:\\repo\\node_modules\\electron\\dist\\electron.exe",
+      },
+    );
+
+    expect(appUserModelIds).toEqual(["C:\\repo\\node_modules\\electron\\dist\\electron.exe"]);
+  });
+
+  test("uses the application id for packaged Windows notifications", () => {
+    const appUserModelIds: string[] = [];
+
+    configureElectronWindowsAppIdentity(
+      {
+        setAppUserModelId(id) {
+          appUserModelIds.push(id);
+        },
+      },
+      {
+        isPackaged: true,
+        platform: "win32",
+        processExecPath: "C:\\Program Files\\OpenDucktor\\OpenDucktor.exe",
+      },
+    );
+
+    expect(appUserModelIds).toEqual(["com.openducktor.app"]);
   });
 });
 

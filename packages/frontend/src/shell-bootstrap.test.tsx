@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { Theme } from "@openducktor/contracts";
-import { createDisabledAppUpdateBridge, type ShellBridge } from "./lib/shell-bridge";
+import {
+  createDisabledAppUpdateBridge,
+  createUnavailableShellBridge,
+  type ShellBridge,
+} from "./lib/shell-bridge";
 import { runOpenDucktorShellBootstrap } from "./shell-bootstrap-workflow";
 import { createHostClientFixture } from "./test-utils/focused-fixture";
 
@@ -46,6 +50,7 @@ const createTestShellBridge = (): ShellBridge =>
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,
     },
+    notifications: createUnavailableShellBridge().notifications,
     openExternalUrl: async () => {},
     resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
     resolveTaskAssetSrc: async () => "asset://task-preview",

@@ -1,9 +1,18 @@
-import type { TaskAssetFailure } from "@openducktor/contracts";
+import type { TaskAssetFailure, TaskEventTaskSnapshot } from "@openducktor/contracts";
 import { Data } from "effect";
 
 export class TaskAssetError extends Data.TaggedError("TaskAssetError")<
   TaskAssetFailure & { readonly cause?: unknown }
 > {}
+
+export class TaskCreatedAssetError extends TaskAssetError {
+  readonly createdTask: TaskEventTaskSnapshot;
+
+  constructor(failure: TaskAssetFailure, createdTask: TaskEventTaskSnapshot) {
+    super(failure);
+    this.createdTask = createdTask;
+  }
+}
 
 export const taskAssetValidationError = (
   message: string,

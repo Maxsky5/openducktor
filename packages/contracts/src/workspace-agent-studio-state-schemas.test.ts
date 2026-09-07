@@ -75,6 +75,7 @@ describe("workspace Agent Studio state schemas", () => {
       reusablePrompts: snapshot.reusablePrompts,
       kanban: snapshot.kanban,
       autopilot: snapshot.autopilot,
+      notifications: snapshot.notifications,
       agentRuntimes: snapshot.agentRuntimes,
       agentModelFavorites: snapshot.agentModelFavorites,
       workspaces: { repo: repoConfig },

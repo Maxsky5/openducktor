@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useNotificationContext } from "@/state/notifications/notification-context";
 import type { StartAgentSession } from "@/types/agent-session-start";
 import {
   createSessionStartWorkflowRunner,
@@ -19,12 +20,14 @@ export function useSessionStartWorkflowRunner({
   sendAgentMessage,
 }: UseSessionStartWorkflowRunnerArgs): RunSessionStartWorkflow {
   const queryClient = useQueryClient();
+  const { sessionStartNotifications } = useNotificationContext();
 
   return useMemo(() => {
     const args: Parameters<typeof createSessionStartWorkflowRunner>[0] = {
       queryClient,
       workspaceId,
       startAgentSession,
+      notifications: sessionStartNotifications,
     };
 
     if (sendAgentMessage) {
@@ -32,5 +35,5 @@ export function useSessionStartWorkflowRunner({
     }
 
     return createSessionStartWorkflowRunner(args);
-  }, [queryClient, sendAgentMessage, startAgentSession, workspaceId]);
+  }, [queryClient, sendAgentMessage, sessionStartNotifications, startAgentSession, workspaceId]);
 }

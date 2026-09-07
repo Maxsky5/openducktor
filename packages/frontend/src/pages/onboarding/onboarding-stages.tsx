@@ -1,7 +1,13 @@
-import type { AgentRuntimes, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type {
+  AgentRuntimes,
+  NotificationSettings,
+  RuntimeDescriptor,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import {
   ArrowLeft,
   ArrowRight,
+  Bell,
   Bot,
   FolderGit2,
   ListChecks,
@@ -23,6 +29,7 @@ import {
   WorkspaceCreationSubmitAction,
 } from "@/components/features/repository/workspace-creation-form";
 import { RuntimeExecutablePanel } from "@/components/features/settings/runtime-executable-panel";
+import { SettingsNotificationsSection } from "@/components/features/settings/settings-notifications-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,6 +41,11 @@ const SETUP_STEPS = [
     label: "Configure coding agents",
     detail: "Choose the local coding agents OpenDucktor can run and confirm each executable path.",
     icon: Bot,
+  },
+  {
+    label: "Choose notifications",
+    detail: "Check in-app and OS notifications before an agent needs your input.",
+    icon: Bell,
   },
   {
     label: "Open your first workspace",
@@ -70,7 +82,7 @@ export function WelcomeStage({ onContinue }: WelcomeStageProps): ReactElement {
           className="flex flex-col justify-center bg-muted/20 px-6 py-9 sm:px-9 sm:py-12"
           aria-label="Setup steps"
         >
-          <p className="text-sm font-semibold text-foreground">Two quick setup steps</p>
+          <p className="text-sm font-semibold text-foreground">Three quick setup steps</p>
           <div className="mt-5 divide-y divide-border border-y border-border">
             {SETUP_STEPS.map((step, index) => {
               const Icon = step.icon;
@@ -287,7 +299,84 @@ export function RuntimeStage({
             Back
           </Button>
           <Button size="lg" onClick={onContinue} disabled={continueDisabled || isSaving}>
-            {isSaving ? "Saving coding agents..." : "Continue to workspace"}
+            {isSaving ? "Saving coding agents..." : "Continue to notifications"}
+            {!isSaving ? <ArrowRight data-icon="inline-end" /> : null}
+          </Button>
+        </div>
+      </Card>
+    </>
+  );
+}
+
+type NotificationsStageProps = {
+  notifications: NotificationSettings | null;
+  isSaving: boolean;
+  saveError: string | null;
+  saveErrorRef: RefObject<HTMLParagraphElement | null>;
+  onUpdateNotifications: (updater: (current: NotificationSettings) => NotificationSettings) => void;
+  onBack: () => void;
+  onContinue: () => void;
+};
+
+export function NotificationsStage({
+  notifications,
+  isSaving,
+  saveError,
+  saveErrorRef,
+  onUpdateNotifications,
+  onBack,
+  onContinue,
+}: NotificationsStageProps): ReactElement {
+  return (
+    <>
+      {isSaving ? (
+        <span className="sr-only" role="status">
+          Saving notifications...
+        </span>
+      ) : null}
+      <Card
+        className="flex min-h-[34rem] flex-col overflow-hidden shadow-sm"
+        inert={isSaving}
+        aria-busy={isSaving}
+      >
+        <CardHeader className="gap-3 border-b border-border px-6 py-5 sm:px-9 sm:py-6">
+          <CardTitle className="text-2xl sm:text-3xl">Configure notifications</CardTitle>
+          <CardDescription className="max-w-2xl text-sm leading-relaxed sm:text-base">
+            Set each notification type, delivery target, and sound now. You can change these choices
+            later in Settings.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 bg-muted/20 p-0">
+          {notifications ? (
+            <SettingsNotificationsSection
+              notifications={notifications}
+              disabled={isSaving}
+              onUpdateNotifications={onUpdateNotifications}
+            />
+          ) : (
+            <div className="grid gap-3 p-4" aria-label="Loading notification settings">
+              <Skeleton className="h-5 w-36" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-48 w-full" />
+            </div>
+          )}
+          {saveError ? (
+            <p
+              ref={saveErrorRef}
+              className="mx-4 mb-4 text-sm text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              role="alert"
+              tabIndex={-1}
+            >
+              {saveError}
+            </p>
+          ) : null}
+        </CardContent>
+        <div className="flex flex-col-reverse justify-between gap-3 border-t border-border bg-card px-6 py-4 sm:flex-row sm:px-9">
+          <Button variant="outline" onClick={onBack} disabled={isSaving}>
+            <ArrowLeft data-icon="inline-start" /> Back
+          </Button>
+          <Button size="lg" onClick={onContinue} disabled={isSaving || !notifications}>
+            {isSaving ? "Saving notifications..." : "Continue to workspace"}
             {!isSaving ? <ArrowRight data-icon="inline-end" /> : null}
           </Button>
         </div>
@@ -374,7 +463,7 @@ export function WorkspaceStage({
           onClick={onBack}
         >
           <ArrowLeft data-icon="inline-start" />
-          Back to coding agents
+          Back to notifications
         </Button>
         <div
           data-testid="onboarding-workspace-actions"

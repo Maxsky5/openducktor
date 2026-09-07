@@ -39,8 +39,25 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     sessionRuntimeKind: sessionRuntimeKind ?? null,
     toolCallPresentation,
   });
+  const sessionErrorMeta =
+    message.meta?.kind === "session_notice" && message.meta.reason === "session_error"
+      ? message.meta
+      : null;
+  const sessionErrorAttentionId = sessionErrorMeta
+    ? (sessionErrorMeta.attentionId ?? message.timestamp)
+    : null;
   return (
-    <article className={vm.articleClassName} style={vm.articleStyle}>
+    <article
+      className={vm.articleClassName}
+      style={vm.articleStyle}
+      {...(sessionErrorMeta
+        ? {
+            "data-notification-attention-kind": "error",
+            "data-notification-attention-id": sessionErrorAttentionId,
+            tabIndex: -1,
+          }
+        : {})}
+    >
       <MessageHeader
         message={message}
         timeLabel={vm.timeLabel}

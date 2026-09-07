@@ -8,6 +8,10 @@ type ElectronAppIdentity = {
   setPath(name: "userData" | "sessionData", value: string): void;
 };
 
+type ElectronWindowsAppIdentity = {
+  setAppUserModelId(id: string): void;
+};
+
 type CreateProfileDirectory = (profilePath: string) => void;
 type ResolveConfigDirectory = (env?: NodeJS.ProcessEnv) => string;
 
@@ -23,6 +27,25 @@ type ConfigureElectronAppIdentityOptions = {
   profileKind: ElectronProfileKind;
   processEnv?: NodeJS.ProcessEnv;
   resolveConfigDirectory?: ResolveConfigDirectory;
+};
+
+const OPEN_DUCKTOR_APP_USER_MODEL_ID = "com.openducktor.app";
+
+export const configureElectronWindowsAppIdentity = (
+  app: ElectronWindowsAppIdentity,
+  {
+    isPackaged,
+    platform,
+    processExecPath,
+  }: {
+    isPackaged: boolean;
+    platform: NodeJS.Platform;
+    processExecPath: string;
+  },
+): void => {
+  if (platform === "win32") {
+    app.setAppUserModelId(isPackaged ? OPEN_DUCKTOR_APP_USER_MODEL_ID : processExecPath);
+  }
 };
 
 const createProfileDirectory: CreateProfileDirectory = (profilePath) => {

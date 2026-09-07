@@ -20,6 +20,7 @@ const change = (sequence: number): TaskEventStreamFrame => ({
     kind: "external_task_created",
     repoPath: "/repo",
     taskId: `task-${sequence}`,
+    taskSnapshot: { id: `task-${sequence}`, title: "Task", status: "open" },
     emittedAt: "2026-07-23T12:00:00.000Z",
   },
 });
@@ -251,4 +252,75 @@ test("cancels reconnect expiry and expires a detached lease exactly once", () =>
   expiryCallback();
   expect(manager.get(lease.subscriptionId)).toBeUndefined();
   expect(fake.unsubscribeCalls).toBe(1);
+});
+
+test("retains immutable committed status changes while a lease waits for reconnection", () => {
+  const fake = createFakeStream();
+  const manager = createTaskEventLeaseManager({
+    encodeFrame: () => new Uint8Array(),
+    reportDeliveryFailure: () => {},
+    scheduleExpiry: createInactiveTimer,
+    taskEventStream: fake.stream,
+  });
+  const lease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
+  const statusChange = {
+    previousStatus: "open" as const,
+    task: { id: "task-1", title: "Committed title", status: "spec_ready" as const },
+  };
+  fake.emit({
+    type: "change",
+    cursor: cursor(1),
+    event: {
+      kind: "tasks_updated",
+      eventId: "status-change",
+      repoPath: "/repo",
+      taskIds: ["task-1"],
+      removedTaskIds: [],
+      taskSnapshots: [statusChange.task],
+      statusChanges: [statusChange],
+      emittedAt: "2026-09-06T10:00:00.000Z",
+    },
+  });
+  statusChange.task.title = "Changed after delivery";
+  const retained = lease.pendingFrames[0];
+  if (retained?.type !== "change" || retained.event.kind !== "tasks_updated")
+    throw new Error("Expected a retained update");
+  expect(retained.event.statusChanges[0]?.task.title).toBe("Committed title");
+  expect(Object.isFrozen(retained.event.statusChanges)).toBe(true);
+  expect(Object.isFrozen(retained.event.statusChanges[0])).toBe(true);
+  expect(Object.isFrozen(retained.event.statusChanges[0]?.task)).toBe(true);
+  manager.dispose();
+});
+
+test("protects created task snapshots retained for an SSE connection", () => {
+  const fake = createFakeStream();
+  const encoded: TaskEventStreamFrame[] = [];
+  const manager = createTaskEventLeaseManager({
+    encodeFrame: (frame) => {
+      encoded.push(frame);
+      return new Uint8Array();
+    },
+    reportDeliveryFailure: () => {},
+    scheduleExpiry: createInactiveTimer,
+    taskEventStream: fake.stream,
+  });
+  try {
+    const lease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
+    const published = change(1);
+    fake.emit(published);
+    if (published.type !== "change" || published.event.kind !== "external_task_created")
+      throw new Error("Expected created task");
+    published.event.taskSnapshot.title = "Changed after delivery";
+    const retained = lease.pendingFrames[0];
+    if (retained?.type !== "change" || retained.event.kind !== "external_task_created")
+      throw new Error("Expected retained created task");
+    expect(Reflect.set(retained.event.taskSnapshot, "status", "closed")).toBe(false);
+    const connection = createController();
+    manager.attach(lease, connection.controller);
+    expect(encoded).toMatchObject([
+      { event: { taskSnapshot: { id: "task-1", title: "Task", status: "open" } } },
+    ]);
+  } finally {
+    manager.dispose();
+  }
 });

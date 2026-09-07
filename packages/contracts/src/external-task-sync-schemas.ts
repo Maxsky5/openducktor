@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { agentRoleSchema } from "./agent-workflow-schemas";
+import { taskStatusSchema } from "./task-schemas";
 
 export const externalTaskSyncEventKindSchema = z.union([
   z.literal("external_task_created"),
@@ -12,14 +14,6 @@ const strictTaskEventValueSchema = z
   .refine((value) => value === value.trim(), {
     message: "Task event values must not include leading or trailing whitespace.",
   });
-
-export const externalTaskCreatedEventSchema = z.object({
-  eventId: strictTaskEventValueSchema,
-  kind: z.literal("external_task_created"),
-  repoPath: strictTaskEventValueSchema,
-  taskId: strictTaskEventValueSchema,
-  emittedAt: z.string().min(1),
-});
 
 const taskChangeIdSchema = strictTaskEventValueSchema;
 const uniqueTaskChangeIdsSchema = z
@@ -47,12 +41,83 @@ export const taskChangeSetSchema = z
   });
 export type TaskChangeSet = z.infer<typeof taskChangeSetSchema>;
 
-export const tasksUpdatedEventSchema = taskChangeSetSchema.extend({
-  eventId: strictTaskEventValueSchema,
-  kind: z.literal("tasks_updated"),
-  repoPath: strictTaskEventValueSchema,
-  emittedAt: z.string().min(1),
+export const taskEventTaskSnapshotSchema = z
+  .object({
+    id: strictTaskEventValueSchema,
+    title: z.string(),
+    status: taskStatusSchema,
+  })
+  .strict();
+export type TaskEventTaskSnapshot = z.infer<typeof taskEventTaskSnapshotSchema>;
+
+export const taskEventStatusChangeSchema = z.strictObject({
+  previousStatus: taskStatusSchema,
+  task: taskEventTaskSnapshotSchema,
+  sourceRole: agentRoleSchema.optional(),
 });
+export type TaskEventStatusChange = z.infer<typeof taskEventStatusChangeSchema>;
+
+export const externalTaskCreatedEventSchema = z
+  .object({
+    eventId: strictTaskEventValueSchema,
+    kind: z.literal("external_task_created"),
+    repoPath: strictTaskEventValueSchema,
+    taskId: strictTaskEventValueSchema,
+    taskSnapshot: taskEventTaskSnapshotSchema,
+    emittedAt: z.string().min(1),
+  })
+  .refine((event) => event.taskId === event.taskSnapshot.id, {
+    message: "The created task snapshot must match the task ID.",
+    path: ["taskSnapshot", "id"],
+  });
+
+const taskEventTaskSnapshotsSchema = z
+  .array(taskEventTaskSnapshotSchema)
+  .refine((tasks) => new Set(tasks.map((task) => task.id)).size === tasks.length, {
+    message: "Task event snapshots must have unique task IDs.",
+  });
+
+export const tasksUpdatedEventSchema = taskChangeSetSchema
+  .extend({
+    eventId: strictTaskEventValueSchema,
+    kind: z.literal("tasks_updated"),
+    repoPath: strictTaskEventValueSchema,
+    taskSnapshots: taskEventTaskSnapshotsSchema,
+    statusChanges: z.array(taskEventStatusChangeSchema),
+    emittedAt: z.string().min(1),
+  })
+  .superRefine(({ taskIds, removedTaskIds, taskSnapshots, statusChanges }, context) => {
+    const changedTaskIds = new Set(taskIds);
+    const removedTaskIdSet = new Set(removedTaskIds);
+    const snapshotTaskIds = new Set(taskSnapshots.map((task) => task.id));
+    for (const change of statusChanges) {
+      if (!changedTaskIds.has(change.task.id)) {
+        context.addIssue({
+          code: "custom",
+          message: "Task status changes must refer to a changed task ID.",
+          path: ["statusChanges"],
+        });
+      }
+    }
+    for (const task of taskSnapshots) {
+      if (!changedTaskIds.has(task.id) || removedTaskIdSet.has(task.id)) {
+        context.addIssue({
+          code: "custom",
+          message: "Task event snapshots must describe changed tasks that were not removed.",
+          path: ["taskSnapshots"],
+        });
+      }
+    }
+    for (const taskId of taskIds) {
+      if (!removedTaskIdSet.has(taskId) && !snapshotTaskIds.has(taskId)) {
+        context.addIssue({
+          code: "custom",
+          message: "Each changed task that was not removed must have a task event snapshot.",
+          path: ["taskSnapshots"],
+        });
+      }
+    }
+  });
 
 export const externalTaskSyncEventSchema = z.discriminatedUnion("kind", [
   externalTaskCreatedEventSchema,

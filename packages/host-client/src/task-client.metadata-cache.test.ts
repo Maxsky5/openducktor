@@ -37,6 +37,8 @@ const tasksUpdated = (repoPath: string, taskIds: string[]): ExternalTaskSyncEven
   repoPath,
   taskIds,
   removedTaskIds: [],
+  statusChanges: [],
+  taskSnapshots: taskIds.map((id) => ({ id, title: id, status: "open" })),
   emittedAt: "2026-07-22T00:00:00Z",
 });
 
@@ -128,6 +130,7 @@ describe("HostTaskClient external task sync metadata reconciliation", () => {
       kind: "external_task_created",
       repoPath: "/repo",
       taskId: "task-3",
+      taskSnapshot: { id: "task-3", title: "Task", status: "open" },
       emittedAt: "2026-07-22T00:00:00Z",
     });
 

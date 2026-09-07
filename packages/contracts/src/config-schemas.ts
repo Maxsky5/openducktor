@@ -3,6 +3,10 @@ import { systemOpenInToolIdSchema } from "./system-open-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { type AgentRole, agentRoleSchema } from "./agent-workflow-schemas";
 import { gitTargetBranchSchema, globalGitConfigSchema, repoGitConfigSchema } from "./git-schemas";
+import {
+  createDefaultNotificationSettings,
+  notificationSettingsSchema,
+} from "./notification-schemas";
 import { repoPromptOverridesSchema } from "./prompt-schemas";
 import { workspaceAgentStudioStateSchema } from "./workspace-agent-studio-state-schemas";
 
@@ -647,6 +651,7 @@ const globalConfigSharedFields = {
   reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
+  notifications: notificationSettingsSchema.default(() => createDefaultNotificationSettings()),
   agentRuntimes: agentRuntimesSchema,
   agentModelFavorites: agentModelFavoritesSchema,
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
@@ -680,6 +685,7 @@ export const settingsSnapshotSchema = z.object({
   reusablePrompts: reusablePromptsSchema.default(() => [...DEFAULT_REUSABLE_PROMPTS]),
   kanban: kanbanSettingsSchema.default(DEFAULT_KANBAN_SETTINGS),
   autopilot: autopilotSettingsSchema.default(() => createDefaultAutopilotSettings()),
+  notifications: notificationSettingsSchema.default(() => createDefaultNotificationSettings()),
   agentRuntimes: agentRuntimesSchema,
   agentModelFavorites: agentModelFavoritesSchema,
   workspaces: z.record(workspaceIdSchema, settingsRepoConfigSchema).default({}),
@@ -703,6 +709,7 @@ export const settingsSnapshotSaveInputSchema = z.object({
   reusablePrompts: reusablePromptsSchema.removeDefault(),
   kanban: kanbanSettingsSchema,
   autopilot: autopilotSettingsSchema,
+  notifications: notificationSettingsSchema.removeDefault(),
   agentRuntimes: agentRuntimesSchema.removeDefault(),
   agentModelFavorites: settingsSnapshotSaveAgentModelFavoritesSchema,
   workspaces: z.record(workspaceIdSchema, settingsRepoConfigSchema),

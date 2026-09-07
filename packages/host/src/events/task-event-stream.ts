@@ -63,14 +63,20 @@ const cursorEquals = (left: TaskEventCursor, right: TaskEventCursor): boolean =>
 const freezeCursor = (cursor: TaskEventCursor): TaskEventCursor => Object.freeze({ ...cursor });
 
 const freezeEvent = (event: ExternalTaskSyncEvent): ExternalTaskSyncEvent => {
-  if (event.kind === "tasks_updated") {
-    const taskIds = [...event.taskIds];
-    const removedTaskIds = [...event.removedTaskIds];
-    Object.freeze(taskIds);
-    Object.freeze(removedTaskIds);
-    return Object.freeze({ ...event, taskIds, removedTaskIds });
+  if (event.kind === "external_task_created") {
+    return Object.freeze({ ...event, taskSnapshot: Object.freeze({ ...event.taskSnapshot }) });
   }
-  return Object.freeze({ ...event });
+  const taskIds = [...event.taskIds];
+  const removedTaskIds = [...event.removedTaskIds];
+  const taskSnapshots = event.taskSnapshots.map((task) => Object.freeze({ ...task }));
+  const statusChanges = event.statusChanges.map((change) =>
+    Object.freeze({ ...change, task: Object.freeze({ ...change.task }) }),
+  );
+  Object.freeze(taskIds);
+  Object.freeze(removedTaskIds);
+  Object.freeze(taskSnapshots);
+  Object.freeze(statusChanges);
+  return Object.freeze({ ...event, taskIds, removedTaskIds, taskSnapshots, statusChanges });
 };
 
 const freezeFrame = (frame: TaskEventStreamFrame): TaskEventStreamFrame =>

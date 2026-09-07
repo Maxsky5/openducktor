@@ -29,6 +29,7 @@ import type {
   PolicyBoundSessionRef,
 } from "@openducktor/core";
 import type {
+  AgentMessageSendOptions,
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentSessionContextLoadTarget,
@@ -201,7 +202,11 @@ export type AgentOperationsContextValue = {
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   loadAgentSessionContext: (session: AgentSessionContextLoadTarget) => Promise<void>;
   startAgentSession: (input: StartAgentSessionInput) => Promise<StartAgentSessionResult>;
-  sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
+  sendAgentMessage: (
+    session: AgentSessionIdentity,
+    parts: AgentUserMessagePart[],
+    options?: AgentMessageSendOptions,
+  ) => Promise<void>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (
     session: AgentSessionIdentity,

@@ -4,12 +4,10 @@ import { toast } from "sonner";
 import type {
   ResolvedSessionStartDecision,
   RunSessionStartWorkflow,
-  SessionStartPostAction,
 } from "@/features/session-start";
-import { sessionStartPostActionErrorTitle } from "@/features/session-start";
+import { isSessionStartFailureFeedbackHandled } from "@/features/session-start/session-start-orchestration";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
-import { renderSessionStartedToastAction } from "./session-started-toast-action";
 
 type StartKanbanSessionFlowInput = {
   request: KanbanSessionStartIntent;
@@ -29,19 +27,12 @@ type StartKanbanSessionFlowInput = {
   ) => void;
 };
 
-const showPostStartActionError = (action: SessionStartPostAction, error: Error): void => {
-  toast.error(sessionStartPostActionErrorTitle(action), {
-    description: error.message,
-  });
-};
-
 export const startKanbanSessionFlow = async ({
   request,
   decision,
   startInBackground,
   openAgentStudioTabOnBackgroundSessionStart,
   tasks,
-  roleLabels,
   workspaceId,
   saveAgentStudioTab,
   runSessionStartWorkflow,
@@ -65,10 +56,14 @@ export const startKanbanSessionFlow = async ({
     workflowInput.persistTaskTargetBranch = setTaskTargetBranch;
   }
   const workflow = await runSessionStartWorkflow(workflowInput);
-  if (workflow.postStartActionError) {
-    showPostStartActionError(effectivePostStartAction, workflow.postStartActionError);
+  if (
+    workflow.postStartActionError &&
+    !isSessionStartFailureFeedbackHandled(workflow.postStartActionError)
+  ) {
+    toast.error(`Session started, but the first message failed for ${request.taskId}.`, {
+      description: workflow.postStartActionError.message,
+    });
   }
-
   if (startInBackground) {
     if (openAgentStudioTabOnBackgroundSessionStart) {
       if (!workspaceId) {
@@ -86,12 +81,6 @@ export const startKanbanSessionFlow = async ({
         }
       }
     }
-
-    const roleLabel = roleLabels[request.role] ?? request.role.toUpperCase();
-    toast.success(`Started ${roleLabel} session in background for ${request.taskId}.`, {
-      duration: 10000,
-      description: renderSessionStartedToastAction(request, workflow, openSessionInAgentStudio),
-    });
   } else {
     openSessionInAgentStudio(request, workflow);
   }

@@ -70,6 +70,10 @@ Session rules:
 
 Human and agent actions meet in the host workflow service. SQLite stores the result.
 
+Task update events carry `statusChanges` with the previous status and the task snapshot at each committed transition. The SQLite adapter reads both states in the transaction and records them only after commit. The mutation publisher collects these values in its Effect fiber and includes them in the task event, including when later work returns a partial failure. The values stay in memory.
+
+Workflow notifications use these committed transitions. A `snapshot_required` refresh can read newer task data before buffered events arrive, so that read cannot define whether an event changed status. Initial snapshots remain silent. Event IDs and transition positions identify repeated delivery of the same change.
+
 For a human action:
 
 1. The user selects an action from `availableActions`.

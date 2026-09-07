@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   externalTaskSyncEventSchema,
   taskChangeSetSchema,
+  taskEventStatusChangeSchema,
   taskEventStreamAcknowledgeSchema,
   taskEventStreamFrameSchema,
   taskEventStreamSubscribeSchema,
@@ -9,6 +10,19 @@ import {
 } from "./external-task-sync-schemas";
 
 describe("external-task-sync-schemas", () => {
+  test("preserves an optional source role and rejects unknown roles", () => {
+    const change = {
+      previousStatus: "blocked",
+      task: { id: "task-1", title: "Task", status: "human_review" },
+    };
+    expect(taskEventStatusChangeSchema.parse(change)).toEqual(change);
+    expect(taskEventStatusChangeSchema.parse({ ...change, sourceRole: "build" }).sourceRole).toBe(
+      "build",
+    );
+    expect(
+      taskEventStatusChangeSchema.safeParse({ ...change, sourceRole: "unknown" }).success,
+    ).toBe(false);
+  });
   test("parses external task created sync events", () => {
     const eventId = "event-µ-1";
     const repoPath = "/repo/naïve";
@@ -18,6 +32,7 @@ describe("external-task-sync-schemas", () => {
       kind: "external_task_created",
       repoPath,
       taskId,
+      taskSnapshot: { id: taskId, title: "Task", status: "open" },
       emittedAt: "2026-04-10T13:00:00.000Z",
     });
 
@@ -36,6 +51,8 @@ describe("external-task-sync-schemas", () => {
       repoPath: "/repo",
       taskIds: ["task-7", "task-8"],
       removedTaskIds: ["task-7"],
+      statusChanges: [],
+      taskSnapshots: [{ id: "task-8", title: "Task 8", status: "ready_for_dev" }],
       emittedAt: "2026-04-10T13:05:00.000Z",
     });
 
@@ -44,7 +61,25 @@ describe("external-task-sync-schemas", () => {
     if (parsed.kind === "tasks_updated") {
       expect(parsed.taskIds).toEqual(["task-7", "task-8"]);
       expect(parsed.removedTaskIds).toEqual(["task-7"]);
+      expect(parsed.taskSnapshots).toEqual([
+        { id: "task-8", title: "Task 8", status: "ready_for_dev" },
+      ]);
     }
+  });
+
+  test("allows an empty task title in update snapshots", () => {
+    const parsed = tasksUpdatedEventSchema.parse({
+      eventId: "event-empty-title",
+      kind: "tasks_updated",
+      repoPath: "/repo",
+      taskIds: ["task-8"],
+      removedTaskIds: [],
+      statusChanges: [],
+      taskSnapshots: [{ id: "task-8", title: "", status: "ready_for_dev" }],
+      emittedAt: "2026-04-10T13:05:00.000Z",
+    });
+
+    expect(parsed.taskSnapshots[0]?.title).toBe("");
   });
 
   test("rejects task event values with surrounding whitespace", () => {
@@ -53,6 +88,7 @@ describe("external-task-sync-schemas", () => {
       kind: "external_task_created" as const,
       repoPath: "/repo",
       taskId: "task-7",
+      taskSnapshot: { id: "task-7", title: "Task", status: "open" },
       emittedAt: "2026-04-10T13:00:00.000Z",
     };
 
@@ -124,6 +160,35 @@ describe("external-task-sync-schemas", () => {
       }).success,
     ).toBe(false);
   });
+  test("requires one snapshot for each changed task that was not removed", () => {
+    const event = {
+      eventId: "event-snapshots",
+      kind: "tasks_updated" as const,
+      repoPath: "/repo",
+      taskIds: ["task-7", "task-8"],
+      removedTaskIds: ["task-7"],
+      emittedAt: "2026-04-10T13:15:00.000Z",
+    };
+
+    expect(tasksUpdatedEventSchema.safeParse({ ...event, taskSnapshots: [] }).success).toBe(false);
+    expect(
+      tasksUpdatedEventSchema.safeParse({
+        ...event,
+        statusChanges: [],
+        taskSnapshots: [{ id: "task-7", title: "Removed", status: "open" }],
+      }).success,
+    ).toBe(false);
+    expect(
+      tasksUpdatedEventSchema.safeParse({
+        ...event,
+        statusChanges: [],
+        taskSnapshots: [
+          { id: "task-8", title: "Task 8", status: "open" },
+          { id: "task-8", title: "Task 8", status: "spec_ready" },
+        ],
+      }).success,
+    ).toBe(false);
+  });
   test("parses strict task event stream cursors, frames, and checkpoints", () => {
     const cursor = { epoch: "be8e34ef-2e0e-4e9a-a63f-72719f95c7b7", sequence: 4 };
     expect(
@@ -135,6 +200,7 @@ describe("external-task-sync-schemas", () => {
           kind: "external_task_created",
           repoPath: "/repo",
           taskId: "task-7",
+          taskSnapshot: { id: "task-7", title: "Task", status: "open" },
           emittedAt: "2026-04-10T13:20:00.000Z",
         },
       }),
@@ -165,4 +231,57 @@ describe("external-task-sync-schemas", () => {
       }).success,
     ).toBe(false);
   });
+});
+
+test("creation events require a snapshot for the same task", () => {
+  const event = {
+    eventId: "create-1",
+    kind: "external_task_created",
+    repoPath: "/repo",
+    taskId: "task-1",
+    emittedAt: "2026-09-06T00:00:00.000Z",
+  };
+  expect(externalTaskSyncEventSchema.safeParse(event).success).toBe(false);
+  expect(
+    externalTaskSyncEventSchema.safeParse({
+      ...event,
+      taskSnapshot: { id: "task-2", title: "Other", status: "open" },
+    }).success,
+  ).toBe(false);
+  expect(
+    externalTaskSyncEventSchema.safeParse({
+      ...event,
+      taskSnapshot: { id: "task-1", title: "Created", status: "open" },
+    }).success,
+  ).toBe(true);
+});
+
+test("requires source status changes and keeps them distinct from later task snapshots", () => {
+  const event = {
+    kind: "tasks_updated",
+    eventId: "committed-change",
+    repoPath: "/repo",
+    taskIds: ["task-1"],
+    removedTaskIds: [],
+    taskSnapshots: [{ id: "task-1", title: "Current", status: "ready_for_dev" }],
+    statusChanges: [
+      { previousStatus: "open", task: { id: "task-1", title: "At commit", status: "spec_ready" } },
+    ],
+    emittedAt: "2026-09-06T10:00:00.000Z",
+  };
+  expect(tasksUpdatedEventSchema.parse(event).statusChanges).toEqual(event.statusChanges);
+  expect(tasksUpdatedEventSchema.safeParse({ ...event, statusChanges: undefined }).success).toBe(
+    false,
+  );
+  expect(
+    tasksUpdatedEventSchema.safeParse({
+      ...event,
+      statusChanges: [
+        {
+          previousStatus: "open",
+          task: { id: "other-task", title: "Other", status: "spec_ready" },
+        },
+      ],
+    }).success,
+  ).toBe(false);
 });

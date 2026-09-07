@@ -44,12 +44,14 @@ export const createAgentStudioRouteSelectionState = ({
   sessionExternalIdParam,
   hasExplicitRoleParam,
   roleFromQuery,
+  routeSessionIdentity = null,
 }: {
   isWorkspaceRestorePending: boolean;
   taskIdParam: string;
   sessionExternalIdParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
+  routeSessionIdentity?: AgentSessionIdentity | null;
 }): AgentStudioSelectionState => {
   if (isWorkspaceRestorePending) {
     return emptyAgentStudioSelectionState();
@@ -58,7 +60,7 @@ export const createAgentStudioRouteSelectionState = ({
   return {
     taskId: taskIdParam,
     sessionExternalId: sessionExternalIdParam,
-    sessionIdentity: null,
+    sessionIdentity: routeSessionIdentity,
     role: roleFromQuery,
     hasExplicitRoleSelection: hasExplicitRoleParam,
     keepSessionless: false,

@@ -17,6 +17,7 @@ import type {
 import {
   buildSessionStartModalRequest,
   createSessionStartGate,
+  isSessionStartFailureFeedbackHandled,
   sessionStartPostActionErrorTitle,
   useSessionStartModalRunner,
 } from "@/features/session-start";
@@ -73,12 +74,6 @@ const buildSessionStartKey = (params: {
     ? "post-start-message"
     : "no-post-start-message";
   return `${params.taskId}:${params.role}:${params.launchActionId}:${messagePolicy}`;
-};
-
-const showPostStartActionError = (action: SessionStartPostAction, error: Error): void => {
-  toast.error(sessionStartPostActionErrorTitle(action), {
-    description: error.message,
-  });
 };
 
 export function useAgentStudioSessionStartFlow({
@@ -196,8 +191,13 @@ export function useAgentStudioSessionStartFlow({
           }
 
           const workflow = await runSessionStartWorkflow(workflowInput);
-          if (workflow.postStartActionError) {
-            showPostStartActionError(request.postStartAction, workflow.postStartActionError);
+          if (
+            workflow.postStartActionError &&
+            !isSessionStartFailureFeedbackHandled(workflow.postStartActionError)
+          ) {
+            toast.error(sessionStartPostActionErrorTitle(request.postStartAction), {
+              description: workflow.postStartActionError.message,
+            });
           }
 
           scheduleQueryUpdate(

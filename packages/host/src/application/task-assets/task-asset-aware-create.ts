@@ -1,5 +1,6 @@
+import type { TaskEventTaskSnapshot } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
-import { TaskAssetError } from "../../effect/task-asset-error";
+import { TaskAssetError, TaskCreatedAssetError } from "../../effect/task-asset-error";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import {
   asTaskAssetError,
@@ -22,7 +23,7 @@ export const createTaskAssetAwareCreate =
   (input) => {
     let createdTaskId: string | undefined;
     let workspaceId: string | undefined;
-    let committed = false;
+    let committedTask: TaskEventTaskSnapshot | null = null;
     let committedCleanupPhase: "purge_create_quarantine" | "discard_committed_staging" =
       "discard_committed_staging";
     let recoveryId: string | null = null;
@@ -133,7 +134,7 @@ export const createTaskAssetAwareCreate =
             }
           }),
       });
-      committed = true;
+      committedTask = { id: created.id, title: created.title, status: created.status };
       if (recoveryId) {
         committedCleanupPhase = "purge_create_quarantine";
         yield* filePort.purgeQuarantine(recoveryId);
@@ -173,7 +174,7 @@ export const createTaskAssetAwareCreate =
           return Effect.fail(error);
         }
         const taskId = createdTaskId;
-        if (committed) {
+        if (committedTask) {
           let message =
             "The task was created, but staged-file cleanup failed. Refresh before continuing.";
           if (committedCleanupPhase === "purge_create_quarantine") {
@@ -181,14 +182,17 @@ export const createTaskAssetAwareCreate =
               "The task was created, but its asset quarantine could not be removed. Refresh before continuing.";
           }
           return Effect.fail(
-            taskAssetPartialStateError({
-              operation: "create",
-              phase: committedCleanupPhase,
-              taskId,
-              assetIds: promotedAssetIds,
-              durableState: "committed_cleanup_pending",
-              message,
-            }),
+            new TaskCreatedAssetError(
+              taskAssetPartialStateError({
+                operation: "create",
+                phase: committedCleanupPhase,
+                taskId,
+                assetIds: promotedAssetIds,
+                durableState: "committed_cleanup_pending",
+                message,
+              }),
+              committedTask,
+            ),
           );
         }
         const cleanupWorkspaceId = workspaceId;

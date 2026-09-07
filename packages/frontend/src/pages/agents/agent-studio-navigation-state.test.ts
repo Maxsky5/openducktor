@@ -166,7 +166,7 @@ describe("resolveAgentStudioNavigationState", () => {
     });
   });
 
-  test("derives full runtime identity from the matching task session summary", () => {
+  test("does not replace an explicit identity with a different runtime or worktree", () => {
     const resolvedSession = createAgentSessionSummaryFixture({
       runtimeKind: "codex",
       externalSessionId: "session-1",
@@ -191,9 +191,10 @@ describe("resolveAgentStudioNavigationState", () => {
 
     expect(state.view.sessionIdentity).toEqual({
       externalSessionId: "session-1",
-      runtimeKind: "codex",
-      workingDirectory: "/repo/worktrees/authoritative",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/stale",
     });
+    expect(state.routeSessionResolution.kind).toBe("missing");
   });
 
   test("keeps an unresolved explicit session actionable after repository read-model failure", () => {
@@ -231,4 +232,34 @@ describe("resolveAgentStudioNavigationState", () => {
       }).queryUpdate,
     ).toBeNull();
   });
+});
+
+test("resolves the exact notification session when native IDs collide", () => {
+  const first = createAgentSessionSummaryFixture({
+    externalSessionId: "shared",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo/first",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
+  });
+  const second = createAgentSessionSummaryFixture({
+    externalSessionId: "shared",
+    runtimeKind: "codex",
+    workingDirectory: "/repo/second",
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+  });
+  const state = createNavigationState({
+    sessions: [first, second],
+    taskIdParam: "task-1",
+    sessionExternalIdParam: "shared",
+    hasExplicitRoleParam: true,
+    roleFromQuery: "build",
+    selectionState: toAgentStudioSessionSelection({ ...second, taskId: "task-1", role: "build" }),
+  });
+  expect(state.routeSessionResolution).toEqual({ kind: "found", session: second });
+  expect(state.view.sessionIdentity).toEqual({
+    externalSessionId: "shared",
+    runtimeKind: "codex",
+    workingDirectory: "/repo/second",
+  });
+  expect(state.queryUpdate).toBeNull();
 });
