@@ -12,7 +12,7 @@ import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
 import type { CreateTaskUseCaseInput } from "../tasks/task-inputs";
 import { createEventPublishingTaskService } from "../tasks/event-publishing-task-service";
-import type { TaskSyncService } from "../tasks/sync/task-sync-service";
+import { createTaskSyncService, type TaskSyncService } from "../tasks/sync/task-sync-service";
 import { createOdtMcpBridgeService } from "./odt-mcp-bridge-service";
 
 const repoConfig: RepoConfig = {
@@ -456,6 +456,63 @@ describe("createOdtMcpBridgeService", () => {
       { type: "listTasks", input: { repoPath: "/repo" } },
     ]);
   });
+  test("returns a committed-state recovery error to MCP after snapshot publication fails", async () => {
+    let current = taskCard();
+    let mutations = 0;
+    let snapshotReads = 0;
+    const snapshotFailure = new HostOperationError({
+      operation: "task.list",
+      message: "Snapshot unavailable",
+    });
+    const base = createTaskServiceWithMutationProgressTestDouble({
+      listTasks: () =>
+        Effect.suspend(() => {
+          if (mutations > 0) {
+            snapshotReads += 1;
+            return Effect.fail(snapshotFailure);
+          }
+          return Effect.succeed([current]);
+        }),
+      setSpec: () =>
+        Effect.sync(() => {
+          mutations += 1;
+          current = taskCard({ status: "spec_ready" });
+          return { markdown: "Spec", revision: 1, updatedAt: "2026-09-07T00:00:00.000Z" };
+        }),
+    });
+    const taskSyncService = createTaskSyncService({
+      taskService: base,
+      taskEventStream: {
+        publish: () => {
+          throw new Error("Unexpected event");
+        },
+        subscribe: () => {
+          throw new Error("Unexpected subscription");
+        },
+        acknowledge: () => {},
+      },
+      publicationReporter: { report: () => Effect.void },
+      onBackgroundFailure: () => Effect.void,
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+    });
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService: createEventPublishingTaskService({ taskService: base, taskSyncService }),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+    const failure = await Effect.runPromise(
+      service
+        .invoke("odt_set_spec", { workspaceId: "repo", taskId: "task-1", markdown: "Spec" })
+        .pipe(Effect.flip),
+    );
+    expect(failure.message).toContain("Task changes were saved");
+    expect(failure.message).toContain("Reload the workspace");
+    expect(failure.message).toContain("Do not repeat the change");
+    expect(failure).toMatchObject({ cause: snapshotFailure });
+    expect(current.status).toBe("spec_ready");
+    expect(mutations).toBe(1);
+    expect(snapshotReads).toBe(1);
+  });
+
   test("uses the task facade to publish one event for MCP document and create mutations", async () => {
     const events: Array<{ kind: "created" | "updated"; taskIds: string[] }> = [];
     const baseTaskService = createTaskServiceWithMutationProgressTestDouble({

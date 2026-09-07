@@ -115,7 +115,7 @@ describe("createTaskSyncService", () => {
       expect.objectContaining({ operation: "task-update", repoPath: "/repo", stage: "acceptance" }),
     ]);
   });
-  test("reports task snapshot capture failures without rejecting committed work", async () => {
+  test("returns an actionable committed-state error when task snapshot capture fails", async () => {
     const { eventBus, events } = createEventBus();
     const reports: unknown[] = [];
     const failure = new HostOperationError({
@@ -136,14 +136,26 @@ describe("createTaskSyncService", () => {
 
     await expect(
       Effect.runPromise(
-        service.publishTasksUpdated(
-          "/repo",
-          { taskIds: ["task-1"], removedTaskIds: [] },
-          "task-update",
-          [],
-        ),
+        service
+          .publishTasksUpdated(
+            "/repo",
+            { taskIds: ["task-1"], removedTaskIds: [] },
+            "task-update",
+            [],
+          )
+          .pipe(Effect.flip),
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({
+      _tag: "HostOperationError",
+      message: expect.stringContaining("Task changes were saved"),
+      cause: failure,
+      details: {
+        durableState: "committed",
+        stage: "snapshot",
+        repoPath: "/repo",
+        changes: { taskIds: ["task-1"], removedTaskIds: [] },
+      },
+    });
     expect(events).toEqual([]);
     expect(reports).toEqual([
       expect.objectContaining({
@@ -497,6 +509,40 @@ describe("createTaskSyncService", () => {
       taskIds: ["task-1", "task-2"],
     });
   });
+  test("retains partial pull request sync failure when its snapshot read fails", async () => {
+    const mutationFailure = new HostOperationError({
+      operation: "task.repo-pull-request-sync",
+      message: "Second task failed",
+    });
+    const snapshotFailure = new HostOperationError({
+      operation: "task.list",
+      message: "Snapshot unavailable",
+    });
+    const { eventBus, events } = createEventBus();
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      taskService: {
+        listTasks: () => Effect.fail(snapshotFailure),
+        repoPullRequestSyncDetailed: () =>
+          Effect.fail(
+            new TaskMutationProgressFailure({
+              operation: "repo-pull-request-sync",
+              changes: { taskIds: ["task-1"], removedTaskIds: [] },
+              failure: mutationFailure,
+            }),
+          ),
+      },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+    });
+    const failure = await Effect.runPromise(
+      service.syncRepoPullRequests("/repo").pipe(Effect.flip),
+    );
+    expect(failure.message).toContain(mutationFailure.message);
+    expect(failure.message).toContain("Task changes were saved");
+    expect(failure).toMatchObject({ cause: { mutationFailure, snapshotFailure } });
+    expect(events).toEqual([]);
+  });
+
   test("combines partial sync and publication failures", async () => {
     const mutationFailure = new HostOperationError({
       operation: "task.repo-pull-request-sync",

@@ -45,6 +45,7 @@ export const createEventPublishingTaskService = ({
             result.left.changes,
             operation,
             statusChanges,
+            result.left.failure,
           );
           return yield* Effect.fail(result.left.failure);
         }
@@ -75,6 +76,7 @@ export const createEventPublishingTaskService = ({
             result.left.changes,
             operation,
             statusChanges,
+            result.left.failure,
           );
           return yield* Effect.fail(result.left.failure);
         }
@@ -105,6 +107,7 @@ export const createEventPublishingTaskService = ({
           result.left.changes,
           "set-plan",
           statusChanges,
+          result.left.failure,
         );
         return yield* Effect.fail(result.left.failure);
       }
@@ -129,6 +132,7 @@ export const createEventPublishingTaskService = ({
           result.left.changes,
           "set-spec",
           statusChanges,
+          result.left.failure,
         );
         return yield* Effect.fail(result.left.failure);
       }

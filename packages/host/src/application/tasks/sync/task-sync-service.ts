@@ -7,7 +7,7 @@ import {
   type TaskEventStatusChange,
 } from "@openducktor/contracts";
 import { type Cause, Deferred, Effect, Exit, Fiber, Ref } from "effect";
-import { HostOperationError } from "../../../effect/host-errors";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../../effect/host-errors";
 import type { TaskEventStreamPort } from "../../../events/task-event-stream";
 import type {
   WorkspaceSettingsError,
@@ -38,7 +38,8 @@ export type TaskSyncService = {
     changes: TaskChangeSet,
     operation: string,
     statusChanges: readonly TaskEventStatusChange[],
-  ): Effect.Effect<void>;
+    mutationFailure?: TaskServiceError,
+  ): Effect.Effect<void, HostOperationErrorAggregate>;
   syncRepoPullRequests(
     repoPath: string,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError>;
@@ -175,7 +176,8 @@ export const createTaskSyncService = ({
     changes: TaskChangeSet,
     operation: string,
     statusChanges: readonly TaskEventStatusChange[],
-  ): Effect.Effect<void> =>
+    mutationFailure?: TaskServiceError,
+  ): Effect.Effect<void, HostOperationErrorAggregate> =>
     Effect.gen(function* () {
       const tasks = yield* Effect.either(taskService.listTasks({ repoPath }));
       if (tasks._tag === "Left") {
@@ -186,7 +188,16 @@ export const createTaskSyncService = ({
           stage: "snapshot",
           cause: tasks.left,
         });
-        return;
+        const recoveryMessage =
+          "Task changes were saved, but their update event could not be sent. Reload the workspace before continuing. Do not repeat the change.";
+        return yield* new HostOperationError({
+          operation: `${operation}.publish-task-update`,
+          message: mutationFailure
+            ? `${mutationFailure.message} ${recoveryMessage}`
+            : recoveryMessage,
+          cause: mutationFailure ? { mutationFailure, snapshotFailure: tasks.left } : tasks.left,
+          details: { durableState: "committed", stage: "snapshot", repoPath, changes },
+        });
       }
       const taskSnapshots = taskSnapshotsForChanges(tasks.right, changes);
       yield* publish(
@@ -216,6 +227,7 @@ export const createTaskSyncService = ({
           syncResult.left.changes,
           syncResult.left.operation,
           statusChanges,
+          syncResult.left.failure,
         );
         return yield* Effect.fail(syncResult.left.failure);
       }

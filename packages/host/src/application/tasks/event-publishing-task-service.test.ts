@@ -3,7 +3,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { createEventPublishingTaskService } from "./event-publishing-task-service";
-import type { TaskSyncService } from "./sync/task-sync-service";
+import { createTaskSyncService, type TaskSyncService } from "./sync/task-sync-service";
 import {
   TaskMutationProgressFailure,
   TaskCreationProgressFailure,
@@ -54,6 +54,79 @@ const sync = (
 });
 
 describe("createEventPublishingTaskService", () => {
+  test.each(["updateTask", "directMerge", "setPlan", "setSpec"] as const)(
+    "preserves the %s failure when snapshot publication also fails",
+    async (method) => {
+      const mutationFailure = new HostOperationError({
+        operation: method,
+        message: "Committed work still needs cleanup.",
+      });
+      const snapshotFailure = new HostOperationError({
+        operation: "task.list",
+        message: "Snapshot unavailable",
+      });
+      const progress = new TaskMutationProgressFailure({
+        operation: "update-task",
+        changes: { taskIds: ["task-1"], removedTaskIds: [] },
+        failure: mutationFailure,
+      });
+      const base = fakeTaskService({
+        updateTask: () => Effect.fail(progress),
+        directMerge: () => Effect.fail(progress),
+        setPlan: () => Effect.fail(progress),
+        setSpec: () => Effect.fail(progress),
+        listTasks: () => Effect.fail(snapshotFailure),
+      });
+      const taskSyncService = createTaskSyncService({
+        taskService: base,
+        taskEventStream: {
+          publish: () => {
+            throw new Error("Unexpected event");
+          },
+          subscribe: () => {
+            throw new Error("Unexpected subscription");
+          },
+          acknowledge: () => {},
+        },
+        publicationReporter: { report: () => Effect.void },
+        onBackgroundFailure: () => Effect.void,
+        workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+      });
+      const service = createEventPublishingTaskService({ taskService: base, taskSyncService });
+      const calls = {
+        updateTask: service
+          .updateTask({ repoPath: "/repo", taskId: "task-1", patch: {} })
+          .pipe(Effect.asVoid),
+        directMerge: service
+          .directMerge({
+            repoPath: "/repo",
+            taskId: "task-1",
+            input: { mergeMethod: "merge_commit" },
+          })
+          .pipe(Effect.asVoid),
+        setPlan: service
+          .setPlan({
+            repoPath: "/repo",
+            taskId: "task-1",
+            markdown: "Plan",
+            subtasks: [],
+            hasExplicitSubtasks: false,
+          })
+          .pipe(Effect.asVoid),
+        setSpec: service
+          .setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "Spec" })
+          .pipe(Effect.asVoid),
+      };
+      const failure = await Effect.runPromise(calls[method].pipe(Effect.flip));
+      expect(failure.message).toContain(mutationFailure.message);
+      expect(failure.message).toContain("Reload the workspace");
+      expect(failure).toMatchObject({
+        cause: { mutationFailure, snapshotFailure },
+        details: { durableState: "committed" },
+      });
+    },
+  );
+
   test("returns committed create and update results after publication acceptance failures", async () => {
     const reports: unknown[] = [];
     const taskSyncService: Pick<

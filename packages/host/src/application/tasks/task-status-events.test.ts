@@ -64,6 +64,48 @@ const deferred = () => {
   return { promise, resolve };
 };
 
+test("keeps the committed transition and reports a failed publication snapshot without retry", async () => {
+  const harness = await createSqliteTaskStoreHarness();
+  const { repoPath, store } = harness;
+  try {
+    const task = await Effect.runPromise(
+      store.createTask({
+        repoPath,
+        task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+      }),
+    );
+    let snapshotReads = 0;
+    let mutations = 0;
+    const { service, events, failures } = createServices(store, {
+      listTasks: () =>
+        Effect.suspend(() => {
+          snapshotReads += 1;
+          return Effect.fail(
+            new HostOperationError({ operation: "task.list", message: "Snapshot unavailable" }),
+          );
+        }),
+      transitionTask: (input) =>
+        Effect.gen(function* () {
+          mutations += 1;
+          return yield* store.transitionTask(input);
+        }),
+    });
+    const failure = await Effect.runPromise(
+      service.transitionTask({ repoPath, taskId: task.id, status: "spec_ready" }).pipe(Effect.flip),
+    );
+    expect(failure.message).toContain("Task changes were saved");
+    expect(failure.message).toContain("Reload the workspace");
+    expect(failure.message).toContain("Do not repeat the change");
+    expect((await Effect.runPromise(store.listTasks({ repoPath })))[0]?.status).toBe("spec_ready");
+    expect(mutations).toBe(1);
+    expect(snapshotReads).toBe(1);
+    expect(events).toEqual([]);
+    expect(failures).toHaveLength(1);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
 test("captures each committed transition despite a concurrent mutation overtaking publication", async () => {
   const harness = await createSqliteTaskStoreHarness();
   const { repoPath, store } = harness;
