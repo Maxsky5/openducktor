@@ -73,14 +73,21 @@ try {
         if (Math.abs(card.getBoundingClientRect().width - root.getBoundingClientRect().width) > 1) throw new Error('Completed card does not fill the available width');
         const button = root.querySelector('[data-slot="collapsible-trigger"]');
         if (button.getAttribute('aria-expanded') !== 'false' || root.textContent.includes(image.alt)) throw new Error('Prompt is not collapsed by default');
-        if (!root.textContent.includes('/runtime/generated/duck.png') || !root.textContent.includes('Opaque')) throw new Error('File and background details are not visible');
+        if (!root.textContent.includes('/runtime/generated/images/') || !root.textContent.includes('Opaque')) throw new Error('File and background details are not visible');
+        const copy = root.querySelector('button[aria-label="Copy generated image path"]');
+        const path = copy.parentElement.querySelector('span');
+        const range = document.createRange();
+        range.selectNodeContents(path);
+        const lastLine = [...range.getClientRects()].at(-1);
+        const copyBox = copy.getBoundingClientRect();
+        if (copyBox.left - lastLine.right < 0 || copyBox.left - lastLine.right > 8 || copyBox.top > lastLine.bottom || copyBox.bottom < lastLine.top) throw new Error('Copy button does not follow the end of the path');
         const box = image.getBoundingClientRect();
         if (box.width < 300 || box.height < 200) throw new Error('Card preview is too small');
         if (root.scrollWidth > innerWidth) throw new Error('Card exceeds viewport');
       })()`,
       );
       const name = `${theme}-${width}x${height}`;
-      await browser("screenshot", join(artifacts, `${name}-card.png`));
+      await browser("screenshot", join(artifacts, `${name}-card.png`), "--full");
       await browser("focus", '[data-slot="collapsible-trigger"]');
       await browser("press", "Enter");
       await browser(

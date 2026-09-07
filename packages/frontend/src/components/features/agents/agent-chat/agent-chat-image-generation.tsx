@@ -147,20 +147,20 @@ function SavedImagePath({ path }: { path: string }): ReactElement {
     errorLogContext: "AgentChatImageGeneration",
   });
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="text-xs font-medium text-muted-foreground">Saved file</p>
-        <p className="break-all font-mono text-xs text-muted-foreground">{path}</p>
-      </div>
-      <CopyIconButton
-        copied={copied}
-        ariaLabel="Copy generated image path"
-        tooltipLabel={copied ? "Copied" : "Copy generated image path"}
-        className="size-6 shrink-0 border-transparent bg-transparent hover:bg-muted"
-        onClick={() => {
-          void copyToClipboard(path);
-        }}
-      />
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-muted-foreground">Saved file</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        <span className="break-all font-mono">{path}</span>
+        <CopyIconButton
+          copied={copied}
+          ariaLabel="Copy generated image path"
+          tooltipLabel={copied ? "Copied" : "Copy generated image path"}
+          className="ml-1 size-6 align-middle border-transparent bg-transparent hover:bg-muted"
+          onClick={() => {
+            void copyToClipboard(path);
+          }}
+        />
+      </p>
     </div>
   );
 }

@@ -32,7 +32,8 @@ const part = {
   partId: "image",
   status: new URLSearchParams(location.search).has("running") ? "running" : "completed",
   revisedPrompt,
-  savedPath: "/runtime/generated/duck.png",
+  savedPath:
+    "/runtime/generated/images/session-01a076a0-82d4-7721-a717-688393728c48/exec-0089ca0e-51e6-4d80-880d-9c09c00aaa3f/duck.png",
   transparentBackground: false,
   output: { itemId: "image", representation: "inline" },
 };
