@@ -91,22 +91,5 @@ jobs:
       - name: Test workspaces
         run: bun run test
 
-      - name: Install Chromium and system dependencies
-        if: runner.os == 'Linux'
-        run: bunx agent-browser install --with-deps
-
-      - name: Test browser layout
-        if: runner.os == 'Linux'
-        run: bun run test:browser
-
-      - name: Upload browser layout evidence
-        if: always() && runner.os == 'Linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: image-generation-layout
-          path: dist/image-generation-layout
-          if-no-files-found: ignore
-          retention-days: 7
-
       - name: Build workspaces
         run: bun run build

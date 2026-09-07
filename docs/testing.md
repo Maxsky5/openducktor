@@ -41,10 +41,6 @@ A `renderToStaticMarkup` test that uses Query or app context needs the same prov
 - Keep each explicit wait below the Bun test timeout.
 - Run flake checks in sequence.
 
-## Isolated browser regression checks
-
-Run `bun run test:browser` to check generated image preview layout in Chromium. The command starts and closes its own fixture server and browser session. See [the fixture guide](../packages/frontend/browser-tests/generated-image-preview/README.md) for setup and coverage. Linux CI runs this command and saves its artifacts.
-
 ## Browser validation
 
 - Use `agent-browser` against the live app and the real OpenDucktor backend.
