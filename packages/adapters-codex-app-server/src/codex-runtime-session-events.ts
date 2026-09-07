@@ -15,6 +15,7 @@ import type {
   AgentModelSelection,
   AgentSessionTodoItem,
   AgentUserMessagePart,
+  SessionRef,
 } from "@openducktor/core";
 import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
 import { codexServerRequestKey } from "./codex-app-server-approvals";
@@ -414,6 +415,7 @@ export class CodexRuntimeSessionEvents {
     if (runtimeId !== undefined) {
       this.clearStartedItemTimestampsForSession(runtimeId, externalSessionId);
       for (const threadId of routedDescendantThreadIds) {
+        this.imageGenerations.clearSession(threadId, runtimeId);
         this.clearStartedItemTimestampsForSession(runtimeId, threadId);
       }
     }
@@ -1127,6 +1129,54 @@ export class CodexRuntimeSessionEvents {
 
   prepareImageHistory(runtimeId: string, threadId: string) {
     return this.imageGenerations.prepareHistory(runtimeId, threadId);
+  }
+
+  settleGeneratedImages(runtimeId: string, sessionRef?: SessionRef): AgentEvent[] {
+    const root = sessionRef
+      ? this.resolveRuntimeStreamEventSessionOwner(sessionRef.externalSessionId, runtimeId)
+          ?.targetSession
+      : undefined;
+    if (
+      sessionRef &&
+      (!root ||
+        root.repoPath !== sessionRef.repoPath ||
+        root.workingDirectory !== sessionRef.workingDirectory)
+    )
+      return [];
+    const roots = root ? [root] : [...this.deps.sessions.values()];
+    const targets = new Map<string, CodexSessionState>();
+    for (const session of roots) {
+      if (session.runtimeId !== runtimeId) continue;
+      targets.set(session.threadId, session);
+      const descendants = this.deps.subagents.descendantRoutesForParent(
+        session.threadId,
+        runtimeId,
+        (route) => {
+          const child = this.deps.sessions.get(route.childExternalSessionId);
+          return (
+            !child || (child.runtimeId === runtimeId && child.contextOwnerThreadId !== undefined)
+          );
+        },
+      );
+      for (const route of descendants) {
+        const child = this.resolveRuntimeStreamEventSessionOwner(
+          route.childExternalSessionId,
+          runtimeId,
+        )?.targetSession;
+        if (
+          child &&
+          child.repoPath === session.repoPath &&
+          child.workingDirectory === session.workingDirectory
+        )
+          targets.set(child.threadId, child);
+      }
+    }
+    return [...targets.values()].flatMap((session) =>
+      this.settleImageGenerations(session, {
+        scope: "session",
+        reason: sessionRef ? "turn_ended" : "runtime_failure",
+      }),
+    );
   }
 
   settleImageGenerations(session: CodexSessionState, end: CodexImageGenerationEnd): AgentEvent[] {

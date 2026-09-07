@@ -302,32 +302,7 @@ export class CodexAppServerAdapter
   }
 
   settleGeneratedImages(runtimeId: string, sessionRef?: SessionRef): AgentEvent[] {
-    const threadIds = sessionRef
-      ? new Set([
-          sessionRef.externalSessionId,
-          ...this.subagents
-            .descendantRoutesForParent(sessionRef.externalSessionId, runtimeId, () => true)
-            .map((route) => route.childExternalSessionId),
-        ])
-      : undefined;
-    const events: AgentEvent[] = [];
-    for (const session of this.localSessions.values()) {
-      if (session.runtimeId !== runtimeId || (threadIds && !threadIds.has(session.threadId)))
-        continue;
-      if (
-        sessionRef &&
-        (session.repoPath !== sessionRef.repoPath ||
-          session.workingDirectory !== sessionRef.workingDirectory)
-      )
-        continue;
-      events.push(
-        ...this.runtimeEvents.settleImageGenerations(session, {
-          scope: "session",
-          reason: sessionRef ? "turn_ended" : "runtime_failure",
-        }),
-      );
-    }
-    return events;
+    return this.runtimeEvents.settleGeneratedImages(runtimeId, sessionRef);
   }
 
   releaseRuntime(runtimeId: string): void {
@@ -335,13 +310,7 @@ export class CodexAppServerAdapter
     releaseCodexRuntimeState(runtimeId, {
       cancelContextUsage: () => this.contextUsageLoader.cancelRuntime(runtimeId),
       releaseSessions: () => {
-        for (const session of this.localSessions.values()) {
-          if (session.runtimeId === runtimeId)
-            this.runtimeEvents.settleImageGenerations(session, {
-              scope: "session",
-              reason: "runtime_failure",
-            });
-        }
+        this.settleGeneratedImages(runtimeId);
         this.localSessions.releaseRuntime(runtimeId);
       },
       clearPendingInput: () => this.pendingInput.clearRuntime(runtimeId),
@@ -1228,7 +1197,7 @@ export class CodexAppServerAdapter
   }
 
   private releaseSessionTree(session: CodexSessionState): void {
-    this.runtimeEvents.settleImageGenerations(session, { scope: "session", reason: "turn_ended" });
+    this.settleGeneratedImages(session.runtimeId, codexSessionRef(session));
     const descendants = this.subagents.descendantRoutesForParent(
       session.threadId,
       session.runtimeId,
@@ -1246,12 +1215,6 @@ export class CodexAppServerAdapter
         externalSessionId: route.childExternalSessionId,
       });
       if (this.localSessions.has(route.childExternalSessionId)) {
-        const child = this.localSessions.get(route.childExternalSessionId);
-        if (child)
-          this.runtimeEvents.settleImageGenerations(child, {
-            scope: "session",
-            reason: "turn_ended",
-          });
         this.localSessions.release(route.childExternalSessionId);
       }
     }
