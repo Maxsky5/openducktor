@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile, chmod } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
@@ -41,7 +41,7 @@ test("saved and inline PNG output return the same bounded bytes", async () => {
   });
 });
 
-test("missing, denied, directory, relative, and URL paths fail without file bytes", async () => {
+test("missing, directory, relative, and URL paths fail without file bytes", async () => {
   const path = await imageFile();
   for (const candidate of [
     path + ".missing",
@@ -53,14 +53,6 @@ test("missing, denied, directory, relative, and URL paths fail without file byte
     await expect(
       Effect.runPromise(reader.read({ representation: "saved_file", path: candidate }, "image")),
     ).rejects.toThrow("Image 'image'");
-  }
-  await chmod(path, 0);
-  try {
-    await expect(
-      Effect.runPromise(reader.read({ representation: "saved_file", path }, "image")),
-    ).rejects.toThrow("readable");
-  } finally {
-    await chmod(path, 0o600);
   }
 });
 

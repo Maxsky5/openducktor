@@ -1725,6 +1725,7 @@ test("unauthenticated generated image invokes never reach the reader or return b
             externalSessionId: "thread",
           },
           itemId: "image",
+          revision: "output-v1",
         }),
       }),
       { hostCommandRouter },

@@ -9,6 +9,7 @@ const input = {
     externalSessionId: "thread",
   },
   itemId: "image",
+  revision: "output-v1",
 };
 test("generated image reads validate request and response through the host transport", async () => {
   const calls: unknown[] = [];

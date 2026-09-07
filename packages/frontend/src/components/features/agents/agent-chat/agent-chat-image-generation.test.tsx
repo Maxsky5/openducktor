@@ -230,7 +230,9 @@ for (const field of ["externalSessionId", "repoPath"] as const) {
     await loadImage();
     const currentSrc = screen.getByRole("img").getAttribute("src");
     await act(async () => {
-      resolve(payload({ ref, itemId: part.itemId, turnId: part.turnId }));
+      resolve(
+        payload({ ref, itemId: part.itemId, turnId: part.turnId, revision: part.output!.revision }),
+      );
     });
     expect(images).toHaveLength(1);
     expect(screen.getByRole("img").getAttribute("src")).toBe(currentSrc);

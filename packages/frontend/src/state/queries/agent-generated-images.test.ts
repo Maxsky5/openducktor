@@ -16,7 +16,7 @@ const input = {
   },
   itemId: "image",
   turnId: "turn",
-  output: { revision: "output-v1" },
+  revision: "output-v1",
 };
 const payload = (request: AgentGeneratedImageReadInput) => ({
   ...request,
@@ -35,11 +35,7 @@ test("keys include every scope and the opaque output revision", () => {
   ]) {
     expect(agentGeneratedImageQueryKeys.image({ ...input, ref })).not.toEqual(key);
   }
-  for (const change of [
-    { itemId: "other" },
-    { turnId: "other" },
-    { output: { revision: "output-v2" } },
-  ]) {
+  for (const change of [{ itemId: "other" }, { turnId: "other" }, { revision: "output-v2" }]) {
     expect(agentGeneratedImageQueryKeys.image({ ...input, ...change })).not.toEqual(key);
   }
 });
@@ -52,13 +48,13 @@ test("a new output revision fetches new bytes while replay reuses the cached ima
     expect(await client.fetchQuery(agentGeneratedImageQueryOptions({ ...input }, read))).toBe(
       first,
     );
-    const changed = { ...input, output: { revision: "next" } };
+    const changed = { ...input, revision: "next" };
     const next = await client.fetchQuery(agentGeneratedImageQueryOptions(changed, read));
     expect(next).not.toBe(first);
     expect(read).toHaveBeenCalledTimes(2);
     expect(read.mock.calls).toEqual([
-      [{ ref: input.ref, itemId: input.itemId, turnId: input.turnId }],
-      [{ ref: input.ref, itemId: input.itemId, turnId: input.turnId }],
+      [{ ref: input.ref, itemId: input.itemId, turnId: input.turnId, revision: input.revision }],
+      [{ ref: input.ref, itemId: input.itemId, turnId: input.turnId, revision: changed.revision }],
     ]);
   } finally {
     client.clear();
@@ -72,7 +68,12 @@ test("reads identity only and caches a Blob rather than encoded bytes", async ()
   expect(blob).toBeInstanceOf(Blob);
   expect(blob.size).toBe(3);
   expect(blob.type).toBe("image/png");
-  expect(read).toHaveBeenCalledWith({ ref: input.ref, itemId: "image", turnId: "turn" });
+  expect(read).toHaveBeenCalledWith({
+    ref: input.ref,
+    itemId: "image",
+    turnId: "turn",
+    revision: input.revision,
+  });
   expect(client.getQueryData<Blob>(agentGeneratedImageQueryKeys.image(input))).toBe(blob);
   client.clear();
 });
@@ -82,6 +83,7 @@ test("rejects wrong echoed identity and does not retry errors", async () => {
   for (const change of [
     { itemId: "other" },
     { turnId: "other" },
+    { revision: "other" },
     { ref: { ...input.ref, repoPath: "/other" } },
   ]) {
     const read = mock(async (request: AgentGeneratedImageReadInput) => ({
@@ -92,6 +94,7 @@ test("rejects wrong echoed identity and does not retry errors", async () => {
       "another session",
     );
     expect(read).toHaveBeenCalledTimes(1);
+    expect(client.getQueryData(agentGeneratedImageQueryKeys.image(input))).toBeUndefined();
   }
   client.clear();
 });

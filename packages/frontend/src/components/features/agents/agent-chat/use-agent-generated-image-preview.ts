@@ -21,6 +21,8 @@ export const useAgentGeneratedImagePreview = (
   const blob = query.data;
   useEffect(() => {
     if (!blob) return;
+    // The effect cleanup below revokes this exact URL on source changes and unmount.
+    // react-doctor-disable-next-line react-doctor/no-create-object-url-without-revoke
     const src = URL.createObjectURL(blob);
     const image = new Image();
     let active = true;

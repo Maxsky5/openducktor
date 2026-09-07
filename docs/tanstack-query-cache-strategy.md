@@ -103,8 +103,8 @@ Keep these values outside TanStack Query:
 
 ## Generated images
 
-`state/queries/agent-generated-images.ts` owns generated image queries. The query key includes repository, runtime kind, working directory, session ID, turn and item IDs, and the opaque output revision. A new revision creates a new preview query; replay of the same revision reuses the current query. Saved paths are display metadata and do not enter the query key or read request. The host enforces the [image format and byte limits](runtime-integration-guide.md#image-reads).
+`state/queries/agent-generated-images.ts` owns generated image queries. The query key includes repository, runtime kind, working directory, session ID, turn and item IDs, and the opaque output revision. A new revision creates a new preview query; replay of the same revision reuses the current query. The read request includes the expected revision so the host cannot return another reported output under that cache key. Saved paths are display metadata and do not enter the query key or read request. The host enforces the [image format and byte limits](runtime-integration-guide.md#image-reads).
 
-The query caches a Blob, never base64. It disables retries and refetches on mount, window focus, and reconnect. It uses no polling or previous-session placeholder and stays fresh while observed. `gcTime: 0` removes the cache entry after its last observer leaves. Before returning the Blob, the query checks cancellation and verifies that the response matches the requested session and image IDs.
+The query caches a Blob, never base64. It disables retries and refetches on mount, window focus, and reconnect. It uses no polling or previous-session placeholder and stays fresh while observed. `gcTime: 0` removes the cache entry after its last observer leaves. Before returning the Blob, the query checks cancellation and verifies that the response matches the requested session, image IDs, and output revision.
 
 The preview hook owns image decoding and object URLs. It revokes each URL when the source changes or the component unmounts. Changing the session or image remounts the preview component.

@@ -1,22 +1,13 @@
-import type {
-  AgentGeneratedImageReadInput,
-  AgentImageGenerationPart,
-} from "@openducktor/contracts";
+import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { queryOptions } from "@tanstack/react-query";
 
-export type AgentGeneratedImageQueryInput = AgentGeneratedImageReadInput & {
-  output: NonNullable<AgentImageGenerationPart["output"]>;
-};
+export type AgentGeneratedImageQueryInput = AgentGeneratedImageReadInput;
 
 export const agentGeneratedImageQueryKeys = {
   all: ["agent-generated-images"] as const,
   image: (input: AgentGeneratedImageQueryInput) =>
-    [
-      ...agentGeneratedImageQueryKeys.all,
-      ...imageReadIdentity(input),
-      input.output.revision,
-    ] as const,
+    [...agentGeneratedImageQueryKeys.all, ...imageReadIdentity(input)] as const,
 };
 
 export const agentGeneratedImageQueryOptions = (
@@ -27,7 +18,11 @@ export const agentGeneratedImageQueryOptions = (
     queryKey: agentGeneratedImageQueryKeys.image(input),
     queryFn: async ({ signal }): Promise<Blob> => {
       signal.throwIfAborted();
-      const request: AgentGeneratedImageReadInput = { ref: input.ref, itemId: input.itemId };
+      const request: AgentGeneratedImageReadInput = {
+        ref: input.ref,
+        itemId: input.itemId,
+        revision: input.revision,
+      };
       if (input.turnId !== undefined) request.turnId = input.turnId;
       const result = await read(request);
       signal.throwIfAborted();
@@ -35,7 +30,7 @@ export const agentGeneratedImageQueryOptions = (
         JSON.stringify(imageReadIdentity(result)) !== JSON.stringify(imageReadIdentity(request))
       ) {
         throw new Error(
-          "The image response belongs to another session or item. Reopen this session.",
+          "The image response belongs to another session, item, or output revision. Reopen this session.",
         );
       }
       let decoded: string;
@@ -61,7 +56,7 @@ export const agentGeneratedImageQueryOptions = (
     refetchOnMount: false,
   });
 
-const imageReadIdentity = ({ ref, itemId, turnId }: AgentGeneratedImageReadInput) =>
+const imageReadIdentity = ({ ref, itemId, turnId, revision }: AgentGeneratedImageReadInput) =>
   [
     ref.repoPath,
     ref.runtimeKind,
@@ -69,4 +64,5 @@ const imageReadIdentity = ({ ref, itemId, turnId }: AgentGeneratedImageReadInput
     ref.externalSessionId,
     turnId ?? null,
     itemId,
+    revision,
   ] as const;

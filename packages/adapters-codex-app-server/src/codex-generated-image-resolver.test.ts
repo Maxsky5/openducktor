@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { CodexAppServerThreadItem } from "@openducktor/contracts";
+import { codexImageGenerationPart, type CodexImageGenerationItem } from "./codex-image-generation";
 import {
   codexThreadFixture,
   codexTurnFixture,
@@ -15,7 +16,7 @@ const ref = {
   workingDirectory: "/repo",
   externalSessionId: "thread-image",
 };
-const completed = (): CodexAppServerThreadItem => ({
+const completed = (): CodexImageGenerationItem => ({
   type: "imageGeneration",
   id: "image",
   status: "completed",
@@ -25,7 +26,7 @@ const completed = (): CodexAppServerThreadItem => ({
   failure: null,
 });
 const createImageHarness = (
-  items = [completed()],
+  items: CodexAppServerThreadItem[] = [completed()],
   cwd = "/repo",
   threadId = ref.externalSessionId,
 ) => {
@@ -64,11 +65,17 @@ const createImageHarness = (
 };
 
 test("source lookup uses full public history without a live snapshot or resume", async () => {
-  const harness = createImageHarness([{ ...completed(), savedPath: "/generated/image.png" }]);
+  const native = { ...completed(), savedPath: "/generated/image.png" };
+  const harness = createImageHarness([native]);
   await harness.adapter.prepareRuntime("runtime-live");
   try {
     expect(
-      await harness.adapter.resolveGeneratedImageSource({ ref, itemId: "image", turnId: "turn" }),
+      await harness.adapter.resolveGeneratedImageSource({
+        ref,
+        itemId: "image",
+        turnId: "turn",
+        revision: codexImageGenerationPart(native).output!.revision,
+      }),
     ).toEqual({ representation: "saved_file", path: "/generated/image.png" });
     expect(harness.calls.filter((call) => call.method !== "initialize")).toEqual([
       { method: "thread/read", params: { threadId: ref.externalSessionId, includeTurns: false } },
@@ -93,7 +100,11 @@ test("inline output is selected only without a supplied path", async () => {
     const { adapter } = createImageHarness([native]);
     await adapter.prepareRuntime("runtime-live");
     try {
-      const source = await adapter.resolveGeneratedImageSource({ ref, itemId: "image" });
+      const source = await adapter.resolveGeneratedImageSource({
+        ref,
+        itemId: "image",
+        revision: codexImageGenerationPart(native).output!.revision,
+      });
       expect(source.representation).toBe("savedPath" in native ? "saved_file" : "inline");
     } finally {
       adapter.releaseRuntime("runtime-live");
@@ -118,6 +129,7 @@ test("wrong session, directory, item, turn, nonterminal outcome, and absent outp
           ref,
           itemId: scenario.itemId ?? "image",
           turnId: scenario.turnId ?? "turn",
+          revision: codexImageGenerationPart(completed()).output!.revision,
         }),
       ).rejects.toThrow("unavailable");
     } finally {
@@ -130,8 +142,13 @@ test("concurrent reads share history and a released runtime cannot publish their
   const harness = createImageHarness();
   harness.defer();
   await harness.adapter.prepareRuntime("runtime-live");
-  const first = harness.adapter.resolveGeneratedImageSource({ ref, itemId: "image" });
-  const second = harness.adapter.resolveGeneratedImageSource({ ref, itemId: "image" });
+  const input = {
+    ref,
+    itemId: "image",
+    revision: codexImageGenerationPart(completed()).output!.revision,
+  };
+  const first = harness.adapter.resolveGeneratedImageSource(input);
+  const second = harness.adapter.resolveGeneratedImageSource(input);
   const results = Promise.allSettled([first, second]);
   await new Promise((resolve) => setImmediate(resolve));
   expect(harness.calls.filter((call) => call.method === "thread/turns/list")).toHaveLength(1);
@@ -142,6 +159,48 @@ test("concurrent reads share history and a released runtime cannot publish their
     if (result.status === "rejected") expect(String(result.reason)).toContain("runtime changed");
   }
 });
+
+for (const source of ["saved", "inline"] as const) {
+  test(`concurrent ${source} reads verify each expected revision against shared history`, async () => {
+    const old = source === "saved" ? { ...completed(), savedPath: "/old.png" } : completed();
+    const current =
+      source === "saved" ? { ...old, savedPath: "/new.png" } : { ...old, result: "bmV3LWltYWdl" };
+    const harness = createImageHarness([current]);
+    harness.defer();
+    await harness.adapter.prepareRuntime("runtime-live");
+    try {
+      const reads = Promise.allSettled(
+        [old, current].map((native) =>
+          harness.adapter.resolveGeneratedImageSource({
+            ref,
+            itemId: "image",
+            turnId: "turn",
+            revision: codexImageGenerationPart(native).output!.revision,
+          }),
+        ),
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(harness.calls.filter((call) => call.method === "thread/turns/list")).toHaveLength(1);
+      harness.gate.resolve();
+      expect(await reads).toEqual([
+        {
+          status: "rejected",
+          reason: expect.objectContaining({ message: expect.stringContaining("output changed") }),
+        },
+        {
+          status: "fulfilled",
+          value:
+            source === "saved"
+              ? { representation: "saved_file", path: "/new.png" }
+              : { representation: "inline", base64: current.result },
+        },
+      ]);
+    } finally {
+      harness.gate.resolve();
+      harness.adapter.releaseRuntime("runtime-live");
+    }
+  });
+}
 
 test("runtime replacement during route resolution rejects the read before history access", async () => {
   const route = createDeferred<void>();
@@ -155,7 +214,7 @@ test("runtime replacement during route resolution rejects the read before histor
   });
   await adapter.prepareRuntime("runtime-live");
   const result = Promise.allSettled([
-    adapter.resolveGeneratedImageSource({ ref, itemId: "image" }),
+    adapter.resolveGeneratedImageSource({ ref, itemId: "image", revision: "old-output" }),
   ]);
   adapter.releaseRuntime("runtime-live");
   await adapter.prepareRuntime("runtime-live");

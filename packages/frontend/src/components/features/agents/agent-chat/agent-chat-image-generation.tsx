@@ -190,7 +190,7 @@ function CompletedImage({
   const input: AgentGeneratedImageQueryInput = {
     ref: sessionRef,
     itemId: part.itemId,
-    output: part.output,
+    revision: part.output.revision,
   };
   if (part.turnId !== undefined) input.turnId = part.turnId;
   return (

@@ -151,6 +151,7 @@ export const createCodexImageSessionHarness = async (runtimeIds = ["runtime-live
     // The resolver reads selectedRuntime, so each session must finish starting before the next.
     for (const id of runtimeIds) {
       selectedRuntime = id;
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
       await adapter.startSession(imageSessionInput(id));
     }
   } catch (error) {

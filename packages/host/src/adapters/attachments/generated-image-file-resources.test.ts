@@ -13,6 +13,27 @@ afterEach(async () => {
   );
 });
 
+test("a denied file open returns an actionable error without reading bytes", async () => {
+  const directory = await fs.mkdtemp(join(tmpdir(), "odt-image-denied-"));
+  directories.push(directory);
+  const path = join(directory, "image.png");
+  const denied = Object.assign(new Error("permission denied"), { code: "EACCES" });
+  const spy = spyOn(fs, "open").mockImplementation(async (...args) => {
+    if (args[0] === path) throw denied;
+    return originalOpen(...args);
+  });
+  try {
+    await expect(
+      Effect.runPromise(
+        createGeneratedImageFileAdapter().read({ representation: "saved_file", path }, "image"),
+      ),
+    ).rejects.toThrow("readable");
+    expect(spy.mock.calls.some(([opened]) => opened === path)).toBe(true);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
 for (const outcome of ["success", "growth", "failure", "interruption"] as const) {
   test(`closes the saved image handle on ${outcome}`, async () => {
     const directory = await fs.mkdtemp(join(tmpdir(), "odt-image-resource-"));

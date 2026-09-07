@@ -5,6 +5,7 @@ import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/
 import { createGeneratedImageCommandHandlers } from "../../interface/commands/generated-image-command-handlers";
 import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
 import { createGeneratedImageReadService } from "./generated-image-read-service";
+import { HostValidationError } from "../../effect/host-errors";
 
 const input = {
   ref: {
@@ -14,6 +15,7 @@ const input = {
     externalSessionId: "thread",
   },
   itemId: "image",
+  revision: "output-v1",
   turnId: "turn",
 };
 const payload = { mime: "image/png" as const, byteLength: 3, base64: "AAAA" };
@@ -130,4 +132,37 @@ test("unsupported capability prevents source and file reads", async () => {
     { listRuntimeDefinitions: () => [] },
   );
   await expect(Effect.runPromise(service.read(input))).rejects.toThrow("does not support");
+});
+
+test("a rejected output revision prevents file reads", async () => {
+  const registry = createLiveSessionAdapterRegistry();
+  const rejected = new HostValidationError({ field: "revision", message: "output changed" });
+  const requests: unknown[] = [];
+  await Effect.runPromise(
+    registry.register(
+      createAgentSessionRuntimeAdapterTestDouble(binding, {
+        resolveGeneratedImageSource: (request) => {
+          requests.push(request);
+          return Effect.fail(rejected);
+        },
+      }),
+    ),
+  );
+  let fileReads = 0;
+  const service = createGeneratedImageReadService(
+    registry,
+    {
+      read: () =>
+        Effect.sync(() => {
+          fileReads++;
+          return payload;
+        }),
+    },
+    definitions,
+  );
+  const result = await Effect.runPromise(Effect.either(service.read(input)));
+  expect(result._tag).toBe("Left");
+  if (result._tag === "Left") expect(result.left).toBe(rejected);
+  expect(requests).toEqual([input]);
+  expect(fileReads).toBe(0);
 });

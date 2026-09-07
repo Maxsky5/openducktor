@@ -69,13 +69,17 @@ export class CodexGeneratedImageResolver {
         "public history does not contain one matching generation item. Check the session history.",
       );
     }
-    if (codexImageGenerationPart(item).status !== "completed")
-      throw unavailable("generation has no completed result.");
-    if (item.savedPath !== undefined) return { representation: "saved_file", path: item.savedPath };
-    if (item.result.length === 0)
+    const part = codexImageGenerationPart(item);
+    if (part.status !== "completed") throw unavailable("generation has no completed result.");
+    if (!part.output)
       throw unavailable(
         "the runtime returned no saved file or inline image. Check the runtime response.",
       );
+    if (part.output.revision !== input.revision)
+      throw unavailable(
+        "the generated output changed. Reload the session history before opening the preview.",
+      );
+    if (item.savedPath !== undefined) return { representation: "saved_file", path: item.savedPath };
     if (item.result.length > LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT)
       throw unavailable("the inline image exceeds the 32 MiB preview limit.");
     return { representation: "inline", base64: item.result };

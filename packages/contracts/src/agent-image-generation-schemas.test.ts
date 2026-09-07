@@ -62,7 +62,7 @@ test("normalized failures do not expose native limit identifiers", () => {
   ).toBe(false);
 });
 
-test("image reads accept identity but reject path and URL authority", () => {
+test("image reads require identity and revision but reject path and URL authority", () => {
   const input = {
     ref: {
       repoPath: "/repo",
@@ -71,8 +71,14 @@ test("image reads accept identity but reject path and URL authority", () => {
       externalSessionId: "session",
     },
     itemId: "image",
+    revision: "output-v1",
   };
   expect(agentGeneratedImageReadInputSchema.safeParse(input).success).toBe(true);
+  const { revision: _revision, ...withoutRevision } = input;
+  expect(agentGeneratedImageReadInputSchema.safeParse(withoutRevision).success).toBe(false);
+  expect(agentGeneratedImageReadInputSchema.safeParse({ ...input, revision: "" }).success).toBe(
+    false,
+  );
   for (const field of ["path", "url", "base64", "runtimeId", "taskId"]) {
     expect(
       agentGeneratedImageReadInputSchema.safeParse({ ...input, [field]: "forged" }).success,

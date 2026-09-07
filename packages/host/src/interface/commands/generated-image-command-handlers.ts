@@ -13,7 +13,7 @@ export const createGeneratedImageCommandHandlers = (service: GeneratedImageReadS
           new HostValidationError({
             field: "args",
             message:
-              "Generated image reads require an exact session and item identity. Paths, URLs, and image bytes are not accepted.",
+              "Generated image reads require an exact session, item identity, and output revision. Paths, URLs, and image bytes are not accepted.",
           }),
       }).pipe(Effect.flatMap(service.read)),
   }) satisfies HostCommandHandlerDefinitions;

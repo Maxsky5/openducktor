@@ -66,6 +66,7 @@ export const agentGeneratedImageReadInputSchema = z
     ref: agentSessionLiveRefSchema,
     itemId: z.string().min(1),
     turnId: z.string().optional(),
+    revision: z.string().min(1),
   })
   .strict();
 export type AgentGeneratedImageReadInput = z.infer<typeof agentGeneratedImageReadInputSchema>;
