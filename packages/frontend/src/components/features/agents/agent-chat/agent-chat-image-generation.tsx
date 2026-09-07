@@ -27,7 +27,6 @@ export function AgentChatImageGeneration({
   part: AgentImageGenerationPart;
 }): ReactElement {
   const sessionRef = useContext(AgentChatImageSessionContext);
-  const resetSeconds = part.failure?.resetsAtEpochSeconds;
   return (
     <div className="my-2 flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card p-3 text-foreground">
       <p role="status" className="inline-flex items-center gap-2 text-sm font-medium">
@@ -47,27 +46,15 @@ export function AgentChatImageGeneration({
           Transparent background: {part.transparentBackground ? "yes" : "no"}
         </p>
       ) : null}
-      {part.status === "completed" ? (
-        sessionRef ? (
-          <CompletedImage part={part} sessionRef={sessionRef} />
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Preview unavailable: the session reference is missing. Reopen the session.
-          </p>
-        )
+      {part.status === "completed" && sessionRef ? (
+        <CompletedImage part={part} sessionRef={sessionRef} />
       ) : null}
-      {part.status === "failed" ? (
-        <p role="alert" className="text-sm text-destructive">
-          {part.failure?.message ||
-            "The runtime could not generate this image. Check the session in the runtime."}
-        </p>
-      ) : null}
-      {part.status === "failed" && resetSeconds !== undefined ? (
+      {part.status === "completed" && !sessionRef ? (
         <p className="text-sm text-muted-foreground">
-          Wait until {new Date(resetSeconds * 1000).toLocaleString()} before requesting another
-          image.
+          Preview unavailable: the session reference is missing. Reopen the session.
         </p>
       ) : null}
+      {part.status === "failed" ? <ImageFailure failure={part.failure} /> : null}
       {part.status === "interrupted" ? (
         <p className="text-sm text-muted-foreground">
           The turn stopped before the runtime confirmed an image result.
@@ -117,6 +104,29 @@ function CompletedImage({
       input={input}
       alt={part.revisedPrompt || "Generated image"}
     />
+  );
+}
+
+function ImageFailure({ failure }: { failure: AgentImageGenerationPart["failure"] }): ReactElement {
+  const resetSeconds = failure?.resetsAtEpochSeconds;
+  return (
+    <>
+      <p role="alert" className="text-sm text-destructive">
+        {failure?.message ||
+          "The runtime could not generate this image. Check the session in the runtime."}
+      </p>
+      {resetSeconds !== undefined ? (
+        <p className="text-sm text-muted-foreground">
+          Wait until {new Date(resetSeconds * 1000).toLocaleString()} before requesting another
+          image.
+        </p>
+      ) : null}
+      {failure?.kind === "usage_limit" && resetSeconds === undefined ? (
+        <p className="text-sm text-muted-foreground">
+          Check image-generation usage limits in the runtime before requesting another image.
+        </p>
+      ) : null}
+    </>
   );
 }
 

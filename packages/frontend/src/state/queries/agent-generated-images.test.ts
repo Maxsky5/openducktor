@@ -1,6 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { waitFor } from "@testing-library/react";
 import {
   agentGeneratedImageQueryKeys,
   agentGeneratedImageQueryOptions,
@@ -86,9 +87,11 @@ test("an unobserved pending read cannot publish and the last observer releases c
   const unsubscribe = observer.subscribe(() => {});
   unsubscribe();
   resolve(payload(input));
-  await new Promise((done) => setTimeout(done, 10));
+  await waitFor(
+    () => expect(client.getQueryCache().find({ queryKey: options.queryKey })).toBeUndefined(),
+    { timeout: 500, interval: 1 },
+  );
   expect(client.getQueryData(options.queryKey)).toBeUndefined();
-  expect(client.getQueryCache().find({ queryKey: options.queryKey })).toBeUndefined();
   const finishedObserver = new QueryObserver(
     client,
     agentGeneratedImageQueryOptions(input, async (request) => payload(request)),
@@ -97,7 +100,9 @@ test("an unobserved pending read cannot publish and the last observer releases c
   await finishedObserver.refetch();
   expect(client.getQueryData(options.queryKey)).toBeInstanceOf(Blob);
   remove();
-  await new Promise((done) => setTimeout(done, 10));
-  expect(client.getQueryCache().find({ queryKey: options.queryKey })).toBeUndefined();
+  await waitFor(
+    () => expect(client.getQueryCache().find({ queryKey: options.queryKey })).toBeUndefined(),
+    { timeout: 500, interval: 1 },
+  );
   client.clear();
 });

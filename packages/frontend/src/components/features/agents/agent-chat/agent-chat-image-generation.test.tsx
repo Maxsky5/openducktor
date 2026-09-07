@@ -273,6 +273,13 @@ for (const resetsAtEpochSeconds of [undefined, 2000000000]) {
     expect(screen.getByText("Image generation limit reached")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain(failure.message);
     expect(Boolean(screen.queryByText(/Wait until/))).toBe(resetsAtEpochSeconds !== undefined);
+    expect(
+      Boolean(
+        screen.queryByText(
+          "Check image-generation usage limits in the runtime before requesting another image.",
+        ),
+      ),
+    ).toBe(resetsAtEpochSeconds === undefined);
     expect(read).not.toHaveBeenCalled();
   });
 }
