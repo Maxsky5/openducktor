@@ -1,6 +1,6 @@
 import { posix, win32 } from "node:path";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
-import type { ToolDiscoveryId, ToolDiscoverySourceCategory } from "../../ports/tool-discovery-port";
+import type { ToolDiscoveryId } from "../../ports/tool-discovery-port";
 
 export type ToolDiscoveryPathOptions = {
   applicationsDir?: string;
@@ -21,22 +21,14 @@ export type ToolDiscoveryContext = {
 export type ToolDiscoverySource =
   | {
       directories: (context: ToolDiscoveryContext) => (string | undefined)[];
-      displayLabel?: string;
       kind: "searchDirectories";
-      label?: string;
-      requiredMissingMessage?: (input: {
-        descriptor: ToolDiscoveryDescriptor;
-        directories: readonly string[];
-      }) => string;
-      sourceCategory?: ToolDiscoverySourceCategory;
+      label: string;
       policy: "candidate" | "required";
     }
   | {
       candidates: (context: ToolDiscoveryContext) => string[];
-      displayLabel?: string;
       kind: "candidateFiles";
       label: string;
-      sourceCategory?: ToolDiscoverySourceCategory;
     };
 
 export type ToolDiscoveryDescriptor = {
