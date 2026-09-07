@@ -93,19 +93,20 @@ export const PROMPT_TEMPLATE_LABELS = {
 
 export const PROMPT_TEMPLATE_DESCRIPTIONS = {
   "system.shared.workflow_guards":
-    "Shared lifecycle rules, required outcomes, design contracts, and repo constraints.",
+    "Shared lifecycle rules, canonical task documents, and repo guidance.",
   "system.shared.tool_protocol":
     "Shared ODT tool permissions, task lock, artifact reads, and clarification rules.",
   "system.shared.task_context": "Task snapshot and access rules for current workflow documents.",
   "system.role.spec.base":
-    "Defines the user problem, scope, constraints, and observable acceptance criteria.",
+    "Resolves product decisions with the user and defines scope, constraints, and observable acceptance criteria.",
   "system.role.planner.base":
     "Defines architecture, module responsibilities, interfaces, and contracts. Leaves implementation order and verification to Builder.",
   "system.role.build.base":
     "Completes the approved outcomes and design contracts with control over implementation, work order, and verification.",
   "system.role.qa.base":
     "Reviews required outcomes, design contracts, correctness, and maintainability with checks based on risk.",
-  "kickoff.spec_initial": "Starts specification of required outcomes and constraints.",
+  "kickoff.spec_initial":
+    "Starts a focused interview about open product decisions before writing the spec.",
   "kickoff.planner_initial":
     "Starts technical design with clear contracts and room for Builder judgment.",
   "kickoff.build_implementation_start":

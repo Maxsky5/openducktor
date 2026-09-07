@@ -55,7 +55,7 @@ describe("buildAgentSystemPrompt", () => {
       "Persisted spec, implementation plan, and latest QA report are intentionally not inlined in this system prompt.",
       "Use odt_read_task with taskId task-42 to load the current canonical task summary object, including task fields, qaVerdict, and document presence booleans.",
       "Use odt_read_task_documents with taskId task-42 and explicit include flags when you need document markdown bodies.",
-      "Follow applicable repo instructions, workflow docs, and project guidelines",
+      "governing constitution for the current task",
       "higher-trust inputs than conversational summaries",
       "Treat the odt_read_task response as the latest persisted workflow summary",
       "odt_set_spec allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review",
@@ -90,6 +90,34 @@ describe("buildAgentSystemPrompt", () => {
     ]);
     expect(prompt).not.toContain("[NEEDS CLARIFICATION]");
     expect(prompt).not.toContain("cite concrete file paths in your final summary");
+  });
+
+  test("spec asks users for product decisions and follows their dependencies", () => {
+    const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
+
+    expectPromptToContainAll(prompt, [
+      "The user owns product decisions",
+      "Research facts from the repo and available sources yourself",
+      "Ask small rounds of independent questions",
+      "Wait for answers before deciding dependent questions",
+      "Revisit consequences after each answer",
+      "Skip questions already answered by the task, prior decisions, or repo facts",
+      "Get confirmation of new or changed product decisions before saving",
+      "If the task is already fully specified, proceed without a confirmation round",
+    ]);
+    expect(prompt).not.toContain("Ask one focused question only");
+  });
+
+  test("shared artifact rules stay general while Builder owns execution choices", () => {
+    const result = buildAgentSystemPromptBundle({ role: "build", task: taskContext });
+    const shared = result.templates.find((entry) => entry.id === "system.shared.workflow_guards");
+
+    expect(shared?.content).toContain("governing constitution for the current task");
+    expect(shared?.content).toContain("Keep summaries and decisions faithful to repo evidence");
+    expect(shared?.content).not.toContain("Builder");
+    expect(result.prompt).toContain(
+      "Choose implementation details, work order, and verification methods",
+    );
   });
 
   test("planner defines design contracts and gives Builder control of implementation", () => {
@@ -157,21 +185,21 @@ describe("buildAgentSystemPrompt", () => {
       {
         type: "override_base_version_mismatch",
         templateId: "system.role.spec.base",
-        builtinVersion: 5,
+        builtinVersion: 6,
         overrideBaseVersion: 999,
       },
     ]);
   });
 
   test.each([
-    ["system.shared.workflow_guards", 5, 6, "build"],
-    ["system.shared.tool_protocol", 6, 7, "build"],
+    ["system.shared.workflow_guards", 6, 7, "build"],
+    ["system.shared.tool_protocol", 7, 8, "build"],
     ["system.shared.task_context", 3, 4, "build"],
-    ["system.role.spec.base", 4, 5, "spec"],
+    ["system.role.spec.base", 5, 6, "spec"],
     ["system.role.planner.base", 5, 6, "planner"],
     ["system.role.build.base", 3, 4, "build"],
     ["system.role.qa.base", 3, 4, "qa"],
-    ["kickoff.spec_initial", 2, 3, "spec"],
+    ["kickoff.spec_initial", 3, 4, "spec"],
     ["kickoff.planner_initial", 2, 3, "planner"],
     ["kickoff.build_implementation_start", 2, 3, "build"],
     ["kickoff.build_after_qa_rejected", 2, 3, "build"],
@@ -330,6 +358,8 @@ describe("kickoff and permission prompts", () => {
 
     expectPromptToContainAll(specPrompt, [
       "observable acceptance criteria",
+      "Ask the user about unresolved product decisions",
+      "Follow the Spec role interview and confirmation rules",
       "Leave implementation and verification procedures to later roles",
       "odt_set_spec",
     ]);
