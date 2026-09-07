@@ -600,9 +600,14 @@ describe("launcher internals", () => {
     expect(calls).toEqual(["log call: frontend close failed", "log finished", "read exit"]);
   });
 
-  test("does not wait for the host exit code when host stop fails", async () => {
+  test("does not read or await the host exit code when host stop fails", async () => {
+    let exitReads = 0;
+    const exited = new Promise<number>(() => {});
     const hostBackend = {
-      exited: new Promise<number>(() => {}),
+      get exited() {
+        exitReads += 1;
+        return exited;
+      },
       port: 14327,
       stop: async () => {},
     };
@@ -641,6 +646,7 @@ describe("launcher internals", () => {
       dependency: "typescript-host-backend",
       operation: "stop",
     });
+    expect(exitReads).toBe(0);
   });
 
   test("preserves frontend and host shutdown failures together", async () => {
