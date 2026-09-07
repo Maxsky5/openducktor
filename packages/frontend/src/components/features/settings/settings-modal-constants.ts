@@ -93,33 +93,31 @@ export const PROMPT_TEMPLATE_LABELS = {
 
 export const PROMPT_TEMPLATE_DESCRIPTIONS = {
   "system.shared.workflow_guards":
-    "Added to every system prompt to enforce lifecycle guardrails, artifact discipline, repo-guidance governance, and fail-fast rules.",
+    "Shared lifecycle rules, canonical task documents, and repo guidance.",
   "system.shared.tool_protocol":
-    "Added to every system prompt to define the required tool-calling protocol, task lock, question discipline, and evidence hierarchy.",
-  "system.shared.task_context":
-    "Added to every system prompt to inject the task snapshot and require fetching canonical workflow artifacts through odt_read_task.",
+    "Shared ODT tool permissions, task lock, artifact reads, and clarification rules.",
+  "system.shared.task_context": "Task snapshot and access rules for current workflow documents.",
   "system.role.spec.base":
-    "Base system instructions used for every Spec run, focused on brownfield-first discovery, clarification discipline, and requirements-quality self-checks.",
+    "Resolves product decisions with the user and defines scope, constraints, and observable acceptance criteria.",
   "system.role.planner.base":
-    "Base system instructions used for every Planner run, focused on repo-fit execution planning, requirement traceability, dependency waves, and verification.",
+    "Defines architecture, module responsibilities, interfaces, and contracts. Leaves implementation order and verification to Builder.",
   "system.role.build.base":
-    "Base system instructions used for every Builder run, focused on plan-faithful execution, durable implementation, verification, and meaningful commits.",
+    "Completes the approved outcomes and design contracts with control over implementation, work order, and verification.",
   "system.role.qa.base":
-    "Base system instructions used for every QA run, focused on principal-level evidence-based review, requirement coverage, and adversarial edge-case hunting.",
+    "Reviews required outcomes, design contracts, correctness, and maintainability with checks based on risk.",
   "kickoff.spec_initial":
-    "Initial kickoff message sent when a Spec session is created, reinforcing discovery, deferred-scope handling, and requirements-quality checks.",
+    "Starts a focused interview about open product decisions before writing the spec.",
   "kickoff.planner_initial":
-    "Initial kickoff message sent when a Planner session is created, reinforcing requirement traceability, dependency waves, and execution-plan quality.",
+    "Starts technical design with clear contracts and room for Builder judgment.",
   "kickoff.build_implementation_start":
-    "Initial kickoff message sent when Builder starts implementation, reinforcing plan-faithful execution, blocker discipline, verification, and commit quality.",
+    "Starts implementation with control over work order and checks within the approved design.",
   "kickoff.build_after_qa_rejected":
-    "Initial kickoff message sent when Builder restarts after QA rejection, reinforcing root-cause fixes and renewed verification.",
+    "Starts review of QA findings, root-cause fixes, and checks for the affected behavior.",
   "kickoff.build_after_human_request_changes":
-    "Initial kickoff message sent when Builder restarts after human-requested changes, reinforcing must-have preservation and renewed verification.",
+    "Starts work on the requested changes while preserving required outcomes and design contracts.",
   "kickoff.build_pull_request_generation":
-    "Initial kickoff message sent when Builder forks to generate or update a pull request.",
-  "kickoff.qa_review":
-    "Initial kickoff message sent when a QA review session is created, reinforcing requirement mapping, adversarial review lenses, and the approval bar.",
+    "Starts pull request creation or updates with required checks and task association.",
+  "kickoff.qa_review": "Starts review of required outcomes, contracts, and material risks.",
   "message.build_rebase_conflict_resolution":
     "Reusable in-session message sent to Builder when a git operation stops on conflicts and must be resolved safely.",
   "permission.read_only.reject":

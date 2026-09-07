@@ -160,7 +160,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     let sendCalls = 0;
     adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
-      expect(input.systemPrompt).toContain("Implement the task");
+      expect(input.systemPrompt).toContain("You are the Build Agent for OpenDucktor.");
       return acceptedUserMessage(input);
     };
 

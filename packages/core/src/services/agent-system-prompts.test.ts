@@ -78,141 +78,97 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("read-only mode");
   });
 
-  test("spec prompt is discovery-first and clarification-aware", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "spec",
-      task: taskContext,
-    });
+  test("spec defines outcomes and leaves delivery methods to Builder and QA", () => {
+    const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
 
     expectPromptToContainAll(prompt, [
-      "Mission:",
-      "Operating stance:",
-      "Workflow:",
-      "Quality bar:",
-      "Anti-patterns:",
-      "Done criteria:",
-      "Discovery first: understand the user goal, motivation, constraints, and success criteria before diving into implementation details.",
-      "Brownfield first: inspect the repository, existing behavior, adjacent flows, and project guidance before inventing new requirements.",
-      "Distinguish locked decisions, assumptions, deferred ideas, and open questions explicitly.",
-      "Ask at most one targeted question at a time, only after completing all non-blocked repo research.",
-      "include a recommended default and explain what would change based on the answer",
-      "[NEEDS CLARIFICATION]",
-      "avoid carrying more than 3 open clarification markers into a supposedly ready spec",
-      "technology-agnostic",
-      "requirements-quality self-check",
-      "Produce complete specification markdown focused on user value, scope, requirements, edge cases, constraints, risks, acceptance criteria, and validation, then self-check it for completeness, clarity, and consistency.",
-      'When revising an existing spec, replace it with the final current version only; fold accepted changes into the relevant sections instead of adding change logs, revision history, deltas, or "what changed" sections.',
-      "The persisted spec is for Builder consumption, so it must describe the final requirements and not the path taken to reach them.",
-      "inspect relevant project files with read/list/search tools and cite concrete file paths",
+      "observable acceptance criteria",
+      "Leave implementation design to Planner",
+      "Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of the spec",
+      "odt_set_spec exactly once",
+      "read-only mode",
     ]);
-    expect(prompt).not.toContain("<obp_tool_call>");
+    expect(prompt).not.toContain("[NEEDS CLARIFICATION]");
+    expect(prompt).not.toContain("cite concrete file paths in your final summary");
   });
 
-  test("planner prompt requires repo-fit architecture, tradeoffs, sequencing, and verification", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "planner",
-      task: taskContext,
-    });
+  test("spec asks users for product decisions and follows their dependencies", () => {
+    const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
 
     expectPromptToContainAll(prompt, [
-      "Act like a staff-level technical planner",
-      "Treat the approved spec plus repo workflow and guidance docs as the source of truth",
-      "Read the relevant code and architecture before planning.",
-      "Respect locked user decisions and keep deferred ideas out of committed scope.",
-      "Map requirements and acceptance criteria to concrete implementation slices",
-      "Identify dependency order, execution waves, must-haves, user or setup steps, and interfaces builders must respect.",
-      "Evaluate meaningful tradeoffs and recommend the preferred approach with rationale.",
-      "Break work into an ordered execution plan sized for safe, verifiable progress",
-      "Include verification strategy, risks, rollout or rollback considerations, observability or docs impacts, and unresolved implementation questions.",
-      "Run a cross-artifact consistency check against the spec and repo reality",
-      "Write the plan as an execution document the builder can follow directly",
-      "not as a passive restatement of the spec.",
-      'When revising an existing plan, replace it with the final current version only; fold accepted changes into the ordered execution plan instead of adding change logs, revision history, deltas, or "what changed" sections.',
-      "The persisted plan is for Builder execution, so it must describe the final implementation strategy and not the path taken to reach it.",
+      "The user owns product decisions",
+      "Research facts from the repo and available sources yourself",
+      "Ask small rounds of independent questions",
+      "Use the question or user-input tool for clarification questions and confirmation requests whenever it is available",
+      "If no such tool is available, ask a concise question in chat and wait for the answer",
+      "Do not call odt_set_spec while required product decisions still await an answer",
+      "Wait for answers before deciding dependent questions",
+      "Revisit consequences after each answer",
+      "Skip questions already answered by the task, prior decisions, or repo facts",
+      "Get confirmation of new or changed product decisions before saving",
+      "If the task is already fully specified, proceed without a confirmation round",
     ]);
+    expect(prompt).not.toContain("Ask one focused question only");
   });
 
-  test("builder prompt enforces durable implementation, verification, and commit discipline", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "build",
-      task: taskContext,
-    });
+  test("shared artifact rules stay general while Builder owns execution choices", () => {
+    const result = buildAgentSystemPromptBundle({ role: "build", task: taskContext });
+    const shared = result.templates.find((entry) => entry.id === "system.shared.workflow_guards");
+
+    expect(shared?.content).toContain("governing constitution for the current task");
+    expect(shared?.content).toContain("Keep summaries and decisions faithful to repo evidence");
+    expect(shared?.content).not.toContain("Builder");
+    expect(result.prompt).toContain(
+      "Choose implementation details, work order, and verification methods",
+    );
+  });
+
+  test("planner defines design contracts and gives Builder control of implementation", () => {
+    const prompt = buildAgentSystemPrompt({ role: "planner", task: taskContext });
 
     expectPromptToContainAll(prompt, [
-      "Mission:",
-      "Execution workflow:",
-      "Treat the approved plan as the execution source of truth",
-      "Execute the plan in dependency order, complete must-haves before nice-to-haves, and make any deviation explicit.",
-      "When a scope-aligned bug or missing critical behavior blocks the task, fix it without waiting for permission",
-      "Use ordered task tracking for non-trivial work when todo tooling is available.",
-      "Prefer test-first or red-green-refactor when practical for logic-heavy or bug-fix work.",
-      "Update or add relevant tests for changed behavior.",
-      "Run relevant verification before declaring completion.",
+      "module responsibilities, architecture boundaries, interfaces, data and state contracts",
+      "Distinguish required design decisions from suggestions",
+      "Builder owns implementation details, work order, and verification methods",
+      "Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of the plan",
+      "odt_set_plan",
+      "read-only mode",
+    ]);
+    expect(prompt).not.toContain("execution waves");
+    expect(prompt).not.toContain("ordered execution plan");
+    expect(prompt).not.toContain("Include verification strategy");
+  });
+
+  test("builder owns execution and verification within the approved design", () => {
+    const prompt = buildAgentSystemPrompt({ role: "build", task: taskContext });
+
+    expectPromptToContainAll(prompt, [
+      "Choose implementation details, work order, and verification methods",
+      "preserve required outcomes, architecture boundaries, and contracts",
+      "Fix scope-aligned issues at the source",
+      "Run checks required by repo guidance",
+      "Repeat or broaden checks only when changes, failures, or unresolved risks justify it",
       "meaningful Conventional Commit before calling odt_build_completed",
-      "Fix the source problem instead of masking failures with fallback logic.",
-      "Do not trust passing tests alone; inspect the changed code path for wiring, integration, and maintainability.",
-      '"Quick win" changes that leave the touched area structurally worse.',
-      "Silently diverging from the approved spec or plan because a different implementation felt easier.",
-      "reviewable state with a meaningful Conventional Commit when code changed.",
-      "Call odt_build_completed once implementation is complete, verification evidence is ready, and the completion summary reflects any meaningful deviations.",
+      "odt_build_blocked with a specific reason",
+      "odt_build_resumed",
     ]);
+    expect(prompt).not.toContain("Execute the plan in dependency order");
     expect(prompt).not.toContain("- odt_set_plan(");
   });
 
-  test("builder base prompt requires root-cause fixes and reviewable completion", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "build",
-      task: taskContext,
-    });
+  test("QA reviews outcomes and contracts without enforcing implementation recipes", () => {
+    const prompt = buildAgentSystemPrompt({ role: "qa", task: taskContext });
 
     expectPromptToContainAll(prompt, [
-      "Mission:",
-      "Execution workflow:",
-      "Fix the source problem instead of masking failures with fallback logic.",
-      "reviewable state with a meaningful Conventional Commit when code changed.",
+      "Inspect the implementation and its wiring directly",
+      "Choose checks based on the changed behavior and risk",
+      "Do not reject valid work for a different implementation order or method",
+      "severity, location, impact, and a concrete correction",
+      "Call exactly one of odt_qa_approved or odt_qa_rejected per review pass",
+      "read-only mode",
     ]);
-  });
-
-  test("pull request generation prompt supports reuse and fork publication flows", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "build",
-      task: taskContext,
-    });
-
-    expectPromptToContainAll(prompt, [
-      "Mission:",
-      "Execution workflow:",
-      "Treat the approved plan as the execution source of truth",
-      "Call odt_build_completed once implementation is complete, verification evidence is ready, and the completion summary reflects any meaningful deviations.",
-    ]);
-  });
-
-  test("qa prompt uses an adversarial evidence-based review rubric", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "qa",
-      task: taskContext,
-    });
-
-    expectPromptToContainAll(prompt, [
-      "Review rubric:",
-      "Act like a principal-engineer reviewer",
-      "Do not trust completion summaries, checked boxes, or claimed verification; inspect repo evidence directly.",
-      "Completeness: verify everything materially required by the spec and plan is actually implemented, and call out uncovered requirements or acceptance criteria.",
-      "Correctness: verify the code appears to work, including edge cases, failure handling, regression risk, and key data or control flow.",
-      "Coherence: verify the solution fits the repo architecture, contracts, boundaries, and patterns.",
-      "Quality: verify the touched scope is free of obvious code smells, weak abstractions, missing tests, or avoidable maintainability risk.",
-      "Actively try to find issues rather than passively confirming success.",
-      "Run at least two review lenses: adversarial skepticism",
-      "Map the material requirements and acceptance criteria to direct evidence",
-      "Verify goal-backward: confirm the expected user outcomes, key wiring, and integrations instead of trusting summaries.",
-      "Produce structured findings with severity, evidence, impact, and recommended fix.",
-      "Reject when material gaps remain, when critical paths lack evidence, or when the implementation contradicts the artifacts even if tests pass.",
-      "If the spec, plan, and implementation disagree, say so explicitly in the report.",
-      "Produce a QA report markdown and call odt_qa_approved or odt_qa_rejected exactly once per review pass.",
-    ]);
+    expect(prompt).not.toContain("Run at least two review lenses");
     expect(prompt).not.toContain("- odt_build_completed(");
-    expect(prompt).not.toContain("latestQaReport");
-    expect(prompt).toContain("read-only mode");
   });
 
   test("override template always wins even with stale baseVersion", () => {
@@ -232,11 +188,62 @@ describe("buildAgentSystemPrompt", () => {
       {
         type: "override_base_version_mismatch",
         templateId: "system.role.spec.base",
-        builtinVersion: 4,
+        builtinVersion: 5,
         overrideBaseVersion: 999,
       },
     ]);
   });
+
+  test.each([
+    ["system.shared.workflow_guards", 5, 6, "build"],
+    ["system.shared.tool_protocol", 6, 7, "build"],
+    ["system.shared.task_context", 3, 4, "build"],
+    ["system.role.spec.base", 4, 5, "spec"],
+    ["system.role.planner.base", 5, 6, "planner"],
+    ["system.role.build.base", 3, 4, "build"],
+    ["system.role.qa.base", 3, 4, "qa"],
+    ["kickoff.spec_initial", 2, 3, "spec"],
+    ["kickoff.planner_initial", 2, 3, "planner"],
+    ["kickoff.build_implementation_start", 2, 3, "build"],
+    ["kickoff.build_after_qa_rejected", 2, 3, "build"],
+    ["kickoff.build_after_human_request_changes", 3, 4, "build"],
+    ["kickoff.build_pull_request_generation", 5, 6, "build"],
+    ["kickoff.qa_review", 2, 3, "qa"],
+  ] as const)(
+    "keeps prior overrides and reports the new version for %s",
+    (id, previous, current, role) => {
+      let custom = "Custom {{task.id}}";
+      if (id === "kickoff.build_pull_request_generation") {
+        custom += " {{git.targetBranch}}";
+      }
+      if (id === "kickoff.build_after_human_request_changes") {
+        custom += " {{humanFeedback}}";
+      }
+      const overrides = { [id]: { template: custom, baseVersion: previous, enabled: true } };
+      const result = id.startsWith("kickoff.")
+        ? buildAgentKickoffPromptBundle({
+            role,
+            // SAFETY: The startsWith check narrows this closed table to its kickoff template IDs.
+            templateId: id as Parameters<typeof buildAgentKickoffPromptBundle>[0]["templateId"],
+            task: taskContext,
+            extraPlaceholders: { humanFeedback: "feedback" },
+            git: { targetBranch: { branch: "main" } },
+            overrides,
+          })
+        : buildAgentSystemPromptBundle({ role, task: taskContext, overrides });
+
+      expect(result.templates.find((entry) => entry.id === id)?.source).toBe("override");
+      expect(result.prompt).toContain("Custom task-42");
+      expect(result.warnings).toEqual([
+        {
+          type: "override_base_version_mismatch",
+          templateId: id,
+          builtinVersion: current,
+          overrideBaseVersion: previous,
+        },
+      ]);
+    },
+  );
 
   test("throws actionable error for unsupported override placeholders", () => {
     expect(() =>
@@ -278,24 +285,35 @@ describe("buildAgentSystemPrompt", () => {
 });
 
 describe("kickoff and permission prompts", () => {
-  test("build kickoff carries stronger execution guidance with task id placeholder", () => {
+  test("build kickoff delegates execution within the approved outcomes and contracts", () => {
     const prompt = buildAgentKickoffPrompt({
       role: "build",
       templateId: "kickoff.build_implementation_start",
-      task: {
-        taskId: "task-1",
-      },
+      task: { taskId: "task-1" },
     });
 
     expectPromptToContainAll(prompt, [
-      "Review the current spec, plan, repo guidance, and relevant code before editing.",
-      "Execute the approved plan in dependency order",
-      "prefer test-first when practical",
-      "prepare a meaningful Conventional Commit before odt_build_completed",
-      "odt_build_blocked/odt_build_resumed/odt_build_completed with taskId task-1.",
+      "Choose implementation details, work order, and verification",
+      "required outcomes and design contracts",
+      "Conventional Commit before odt_build_completed",
       "taskId task-1",
     ]);
-    expect(prompt.split("\n")).toHaveLength(3);
+    expect(prompt).not.toContain("dependency order");
+  });
+
+  test("QA rework kickoff validates findings while preserving design contracts", () => {
+    const prompt = buildAgentKickoffPrompt({
+      role: "build",
+      templateId: "kickoff.build_after_qa_rejected",
+      task: { taskId: "task-1" },
+    });
+
+    expectPromptToContainAll(prompt, [
+      "Validate each rejection finding against the current implementation",
+      "preserve required outcomes and design contracts",
+      "Conventional Commit before odt_build_completed",
+      "Use taskId task-1 for every odt_* tool call",
+    ]);
   });
 
   test("human-review kickoff embeds the requested feedback into the kickoff instructions", () => {
@@ -342,20 +360,21 @@ describe("kickoff and permission prompts", () => {
     });
 
     expectPromptToContainAll(specPrompt, [
-      "Start with the user goal, motivation, constraints, success criteria, and project guidance before solutioning.",
-      "capture deferred ideas separately",
-      "keep open [NEEDS CLARIFICATION] items rare",
-      "requirements-quality self-check via odt_set_spec",
+      "observable acceptance criteria",
+      "Ask about unresolved product decisions with the question or user-input tool whenever available",
+      "If no such tool is available, ask in chat and wait for the answer",
+      "Follow the Spec role interview and confirmation rules",
+      "Leave implementation and verification procedures to later roles",
+      "odt_set_spec",
     ]);
     expectPromptToContainAll(plannerPrompt, [
-      "Inspect the approved spec, repo guidance, and relevant code before planning.",
-      "requirement traceability, dependency waves, must-haves, architecture tradeoffs, risks, and verification",
-      "Builder can execute it directly, not as a spec restatement",
+      "architecture, interfaces, contracts",
+      "Leave implementation details, work order, and verification methods to Builder",
+      "odt_set_plan",
     ]);
     expectPromptToContainAll(qaPrompt, [
-      "Review the implementation against the spec, plan, project guidance, and repo evidence, not just the tests or summary.",
-      "Map requirements to evidence, run adversarial and edge-case review lenses",
-      "completeness/correctness/coherence/quality rubric with goal-backward verification of key wiring",
+      "required outcomes and design contracts",
+      "Choose checks based on risk",
       "Call exactly one of odt_qa_approved or odt_qa_rejected with taskId task-1",
     ]);
   });
@@ -455,7 +474,7 @@ describe("kickoff and permission prompts", () => {
     expect(prompt).not.toContain("comparison");
     expect(prompt).not.toContain("origin/release/2026.04");
     expect(prompt).not.toContain("target");
-    expect(result.templates[0]?.builtinVersion).toBe(5);
+    expect(result.templates[0]?.builtinVersion).toBe(6);
   });
 
   test("rejects pull request generation kickoff when target branch context is missing", () => {
