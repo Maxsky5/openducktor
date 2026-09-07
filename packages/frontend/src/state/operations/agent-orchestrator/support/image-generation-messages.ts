@@ -23,6 +23,7 @@ export const upsertImageGenerationMessage = (
     | "externalSessionId"
     | "messages"
     | "imageGenerationEnd"
+    | "imageGenerationFailureTimestamp"
     | "imageGenerationTurnEnds"
     | "imageGenerationTurnStarts"
   >,
@@ -42,6 +43,7 @@ export const upsertImageGenerationMessage = (
       owner.imageGenerationEnd,
       owner.imageGenerationTurnEnds,
       owner.imageGenerationTurnStarts,
+      owner.imageGenerationFailureTimestamp,
     ),
   );
 };

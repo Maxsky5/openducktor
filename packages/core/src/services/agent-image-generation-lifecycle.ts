@@ -4,6 +4,7 @@ export type AgentImageGenerationLifecycle = {
   turnEnds?: ReadonlyMap<string, AgentImageGenerationSettlement> | undefined;
   turnStarts?: ReadonlySet<string> | undefined;
   sessionEnd?: { timestamp: string; reason: AgentImageGenerationSettlement } | undefined;
+  sessionFailureTimestamp?: string | undefined;
 };
 
 export type AgentImageGenerationLifecycleEvent =
@@ -49,6 +50,8 @@ export const reduceAgentImageGenerationLifecycle = (
     turnEnds,
     turnStarts: new Set(),
     sessionEnd: { timestamp: event.timestamp, reason: event.reason },
+    sessionFailureTimestamp:
+      event.reason === "runtime_failure" ? event.timestamp : state.sessionFailureTimestamp,
   };
 };
 
@@ -72,9 +75,19 @@ export const resolveAgentImageGenerationSettlement = (
     if (state.turnStarts?.has(image.turnId)) return undefined;
   }
   const end = state.sessionEnd;
-  return scope === "session" &&
-    end &&
-    (image.timestamp === undefined || Date.parse(image.timestamp) <= Date.parse(end.timestamp))
-    ? end.reason
-    : undefined;
+  if (
+    scope !== "session" ||
+    !end ||
+    (image.timestamp !== undefined && Date.parse(image.timestamp) > Date.parse(end.timestamp))
+  )
+    return undefined;
+  // Unknown history timestamps use the latest end; only known older images inherit the failure.
+  if (
+    end.reason === "turn_ended" &&
+    image.timestamp !== undefined &&
+    state.sessionFailureTimestamp !== undefined &&
+    Date.parse(image.timestamp) <= Date.parse(state.sessionFailureTimestamp)
+  )
+    return "runtime_failure";
+  return end.reason;
 };

@@ -184,3 +184,50 @@ test("a confirmed image turn excludes generic session settlement and leaves the 
   expect(ended.imageGenerationTurnStarts?.has("next")).toBe(false);
   expect(recordImageGenerationTurnEnd(ended, "next", "turn_ended")).toBe(ended);
 });
+
+for (const loadHistory of [applyLoadedSessionHistory, mergeReadonlyRuntimeHistory]) {
+  test(`${loadHistory.name} retains the failure cutoff for previously unseen images`, () => {
+    let session = recordImageGenerationSessionEnd(
+      createAgentSessionFixture(),
+      timestamp,
+      "runtime_failure",
+    );
+    session = recordImageGenerationSessionEnd(session, "2026-09-06T11:00:00.000Z", "turn_ended");
+    const loaded = loadHistory(session, [
+      {
+        messageId: "old",
+        role: "assistant",
+        text: "",
+        timestamp: "2026-09-06T09:00:00.000Z",
+        parts: [{ ...part, turnId: "old", itemId: "old" }],
+      },
+      {
+        messageId: "middle",
+        role: "assistant",
+        text: "",
+        timestamp: "2026-09-06T10:30:00.000Z",
+        parts: [{ ...part, turnId: "middle", itemId: "middle" }],
+      },
+      {
+        messageId: "new",
+        role: "assistant",
+        text: "",
+        timestamp: "2026-09-06T12:00:00.000Z",
+        parts: [{ ...part, turnId: "new", itemId: "new" }],
+      },
+    ]);
+    const images = loaded.messages.items.filter(
+      (message) => message.meta?.kind === "image_generation",
+    );
+    expect(images.map((message) => message.meta)).toMatchObject([
+      { status: "incomplete", incompleteReason: "runtime_failure" },
+      { status: "incomplete", incompleteReason: "turn_ended" },
+      { status: "running" },
+    ]);
+    const live = upsertImageGenerationMessage(session, { ...part, turnId: "late" }, timestamp);
+    expect(live.items[0]?.meta).toMatchObject({
+      status: "incomplete",
+      incompleteReason: "runtime_failure",
+    });
+  });
+}

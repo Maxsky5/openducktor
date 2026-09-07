@@ -129,3 +129,53 @@ test("an unobserved pending read cannot publish and the last observer releases c
   );
   client.clear();
 });
+
+test("switching image revisions terminates decoding and rejects a late worker reply", async () => {
+  type PendingWorker = {
+    onmessage: ((event: { data: { kind: "decode"; bytes: ArrayBuffer } }) => void) | null;
+    terminate: ReturnType<typeof mock<() => void>>;
+  };
+  const workers: PendingWorker[] = [];
+  let posted!: () => void;
+  const firstPosted = new Promise<void>((resolve) => {
+    posted = resolve;
+  });
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "Worker")!;
+  Object.defineProperty(globalThis, "Worker", {
+    configurable: true,
+    value: class {
+      onmessage: PendingWorker["onmessage"] = null;
+      terminate = mock(() => {});
+      constructor() {
+        workers.push(this);
+      }
+      postMessage() {
+        posted();
+      }
+    },
+  });
+  const client = new QueryClient();
+  const read = async (request: AgentGeneratedImageReadInput) => payload(request);
+  const options = agentGeneratedImageQueryOptions(input, read);
+  const observer = new QueryObserver(client, options);
+  const unsubscribe = observer.subscribe(() => {});
+  try {
+    await firstPosted;
+    const nextPosted = new Promise<void>((resolve) => {
+      posted = resolve;
+    });
+    observer.setOptions(agentGeneratedImageQueryOptions({ ...input, revision: "next" }, read));
+    await nextPosted;
+    expect(workers[0]!.terminate).toHaveBeenCalledTimes(1);
+    workers[0]!.onmessage!({ data: { kind: "decode", bytes: new ArrayBuffer(3) } });
+    workers[1]!.onmessage!({ data: { kind: "decode", bytes: new ArrayBuffer(3) } });
+    await observer.refetch();
+    expect(client.getQueryData(options.queryKey)).toBeUndefined();
+    expect(observer.getCurrentResult().data).toBeInstanceOf(Blob);
+    expect(workers[1]!.terminate).toHaveBeenCalledTimes(1);
+  } finally {
+    unsubscribe();
+    client.clear();
+    Object.defineProperty(globalThis, "Worker", descriptor);
+  }
+});

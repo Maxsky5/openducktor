@@ -1,5 +1,9 @@
 import type { CodexMappingContext, CodexMappingResult } from "./codex-canonical-events";
-import type { CodexAppServerThreadItem, CodexAppServerTurn } from "@openducktor/contracts";
+import type {
+  AgentImageGenerationPart,
+  CodexAppServerThreadItem,
+  CodexAppServerTurn,
+} from "@openducktor/contracts";
 import type { CodexNotificationRecord, CodexServerRequestRecord } from "./types";
 
 export type CodexTimedThreadItem = CodexAppServerThreadItem & {
@@ -19,6 +23,7 @@ export type CodexThreadItemInput = {
   index: number;
   timestamp?: string;
   isFinalAgentMessage?: boolean;
+  preparedImageGeneration?: AgentImageGenerationPart;
 };
 
 export interface CodexEventMapper<State = undefined> {

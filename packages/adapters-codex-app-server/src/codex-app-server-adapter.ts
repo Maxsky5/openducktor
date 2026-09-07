@@ -608,6 +608,7 @@ export class CodexAppServerAdapter
       session,
       runtime,
       threadInventory: this.threadInventory,
+      prepareImageGenerations: this.options.prepareImageGenerations,
     });
     if (!mergeImage) return history;
     return history.map((message) =>

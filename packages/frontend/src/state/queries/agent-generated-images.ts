@@ -1,3 +1,4 @@
+import { decodeGeneratedImage } from "@/lib/generated-images/image-worker-client";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { queryOptions } from "@tanstack/react-query";
@@ -33,18 +34,10 @@ export const agentGeneratedImageQueryOptions = (
           "The image response belongs to another session, item, or output revision. Reopen this session.",
         );
       }
-      let decoded: string;
-      try {
-        decoded = atob(result.base64);
-      } catch {
-        throw new Error("The generated image data cannot be decoded. Check the runtime output.");
-      }
-      if (result.mime !== "image/png" || decoded.length !== result.byteLength) {
-        throw new Error(
-          "The generated image response has invalid content. Check the runtime output.",
-        );
-      }
-      const bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+      const bytes = await decodeGeneratedImage(
+        { base64: result.base64, mime: result.mime, byteLength: result.byteLength },
+        signal,
+      );
       signal.throwIfAborted();
       return new Blob([bytes], { type: result.mime });
     },

@@ -12,6 +12,7 @@ type ImageOwner = Pick<
   | "externalSessionId"
   | "messages"
   | "imageGenerationEnd"
+  | "imageGenerationFailureTimestamp"
   | "imageGenerationTurnEnds"
   | "imageGenerationTurnStarts"
 >;
@@ -22,10 +23,16 @@ export const settleImageGenerationMessage = (
   end: AgentSessionState["imageGenerationEnd"],
   turns?: AgentSessionState["imageGenerationTurnEnds"],
   starts?: AgentSessionState["imageGenerationTurnStarts"],
+  failureTimestamp?: AgentSessionState["imageGenerationFailureTimestamp"],
 ): AgentChatMessage => {
   if (message.meta?.kind !== "image_generation") return message;
   const reason = resolveAgentImageGenerationSettlement(
-    { sessionEnd: end, turnEnds: turns, turnStarts: starts },
+    {
+      sessionEnd: end,
+      turnEnds: turns,
+      turnStarts: starts,
+      sessionFailureTimestamp: failureTimestamp,
+    },
     {
       turnId: message.meta.turnId,
       timestamp: message.timestampIsApproximate ? undefined : message.timestamp,
@@ -44,6 +51,7 @@ export const settleImageGenerationMessages = (session: ImageOwner): AgentSession
       session.imageGenerationEnd,
       session.imageGenerationTurnEnds,
       session.imageGenerationTurnStarts,
+      session.imageGenerationFailureTimestamp,
     ),
   );
 
@@ -60,10 +68,17 @@ export const recordImageGenerationEnd = (
     previous && Date.parse(previous.timestamp) >= Date.parse(timestamp)
       ? previous
       : { timestamp, reason };
-  const messages = settleImageGenerationMessages({ ...session, imageGenerationEnd });
+  const imageGenerationFailureTimestamp =
+    imageGenerationEnd !== previous && reason === "runtime_failure"
+      ? timestamp
+      : session.imageGenerationFailureTimestamp;
+  const updated = { ...session, imageGenerationEnd };
+  if (imageGenerationFailureTimestamp !== undefined)
+    updated.imageGenerationFailureTimestamp = imageGenerationFailureTimestamp;
+  const messages = settleImageGenerationMessages(updated);
   return messages === session.messages && imageGenerationEnd === previous
     ? session
-    : { ...session, imageGenerationEnd, messages };
+    : { ...updated, messages };
 };
 
 export const recordImageGenerationTurnEnd = (
@@ -116,14 +131,20 @@ const imageLifecycle = (session: ImageOwner): AgentImageGenerationLifecycle => (
   turnEnds: session.imageGenerationTurnEnds,
   turnStarts: session.imageGenerationTurnStarts,
   sessionEnd: session.imageGenerationEnd,
+  sessionFailureTimestamp: session.imageGenerationFailureTimestamp,
 });
 
 const withImageTurns = (
   session: AgentSessionState,
-  lifecycle: Pick<AgentImageGenerationLifecycle, "turnEnds" | "turnStarts">,
+  lifecycle: Pick<
+    AgentImageGenerationLifecycle,
+    "turnEnds" | "turnStarts" | "sessionFailureTimestamp"
+  >,
 ): AgentSessionState => {
   const updated = { ...session };
   if (lifecycle.turnEnds) updated.imageGenerationTurnEnds = lifecycle.turnEnds;
   if (lifecycle.turnStarts) updated.imageGenerationTurnStarts = lifecycle.turnStarts;
+  if (lifecycle.sessionFailureTimestamp !== undefined)
+    updated.imageGenerationFailureTimestamp = lifecycle.sessionFailureTimestamp;
   return updated;
 };

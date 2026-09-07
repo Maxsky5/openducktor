@@ -76,3 +76,12 @@ export const codexImageGenerationPart = (
   }
   return part;
 };
+
+export type CodexImageGenerationPreparation = {
+  item: CodexImageGenerationItem;
+  context: CodexImageGenerationContext;
+};
+
+export type CodexImageGenerationPreparer = (
+  images: readonly CodexImageGenerationPreparation[],
+) => Promise<AgentImageGenerationPart[]>;

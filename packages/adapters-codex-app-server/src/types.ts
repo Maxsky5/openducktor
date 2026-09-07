@@ -1,3 +1,4 @@
+import type { CodexImageGenerationPreparer } from "./codex-image-generation";
 import type {
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
@@ -218,6 +219,7 @@ type CodexAppServerAdapterBaseOptions = {
   respondServerRequest?: CodexServerRequestResponder;
   onLiveSessionMutation?: (mutation: CodexLiveSessionMutation) => void | Promise<void>;
   onCatalogInvalidated?: (event: CodexCatalogInvalidation) => void | Promise<void>;
+  prepareImageGenerations?: CodexImageGenerationPreparer;
   logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
 };
 

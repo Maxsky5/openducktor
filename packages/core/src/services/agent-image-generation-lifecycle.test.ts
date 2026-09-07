@@ -104,3 +104,47 @@ test("native image outcomes survive lifecycle settlement", () => {
     expect(settleAgentImageGeneration(part, reason)).toBe(part);
   }
 });
+
+test("later idle keeps the failure cutoff without applying it to newer unseen images", () => {
+  const failed = reduce(
+    {},
+    {
+      type: "session_ended",
+      timestamp,
+      reason: "runtime_failure",
+      turnIds: [],
+    },
+  );
+  const idle = reduce(failed, {
+    type: "session_ended",
+    timestamp: "2026-09-06T11:00:00.000Z",
+    reason: "turn_ended",
+    turnIds: [],
+  });
+  expect(resolve(idle, { timestamp: "2026-09-06T09:00:00.000Z" }, "session")).toBe(
+    "runtime_failure",
+  );
+  expect(resolve(idle, { timestamp }, "session")).toBe("runtime_failure");
+  expect(resolve(idle, { timestamp: "2026-09-06T10:30:00.000Z" }, "session")).toBe("turn_ended");
+  expect(resolve(idle, { timestamp: "2026-09-06T12:00:00.000Z" }, "session")).toBeUndefined();
+  expect(resolve(idle, {}, "session")).toBe("turn_ended");
+  expect(resolve(idle, { timestamp }, "turn")).toBeUndefined();
+  const next = reduce(idle, { type: "turn_started", turnId: "next" });
+  expect(resolve(next, { turnId: "next", timestamp }, "session")).toBeUndefined();
+  const ended = reduce(next, { type: "turn_ended", turnId: "next", reason: "interrupted" });
+  expect(resolve(ended, { turnId: "next", timestamp }, "session")).toBe("interrupted");
+});
+
+test("session interruption takes priority over an older failure cutoff", () => {
+  const failed = reduce(
+    {},
+    { type: "session_ended", timestamp, reason: "runtime_failure", turnIds: [] },
+  );
+  const interrupted = reduce(failed, {
+    type: "session_ended",
+    timestamp: "2026-09-06T11:00:00.000Z",
+    reason: "interrupted",
+    turnIds: [],
+  });
+  expect(resolve(interrupted, { timestamp }, "session")).toBe("interrupted");
+});
