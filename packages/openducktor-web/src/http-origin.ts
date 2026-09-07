@@ -6,7 +6,14 @@ export const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]
 
 const stripTrailingDot = (host: string): string => host.replace(/\.$/u, "");
 
-export const isLoopbackHost = (host: string): boolean => LOOPBACK_HOSTS.has(stripTrailingDot(host));
+export const isLoopbackHost = (host: string): boolean => {
+  const hostname = stripTrailingDot(host);
+  return (
+    LOOPBACK_HOSTS.has(hostname) ||
+    (/^127(\.\d{1,3}){3}$/u.test(hostname) &&
+      hostname.split(".").every((octet) => Number(octet) <= 255))
+  );
+};
 
 export const formatHost = (host: string): string => {
   if (host.includes(":") && !host.startsWith("[")) {

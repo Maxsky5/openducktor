@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { createBrowserRuntimeConfigState } from "./browser-runtime-config-state";
+import { parseCliArgs } from "./cli";
 import { WebOperationError } from "./effect/web-errors";
 import {
   logDuplicateWebTerminationNotice,
@@ -30,7 +31,12 @@ import {
   stopLauncherServices,
   waitForBackend,
 } from "./launcher-support";
-import { allowedHostnamesFor, isRequestHostAllowed, LOCALHOST } from "./http-origin";
+import {
+  allowedHostnamesFor,
+  isLoopbackHost,
+  isRequestHostAllowed,
+  LOCALHOST,
+} from "./http-origin";
 import type { WebLogger } from "./logger";
 
 const testLogger: WebLogger = {
@@ -42,6 +48,81 @@ const testLogger: WebLogger = {
 const createHostProcess = (exited: Promise<number>): Pick<Bun.Subprocess, "exited"> => ({ exited });
 
 describe("launcher internals", () => {
+  test.each([
+    "127.0.0.0",
+    "127.0.0.1",
+    "127.0.0.2",
+    "127.255.255.255",
+    "127.0.0.2.",
+    "localhost",
+    "localhost.",
+    "::1",
+    "[::1]",
+  ])("recognizes loopback host %s", (host) => {
+    expect(isLoopbackHost(host)).toBe(true);
+  });
+
+  test.each([
+    "126.255.255.255",
+    "128.0.0.0",
+    "100.64.0.1",
+    "127.example.com",
+    "127.256.0.1",
+    "127.0.256.1",
+    "127.0.0.256",
+    "127.0.0.-1",
+    "127.0.0",
+    "127.0.0.1.2",
+    "127.0.0.0000",
+    "127..0.1",
+  ])("does not classify invalid or remote host %s as loopback", (host) => {
+    expect(isLoopbackHost(host)).toBe(false);
+  });
+
+  test.each(["127.0.0.0", "127.0.0.2", "127.255.255.255", "0x7f000002"])(
+    "rejects loopback external host %s through CLI and programmatic launch paths",
+    async (host) => {
+      const externalUrl = `http://${host}:1420`;
+      const parsed = parseCliArgs(["--host", "0.0.0.0", "--external-url", externalUrl]);
+      expect(parsed.externalUrl).toBe(new URL(externalUrl).origin);
+      for (const options of [parsed, { host: "0.0.0.0", externalUrl }]) {
+        await expect(
+          Effect.runPromise(
+            runLauncherEffect(
+              {
+                ...options,
+                packageRoot: "/missing-web-package",
+                workspaceMode: false,
+                frontendPort: 0,
+                backendPort: 0,
+              },
+              testLogger,
+            ),
+          ),
+        ).rejects.toThrow("binds a non-loopback host");
+      }
+    },
+  );
+
+  test.each([undefined, "http://127.0.0.2:1420"])(
+    "accepts an IPv4 loopback bind with external URL %s",
+    async (externalUrl) => {
+      await Effect.runPromise(
+        validateLauncherNetworkOptionsEffect({
+          basePath: undefined,
+          bindHost: "127.0.0.2",
+          externalUrl,
+        }),
+      );
+    },
+  );
+
+  test("does not expand the request Host allowlist to the loopback block", () => {
+    expect(
+      allowedHostnamesFor({ bindHost: LOCALHOST, externalUrl: undefined }).has("127.0.0.2"),
+    ).toBe(false);
+  });
+
   test.each(["http://0.0.0.0:1420", "http://[::]:1420"])(
     "rejects wildcard external origin %s before starting servers",
     async (externalUrl) => {

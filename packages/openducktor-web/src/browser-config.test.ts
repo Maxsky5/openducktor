@@ -66,6 +66,13 @@ describe("browser web host config", () => {
   test("uses the browser loopback hostname for backend requests", () => {
     expect(
       getBrowserBackendUrl(
+        { VITE_ODT_BROWSER_BACKEND_URL: "http://127.255.255.255:14327" },
+        "http://127.0.0.2:1420",
+      ),
+    ).toBe("http://127.0.0.2:14327");
+
+    expect(
+      getBrowserBackendUrl(
         { VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327" },
         "http://localhost:1420",
       ),

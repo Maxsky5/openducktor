@@ -51,6 +51,7 @@ test.each([
   { externalUrl: "https://machine.ts.net", failAdvisory: true, warns: false },
   { externalUrl: "https://machine.ts.net", failAdvisory: false, warns: true },
   { externalUrl: "http://localhost:1420", failAdvisory: false, warns: false },
+  { externalUrl: "http://127.0.0.2:1420", failAdvisory: false, warns: false },
 ])(
   "cleans up startup and reports remote access: %j",
   async ({ externalUrl, failAdvisory, warns }) => {
