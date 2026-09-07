@@ -201,16 +201,16 @@ const renderTerminalBuffer = ({
   const didTerminalIdentityChange =
     renderedStateRef.current.terminalIdentityKey !== terminalIdentityKey;
   const didResetTokenChange = renderedStateRef.current.resetToken !== nextResetToken;
+  const shouldReplay = didTerminalIdentityChange || didResetTokenChange;
 
-  const lastRenderedSequence = renderedStateRef.current.lastSequence;
+  // A sequence cursor only applies to the terminal generation that rendered it.
+  const lastRenderedSequence = shouldReplay ? null : renderedStateRef.current.lastSequence;
   const evictedThroughSequence = terminalBuffer?.evictedThroughSequence ?? null;
   const didLoseUnseenOutput =
-    !didTerminalIdentityChange &&
-    !didResetTokenChange &&
     evictedThroughSequence !== null &&
     (lastRenderedSequence === null || lastRenderedSequence < evictedThroughSequence);
 
-  if (didTerminalIdentityChange || didResetTokenChange || didLoseUnseenOutput) {
+  if (shouldReplay || didLoseUnseenOutput) {
     const hasRenderedCurrentBinding = renderedStateRef.current.terminalIdentityKey !== null;
     const activeBinding = hasRenderedCurrentBinding ? recreateTerminalBinding() : binding;
     if (!activeBinding) {

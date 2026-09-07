@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerEvent, DevServerTerminalChunk } from "@openducktor/contracts";
-import { act } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
+import { AgentStudioDevServerTerminal } from "@/components/features/agents/agent-studio-dev-server-terminal";
 import * as logBuffer from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 import { buildScript, buildState } from "./use-agent-studio-dev-server-panel-test-fixtures";
 import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-test-harness";
@@ -95,6 +96,105 @@ describe("dev server terminal frame publication", () => {
       harness.unmount();
     }
   });
+
+  test.each([0, 5_000])(
+    "reports new-run overflow before one frame without reusing prior cursor %i",
+    async (priorSequence) => {
+      const harness = createHarness();
+      const writes: string[] = [];
+      let screen = "";
+      const createTerminalBinding = () => ({
+        terminal: {
+          options: {},
+          open: () => {},
+          loadAddon: () => {},
+          dispose: () => {},
+          clear: () => {
+            screen = "";
+          },
+          reset: () => {
+            screen = "";
+          },
+          write: (data: string) => {
+            writes.push(data);
+            screen += data;
+          },
+        },
+        fitAddon: { fit: () => {}, dispose: () => {} },
+      });
+      const onRendererError = (message: string | null) => {
+        if (message) throw new Error(message);
+      };
+      const element = () => (
+        <AgentStudioDevServerTerminal
+          scopeKey="/repo::task-7"
+          scriptId="frontend"
+          terminalBuffer={harness.getLatest().selectedScriptTerminalBuffer}
+          createTerminalBinding={createTerminalBinding}
+          onRendererError={onRendererError}
+        />
+      );
+      const newRunEvent = (sequence: number): DevServerEvent => ({
+        type: "terminal_chunk",
+        repoPath: "/repo",
+        taskId: "task-7",
+        terminalChunk: {
+          ...chunk(sequence),
+          data: `${sequence},`,
+          runIdentity: {
+            runId: "frontend:2",
+            runOrder: { hostInstanceId: "host-1", generation: 2 },
+          },
+        },
+      });
+      act(() => {
+        harness.getLatest().applyTerminalBuffersFromEvent(event(priorSequence), "frontend");
+      });
+      flushFrame();
+      const previousResetToken = harness.getLatest().selectedScriptTerminalBuffer?.resetToken;
+      const view = render(element());
+      try {
+        await act(async () => {});
+        expect(screen).toBe(`frontend-${priorSequence}\r\n`);
+        requestFrame.mockClear();
+        act(() => {
+          for (let sequence = 0; sequence <= 2_000; sequence += 1) {
+            harness.getLatest().applyTerminalBuffersFromEvent(newRunEvent(sequence), "frontend");
+          }
+        });
+        expect(requestFrame).toHaveBeenCalledTimes(1);
+        expect(screen).toBe(`frontend-${priorSequence}\r\n`);
+        flushFrame();
+        const buffer = harness.getLatest().selectedScriptTerminalBuffer;
+        expect(buffer?.resetToken).toBe((previousResetToken ?? 0) + 1);
+        expect(buffer?.evictedThroughSequence).toBe(0);
+        expect(buffer?.entries).toHaveLength(2_000);
+        await act(async () => {
+          view.rerender(element());
+        });
+        const retainedReplay =
+          "[Dev server output exceeded the 2,000-chunk buffer. Showing retained output.]\r\n" +
+          Array.from({ length: 2_000 }, (_, index) => `${index + 1},`).join("");
+        expect(screen).toBe(retainedReplay);
+        expect(writes).toEqual([`frontend-${priorSequence}\r\n`, retainedReplay]);
+        act(() => {
+          harness.getLatest().applyTerminalBuffersFromEvent(newRunEvent(2_001), "frontend");
+        });
+        flushFrame();
+        await act(async () => {
+          view.rerender(element());
+        });
+        await act(async () => {
+          view.rerender(element());
+        });
+        expect(screen).toBe(`${retainedReplay}2001,`);
+        expect(writes).toEqual([`frontend-${priorSequence}\r\n`, retainedReplay, "2001,"]);
+      } finally {
+        view.unmount();
+        harness.unmount();
+      }
+    },
+  );
 
   test("cancels pending publication on selection, clear, scope change, and unmount", () => {
     const harness = createHarness();
