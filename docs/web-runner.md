@@ -54,6 +54,8 @@ The browser config uses `https://machine.ts.net/api` as the host URL. The host s
 - Caddy can strip it: `handle_path /api/* { reverse_proxy 127.0.0.1:14327 }`
 - nginx can strip it with `location /api/ { proxy_pass http://127.0.0.1:14327/; }`
 
+The example mounts the host at port 443, which differs from the frontend port 1420. The launcher logs an info message about this port mismatch. It is expected behind a proxy.
+
 The frontend stays at the origin root, for example `tailscale serve --bg http://127.0.0.1:1420`. A same-origin deployment also gives the session cookie the `Secure` flag when the origin uses `https`.
 
 The runner serves plain HTTP. Tailscale encrypts the traffic in transit, so this is safe on the tailnet. Use a TLS reverse proxy in front of the runner for a public deployment, and set `--external-url` to the `https` origin. The host then sets the `Secure` cookie flag automatically.

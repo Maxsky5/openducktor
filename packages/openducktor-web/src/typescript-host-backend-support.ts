@@ -177,9 +177,12 @@ export const validateWebFrontendOriginEffect = (
 export const validateWebFrontendOrigin = (origin: string): string =>
   runWebSyncBoundary(validateWebFrontendOriginEffect(origin));
 
-export const allowedOriginsForFrontendOrigin = (frontendOrigin: string): Set<string> => {
+export const allowedOriginsForFrontendOrigin = (
+  frontendOrigin: string,
+  frontendPort?: number,
+): Set<string> => {
   const parsed = new URL(frontendOrigin);
-  const port = portOfHttpOrigin(parsed);
+  const port = String(frontendPort ?? Number(portOfHttpOrigin(parsed)));
   return new Set([
     parsed.origin,
     `http://127.0.0.1:${port}`,

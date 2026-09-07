@@ -63,6 +63,9 @@ export const buildFrontendUrl = (port: number, host: string = LOCALHOST): string
 export const buildBackendUrl = (port: number, host: string = LOCALHOST): string =>
   `http://${formatHost(host)}:${port}`;
 
+export const readinessHostForBind = (bindHost: string): string =>
+  bindHost === "0.0.0.0" ? LOCALHOST : bindHost;
+
 export const buildExternalBackendUrl = (externalUrl: string, port: number): string => {
   const parsed = new URL(externalUrl);
   parsed.port = String(port);

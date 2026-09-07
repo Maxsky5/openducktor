@@ -448,6 +448,14 @@ describe("TypeScript web host backend", () => {
         "http://[::1]:443",
       ]),
     );
+    expect(allowedOriginsForFrontendOrigin("https://machine.ts.net", 1420)).toEqual(
+      new Set([
+        "https://machine.ts.net",
+        "http://127.0.0.1:1420",
+        "http://localhost:1420",
+        "http://[::1]:1420",
+      ]),
+    );
   });
 
   test("preserves structured host command failure kind in invoke error responses", async () => {
@@ -1409,6 +1417,55 @@ describe("TypeScript web host backend", () => {
         // Bun rejects an SSE reader after server.stop(true) force-closes its socket.
       }
     }
+  });
+
+  test("applies the SSE no-timeout override to the original request under a base path", async () => {
+    const timeoutRequests: Request[] = [];
+    // SAFETY: the SSE route calls only server.timeout on this fake; the request path is not a terminal upgrade, so server.upgrade is never invoked.
+    const fakeServer = {
+      timeout(request: Request, _seconds: number) {
+        timeoutRequests.push(request);
+      },
+    } as Parameters<typeof handleHostFetch>[0]["server"];
+    const originalRequest = new Request(
+      `http://127.0.0.1:1420${TERMINAL_UPGRADE_BASE_PATH}/events`,
+      {
+        headers: {
+          host: "127.0.0.1:1420",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+      },
+    );
+    const response = await handleHostFetch({
+      allowedHostnames: allowedHostnamesFor({
+        bindHost: "127.0.0.1",
+        externalUrl: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+      }),
+      allowedOrigins: allowedOriginsForFrontendOrigin(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
+      appSessionCookieName: APP_SESSION_COOKIE_NAME,
+      appToken: APP_TOKEN,
+      controlToken: CONTROL_TOKEN,
+      eventBus: new BufferedHostEventBus({ report: () => {} }),
+      hostCommandRouter: createTestNodeHostCommandRouter(),
+      taskAssetReadService: missingTaskAssetReadService,
+      localAttachments: createLocalAttachmentAdapter(),
+      logger: testLogger,
+      basePath: TERMINAL_UPGRADE_BASE_PATH,
+      onBackgroundFailure: () => {},
+      request: originalRequest,
+      server: fakeServer,
+      sessionCookieSecure: false,
+      shutdownStarted: false,
+      beginShutdown: () => {},
+      stop: () => Promise.resolve(),
+    });
+    expect(response).toBeInstanceOf(Response);
+    if (!(response instanceof Response)) {
+      throw new Error("Expected an SSE response.");
+    }
+    expect(timeoutRequests).toHaveLength(1);
+    expect(timeoutRequests[0]).toBe(originalRequest);
+    await response.body?.cancel();
   });
 
   test("keeps the backend server alive until host disposal finishes", async () => {

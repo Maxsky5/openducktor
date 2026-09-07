@@ -22,6 +22,7 @@ import {
 } from "./effect/web-errors";
 import { createWebLauncherLifecycle, type WebLauncherLifecycle } from "./launcher-lifecycle";
 import {
+  buildBackendUrl,
   buildBrowserBackendUrl,
   buildBrowserRuntimeConfigJson,
   buildFrontendDisplayUrls,
@@ -31,6 +32,7 @@ import {
   type FrontendServer,
   indexStaticAssetPaths,
   keepProcessAliveDuringEffect,
+  readinessHostForBind,
   resolveIndexedStaticAssetPath,
   stopLauncherServicesEffect,
   waitForBackendEffect,
@@ -314,7 +316,7 @@ const cleanupStartedFrontendServerEffect = (
 
 export const viteServerOptions = (options: LauncherOptions): ViteServerOptions => {
   const serverOptions: ViteServerOptions = {
-    host: options.host ?? LOCALHOST,
+    host: options.host?.trim() || LOCALHOST,
     port: options.frontendPort,
     strictPort: true,
     fs: {
@@ -481,7 +483,7 @@ const startStaticFrontendServerEffect = (
     }
 
     const allowedHostnames = allowedHostnamesFor({
-      bindHost: options.host ?? LOCALHOST,
+      bindHost: options.host?.trim() || LOCALHOST,
       externalUrl: options.externalUrl?.trim() || undefined,
     });
 
@@ -489,7 +491,7 @@ const startStaticFrontendServerEffect = (
       Effect.try({
         try: () =>
           Bun.serve({
-            hostname: options.host ?? LOCALHOST,
+            hostname: options.host?.trim() || LOCALHOST,
             port: options.frontendPort,
             async fetch(request) {
               if (!isRequestHostAllowed(request, allowedHostnames)) {
@@ -787,13 +789,6 @@ export const runLauncherEffect = (
             `The --external-url port does not match the frontend port ${frontendServer.port}. Browsers reach the frontend only through --external-url. Set --port to match, or map the port in the proxy.`,
           );
         }
-        if (parsedExternalUrl?.protocol === "https:" && options.basePath === undefined) {
-          yield* writeWebLogEffect(
-            logger,
-            "info",
-            `The --external-url origin is https without --base-path. The browser reaches the TypeScript host at https://${parsedExternalUrl.hostname}:${options.backendPort}. Terminate TLS for that port in the proxy.`,
-          );
-        }
         yield* writeWebLogEffect(logger, "info", "Starting OpenDucktor TypeScript host...");
         const hostBackendExit = yield* Effect.exit(
           startWebLauncherHostBackendEffect({
@@ -803,6 +798,7 @@ export const runLauncherEffect = (
               basePath: options.basePath,
             }),
             frontendOrigin: frontendUrl,
+            frontendPort: frontendServer.port,
             controlToken,
             appToken,
             onBackgroundFailure: defaultWebSignalProcessBoundary.reportFailure,
@@ -820,8 +816,15 @@ export const runLauncherEffect = (
           );
         }
         const hostBackend = hostBackendExit.value;
+        if (parsedExternalUrl?.protocol === "https:" && options.basePath === undefined) {
+          yield* writeWebLogEffect(
+            logger,
+            "info",
+            `The --external-url origin is https without --base-path. The browser reaches the TypeScript host at https://${parsedExternalUrl.hostname}:${hostBackend.port}. Terminate TLS for that port in the proxy.`,
+          );
+        }
         yield* owner.registerHost(hostBackend);
-        const { browserUrl, directUrl } = buildBrowserBackendUrl(
+        const { browserUrl } = buildBrowserBackendUrl(
           options.basePath,
           frontendUrl,
           externalUrl,
@@ -842,7 +845,7 @@ export const runLauncherEffect = (
           logger,
           owner,
           readinessTimeoutMs,
-          readinessUrl: directUrl,
+          readinessUrl: buildBackendUrl(hostBackend.port, readinessHostForBind(bindHost)),
         });
       }),
     );

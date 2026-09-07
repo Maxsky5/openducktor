@@ -15,6 +15,11 @@
     "expected": "http://[::1]:14327"
   },
   {
+    "name": "expanded ipv6 loopback origin",
+    "input": "http://[0:0:0:0:0:0:0:1]:14327",
+    "expected": "http://[::1]:14327"
+  },
+  {
     "name": "trimmed loopback origin",
     "input": " http://127.0.0.1:14327 ",
     "expected": "http://127.0.0.1:14327"

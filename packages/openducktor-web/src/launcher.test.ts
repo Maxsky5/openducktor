@@ -23,6 +23,7 @@ import {
   closeViteFrontendServer,
   indexStaticAssetPaths,
   keepProcessAliveDuring,
+  readinessHostForBind,
   resolveIndexedStaticAssetPath,
   resolveStaticAssetPath,
   stopLauncherServices,
@@ -219,6 +220,29 @@ describe("launcher internals", () => {
         hostnames,
       ),
     ).toBe(false);
+  });
+
+  test("allows the dot-stripped proxy hostname on remote frontend servers", () => {
+    const hostnames = allowedHostnamesFor({
+      bindHost: "0.0.0.0",
+      externalUrl: "https://machine.ts.net.",
+    });
+    expect(hostnames).toEqual(
+      new Set(["127.0.0.1", "localhost", "[::1]", "::1", "machine.ts.net", "0.0.0.0"]),
+    );
+    expect(
+      isRequestHostAllowed(
+        new Request("http://frontend/", { headers: { host: "machine.ts.net" } }),
+        hostnames,
+      ),
+    ).toBe(true);
+  });
+
+  test("probes readiness over loopback when the bind covers all interfaces", () => {
+    expect(readinessHostForBind("0.0.0.0")).toBe(LOCALHOST);
+    expect(readinessHostForBind("127.0.0.1")).toBe("127.0.0.1");
+    expect(readinessHostForBind("::1")).toBe("::1");
+    expect(readinessHostForBind("10.0.0.5")).toBe("10.0.0.5");
   });
 
   test("reports runtime-config response failures instead of rejecting without an owner", async () => {

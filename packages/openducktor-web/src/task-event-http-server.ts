@@ -25,6 +25,7 @@ type TaskEventHttpServerContext = {
   parseJsonObjectBody: (request: Request) => Effect.Effect<WebRequestBody, WebHostRequestError>;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
+  requestTimeoutSource?: Request | undefined;
   shutdownStarted: boolean;
   taskEventLeaseManager?: TaskEventLeaseManager;
   validateAppCookieOrHeader: (
@@ -143,6 +144,7 @@ export const routeTaskEventHttpRequest = ({
   parseJsonObjectBody,
   request,
   requestTimeouts,
+  requestTimeoutSource,
   shutdownStarted,
   taskEventLeaseManager,
   validateAppCookieOrHeader,
@@ -225,7 +227,7 @@ export const routeTaskEventHttpRequest = ({
           410,
         );
       }
-      requestTimeouts?.timeout(request, 0);
+      requestTimeouts?.timeout(requestTimeoutSource ?? request, 0);
       return createTaskEventSseResponse(taskEventLeaseManager, lease.subscriptionId, corsHeaders);
     }
 

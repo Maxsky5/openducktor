@@ -65,7 +65,7 @@ export const createLauncherOptions = (
 
 const printHelp = (): void => {
   console.log(
-    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local host port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_BACKEND_PORT})\n  --host <host>           Bind address for the frontend and host; use a Tailscale IP or 0.0.0.0 to reach them from another machine (default 127.0.0.1)\n  --external-url <origin> URL browsers use to reach the frontend, for example http://100.64.0.1:1420; required when --host is not loopback\n  --base-path <path>      Serve the host under this path on the same origin, for example /api; use with a reverse proxy or Tailscale Serve\n  --workspace             Serve the repo-local frontend with Vite for development\n  -h, --help              Show this help`,
+    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local host port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_BACKEND_PORT})\n  --host <host>           Bind address for the frontend and host; wrap IPv6 addresses in brackets, for example [::1]; use a Tailscale IP or 0.0.0.0 to reach them from another machine (default 127.0.0.1)\n  --external-url <origin> URL browsers use to reach the frontend, for example http://100.64.0.1:1420; required when --host is not loopback\n  --base-path <path>      Serve the host under this path on the same origin, for example /api; use with a reverse proxy or Tailscale Serve\n  --workspace             Serve the repo-local frontend with Vite for development\n  -h, --help              Show this help`,
   );
 };
 
@@ -114,7 +114,7 @@ const parseHostEffect = (
   flag: string,
 ): Effect.Effect<string, WebValidationError> =>
   Effect.gen(function* () {
-    if (!raw) {
+    if (raw === undefined) {
       return yield* new WebValidationError({
         message: `Missing value for ${flag}.`,
         field: flag,
@@ -139,7 +139,7 @@ const parseBasePathEffect = (
   flag: string,
 ): Effect.Effect<string, WebValidationError> =>
   Effect.gen(function* () {
-    if (!raw) {
+    if (raw === undefined) {
       return yield* new WebValidationError({
         message: `Missing value for ${flag}.`,
         field: flag,
@@ -161,7 +161,7 @@ const parseExternalUrlEffect = (
   flag: string,
 ): Effect.Effect<string, WebValidationError> =>
   Effect.gen(function* () {
-    if (!raw) {
+    if (raw === undefined) {
       return yield* new WebValidationError({
         message: `Missing value for ${flag}.`,
         field: flag,
@@ -176,7 +176,7 @@ const parsePortEffect = (
   flag: string,
 ): Effect.Effect<number, WebValidationError> =>
   Effect.gen(function* () {
-    if (!raw) {
+    if (raw === undefined) {
       return yield* new WebValidationError({
         message: `Missing value for ${flag}.`,
         field: flag,

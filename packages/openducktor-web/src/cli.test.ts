@@ -192,6 +192,24 @@ describe("web CLI argument parsing", () => {
     expect(parseUnknownOption).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
   });
 
+  test("rejects empty string values as invalid, not missing", () => {
+    const parseEmptyHost = () => parseCliArgs(["--host", ""]);
+    expect(parseEmptyHost).toThrow("Invalid --host value: .");
+    expect(parseEmptyHost).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+
+    const parseEmptyExternalUrl = () => parseCliArgs(["--external-url", ""]);
+    expect(parseEmptyExternalUrl).toThrow(/must use http or https|is invalid/);
+    expect(parseEmptyExternalUrl).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+
+    const parseEmptyBasePath = () => parseCliArgs(["--base-path", ""]);
+    expect(parseEmptyBasePath).toThrow("Invalid --base-path value: .");
+    expect(parseEmptyBasePath).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+
+    const parseEmptyPort = () => parseCliArgs(["--port", ""]);
+    expect(parseEmptyPort).toThrow("Invalid --port value: .");
+    expect(parseEmptyPort).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+  });
+
   test("returns help before launcher setup", async () => {
     await expect(Effect.runPromise(parseCliArgsEffect(["--help"]))).resolves.toEqual({
       _tag: "Help",

@@ -39,7 +39,7 @@ export const allowedHostnamesFor = (options: {
 }): ReadonlySet<string> => {
   const hostnames = new Set<string>(LOOPBACK_HOSTS);
   if (options.externalUrl !== undefined) {
-    hostnames.add(new URL(options.externalUrl).hostname);
+    hostnames.add(stripTrailingDot(new URL(options.externalUrl).hostname));
   }
   hostnames.add(stripTrailingDot(options.bindHost));
   return hostnames;

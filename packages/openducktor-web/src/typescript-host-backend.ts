@@ -59,6 +59,7 @@ import {
 export type TypescriptHostBackendOptions = {
   port: number;
   frontendOrigin: string;
+  frontendPort?: number;
   controlToken: string;
   appToken: string;
   host?: string;
@@ -628,6 +629,7 @@ const routeCorsRequest = ({
   logger,
   request,
   requestTimeouts,
+  requestTimeoutSource,
   sessionCookieSecure,
   shutdownStarted,
   beginShutdown,
@@ -645,6 +647,7 @@ const routeCorsRequest = ({
   logger: WebLogger;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
+  requestTimeoutSource?: Request | undefined;
   sessionCookieSecure: boolean;
   shutdownStarted: boolean;
   beginShutdown: () => void;
@@ -703,6 +706,7 @@ const routeCorsRequest = ({
       parseJsonObjectBody,
       request,
       requestTimeouts,
+      requestTimeoutSource,
       shutdownStarted,
       validateAppCookieOrHeader: (sessionRequest, expectedToken) =>
         validateAppCookieOrHeader(sessionRequest, expectedToken, appSessionCookieName),
@@ -725,7 +729,7 @@ const routeCorsRequest = ({
           503,
         );
       }
-      requestTimeouts?.timeout(request, 0);
+      requestTimeouts?.timeout(requestTimeoutSource ?? request, 0);
       return createSseResponse(
         eventBus.stream(),
         yield* parseLastEventId(request),
@@ -803,6 +807,7 @@ export const handleTypescriptHostBackendRequest = ({
   logger,
   request,
   requestTimeouts,
+  requestTimeoutSource,
   sessionCookieSecure,
   shutdownStarted,
   beginShutdown,
@@ -820,6 +825,7 @@ export const handleTypescriptHostBackendRequest = ({
   logger: WebLogger;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
+  requestTimeoutSource?: Request | undefined;
   sessionCookieSecure: boolean;
   shutdownStarted: boolean;
   beginShutdown: () => void;
@@ -847,6 +853,7 @@ export const handleTypescriptHostBackendRequest = ({
       logger,
       request,
       requestTimeouts,
+      requestTimeoutSource,
       sessionCookieSecure,
       shutdownStarted,
       beginShutdown,
@@ -897,7 +904,6 @@ export const handleHostFetch = (
     return new Response("Host not allowed.", { status: 403 });
   }
   const routedUrl = stripBasePath(basePath, request.url);
-  const routedRequest = routedUrl === request.url ? request : new Request(routedUrl, request);
   const terminalUpgrade = tryUpgradeTerminalWebSocket({
     allowedOrigins: backendInput.allowedOrigins,
     appSessionCookieName: backendInput.appSessionCookieName,
@@ -911,10 +917,12 @@ export const handleHostFetch = (
     terminalPath: new URL(routedUrl).pathname,
   });
   if (terminalUpgrade.handled) return terminalUpgrade.response;
+  const routedRequest = routedUrl === request.url ? request : new Request(routedUrl, request);
   return Effect.runPromise(
     handleTypescriptHostBackendRequest({
       ...backendInput,
       request: routedRequest,
+      requestTimeoutSource: request,
       requestTimeouts: server,
     }),
   );
@@ -923,6 +931,7 @@ export const handleHostFetch = (
 export const startTypescriptHostBackendEffect = ({
   port,
   frontendOrigin,
+  frontendPort,
   controlToken,
   appToken,
   host,
@@ -939,7 +948,7 @@ export const startTypescriptHostBackendEffect = ({
     const validatedFrontendOrigin = yield* validateWebFrontendOriginEffect(frontendOrigin).pipe(
       Effect.mapError((cause) => toWebOperationError(cause, "web.host.validate-frontend-origin")),
     );
-    const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
+    const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin, frontendPort);
     const allowedHostnames = allowedHostnamesFor({
       bindHost: host ?? LOCALHOST,
       externalUrl: validatedFrontendOrigin,
