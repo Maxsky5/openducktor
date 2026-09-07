@@ -15,9 +15,6 @@ type ThreadImages = {
   items: Map<string, AgentImageGenerationPart>;
   lifecycle: AgentImageGenerationLifecycle;
 };
-const itemKey = (part: AgentImageGenerationPart): string =>
-  JSON.stringify([part.turnId ?? null, part.itemId]);
-
 export class CodexImageGenerationState {
   private readonly runtimes = new Map<string, Map<string, ThreadImages>>();
 
@@ -128,3 +125,6 @@ export class CodexImageGenerationState {
     return next;
   }
 }
+
+const itemKey = (part: AgentImageGenerationPart): string =>
+  JSON.stringify([part.turnId ?? null, part.itemId]);

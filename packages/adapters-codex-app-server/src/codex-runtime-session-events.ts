@@ -1131,6 +1131,7 @@ export class CodexRuntimeSessionEvents {
     return this.imageGenerations.prepareHistory(runtimeId, threadId);
   }
 
+  /** Routed children can receive images without a local session. Resolve their owner before removing routes. */
   settleGeneratedImages(runtimeId: string, sessionRef?: SessionRef): AgentEvent[] {
     const root = sessionRef
       ? this.resolveRuntimeStreamEventSessionOwner(sessionRef.externalSessionId, runtimeId)

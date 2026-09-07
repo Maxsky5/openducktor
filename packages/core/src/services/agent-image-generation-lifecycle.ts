@@ -16,7 +16,7 @@ export type AgentImageGenerationLifecycleEvent =
       turnIds: Iterable<string>;
     };
 
-/** Owners supply the turns covered by a session end; this policy keeps native turn ends authoritative. */
+/** The caller selects affected turns. Keep a confirmed interruption when later end events arrive. */
 export const reduceAgentImageGenerationLifecycle = (
   state: AgentImageGenerationLifecycle,
   event: AgentImageGenerationLifecycleEvent,

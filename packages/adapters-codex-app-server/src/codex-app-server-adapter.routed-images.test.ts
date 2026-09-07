@@ -10,69 +10,6 @@ import {
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
 
-const createRoutedImages = async () => {
-  const stream = createRuntimeStreamSubscription();
-  const events: AgentEvent[] = [];
-  const { adapter, transports } = createHarness({
-    subscribeEvents: stream.subscribeEvents,
-    onLiveSessionMutation: (mutation) => events.push(...mutation.transcriptEvents),
-  });
-  const ref = codexSessionRuntimeRef();
-  const start = async () => {
-    await adapter.startSession(codexStartSessionInput());
-    const routes: [string, string][] = [
-      [ref.externalSessionId, "child"],
-      ["child", "nested"],
-    ];
-    for (const [parent, child] of routes) {
-      stream.emitNotification({
-        method: "item/completed",
-        params: {
-          threadId: parent,
-          turnId: "spawn-turn",
-          completedAtMs: 1,
-          item: {
-            type: "collabAgentToolCall",
-            id: `spawn-${child}`,
-            tool: "spawnAgent",
-            status: "completed",
-            senderThreadId: parent,
-            receiverThreadIds: [child],
-            prompt: "Generate image",
-            model: null,
-            reasoningEffort: null,
-            agentsStates: { [child]: { status: "running", message: null } },
-          },
-        },
-      });
-      await flushCodexAdapterWork();
-      for (const status of ["in_progress", "completed", "failed"]) {
-        stream.emitNotification({
-          method: status === "in_progress" ? "item/started" : "item/completed",
-          params: {
-            threadId: child,
-            turnId: "image-turn",
-            startedAtMs: 0,
-            completedAtMs: 1,
-            item: {
-              type: "imageGeneration",
-              id: status,
-              status,
-              result: status === "completed" ? "private-bytes" : "",
-              revisedPrompt: null,
-              transparentBackground: null,
-              failure: null,
-            },
-          },
-        });
-      }
-      await flushCodexAdapterWork();
-    }
-  };
-  await start();
-  return { adapter, events, ref, start, transports };
-};
-
 for (const scope of ["session", "runtime"] as const) {
   test(`${scope} image settlement includes routed children and nested children`, async () => {
     const { adapter, events: liveEvents, ref } = await createRoutedImages();
@@ -200,3 +137,66 @@ for (const cleanup of ["stop", "release", "runtime"] as const) {
     }
   });
 }
+
+const createRoutedImages = async () => {
+  const stream = createRuntimeStreamSubscription();
+  const events: AgentEvent[] = [];
+  const { adapter, transports } = createHarness({
+    subscribeEvents: stream.subscribeEvents,
+    onLiveSessionMutation: (mutation) => events.push(...mutation.transcriptEvents),
+  });
+  const ref = codexSessionRuntimeRef();
+  const start = async () => {
+    await adapter.startSession(codexStartSessionInput());
+    const routes: [string, string][] = [
+      [ref.externalSessionId, "child"],
+      ["child", "nested"],
+    ];
+    for (const [parent, child] of routes) {
+      stream.emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: parent,
+          turnId: "spawn-turn",
+          completedAtMs: 1,
+          item: {
+            type: "collabAgentToolCall",
+            id: `spawn-${child}`,
+            tool: "spawnAgent",
+            status: "completed",
+            senderThreadId: parent,
+            receiverThreadIds: [child],
+            prompt: "Generate image",
+            model: null,
+            reasoningEffort: null,
+            agentsStates: { [child]: { status: "running", message: null } },
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+      for (const status of ["in_progress", "completed", "failed"]) {
+        stream.emitNotification({
+          method: status === "in_progress" ? "item/started" : "item/completed",
+          params: {
+            threadId: child,
+            turnId: "image-turn",
+            startedAtMs: 0,
+            completedAtMs: 1,
+            item: {
+              type: "imageGeneration",
+              id: status,
+              status,
+              result: status === "completed" ? "private-bytes" : "",
+              revisedPrompt: null,
+              transparentBackground: null,
+              failure: null,
+            },
+          },
+        });
+      }
+      await flushCodexAdapterWork();
+    }
+  };
+  await start();
+  return { adapter, events, ref, start, transports };
+};

@@ -74,7 +74,7 @@ export const recordImageGenerationTurnEnd = (
   const state = imageLifecycle(session);
   const next = reduceAgentImageGenerationLifecycle(state, { type: "turn_ended", turnId, reason });
   if (next === state) return session;
-  const updated = applyImageLifecycle(session, next);
+  const updated = withImageTurns(session, next);
   return { ...updated, messages: settleImageGenerationMessages(updated) };
 };
 
@@ -95,7 +95,8 @@ export const recordImageGenerationSessionEnd = (
     reason,
     turnIds,
   });
-  return recordImageGenerationEnd(applyImageLifecycle(session, next), timestamp, reason, "image");
+  // Compare session cutoffs separately because older events can arrive after newer ones.
+  return recordImageGenerationEnd(withImageTurns(session, next), timestamp, reason, "image");
 };
 
 export const recordImageGenerationTurnStart = (
@@ -104,7 +105,7 @@ export const recordImageGenerationTurnStart = (
 ): AgentSessionState => {
   const state = imageLifecycle(session);
   const next = reduceAgentImageGenerationLifecycle(state, { type: "turn_started", turnId });
-  return next === state ? session : applyImageLifecycle(session, next);
+  return next === state ? session : withImageTurns(session, next);
 };
 
 const imageLifecycle = (session: ImageOwner): AgentImageGenerationLifecycle => ({
@@ -113,10 +114,9 @@ const imageLifecycle = (session: ImageOwner): AgentImageGenerationLifecycle => (
   sessionEnd: session.imageGenerationEnd,
 });
 
-// The frontend keeps the latest timestamp in recordImageGenerationEnd, including generic session events.
-const applyImageLifecycle = (
+const withImageTurns = (
   session: AgentSessionState,
-  lifecycle: AgentImageGenerationLifecycle,
+  lifecycle: Pick<AgentImageGenerationLifecycle, "turnEnds" | "turnStarts">,
 ): AgentSessionState => {
   const updated = { ...session };
   if (lifecycle.turnEnds) updated.imageGenerationTurnEnds = lifecycle.turnEnds;

@@ -139,6 +139,9 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     },
   });
   const operations: AgentOperationsContextValue = {
+    readGeneratedImage: async () => {
+      throw new Error("Unexpected generated image read");
+    },
     readSessionTodos: async () => [],
     readSessionHistory: async () => [],
     loadAgentSessionHistory: async () => null,
