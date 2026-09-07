@@ -13,22 +13,28 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { GitWorktreeStatusData } from "../../ports/git-port";
 
 const gitWorktreeHashVersion = 1;
-const fnv1a64OffsetBasis = 0xcbf29ce484222325n;
-const fnv1a64Prime = 0x100000001b3n;
-const uint64Mask = 0xffffffffffffffffn;
 
-class Fnv1a64Hasher {
-  private state = fnv1a64OffsetBasis;
+class WorktreeSnapshotHasher {
+  private high = 0xcbf29ce4 | 0;
+  private low = 0x84222325 | 0;
 
   updateByte(value: number): void {
-    this.state ^= BigInt(value & 0xff);
-    this.state = (this.state * fnv1a64Prime) & uint64Mask;
+    this.updateBytes(Uint8Array.of(value));
   }
 
   updateBytes(values: Uint8Array): void {
-    for (const value of values) {
-      this.updateByte(value);
+    let high = this.high;
+    let low = this.low;
+    for (let index = 0; index < values.length; index += 1) {
+      low ^= values[index]!;
+      // FNV prime = 2^40 + 435. Split the low product into 16-bit limbs for its carry.
+      const lowProduct = (low & 0xffff) * 435;
+      const middle = (low >>> 16) * 435 + (lowProduct >>> 16);
+      high = (Math.imul(high, 435) + (low << 8) + (middle >>> 16)) | 0;
+      low = Math.imul(low, 435);
     }
+    this.high = high;
+    this.low = low;
   }
 
   updateBool(value: boolean): void {
@@ -42,11 +48,9 @@ class Fnv1a64Hasher {
   }
 
   updateU64(value: number): void {
-    let remaining = BigInt(value);
-    for (let index = 0; index < 8; index += 1) {
-      this.updateByte(Number(remaining & 0xffn));
-      remaining >>= 8n;
-    }
+    const buffer = new ArrayBuffer(8);
+    new DataView(buffer).setBigUint64(0, BigInt(value), true);
+    this.updateBytes(new Uint8Array(buffer));
   }
 
   updateString(value: string): void {
@@ -56,11 +60,14 @@ class Fnv1a64Hasher {
   }
 
   finishHex(): string {
-    return this.state.toString(16).padStart(16, "0");
+    return (
+      (this.high >>> 0).toString(16).padStart(8, "0") +
+      (this.low >>> 0).toString(16).padStart(8, "0")
+    );
   }
 }
 
-const hashOptionalString = (hasher: Fnv1a64Hasher, value: string | undefined): void => {
+const hashOptionalString = (hasher: WorktreeSnapshotHasher, value: string | undefined): void => {
   if (value === undefined) {
     hasher.updateByte(0);
     return;
@@ -71,7 +78,7 @@ const hashOptionalString = (hasher: Fnv1a64Hasher, value: string | undefined): v
 };
 
 const hashUpstreamAheadBehind = (
-  hasher: Fnv1a64Hasher,
+  hasher: WorktreeSnapshotHasher,
   upstreamAheadBehind: GitUpstreamAheadBehind,
 ): void => {
   if (upstreamAheadBehind.outcome === "tracking") {
@@ -97,7 +104,7 @@ export const hashWorktreeStatusPayload = (
   targetAheadBehind: CommitsAheadBehind,
   upstreamAheadBehind: GitUpstreamAheadBehind,
 ): string => {
-  const hasher = new Fnv1a64Hasher();
+  const hasher = new WorktreeSnapshotHasher();
 
   hashOptionalString(hasher, currentBranch.name);
   hasher.updateBool(currentBranch.detached);
@@ -116,7 +123,7 @@ export const hashWorktreeStatusPayload = (
 };
 
 export const hashWorktreeDiffPayload = (fileDiffs: FileDiff[]): string => {
-  const hasher = new Fnv1a64Hasher();
+  const hasher = new WorktreeSnapshotHasher();
   hasher.updateU64(fileDiffs.length);
 
   for (const diff of fileDiffs) {
@@ -135,7 +142,7 @@ export const hashWorktreeDiffSummaryPayload = (
   targetAheadBehind: CommitsAheadBehind,
   fileStatusCounts: GitFileStatusCounts,
 ): string => {
-  const hasher = new Fnv1a64Hasher();
+  const hasher = new WorktreeSnapshotHasher();
   hasher.updateString(diffScope);
   hasher.updateU32(targetAheadBehind.ahead);
   hasher.updateU32(targetAheadBehind.behind);
