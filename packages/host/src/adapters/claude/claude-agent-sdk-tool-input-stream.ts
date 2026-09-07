@@ -12,6 +12,7 @@ type ToolStreamEntry = {
   partialInputJson: string;
   toolUse: ClaudeDecodedToolUse;
   lastEmittedInputFingerprint?: string;
+  envelopeInput?: ClaudeToolInput;
 };
 
 type ToolStreamState = {
@@ -83,25 +84,31 @@ export const completeClaudeStreamToolInput = (
   state.toolsByBlockIndex.delete(blockIndex);
   const json = entry.partialInputJson;
   entry.partialInputJson = "";
-  if (json.length === 0) {
+  if (entry.envelopeInput) {
+    state.toolsByCallId.delete(entry.toolUse.callId);
+  }
+
+  let parsedInput = entry.toolUse.input;
+  if (json.length > 0) {
+    try {
+      parsedInput = claudeProtocolObjectSchema.parse(JSON.parse(json));
+    } catch (cause) {
+      state.toolsByCallId.delete(entry.toolUse.callId);
+      throw new HostValidationError({
+        field: "claudeStreamToolInput",
+        message: `Claude SDK sent invalid completed tool input for "${entry.toolUse.callId}" (${entry.toolUse.toolName}, block ${blockIndex}). Retry the turn.`,
+        cause,
+        details: { callId: entry.toolUse.callId, blockIndex, toolName: entry.toolUse.toolName },
+      });
+    }
+  }
+  // The SDK can normalize tool values in the envelope. Validate raw input first.
+  const input = entry.envelopeInput ?? parsedInput;
+  if (!input) {
     return null;
   }
 
-  // The SDK delivers complete tool input at content_block_stop.
-  let parsedInput: ClaudeProtocolObject;
-  try {
-    parsedInput = claudeProtocolObjectSchema.parse(JSON.parse(json));
-  } catch (cause) {
-    state.toolsByCallId.delete(entry.toolUse.callId);
-    throw new HostValidationError({
-      field: "claudeStreamToolInput",
-      message: `Claude SDK sent invalid completed tool input for "${entry.toolUse.callId}" (${entry.toolUse.toolName}, block ${blockIndex}). Retry the turn.`,
-      cause,
-      details: { callId: entry.toolUse.callId, blockIndex, toolName: entry.toolUse.toolName },
-    });
-  }
-
-  const nextFingerprint = toolInputFingerprint(parsedInput);
+  const nextFingerprint = toolInputFingerprint(input);
   if (entry.lastEmittedInputFingerprint === nextFingerprint) {
     return null;
   }
@@ -109,7 +116,7 @@ export const completeClaudeStreamToolInput = (
   entry.lastEmittedInputFingerprint = nextFingerprint;
   entry.toolUse = {
     ...entry.toolUse,
-    input: parsedInput,
+    input,
   };
   return entry.toolUse;
 };
@@ -124,10 +131,13 @@ export const consumeClaudeStreamEmittedToolInput = (
   if (!state || !entry) {
     return false;
   }
-  state.toolsByCallId.delete(callId);
   if (state.toolsByBlockIndex.get(entry.blockIndex) === entry) {
-    state.toolsByBlockIndex.delete(entry.blockIndex);
+    // SDK 0.3.251 can emit the envelope before the raw content_block_stop event.
+    // Retain the raw buffer and defer the update until completion validates it.
+    entry.envelopeInput = input;
+    return true;
   }
+  state.toolsByCallId.delete(callId);
   return entry.lastEmittedInputFingerprint === toolInputFingerprint(input);
 };
 

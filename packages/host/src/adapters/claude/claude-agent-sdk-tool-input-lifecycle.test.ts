@@ -68,6 +68,48 @@ describe("Claude tool input lifecycle", () => {
     expect(completeClaudeStreamToolInput(session, 0)).toBeNull();
   });
 
+  test.each([
+    { json: "null", input: {} },
+    { json: '{"content":', input: { __unparsedToolInput: { raw: '{"content":', len: 11 } } },
+  ])("rejects raw $json after the SDK sends its normalized envelope", async ({ json, input }) => {
+    const events: AgentEvent[] = [];
+    const rawDelta = claudeSdkMessageFixture({
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: json },
+      },
+    });
+    const envelope = claudeSdkMessageFixture({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "write-1", name: "Write", input }],
+      },
+    });
+    const session = createClaudeSession({
+      query: claudeQueryWithMessages([start, rawDelta, envelope, stop]),
+    });
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    sessionStore.set(session);
+    await consumeClaudeSession({
+      session,
+      sessionStore,
+      now: () => timestamp,
+      emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+    });
+    expect(events.filter((event) => event.type === "session_error")).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining('tool input for "write-1" (Write, block 0)'),
+      }),
+    ]);
+    expect(events.filter((event) => event.type === "assistant_part")).toHaveLength(1);
+    expect(session.toolInputsByCallId.get("write-1")).toEqual({});
+    expect(sessionStore.get(session.externalSessionId)).toBeUndefined();
+  });
+
   test("cancellation clears an unfinished tool without parsing or emitting an input update", async () => {
     const events: AgentEvent[] = [];
     const session = createClaudeSession();

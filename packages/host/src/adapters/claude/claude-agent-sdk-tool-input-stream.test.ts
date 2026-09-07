@@ -70,6 +70,45 @@ describe("Claude streamed tool input", () => {
     expect(consumeClaudeStreamEmittedToolInput(session, "third", { value: 4 })).toBe(false);
   });
 
+  test("keeps early envelopes attached to interleaved calls and releases them at stop", () => {
+    const session = { externalSessionId: "session-1" };
+    start(session, 0, "first");
+    start(session, 1, "second");
+    appendClaudeStreamToolInputJson(session, 0, '{"value":1}');
+    appendClaudeStreamToolInputJson(session, 1, '{"value":2}');
+    expect(consumeClaudeStreamEmittedToolInput(session, "second", { value: 20 })).toBe(true);
+    expect(consumeClaudeStreamEmittedToolInput(session, "first", { value: 10 })).toBe(true);
+    expect(completeClaudeStreamToolInput(session, 0)).toMatchObject({
+      callId: "first",
+      input: { value: 10 },
+    });
+    start(session, 0, "third");
+    appendClaudeStreamToolInputJson(session, 0, '{"value":3}');
+    expect(consumeClaudeStreamEmittedToolInput(session, "first", { value: 10 })).toBe(false);
+    expect(completeClaudeStreamToolInput(session, 1)).toMatchObject({
+      callId: "second",
+      input: { value: 20 },
+    });
+    expect(completeClaudeStreamToolInput(session, 0)).toMatchObject({
+      callId: "third",
+      input: { value: 3 },
+    });
+  });
+
+  test("uses an early envelope for a block without deltas and clears it on cancellation", () => {
+    const session = { externalSessionId: "session-1" };
+    start(session, 0, "empty");
+    expect(consumeClaudeStreamEmittedToolInput(session, "empty", { default: true })).toBe(true);
+    expect(completeClaudeStreamToolInput(session, 0)?.input).toEqual({ default: true });
+    expect(consumeClaudeStreamEmittedToolInput(session, "empty", { default: true })).toBe(false);
+    start(session, 0, "canceled");
+    appendClaudeStreamToolInputJson(session, 0, '{"value":');
+    expect(consumeClaudeStreamEmittedToolInput(session, "canceled", { value: 1 })).toBe(true);
+    clearClaudeStreamToolInputTree(session);
+    expect(completeClaudeStreamToolInput(session, 0)).toBeNull();
+    expect(consumeClaudeStreamEmittedToolInput(session, "canceled", { value: 1 })).toBe(false);
+  });
+
   test.each(['{"broken":', "[]", "null", '"string"', "1"])(
     "rejects malformed completed input %s once",
     (json) => {
