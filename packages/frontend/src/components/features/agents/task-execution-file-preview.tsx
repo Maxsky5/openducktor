@@ -426,6 +426,55 @@ const resultBelongsToSelectedFile = (
   );
 };
 
+function resolveFilePreviewPresentation({
+  selectedFile,
+  currentEditorSnapshot,
+  retainedSnapshot,
+  preservePreviousSnapshot,
+  isFileFetching,
+  isCurrentSnapshotReady,
+  editor,
+  isFileError,
+  isFileLoading,
+  fileError,
+}: {
+  selectedFile: TaskExecutionSelectedFile | null;
+  currentEditorSnapshot: FilePreviewSnapshot | null;
+  retainedSnapshot: FilePreviewSnapshot | null;
+  preservePreviousSnapshot: boolean;
+  isFileFetching: boolean;
+  isCurrentSnapshotReady: boolean;
+  editor: Pick<ReturnType<typeof useTaskExecutionFileEditor>, "session" | "isDirty" | "isSaving">;
+  isFileError: boolean;
+  isFileLoading: boolean;
+  fileError: unknown;
+}) {
+  const visibleSnapshot =
+    currentEditorSnapshot ?? (preservePreviousSnapshot ? retainedSnapshot : null);
+  const isSwitchingFiles =
+    selectedFile !== null &&
+    visibleSnapshot !== null &&
+    (visibleSnapshot.selectedFile.rootPath !== selectedFile.rootPath ||
+      visibleSnapshot.selectedFile.relativePath !== selectedFile.relativePath) &&
+    (isFileFetching || !isCurrentSnapshotReady);
+  const codeViewFileId = visibleSnapshot?.codeViewFile?.id ?? null;
+  const hasActiveEditorSession =
+    codeViewFileId !== null &&
+    editor.session?.id === codeViewFileId &&
+    !isSwitchingFiles &&
+    (!isFileError || editor.isDirty || editor.isSaving);
+
+  let message: string | null = null;
+  if (isFileError && !hasActiveEditorSession) {
+    message = errorMessage(fileError);
+  } else if ((isFileLoading || !isCurrentSnapshotReady) && !visibleSnapshot) {
+    message = "Loading file...";
+  } else if (visibleSnapshot?.result.kind === "unsupported") {
+    message = visibleSnapshot.result.message;
+  }
+  return { visibleSnapshot, isSwitchingFiles, codeViewFileId, hasActiveEditorSession, message };
+}
+
 export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelectedFilePreview({
   model: {
     selectedFile,
@@ -509,14 +558,19 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     readyCurrentSnapshot,
     selectedFile,
   ]);
-  const visibleSnapshot =
-    currentEditorSnapshot ?? (preservePreviousSnapshot ? retainedSnapshot : null);
-  const isSwitchingFiles =
-    selectedFile !== null &&
-    visibleSnapshot !== null &&
-    (visibleSnapshot.selectedFile.rootPath !== selectedFile.rootPath ||
-      visibleSnapshot.selectedFile.relativePath !== selectedFile.relativePath) &&
-    (isFileFetching || !isCurrentSnapshotReady);
+  const { visibleSnapshot, isSwitchingFiles, codeViewFileId, hasActiveEditorSession, message } =
+    resolveFilePreviewPresentation({
+      selectedFile,
+      currentEditorSnapshot,
+      retainedSnapshot,
+      preservePreviousSnapshot,
+      isFileFetching,
+      isCurrentSnapshotReady,
+      editor,
+      isFileError,
+      isFileLoading,
+      fileError,
+    });
   const codeViewOptions = useMemo<CodeViewOptions<undefined>>(
     () => ({
       theme: CODE_VIEW_THEME,
@@ -548,17 +602,11 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     }),
     [theme, visibleSnapshot?.codeViewFile?.numberColumnWidth],
   );
-  const codeViewFileId = visibleSnapshot?.codeViewFile?.id ?? null;
   const codeViewRenderKey =
     codeViewFileId !== null ? `${previewSessionKey}:${codeViewFileId}` : null;
   const handleEditorDetach = useCallback(() => {
     attachedEditorRef.current = null;
   }, []);
-  const hasActiveEditorSession =
-    codeViewFileId !== null &&
-    editor.session?.id === codeViewFileId &&
-    !isSwitchingFiles &&
-    (!isFileError || editor.isDirty || editor.isSaving);
   const codeViewItems = useMemo<CodeViewFileItem[]>(() => {
     if (!visibleSnapshot?.codeViewFile || !codeViewFileId) {
       return [];
@@ -638,12 +686,8 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   }
 
   let body: ReactElement;
-  if (isFileError && !hasActiveEditorSession) {
-    body = <FilePreviewState message={errorMessage(fileError)} />;
-  } else if ((isFileLoading || !isCurrentSnapshotReady) && !visibleSnapshot) {
-    body = <FilePreviewState message="Loading file..." />;
-  } else if (visibleSnapshot?.result.kind === "unsupported") {
-    body = <FilePreviewState message={visibleSnapshot.result.message} />;
+  if (message !== null) {
+    body = <FilePreviewState message={message} />;
   } else if (codeViewFileId && codeViewItems.length > 0) {
     body = (
       <EditorAttachmentLifecycle key={codeViewRenderKey} onDetach={handleEditorDetach}>

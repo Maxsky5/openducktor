@@ -4,7 +4,15 @@ import {
   type MarkdownLinkPolicy,
 } from "./markdown-link-policy";
 import { TASK_ASSET_URI_PREFIX, type TaskAssetRenderContext } from "@openducktor/contracts";
-import { lazy, memo, type ReactElement, type ReactNode, Suspense, useMemo } from "react";
+import {
+  type ComponentProps,
+  lazy,
+  memo,
+  type ReactElement,
+  type ReactNode,
+  Suspense,
+  useMemo,
+} from "react";
 import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getShellBridge } from "@/lib/shell-bridge";
@@ -115,6 +123,12 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const rendersTaskAsset = content.includes(TASK_ASSET_URI_PREFIX);
   const needsRichRenderer = rendersTaskAsset || taskAssetContext !== undefined;
   const resolveTaskAssetSrc = taskAssetContext ? getShellBridge().resolveTaskAssetSrc : undefined;
+  const taskAssetProps: Pick<
+    ComponentProps<typeof MarkdownRendererRich>,
+    "taskAssetContext" | "resolveTaskAssetSrc"
+  > = {};
+  if (taskAssetContext) taskAssetProps.taskAssetContext = taskAssetContext;
+  if (resolveTaskAssetSrc) taskAssetProps.resolveTaskAssetSrc = resolveTaskAssetSrc;
 
   let renderedContent: ReactElement;
   if (needsRichRenderer) {
@@ -126,8 +140,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           linkPolicy={linkPolicy}
           premiumCodeBlocks={premiumCodeBlocks}
           fallback={fallback}
-          {...(taskAssetContext ? { taskAssetContext } : {})}
-          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+          {...taskAssetProps}
         />
       </Suspense>
     );
@@ -148,35 +161,20 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     );
   }
 
-  if (hasMermaidCandidate) {
+  const CandidateRenderer = hasMermaidCandidate
+    ? MarkdownRendererMermaidCandidate
+    : MarkdownRendererMathCandidate;
+  if (hasMermaidCandidate || hasMathCandidate) {
     renderedContent = (
       <Suspense fallback={renderedContent}>
-        <MarkdownRendererMermaidCandidate
+        <CandidateRenderer
           markdown={content}
           components={components}
           linkPolicy={linkPolicy}
           fallbackContent={renderedContent}
           premiumCodeBlocks={premiumCodeBlocks}
           fallback={fallback}
-          {...(taskAssetContext ? { taskAssetContext } : {})}
-          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
-        />
-      </Suspense>
-    );
-  }
-
-  if (hasMathCandidate && !hasMermaidCandidate) {
-    renderedContent = (
-      <Suspense fallback={renderedContent}>
-        <MarkdownRendererMathCandidate
-          markdown={content}
-          components={components}
-          linkPolicy={linkPolicy}
-          fallbackContent={renderedContent}
-          premiumCodeBlocks={premiumCodeBlocks}
-          fallback={fallback}
-          {...(taskAssetContext ? { taskAssetContext } : {})}
-          {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+          {...taskAssetProps}
         />
       </Suspense>
     );
