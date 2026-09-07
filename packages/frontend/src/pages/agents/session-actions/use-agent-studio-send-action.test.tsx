@@ -478,4 +478,48 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.unmount();
   });
+  test.each(["workspace", "task", "role"] as const)(
+    "cancels staged submission after a %s switch",
+    async (context) => {
+      const staged =
+        createDeferred<Awaited<ReturnType<typeof hostClient.workspaceStageLocalAttachment>>>();
+      const stage = mock(() => staged.promise);
+      hostClient.workspaceStageLocalAttachment = stage;
+      const startSession = mock(async () => sessionWorkflowResult("never"));
+      const sendAgentMessage = mock(async () => {});
+      const args: HookArgs = {
+        ...createBaseArgs(),
+        selectedSessionIdentity: null,
+        startSession,
+        sendAgentMessage,
+      };
+      const harness = createHookHarness(useAgentStudioSendAction, args);
+      let submitted!: Promise<AgentChatSendResult>;
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          submitted = state.onSend(createAttachmentDraft());
+        });
+        await harness.waitFor(() => stage.mock.calls.length === 1);
+        await harness.run(async (state) => {
+          expect(await state.onSend(createAttachmentDraft())).toBe(false);
+        });
+        const nextArgs: HookArgs = { ...args };
+        if (context === "workspace") nextArgs.workspaceId = "workspace-2";
+        if (context === "task") nextArgs.taskId = "task-2";
+        if (context === "role") nextArgs.role = "planner";
+        await harness.update(nextArgs);
+        expect(harness.getLatest().isSending).toBe(false);
+        await harness.run(async () => {
+          staged.resolve({ path: "/tmp/brief.pdf" });
+          expect(await submitted).toBe(false);
+        });
+        expect(stage).toHaveBeenCalledTimes(1);
+        expect(startSession).not.toHaveBeenCalled();
+        expect(sendAgentMessage).not.toHaveBeenCalled();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 });

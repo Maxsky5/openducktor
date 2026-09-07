@@ -66,6 +66,8 @@ const collapseLeadingWhitespaceAfterSkippedPart = (
 
 export const normalizeAgentUserMessageParts = (
   parts: AgentUserMessagePart[],
+  // Delivery of confirmed text must not apply composer boundary trimming.
+  options: { preserveTextWhitespace?: boolean } = {},
 ): AgentUserMessagePart[] => {
   const merged = parts.reduce<AgentUserMessagePart[]>((acc, part) => {
     if (part.kind === "text") {
@@ -85,6 +87,9 @@ export const normalizeAgentUserMessageParts = (
   }
 
   const normalized = merged.map((part, index) => {
+    if (options.preserveTextWhitespace) {
+      return part;
+    }
     if (index === 0) {
       return trimBoundaryTextPart(part, "start");
     }

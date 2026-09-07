@@ -322,7 +322,7 @@ const prepareManualSessionCompactionSend = (): PreparedUserSend => ({
 const toAdmittedUserDisplayParts = (
   parts: SendAgentUserMessageInput["parts"],
 ): AgentUserMessageDisplayPart[] =>
-  normalizeAgentUserMessageParts(parts).map((part) => {
+  normalizeAgentUserMessageParts(parts, { preserveTextWhitespace: true }).map((part) => {
     if (part.kind === "slash_command") {
       return { kind: "text", text: `/${part.command.trigger}` };
     }

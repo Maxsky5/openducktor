@@ -286,20 +286,9 @@ export const encodeClaudePromptTextWithSourceRanges = (parts: AgentUserMessagePa
     previousPart = part;
   }
 
-  const leadingWhitespaceLength = text.length - text.trimStart().length;
-  const trimmedText = text.trim();
   return {
-    text: trimmedText,
-    sourceTextByPartIndex: sourceTextByPartIndex.map((sourceText) => {
-      if (!sourceText) {
-        return undefined;
-      }
-      return {
-        value: sourceText.value,
-        start: sourceText.start - leadingWhitespaceLength,
-        end: sourceText.end - leadingWhitespaceLength,
-      };
-    }),
+    text,
+    sourceTextByPartIndex,
   } satisfies {
     text: string;
     sourceTextByPartIndex: readonly (AgentUserMessageSourceText | undefined)[];

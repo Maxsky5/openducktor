@@ -1,3 +1,5 @@
+import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
@@ -5,7 +7,7 @@ import {
   repoConfigSchema,
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, useQueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
   type AgentChatComposerDraft,
@@ -263,7 +265,7 @@ const createTestRuntimeDefinitionsContextValue = () =>
     }),
   });
 
-const createHookHarness = (initialProps: HookArgs) => {
+const createHookWrapper = () => {
   const checksStateContextValue = createChecksStateContextValue();
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
@@ -304,8 +306,13 @@ const createHookHarness = (initialProps: HookArgs) => {
       ),
     );
 
-  return createCoreHookHarness(useAgentStudioSessionActions, initialProps, { wrapper });
+  return wrapper;
 };
+
+const createHookHarness = (initialProps: HookArgs) =>
+  createCoreHookHarness(useAgentStudioSessionActions, initialProps, {
+    wrapper: createHookWrapper(),
+  });
 
 const createBaseArgs = (): HookArgs => {
   return {
@@ -2067,4 +2074,150 @@ describe("direct prepared submission", () => {
     expect(start).toHaveBeenCalledTimes(1);
     await harness.unmount();
   });
+});
+
+describe("prepared composer catalog refresh", () => {
+  test.each(["model", "profile", "variant"] as const)(
+    "rejects an explicit %s removed after selection without repair or a modal",
+    async (removed) => {
+      const start = mock(async () => sessionIdentity("never"));
+      const send = mock(async () => {});
+      const args = {
+        ...createBaseArgs(),
+        runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+        sendAgentMessage: send,
+      };
+      let catalog = args.newSessionCatalog!;
+      const loadCatalog = async () => catalog;
+      const harness = createCoreHookHarness(
+        (props: HookArgs) => {
+          const composer = useAgentStudioChatComposer({
+            workspaceRepoPath: props.workspaceRepoPath,
+            selectedSession: props.selectedSession,
+            role: props.role,
+            reusablePrompts: props.reusablePrompts,
+            repoSettings: props.repoSettings,
+            favoriteState: props.favoriteState,
+            updateAgentSessionModel: async () => {},
+            loadCatalog,
+          });
+          const actions = useAgentStudioSessionActions({
+            ...props,
+            selectionForNewSession: composer.selectionForNewSession,
+            newSessionCatalog: composer.newSessionCatalog,
+            selectedModelDescriptor: composer.selectedModelDescriptor,
+          });
+          return { composer, actions, queryClient: useQueryClient() };
+        },
+        args,
+        { wrapper: createHookWrapper() },
+      );
+      try {
+        await harness.mount();
+        await harness.waitFor((state) => state.composer.newSessionCatalog !== null);
+        await harness.run(({ composer }) => {
+          composer.modelPicker.onValueChange({
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+          });
+        });
+        const selected = harness.getLatest().composer.selectionForNewSession;
+        expect(selected).toEqual(args.selectionForNewSession);
+        catalog = {
+          ...catalog,
+          profiles: removed === "profile" ? [] : catalog.profiles,
+          models: catalog.models.map((model) => ({
+            ...model,
+            id: removed === "model" ? "openai/replacement" : model.id,
+            modelId: removed === "model" ? "replacement" : model.modelId,
+            variants: removed === "variant" ? ["replacement"] : model.variants,
+          })),
+        };
+        await harness.run(async ({ queryClient }) => {
+          queryClient.setQueryData(runtimeCatalogQueryKeys.repo("/repo", "opencode"), catalog);
+        });
+        await harness.waitFor(
+          (state) =>
+            state.composer.newSessionCatalog?.models[0]?.modelId === catalog.models[0]?.modelId &&
+            state.composer.newSessionCatalog?.profiles?.length === catalog.profiles?.length &&
+            state.composer.newSessionCatalog?.models[0]?.variants[0] ===
+              catalog.models[0]?.variants[0],
+        );
+        await harness.run(async ({ actions }) => {
+          await expect(actions.onSend(createComposerDraft("draft"))).rejects.toThrow("unavailable");
+        });
+        expect(harness.getLatest().composer.selectionForNewSession).toEqual(selected);
+        expect(harness.getLatest().actions.sessionStartModal).toBeNull();
+        expect(start).not.toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+});
+
+describe("direct submission context isolation", () => {
+  test.each(["workspace", "task", "role"] as const)(
+    "keeps startup and send in the original context after a %s switch",
+    async (context) => {
+      const creation = createDeferred<AgentSessionIdentity>();
+      const sending = createDeferred<void>();
+      const start = mock(() => creation.promise);
+      const send = mock(() => sending.promise);
+      const navigation = mock(() => {});
+      const args = {
+        ...createBaseArgs(),
+        scheduleQueryUpdate: navigation,
+        runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+        sendAgentMessage: send,
+      };
+      const harness = createHookHarness(args);
+      let submitted!: Promise<AgentChatSendResult>;
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          submitted = state.onSend(createComposerDraft("original"));
+        });
+        await harness.waitFor(() => start.mock.calls.length === 1);
+        await harness.run(async (state) => {
+          expect(await state.onSend(createComposerDraft("duplicate"))).toBe(false);
+        });
+        const nextArgs: HookArgs = { ...args };
+        if (context === "workspace") {
+          nextArgs.activeWorkspaceId = "workspace-2";
+          nextArgs.workspaceRepoPath = "/repo-2";
+        }
+        if (context === "task") {
+          nextArgs.taskId = "task-2";
+          nextArgs.selectedTask = createTask({ id: "task-2" });
+        }
+        if (context === "role") {
+          nextArgs.role = "planner";
+          nextArgs.launchActionId = "planner_initial";
+        }
+        await harness.update(nextArgs);
+        expect(harness.getLatest().isSending).toBe(false);
+        expect(harness.getLatest().isStarting).toBe(false);
+        await harness.run(() => {
+          creation.resolve(sessionIdentity("original"));
+        });
+        await harness.waitFor(() => send.mock.calls.length === 1);
+        expect(send).toHaveBeenCalledWith(sessionIdentity("original"), [
+          { kind: "text", text: "original" },
+        ]);
+        expect(navigation).not.toHaveBeenCalled();
+        expect(harness.getLatest().isSending).toBe(false);
+        await harness.run(async () => {
+          sending.resolve();
+          expect(await submitted).toBe(true);
+        });
+        expect(start).toHaveBeenCalledTimes(1);
+        expect(harness.getLatest().sessionStartModal).toBeNull();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 });

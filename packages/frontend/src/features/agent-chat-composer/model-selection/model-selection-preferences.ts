@@ -104,13 +104,15 @@ export const resolveChatComposerModelSelections = ({
   }
 
   const selectionCatalog = source.composerCatalog;
-  const selectionForNewSession = selectionCatalog
-    ? resolvePreferredModelSelection({
-        catalog: selectionCatalog,
-        fallbackSelection: defaultSelection,
-        preferredSelection: source.draftSelection,
-      })
-    : source.draftSelection;
+  const selectionForNewSession =
+    source.draftSelection ??
+    (selectionCatalog
+      ? resolvePreferredModelSelection({
+          catalog: selectionCatalog,
+          fallbackSelection: defaultSelection,
+          preferredSelection: null,
+        })
+      : defaultSelection);
 
   return {
     selectionCatalog,

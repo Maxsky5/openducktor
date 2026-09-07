@@ -72,7 +72,7 @@ const buildQueuedRequestSignatureWithAttachmentPathMode = (
   model: AgentModelSelection | undefined,
   attachmentPathMode: AttachmentPathMode,
 ): string => {
-  const normalizedParts = normalizeAgentUserMessageParts(parts);
+  const normalizedParts = normalizeAgentUserMessageParts(parts, { preserveTextWhitespace: true });
   const promptText = buildOpenCodePromptText(normalizedParts);
   const nonTextParts: ComparableNonTextPart[] = [
     ...promptText.fileReferences.map(({ file, sourceText }) => ({

@@ -290,10 +290,15 @@ export const startSessionWorkflow = async ({
           text: confirmedPostStartMessage,
         },
       ];
+      const sendOptions: AgentMessageSendOptions = {};
+      if (intent.postStartAction === "kickoff" && intent.kickoffPrompt !== undefined) {
+        sendOptions.preserveTextWhitespace = true;
+      }
       if (postStartErrorAttentionId) {
-        await confirmedPostStartMessageSender(session, parts, {
-          errorAttentionId: postStartErrorAttentionId,
-        });
+        sendOptions.errorAttentionId = postStartErrorAttentionId;
+      }
+      if (Object.keys(sendOptions).length > 0) {
+        await confirmedPostStartMessageSender(session, parts, sendOptions);
       } else {
         await confirmedPostStartMessageSender(session, parts);
       }

@@ -89,6 +89,21 @@ const createSession = (overrides?: {
 };
 
 describe("message-execution", () => {
+  test("delivers exact kickoff text to the native prompt transport", async () => {
+    const { session, promptAsync, command } = createSession();
+    const text = "\n\n  Custom kickoff\n{{task.title}}\n ";
+    const result = await sendUserMessage({
+      session,
+      request: { externalSessionId: "session-1", parts: [{ kind: "text", text }] },
+      tools: {},
+    });
+    expect(promptAsync).toHaveBeenCalledTimes(1);
+    expect(promptAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ parts: [{ type: "text", text }] }),
+    );
+    expect(result.parts).toEqual([{ kind: "text", text }]);
+    expect(command).not.toHaveBeenCalled();
+  });
   test("routes slash command messages through the native command transport", async () => {
     const { session, command, promptAsync } = createSession();
 

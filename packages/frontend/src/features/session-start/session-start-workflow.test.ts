@@ -616,9 +616,11 @@ describe("confirmed kickoff", () => {
       sendAgentMessage,
     });
     expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("custom"), [
-      { kind: "text", text },
-    ]);
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      sessionIdentity("custom"),
+      [{ kind: "text", text }],
+      { preserveTextWhitespace: true },
+    );
   });
   test("rejects blank custom text before mutations", async () => {
     const persistTaskTargetBranch = mock(async () => undefined);
@@ -677,6 +679,7 @@ test.each(["fresh", "reuse", "fork"] as const)(
     expect(send.mock.calls[0]).toEqual([
       sessionIdentity("kept"),
       [{ kind: "text", text: " exact\nmessage " }],
+      { preserveTextWhitespace: true },
     ]);
   },
 );
@@ -739,7 +742,9 @@ test("retry sends the retained kickoff to the created session without another st
   await result.retryPostStartMessage?.();
   expect(start).toHaveBeenCalledTimes(1);
   expect(send).toHaveBeenCalledTimes(2);
-  expect(send).toHaveBeenLastCalledWith(sessionIdentity("kept"), [
-    { kind: "text", text: "retain this" },
-  ]);
+  expect(send).toHaveBeenLastCalledWith(
+    sessionIdentity("kept"),
+    [{ kind: "text", text: "retain this" }],
+    { preserveTextWhitespace: true },
+  );
 });

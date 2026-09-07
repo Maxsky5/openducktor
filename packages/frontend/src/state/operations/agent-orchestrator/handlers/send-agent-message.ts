@@ -176,7 +176,9 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     parts: AgentUserMessagePart[],
     options?: AgentMessageSendOptions,
   ): Promise<void> => {
-    const normalizedParts = normalizeAgentUserMessageParts(parts);
+    const normalizedParts = normalizeAgentUserMessageParts(parts, {
+      preserveTextWhitespace: options?.preserveTextWhitespace ?? false,
+    });
     if (!hasMeaningfulAgentUserMessageParts(normalizedParts)) {
       return;
     }

@@ -41,6 +41,27 @@ const createAttachment = () => ({
 });
 
 describe("agent-user-message-parts", () => {
+  test("preserves confirmed text without changing blank validation or ordinary normalization", () => {
+    const text = "\n  Custom instruction\n{{task.title}}\n ";
+    const input = [
+      { kind: "text" as const, text: text.slice(0, 5) },
+      { kind: "text" as const, text: text.slice(5) },
+    ];
+    expect(normalizeAgentUserMessageParts(input, { preserveTextWhitespace: true })).toEqual([
+      { kind: "text", text },
+    ]);
+    expect(normalizeAgentUserMessageParts(input)).toEqual([
+      { kind: "text", text: text.trimStart() },
+    ]);
+    expect(input[0]?.text).toBe(text.slice(0, 5));
+    expect(
+      hasMeaningfulAgentUserMessageParts(
+        normalizeAgentUserMessageParts([{ kind: "text", text: " \n " }], {
+          preserveTextWhitespace: true,
+        }),
+      ),
+    ).toBe(false);
+  });
   test("merges adjacent text parts and trims only boundaries", () => {
     const command = createCommand();
 

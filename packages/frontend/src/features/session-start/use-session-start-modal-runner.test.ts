@@ -512,3 +512,93 @@ test("prompt resolution ignores replaced requests and confirmation holds a synch
   expect(await currentResult).toBe("started");
   await harness.unmount();
 });
+
+test("ignores out-of-order branch prompt results and blocks unresolved confirmation", async () => {
+  const resolutions: {
+    branch: string | undefined;
+    resolve: (text: string) => void;
+    reject: (cause: Error) => void;
+  }[] = [];
+  const execute = mock(async () => "started");
+  const harness = createHookHarness(
+    useSessionStartModalRunner,
+    {
+      favoriteState: {
+        favorites: [],
+        isLoading: false,
+        readError: null,
+        isMutationPending: false,
+        mutationError: null,
+        canMutate: false,
+        toggleFavorite: () => {},
+        retryRead: () => {},
+        retryMutation: () => {},
+      },
+      repoSettings: null,
+      workspaceRepoPath: "/repo",
+    },
+    {
+      runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        loadRepoRuntimeCatalog: async () => CATALOG,
+      }),
+    },
+  );
+
+  await harness.mount();
+  try {
+    await harness.run((runner) => {
+      void runner.runSessionStartRequest(
+        {
+          source: "agent_studio",
+          taskId: "TASK-1",
+          role: "build",
+          launchActionId: "build_implementation_start",
+          postStartAction: "kickoff",
+          selectedModel: SELECTED_MODEL,
+          resolveKickoffPrompt: (branch) =>
+            new Promise<string>((resolve, reject) =>
+              resolutions.push({ branch: branch?.branch, resolve, reject }),
+            ),
+        },
+        execute,
+      );
+    });
+    await harness.waitFor(() => resolutions.length === 1);
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onSelectTargetBranch?.("refs/heads/one");
+    });
+    await harness.waitFor(() => resolutions.length === 2);
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onSelectTargetBranch?.("refs/heads/two");
+    });
+    await harness.waitFor(() => resolutions.length === 3);
+    expect(resolutions.map((entry) => entry.branch)).toEqual(["main", "one", "two"]);
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onConfirm({
+        startMode: "fresh",
+        sourceSessionOptionValue: null,
+        kickoffPrompt: "unresolved",
+        runInBackground: false,
+      });
+    });
+    expect(execute).not.toHaveBeenCalled();
+    await harness.run(() => {
+      resolutions[2]!.resolve("prompt for two");
+    });
+    await harness.waitFor((runner) => runner.sessionStartModal?.kickoffPrompt === "prompt for two");
+    await harness.run(() => {
+      resolutions[1]!.resolve("stale one");
+      resolutions[0]!.reject(new Error("stale error"));
+    });
+    expect(harness.getLatest().sessionStartModal?.kickoffPrompt).toBe("prompt for two");
+    expect(harness.getLatest().sessionStartModal?.kickoffPromptError).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+  } finally {
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onOpenChange(false);
+    });
+    await harness.unmount();
+  }
+});

@@ -25,6 +25,19 @@ const fileReference = {
 };
 
 describe("encodeClaudePromptText", () => {
+  test("preserves confirmed text whitespace through native message encoding", async () => {
+    const text = "\n  Custom instruction\n{{task.title}}\n ";
+    const parts = [{ kind: "text" as const, text }];
+    expect(encodeClaudePromptText(parts)).toBe(text);
+    expect((await toClaudeMessageFromParts(parts)).message.content).toEqual([
+      { type: "text", text },
+    ]);
+    const encoded = encodeClaudePromptTextWithSourceRanges([
+      ...parts,
+      { kind: "file_reference", file: fileReference },
+    ]);
+    expect(encoded.sourceTextByPartIndex[1]?.start).toBe(text.length);
+  });
   test("encodes SDK-native slash commands and file references as Claude prompt text", () => {
     expect(
       encodeClaudePromptText([

@@ -134,6 +134,7 @@ export type AgentChatMessage = {
 };
 
 export type AgentMessageSendOptions = {
+  preserveTextWhitespace?: boolean;
   errorAttentionId?: string;
 };
 

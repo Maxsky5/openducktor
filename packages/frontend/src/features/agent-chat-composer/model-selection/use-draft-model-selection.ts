@@ -118,9 +118,11 @@ export const useDraftModelSelectionState = ({
 
   return {
     draftSelection,
+    explicitDraftSelection: storedDraftSelection ?? null,
     applyDraftSelection,
   } satisfies {
     draftSelection: AgentModelSelection | null;
+    explicitDraftSelection: AgentModelSelection | null;
     applyDraftSelection: (selection: AgentModelSelection | null) => void;
   };
 };

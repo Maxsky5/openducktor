@@ -57,7 +57,7 @@ const collapseLeadingWhitespaceAfterSkippedPart = (
 };
 
 const buildOpenCodeMessageEncoding = (parts: AgentUserMessagePart[]) => {
-  const normalized = normalizeAgentUserMessageParts(parts);
+  const normalized = normalizeAgentUserMessageParts(parts, { preserveTextWhitespace: true });
   let text = "";
   const fileReferences: AgentUserMessagePromptFileReference[] = [];
   const subagentReferences: AgentUserMessagePromptSubagentReference[] = [];
