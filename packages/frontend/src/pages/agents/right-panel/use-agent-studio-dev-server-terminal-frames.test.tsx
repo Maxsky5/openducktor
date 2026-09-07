@@ -173,7 +173,7 @@ describe("dev server terminal frame publication", () => {
           view.rerender(element());
         });
         const retainedReplay =
-          "[Dev server output exceeded the 2,000-chunk buffer. Showing retained output.]\r\n" +
+          "[Dev server output was truncated. Showing retained output.]\r\n" +
           Array.from({ length: 2_000 }, (_, index) => `${index + 1},`).join("");
         expect(screen).toBe(retainedReplay);
         expect(writes).toEqual([`frontend-${priorSequence}\r\n`, retainedReplay]);
@@ -279,3 +279,61 @@ describe("dev server terminal frame publication", () => {
     }
   });
 });
+
+test.each(["delayed prefix", "host tail", "host tail without ring overflow"])(
+  "keeps loss evidence when %s replaces a pending burst",
+  (scenario) => {
+    const harness = createHarness();
+    const end = scenario === "host tail without ring overflow" ? 100 : 2_001;
+    const firstRetained = scenario === "delayed prefix" ? 2 : 50;
+    try {
+      act(() => {
+        harness.getLatest().applyTerminalBuffersFromEvent(event(0), "frontend");
+      });
+      flushFrame();
+      act(() => {
+        for (let sequence = 1; sequence <= end; sequence += 1) {
+          harness.getLatest().applyTerminalBuffersFromEvent(event(sequence), "frontend");
+        }
+      });
+      const pendingFrame = [...frames.values()][0];
+      const script = buildScript({
+        bufferedTerminalChunks:
+          scenario === "delayed prefix"
+            ? [chunk(0), chunk(1)]
+            : Array.from({ length: end - firstRetained + 1 }, (_, index) =>
+                chunk(index + firstRetained),
+              ),
+      });
+      act(() => {
+        if (scenario === "delayed prefix") {
+          harness
+            .getLatest()
+            .hydrateTerminalBuffersFromState(buildState({ scripts: [script] }), "frontend");
+        } else {
+          harness.getLatest().applyTerminalBuffersFromEvent(
+            {
+              type: "script_status_changed",
+              repoPath: "/repo",
+              taskId: "task-7",
+              updatedAt: "2026-03-25T10:00:00.000Z",
+              script,
+            },
+            "frontend",
+          );
+        }
+      });
+      const published = harness.getLatest().selectedScriptTerminalBuffer;
+      expect(frames.size).toBe(0);
+      expect(published?.evictedThroughSequence).toBe(firstRetained - 1);
+      expect(published?.entries[0]?.sequence).toBe(firstRetained);
+      expect(published?.lastSequence).toBe(end);
+      act(() => {
+        pendingFrame?.(0);
+      });
+      expect(harness.getLatest().selectedScriptTerminalBuffer).toBe(published);
+    } finally {
+      harness.unmount();
+    }
+  },
+);

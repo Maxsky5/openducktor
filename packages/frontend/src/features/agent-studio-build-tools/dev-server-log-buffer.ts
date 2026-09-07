@@ -257,6 +257,27 @@ export const applyDevServerTerminalBufferReplacement = (
   scriptId: string,
   replacement: DevServerTerminalBufferReplacement,
 ): void => {
+  const previousBuffer = store.get(scriptId);
+  let evictedThroughSequence: number | null = null;
+  if (
+    previousBuffer &&
+    areDevServerRunIdentitiesEqual(previousBuffer.runIdentity, replacement.runIdentity)
+  ) {
+    // Reconciliation can shorten a replay within the same run. Keep evidence of
+    // earlier eviction and of known entries that this replacement removes.
+    evictedThroughSequence = previousBuffer.evictedThroughSequence;
+    const retainedSequences = new Set(
+      replacement.terminalChunks
+        .slice(-MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS)
+        .map((chunk) => chunk.sequence),
+    );
+    for (const entry of readCurrentBufferEntries(previousBuffer)) {
+      if (!retainedSequences.has(entry.sequence)) {
+        evictedThroughSequence = Math.max(evictedThroughSequence ?? entry.sequence, entry.sequence);
+      }
+    }
+  }
+
   replaceDevServerTerminalBuffer(
     store,
     scriptId,
@@ -265,6 +286,7 @@ export const applyDevServerTerminalBufferReplacement = (
   );
 
   const buffer = getOrCreateDevServerTerminalBufferState(store, scriptId);
+  buffer.evictedThroughSequence = evictedThroughSequence;
   buffer.firstSnapshotSequence = replacement.snapshotWindow.firstSequence;
   buffer.lastSnapshotSequence = replacement.snapshotWindow.lastSequence;
   buffer.runIdentity = replacement.runIdentity;

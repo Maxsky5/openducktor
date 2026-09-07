@@ -210,6 +210,13 @@ const renderTerminalBuffer = ({
     evictedThroughSequence !== null &&
     (lastRenderedSequence === null || lastRenderedSequence < evictedThroughSequence);
 
+  // An empty or shorter replay can acknowledge loss beyond its last entry.
+  const consumedThroughSequence =
+    evictedThroughSequence !== null &&
+    (nextLastSequence === null || nextLastSequence < evictedThroughSequence)
+      ? evictedThroughSequence
+      : nextLastSequence;
+
   if (shouldReplay || didLoseUnseenOutput) {
     const hasRenderedCurrentBinding = renderedStateRef.current.terminalIdentityKey !== null;
     const activeBinding = hasRenderedCurrentBinding ? recreateTerminalBinding() : binding;
@@ -220,7 +227,7 @@ const renderTerminalBuffer = ({
     activeBinding.terminal.reset();
     activeBinding.terminal.clear();
     const truncationNotice = didLoseUnseenOutput
-      ? "[Dev server output exceeded the 2,000-chunk buffer. Showing retained output.]\r\n"
+      ? "[Dev server output was truncated. Showing retained output.]\r\n"
       : "";
     writeTerminalOutput(
       activeBinding.terminal,
@@ -230,13 +237,13 @@ const renderTerminalBuffer = ({
     renderedStateRef.current = {
       terminalIdentityKey,
       resetToken: nextResetToken,
-      lastSequence: nextLastSequence,
+      lastSequence: consumedThroughSequence,
     };
     return;
   }
 
   writeTerminalOutput(binding.terminal, readDevServerTerminalOutput(entries, lastRenderedSequence));
-  renderedStateRef.current.lastSequence = nextLastSequence;
+  renderedStateRef.current.lastSequence = consumedThroughSequence;
 };
 
 export const useDevServerTerminalBinding = ({

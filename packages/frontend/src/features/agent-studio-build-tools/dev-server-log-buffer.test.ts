@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import {
   appendDevServerTerminalChunk,
+  applyDevServerTerminalBufferReplacement,
   createDevServerTerminalBufferStore,
   getDevServerTerminalBuffer,
   getDevServerTerminalBufferReplacementContext,
@@ -1269,4 +1270,31 @@ describe("dev-server-log-buffer", () => {
     expect(getDevServerTerminalBuffer(store, "removed")).toBeNull();
     expect(getDevServerTerminalBuffer(store, "frontend")?.entries[0]?.data).toBe("fresh\r\n");
   });
+});
+
+test("same-run reconciliation tracks removed entries, not numeric sequence gaps", () => {
+  const store = createDevServerTerminalBufferStore();
+  replaceDevServerTerminalBuffer(store, "frontend", [buildChunk(0), buildChunk(3), buildChunk(9)]);
+  const replace = (sequences: number[], runId = "frontend:1") => {
+    const chunks = sequences.map((sequence) =>
+      buildChunk(sequence, { runIdentity: { runId, runOrder: testRunOrder(runId) } }),
+    );
+    applyDevServerTerminalBufferReplacement(store, "frontend", {
+      terminalChunks: chunks,
+      runIdentity: chunks[0]?.runIdentity ?? null,
+      snapshotWindow: {
+        count: chunks.length,
+        firstSequence: sequences[0] ?? null,
+        lastSequence: sequences.at(-1) ?? null,
+      },
+    });
+  };
+  replace([0, 3, 9, 15]);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBeNull();
+  replace([0, 9, 15]);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBe(3);
+  replace([0, 9, 15, 20]);
+  expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBe(3);
+  replace([0], "frontend:2");
+  expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBeNull();
 });
