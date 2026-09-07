@@ -1,0 +1,493 @@
+{
+  "applicationCommit": "800022b1ac33303ea33014d6e1873983fd5f9649",
+  "sourceArtifacts": {
+    "network-evidence.json": "215329cf80285290da5f459d424af6d2f882d7d53e7731adc29d5c6c493b9039",
+    "native-history.json": "a070ca361d852fe2289229479bcde12379efd6fba351b9fb1f474c961b3c33ec"
+  },
+  "note": "Selected fields from browser HAR requests/responses and native OpenCode message history. System prompts, unrelated traffic, and non-text native parts are omitted. Status 0 is the deliberately aborted browser send request.",
+  "scenarios": {
+    "direct-preparation": {
+      "calls": []
+    },
+    "kanban-success": {
+      "calls": [
+        {
+          "command": "agent_session_workflow_start",
+          "status": 200,
+          "request": {
+            "repoPath": "/private/tmp/a0a9-live/repo",
+            "runtimeKind": "opencode",
+            "sessionScope": {
+              "kind": "workflow",
+              "taskId": "a0a9-live-jwuv",
+              "role": "build"
+            },
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          },
+          "response": {
+            "externalSessionId": "ses_f81d7045fffelm6Xy5F4R5h5or",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/Users/maxsky5/.openducktor-local4/worktrees/a0a9-live/a0a9-live-jwuv"
+          }
+        },
+        {
+          "command": "agent_session_control_send",
+          "status": 200,
+          "request": {
+            "repoPath": "/private/tmp/a0a9-live/repo",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/Users/maxsky5/.openducktor-local4/worktrees/a0a9-live/a0a9-live-jwuv",
+            "externalSessionId": "ses_f81d7045fffelm6Xy5F4R5h5or",
+            "sessionScope": {
+              "kind": "workflow",
+              "taskId": "a0a9-live-jwuv",
+              "role": "build"
+            },
+            "parts": [
+              {
+                "kind": "text",
+                "text": "\n  A0A9-KANBAN-EXACT\nThis is a UI acceptance check. Do not use tools, edit files, or change task state. Reply only A0A9-KANBAN-OK.\n\nLine 01: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 02: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 03: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 04: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 05: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 06: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 07: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 08: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 09: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 10: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 11: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 12: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 13: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 14: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 15: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 16: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 17: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 18: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 19: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 20: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 21: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 22: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 23: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 24: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 25: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 26: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 27: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 28: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 29: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 30: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 31: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 32: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 33: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 34: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 35: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 36: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 37: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 38: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 39: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 40: literal {task.title} stays unchanged; whitespace belongs to this test.\n  END-A0A9  \n"
+              }
+            ],
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          },
+          "response": {
+            "externalSessionId": "ses_f81d7045fffelm6Xy5F4R5h5or",
+            "type": "user_message",
+            "messageId": "msg_07e28ff770017QCf1S2rceVOPn",
+            "parts": [
+              {
+                "kind": "text",
+                "text": "\n  A0A9-KANBAN-EXACT\nThis is a UI acceptance check. Do not use tools, edit files, or change task state. Reply only A0A9-KANBAN-OK.\n\nLine 01: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 02: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 03: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 04: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 05: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 06: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 07: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 08: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 09: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 10: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 11: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 12: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 13: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 14: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 15: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 16: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 17: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 18: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 19: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 20: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 21: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 22: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 23: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 24: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 25: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 26: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 27: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 28: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 29: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 30: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 31: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 32: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 33: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 34: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 35: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 36: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 37: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 38: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 39: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 40: literal {task.title} stays unchanged; whitespace belongs to this test.\n  END-A0A9  \n"
+              }
+            ],
+            "state": "read",
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          }
+        }
+      ],
+      "nativeMessages": [
+        {
+          "info": {
+            "id": "msg_07e28ff770017QCf1S2rceVOPn",
+            "sessionID": "ses_f81d7045fffelm6Xy5F4R5h5or",
+            "role": "user",
+            "model": {
+              "providerID": "opencode-go",
+              "modelID": "gpt-5.6-luna",
+              "variant": "none"
+            },
+            "agent": "build",
+            "time": {
+              "created": 1788823011452
+            }
+          },
+          "textParts": [
+            "\n  A0A9-KANBAN-EXACT\nThis is a UI acceptance check. Do not use tools, edit files, or change task state. Reply only A0A9-KANBAN-OK.\n\nLine 01: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 02: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 03: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 04: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 05: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 06: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 07: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 08: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 09: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 10: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 11: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 12: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 13: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 14: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 15: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 16: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 17: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 18: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 19: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 20: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 21: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 22: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 23: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 24: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 25: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 26: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 27: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 28: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 29: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 30: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 31: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 32: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 33: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 34: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 35: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 36: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 37: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 38: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 39: literal {task.title} stays unchanged; whitespace belongs to this test.\nLine 40: literal {task.title} stays unchanged; whitespace belongs to this test.\n  END-A0A9  \n"
+          ]
+        },
+        {
+          "info": {
+            "id": "msg_07e2900f100186gq55mqRkMNeh",
+            "sessionID": "ses_f81d7045fffelm6Xy5F4R5h5or",
+            "role": "assistant",
+            "agent": "build",
+            "variant": "none",
+            "providerID": "opencode-go",
+            "modelID": "gpt-5.6-luna",
+            "time": {
+              "created": 1788823011569,
+              "completed": 1788823013702
+            }
+          },
+          "textParts": ["A0A9-KANBAN-OK"]
+        }
+      ]
+    },
+    "studio-success": {
+      "calls": [
+        {
+          "command": "agent_session_workflow_start",
+          "status": 200,
+          "request": {
+            "repoPath": "/private/tmp/a0a9-live/repo",
+            "runtimeKind": "opencode",
+            "sessionScope": {
+              "kind": "workflow",
+              "taskId": "a0a9-live-jwuv",
+              "role": "build"
+            },
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          },
+          "response": {
+            "externalSessionId": "ses_f81d5a350ffea92NJOi0Ineu4S",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/Users/maxsky5/.openducktor-local4/worktrees/a0a9-live/a0a9-live-jwuv"
+          }
+        },
+        {
+          "command": "agent_session_control_send",
+          "status": 200,
+          "request": {
+            "repoPath": "/private/tmp/a0a9-live/repo",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/Users/maxsky5/.openducktor-local4/worktrees/a0a9-live/a0a9-live-jwuv",
+            "externalSessionId": "ses_f81d5a350ffea92NJOi0Ineu4S",
+            "sessionScope": {
+              "kind": "workflow",
+              "taskId": "a0a9-live-jwuv",
+              "role": "build"
+            },
+            "parts": [
+              {
+                "kind": "text",
+                "text": "A0A9-STUDIO-EXACT. Do not use tools, edit files, or change task state. Reply only A0A9-STUDIO-OK.\nKeyboard-edited line."
+              }
+            ],
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          },
+          "response": {
+            "externalSessionId": "ses_f81d5a350ffea92NJOi0Ineu4S",
+            "type": "user_message",
+            "messageId": "msg_07e2a5d5e001k2sLT3RKs8yB6U",
+            "parts": [
+              {
+                "kind": "text",
+                "text": "A0A9-STUDIO-EXACT. Do not use tools, edit files, or change task state. Reply only A0A9-STUDIO-OK.\nKeyboard-edited line."
+              }
+            ],
+            "state": "read",
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          }
+        }
+      ],
+      "nativeMessages": [
+        {
+          "info": {
+            "id": "msg_07e2a5d5e001k2sLT3RKs8yB6U",
+            "sessionID": "ses_f81d5a350ffea92NJOi0Ineu4S",
+            "role": "user",
+            "model": {
+              "providerID": "opencode-go",
+              "modelID": "gpt-5.6-luna",
+              "variant": "none"
+            },
+            "agent": "build",
+            "time": {
+              "created": 1788823100768
+            }
+          },
+          "textParts": [
+            "A0A9-STUDIO-EXACT. Do not use tools, edit files, or change task state. Reply only A0A9-STUDIO-OK.\nKeyboard-edited line."
+          ]
+        },
+        {
+          "info": {
+            "id": "msg_07e2a5d67001MkltoUPBw3O6nq",
+            "sessionID": "ses_f81d5a350ffea92NJOi0Ineu4S",
+            "role": "assistant",
+            "agent": "build",
+            "variant": "none",
+            "providerID": "opencode-go",
+            "modelID": "gpt-5.6-luna",
+            "time": {
+              "created": 1788823100775,
+              "completed": 1788823103381
+            }
+          },
+          "textParts": ["A0A9-STUDIO-OK"]
+        }
+      ]
+    },
+    "direct-success": {
+      "calls": [
+        {
+          "command": "agent_session_workflow_start",
+          "status": 200,
+          "request": {
+            "repoPath": "/private/tmp/a0a9-live/repo",
+            "runtimeKind": "opencode",
+            "sessionScope": {
+              "kind": "workflow",
+              "taskId": "a0a9-live-jwuv",
+              "role": "build"
+            },
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          },
+          "response": {
+            "externalSessionId": "ses_f81d4bf78ffeOL3vXITe1lD6cY",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/Users/maxsky5/.openducktor-local4/worktrees/a0a9-live/a0a9-live-jwuv"
+          }
+        },
+        {
+          "command": "agent_session_control_send",
+          "status": 200,
+          "request": {
+            "repoPath": "/private/tmp/a0a9-live/repo",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/Users/maxsky5/.openducktor-local4/worktrees/a0a9-live/a0a9-live-jwuv",
+            "externalSessionId": "ses_f81d4bf78ffeOL3vXITe1lD6cY",
+            "sessionScope": {
+              "kind": "workflow",
+              "taskId": "a0a9-live-jwuv",
+              "role": "build"
+            },
+            "parts": [
+              {
+                "kind": "text",
+                "text": "A0A9-DIRECT-EXACT. Do not use tools, edit files, or change task state. Reply only A0A9-DIRECT-OK."
+              }
+            ],
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          },
+          "response": {
+            "externalSessionId": "ses_f81d4bf78ffeOL3vXITe1lD6cY",
+            "type": "user_message",
+            "messageId": "msg_07e2b41780018BOUrx0LmLrrwq",
+            "parts": [
+              {
+                "kind": "text",
+                "text": "A0A9-DIRECT-EXACT. Do not use tools, edit files, or change task state. Reply only A0A9-DIRECT-OK."
+              }
+            ],
+            "state": "read",
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          }
+        }
+      ],
+      "nativeMessages": [
+        {
+          "info": {
+            "id": "msg_07e2b41780018BOUrx0LmLrrwq",
+            "sessionID": "ses_f81d4bf78ffeOL3vXITe1lD6cY",
+            "role": "user",
+            "model": {
+              "providerID": "opencode-go",
+              "modelID": "gpt-5.6-luna",
+              "variant": "none"
+            },
+            "agent": "build",
+            "time": {
+              "created": 1788823159162
+            }
+          },
+          "textParts": [
+            "A0A9-DIRECT-EXACT. Do not use tools, edit files, or change task state. Reply only A0A9-DIRECT-OK."
+          ]
+        },
+        {
+          "info": {
+            "id": "msg_07e2b4190001YUzdR1bAPleEQa",
+            "sessionID": "ses_f81d4bf78ffeOL3vXITe1lD6cY",
+            "role": "assistant",
+            "agent": "build",
+            "variant": "none",
+            "providerID": "opencode-go",
+            "modelID": "gpt-5.6-luna",
+            "time": {
+              "created": 1788823159184,
+              "completed": 1788823160722
+            }
+          },
+          "textParts": ["A0A9-DIRECT-OK"]
+        }
+      ]
+    },
+    "retry-success": {
+      "calls": [
+        {
+          "command": "agent_session_workflow_start",
+          "status": 200,
+          "request": {
+            "repoPath": "/private/tmp/a0a9-live/repo",
+            "runtimeKind": "opencode",
+            "sessionScope": {
+              "kind": "workflow",
+              "taskId": "a0a9-live-jwuv",
+              "role": "build"
+            },
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          },
+          "response": {
+            "externalSessionId": "ses_f81d24215ffe4FSMjf2YdvTxY2",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/Users/maxsky5/.openducktor-local4/worktrees/a0a9-live/a0a9-live-jwuv"
+          }
+        },
+        {
+          "command": "agent_session_control_send",
+          "status": 0,
+          "request": {
+            "repoPath": "/private/tmp/a0a9-live/repo",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/Users/maxsky5/.openducktor-local4/worktrees/a0a9-live/a0a9-live-jwuv",
+            "externalSessionId": "ses_f81d24215ffe4FSMjf2YdvTxY2",
+            "sessionScope": {
+              "kind": "workflow",
+              "taskId": "a0a9-live-jwuv",
+              "role": "build"
+            },
+            "parts": [
+              {
+                "kind": "text",
+                "text": "A0A9-RETRY-EXACT. Do not use tools, edit files, or change task state. Reply only A0A9-RETRY-OK."
+              }
+            ],
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          }
+        },
+        {
+          "command": "agent_session_control_send",
+          "status": 200,
+          "request": {
+            "repoPath": "/private/tmp/a0a9-live/repo",
+            "runtimeKind": "opencode",
+            "workingDirectory": "/Users/maxsky5/.openducktor-local4/worktrees/a0a9-live/a0a9-live-jwuv",
+            "externalSessionId": "ses_f81d24215ffe4FSMjf2YdvTxY2",
+            "sessionScope": {
+              "kind": "workflow",
+              "taskId": "a0a9-live-jwuv",
+              "role": "build"
+            },
+            "parts": [
+              {
+                "kind": "text",
+                "text": "A0A9-RETRY-EXACT. Do not use tools, edit files, or change task state. Reply only A0A9-RETRY-OK."
+              }
+            ],
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          },
+          "response": {
+            "externalSessionId": "ses_f81d24215ffe4FSMjf2YdvTxY2",
+            "type": "user_message",
+            "messageId": "msg_07e2df701001nHV4waUob95ZF7",
+            "parts": [
+              {
+                "kind": "text",
+                "text": "A0A9-RETRY-EXACT. Do not use tools, edit files, or change task state. Reply only A0A9-RETRY-OK."
+              }
+            ],
+            "state": "read",
+            "model": {
+              "runtimeKind": "opencode",
+              "providerId": "opencode-go",
+              "modelId": "gpt-5.6-luna",
+              "variant": "none",
+              "profileId": "build"
+            }
+          }
+        }
+      ],
+      "nativeMessages": [
+        {
+          "info": {
+            "id": "msg_07e2df701001nHV4waUob95ZF7",
+            "sessionID": "ses_f81d24215ffe4FSMjf2YdvTxY2",
+            "role": "user",
+            "model": {
+              "providerID": "opencode-go",
+              "modelID": "gpt-5.6-luna",
+              "variant": "none"
+            },
+            "agent": "build",
+            "time": {
+              "created": 1788823336707
+            }
+          },
+          "textParts": [
+            "A0A9-RETRY-EXACT. Do not use tools, edit files, or change task state. Reply only A0A9-RETRY-OK."
+          ]
+        },
+        {
+          "info": {
+            "id": "msg_07e2df70d0013bBegKoABqUktf",
+            "sessionID": "ses_f81d24215ffe4FSMjf2YdvTxY2",
+            "role": "assistant",
+            "agent": "build",
+            "variant": "none",
+            "providerID": "opencode-go",
+            "modelID": "gpt-5.6-luna",
+            "time": {
+              "created": 1788823336717,
+              "completed": 1788823338872
+            }
+          },
+          "textParts": ["A0A9-RETRY-OK"]
+        }
+      ]
+    }
+  }
+}

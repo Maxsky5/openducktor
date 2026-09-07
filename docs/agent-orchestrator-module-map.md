@@ -232,6 +232,8 @@ Rules:
 - The start modal reads runtime definitions from runtime availability context.
 - Action state owns busy, waiting, queued, and send-block rules. It does not copy identity or runtime-data loading.
 
+The [session kickoff acceptance record](validation/openduckto-a0a9/README.md) contains real-backend delivery, prepared submission, recovery, and build evidence for this change.
+
 ## Read-only transcripts
 
 Files: `components/features/agents/agent-chat/readonly-transcript/use-runtime-transcript-session-history.ts`, `use-runtime-transcript-interactions.ts`, and `use-session-transcript-surface-model.ts`.

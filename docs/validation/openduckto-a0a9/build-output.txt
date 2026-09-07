@@ -1,0 +1,25 @@
+Command: bun run build
+Application commit: 800022b1ac33303ea33014d6e1873983fd5f9649
+Exit status: 0
+
+Captured output excerpt (workspace completion lines and bundle warning):
+$ bun run --workspaces build
+@openducktor/anti-slop-oxlint build: $ tsc --noEmit
+@openducktor/mcp build: Bundled 291 modules in 39ms
+@openducktor/path-support build: Exited with code 0
+@openducktor/contracts build: Exited with code 0
+@openducktor/build-tools build: Exited with code 0
+@openducktor/core build: Exited with code 0
+@openducktor/anti-slop-oxlint build: Exited with code 0
+@openducktor/host-client build: Exited with code 0
+@openducktor/adapters-codex-app-server build: Exited with code 0
+@openducktor/adapters-opencode-sdk build: Exited with code 0
+@openducktor/mcp build: Exited with code 0
+@openducktor/host build: Exited with code 0
+@openducktor/web build: (!) Some chunks are larger than 500 kB after minification. Consider:
+@openducktor/electron build: (!) Some chunks are larger than 500 kB after minification. Consider:
+@openducktor/electron build: Exited with code 0
+@openducktor/web build: Exited with code 0
+@openducktor/frontend build: Exited with code 0
+
+Full output: /Users/maxsky5/.codex/artifacts/openduckto-a0a9-live-20260908/build-full-output.txt
