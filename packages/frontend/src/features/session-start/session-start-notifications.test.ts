@@ -132,13 +132,14 @@ describe("session-start notifications", () => {
           openSessionInAgentStudio: () => {},
         });
         expect(started).toMatchObject(session);
-        expect(showError).toHaveBeenCalledTimes(scenario === "in_app" ? 0 : 1);
-        if (scenario !== "in_app") {
-          expect(showError).toHaveBeenCalledWith(
-            "Session started, but the first message failed for task-1.",
-            { description: "First message failed" },
-          );
-        }
+        expect(showError).toHaveBeenCalledTimes(1);
+        expect(showError).toHaveBeenCalledWith(
+          "Session started, but the first message failed.",
+          expect.objectContaining({
+            description: "First message failed",
+            action: expect.objectContaining({ label: "Retry message" }),
+          }),
+        );
         expect(deliverOs).not.toHaveBeenCalled();
         expect(notifications.publishSessionStarted).not.toHaveBeenCalled();
       } finally {

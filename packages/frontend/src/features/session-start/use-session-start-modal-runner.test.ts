@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
@@ -417,4 +417,98 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
       }),
     ).toThrow("Reusable session is missing a runtime kind.");
   });
+});
+
+test("prompt resolution ignores replaced requests and confirmation holds a synchronous lease", async () => {
+  let resolveOld!: (text: string) => void;
+  const oldPrompt = new Promise<string>((resolve) => {
+    resolveOld = resolve;
+  });
+  let finishStart!: () => void;
+  const startPending = new Promise<void>((resolve) => {
+    finishStart = resolve;
+  });
+  const execute = mock(async () => {
+    await startPending;
+    return "started";
+  });
+  const harness = createHookHarness(
+    useSessionStartModalRunner,
+    {
+      favoriteState: {
+        favorites: [],
+        isLoading: false,
+        readError: null,
+        isMutationPending: false,
+        mutationError: null,
+        canMutate: false,
+        toggleFavorite: () => {},
+        retryRead: () => {},
+        retryMutation: () => {},
+      },
+      repoSettings: null,
+      workspaceRepoPath: "/repo",
+    },
+    {
+      runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        loadRepoRuntimeCatalog: async () => CATALOG,
+      }),
+    },
+  );
+  const request = {
+    source: "agent_studio",
+    taskId: "TASK-1",
+    role: "build",
+    launchActionId: "build_implementation_start",
+    postStartAction: "kickoff",
+    selectedModel: SELECTED_MODEL,
+  } as const;
+  await harness.mount();
+  let oldResult!: Promise<string | undefined>;
+  let currentResult!: Promise<string | undefined>;
+  await harness.run((runner) => {
+    oldResult = runner.runSessionStartRequest(
+      { ...request, resolveKickoffPrompt: () => oldPrompt },
+      execute,
+    );
+  });
+  const oldConfirm = harness.getLatest().sessionStartModal?.onConfirm;
+  await harness.run((runner) => {
+    currentResult = runner.runSessionStartRequest(
+      { ...request, resolveKickoffPrompt: async () => "current prompt" },
+      execute,
+    );
+  });
+  await harness.waitFor(
+    (runner) =>
+      runner.sessionStartModal?.kickoffPrompt === "current prompt" &&
+      !runner.sessionStartModal.isSelectionCatalogLoading,
+  );
+  await harness.run(() => {
+    resolveOld("old prompt");
+  });
+  expect(await oldResult).toBeUndefined();
+  expect(harness.getLatest().sessionStartModal?.kickoffPrompt).toBe("current prompt");
+  const input = {
+    startMode: "fresh",
+    sourceSessionOptionValue: null,
+    runInBackground: false,
+    kickoffPrompt: "edited",
+  } as const;
+  await harness.run((runner) => {
+    oldConfirm?.(input);
+    runner.sessionStartModal?.onConfirm(input);
+    runner.sessionStartModal?.onConfirm(input);
+  });
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(execute).toHaveBeenCalledWith(
+    expect.objectContaining({ decision: expect.objectContaining({ kickoffPrompt: "edited" }) }),
+  );
+  await harness.run(() => {
+    finishStart();
+  });
+  expect(await currentResult).toBe("started");
+  await harness.unmount();
 });

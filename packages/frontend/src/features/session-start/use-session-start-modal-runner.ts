@@ -1,14 +1,11 @@
-import type {
-  GitBranch,
-  GitTargetBranch,
-  RuntimeDescriptor,
-  RuntimeKind,
-} from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
+export { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
+import type { GitBranch, GitTargetBranch, RuntimeKind } from "@openducktor/contracts";
+import type { AgentModelSelection } from "@openducktor/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
-import { findRuntimeDefinition, runtimeSupportsStartMode } from "@/lib/agent-runtime";
+import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import {
   INVALID_TASK_TARGET_BRANCH_LABEL,
@@ -19,27 +16,14 @@ import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { supportsTaskTargetBranchSelection } from "./constants";
 import { isSessionStartFailureFeedbackHandled } from "./session-start-orchestration";
-import type { SessionStartExistingSessionOption } from "./session-start-types";
+import type {
+  NewSessionStartDecision,
+  SessionStartExistingSessionOption,
+} from "./session-start-types";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
 
-export type SessionStartModalDecision =
-  | {
-      startMode: "fresh";
-      selectedModel: AgentModelSelection;
-      targetBranch?: GitTargetBranch;
-    }
-  | {
-      startMode: "reuse";
-      sourceSession: AgentSessionIdentity;
-      targetBranch?: GitTargetBranch;
-    }
-  | {
-      startMode: "fork";
-      selectedModel: AgentModelSelection;
-      sourceSession: AgentSessionIdentity;
-      targetBranch?: GitTargetBranch;
-    };
+export type SessionStartModalDecision = Exclude<NewSessionStartDecision, null>;
 
 type SessionStartModalRunRequest = SessionStartModalOpenRequest & {
   selectedModel?: AgentModelSelection | null;
@@ -53,6 +37,7 @@ type SessionStartModalConfirmPayload = Exclude<
 type SessionStartDecisionInput = Omit<SessionStartModalConfirmPayload, "runInBackground">;
 
 type SessionStartTargetBranchFields = {
+  kickoffPrompt?: string;
   targetBranch?: GitTargetBranch;
 };
 
@@ -114,8 +99,12 @@ export const buildSessionStartModalDecision = ({
   requestContext: SessionStartDecisionRequestContext;
   selectedModel: AgentModelSelection | null;
 }): SessionStartModalDecision => {
-  const buildTargetBranchFields = (): SessionStartTargetBranchFields =>
-    input.targetBranch ? { targetBranch: targetBranchFromSelection(input.targetBranch) } : {};
+  const buildTargetBranchFields = (): SessionStartTargetBranchFields => {
+    const fields: SessionStartTargetBranchFields = {};
+    if (input.targetBranch) fields.targetBranch = targetBranchFromSelection(input.targetBranch);
+    if (input.kickoffPrompt !== undefined) fields.kickoffPrompt = input.kickoffPrompt;
+    return fields;
+  };
 
   if (input.startMode === "reuse") {
     const sourceSession = requireSourceSession(
@@ -166,50 +155,30 @@ export const requireSourceSessionRuntimeKind = (
   throw new Error("Reusable session is missing a runtime kind.");
 };
 
-export const assertRuntimeSupportsSelectedStartMode = ({
-  launchActionId,
-  role,
-  runtimeDescriptor,
-  runtimeKind,
-  startMode,
-  taskId,
-}: {
-  launchActionId: string;
-  role: AgentRole;
-  runtimeDescriptor: RuntimeDescriptor | null;
-  runtimeKind: RuntimeKind | null;
-  startMode: AgentSessionStartMode;
-  taskId: string;
-}): void => {
-  if (!runtimeDescriptor) {
-    throw new Error(
-      `Starting a ${role} ${launchActionId} session for ${taskId} requires a runtime that supports ${startMode} session starts.`,
-    );
-  }
-  if (runtimeSupportsStartMode(runtimeDescriptor, startMode)) {
-    return;
-  }
-
-  const runtimeLabel = runtimeDescriptor.label || runtimeKind || runtimeDescriptor.kind;
-  throw new Error(
-    `Runtime "${runtimeLabel}" does not support ${startMode} session starts for ${launchActionId}. Select a compatible runtime or start mode.`,
-  );
-};
-
 export function useSessionStartModalRunner({
   branches = [],
   favoriteState,
   repoSettings,
   workspaceRepoPath,
+  scopeKey = workspaceRepoPath,
 }: {
   branches?: GitBranch[];
   favoriteState: SessionStartModalModel["favoriteState"];
   repoSettings: RepoSettingsInput | null;
   workspaceRepoPath: string | null;
+  scopeKey?: string | null;
 }) {
+  const scopeRef = useRef(scopeKey);
   const selectionRef = useRef<AgentModelSelection | null>(null);
   const pendingRunRef = useRef<PendingModalRun | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const confirmingRef = useRef(false);
+  const [promptRetry, setPromptRetry] = useState(0);
+  const [promptState, setPromptState] = useState<{
+    key: string;
+    text?: string;
+    error?: string;
+  } | null>(null);
 
   const {
     intent,
@@ -254,6 +223,28 @@ export function useSessionStartModalRunner({
   });
 
   selectionRef.current = selection;
+  const promptKey = `${intent?.requestId ?? ""}:${selectedTargetBranch}:${promptRetry}`;
+  const needsPrompt = Boolean(intent?.resolveKickoffPrompt);
+  const promptLoading = needsPrompt && promptState?.key !== promptKey;
+  useEffect(() => {
+    const resolve = intent?.resolveKickoffPrompt;
+    if (!resolve) return;
+    let active = true;
+    void (async () => {
+      try {
+        const branch = selectedTargetBranch
+          ? targetBranchFromSelection(selectedTargetBranch)
+          : undefined;
+        const text = await resolve(branch);
+        if (active) setPromptState({ key: promptKey, text });
+      } catch (cause) {
+        if (active) setPromptState({ key: promptKey, error: errorMessage(cause) });
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [intent?.resolveKickoffPrompt, promptKey, selectedTargetBranch]);
 
   const handleRetryRuntimeDefinitions = useCallback((): void => {
     void retryRuntimeDefinitions().catch((error) => {
@@ -285,12 +276,19 @@ export function useSessionStartModalRunner({
     [closeStartModal],
   );
 
+  useEffect(() => {
+    if (scopeRef.current !== scopeKey) {
+      scopeRef.current = scopeKey;
+      resolvePendingRun();
+    }
+  }, [scopeKey, resolvePendingRun]);
+
   const runSessionStartRequest = useCallback(
     <T>(
       request: SessionStartModalRunRequest,
       execute: (result: SessionStartModalRunResult) => Promise<T>,
     ): Promise<T | undefined> => {
-      if (isStarting) {
+      if (confirmingRef.current) {
         throw new Error("A session start is already in progress.");
       }
       resolvePendingRun();
@@ -306,11 +304,12 @@ export function useSessionStartModalRunner({
         });
         return Promise.resolve(undefined);
       }
-      openStartModal(request);
+      const identifiedRequest = { ...request, requestId: crypto.randomUUID() };
+      openStartModal(identifiedRequest);
 
       return new Promise<T | undefined>((resolve) => {
         pendingRunRef.current = {
-          request,
+          request: identifiedRequest,
           execute: async (result) => {
             const value = await execute(result);
             return () => resolve(value);
@@ -319,12 +318,18 @@ export function useSessionStartModalRunner({
         };
       });
     },
-    [isStarting, openStartModal, resolvePendingRun],
+    [openStartModal, resolvePendingRun],
   );
 
   const confirmModal = useCallback(
     async (input?: Parameters<SessionStartModalModel["onConfirm"]>[0]) => {
-      if (!input || input === true) {
+      if (
+        !input ||
+        input === true ||
+        confirmingRef.current ||
+        promptLoading ||
+        (needsPrompt && promptState?.error)
+      ) {
         return;
       }
 
@@ -334,8 +339,11 @@ export function useSessionStartModalRunner({
         return;
       }
 
+      if (pendingRun.request.requestId !== intent?.requestId || scopeRef.current !== scopeKey)
+        return;
       const requestContext = pendingRun.request;
 
+      confirmingRef.current = true;
       setIsStarting(true);
       try {
         const decision = buildSessionStartModalDecision({
@@ -375,7 +383,8 @@ export function useSessionStartModalRunner({
           runInBackground: input.runInBackground ?? false,
           request: requestContext,
         });
-        resolvePendingRun(settle);
+        if (pendingRunRef.current === pendingRun) resolvePendingRun(settle);
+        else settle();
       } catch (error) {
         if (!isSessionStartFailureFeedbackHandled(error)) {
           toast.error("Failed to start the session.", {
@@ -383,10 +392,16 @@ export function useSessionStartModalRunner({
           });
         }
       } finally {
+        confirmingRef.current = false;
         setIsStarting(false);
       }
     },
     [
+      intent?.requestId,
+      scopeKey,
+      promptLoading,
+      needsPrompt,
+      promptState,
       eligibleRuntimeDefinitions,
       existingSessionOptions,
       resolvePendingRun,
@@ -402,6 +417,12 @@ export function useSessionStartModalRunner({
 
     return {
       open: isOpen,
+      requestId: intent.requestId,
+      kickoffPrompt: needsPrompt && promptState?.key === promptKey ? promptState.text : undefined,
+      isKickoffPromptLoading: promptLoading,
+      kickoffPromptError:
+        needsPrompt && promptState?.key === promptKey ? (promptState.error ?? null) : null,
+      onRetryKickoffPrompt: () => setPromptRetry((value) => value + 1),
       title: intent.title,
       description:
         intent.description ??
@@ -451,6 +472,10 @@ export function useSessionStartModalRunner({
       onConfirm: confirmModal,
     };
   }, [
+    needsPrompt,
+    promptState,
+    promptKey,
+    promptLoading,
     runtimeProfileOptions,
     availableStartModes,
     catalogError,

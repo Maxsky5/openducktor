@@ -76,6 +76,7 @@ type UseAgentStudioChatComposerArgs = {
 
 type AgentStudioChatComposerState = {
   selectionForNewSession: AgentModelSelection | null;
+  newSessionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
   isSelectedSessionModelSendable: boolean;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
@@ -536,6 +537,8 @@ export function useAgentStudioChatComposer({
   };
 
   return {
+    newSessionCatalog:
+      isRepoRuntimeReady && !selectedComposerResource?.error ? composerCatalog : null,
     selectionForNewSession,
     selectedModelSelection,
     isSelectedSessionModelSendable,

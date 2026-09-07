@@ -1,3 +1,4 @@
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act, createElement, createRef } from "react";
@@ -581,7 +582,7 @@ describe("useAgentStudioPageModels", () => {
     const sendResolver = createRef<(value: boolean) => void>();
     const onSend = mock(
       () =>
-        new Promise<boolean>((resolve) => {
+        new Promise<AgentChatSendResult>((resolve) => {
           sendResolver.current = resolve;
         }),
     );
@@ -599,7 +600,7 @@ describe("useAgentStudioPageModels", () => {
     const state = harness.getLatest();
     state.agentChatModel.composer.scrollToBottomOnSendRef.current = scrollToBottomOnSend;
 
-    let sendPromise: Promise<boolean> | null = null;
+    let sendPromise: Promise<AgentChatSendResult> | null = null;
     await act(async () => {
       sendPromise = state.agentChatModel.composer.onSend(createComposerDraft("message"));
       await Promise.resolve();

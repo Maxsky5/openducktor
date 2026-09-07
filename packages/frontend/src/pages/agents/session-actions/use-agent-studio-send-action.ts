@@ -1,3 +1,6 @@
+import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
+import { agentStudioChatDraftScopeKey } from "../agent-studio-chat-draft";
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type { ReusablePrompt } from "@openducktor/contracts";
 import {
   type AgentModelCatalog,
@@ -73,10 +76,11 @@ export function useAgentStudioSendAction({
     role,
     session: selectedSessionIdentity,
   });
+  const isCurrentContext = useSessionStartContext(activeComposerContextKey);
   const isSending = isSendingActivityActive(activeComposerContextKey);
 
   const onSend = useCallback(
-    async (draft: AgentChatComposerDraft): Promise<boolean> => {
+    async (draft: AgentChatComposerDraft): Promise<AgentChatSendResult> => {
       if (
         (!sessionState.canQueueBusyFollowups &&
           (isSending || hasSendingActivityInFlight(activeComposerContextKey))) ||
@@ -102,19 +106,19 @@ export function useAgentStudioSendAction({
         return false;
       }
 
-      const messagePartsResult = resolveAgentStudioSendDraftParts({
-        draft,
-        reusablePrompts,
-        selectedModelDescriptor,
-        supportsAttachments,
-      });
-      if (!messagePartsResult || !taskId) {
-        return false;
-      }
+      if (!taskId) return false;
       const activity = beginSendingActivity(activeComposerContextKey);
-
+      let createdSession: AgentSessionIdentity | null = null;
       try {
+        const messagePartsResult = resolveAgentStudioSendDraftParts({
+          draft,
+          reusablePrompts,
+          selectedModelDescriptor,
+          supportsAttachments,
+        });
+        if (!messagePartsResult) return false;
         const messageParts = await messagePartsResult;
+        if (!isCurrentContext()) return false;
         const systemInvocation = classifySystemSlashCommandInvocation(messageParts);
         if (systemInvocation.kind === "manual_session_compaction") {
           if (!selectedSessionIdentity) {
@@ -139,6 +143,8 @@ export function useAgentStudioSendAction({
           return false;
         }
 
+        if (!selectedSessionIdentity) createdSession = targetSession;
+
         const targetComposerContextKey = buildAgentStudioSessionActivityKey({
           workspaceId,
           taskId,
@@ -148,11 +154,26 @@ export function useAgentStudioSendAction({
         activity.add(targetComposerContextKey);
         await sendAgentMessage(targetSession, messageParts);
         return true;
+      } catch (cause) {
+        if (createdSession) {
+          return {
+            kind: "recover_draft",
+            originKey: agentStudioChatDraftScopeKey(workspaceId, { taskId, role, session: null }),
+            recoveryKey: agentStudioChatDraftScopeKey(workspaceId, {
+              taskId,
+              role,
+              session: createdSession,
+            }),
+            error: cause instanceof Error ? cause : new Error(String(cause)),
+          };
+        }
+        throw cause;
       } finally {
         activity.finish();
       }
     },
     [
+      isCurrentContext,
       activeComposerContextKey,
       agentStudioReady,
       beginSendingActivity,
@@ -180,6 +201,6 @@ export function useAgentStudioSendAction({
 
   return { isSending, onSend } satisfies {
     isSending: boolean;
-    onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
+    onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   };
 }

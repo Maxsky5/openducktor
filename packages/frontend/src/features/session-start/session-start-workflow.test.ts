@@ -594,3 +594,152 @@ describe("session-start-workflow", () => {
     );
   });
 });
+
+describe("confirmed kickoff", () => {
+  test("sends exact custom text once", async () => {
+    const sendAgentMessage = createSendAgentMessageMock();
+    const text = "  Custom instruction\n{{task.title}}\n ";
+    await startSessionWorkflow({
+      workspaceId: null,
+      queryClient: new QueryClient(),
+      task: null,
+      intent: {
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        startMode: "fresh",
+        postStartAction: "kickoff",
+        kickoffPrompt: text,
+      },
+      selection: BUILD_SELECTION,
+      startAgentSession: async () => sessionIdentity("custom"),
+      sendAgentMessage,
+    });
+    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("custom"), [
+      { kind: "text", text },
+    ]);
+  });
+  test("rejects blank custom text before mutations", async () => {
+    const persistTaskTargetBranch = mock(async () => undefined);
+    const startAgentSession = mock(async () => sessionIdentity("custom"));
+    await expect(
+      startSessionWorkflow({
+        workspaceId: null,
+        queryClient: new QueryClient(),
+        task: null,
+        intent: {
+          taskId: "TASK-1",
+          role: "build",
+          launchActionId: "build_implementation_start",
+          startMode: "fresh",
+          postStartAction: "kickoff",
+          kickoffPrompt: " \n",
+          targetBranch: { branch: "main" },
+        },
+        selection: BUILD_SELECTION,
+        startAgentSession,
+        persistTaskTargetBranch,
+        sendAgentMessage: createSendAgentMessageMock(),
+      }),
+    ).rejects.toThrow("Kickoff prompt must not be blank.");
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(persistTaskTargetBranch).not.toHaveBeenCalled();
+  });
+});
+
+test.each(["fresh", "reuse", "fork"] as const)(
+  "custom kickoff preserves validation and send failure identity in %s mode",
+  async (startMode) => {
+    const send = mock<SendAgentMessage>(async () => {
+      throw new Error("send failed");
+    });
+    const result = await startSessionWorkflow({
+      queryClient: new QueryClient(),
+      workspaceId: null,
+      task: null,
+      intent: {
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        postStartAction: "kickoff",
+        startMode,
+        sourceSession: sessionIdentity("source"),
+        kickoffPrompt: " exact\nmessage ",
+      },
+      selection: BUILD_SELECTION,
+      startAgentSession: async () => sessionIdentity("kept"),
+      sendAgentMessage: send,
+    });
+    expect(result.externalSessionId).toBe("kept");
+    expect(result.postStartActionError?.message).toBe("send failed");
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]).toEqual([
+      sessionIdentity("kept"),
+      [{ kind: "text", text: " exact\nmessage " }],
+    ]);
+  },
+);
+
+test.each(["build_after_human_request_changes", "build_pull_request_generation"] as const)(
+  "custom kickoff cannot bypass prerequisites for %s",
+  async (launchActionId) => {
+    const startAgentSession = mock(async () => sessionIdentity("never"));
+    const mutate = mock(async () => {});
+    await expect(
+      startSessionWorkflow({
+        queryClient: new QueryClient(),
+        workspaceId: null,
+        task: null,
+        intent: {
+          taskId: "TASK-1",
+          role: "build",
+          launchActionId,
+          postStartAction: "kickoff",
+          startMode: "fresh",
+          kickoffPrompt: "custom",
+          targetBranch: { branch: "@{upstream}" },
+          beforeStartAction: { action: "human_request_changes", note: "review" },
+        },
+        selection: BUILD_SELECTION,
+        startAgentSession,
+        sendAgentMessage: createSendAgentMessageMock(),
+        humanRequestChangesTask: mutate,
+        persistTaskTargetBranch: mutate,
+      }),
+    ).rejects.toThrow();
+    expect(startAgentSession).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
+  },
+);
+
+test("retry sends the retained kickoff to the created session without another start", async () => {
+  let fail = true;
+  const start = mock(async () => sessionIdentity("kept"));
+  const send = mock<SendAgentMessage>(async () => {
+    if (fail) throw new Error("failed");
+  });
+  const result = await startSessionWorkflow({
+    queryClient: new QueryClient(),
+    workspaceId: null,
+    task: null,
+    intent: {
+      taskId: "TASK-1",
+      role: "build",
+      launchActionId: "build_implementation_start",
+      startMode: "fresh",
+      postStartAction: "kickoff",
+      kickoffPrompt: "retain this",
+    },
+    selection: BUILD_SELECTION,
+    startAgentSession: start,
+    sendAgentMessage: send,
+  });
+  fail = false;
+  await result.retryPostStartMessage?.();
+  expect(start).toHaveBeenCalledTimes(1);
+  expect(send).toHaveBeenCalledTimes(2);
+  expect(send).toHaveBeenLastCalledWith(sessionIdentity("kept"), [
+    { kind: "text", text: "retain this" },
+  ]);
+});

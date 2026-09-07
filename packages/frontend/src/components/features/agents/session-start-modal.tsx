@@ -1,3 +1,7 @@
+import {
+  SessionStartKickoffField,
+  useSessionStartKickoffDraft,
+} from "./session-start-kickoff-field";
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import { LoaderCircle } from "lucide-react";
@@ -31,6 +35,7 @@ type SessionStartModalConfirmInput =
       startMode: AgentSessionStartMode;
       sourceSessionOptionValue: string | null;
       targetBranch?: string;
+      kickoffPrompt?: string | undefined;
     };
 type SessionStartModalConfirmPayload = Exclude<SessionStartModalConfirmInput, boolean>;
 type SessionStartModalConfirmDraft = Omit<SessionStartModalConfirmPayload, "runInBackground">;
@@ -41,6 +46,11 @@ type ExistingSessionOption = ComboboxOption & {
 
 export type SessionStartModalModel = {
   open: boolean;
+  requestId?: string | undefined;
+  kickoffPrompt?: string | undefined;
+  isKickoffPromptLoading?: boolean;
+  kickoffPromptError?: string | null;
+  onRetryKickoffPrompt?: () => void;
   title: string;
   description: string;
   confirmLabel: string;
@@ -408,6 +418,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     onConfirm,
   } = model;
 
+  const kickoffDraft = useSessionStartKickoffDraft({
+    requestId: model.requestId,
+    open,
+    prompt: model.kickoffPrompt,
+  });
+
   const selectedProfileId = selectedModelSelection?.profileId ?? "";
   const selectedPickerValue =
     selectedModelSelection?.runtimeKind && selectedModelSelection.providerId
@@ -426,6 +442,9 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   );
   const hasExistingSessionSelection = selectedSourceSessionOption !== undefined;
   const confirmDisabled =
+    kickoffDraft.invalid ||
+    model.isKickoffPromptLoading ||
+    Boolean(model.kickoffPromptError) ||
     isStarting ||
     isRuntimeDefinitionsLoading ||
     runtimeDefinitionsError !== null ||
@@ -438,6 +457,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     startMode: selectedStartMode,
     sourceSessionOptionValue: requiresExistingSession ? selectedSourceSessionValue : null,
   };
+  if (kickoffDraft.value !== undefined) confirmInput.kickoffPrompt = kickoffDraft.value;
   if (showTargetBranchSelector) {
     confirmInput.targetBranch = selectedTargetBranch;
   }
@@ -454,8 +474,9 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   };
 
   const runtimeProfileDisabled =
-    isReuseMode || isSelectionCatalogLoading || runtimeProfileOptions.length === 0;
+    isStarting || isReuseMode || isSelectionCatalogLoading || runtimeProfileOptions.length === 0;
   const variantDisabled =
+    isStarting ||
     isReuseMode ||
     isSelectionCatalogLoading ||
     !selectedModelSelection ||
@@ -466,6 +487,9 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     isReuseMode,
     isSelectionCatalogLoading,
   });
+  const modelReadOnlyReason = isStarting
+    ? "Session start is in progress."
+    : "Reuse mode keeps the source session runtime and model.";
   const runtimeModelControl = (() => {
     if (runtimeDefinitionsError) {
       return (
@@ -519,10 +543,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
         value={selectedPickerValue}
         favoriteState={favoriteState}
         selectionPolicy={
-          isReuseMode
+          isReuseMode || isStarting
             ? {
                 kind: "read_only",
-                reason: "Reuse mode keeps the source session runtime and model.",
+                reason: modelReadOnlyReason,
               }
             : { kind: "editable" }
         }
@@ -551,6 +575,13 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
           <DialogBody className="pt-2 pb-4">
             <fieldset className="space-y-5" disabled={isStarting}>
+              <SessionStartKickoffField
+                draft={kickoffDraft}
+                disabled={isStarting}
+                loading={model.isKickoffPromptLoading}
+                error={model.kickoffPromptError}
+                onRetry={model.onRetryKickoffPrompt}
+              />
               <StartModeField
                 availableStartModes={availableStartModes}
                 hasExistingSessionOptions={hasExistingSessionOptions}

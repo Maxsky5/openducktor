@@ -443,3 +443,39 @@ describe("useAgentChatComposerDraftState", () => {
     expect(persistence.adapter.flush).toHaveBeenCalledTimes(2);
   });
 });
+
+test("keeps first-message recovery pending for the exact created session", async () => {
+  const harness = await mountHarness({ key: "new", persistence: null });
+  const draft = buildDraft("retry first message");
+  const snapshot = harness.getLatest().createSubmittedDraftSnapshot(draft);
+  await harness.update({ scope: { key: "other-task", persistence: null } });
+  await harness.run((state) =>
+    state.restoreSubmittedDraft(snapshot, {
+      kind: "recover_draft",
+      originKey: "new",
+      recoveryKey: "created",
+      error: new Error("failed"),
+    }),
+  );
+  expect(draftHasMeaningfulContent(harness.getLatest().draft)).toBe(false);
+  await harness.update({ scope: { key: "created", persistence: null } });
+  expect(harness.getLatest().draft).toEqual(draft);
+  await harness.unmount();
+});
+
+test("first-message recovery does not overwrite newer session input", async () => {
+  const persistence = createFakePersistence(buildDraft("newer input"));
+  const harness = await mountHarness({ key: "new", persistence: null });
+  const snapshot = harness.getLatest().createSubmittedDraftSnapshot(buildDraft("old input"));
+  await harness.run((state) =>
+    state.restoreSubmittedDraft(snapshot, {
+      kind: "recover_draft",
+      originKey: "new",
+      recoveryKey: "created",
+      error: new Error("failed"),
+    }),
+  );
+  await harness.update({ scope: { key: "created", persistence: persistence.adapter } });
+  expect(harness.getLatest().draft).toEqual(buildDraft("newer input"));
+  await harness.unmount();
+});

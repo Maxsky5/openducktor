@@ -1,3 +1,4 @@
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
@@ -298,7 +299,7 @@ describe("useAgentStudioSendAction", () => {
     const harness = createHookHarness(useAgentStudioSendAction, initialArgs);
 
     await harness.mount();
-    let sendPromise: Promise<boolean> | undefined;
+    let sendPromise: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       sendPromise = state.onSend(createDraft("hello"));
     });
@@ -338,7 +339,7 @@ describe("useAgentStudioSendAction", () => {
     });
 
     await harness.mount();
-    let firstSend: Promise<boolean> | undefined;
+    let firstSend: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       firstSend = state.onSend(createDraft("first"));
     });
@@ -371,8 +372,8 @@ describe("useAgentStudioSendAction", () => {
     });
 
     await harness.mount();
-    let firstSend: Promise<boolean> | undefined;
-    let secondSend: Promise<boolean> | undefined;
+    let firstSend: Promise<AgentChatSendResult> | undefined;
+    let secondSend: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       firstSend = state.onSend(createDraft("first"));
       secondSend = state.onSend(createDraft("second"));
@@ -412,7 +413,7 @@ describe("useAgentStudioSendAction", () => {
     });
 
     await harness.mount();
-    let firstSend: Promise<boolean> | undefined;
+    let firstSend: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       firstSend = state.onSend(createDraft("first"));
     });

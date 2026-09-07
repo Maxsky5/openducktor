@@ -560,6 +560,7 @@ export function AgentChatComposer({
     scope: draftScope,
   });
   const latestDraftRef = useRef<AgentChatComposerDraft>(draft);
+  const latestDraftScopeKeyRef = useRef(draftScope.key);
   const latestSendDisabledRef = useRef(false);
   const latestOnSendRef = useRef(onSend);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
@@ -664,10 +665,11 @@ export function AgentChatComposer({
     !isInteractionEnabled;
 
   useLayoutEffect(() => {
+    latestDraftScopeKeyRef.current = draftScope.key;
     latestDraftRef.current = draft;
     latestOnSendRef.current = onSend;
     latestSendDisabledRef.current = sendDisabled;
-  }, [draft, onSend, sendDisabled]);
+  }, [draft, draftScope.key, onSend, sendDisabled]);
 
   useLayoutEffect(() => {
     if (previousAttachmentLayoutKeyRef.current === attachmentLayoutKey) {
@@ -706,21 +708,30 @@ export function AgentChatComposer({
     scheduleComposerFocus();
     try {
       const didSend = await latestOnSendRef.current(submittedDraft);
-      if (!didSend) {
-        restoreSubmittedDraft(submittedSnapshot);
-        onComposerEditorInput();
-        scheduleComposerFocus();
+      if (didSend !== true && didSend !== false) {
+        restoreSubmittedDraft(submittedSnapshot, didSend);
+        toast.error("Unable to send message", { description: didSend.error.message });
         return;
       }
-      scheduleComposerFocus();
+      if (!didSend) {
+        restoreSubmittedDraft(submittedSnapshot);
+        if (latestDraftScopeKeyRef.current === submittedSnapshot.key) {
+          onComposerEditorInput();
+          scheduleComposerFocus();
+        }
+        return;
+      }
+      if (latestDraftScopeKeyRef.current === submittedSnapshot.key) scheduleComposerFocus();
     } catch (error) {
       const description = error instanceof Error ? error.message : String(error);
       toast.error("Unable to send message", {
         description,
       });
       restoreSubmittedDraft(submittedSnapshot);
-      onComposerEditorInput();
-      scheduleComposerFocus();
+      if (latestDraftScopeKeyRef.current === submittedSnapshot.key) {
+        onComposerEditorInput();
+        scheduleComposerFocus();
+      }
     }
   }, [
     clearSubmittedDraft,

@@ -1,3 +1,4 @@
+import type { AgentChatSendRecovery } from "./agent-chat-send-result";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type AgentChatComposerDraft,
@@ -20,6 +21,7 @@ type SubmittedDraftSnapshot = {
   key: string;
   persistence: AgentChatDraftPersistence | null;
   version: number | null;
+  editSequence: number;
   draft: AgentChatComposerDraft;
 };
 
@@ -29,7 +31,10 @@ type UseAgentChatComposerDraftStateResult = {
   setDisplayedDraft: (draft: AgentChatComposerDraft) => void;
   createSubmittedDraftSnapshot: (draft: AgentChatComposerDraft) => SubmittedDraftSnapshot;
   clearSubmittedDraft: (snapshot: SubmittedDraftSnapshot) => void;
-  restoreSubmittedDraft: (snapshot: SubmittedDraftSnapshot) => void;
+  restoreSubmittedDraft: (
+    snapshot: SubmittedDraftSnapshot,
+    recovery?: AgentChatSendRecovery,
+  ) => void;
 };
 
 const createInitialDraftState = ({
@@ -46,6 +51,9 @@ export function useAgentChatComposerDraftState({
 }: UseAgentChatComposerDraftStateArgs): UseAgentChatComposerDraftStateResult {
   const [state, setState] = useState<ComposerDraftState>(() => createInitialDraftState(scope));
   const latestStateRef = useRef(state);
+  const pendingRecoveryRef = useRef(new Map<string, AgentChatComposerDraft>());
+  const editSequenceRef = useRef(0);
+  const scopeEditsRef = useRef(new Map<string, number>());
   const nextKey = scope.key;
   const nextPersistence = scope.persistence;
 
@@ -90,7 +98,14 @@ export function useAgentChatComposerDraftState({
       return;
     }
 
-    setState(createInitialDraftState({ key: nextKey, persistence: nextPersistence }));
+    const nextState = createInitialDraftState({ key: nextKey, persistence: nextPersistence });
+    const recovered = pendingRecoveryRef.current.get(nextKey);
+    if (recovered) {
+      if (!draftHasMeaningfulContent(nextState.draft)) nextState.draft = recovered;
+      else pendingRecoveryRef.current.delete(nextKey);
+    }
+    latestStateRef.current = nextState;
+    setState(nextState);
   }, [nextKey, nextPersistence]);
 
   useEffect(() => {
@@ -122,6 +137,9 @@ export function useAgentChatComposerDraftState({
 
   const commitDraft = useCallback((nextDraft: AgentChatComposerDraft): void => {
     const current = latestStateRef.current;
+    editSequenceRef.current += 1;
+    scopeEditsRef.current.set(current.key, editSequenceRef.current);
+    pendingRecoveryRef.current.delete(current.key);
     current.persistence?.set(nextDraft);
     setState({
       key: current.key,
@@ -146,6 +164,7 @@ export function useAgentChatComposerDraftState({
         key: current.key,
         persistence: current.persistence,
         version: current.persistence?.readVersion() ?? null,
+        editSequence: editSequenceRef.current,
         draft,
       };
     },
@@ -153,22 +172,45 @@ export function useAgentChatComposerDraftState({
   );
 
   const clearSubmittedDraft = useCallback((snapshot: SubmittedDraftSnapshot): void => {
+    pendingRecoveryRef.current.delete(snapshot.key);
     snapshot.persistence?.clear({ onlyIfVersion: snapshot.version });
   }, []);
 
-  const restoreSubmittedDraft = useCallback((snapshot: SubmittedDraftSnapshot): void => {
-    const current = latestStateRef.current;
-    if (current.key !== snapshot.key || draftHasMeaningfulContent(current.draft)) {
-      return;
-    }
+  const restoreSubmittedDraft = useCallback(
+    (snapshot: SubmittedDraftSnapshot, recovery?: AgentChatSendRecovery): void => {
+      const current = latestStateRef.current;
+      if (recovery && recovery.originKey === snapshot.key) {
+        if ((scopeEditsRef.current.get(recovery.recoveryKey) ?? 0) > snapshot.editSequence) return;
+        if (current.key !== recovery.recoveryKey) {
+          pendingRecoveryRef.current.set(recovery.recoveryKey, snapshot.draft);
+        } else if (!draftHasMeaningfulContent(current.draft)) {
+          pendingRecoveryRef.current.set(recovery.recoveryKey, snapshot.draft);
+          const restored = { ...current, draft: snapshot.draft };
+          latestStateRef.current = restored;
+          setState(restored);
+        }
+        return;
+      }
+      if (
+        current.key !== snapshot.key &&
+        !snapshot.persistence &&
+        (scopeEditsRef.current.get(snapshot.key) ?? 0) <= snapshot.editSequence
+      ) {
+        pendingRecoveryRef.current.set(snapshot.key, snapshot.draft);
+      }
+      if (current.key !== snapshot.key || draftHasMeaningfulContent(current.draft)) {
+        return;
+      }
 
-    current.persistence?.set(snapshot.draft);
-    setState({
-      key: current.key,
-      persistence: current.persistence,
-      draft: snapshot.draft,
-    });
-  }, []);
+      current.persistence?.set(snapshot.draft);
+      setState({
+        key: current.key,
+        persistence: current.persistence,
+        draft: snapshot.draft,
+      });
+    },
+    [],
+  );
 
   return useMemo(
     () => ({

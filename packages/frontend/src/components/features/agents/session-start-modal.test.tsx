@@ -469,3 +469,53 @@ describe("SessionStartModal", () => {
     unmount();
   });
 });
+
+describe("kickoff customization", () => {
+  test.each([undefined, "", " \n "])(
+    "hides customization for absent prompt %j",
+    (kickoffPrompt) => {
+      const view = render(<SessionStartModal model={createModel({ kickoffPrompt })} />);
+      expect(screen.queryByRole("switch", { name: "Customize kickoff prompt" })).toBeNull();
+      view.unmount();
+    },
+  );
+  test("keeps edits across toggles and defaults, validates both buttons, resets for a new request", () => {
+    const onConfirm = mock(() => {});
+    const model = createModel({ requestId: "one", kickoffPrompt: "Default\ntext", onConfirm });
+    const view = render(<SessionStartModal model={model} />);
+    const toggle = () =>
+      fireEvent.click(screen.getByRole("switch", { name: "Customize kickoff prompt" }));
+    expect(screen.queryByLabelText("Kickoff prompt")).toBeNull();
+    toggle();
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Kickoff prompt").value).toBe(
+      "Default\ntext",
+    );
+    fireEvent.change(screen.getByLabelText("Kickoff prompt"), {
+      target: { value: "  Edited\ntext " },
+    });
+    toggle();
+    toggle();
+    view.rerender(<SessionStartModal model={{ ...model, kickoffPrompt: "New default" }} />);
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Kickoff prompt").value).toBe(
+      "  Edited\ntext ",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Run in background" }));
+    expect(onConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({ kickoffPrompt: "  Edited\ntext ", runInBackground: true }),
+    );
+    fireEvent.change(screen.getByLabelText("Kickoff prompt"), { target: { value: " \n" } });
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Start session" }).disabled).toBe(
+      true,
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Run in background" }).disabled,
+    ).toBe(true);
+    view.rerender(<SessionStartModal model={{ ...model, requestId: "two" }} />);
+    expect(screen.queryByLabelText("Kickoff prompt")).toBeNull();
+    toggle();
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Kickoff prompt").value).toBe(
+      "Default\ntext",
+    );
+    view.unmount();
+  });
+});

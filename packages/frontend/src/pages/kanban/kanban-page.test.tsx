@@ -1147,7 +1147,10 @@ describe("KanbanPage session start modal flow", () => {
       }),
       "config unavailable",
     );
-    expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      "Session started, but the first message failed.",
+      expect.objectContaining({ action: expect.objectContaining({ label: "Retry message" }) }),
+    );
 
     await act(async () => {
       renderer.unmount();
@@ -1185,42 +1188,39 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  kanbanTest(
-    "malformed kickoff override prevents start and publishes a session error",
-    async () => {
-      currentRepoConfigFixture = createRepoConfigFixture({
-        "kickoff.build_implementation_start": {
-          template: "Kickoff {{unsupported.token}}",
-          baseVersion: 1,
-        },
-      });
+  kanbanTest("malformed kickoff override blocks the modal before startup", async () => {
+    currentRepoConfigFixture = createRepoConfigFixture({
+      "kickoff.build_implementation_start": {
+        template: "Kickoff {{unsupported.token}}",
+        baseVersion: 1,
+      },
+    });
 
-      const renderer = await renderPage();
+    const renderer = await renderPage();
 
-      await act(async () => {
-        renderer.getKanbanColumnProps().onDelegate("TASK-123");
-      });
+    await act(async () => {
+      renderer.getKanbanColumnProps().onDelegate("TASK-123");
+    });
 
-      await confirmSessionStartModal(renderer, {
-        modelId: "openai/gpt-5",
-        profileId: "build-agent",
-        variant: "default",
-      });
+    await confirmSessionStartModal(renderer, {
+      modelId: "openai/gpt-5",
+      profileId: "build-agent",
+      variant: "default",
+    });
 
-      expect(startAgentSessionMock).not.toHaveBeenCalled();
-      expect(sendAgentMessageMock).not.toHaveBeenCalled();
-      expect(renderer.getLocation()).toBe("/");
-      expect(publishSessionErrorMock).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: "TASK-123", role: "build" }),
-        'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token".',
-      );
-      expect(toastErrorMock).not.toHaveBeenCalled();
+    expect(startAgentSessionMock).not.toHaveBeenCalled();
+    expect(sendAgentMessageMock).not.toHaveBeenCalled();
+    expect(renderer.getLocation()).toBe("/");
+    expect(renderer.getSessionStartModalModel()?.kickoffPromptError).toBe(
+      'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token".',
+    );
+    expect(publishSessionErrorMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).not.toHaveBeenCalled();
 
-      await act(async () => {
-        renderer.unmount();
-      });
-    },
-  );
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 
   kanbanTest("modal model edits are propagated to session start payload", async () => {
     const renderer = await renderPage();

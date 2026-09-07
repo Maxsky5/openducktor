@@ -1,3 +1,4 @@
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { useCallback, useEffect, useMemo } from "react";
 import type { AgentChatComposerModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import {
@@ -30,7 +31,7 @@ type AgentStudioReviewCommentComposerAdapter = {
   submitDraft: (
     draft: AgentChatComposerDraft,
     onSend: AgentChatComposerModel["onSend"],
-  ) => Promise<boolean>;
+  ) => Promise<AgentChatSendResult>;
 };
 
 export const createAgentStudioReviewCommentComposerAdapter = (
@@ -75,7 +76,7 @@ export const createAgentStudioReviewCommentComposerAdapter = (
           return didSend;
         }
 
-        if (didSend) {
+        if (didSend === true) {
           getStore().completeSubmittingDrafts(submissionId);
         } else {
           getStore().restoreSubmittingDrafts(submissionId);
@@ -119,7 +120,8 @@ export function useAgentStudioReviewCommentComposerAdapter({
   }, [adapter, draftScope, draftStateKey]);
 
   const submitDraft = useCallback(
-    (draft: AgentChatComposerDraft): Promise<boolean> => adapter.submitDraft(draft, onSend),
+    (draft: AgentChatComposerDraft): Promise<AgentChatSendResult> =>
+      adapter.submitDraft(draft, onSend),
     [adapter, onSend],
   );
 

@@ -1,5 +1,14 @@
+import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
+import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import { getSessionLaunchAction } from "@/features/session-start/session-start-launch-options";
+import { supportsTaskTargetBranchSelection } from "@/features/session-start/constants";
+import { effectiveTaskTargetBranch, taskTargetBranchValidationError } from "@/lib/target-branch";
+import { requireDirectSessionSelection } from "./direct-session-selection";
+import { useQueryClient } from "@tanstack/react-query";
+import { createSessionStartKickoffResolver } from "@/features/session-start/session-start-kickoff";
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback, useRef } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
@@ -52,6 +61,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   canStartRole: CanStartRole;
   isSessionWorking: boolean;
   selectionForNewSession: AgentModelSelection | null;
+  newSessionCatalog?: AgentModelCatalog | null;
   repoSettings: RepoSettingsInput | null;
   workspaceId: string | null;
   workspaceRepoPath: string | null;
@@ -89,6 +99,7 @@ export function useAgentStudioSessionStartFlow({
   canStartRole,
   isSessionWorking,
   selectionForNewSession,
+  newSessionCatalog,
   repoSettings,
   workspaceId,
   workspaceRepoPath,
@@ -97,6 +108,10 @@ export function useAgentStudioSessionStartFlow({
   setTaskTargetBranch,
   scheduleQueryUpdate,
 }: UseAgentStudioSessionStartFlowArgs) {
+  const queryClient = useQueryClient();
+  const { availableRuntimeDefinitions } = useRuntimeAvailabilityContext();
+  const contextKey = `${workspaceId}:${taskId}:${role}`;
+  const isCurrentContext = useSessionStartContext(contextKey);
   const sessionStartGateScopeRef = useRef(workspaceId);
   const sessionStartGateRef = useRef<SessionStartGate<AgentStudioSessionStartGateResult> | null>(
     null,
@@ -123,6 +138,7 @@ export function useAgentStudioSessionStartFlow({
 
   const { sessionStartModal, runSessionStartRequest: runInternalSessionStartRequest } =
     useSessionStartModalRunner({
+      scopeKey: contextKey,
       branches,
       favoriteState,
       repoSettings,
@@ -137,6 +153,12 @@ export function useAgentStudioSessionStartFlow({
       return runInternalSessionStartRequest(
         buildSessionStartModalRequest({
           source: "agent_studio",
+          resolveKickoffPrompt: createSessionStartKickoffResolver({
+            queryClient,
+            workspaceId,
+            task: request.taskId === taskId ? selectedTask : null,
+            request,
+          }),
           request,
           requestedRuntimeKind:
             request.taskId === taskId
@@ -162,6 +184,8 @@ export function useAgentStudioSessionStartFlow({
       );
     },
     [
+      queryClient,
+      workspaceId,
       loadedSession,
       role,
       runInternalSessionStartRequest,
@@ -182,6 +206,7 @@ export function useAgentStudioSessionStartFlow({
           const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
             request,
             decision,
+            isCurrent: isCurrentContext,
             task: request.taskId === taskId ? selectedTask : null,
             humanRequestChangesTask,
           };
@@ -191,8 +216,10 @@ export function useAgentStudioSessionStartFlow({
           }
 
           const workflow = await runSessionStartWorkflow(workflowInput);
+          showSessionStartMessageRecovery(workflow);
           if (
             workflow.postStartActionError &&
+            !workflow.retryPostStartMessage &&
             !isSessionStartFailureFeedbackHandled(workflow.postStartActionError)
           ) {
             toast.error(sessionStartPostActionErrorTitle(request.postStartAction), {
@@ -200,13 +227,14 @@ export function useAgentStudioSessionStartFlow({
             });
           }
 
-          scheduleQueryUpdate(
-            buildAgentStudioSelectionQueryUpdate({
-              taskId: request.taskId,
-              sessionExternalId: workflow.externalSessionId,
-              role: request.role,
-            }),
-          );
+          if (isCurrentContext())
+            scheduleQueryUpdate(
+              buildAgentStudioSelectionQueryUpdate({
+                taskId: request.taskId,
+                sessionExternalId: workflow.externalSessionId,
+                role: request.role,
+              }),
+            );
           return workflow;
         };
 
@@ -228,6 +256,7 @@ export function useAgentStudioSessionStartFlow({
       return executeRequestedSessionStart(request, executeWithDecision);
     },
     [
+      isCurrentContext,
       beginStartingActivity,
       executeRequestedSessionStart,
       humanRequestChangesTask,
@@ -309,6 +338,81 @@ export function useAgentStudioSessionStartFlow({
     },
     [runSessionStart],
   );
+
+  const startSessionForMessage = useCallback(async (): Promise<
+    SessionStartWorkflowResult | undefined
+  > => {
+    if (!canStartRole(role)) throw new Error("This task cannot start the selected workflow role.");
+    const action = getSessionLaunchAction(launchActionId);
+    if (action.role !== role || !action.allowedStartModes.includes("fresh")) {
+      throw new Error("This workflow action requires an explicit session launch.");
+    }
+    const selectedModel = requireDirectSessionSelection({
+      selection: selectionForNewSession,
+      catalog: newSessionCatalog ?? null,
+      runtimeDefinitions: availableRuntimeDefinitions,
+      role,
+      taskId,
+      launchActionId,
+    });
+    if (!repoSettings)
+      throw new Error("Repository settings are unavailable. Reload before starting a session.");
+    const branchError = taskTargetBranchValidationError(selectedTask?.targetBranchError);
+    if (branchError) throw new Error(branchError);
+    const decision: ResolvedSessionStartDecision = { startMode: "fresh", selectedModel };
+    if (supportsTaskTargetBranchSelection(role, launchActionId)) {
+      decision.targetBranch = effectiveTaskTargetBranch(
+        selectedTask?.targetBranch,
+        repoSettings.defaultTargetBranch,
+      );
+    }
+    const activity = beginStartingActivity(
+      buildAgentStudioSessionActivityKey({ workspaceId, taskId, role, session: null }),
+    );
+    try {
+      const input: Parameters<typeof runSessionStartWorkflow>[0] = {
+        request: {
+          taskId,
+          role,
+          launchActionId,
+          postStartAction: "none",
+          holdForPostStartMessage: true,
+        },
+        decision,
+        task: selectedTask,
+        isCurrent: isCurrentContext,
+      };
+      if (setTaskTargetBranch) input.persistTaskTargetBranch = setTaskTargetBranch;
+      const result = await runSessionStartWorkflow(input);
+      if (isCurrentContext())
+        scheduleQueryUpdate(
+          buildAgentStudioSelectionQueryUpdate({
+            taskId,
+            role,
+            sessionExternalId: result.externalSessionId,
+          }),
+        );
+      return result;
+    } finally {
+      activity.finish();
+    }
+  }, [
+    canStartRole,
+    role,
+    launchActionId,
+    selectionForNewSession,
+    newSessionCatalog,
+    availableRuntimeDefinitions,
+    taskId,
+    repoSettings,
+    selectedTask,
+    beginStartingActivity,
+    workspaceId,
+    runSessionStartWorkflow,
+    setTaskTargetBranch,
+    isCurrentContext,
+    scheduleQueryUpdate,
+  ]);
 
   const startSessionRequest = useCallback(
     async (
@@ -425,6 +529,7 @@ export function useAgentStudioSessionStartFlow({
     humanReviewFeedbackModal,
     startSessionRequest,
     startSession,
+    startSessionForMessage,
     startLaunchKickoff,
     handleCreateSession: handleCreateSessionWithHumanFeedback,
     handleQuickAction,
@@ -435,6 +540,7 @@ export function useAgentStudioSessionStartFlow({
     startSessionRequest: (
       request: AgentStudioSessionStartRequest,
     ) => Promise<SessionStartWorkflowResult | undefined>;
+    startSessionForMessage: () => Promise<SessionStartWorkflowResult | undefined>;
     startSession: (options?: {
       holdForPostStartMessage?: boolean;
     }) => Promise<SessionStartWorkflowResult | undefined>;

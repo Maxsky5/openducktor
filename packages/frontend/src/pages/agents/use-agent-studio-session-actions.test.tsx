@@ -1,3 +1,4 @@
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -306,40 +307,6 @@ const createHookHarness = (initialProps: HookArgs) => {
   return createCoreHookHarness(useAgentStudioSessionActions, initialProps, { wrapper });
 };
 
-const confirmSessionStartModal = async (
-  harness: ReturnType<typeof createHookHarness>,
-): Promise<void> => {
-  await harness.waitFor(
-    (state) =>
-      state.sessionStartModal !== null &&
-      state.sessionStartModal.isSelectionCatalogLoading === false,
-  );
-  await harness.run((state) => {
-    state.sessionStartModal?.onSelectModelPair({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-    });
-    state.sessionStartModal?.onSelectRuntimeProfile("spec");
-    state.sessionStartModal?.onSelectVariant("default");
-  });
-  await harness.waitFor((state) => {
-    const selection = state.sessionStartModal?.selectedModelSelection;
-    return (
-      selection?.profileId === "spec" &&
-      selection.modelId === "gpt-5" &&
-      (selection.variant ?? "") === "default"
-    );
-  });
-  await harness.run(async (state) => {
-    state.sessionStartModal?.onConfirm({
-      runInBackground: false,
-      startMode: "fresh",
-      sourceSessionOptionValue: null,
-    });
-  });
-};
-
 const createBaseArgs = (): HookArgs => {
   return {
     activeWorkspaceId: "workspace-1",
@@ -374,8 +341,33 @@ const createBaseArgs = (): HookArgs => {
       variant: "default",
       profileId: "spec",
     },
+    newSessionCatalog: {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT-5",
+          variants: ["default"],
+        },
+      ],
+      profiles: [{ name: "spec", mode: "primary", hidden: false }],
+      defaultModelsByProvider: {},
+    },
     reusablePrompts: [],
-    repoSettings: null,
+    repoSettings: {
+      defaultRuntimeKind: "opencode",
+      worktreeBasePath: "",
+      branchPrefix: "task/",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      preStartHooks: [],
+      postCompleteHooks: [],
+      devServers: [],
+      worktreeCopyPaths: [],
+      agentDefaults: { spec: null, planner: null, build: null, qa: null },
+    },
     runSessionStartWorkflow: createRunSessionStartWorkflow(),
     sendAgentMessage: async () => {},
     humanRequestChangesTask: async () => {},
@@ -656,11 +648,11 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
-    let sendPromise: Promise<boolean | undefined> | undefined;
+    let sendPromise: Promise<AgentChatSendResult | undefined> | undefined;
     await harness.run((state) => {
       sendPromise = state.onSend(draft);
     });
-    await confirmSessionStartModal(harness);
+    expect(harness.getLatest().sessionStartModal).toBeNull();
     await harness.run(async () => {
       await sendPromise;
     });
@@ -1230,7 +1222,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
-    let sendPromise: Promise<boolean | undefined> | undefined;
+    let sendPromise: Promise<AgentChatSendResult | undefined> | undefined;
     await harness.run(async (state) => {
       sendPromise = state.onSend(draft);
     });
@@ -1259,7 +1251,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
-    let sendPromise: Promise<boolean | undefined> | undefined;
+    let sendPromise: Promise<AgentChatSendResult | undefined> | undefined;
     await harness.run(async (state) => {
       sendPromise = state.onSend(draft).catch(() => undefined);
     });
@@ -1398,7 +1390,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
 
-    let sendPromise: Promise<boolean> | undefined;
+    let sendPromise: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       sendPromise = state.onSend(taskOneDraft);
     });
@@ -1449,7 +1441,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
 
-    let firstSendPromise: Promise<boolean> | undefined;
+    let firstSendPromise: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       firstSendPromise = state.onSend(firstDraft);
     });
@@ -1507,7 +1499,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
 
-    let firstSendPromise: Promise<boolean> | undefined;
+    let firstSendPromise: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       firstSendPromise = state.onSend(firstDraft);
     });
@@ -1564,7 +1556,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
-    let sendPromise: Promise<boolean> | undefined;
+    let sendPromise: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       sendPromise = state.onSend(createComposerDraft("hello world"));
     });
@@ -1615,11 +1607,11 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
 
-    let sendPromise: Promise<boolean> | undefined;
+    let sendPromise: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       sendPromise = state.onSend(draft);
     });
-    await confirmSessionStartModal(harness);
+    expect(harness.getLatest().sessionStartModal).toBeNull();
 
     await harness.waitFor((state) => state.isSending);
 
@@ -1976,6 +1968,103 @@ describe("useAgentStudioSessionActions", () => {
       },
     ]);
 
+    await harness.unmount();
+  });
+});
+
+describe("direct prepared submission", () => {
+  test.each([
+    ["spec", "spec_initial"],
+    ["planner", "planner_initial"],
+    ["build", "build_implementation_start"],
+    ["qa", "qa_review"],
+  ] as const)(
+    "starts %s fresh with the exact selection and no modal",
+    async (role, launchActionId) => {
+      const start = mock(async () => sessionIdentity("direct"));
+      const send = mock(async () => {});
+      const args = {
+        ...createBaseArgs(),
+        role,
+        launchActionId,
+        selectedTask: createTask({
+          status: "ai_review",
+          agentWorkflows: {
+            ...createTask().agentWorkflows,
+            qa: { required: true, canSkip: false, available: true, completed: false },
+          },
+        }),
+        runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+        sendAgentMessage: send,
+      };
+      const harness = createHookHarness(args);
+      await harness.mount();
+      await harness.run(async (state) => {
+        expect(await state.onSend(createComposerDraft("exact draft"))).toBe(true);
+      });
+      expect(harness.getLatest().sessionStartModal).toBeNull();
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(start).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role,
+          startMode: "fresh",
+          selectedModel: args.selectionForNewSession,
+          holdForPostStartMessage: true,
+        }),
+      );
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith(sessionIdentity("direct"), [
+        { kind: "text", text: "exact draft" },
+      ]);
+      await harness.unmount();
+    },
+  );
+  test("rejects a missing catalog without opening a modal or starting", async () => {
+    const start = mock(async () => sessionIdentity("never"));
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      newSessionCatalog: null,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+    });
+    await harness.mount();
+    await harness.run(async (state) => {
+      await expect(state.onSend(createComposerDraft("draft"))).rejects.toThrow(
+        "Select an available runtime and model",
+      );
+    });
+    expect(start).not.toHaveBeenCalled();
+    expect(harness.getLatest().sessionStartModal).toBeNull();
+    await harness.unmount();
+  });
+  test("returns recovery after first-send failure and retries in the existing session", async () => {
+    const start = mock(async () => sessionIdentity("kept"));
+    const send = mock(async () => {
+      throw new Error("send failed");
+    });
+    const args = {
+      ...createBaseArgs(),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      sendAgentMessage: send,
+    };
+    const harness = createHookHarness(args);
+    await harness.mount();
+    await harness.run(async (state) => {
+      expect(await state.onSend(createComposerDraft("recover me"))).toEqual(
+        expect.objectContaining({
+          kind: "recover_draft",
+          error: expect.objectContaining({ message: "send failed" }),
+        }),
+      );
+    });
+    await harness.update({
+      ...args,
+      selectedSession: selectedSessionFromIdentity(sessionIdentity("kept")),
+      sendAgentMessage: async () => {},
+    });
+    await harness.run(async (state) => {
+      expect(await state.onSend(createComposerDraft("recover me"))).toBe(true);
+    });
+    expect(start).toHaveBeenCalledTimes(1);
     await harness.unmount();
   });
 });

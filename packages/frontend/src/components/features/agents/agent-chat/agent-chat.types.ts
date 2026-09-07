@@ -1,3 +1,4 @@
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type {
   ChatSettings,
   RuntimeApprovalReplyOutcome,
@@ -153,7 +154,9 @@ export type AgentChatComposerModel = {
   busySendBlockedReason: string | null;
   pendingSendItems?: AgentChatPendingSendItems;
   draftScope: AgentChatDraftScope;
-  onSend: (draft: import("./agent-chat-composer-draft").AgentChatComposerDraft) => Promise<boolean>;
+  onSend: (
+    draft: import("./agent-chat-composer-draft").AgentChatComposerDraft,
+  ) => Promise<AgentChatSendResult>;
   isSending: boolean;
   isStarting: boolean;
   isSessionWorking: boolean;

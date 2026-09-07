@@ -371,6 +371,7 @@ describe("session-start-orchestration", () => {
     expect(result).toEqual({
       ...sessionIdentity("session-new"),
       postStartActionError: expect.objectContaining({ message: "kickoff failed" }),
+      retryPostStartMessage: expect.any(Function),
     });
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({

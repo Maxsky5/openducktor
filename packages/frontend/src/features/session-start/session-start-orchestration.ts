@@ -46,6 +46,7 @@ type SessionStartContextSession = {
 
 type BuildSessionStartModalRequestArgs = {
   source: SessionStartModalSource;
+  resolveKickoffPrompt?: SessionStartModalOpenRequest["resolveKickoffPrompt"];
   request: SessionStartFlowRequest;
   requestedRuntimeKind?: RuntimeKind | null;
   selectedModel: AgentModelSelection | null;
@@ -55,6 +56,7 @@ type BuildSessionStartModalRequestArgs = {
 };
 
 type ExecuteSessionStartFromDecisionArgs = {
+  isCurrent?: () => boolean;
   queryClient: QueryClient;
   request: SessionStartFlowRequest;
   decision: ResolvedSessionStartDecision;
@@ -177,6 +179,7 @@ const resolveInitialSourceSession = ({
 
 export const buildSessionStartModalRequest = ({
   source,
+  resolveKickoffPrompt,
   request,
   requestedRuntimeKind,
   selectedModel,
@@ -202,6 +205,8 @@ export const buildSessionStartModalRequest = ({
     selectedModel,
     initialTargetBranch,
   };
+
+  if (resolveKickoffPrompt) modalRequest.resolveKickoffPrompt = resolveKickoffPrompt;
 
   if (requestedRuntimeKind) {
     modalRequest.requestedRuntimeKind = requestedRuntimeKind;
@@ -231,6 +236,7 @@ export const buildSessionStartModalRequest = ({
 };
 
 export const executeSessionStartFromDecision = async ({
+  isCurrent,
   queryClient,
   request,
   decision,
@@ -249,6 +255,10 @@ export const executeSessionStartFromDecision = async ({
     startMode: decision.startMode,
     postStartAction: request.postStartAction,
   };
+
+  if (decision.kickoffPrompt !== undefined) {
+    intent.kickoffPrompt = decision.kickoffPrompt;
+  }
 
   if (decision.targetBranch) {
     intent.targetBranch = decision.targetBranch;
@@ -287,6 +297,7 @@ export const executeSessionStartFromDecision = async ({
     startAgentSession,
   };
 
+  if (isCurrent) workflowInput.isCurrent = isCurrent;
   if (persistTaskTargetBranch) {
     workflowInput.persistTaskTargetBranch = persistTaskTargetBranch;
   }
@@ -365,7 +376,8 @@ export const createSessionStartWorkflowRunner = ({
       throw new SessionStartWorkflowError(startError, feedbackHandled);
     }
 
-    const { postStartActionError, ...session } = result;
+    const { postStartActionError } = result;
+    const session = toAgentSessionIdentity(result);
     const notificationWithSession = { ...notificationInput, session };
     try {
       if (postStartActionError) {

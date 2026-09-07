@@ -1,3 +1,5 @@
+import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
+import { createSessionStartKickoffResolver } from "@/features/session-start/session-start-kickoff";
 import type { GitBranch, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
@@ -141,9 +143,11 @@ export function useKanbanSessionStartFlow({
   runSessionStartWorkflow,
 }: UseKanbanSessionStartFlowArgs): UseKanbanSessionStartFlowResult {
   const queryClient = useQueryClient();
+  const isCurrentContext = useSessionStartContext(activeWorkspaceId);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
   const { sessionStartModal, runSessionStartRequest } = useSessionStartModalRunner({
+    scopeKey: activeWorkspaceId,
     branches,
     favoriteState,
     repoSettings,
@@ -204,6 +208,12 @@ export function useKanbanSessionStartFlow({
       return runSessionStartRequest(
         buildSessionStartModalRequest({
           source: "kanban",
+          resolveKickoffPrompt: createSessionStartKickoffResolver({
+            queryClient,
+            workspaceId: activeWorkspaceId,
+            task: selectedTask,
+            request: intent,
+          }),
           request: intent,
           selectedModel: null,
           taskSessions,
@@ -212,6 +222,7 @@ export function useKanbanSessionStartFlow({
         async ({ decision, runInBackground }) => {
           const input: Parameters<typeof startKanbanSessionFlow>[0] = {
             workspaceId: activeWorkspaceId,
+            isCurrent: isCurrentContext,
             request: intent,
             decision,
             startInBackground: runInBackground,
@@ -220,7 +231,9 @@ export function useKanbanSessionStartFlow({
             roleLabels: ROLE_LABELS,
             runSessionStartWorkflow,
             humanRequestChangesTask,
-            openSessionInAgentStudio,
+            openSessionInAgentStudio: (request, session) => {
+              if (isCurrentContext()) openSessionInAgentStudio(request, session);
+            },
             saveAgentStudioTab,
           };
           if (setTaskTargetBranch) {
@@ -232,6 +245,8 @@ export function useKanbanSessionStartFlow({
       );
     },
     [
+      isCurrentContext,
+      queryClient,
       humanRequestChangesTask,
       openAgentStudioTabOnBackgroundSessionStart,
       openSessionInAgentStudio,
