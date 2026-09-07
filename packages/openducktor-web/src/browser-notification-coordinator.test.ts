@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   createDefaultNotificationSettings,
   type NotificationOccurrence,
@@ -1186,6 +1186,78 @@ test("keeps the same occurrence pending after a failed lock query", async () => 
   await expect(owner.claimExternalDelivery(occurrence.occurrenceId)).resolves.toBe(false);
   owner.dispose();
 });
+
+test.each([false, true])(
+  "times out an unresponsive peer and releases its wait, disposing=%s",
+  async (disposeBeforeTimeout) => {
+    const hub = new FakeBroadcastHub(false);
+    const locks = new FakeLockManager();
+    let ownerChannel!: FakeBroadcastChannel;
+    let peerChannel!: FakeBroadcastChannel;
+    const owner = createBrowserNotificationCoordinator({
+      createChannel: () => (ownerChannel = hub.createChannel()),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "owner",
+    });
+    const peer = createBrowserNotificationCoordinator({
+      createChannel: () => (peerChannel = hub.createChannel()),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "peer",
+    });
+    const originalSetTimeout = globalThis.setTimeout;
+    let expire: (() => void) | undefined;
+    const timerSpy = spyOn(globalThis, "setTimeout").mockImplementation(
+      Object.assign((...args: Parameters<typeof setTimeout>) => {
+        const [callback, delay, ...callbackArgs] = args;
+        if (delay === 5000) expire = () => callback(...callbackArgs);
+        return originalSetTimeout(...args);
+      }, originalSetTimeout),
+    );
+    try {
+      await waitFor(
+        () =>
+          owner.isExternalDeliveryOwner() && locks.heldCount(`${TAB_LOCK_NAME_PREFIX}peer`) === 1,
+      );
+      await owner.publishOccurrence(occurrence, settings);
+      await hub.flushNext(peerChannel, "occurrence_selected");
+      const deliver = mock(() => {});
+      const claim = owner.claimExternalDelivery(occurrence.occurrenceId).then((claimed) => {
+        if (claimed) deliver();
+      });
+      const failure = claim.catch((cause: unknown) => cause);
+      await waitFor(() => expire !== undefined);
+      if (disposeBeforeTimeout) owner.dispose();
+      expire?.();
+      expect(await failure).toEqual(
+        new Error(
+          "A browser tab did not acknowledge the notification claim. Close or reload unresponsive OpenDucktor tabs.",
+        ),
+      );
+      expect(owner.getFailureMessage()).toContain("Close or reload");
+      expect(deliver).not.toHaveBeenCalled();
+      await waitForAsync(
+        async () =>
+          !(await locks.query()).pending.some(
+            (lock) => lock.name === `${TAB_LOCK_NAME_PREFIX}peer`,
+          ),
+      );
+      await hub.flushNext(peerChannel, "external_delivery_claimed");
+      if (!disposeBeforeTimeout) await hub.flushNext(ownerChannel, "external_delivery_claim_ack");
+      owner.dispose();
+      await waitFor(() => peer.isExternalDeliveryOwner());
+      await hub.flushNext(peerChannel, "external_delivery_claim_released");
+      expect(await peer.claimExternalDelivery(occurrence.occurrenceId)).toBe(true);
+    } finally {
+      timerSpy.mockRestore();
+      owner.dispose();
+      peer.dispose();
+    }
+  },
+);
 
 test("rolls back a partially propagated claim before a new owner replays it", async () => {
   const hub = new FakeBroadcastHub(false);

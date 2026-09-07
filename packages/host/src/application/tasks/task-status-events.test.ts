@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { HostOperationError } from "../../effect/host-errors";
 import { collectTaskStatusChanges } from "../../ports/task-status-changes";
@@ -64,6 +64,47 @@ const deferred = () => {
   return { promise, resolve };
 };
 
+test.each([
+  ["buildCompleted", "in_progress", "build"],
+  ["buildCompleted", "blocked", "build"],
+  ["qaApproved", "blocked", "qa"],
+  ["qaApproved", "ai_review", "qa"],
+] as const)(
+  "publishes the source role for %s from %s",
+  async (operation, previousStatus, sourceRole) => {
+    const harness = await createSqliteTaskStoreHarness();
+    const { repoPath, store } = harness;
+    try {
+      const task = await Effect.runPromise(
+        store.createTask({
+          repoPath,
+          task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+        }),
+      );
+      await Effect.runPromise(
+        store.transitionTask({ repoPath, taskId: task.id, status: previousStatus }),
+      );
+      const { service, events } = createServices(store, {
+        [operation]: () =>
+          store.transitionTask({ repoPath, taskId: task.id, status: "human_review" }),
+      });
+      await Effect.runPromise(
+        service[operation]({ repoPath, taskId: task.id, markdown: "Approved" }),
+      );
+      expect(events).toMatchObject([
+        {
+          kind: "tasks_updated",
+          statusChanges: [
+            { previousStatus, sourceRole, task: { id: task.id, status: "human_review" } },
+          ],
+        },
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  },
+);
+
 test("keeps the committed transition and reports a failed publication snapshot without retry", async () => {
   const harness = await createSqliteTaskStoreHarness();
   const { repoPath, store } = harness;
@@ -106,62 +147,82 @@ test("keeps the committed transition and reports a failed publication snapshot w
   }
 });
 
-test("captures each committed transition despite a concurrent mutation overtaking publication", async () => {
-  const harness = await createSqliteTaskStoreHarness();
-  const { repoPath, store } = harness;
-  const committed = deferred();
-  const release = deferred();
-  try {
-    const task = await Effect.runPromise(
-      store.createTask({
-        repoPath,
-        task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
-      }),
-    );
-    const { service, events, failures } = createServices(store, {
-      transitionTask: (input) =>
-        Effect.gen(function* () {
-          const result = yield* store.transitionTask(input);
-          if (input.status === "spec_ready") {
-            committed.resolve();
-            yield* Effect.promise(() => release.promise);
-          }
-          return result;
+test.each([false, true])(
+  "publishes concurrent mutations in commit order, background sync=%s",
+  async (viaSync) => {
+    const harness = await createSqliteTaskStoreHarness();
+    const { repoPath, store } = harness;
+    const committed = deferred();
+    const release = deferred();
+    try {
+      const task = await Effect.runPromise(
+        store.createTask({
+          repoPath,
+          task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
         }),
-    });
-    const first = Effect.runPromise(
-      service.transitionTask({ repoPath, taskId: task.id, status: "spec_ready" }),
-    );
-    await committed.promise;
-    await Effect.runPromise(
-      service.transitionTask({ repoPath, taskId: task.id, status: "ready_for_dev" }),
-    );
-    release.resolve();
-    await first;
-    expect(failures).toEqual([]);
-    expect(events).toMatchObject([
-      {
-        kind: "tasks_updated",
-        statusChanges: [
-          { previousStatus: "spec_ready", task: { id: task.id, status: "ready_for_dev" } },
-        ],
-      },
-      {
-        kind: "tasks_updated",
-        statusChanges: [{ previousStatus: "open", task: { id: task.id, status: "spec_ready" } }],
-        taskSnapshots: [{ id: task.id, status: "ready_for_dev" }],
-      },
-    ]);
-    // A metadata/no-op status update must not repeat either transition.
-    await Effect.runPromise(
-      service.transitionTask({ repoPath, taskId: task.id, status: "ready_for_dev" }),
-    );
-    expect(events[2]).toMatchObject({ statusChanges: [] });
-  } finally {
-    release.resolve();
-    await harness.cleanup();
-  }
-});
+      );
+      const { service, sync, events, failures } = createServices(store, {
+        repoPullRequestSyncDetailed: () =>
+          store
+            .transitionTask({ repoPath, taskId: task.id, status: "ready_for_dev" })
+            .pipe(Effect.as({ ran: true, changedTaskIds: [task.id] })),
+        transitionTask: (input) =>
+          Effect.gen(function* () {
+            const result = yield* store.transitionTask(input);
+            if (input.status === "spec_ready") {
+              committed.resolve();
+              yield* Effect.promise(() => release.promise);
+            }
+            return result;
+          }),
+      });
+      const first = Effect.runPromise(
+        service.transitionTask({ repoPath, taskId: task.id, status: "spec_ready" }),
+      );
+      await committed.promise;
+      const secondStarted = deferred();
+      const secondMutation = viaSync
+        ? sync.syncRepoPullRequests(repoPath).pipe(Effect.asVoid)
+        : service
+            .transitionTask({ repoPath, taskId: task.id, status: "ready_for_dev" })
+            .pipe(Effect.asVoid);
+      const second = Effect.runFork(
+        Effect.sync(secondStarted.resolve).pipe(Effect.zipRight(secondMutation)),
+      );
+      await secondStarted.promise;
+      expect(events).toEqual([]);
+      expect((await Effect.runPromise(store.listTasks({ repoPath })))[0]?.status).toBe(
+        "spec_ready",
+      );
+      release.resolve();
+      await first;
+      await Effect.runPromise(Fiber.join(second));
+      expect(failures).toEqual([]);
+      expect(events).toMatchObject([
+        {
+          kind: "tasks_updated",
+          statusChanges: [{ previousStatus: "open", task: { id: task.id, status: "spec_ready" } }],
+          taskSnapshots: [{ id: task.id, status: "spec_ready" }],
+        },
+        {
+          kind: "tasks_updated",
+          statusChanges: [
+            { previousStatus: "spec_ready", task: { id: task.id, status: "ready_for_dev" } },
+          ],
+          taskSnapshots: [{ id: task.id, status: "ready_for_dev" }],
+        },
+      ]);
+      // A metadata/no-op status update must not repeat either transition.
+      await Effect.runPromise(
+        service.transitionTask({ repoPath, taskId: task.id, status: "ready_for_dev" }),
+      );
+      expect(events[2]).toMatchObject({ statusChanges: [] });
+    } finally {
+      release.resolve();
+      await harness.cleanup();
+    }
+  },
+);
 
 test("publishes committed transitions when the rest of a mutation fails", async () => {
   const harness = await createSqliteTaskStoreHarness();

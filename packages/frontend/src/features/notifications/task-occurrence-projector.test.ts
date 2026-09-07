@@ -19,6 +19,26 @@ const event = (
 
 describe("task occurrence projector", () => {
   test.each([
+    ["in_progress", "build"],
+    ["blocked", "build"],
+    ["blocked", "qa"],
+    ["ai_review", "qa"],
+  ] as const)("routes Human Review from %s to its source role %s", (previousStatus, sourceRole) => {
+    const projector = createTaskOccurrenceProjector({ repoPath: "/repo", repositoryLabel: "Repo" });
+    const update = event("review", "human_review", previousStatus);
+    update.statusChanges[0]!.sourceRole = sourceRole;
+    expect(projector.projectChange(update)).toMatchObject([
+      {
+        role: sourceRole,
+        navigationTarget: {
+          type: "agent_studio_task",
+          taskId: "task-1",
+          preferredRole: sourceRole,
+        },
+      },
+    ]);
+  });
+  test.each([
     ["spec_ready", "workflow.spec_ready", "spec"],
     ["ready_for_dev", "workflow.ready_for_dev", "planner"],
     ["in_progress", "workflow.in_progress", "build"],

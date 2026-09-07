@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   externalTaskSyncEventSchema,
   taskChangeSetSchema,
+  taskEventStatusChangeSchema,
   taskEventStreamAcknowledgeSchema,
   taskEventStreamFrameSchema,
   taskEventStreamSubscribeSchema,
@@ -9,6 +10,19 @@ import {
 } from "./external-task-sync-schemas";
 
 describe("external-task-sync-schemas", () => {
+  test("preserves an optional source role and rejects unknown roles", () => {
+    const change = {
+      previousStatus: "blocked",
+      task: { id: "task-1", title: "Task", status: "human_review" },
+    };
+    expect(taskEventStatusChangeSchema.parse(change)).toEqual(change);
+    expect(taskEventStatusChangeSchema.parse({ ...change, sourceRole: "build" }).sourceRole).toBe(
+      "build",
+    );
+    expect(
+      taskEventStatusChangeSchema.safeParse({ ...change, sourceRole: "unknown" }).success,
+    ).toBe(false);
+  });
   test("parses external task created sync events", () => {
     const eventId = "event-µ-1";
     const repoPath = "/repo/naïve";

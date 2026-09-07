@@ -43,8 +43,9 @@ const sync = (
   events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }>,
 ): Pick<
   TaskSyncService,
-  "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests"
+  "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests" | "runMutation"
 > => ({
+  runMutation: (_repoPath, mutation) => mutation,
   publishExternalTaskCreated: () => Effect.void,
   publishTasksUpdated: (_repoPath, changes) =>
     Effect.sync(() => {
@@ -131,8 +132,9 @@ describe("createEventPublishingTaskService", () => {
     const reports: unknown[] = [];
     const taskSyncService: Pick<
       TaskSyncService,
-      "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests"
+      "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests" | "runMutation"
     > = {
+      runMutation: (_repoPath, mutation) => mutation,
       publishExternalTaskCreated: () => Effect.void,
       publishTasksUpdated: () =>
         Effect.sync(() => {
@@ -177,6 +179,7 @@ describe("createEventPublishingTaskService", () => {
           ),
       }),
       taskSyncService: {
+        runMutation: (_repoPath, mutation) => mutation,
         publishExternalTaskCreated: (_repoPath, taskSnapshot) =>
           Effect.sync(() => {
             publishedTaskIds.push(taskSnapshot.id);

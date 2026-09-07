@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentRoleSchema } from "./agent-workflow-schemas";
 import { taskStatusSchema } from "./task-schemas";
 
 export const externalTaskSyncEventKindSchema = z.union([
@@ -52,6 +53,7 @@ export type TaskEventTaskSnapshot = z.infer<typeof taskEventTaskSnapshotSchema>;
 export const taskEventStatusChangeSchema = z.strictObject({
   previousStatus: taskStatusSchema,
   task: taskEventTaskSnapshotSchema,
+  sourceRole: agentRoleSchema.optional(),
 });
 export type TaskEventStatusChange = z.infer<typeof taskEventStatusChangeSchema>;
 

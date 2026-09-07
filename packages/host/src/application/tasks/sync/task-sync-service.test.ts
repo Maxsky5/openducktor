@@ -52,6 +52,51 @@ const createEventBus = () => {
   };
   return { eventBus, events };
 };
+
+test.each(["failure", "interruption"] as const)(
+  "releases the repository mutation gate after %s",
+  async (outcome) => {
+    const sync = createTaskSyncServiceForTest({
+      eventBus: createEventBus().eventBus,
+      taskService: {
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: false, changedTaskIds: [] }),
+      },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+    });
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const entered = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
+          const first = yield* Effect.forkScoped(
+            sync.runMutation(
+              "/repo",
+              Effect.gen(function* () {
+                yield* Deferred.succeed(entered, undefined);
+                yield* Deferred.await(release);
+                return yield* Effect.fail("Mutation failed");
+              }),
+            ),
+          );
+          yield* Deferred.await(entered);
+          const queued = yield* Effect.forkScoped(
+            sync.runMutation("/repo", Effect.succeed("next")),
+          );
+          expect(yield* sync.runMutation("/other-repo", Effect.succeed("independent"))).toBe(
+            "independent",
+          );
+          if (outcome === "interruption") {
+            yield* Fiber.interrupt(first);
+          } else {
+            yield* Deferred.succeed(release, undefined);
+            expect(yield* Fiber.join(first).pipe(Effect.flip)).toBe("Mutation failed");
+          }
+          expect(yield* Fiber.join(queued)).toBe("next");
+        }),
+      ),
+    );
+  },
+);
 const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
   title: "Task 1",

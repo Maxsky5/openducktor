@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { render as renderUi } from "@testing-library/react";
+import { render as renderUi, waitFor } from "@testing-library/react";
 import { act, createElement, createRef, type ReactElement } from "react";
 import {
   createTaskCardFixture,
@@ -8,6 +8,7 @@ import {
 import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { taskQueryKeys } from "@/state/queries/tasks";
+import { withMockedToast } from "@/test-utils/mock-toast";
 import { collectDeleteImpactTaskIds, toSubtasks } from "./task-details-sheet-model";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
@@ -42,6 +43,72 @@ async function importMockedTaskDetailsSheetController(): Promise<TaskDetailsShee
 }
 
 describe("TaskDetailsSheetController", () => {
+  test.each([false, true])(
+    "handles a cached task refresh failure, visible on board=%s",
+    async (visibleOnBoard) => {
+      const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
+      const task = createTaskCardFixture({ id: "task-1", status: "closed" });
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
+      client.setQueryData(queryKey, { tasks: [task] });
+      const ref = createRef<TaskDetailsSheetControllerHandle>();
+      const rendered = renderUi(
+        createElement(TaskDetailsSheetController, {
+          ref,
+          activeWorkspace,
+          allTasks: visibleOnBoard ? [task] : [],
+          taskSessionsByTaskId: new Map(),
+          historicalSessionsByTaskId: new Map(),
+          activeTaskSessionContextByTaskId: new Map(),
+          workflowActionsEnabled: false,
+        }),
+        { wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children) },
+      );
+      try {
+        await act(async () => ref.current?.openTask(task.id));
+        await withMockedToast(async ({ toastErrorMock }) => {
+          let failRead = (_error: Error): void => {};
+          const read = new Promise<never>((_resolve, reject) => {
+            failRead = reject;
+          });
+          let refresh: Promise<unknown> = Promise.resolve();
+          await act(async () => {
+            refresh = client
+              .fetchQuery({ queryKey, queryFn: () => read, staleTime: 0 })
+              .catch(() => {});
+          });
+          expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+            expect.objectContaining({ task, open: true }),
+          );
+          await act(async () => {
+            failRead(new Error("Task read failed"));
+            await refresh;
+          });
+          await waitFor(() => {
+            expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+              expect.objectContaining({
+                task: visibleOnBoard ? task : null,
+                open: visibleOnBoard,
+              }),
+            );
+          });
+          expect(client.getQueryData<{ tasks: TaskCard[] }>(queryKey)).toEqual({ tasks: [task] });
+          if (visibleOnBoard) {
+            expect(toastErrorMock).not.toHaveBeenCalled();
+          } else {
+            expect(toastErrorMock).toHaveBeenCalledTimes(1);
+            expect(toastErrorMock).toHaveBeenCalledWith("Could not load notification task", {
+              id: "task-details-unavailable:/repo-a:task-1",
+              description: "Reload and open the task again.",
+            });
+          }
+        });
+      } finally {
+        rendered.unmount();
+        client.clear();
+      }
+    },
+  );
   test("opens a closed task outside the board and clears selection on workspace switch", async () => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
     const child = createTaskCardFixture({

@@ -527,8 +527,9 @@ describe("createOdtMcpBridgeService", () => {
     });
     const taskSyncService: Pick<
       TaskSyncService,
-      "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests"
+      "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests" | "runMutation"
     > = {
+      runMutation: (_repoPath, mutation) => mutation,
       publishExternalTaskCreated(_repoPath, taskSnapshot) {
         return Effect.sync(() => {
           events.push({ kind: "created", taskIds: [taskSnapshot.id] });

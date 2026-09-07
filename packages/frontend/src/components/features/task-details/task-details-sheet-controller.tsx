@@ -49,11 +49,11 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
     ...unfilteredRepoTaskDataQueryOptions(repoPath ?? ""),
     enabled: repoPath !== null && taskId !== null && !boardTask,
   });
-  const sheetTasks = boardTask ? allTasks : (taskQuery.data?.tasks ?? allTasks);
+  const sheetTasks = boardTask || !taskQuery.isSuccess ? allTasks : taskQuery.data.tasks;
   const task = sheetTasks.find((entry) => entry.id === taskId) ?? null;
   useEffect(() => {
-    if (!taskId || taskQuery.isFetching || taskQuery.isPending) return;
-    if (taskQuery.data?.tasks.some((entry) => entry.id === taskId)) return;
+    if (!taskId || boardTask || taskQuery.isFetching || taskQuery.isPending) return;
+    if (taskQuery.isSuccess && taskQuery.data.tasks.some((entry) => entry.id === taskId)) return;
     toast.error(
       taskQuery.isError ? "Could not load notification task" : "Notification task no longer exists",
       {
@@ -64,12 +64,14 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
       },
     );
   }, [
+    boardTask,
     repoPath,
     taskId,
     taskQuery.data,
     taskQuery.isError,
     taskQuery.isFetching,
     taskQuery.isPending,
+    taskQuery.isSuccess,
   ]);
   const open = task !== null;
 

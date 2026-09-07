@@ -16,7 +16,7 @@ export type CreateEventPublishingTaskServiceInput = {
   taskService: TaskServiceWithMutationProgress;
   taskSyncService: Pick<
     TaskSyncService,
-    "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests"
+    "publishExternalTaskCreated" | "publishTasksUpdated" | "syncRepoPullRequests" | "runMutation"
   >;
 };
 
@@ -58,7 +58,7 @@ export const createEventPublishingTaskService = ({
         statusChanges,
       );
       return result.right;
-    });
+    }).pipe((mutation) => taskSyncService.runMutation(repoPath, mutation));
 
   const publishAfterConditionalMutation = <A>(
     operation: string,
@@ -87,7 +87,7 @@ export const createEventPublishingTaskService = ({
       }
       yield* taskSyncService.publishTasksUpdated(repoPath, changes, operation, statusChanges);
       return result.right;
-    });
+    }).pipe((mutation) => taskSyncService.runMutation(repoPath, mutation));
 
   const publishSetPlan = (input: Parameters<TaskService["setPlan"]>[0]) =>
     Effect.gen(function* () {
@@ -112,7 +112,7 @@ export const createEventPublishingTaskService = ({
         return yield* Effect.fail(result.left.failure);
       }
       return yield* Effect.fail(result.left);
-    });
+    }).pipe((mutation) => taskSyncService.runMutation(input.repoPath, mutation));
 
   const publishSetSpec = (input: Parameters<TaskService["setSpec"]>[0]) =>
     Effect.gen(function* () {
@@ -137,7 +137,7 @@ export const createEventPublishingTaskService = ({
         return yield* Effect.fail(result.left.failure);
       }
       return yield* Effect.fail(result.left);
-    });
+    }).pipe((mutation) => taskSyncService.runMutation(input.repoPath, mutation));
 
   return {
     listTasks: (input) => taskService.listTasks(input),
@@ -228,7 +228,7 @@ export const createEventPublishingTaskService = ({
         }
         yield* taskSyncService.publishExternalTaskCreated(input.repoPath, result.right);
         return result.right;
-      }),
+      }).pipe((mutation) => taskSyncService.runMutation(input.repoPath, mutation)),
     deleteTask: (input) =>
       publishAfterMutation(
         "delete-task",

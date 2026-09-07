@@ -12,7 +12,10 @@ type WorkflowNotification = {
   preferredRole?: AgentRole;
 };
 
-const workflowNotification = (status: TaskStatus): WorkflowNotification | null => {
+const workflowNotification = (
+  status: TaskStatus,
+  sourceRole?: AgentRole,
+): WorkflowNotification | null => {
   switch (status) {
     case "open":
       return null;
@@ -50,7 +53,7 @@ const workflowNotification = (status: TaskStatus): WorkflowNotification | null =
       return {
         kind: "workflow.human_review",
         status: "Task moved to Human Review.",
-        preferredRole: "qa",
+        preferredRole: sourceRole ?? "qa",
       };
     case "closed":
       return { kind: "workflow.closed", status: "Task moved to Closed." };
@@ -73,11 +76,14 @@ export const createTaskOccurrenceProjector = ({
     processedEvents.add(event.eventId);
     const occurrences: NotificationOccurrence[] = [];
 
-    for (const [index, { task: current, previousStatus }] of event.statusChanges.entries()) {
+    for (const [
+      index,
+      { task: current, previousStatus, sourceRole },
+    ] of event.statusChanges.entries()) {
       if (previousStatus === current.status) {
         continue;
       }
-      const notification = workflowNotification(current.status);
+      const notification = workflowNotification(current.status, sourceRole);
       if (!notification) {
         continue;
       }

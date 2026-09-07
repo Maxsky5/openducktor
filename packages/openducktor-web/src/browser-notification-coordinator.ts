@@ -10,6 +10,7 @@ const OCCURRENCE_CHANNEL_NAME = "openducktor:notifications:occurrences";
 const EXTERNAL_DELIVERY_LOCK_NAME = "openducktor:notifications:external-delivery";
 const TAB_LOCK_NAME_PREFIX = "openducktor:notifications:tab:";
 const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
+const CLAIM_ACKNOWLEDGEMENT_TIMEOUT_MS = 5000;
 const COORDINATION_DISPOSED_MESSAGE =
   "Browser notification coordination stopped before occurrence selection.";
 
@@ -261,7 +262,15 @@ export const createBrowserNotificationCoordinator = ({
   ): Promise<boolean | void> => {
     const controller = new AbortController();
     let finishWaiting = (_focusUnavailable?: boolean): void => {};
-    const waitFinished = new Promise<boolean | void>((resolve) => {
+    let timeout: ReturnType<typeof setTimeout>;
+    const waitFinished = new Promise<boolean | void>((resolve, reject) => {
+      timeout = setTimeout(() => {
+        const error = new Error(
+          "A browser tab did not acknowledge the notification claim. Close or reload unresponsive OpenDucktor tabs.",
+        );
+        recordFailure("claim", error);
+        reject(error);
+      }, CLAIM_ACKNOWLEDGEMENT_TIMEOUT_MS);
       finishWaiting = (focusUnavailable) => {
         resolve(focusUnavailable);
         controller.abort();
@@ -280,17 +289,18 @@ export const createBrowserNotificationCoordinator = ({
         if (controller.signal.aborted) return;
         recordFailure("claim", cause);
         throw cause;
-      })
-      .finally(() => {
-        const currentWaiters = claimWaiters.get(claimId);
-        if (currentWaiters?.get(recipientTabId) === finishWaiting) {
-          currentWaiters.delete(recipientTabId);
-          if (currentWaiters.size === 0) {
-            claimWaiters.delete(claimId);
-          }
-        }
       });
-    return Promise.race([waitFinished, exited]);
+    return Promise.race([waitFinished, exited]).finally(() => {
+      clearTimeout(timeout);
+      controller.abort();
+      const currentWaiters = claimWaiters.get(claimId);
+      if (currentWaiters?.get(recipientTabId) === finishWaiting) {
+        currentWaiters.delete(recipientTabId);
+        if (currentWaiters.size === 0) {
+          claimWaiters.delete(claimId);
+        }
+      }
+    });
   };
 
   const propagateClaim = async (occurrenceId: string, claimId: string): Promise<void> => {
