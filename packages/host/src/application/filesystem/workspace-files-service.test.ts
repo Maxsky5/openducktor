@@ -295,6 +295,137 @@ describe("createWorkspaceFilesService", () => {
     );
   });
 
+  test.each([false, true])(
+    "returns an early error without waiting for later reads (started: %s)",
+    async (waitForLaterRead) => {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const laterStarted = yield* Deferred.make<void>();
+          const blocked = yield* Deferred.make<void>();
+          const cause = hostOperationError("first stat denied");
+          const calls: string[] = [];
+          let active = 0;
+          let interrupted = 0;
+          const filesystem = createFakeFilesystem({ stats: { "/repo": { isDirectory: true } } });
+          const files = Array.from(
+            { length: 100 },
+            (_, index) => `file-${String(index).padStart(3, "0")}`,
+          );
+          const service = createWorkspaceFilesService(
+            {
+              ...filesystem,
+              stat: (path, options) =>
+                Effect.gen(function* () {
+                  if (path === "/repo") return yield* filesystem.stat(path, options);
+                  calls.push(path);
+                  if (path === "/repo/file-000") {
+                    if (waitForLaterRead) yield* Deferred.await(laterStarted);
+                    return yield* Effect.fail(cause);
+                  }
+                  active += 1;
+                  yield* Deferred.succeed(laterStarted, undefined);
+                  return yield* Deferred.await(blocked).pipe(
+                    Effect.as({ isDirectory: false }),
+                    Effect.onInterrupt(() =>
+                      Effect.sync(() => {
+                        interrupted += 1;
+                      }),
+                    ),
+                    Effect.ensuring(
+                      Effect.sync(() => {
+                        active -= 1;
+                      }),
+                    ),
+                  );
+                }),
+            },
+            createFakeGitPort({ files }),
+          );
+          const result = yield* Effect.either(service.listTree({ rootPath: "/repo" })).pipe(
+            Effect.timeoutFail({
+              duration: "200 millis",
+              onTimeout: () => new Error("Known file error waited for a later blocked read"),
+            }),
+          );
+          expect(result).toMatchObject({
+            _tag: "Left",
+            left: {
+              _tag: "HostValidationError",
+              message: "Unable to inspect file 'file-000'.",
+              details: { rootPath: "/repo", relativePath: "file-000" },
+              cause,
+            },
+          });
+          expect(yield* Deferred.isDone(blocked)).toBe(false);
+          expect(active).toBe(0);
+          expect(calls.length).toBeLessThan(files.length);
+          expect(interrupted).toBe(calls.length - 1);
+          if (waitForLaterRead) expect(interrupted).toBeGreaterThan(0);
+        }),
+      );
+    },
+  );
+
+  test("waits for earlier paths and skips deleted failures before returning a later error", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const earlier = yield* Deferred.make<void>();
+          const lastStarted = yield* Deferred.make<void>();
+          const cause = hostOperationError("later stat denied");
+          let lastInterrupted = false;
+          const filesystem = createFakeFilesystem({ stats: { "/repo": { isDirectory: true } } });
+          const service = createWorkspaceFilesService(
+            {
+              ...filesystem,
+              stat: (path, options) => {
+                if (path === "/repo") return filesystem.stat(path, options);
+                if (path === "/repo/a")
+                  return Deferred.await(earlier).pipe(Effect.as({ isDirectory: false }));
+                if (path === "/repo/b") return Effect.fail(hostOperationError("deleted file"));
+                if (path === "/repo/c") return Effect.fail(cause);
+                return Deferred.succeed(lastStarted, undefined).pipe(
+                  Effect.zipRight(Effect.never),
+                  Effect.onInterrupt(() =>
+                    Effect.sync(() => {
+                      lastInterrupted = true;
+                    }),
+                  ),
+                );
+              },
+            },
+            createFakeGitPort({
+              files: ["d", "c", "b", "a"],
+              statuses: [{ path: "b", status: "deleted", staged: false }],
+            }),
+          );
+          const fiber = yield* Effect.forkScoped(
+            Effect.either(service.listTree({ rootPath: "/repo" })),
+          );
+          yield* Deferred.await(lastStarted).pipe(
+            Effect.timeoutFail({
+              duration: "200 millis",
+              onTimeout: () => new Error("Later metadata reads did not start"),
+            }),
+          );
+          expect((yield* Fiber.poll(fiber))._tag).toBe("None");
+          yield* Deferred.succeed(earlier, undefined);
+          const result = yield* Fiber.join(fiber).pipe(
+            Effect.timeoutFail({
+              duration: "200 millis",
+              onTimeout: () => new Error("Known error waited for a later blocked read"),
+            }),
+          );
+          expect(result).toMatchObject({
+            _tag: "Left",
+            left: { _tag: "HostValidationError", message: "Unable to inspect file 'c'.", cause },
+          });
+          expect(lastInterrupted).toBe(true);
+        }),
+      ),
+    );
+  });
+
   test("reports the first path error even when a later stat fails first", async () => {
     await Effect.runPromise(
       Effect.scoped(

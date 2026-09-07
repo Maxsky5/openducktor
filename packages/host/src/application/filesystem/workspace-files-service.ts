@@ -7,7 +7,7 @@ import {
   type WorkspaceTextFileWriteResult,
   workspaceFileTreeSchema,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
 import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-port";
 import type { GitPort } from "../../ports/git-port";
@@ -267,15 +267,25 @@ export const createWorkspaceFilesService = (
           ]),
         );
         const fileEntries: WorkspaceFileTreeEntry[] = [];
-        const fileMetadata = yield* Effect.forEach(
-          filePaths,
-          (filePath) =>
-            Effect.either(statFile(filesystem, canonicalRoot, filePath)).pipe(
-              Effect.map((metadataResult) => ({ filePath, metadataResult })),
-            ),
-          { concurrency: FILE_TREE_METADATA_CONCURRENCY },
+        const metadataReads = yield* Effect.forEach(filePaths, (filePath) =>
+          Effect.gen(function* () {
+            const metadata = statFile(filesystem, canonicalRoot, filePath);
+            const result = yield* Deferred.make<
+              FilesystemStats,
+              Effect.Effect.Error<typeof metadata>
+            >();
+            return { filePath, metadata, result };
+          }),
         );
-        for (const { filePath, metadataResult } of fileMetadata) {
+        yield* Effect.forkScoped(
+          Effect.forEach(
+            metadataReads,
+            ({ metadata, result }) => Effect.intoDeferred(metadata, result),
+            { concurrency: FILE_TREE_METADATA_CONCURRENCY, discard: true },
+          ),
+        );
+        for (const { filePath, result } of metadataReads) {
+          const metadataResult = yield* Effect.either(Deferred.await(result));
           const gitStatus = gitStatusByPath.get(filePath) ?? null;
           if (metadataResult._tag === "Left") {
             if (gitStatus !== "deleted") {
@@ -319,7 +329,7 @@ export const createWorkspaceFilesService = (
             ...fileEntries,
           ],
         });
-      });
+      }).pipe(Effect.scoped);
     },
     readTextFile(input) {
       return textFiles.readTextFile(input);
