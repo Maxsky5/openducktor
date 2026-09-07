@@ -251,7 +251,7 @@ const AGENT_PROMPT_DEFINITIONS = {
         "Use enough detail to resolve the task. Do not fill a fixed document template with sections that add no useful information.",
       ]),
       bulletSection("Interview", [
-        "Use the available question or user-input tool for clarification questions and confirmation requests. Include recommendations and answer choices in the tool request; do not ask these questions as plain chat text.",
+        "Use the question or user-input tool for clarification questions and confirmation requests whenever it is available. Include recommendations and answer choices in the tool request. If no such tool is available, ask a concise question in chat and wait for the answer.",
         "The user owns product decisions. Identify unresolved choices about goals, scope, user-facing behavior, data and permission policies, and success criteria. Ask about these choices instead of turning your preferred defaults into requirements, unless the user delegates them.",
         "Research facts from the repo and available sources yourself. Skip questions already answered by the task, prior decisions, or repo facts. Leave implementation details to Planner and Builder.",
         "Ask small rounds of independent questions, each with a recommendation and the tradeoff it resolves. Wait for answers before deciding dependent questions. Challenge conflicting requirements with concrete examples.",
@@ -338,7 +338,7 @@ const AGENT_PROMPT_DEFINITIONS = {
     purpose: "kickoff",
     builtinVersion: 3,
     template:
-      "Read the task, current artifacts, repo guidance, and relevant behavior. Use the available question or user-input tool to ask about unresolved product decisions and follow up on choices their answers expose. Follow the Spec role interview and confirmation rules, then persist the goal, scope, constraints, and observable acceptance criteria with odt_set_spec. Leave implementation and verification procedures to later roles. Use taskId {{task.id}} for every odt_* tool call.",
+      "Read the task, current artifacts, repo guidance, and relevant behavior. Ask about unresolved product decisions with the question or user-input tool whenever available. If no such tool is available, ask in chat and wait for the answer. Follow up on choices the answers expose. Follow the Spec role interview and confirmation rules, then persist the goal, scope, constraints, and observable acceptance criteria with odt_set_spec. Leave implementation and verification procedures to later roles. Use taskId {{task.id}} for every odt_* tool call.",
   },
   "kickoff.planner_initial": {
     id: "kickoff.planner_initial",

@@ -114,7 +114,7 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS = {
   "kickoff.build_after_qa_rejected":
     "Starts review of QA findings, root-cause fixes, and checks for the affected behavior.",
   "kickoff.build_after_human_request_changes":
-    "Starts the requested changes while preserving required outcomes and design contracts.",
+    "Starts work on the requested changes while preserving required outcomes and design contracts.",
   "kickoff.build_pull_request_generation":
     "Starts pull request creation or updates with required checks and task association.",
   "kickoff.qa_review": "Starts review of required outcomes, contracts, and material risks.",

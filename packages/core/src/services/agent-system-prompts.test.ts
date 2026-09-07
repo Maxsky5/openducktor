@@ -99,8 +99,9 @@ describe("buildAgentSystemPrompt", () => {
       "The user owns product decisions",
       "Research facts from the repo and available sources yourself",
       "Ask small rounds of independent questions",
-      "Use the available question or user-input tool for clarification questions and confirmation requests",
-      "do not ask these questions as plain chat text",
+      "Use the question or user-input tool for clarification questions and confirmation requests whenever it is available",
+      "If no such tool is available, ask a concise question in chat and wait for the answer",
+      "Do not call odt_set_spec while required product decisions still await an answer",
       "Wait for answers before deciding dependent questions",
       "Revisit consequences after each answer",
       "Skip questions already answered by the task, prior decisions, or repo facts",
@@ -360,7 +361,8 @@ describe("kickoff and permission prompts", () => {
 
     expectPromptToContainAll(specPrompt, [
       "observable acceptance criteria",
-      "Use the available question or user-input tool to ask about unresolved product decisions",
+      "Ask about unresolved product decisions with the question or user-input tool whenever available",
+      "If no such tool is available, ask in chat and wait for the answer",
       "Follow the Spec role interview and confirmation rules",
       "Leave implementation and verification procedures to later roles",
       "odt_set_spec",
