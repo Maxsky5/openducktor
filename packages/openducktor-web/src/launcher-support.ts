@@ -394,52 +394,30 @@ export const stopLauncherServicesEffect = (
       }
     }
     shutdownFailures.push(...loggingFailures);
-    if (hostStopExit._tag === "Failure") {
-      const failure = combineWebErrors(
-        "web.launcher.shutdown",
-        "OpenDucktor web shutdown failed.",
-        shutdownFailures,
-      );
-      if (failure) {
-        return yield* failure;
-      }
-      return;
-    }
-
-    if (!hostBackend) {
-      const failure = combineWebErrors(
-        "web.launcher.shutdown",
-        "OpenDucktor web shutdown failed.",
-        shutdownFailures,
-      );
-      if (failure) {
-        return yield* failure;
-      }
-      return;
-    }
-
-    const hostExit = yield* Effect.exit(
-      Effect.tryPromise({
-        try: () => hostBackend.exited,
-        catch: (cause) =>
-          new WebDependencyError({
-            dependency: "typescript-host-backend",
-            operation: "await-exit",
-            message: errorMessage(cause),
-            cause,
-          }),
-      }),
-    );
-    if (hostExit._tag === "Failure") {
-      shutdownFailures.push(causeToWebBoundaryError(hostExit.cause));
-    } else if (hostExit.value !== 0) {
-      shutdownFailures.push(
-        new WebOperationError({
-          operation: "web.launcher.shutdown",
-          message: `OpenDucktor TypeScript host shutdown failed with exit code ${hostExit.value}.`,
-          details: { hostExitCode: hostExit.value },
+    if (hostBackend && hostStopExit._tag === "Success") {
+      const hostExit = yield* Effect.exit(
+        Effect.tryPromise({
+          try: () => hostBackend.exited,
+          catch: (cause) =>
+            new WebDependencyError({
+              dependency: "typescript-host-backend",
+              operation: "await-exit",
+              message: errorMessage(cause),
+              cause,
+            }),
         }),
       );
+      if (hostExit._tag === "Failure") {
+        shutdownFailures.push(causeToWebBoundaryError(hostExit.cause));
+      } else if (hostExit.value !== 0) {
+        shutdownFailures.push(
+          new WebOperationError({
+            operation: "web.launcher.shutdown",
+            message: `OpenDucktor TypeScript host shutdown failed with exit code ${hostExit.value}.`,
+            details: { hostExitCode: hostExit.value },
+          }),
+        );
+      }
     }
 
     const failure = combineWebErrors(
