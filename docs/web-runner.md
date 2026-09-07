@@ -36,7 +36,9 @@ Restrict access before you start the runner:
 - Or allow only the Tailscale subnet in the firewall, for example `ufw allow from 100.64.0.0/10`.
 - Keep the runner off the public internet. The app token is part of the served browser config, so anyone who can reach the ports can use the runner.
 
-The frontend and host servers accept only requests whose `Host` header is a loopback host, the bind host, or the `--external-url` host. Requests with any other `Host` header get a `403` response. This stops a page on another domain from reading the runner through a DNS rebinding attack.
+The production static frontend and the backend accept only requests whose `Host` header is a loopback host, the bind host, or the `--external-url` host. Requests with any other `Host` header get a `403` response. This check protects against DNS rebinding.
+
+The workspace frontend uses Vite's Host checks instead. Vite allows all IP literals, `localhost`, and `.localhost` subdomains by default, plus the configured bind and external hostnames. Host checks do not authenticate clients. Restrict network and proxy access in both modes.
 
 The launcher fails fast when it binds a non-loopback host without `--external-url`. Browsers on another machine cannot reach a loopback backend URL.
 

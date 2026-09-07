@@ -107,5 +107,11 @@ export const parseHttpOriginEffect = (
       });
     }
 
+    if (parsed.hostname === "0.0.0.0" || parsed.hostname === "[::]") {
+      return yield* originError(options.field, {
+        message: `${originDescription} must not use a wildcard address. Use the real IP address or DNS name that browsers will reach; use wildcard addresses only for --host.`,
+        details: { rawUrl },
+      });
+    }
     return parsed;
   });

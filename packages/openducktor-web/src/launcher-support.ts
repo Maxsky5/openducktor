@@ -111,12 +111,20 @@ export type FrontendDisplayUrl = {
 
 export const buildFrontendDisplayUrls = (
   port: number,
+  bindHost: string,
   externalUrl?: string,
 ): FrontendDisplayUrl[] => {
-  const urls: FrontendDisplayUrl[] = [
-    { kind: "local", url: `http://localhost:${port}/` },
-    { kind: "local", url: `http://${LOCALHOST}:${port}/` },
-  ];
+  const urls: FrontendDisplayUrl[] = [];
+  if (bindHost === LOCALHOST || bindHost === "0.0.0.0") {
+    urls.push(
+      { kind: "local", url: `http://localhost:${port}/` },
+      { kind: "local", url: `http://${LOCALHOST}:${port}/` },
+    );
+  } else if (["::", "[::]", "::1", "[::1]"].includes(bindHost)) {
+    urls.push({ kind: "local", url: `http://[::1]:${port}/` });
+  } else if (bindHost === "localhost" || bindHost === "localhost.") {
+    urls.push({ kind: "local", url: `http://${bindHost}:${port}/` });
+  }
   if (externalUrl) {
     const externalDisplayUrl = `${externalUrl.replace(/\/$/, "")}/`;
     if (!urls.some((entry) => entry.url === externalDisplayUrl)) {

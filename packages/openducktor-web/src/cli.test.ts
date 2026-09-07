@@ -4,6 +4,15 @@ import { Effect } from "effect";
 import { createLauncherOptions, parseCliArgs, parseCliArgsEffect } from "./cli";
 
 describe("web CLI argument parsing", () => {
+  test.each(["http://0.0.0.0:1420", "http://[::]:1420"])(
+    "rejects wildcard external origin %s",
+    (externalUrl) => {
+      expect(() => parseCliArgs(["--external-url", externalUrl])).toThrow(
+        "Use the real IP address or DNS name",
+      );
+    },
+  );
+
   test("uses OS-assigned ports for workspace development", () => {
     expect(parseCliArgs(["--workspace"])).toMatchObject({
       frontendPort: 0,

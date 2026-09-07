@@ -44,6 +44,7 @@ import {
   isRemoteExternalOrigin,
   isRequestHostAllowed,
   LOCALHOST,
+  parseHttpOriginEffect,
   portOfHttpOrigin,
 } from "./http-origin";
 import { type WebLogger, writeWebLogEffect } from "./logger";
@@ -123,7 +124,7 @@ const logFrontendAvailability = (
 ): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
     yield* writeWebLogEffect(logger, "success", "OpenDucktor web is ready:");
-    for (const { kind, url } of buildFrontendDisplayUrls(port, externalUrl)) {
+    for (const { kind, url } of buildFrontendDisplayUrls(port, bindHost, externalUrl)) {
       const label = kind === "local" ? "Local:   " : "Network: ";
       yield* writeWebLogEffect(logger, "success", `  ➜  ${label}${url}`);
     }
@@ -131,11 +132,11 @@ const logFrontendAvailability = (
     if (developmentInstanceId) {
       yield* writeWebLogEffect(logger, "success", `  ➜  Instance: ${developmentInstanceId}`);
     }
-    if (isRemoteExternalOrigin(externalUrl) && !isLoopbackHost(bindHost)) {
+    if (isRemoteExternalOrigin(externalUrl)) {
       yield* writeWebLogEffect(
         logger,
         "info",
-        "OpenDucktor web is reachable outside this machine. Restrict access with a firewall or a Tailscale ACL before using it.",
+        "OpenDucktor web is reachable outside this machine. Restrict access with proxy access controls, a firewall, or a Tailscale ACL before using it.",
       );
     }
   });
@@ -328,7 +329,7 @@ export const viteServerOptions = (options: LauncherOptions): ViteServerOptions =
   if (externalUrl && isRemoteExternalOrigin(externalUrl)) {
     const hostname = new URL(externalUrl).hostname;
     if (!isIpLiteral(hostname)) {
-      allowedHosts.push(hostname);
+      allowedHosts.push(...new Set([hostname, hostname.replace(/\.$/u, "")]));
     }
   }
   const bindHostname = options.host?.trim();
@@ -723,6 +724,11 @@ export const validateLauncherNetworkOptionsEffect = (options: {
   externalUrl: string | undefined;
 }): Effect.Effect<void, WebValidationError> =>
   Effect.gen(function* () {
+    if (options.externalUrl !== undefined) {
+      yield* parseHttpOriginEffect(options.externalUrl, "OpenDucktor web --external-url", {
+        field: "externalUrl",
+      });
+    }
     const remoteExternalUrl = isRemoteExternalOrigin(options.externalUrl);
     if (!isLoopbackHost(options.bindHost) && !remoteExternalUrl) {
       return yield* new WebValidationError({
@@ -826,6 +832,7 @@ export const runLauncherEffect = (
           );
         }
         const hostBackend = hostBackendExit.value;
+        yield* owner.registerHost(hostBackend);
         if (parsedExternalUrl?.protocol === "https:" && options.basePath === undefined) {
           yield* writeWebLogEffect(
             logger,
@@ -833,7 +840,6 @@ export const runLauncherEffect = (
             `The --external-url origin is https without --base-path. The browser reaches the TypeScript host at https://${parsedExternalUrl.hostname}:${hostBackend.port}. Terminate TLS for that port in the proxy.`,
           );
         }
-        yield* owner.registerHost(hostBackend);
         const { browserUrl } = buildBrowserBackendUrl(
           options.basePath,
           frontendUrl,

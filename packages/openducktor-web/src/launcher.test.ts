@@ -9,6 +9,7 @@ import {
   logDuplicateWebTerminationNotice,
   preserveLauncherFailureAfterStop,
   resolveWebMcpBridgeDiscoveryMode,
+  runLauncherEffect,
   runWebSignalShutdown,
   validateLauncherNetworkOptionsEffect,
   viteServerOptions,
@@ -41,6 +42,61 @@ const testLogger: WebLogger = {
 const createHostProcess = (exited: Promise<number>): Pick<Bun.Subprocess, "exited"> => ({ exited });
 
 describe("launcher internals", () => {
+  test.each(["http://0.0.0.0:1420", "http://[::]:1420"])(
+    "rejects wildcard external origin %s before starting servers",
+    async (externalUrl) => {
+      await expect(
+        Effect.runPromise(
+          runLauncherEffect(
+            {
+              packageRoot: "/missing-web-package",
+              workspaceMode: false,
+              frontendPort: 0,
+              backendPort: 0,
+              host: "0.0.0.0",
+              externalUrl,
+            },
+            testLogger,
+          ),
+        ),
+      ).rejects.toThrow("Use the real IP address or DNS name");
+    },
+  );
+
+  test("allows dotted and canonical external hostnames in Vite without duplicates", () => {
+    expect(
+      viteServerOptions({
+        packageRoot: "/web-package",
+        workspaceMode: false,
+        frontendPort: 0,
+        backendPort: 0,
+        host: "machine.ts.net",
+        externalUrl: "https://machine.ts.net.",
+      }).allowedHosts,
+    ).toEqual(["localhost", ".localhost", "machine.ts.net.", "machine.ts.net"]);
+  });
+
+  test.each(["100.64.0.1", "2001:db8::1", "[2001:db8::1]", "runner.internal"])(
+    "omits loopback display URLs for specific bind %s",
+    (bindHost) => {
+      expect(buildFrontendDisplayUrls(1420, bindHost, "https://machine.ts.net")).toEqual([
+        { kind: "network", url: "https://machine.ts.net/" },
+      ]);
+    },
+  );
+
+  test.each(["::", "[::]", "::1", "[::1]"])("prints only IPv6 loopback for bind %s", (bindHost) => {
+    expect(buildFrontendDisplayUrls(1420, bindHost)).toEqual([
+      { kind: "local", url: "http://[::1]:1420/" },
+    ]);
+  });
+
+  test.each(["localhost", "localhost."])("prints the loopback hostname bind %s", (bindHost) => {
+    expect(buildFrontendDisplayUrls(1420, bindHost)).toEqual([
+      { kind: "local", url: `http://${bindHost}:1420/` },
+    ]);
+  });
+
   test("uses development discovery for workspace source launches", () => {
     expect(resolveWebMcpBridgeDiscoveryMode(true)).toBe("development");
   });
@@ -1036,14 +1092,14 @@ describe("launcher internals", () => {
   });
 
   test("prints localhost first in the frontend availability URLs", () => {
-    expect(buildFrontendDisplayUrls(1420)).toEqual([
+    expect(buildFrontendDisplayUrls(1420, LOCALHOST)).toEqual([
       { kind: "local", url: "http://localhost:1420/" },
       { kind: "local", url: "http://127.0.0.1:1420/" },
     ]);
   });
 
   test("adds the external URL to the frontend availability URLs", () => {
-    expect(buildFrontendDisplayUrls(1420, "http://100.64.0.1:1420")).toEqual([
+    expect(buildFrontendDisplayUrls(1420, "0.0.0.0", "http://100.64.0.1:1420")).toEqual([
       { kind: "local", url: "http://localhost:1420/" },
       { kind: "local", url: "http://127.0.0.1:1420/" },
       { kind: "network", url: "http://100.64.0.1:1420/" },
