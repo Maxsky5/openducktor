@@ -1,7 +1,16 @@
 import type { AgentImageGenerationPart, AgentSessionLiveRef } from "@openducktor/contracts";
-import { ChevronDown, ImageIcon, LoaderCircle, Maximize2, TextAlignStart } from "lucide-react";
+import {
+  ChevronDown,
+  ImageIcon,
+  LoaderCircle,
+  Maximize2,
+  TextAlignStart,
+  TriangleAlert,
+} from "lucide-react";
 import { type ReactElement, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
@@ -68,14 +77,10 @@ export function AgentChatImageGeneration({
 
 function GeneratingImage(): ReactElement {
   return (
-    <div className="flex aspect-[4/3] max-h-64 flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border bg-muted/40 px-6 text-center">
-      <div className="flex size-14 items-center justify-center rounded-2xl border border-border bg-card shadow-sm">
-        <ImageIcon aria-hidden="true" className="size-6 text-muted-foreground" />
-      </div>
-      <p className="max-w-56 text-sm text-muted-foreground">
-        Your image will appear here when it is ready.
-      </p>
-    </div>
+    <Skeleton
+      aria-hidden="true"
+      className="aspect-[4/3] max-h-64 w-full rounded-lg motion-reduce:animate-none"
+    />
   );
 }
 
@@ -87,26 +92,38 @@ function ImageDetails({ part }: { part: AgentImageGenerationPart }): ReactElemen
   )
     return null;
   return (
-    <Collapsible>
-      <CollapsibleTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="group w-full justify-start gap-2 text-muted-foreground"
-        >
-          <TextAlignStart aria-hidden="true" className="size-4" />
-          {part.revisedPrompt ? "View prompt" : "View details"}
-          <ChevronDown
-            aria-hidden="true"
-            className="ml-auto size-4 transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-180"
-          />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="mt-2 flex flex-col gap-4 rounded-lg bg-muted/50 p-3">
-          {part.revisedPrompt ? (
-            <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-3">
+      {part.savedPath !== undefined ? (
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-xs font-medium text-muted-foreground">Saved file</p>
+          <p className="break-all font-mono text-xs text-muted-foreground">{part.savedPath}</p>
+        </div>
+      ) : null}
+      {part.transparentBackground !== undefined ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          Background
+          <Badge variant="secondary">{part.transparentBackground ? "Transparent" : "Opaque"}</Badge>
+        </div>
+      ) : null}
+      {part.revisedPrompt ? (
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="group w-full justify-start gap-2 text-muted-foreground"
+            >
+              <TextAlignStart aria-hidden="true" className="size-4" />
+              View prompt
+              <ChevronDown
+                aria-hidden="true"
+                className="ml-auto size-4 transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-180"
+              />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-2 flex flex-col gap-2 rounded-lg bg-muted/50 p-3">
               <p className="text-xs font-medium text-muted-foreground">Generation prompt</p>
               <p
                 className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed"
@@ -115,21 +132,10 @@ function ImageDetails({ part }: { part: AgentImageGenerationPart }): ReactElemen
                 {part.revisedPrompt}
               </p>
             </div>
-          ) : null}
-          {part.savedPath !== undefined ? (
-            <div className="flex flex-col gap-1">
-              <p className="text-xs font-medium text-muted-foreground">Saved file</p>
-              <p className="break-all font-mono text-xs text-muted-foreground">{part.savedPath}</p>
-            </div>
-          ) : null}
-          {part.transparentBackground !== undefined ? (
-            <p className="text-xs text-muted-foreground">
-              Transparent background: {part.transparentBackground ? "yes" : "no"}
-            </p>
-          ) : null}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
+    </div>
   );
 }
 
@@ -174,23 +180,34 @@ function CompletedImage({
 function ImageFailure({ failure }: { failure: AgentImageGenerationPart["failure"] }): ReactElement {
   const resetSeconds = failure?.resetsAtEpochSeconds;
   return (
-    <>
-      <p role="alert" className="text-sm text-destructive">
-        {failure?.message ||
-          "The runtime could not generate this image. Check the session in the runtime."}
-      </p>
-      {resetSeconds !== undefined ? (
-        <p className="text-sm text-muted-foreground">
-          Wait until {new Date(resetSeconds * 1000).toLocaleString()} before requesting another
-          image.
+    <div
+      role="alert"
+      className="flex items-start gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3"
+    >
+      <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-destructive" />
+      <div className="flex min-w-0 flex-col gap-2">
+        <p className="whitespace-pre-wrap break-words text-sm">
+          {failure?.message ||
+            "The runtime could not generate this image. It did not provide a failure reason."}
         </p>
-      ) : null}
-      {failure?.kind === "usage_limit" && resetSeconds === undefined ? (
-        <p className="text-sm text-muted-foreground">
-          Check image-generation usage limits in the runtime before requesting another image.
-        </p>
-      ) : null}
-    </>
+        {failure?.kind !== "usage_limit" ? (
+          <p className="text-sm text-muted-foreground">
+            Ask the agent to explain this failure before trying again.
+          </p>
+        ) : null}
+        {resetSeconds !== undefined ? (
+          <p className="text-sm text-muted-foreground">
+            Wait until {new Date(resetSeconds * 1000).toLocaleString()} before requesting another
+            image.
+          </p>
+        ) : null}
+        {failure?.kind === "usage_limit" && resetSeconds === undefined ? (
+          <p className="text-sm text-muted-foreground">
+            Check image-generation usage limits in the runtime before requesting another image.
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

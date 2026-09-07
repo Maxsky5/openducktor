@@ -36,6 +36,17 @@ const part = {
   transparentBackground: false,
   output: { itemId: "image", representation: "inline" },
 };
+if (new URLSearchParams(location.search).has("failed")) {
+  part.status = "failed";
+  part.failure = {
+    kind: "generation_failed",
+    message:
+      "Codex could not generate this image. It did not include a reason in the image result.",
+  };
+  delete part.output;
+  delete part.savedPath;
+  delete part.transparentBackground;
+}
 const operations = {
   readGeneratedImage: async (input) => ({
     ...input,

@@ -80,3 +80,26 @@ test("live and public history use the same normalized item identity and metadata
   expect(live).toHaveLength(1);
   expect(history).toEqual(live.map((event) => ({ ...event, source: "thread_read" })));
 });
+
+test("general failure without native details is explicit in live and history", () => {
+  const pipeline = createCodexEventMapperPipeline();
+  const native = item("failed");
+  const context = { threadId: "thread", turnId: "turn" };
+  const failure = codexImageGenerationPart(native).failure;
+  expect(failure).toEqual({
+    kind: "generation_failed",
+    message:
+      "Codex could not generate this image. It did not include a reason in the image result.",
+  });
+  const live = pipeline.runLive(
+    { kind: "item_completed", item: native },
+    { ...context, source: "live" },
+  );
+  const history = pipeline.runThreadItem(
+    { item: native, index: 0 },
+    { ...context, source: "thread_read" },
+  );
+  expect(live).toHaveLength(1);
+  expect(history).toEqual(live.map((event) => ({ ...event, source: "thread_read" })));
+  expect(JSON.stringify(live)).toContain(failure!.message);
+});

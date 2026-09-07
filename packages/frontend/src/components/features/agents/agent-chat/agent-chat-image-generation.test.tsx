@@ -294,9 +294,9 @@ for (const resetsAtEpochSeconds of [undefined, 2000000000]) {
 }
 
 test("shows a generating placeholder without reading image bytes", () => {
-  const { read } = harness(undefined, true, { ...part, status: "running" });
+  const { read, view } = harness(undefined, true, { ...part, status: "running" });
   expect(screen.getByRole("status").textContent).toBe("Generating image…");
-  expect(screen.getByText("Your image will appear here when it is ready.")).toBeTruthy();
+  expect(view.container.querySelector('[data-slot="skeleton"]')).toBeTruthy();
   expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
   expect(read).not.toHaveBeenCalled();
 });
@@ -316,4 +316,43 @@ test("closes prompt details when the session or image changes", () => {
     ),
   );
   expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
+});
+
+for (const transparentBackground of [true, false]) {
+  test(`shows saved file and background ${transparentBackground} without opening the prompt`, () => {
+    const { view } = harness(undefined, true, {
+      ...part,
+      status: "running",
+      transparentBackground,
+    });
+    expect(screen.getByText(part.savedPath!)).toBeTruthy();
+    expect(screen.getByText(transparentBackground ? "Transparent" : "Opaque")).toBeTruthy();
+    expect(screen.queryByText(part.revisedPrompt!)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "View prompt" }));
+    const prompt = view.container.querySelector('[data-slot="collapsible-content"]')!;
+    expect(prompt.textContent).toContain(part.revisedPrompt!);
+    expect(prompt.textContent).not.toContain(part.savedPath!);
+    expect(prompt.textContent).not.toContain("Background");
+  });
+}
+
+test("general failures preserve the reason and offer an action in the chat", () => {
+  const failure = {
+    kind: "generation_failed" as const,
+    message: "The image service rejected the request.",
+  };
+  const { read } = harness(undefined, true, { ...part, status: "failed", failure });
+  expect(screen.getByRole("alert").textContent).toContain(failure.message);
+  expect(screen.getByRole("alert").textContent).toContain(
+    "Ask the agent to explain this failure before trying again.",
+  );
+  expect(read).not.toHaveBeenCalled();
+});
+
+test("missing failure details state the limitation and an action", () => {
+  harness(undefined, true, { ...part, status: "failed" });
+  expect(screen.getByRole("alert").textContent).toContain("It did not provide a failure reason.");
+  expect(screen.getByRole("alert").textContent).toContain(
+    "Ask the agent to explain this failure before trying again.",
+  );
 });

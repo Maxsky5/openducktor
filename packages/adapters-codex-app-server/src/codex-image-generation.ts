@@ -43,7 +43,8 @@ export const codexImageGenerationPart = (
     part.status = "failed";
     part.failure = {
       kind: "generation_failed",
-      message: "Image generation failed. Check the runtime response for details.",
+      message:
+        "Codex could not generate this image. It did not include a reason in the image result.",
     };
     if (item.failure?.type === "usageLimitExceeded") {
       part.failure = {

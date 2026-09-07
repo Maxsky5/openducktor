@@ -71,6 +71,7 @@ try {
         const image = root.querySelector('img');
         const button = root.querySelector('[data-slot="collapsible-trigger"]');
         if (button.getAttribute('aria-expanded') !== 'false' || root.textContent.includes(image.alt)) throw new Error('Prompt is not collapsed by default');
+        if (!root.textContent.includes('/runtime/generated/duck.png') || !root.textContent.includes('Opaque')) throw new Error('File and background details are not visible');
         const box = image.getBoundingClientRect();
         if (box.width < 300 || box.height < 200) throw new Error('Card preview is too small');
         if (root.scrollWidth > innerWidth) throw new Error('Card exceeds viewport');
@@ -118,12 +119,27 @@ try {
         "eval",
         `(() => {
         const root = document.querySelector('#root');
-        if (!root.textContent.includes('Your image will appear here when it is ready.')) throw new Error('Generating placeholder is missing');
+        const skeleton = root.querySelector('[data-slot="skeleton"]');
+        if (!skeleton || skeleton.getBoundingClientRect().height < 200) throw new Error('Generating skeleton is missing or too small');
         if (root.querySelector('img') || root.querySelector('[role="progressbar"]')) throw new Error('Generating state claims output or progress');
         if (root.scrollWidth > innerWidth) throw new Error('Generating card exceeds viewport');
       })()`,
       );
       await browser("screenshot", join(artifacts, `${name}-running.png`));
+      await browser("open", `${url}?failed`);
+      await browser("wait", '[role="alert"]');
+      await browser("eval", `document.documentElement.className = '${theme}'`);
+      await browser(
+        "eval",
+        `(() => {
+        const root = document.querySelector('#root');
+        const alert = root.querySelector('[role="alert"]');
+        if (!alert.textContent.includes('It did not include a reason in the image result.') || !alert.textContent.includes('Ask the agent to explain this failure before trying again.')) throw new Error('Failure lacks an explanation or next action');
+        if (root.querySelector('img') || root.querySelector('[data-slot="skeleton"]')) throw new Error('Failed generation shows output or a loading skeleton');
+        if (root.scrollWidth > innerWidth) throw new Error('Failed card exceeds viewport');
+      })()`,
+      );
+      await browser("screenshot", join(artifacts, `${name}-failed.png`));
     }
   }
 } catch (error) {
