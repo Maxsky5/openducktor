@@ -1,5 +1,5 @@
 import type { DevServerEvent, DevServerGroupState } from "@openducktor/contracts";
-import { useCallback, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import {
   type AgentStudioDevServerTerminalBuffer,
   appendDevServerTerminalChunk,
@@ -34,12 +34,16 @@ type SelectedScriptTerminalBufferState = {
 };
 
 type DevServerTerminalBufferOwner = {
+  active: boolean;
+  pendingPublication: { frameId: number } | null;
   pendingMutationReplaySync: PendingMutationReplaySync | null;
   scopeKey: string;
   terminalBuffers: DevServerTerminalBufferStore;
 };
 
 const createDevServerTerminalBufferOwner = (scopeKey: string): DevServerTerminalBufferOwner => ({
+  active: false,
+  pendingPublication: null,
   pendingMutationReplaySync: null,
   scopeKey,
   terminalBuffers: createDevServerTerminalBufferStore(),
@@ -111,14 +115,51 @@ export const useAgentStudioDevServerTerminalBuffers = (
   const activeScopeKey = terminalBufferOwner.scopeKey;
   const terminalBuffers = terminalBufferOwner.terminalBuffers;
 
+  const cancelPendingPublication = useCallback((): void => {
+    if (terminalBufferOwner.pendingPublication !== null) {
+      cancelAnimationFrame(terminalBufferOwner.pendingPublication.frameId);
+      terminalBufferOwner.pendingPublication = null;
+    }
+  }, [terminalBufferOwner]);
+
+  useLayoutEffect(() => {
+    terminalBufferOwner.active = true;
+    return () => {
+      terminalBufferOwner.active = false;
+      cancelPendingPublication();
+    };
+  }, [cancelPendingPublication, terminalBufferOwner]);
+
   const syncSelectedScriptTerminalBuffer = useCallback(
     (scriptId: string | null): void => {
+      cancelPendingPublication();
+      if (!terminalBufferOwner.active) {
+        return;
+      }
       setSelectedScriptTerminalBufferState({
         buffer: getDevServerTerminalBuffer(terminalBuffers, scriptId),
         scopeKey: activeScopeKey,
       });
     },
-    [activeScopeKey, terminalBuffers],
+    [activeScopeKey, cancelPendingPublication, terminalBufferOwner, terminalBuffers],
+  );
+
+  const scheduleSelectedScriptTerminalBuffer = useCallback(
+    (scriptId: string): void => {
+      if (!terminalBufferOwner.active || terminalBufferOwner.pendingPublication !== null) {
+        return;
+      }
+      const publication = { frameId: 0 };
+      terminalBufferOwner.pendingPublication = publication;
+      publication.frameId = requestAnimationFrame(() => {
+        if (terminalBufferOwner.pendingPublication !== publication) {
+          return;
+        }
+        terminalBufferOwner.pendingPublication = null;
+        syncSelectedScriptTerminalBuffer(scriptId);
+      });
+    },
+    [syncSelectedScriptTerminalBuffer, terminalBufferOwner],
   );
 
   const replaceTerminalBuffersFromState = useCallback(
@@ -325,11 +366,21 @@ export const useAgentStudioDevServerTerminalBuffers = (
           ? event.script.scriptId
           : event.terminalChunk.scriptId;
       if (selectedScriptId && touchedScriptId === selectedScriptId) {
-        syncSelectedScriptTerminalBuffer(selectedScriptId);
+        if (event.type === "terminal_chunk") {
+          scheduleSelectedScriptTerminalBuffer(selectedScriptId);
+        } else {
+          syncSelectedScriptTerminalBuffer(selectedScriptId);
+        }
       }
       return true;
     },
-    [hydrateTerminalBuffersFromState, scope, syncSelectedScriptTerminalBuffer, terminalBuffers],
+    [
+      hydrateTerminalBuffersFromState,
+      scheduleSelectedScriptTerminalBuffer,
+      scope,
+      syncSelectedScriptTerminalBuffer,
+      terminalBuffers,
+    ],
   );
 
   const cancelMutationReplaySync = useCallback((): void => {
@@ -337,10 +388,11 @@ export const useAgentStudioDevServerTerminalBuffers = (
   }, [terminalBufferOwner]);
 
   const clearTerminalBuffers = useCallback((): void => {
+    cancelPendingPublication();
     terminalBuffers.clear();
     terminalBufferOwner.pendingMutationReplaySync = null;
     setSelectedScriptTerminalBufferState({ buffer: null, scopeKey: activeScopeKey });
-  }, [activeScopeKey, terminalBufferOwner, terminalBuffers]);
+  }, [activeScopeKey, cancelPendingPublication, terminalBufferOwner, terminalBuffers]);
   const selectedScriptTerminalBuffer =
     selectedScriptTerminalBufferState?.scopeKey === activeScopeKey
       ? selectedScriptTerminalBufferState.buffer

@@ -1860,10 +1860,14 @@ describe("useAgentStudioDevServerPanel", () => {
         });
       });
 
-      expect(getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data)).toEqual([
-        "Starting `bun run dev`\r\n",
-        "new dev server ready\r\n",
-      ]);
+      await waitFor(
+        () => {
+          expect(
+            getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
+          ).toEqual(["Starting `bun run dev`\r\n", "new dev server ready\r\n"]);
+        },
+        { timeout: 200 },
+      );
 
       restartDeferred.resolve(
         buildState({

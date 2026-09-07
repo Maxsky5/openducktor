@@ -18,6 +18,7 @@ export type AgentStudioDevServerTerminalChunkEntry = DevServerTerminalChunk;
 export type AgentStudioDevServerTerminalBuffer = {
   entries: readonly AgentStudioDevServerTerminalChunkEntry[];
   lastSequence: number | null;
+  evictedThroughSequence: number | null;
   resetToken: number;
 };
 
@@ -47,6 +48,7 @@ type DevServerTerminalBufferState = {
   lastSnapshotSequence: number | null;
   size: number;
   lastSequence: number | null;
+  evictedThroughSequence: number | null;
   resetToken: number;
   runIdentity: DevServerRunIdentity | null;
   snapshotEntryCount: number;
@@ -153,6 +155,7 @@ const createDevServerTerminalBufferState = (): DevServerTerminalBufferState => (
   size: 0,
   lastSequence: null,
   resetToken: 0,
+  evictedThroughSequence: null,
   runIdentity: null,
   snapshotEntryCount: 0,
 });
@@ -203,6 +206,11 @@ export const appendDevServerTerminalChunk = (
     buffer.entries[insertionIndex] = terminalChunk;
     buffer.size += 1;
   } else {
+    const evictedEntry = buffer.entries[buffer.head];
+    if (!evictedEntry) {
+      throw new Error(`Missing dev server terminal chunk at ring head ${buffer.head}.`);
+    }
+    buffer.evictedThroughSequence = evictedEntry.sequence;
     buffer.entries[buffer.head] = terminalChunk;
     buffer.head = (buffer.head + 1) % MAX_BUFFERED_DEV_SERVER_TERMINAL_CHUNKS;
   }
@@ -225,6 +233,7 @@ export const replaceDevServerTerminalBuffer = (
   buffer.head = 0;
   buffer.size = 0;
   buffer.lastSequence = null;
+  buffer.evictedThroughSequence = null;
   buffer.firstSnapshotSequence = null;
   buffer.lastSnapshotSequence = null;
   buffer.runIdentity = runIdentity;
@@ -322,6 +331,7 @@ export const getDevServerTerminalBuffer = (
     entries: readCurrentBufferEntries(buffer),
     lastSequence: buffer.lastSequence,
     resetToken: buffer.resetToken,
+    evictedThroughSequence: buffer.evictedThroughSequence,
   };
 };
 

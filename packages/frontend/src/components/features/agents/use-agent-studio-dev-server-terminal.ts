@@ -2,6 +2,7 @@ import type { FitAddon } from "@xterm/addon-fit";
 import type { ITerminalOptions, Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import { readDevServerTerminalOutput } from "@/features/agent-studio-build-tools/dev-server-terminal-output";
 import { createTerminalBinding } from "@/features/terminals/shared-terminal-binding";
 import {
   createTerminalOptions,
@@ -181,25 +182,6 @@ const disposeTerminalBinding = (
   resetTerminalRenderQueue(renderedStateRef, renderQueueRef, renderGenerationRef);
 };
 
-const readTerminalReplayOutput = (
-  entries: AgentStudioDevServerTerminalBuffer["entries"],
-): string => {
-  return entries.map((entry) => entry.data).join("");
-};
-
-const readAppendedTerminalOutput = (
-  entries: AgentStudioDevServerTerminalBuffer["entries"],
-  lastRenderedSequence: number | null,
-): string => {
-  let output = "";
-  for (const entry of entries) {
-    if (lastRenderedSequence === null || entry.sequence > lastRenderedSequence) {
-      output += entry.data;
-    }
-  }
-  return output;
-};
-
 const renderTerminalBuffer = ({
   binding,
   terminalIdentityKey,
@@ -220,7 +202,15 @@ const renderTerminalBuffer = ({
     renderedStateRef.current.terminalIdentityKey !== terminalIdentityKey;
   const didResetTokenChange = renderedStateRef.current.resetToken !== nextResetToken;
 
-  if (didTerminalIdentityChange || didResetTokenChange) {
+  const lastRenderedSequence = renderedStateRef.current.lastSequence;
+  const evictedThroughSequence = terminalBuffer?.evictedThroughSequence ?? null;
+  const didLoseUnseenOutput =
+    !didTerminalIdentityChange &&
+    !didResetTokenChange &&
+    evictedThroughSequence !== null &&
+    (lastRenderedSequence === null || lastRenderedSequence < evictedThroughSequence);
+
+  if (didTerminalIdentityChange || didResetTokenChange || didLoseUnseenOutput) {
     const hasRenderedCurrentBinding = renderedStateRef.current.terminalIdentityKey !== null;
     const activeBinding = hasRenderedCurrentBinding ? recreateTerminalBinding() : binding;
     if (!activeBinding) {
@@ -229,7 +219,13 @@ const renderTerminalBuffer = ({
 
     activeBinding.terminal.reset();
     activeBinding.terminal.clear();
-    writeTerminalOutput(activeBinding.terminal, readTerminalReplayOutput(entries));
+    const truncationNotice = didLoseUnseenOutput
+      ? "[Dev server output exceeded the 2,000-chunk buffer. Showing retained output.]\r\n"
+      : "";
+    writeTerminalOutput(
+      activeBinding.terminal,
+      truncationNotice + readDevServerTerminalOutput(entries, null),
+    );
     activeBinding.fitAddon.fit();
     renderedStateRef.current = {
       terminalIdentityKey,
@@ -239,10 +235,7 @@ const renderTerminalBuffer = ({
     return;
   }
 
-  writeTerminalOutput(
-    binding.terminal,
-    readAppendedTerminalOutput(entries, renderedStateRef.current.lastSequence),
-  );
+  writeTerminalOutput(binding.terminal, readDevServerTerminalOutput(entries, lastRenderedSequence));
   renderedStateRef.current.lastSequence = nextLastSequence;
 };
 

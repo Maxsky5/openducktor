@@ -257,6 +257,20 @@ describe("dev-server-log-buffer", () => {
     );
   });
 
+  test("records actual evictions without treating sequence gaps as lost output", () => {
+    const store = createDevServerTerminalBufferStore();
+    for (let index = 0; index < 2_000; index += 1) {
+      appendDevServerTerminalChunk(store, buildChunk(index * 3));
+    }
+    const before = getDevServerTerminalBuffer(store, "frontend");
+    expect(before?.evictedThroughSequence).toBeNull();
+    appendDevServerTerminalChunk(store, buildChunk(6_000));
+    expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBe(0);
+    expect(before?.evictedThroughSequence).toBeNull();
+    replaceDevServerTerminalBuffer(store, "frontend", [buildChunk(9_000)]);
+    expect(getDevServerTerminalBuffer(store, "frontend")?.evictedThroughSequence).toBeNull();
+  });
+
   test("replaces and prunes script buffers when syncing state", () => {
     const store = createDevServerTerminalBufferStore();
     appendDevServerTerminalChunk(store, {
