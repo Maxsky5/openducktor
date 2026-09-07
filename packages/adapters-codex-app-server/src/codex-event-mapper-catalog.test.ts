@@ -20,6 +20,5 @@ describe("Codex event mapper catalog", () => {
     expect(names.indexOf("todo")).toBeLessThan(names.indexOf("dynamic_tool"));
     expect(names.indexOf("web_search")).toBeLessThan(names.indexOf("dynamic_tool"));
     expect(names.indexOf("subagent")).toBeLessThan(names.indexOf("collab_tool"));
-    expect(names[names.length - 1]).toBe("hidden_item");
   });
 });

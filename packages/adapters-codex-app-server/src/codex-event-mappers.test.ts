@@ -38,6 +38,21 @@ const projectedSubagents = (events: ReturnType<typeof projectCodexCanonicalEvent
       return event.part;
     });
 
+describe("Codex event mapper pipeline", () => {
+  test("returns an unhandled result for an unmapped history item", () => {
+    const pipeline = createCodexEventMapperPipeline();
+    const result = pipeline.runThreadItemResult(
+      {
+        index: 0,
+        item: { type: "imageView", id: "image-1", path: "/repo/image.png" },
+      },
+      { source: "thread_read", threadId: "thread-1" },
+    );
+
+    expect(result).toEqual({ events: [], handled: false });
+  });
+});
+
 describe("Codex todo event mapper", () => {
   test("keeps live and thread-read todo updates in canonical parity", () => {
     const live = projectCodexCanonicalEvents(

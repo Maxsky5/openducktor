@@ -9,7 +9,6 @@ import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper } from "../codex-event-mapper";
 import { noCodexMapperState, type CodexTimedThreadItem } from "../codex-event-mapper";
 import type { CodexToolTimingOptions } from "../codex-tool-timing";
-import { emptyMapper } from "./empty";
 
 const streamPartEvents = (
   name: string,
@@ -110,4 +109,3 @@ export const mcpToolMapper = streamPartMapper("mcp_tool", "mcpToolCall");
 export const webSearchMapper = streamPartMapper("web_search", "webSearch");
 export const collabToolMapper = streamPartMapper("collab_tool", "collabAgentToolCall");
 export const dynamicToolMapper = streamPartMapper("dynamic_tool", "dynamicToolCall");
-export const hiddenItemMapper = emptyMapper("hidden_item");
