@@ -1,6 +1,9 @@
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 import {
   mergeAgentImageGeneration,
+  reduceAgentImageGenerationLifecycle,
+  resolveAgentImageGenerationSettlement,
+  type AgentImageGenerationLifecycle,
   settleAgentImageGeneration,
   type AgentImageGenerationSettlement,
 } from "@openducktor/core";
@@ -10,9 +13,7 @@ export type CodexImageGenerationEnd =
   | { scope: "session"; reason: Exclude<AgentImageGenerationSettlement, "interrupted"> };
 type ThreadImages = {
   items: Map<string, AgentImageGenerationPart>;
-  terminalTurns: Map<string, AgentImageGenerationSettlement>;
-  startedTurns: Set<string>;
-  sessionEnd?: { timestamp: string; reason: AgentImageGenerationSettlement };
+  lifecycle: AgentImageGenerationLifecycle;
 };
 const itemKey = (part: AgentImageGenerationPart): string =>
   JSON.stringify([part.turnId ?? null, part.itemId]);
@@ -44,7 +45,10 @@ export class CodexImageGenerationState {
 
   startTurn(runtimeId: string, threadId: string, turnId: string): void {
     const state = this.thread(runtimeId, threadId);
-    if (!state.terminalTurns.has(turnId)) state.startedTurns.add(turnId);
+    state.lifecycle = reduceAgentImageGenerationLifecycle(state.lifecycle, {
+      type: "turn_started",
+      turnId,
+    });
   }
 
   settle(
@@ -55,21 +59,22 @@ export class CodexImageGenerationState {
   ): AgentImageGenerationPart[] {
     const { reason } = end;
     const state = this.thread(runtimeId, threadId);
-    const recordTurn = (id: string) => {
-      if (state.terminalTurns.get(id) !== "interrupted") state.terminalTurns.set(id, reason);
-    };
-    if (end.scope === "turn") {
-      recordTurn(end.turnId);
-      state.startedTurns.delete(end.turnId);
-    } else {
-      state.sessionEnd = { timestamp, reason };
-      for (const id of state.startedTurns) recordTurn(id);
-      state.startedTurns.clear();
-    }
+    state.lifecycle = reduceAgentImageGenerationLifecycle(
+      state.lifecycle,
+      end.scope === "turn"
+        ? { type: "turn_ended", turnId: end.turnId, reason }
+        : {
+            type: "session_ended",
+            timestamp,
+            reason,
+            turnIds: [...state.items.values()].flatMap((item) =>
+              item.turnId === undefined ? [] : [item.turnId],
+            ),
+          },
+    );
     const settled: AgentImageGenerationPart[] = [];
     for (const item of state.items.values()) {
       if (end.scope === "turn" && item.turnId !== end.turnId) continue;
-      if (item.turnId !== undefined) recordTurn(item.turnId);
       const next = settleAgentImageGeneration(item, reason);
       if (next === item) continue;
       state.items.set(itemKey(item), next);
@@ -98,7 +103,7 @@ export class CodexImageGenerationState {
     }
     let state = threads.get(threadId);
     if (!state) {
-      state = { items: new Map(), terminalTurns: new Map(), startedTurns: new Set() };
+      state = { items: new Map(), lifecycle: {} };
       threads.set(threadId, state);
     }
     return state;
@@ -113,18 +118,11 @@ export class CodexImageGenerationState {
     const key = itemKey(incoming);
     const current = state.items.get(key);
     const merged = current ? mergeAgentImageGeneration(current, incoming, source) : incoming;
-    const turnEnd =
-      merged.turnId === undefined ? undefined : state.terminalTurns.get(merged.turnId);
-    const hasNewTurn = merged.turnId !== undefined && state.startedTurns.has(merged.turnId);
-    const sessionEnd = state.sessionEnd;
-    const historyEnd =
-      source === "history" &&
-      sessionEnd &&
-      !hasNewTurn &&
-      (occurredAt === undefined || Date.parse(occurredAt) <= Date.parse(sessionEnd.timestamp))
-        ? sessionEnd.reason
-        : undefined;
-    const terminal = turnEnd ?? historyEnd;
+    const terminal = resolveAgentImageGenerationSettlement(
+      state.lifecycle,
+      { turnId: merged.turnId, timestamp: occurredAt },
+      source === "live" ? "turn" : "session",
+    );
     const next = terminal ? settleAgentImageGeneration(merged, terminal) : merged;
     state.items.set(key, next);
     return next;

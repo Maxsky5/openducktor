@@ -1,4 +1,9 @@
-import { settleAgentImageGeneration } from "@openducktor/core";
+import {
+  settleAgentImageGeneration,
+  reduceAgentImageGenerationLifecycle,
+  resolveAgentImageGenerationSettlement,
+  type AgentImageGenerationLifecycle,
+} from "@openducktor/core";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { updateSessionMessagesByRole } from "./messages";
 
@@ -18,21 +23,17 @@ export const settleImageGenerationMessage = (
   turns?: AgentSessionState["imageGenerationTurnEnds"],
   starts?: AgentSessionState["imageGenerationTurnStarts"],
 ): AgentChatMessage => {
-  if (message.meta?.kind === "image_generation" && message.meta.turnId) {
-    const reason = turns?.get(message.meta.turnId);
-    if (reason) {
-      const meta = settleAgentImageGeneration(message.meta, reason);
-      return meta === message.meta ? message : { ...message, meta };
-    }
-    if (starts?.has(message.meta.turnId)) return message;
-  }
-  if (
-    !end ||
-    message.meta?.kind !== "image_generation" ||
-    (!message.timestampIsApproximate && Date.parse(message.timestamp) > Date.parse(end.timestamp))
-  )
-    return message;
-  const meta = settleAgentImageGeneration(message.meta, end.reason);
+  if (message.meta?.kind !== "image_generation") return message;
+  const reason = resolveAgentImageGenerationSettlement(
+    { sessionEnd: end, turnEnds: turns, turnStarts: starts },
+    {
+      turnId: message.meta.turnId,
+      timestamp: message.timestampIsApproximate ? undefined : message.timestamp,
+    },
+    "session",
+  );
+  if (!reason) return message;
+  const meta = settleAgentImageGeneration(message.meta, reason);
   return meta === message.meta ? message : { ...message, meta };
 };
 
@@ -70,18 +71,11 @@ export const recordImageGenerationTurnEnd = (
   turnId: string,
   reason: "interrupted" | "turn_ended" | "runtime_failure",
 ): AgentSessionState => {
-  const turns = session.imageGenerationTurnEnds;
-  const previous = turns?.get(turnId);
-  if (previous === reason || previous === "interrupted") return session;
-  const imageGenerationTurnEnds = new Map(session.imageGenerationTurnEnds).set(turnId, reason);
-  const imageGenerationTurnStarts = new Set(session.imageGenerationTurnStarts);
-  imageGenerationTurnStarts.delete(turnId);
-  return {
-    ...session,
-    imageGenerationTurnEnds,
-    imageGenerationTurnStarts,
-    messages: settleImageGenerationMessages({ ...session, imageGenerationTurnEnds }),
-  };
+  const state = imageLifecycle(session);
+  const next = reduceAgentImageGenerationLifecycle(state, { type: "turn_ended", turnId, reason });
+  if (next === state) return session;
+  const updated = applyImageLifecycle(session, next);
+  return { ...updated, messages: settleImageGenerationMessages(updated) };
 };
 
 export const recordImageGenerationSessionEnd = (
@@ -89,35 +83,43 @@ export const recordImageGenerationSessionEnd = (
   timestamp: string,
   reason: NonNullable<AgentSessionState["imageGenerationEnd"]>["reason"],
 ): AgentSessionState => {
-  const imageGenerationTurnEnds = new Map(session.imageGenerationTurnEnds);
-  const recordTurn = (turnId: string) => {
-    if (imageGenerationTurnEnds.get(turnId) !== "interrupted")
-      imageGenerationTurnEnds.set(turnId, reason);
-  };
-  for (const turnId of session.imageGenerationTurnStarts ?? []) recordTurn(turnId);
+  const turnIds: string[] = [];
   for (const message of session.messages.items) {
     if (message.meta?.kind !== "image_generation" || !message.meta.turnId) continue;
-    if (message.timestampIsApproximate || Date.parse(message.timestamp) <= Date.parse(timestamp)) {
-      recordTurn(message.meta.turnId);
-    }
+    if (message.timestampIsApproximate || Date.parse(message.timestamp) <= Date.parse(timestamp))
+      turnIds.push(message.meta.turnId);
   }
-  return recordImageGenerationEnd(
-    { ...session, imageGenerationTurnEnds, imageGenerationTurnStarts: new Set() },
+  const next = reduceAgentImageGenerationLifecycle(imageLifecycle(session), {
+    type: "session_ended",
     timestamp,
     reason,
-    "image",
-  );
+    turnIds,
+  });
+  return recordImageGenerationEnd(applyImageLifecycle(session, next), timestamp, reason, "image");
 };
 
 export const recordImageGenerationTurnStart = (
   session: AgentSessionState,
   turnId: string,
 ): AgentSessionState => {
-  const ends = session.imageGenerationTurnEnds;
-  if (ends?.has(turnId) || session.imageGenerationTurnStarts?.has(turnId)) return session;
-  return {
-    ...session,
-    imageGenerationTurnEnds: ends ?? new Map(),
-    imageGenerationTurnStarts: new Set(session.imageGenerationTurnStarts).add(turnId),
-  };
+  const state = imageLifecycle(session);
+  const next = reduceAgentImageGenerationLifecycle(state, { type: "turn_started", turnId });
+  return next === state ? session : applyImageLifecycle(session, next);
+};
+
+const imageLifecycle = (session: ImageOwner): AgentImageGenerationLifecycle => ({
+  turnEnds: session.imageGenerationTurnEnds,
+  turnStarts: session.imageGenerationTurnStarts,
+  sessionEnd: session.imageGenerationEnd,
+});
+
+// The frontend keeps the latest timestamp in recordImageGenerationEnd, including generic session events.
+const applyImageLifecycle = (
+  session: AgentSessionState,
+  lifecycle: AgentImageGenerationLifecycle,
+): AgentSessionState => {
+  const updated = { ...session };
+  if (lifecycle.turnEnds) updated.imageGenerationTurnEnds = lifecycle.turnEnds;
+  if (lifecycle.turnStarts) updated.imageGenerationTurnStarts = lifecycle.turnStarts;
+  return updated;
 };

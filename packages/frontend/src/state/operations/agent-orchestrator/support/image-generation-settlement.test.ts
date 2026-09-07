@@ -1,3 +1,5 @@
+import { buildSession } from "../events/session-events-test-harness";
+import { applyLoadedSessionHistory } from "./session-history-chat-messages";
 import { expect, test } from "bun:test";
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 import { mergeReadonlyRuntimeHistory } from "@/components/features/agents/agent-chat/readonly-transcript/readonly-transcript-session";
@@ -9,6 +11,8 @@ import {
 import { createSessionMessagesState } from "./messages";
 import {
   recordImageGenerationSessionEnd,
+  recordImageGenerationEnd,
+  recordImageGenerationTurnStart,
   recordImageGenerationTurnEnd,
 } from "./image-generation-settlement";
 
@@ -81,4 +85,49 @@ test("arbitrary turn IDs cannot inherit a terminal marker from Object.prototype"
     "interrupted",
   );
   expect(settled.messages.items[0]?.meta).toMatchObject({ status: "interrupted" });
+});
+
+test("frontend keeps its latest cutoff while the shared policy preserves interruption", () => {
+  const latest = "2026-09-06T10:00:00.000Z";
+  let session = buildSession({ runtimeKind: "codex" });
+  session = recordImageGenerationSessionEnd(session, latest, "runtime_failure");
+  session = recordImageGenerationTurnEnd(session, "interrupted", "interrupted");
+  const previous = session;
+  session = recordImageGenerationSessionEnd(session, "2026-09-06T09:00:00.000Z", "turn_ended");
+  expect(session.imageGenerationEnd).toBe(previous.imageGenerationEnd);
+  expect(recordImageGenerationTurnStart(session, "interrupted")).toBe(session);
+  session = applyLoadedSessionHistory(session, [
+    {
+      messageId: "image",
+      role: "assistant",
+      text: "",
+      timestamp: "2026-09-06T09:30:00.000Z",
+      parts: [
+        {
+          kind: "image_generation",
+          itemId: "image",
+          messageId: "image",
+          partId: "image",
+          status: "running",
+        },
+      ],
+    },
+  ]);
+  expect(
+    session.messages.items.find((message) => message.meta?.kind === "image_generation")?.meta,
+  ).toMatchObject({ status: "incomplete", incompleteReason: "runtime_failure" });
+  expect(session.imageGenerationTurnEnds?.get("interrupted")).toBe("interrupted");
+});
+
+test("a confirmed image turn excludes generic session settlement and leaves the input state intact", () => {
+  const original = buildSession({ runtimeKind: "codex" });
+  const running = recordImageGenerationTurnStart(original, "next");
+  expect(recordImageGenerationEnd(running, "2026-09-06T10:00:00.000Z", "runtime_failure")).toBe(
+    running,
+  );
+  const ended = recordImageGenerationTurnEnd(running, "next", "interrupted");
+  expect(original.imageGenerationTurnStarts).toBeUndefined();
+  expect(running.imageGenerationTurnStarts?.has("next")).toBe(true);
+  expect(ended.imageGenerationTurnStarts?.has("next")).toBe(false);
+  expect(recordImageGenerationTurnEnd(ended, "next", "turn_ended")).toBe(ended);
 });
