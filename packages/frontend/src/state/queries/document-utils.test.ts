@@ -21,19 +21,25 @@ describe("document-utils", () => {
     expect(resolveLatestDocumentPayload(current, incoming)).toBe(current);
   });
 
-  test("resolveLatestDocumentPayload applies incoming null timestamp when content changed", () => {
-    const current = payload({ markdown: "# Existing", updatedAt: "2026-03-26T20:00:00.000Z" });
-    const incoming = payload({ markdown: "", updatedAt: null });
+  test.each([null, "invalid-incoming"])(
+    "resolveLatestDocumentPayload accepts changed content with incoming timestamp %j",
+    (updatedAt) => {
+      const current = payload({ markdown: "# Existing", updatedAt: "2026-03-26T20:00:00.000Z" });
+      const incoming = payload({ markdown: "", updatedAt });
 
-    expect(resolveLatestDocumentPayload(current, incoming)).toBe(incoming);
-  });
+      expect(resolveLatestDocumentPayload(current, incoming)).toBe(incoming);
+    },
+  );
 
-  test("resolveLatestDocumentPayload keeps current null-timestamp incoming when content unchanged", () => {
-    const current = payload({ markdown: "# Existing", updatedAt: "2026-03-26T20:00:00.000Z" });
-    const incoming = payload({ markdown: "# Existing", updatedAt: null });
+  test.each([null, "invalid-incoming"])(
+    "resolveLatestDocumentPayload keeps unchanged content with incoming timestamp %j",
+    (updatedAt) => {
+      const current = payload({ markdown: "# Existing", updatedAt: "2026-03-26T20:00:00.000Z" });
+      const incoming = payload({ markdown: "# Existing", updatedAt });
 
-    expect(resolveLatestDocumentPayload(current, incoming)).toBe(current);
-  });
+      expect(resolveLatestDocumentPayload(current, incoming)).toBe(current);
+    },
+  );
 
   test("resolveLatestDocumentPayload accepts incoming data when current data is absent", () => {
     const incoming = payload({ markdown: "# Incoming" });
@@ -57,24 +63,12 @@ describe("document-utils", () => {
     ["invalid-current", "2026-03-26T20:00:00.000Z"],
     ["invalid-current", "invalid-incoming"],
   ])(
-    "resolveLatestDocumentPayload accepts incoming data with current timestamp %s and incoming timestamp %s",
+    "resolveLatestDocumentPayload accepts incoming data with current timestamp %j and incoming timestamp %j",
     (currentUpdatedAt, incomingUpdatedAt) => {
       const current = payload({ markdown: "# Current", updatedAt: currentUpdatedAt });
       const incoming = payload({ markdown: "# Incoming", updatedAt: incomingUpdatedAt });
 
       expect(resolveLatestDocumentPayload(current, incoming)).toBe(incoming);
-    },
-  );
-
-  test.each(["# Current", "# Changed"])(
-    "resolveLatestDocumentPayload treats an invalid incoming timestamp as missing for %s",
-    (markdown) => {
-      const current = payload({ markdown: "# Current", updatedAt: "2026-03-26T20:00:00.000Z" });
-      const incoming = payload({ markdown, updatedAt: "invalid-incoming" });
-
-      expect(resolveLatestDocumentPayload(current, incoming)).toBe(
-        markdown === current.markdown ? current : incoming,
-      );
     },
   );
 
