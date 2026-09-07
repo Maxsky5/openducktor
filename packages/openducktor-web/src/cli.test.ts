@@ -27,6 +27,88 @@ describe("web CLI argument parsing", () => {
     });
   });
 
+  test("parses a bind host and external URL for network deployments", () => {
+    expect(
+      parseCliArgs([
+        "--host",
+        "100.64.0.1",
+        "--external-url",
+        "http://100.64.0.1:1420",
+        "--backend-port",
+        "14328",
+      ]),
+    ).toMatchObject({
+      host: "100.64.0.1",
+      externalUrl: "http://100.64.0.1:1420",
+      backendPort: 14328,
+    });
+  });
+
+  test("normalizes the external URL to its origin", () => {
+    expect(
+      parseCliArgs(["--host", "0.0.0.0", "--external-url", " http://100.64.0.1:1420/ "]),
+    ).toMatchObject({
+      host: "0.0.0.0",
+      externalUrl: "http://100.64.0.1:1420",
+    });
+  });
+
+  test("rejects invalid bind hosts and external URLs", () => {
+    const parseBadHost = () => parseCliArgs(["--host", "http://100.64.0.1:1420"]);
+    expect(parseBadHost).toThrow("Invalid --host value");
+    expect(parseBadHost).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+
+    expect(() => parseCliArgs(["--host", "0.0.0.0:1420"])).toThrow("Invalid --host value");
+    expect(() => parseCliArgs(["--host", "localhost:80"])).toThrow("Invalid --host value");
+    expect(() => parseCliArgs(["--host", "[::1]:1420"])).toThrow("Invalid --host value");
+    expect(() => parseCliArgs(["--host", "0:0:0:0:0:0:0:1"])).toThrow("Invalid --host value");
+    expect(() => parseCliArgs(["--host", "a[b"])).toThrow("Invalid --host value");
+    expect(() => parseCliArgs(["--host", "a]b"])).toThrow("Invalid --host value");
+    expect(parseCliArgs(["--host", "[0:0:0:0:0:0:0:1]"])).toMatchObject({
+      host: "[::1]",
+    });
+
+    const parseBadExternalUrl = () => parseCliArgs(["--external-url", "ftp://100.64.0.1:1420"]);
+    expect(parseBadExternalUrl).toThrow("must use http or https");
+    expect(parseBadExternalUrl).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+
+    const parseMalformedExternalUrl = () => parseCliArgs(["--external-url", "not a url"]);
+    expect(parseMalformedExternalUrl).toThrow("OpenDucktor web --external-url is invalid.");
+    expect(parseMalformedExternalUrl).not.toThrow("Start the app through");
+
+    expect(
+      parseCliArgs(["--host", "0.0.0.0", "--external-url", "https://machine.ts.net:443"]),
+    ).toMatchObject({
+      host: "0.0.0.0",
+      externalUrl: "https://machine.ts.net",
+    });
+
+    expect(parseCliArgs(["--external-url", "http://100.64.0.1"])).toMatchObject({
+      externalUrl: "http://100.64.0.1",
+    });
+  });
+
+  test("parses and normalizes a base path", () => {
+    expect(parseCliArgs(["--base-path", "/api/"])).toMatchObject({
+      basePath: "/api",
+    });
+    expect(parseCliArgs(["--base-path", "/deep/nested/api"])).toMatchObject({
+      basePath: "/deep/nested/api",
+    });
+
+    const parseNoLeadingSlash = () => parseCliArgs(["--base-path", "api"]);
+    expect(parseNoLeadingSlash).toThrow("Invalid --base-path value");
+    expect(parseNoLeadingSlash).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+
+    const parseQuery = () => parseCliArgs(["--base-path", "/api?x=1"]);
+    expect(parseQuery).toThrow("Invalid --base-path value");
+    expect(parseQuery).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+
+    const parseMissingBasePath = () => parseCliArgs(["--base-path"]);
+    expect(parseMissingBasePath).toThrow("Missing value for --base-path.");
+    expect(parseMissingBasePath).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+  });
+
   test("rejects malformed port values instead of truncating trailing text", () => {
     const parseBackendPort = () => parseCliArgs(["--backend-port", "14327abc"]);
     expect(parseBackendPort).toThrow("Invalid --backend-port value: 14327abc");
@@ -94,6 +176,16 @@ describe("web CLI argument parsing", () => {
     const parseFlagAsBackendPort = () => parseCliArgs(["--backend-port", "--workspace"]);
     expect(parseFlagAsBackendPort).toThrow("Missing value for --backend-port.");
     expect(parseFlagAsBackendPort).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+
+    const parseMissingHost = () => parseCliArgs(["--host"]);
+    expect(parseMissingHost).toThrow("Missing value for --host.");
+    expect(parseMissingHost).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+
+    const parseMissingExternalUrl = () => parseCliArgs(["--external-url"]);
+    expect(parseMissingExternalUrl).toThrow("Missing value for --external-url.");
+    expect(parseMissingExternalUrl).toThrow(
+      expect.objectContaining({ _tag: "WebValidationError" }),
+    );
 
     const parseUnknownOption = () => parseCliArgs(["--unexpected"]);
     expect(parseUnknownOption).toThrow("Unknown option: --unexpected");

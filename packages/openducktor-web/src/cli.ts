@@ -14,11 +14,15 @@ import {
 } from "./effect/web-errors";
 import { type LauncherOptions, runLauncherEffect } from "./launcher";
 import { createWebLogger, type WebLogger, writeWebLogEffect } from "./logger";
+import { parseHttpOriginEffect } from "./http-origin";
 
 type CliOptions = {
   workspaceMode: boolean;
   frontendPort: number;
   backendPort: number;
+  host?: string;
+  externalUrl?: string;
+  basePath?: string;
 };
 
 type CliInvocation =
@@ -39,6 +43,11 @@ export const createLauncherOptions = (
     packageRoot,
     frontendPort: cliOptions.frontendPort,
     backendPort: cliOptions.backendPort,
+    ...(cliOptions.host !== undefined && { host: cliOptions.host }),
+    ...(cliOptions.externalUrl !== undefined && {
+      externalUrl: cliOptions.externalUrl,
+    }),
+    ...(cliOptions.basePath !== undefined && { basePath: cliOptions.basePath }),
   };
   if (cliOptions.workspaceMode) {
     return {
@@ -56,7 +65,7 @@ export const createLauncherOptions = (
 
 const printHelp = (): void => {
   console.log(
-    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local host port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_BACKEND_PORT})\n  --workspace             Serve the repo-local frontend with Vite for development\n  -h, --help              Show this help`,
+    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local host port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_BACKEND_PORT})\n  --host <host>           Bind address for the frontend and host; use a Tailscale IP or 0.0.0.0 to reach them from another machine (default 127.0.0.1)\n  --external-url <origin> URL browsers use to reach the frontend, for example http://100.64.0.1:1420; required when --host is not loopback\n  --base-path <path>      Serve the host under this path on the same origin, for example /api; use with a reverse proxy or Tailscale Serve\n  --workspace             Serve the repo-local frontend with Vite for development\n  -h, --help              Show this help`,
   );
 };
 
@@ -71,8 +80,96 @@ const isKnownCliFlag = (value: string | undefined): boolean =>
   value === "--workspace" ||
   value === "--port" ||
   value === "--backend-port" ||
+  value === "--host" ||
+  value === "--external-url" ||
+  value === "--base-path" ||
   value === "-h" ||
   value === "--help";
+
+const readFlagValue = (
+  args: readonly string[],
+  index: number,
+  flag: string,
+): Effect.Effect<string | undefined, WebValidationError> =>
+  Effect.gen(function* () {
+    const value = args[index + 1];
+    if (isKnownCliFlag(value)) {
+      return yield* new WebValidationError({
+        message: `Missing value for ${flag}.`,
+        field: flag,
+      });
+    }
+    return value;
+  });
+
+const invalidHostError = (raw: string, flag: string): WebValidationError =>
+  new WebValidationError({
+    message: `Invalid ${flag} value: ${raw}. Expected a hostname or IP address without a scheme, port, or path.`,
+    field: flag,
+    details: { raw },
+  });
+
+const parseHostEffect = (
+  raw: string | undefined,
+  flag: string,
+): Effect.Effect<string, WebValidationError> =>
+  Effect.gen(function* () {
+    if (!raw) {
+      return yield* new WebValidationError({
+        message: `Missing value for ${flag}.`,
+        field: flag,
+      });
+    }
+    const trimmed = raw.trim();
+    if (trimmed.includes(":") && !trimmed.startsWith("[")) {
+      return yield* invalidHostError(raw, flag);
+    }
+    const parsed = yield* Effect.try({
+      try: () => new URL(`http://${trimmed}`),
+      catch: () => invalidHostError(raw, flag),
+    });
+    if (parsed.href !== `http://${parsed.hostname}/`) {
+      return yield* invalidHostError(raw, flag);
+    }
+    return parsed.hostname;
+  });
+
+const parseBasePathEffect = (
+  raw: string | undefined,
+  flag: string,
+): Effect.Effect<string, WebValidationError> =>
+  Effect.gen(function* () {
+    if (!raw) {
+      return yield* new WebValidationError({
+        message: `Missing value for ${flag}.`,
+        field: flag,
+      });
+    }
+    const trimmed = raw.trim().replace(/\/+$/u, "");
+    if (trimmed === "" || !/^\/[A-Za-z0-9._~-]+(\/[A-Za-z0-9._~-]+)*$/u.test(trimmed)) {
+      return yield* new WebValidationError({
+        message: `Invalid ${flag} value: ${raw}. Expected a path starting with / with no empty segments, query string, or fragment.`,
+        field: flag,
+        details: { raw },
+      });
+    }
+    return trimmed;
+  });
+
+const parseExternalUrlEffect = (
+  raw: string | undefined,
+  flag: string,
+): Effect.Effect<string, WebValidationError> =>
+  Effect.gen(function* () {
+    if (!raw) {
+      return yield* new WebValidationError({
+        message: `Missing value for ${flag}.`,
+        field: flag,
+      });
+    }
+    const parsed = yield* parseHttpOriginEffect(raw.trim(), `OpenDucktor web ${flag}`);
+    return parsed.origin;
+  });
 
 const parsePortEffect = (
   raw: string | undefined,
@@ -113,26 +210,32 @@ export const parseCliArgsEffect = (
         continue;
       }
       if (arg === "--port") {
-        const value = args[index + 1];
-        if (isKnownCliFlag(value)) {
-          return yield* new WebValidationError({
-            message: "Missing value for --port.",
-            field: "--port",
-          });
-        }
+        const value = yield* readFlagValue(args, index, "--port");
         options.frontendPort = yield* parsePortEffect(value, "--port");
         index += 1;
         continue;
       }
       if (arg === "--backend-port") {
-        const value = args[index + 1];
-        if (isKnownCliFlag(value)) {
-          return yield* new WebValidationError({
-            message: "Missing value for --backend-port.",
-            field: "--backend-port",
-          });
-        }
+        const value = yield* readFlagValue(args, index, "--backend-port");
         options.backendPort = yield* parsePortEffect(value, "--backend-port");
+        index += 1;
+        continue;
+      }
+      if (arg === "--host") {
+        const value = yield* readFlagValue(args, index, "--host");
+        options.host = yield* parseHostEffect(value, "--host");
+        index += 1;
+        continue;
+      }
+      if (arg === "--external-url") {
+        const value = yield* readFlagValue(args, index, "--external-url");
+        options.externalUrl = yield* parseExternalUrlEffect(value, "--external-url");
+        index += 1;
+        continue;
+      }
+      if (arg === "--base-path") {
+        const value = yield* readFlagValue(args, index, "--base-path");
+        options.basePath = yield* parseBasePathEffect(value, "--base-path");
         index += 1;
         continue;
       }

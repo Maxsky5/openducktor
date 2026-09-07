@@ -11,6 +11,7 @@ import {
   WebOperationError,
 } from "./effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
+import { formatHost, LOCALHOST } from "./http-origin";
 import type { TypescriptHostBackend } from "./typescript-host-backend";
 
 interface LauncherEarlyExitRef {
@@ -53,19 +54,67 @@ const scheduleInterval = (callback: () => void, durationMs: number): (() => void
   return () => clearInterval(intervalId);
 };
 
-export const LOCALHOST = "127.0.0.1";
-
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SHUTDOWN_KEEP_ALIVE_INTERVAL_MS = 1_000;
 
-export const buildFrontendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
+export const buildFrontendUrl = (port: number, host: string = LOCALHOST): string =>
+  `http://${formatHost(host)}:${port}`;
 
-export const buildBackendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
+export const buildBackendUrl = (port: number, host: string = LOCALHOST): string =>
+  `http://${formatHost(host)}:${port}`;
 
-export const buildFrontendDisplayUrls = (port: number): string[] => [
-  `http://localhost:${port}/`,
-  `http://${LOCALHOST}:${port}/`,
-];
+export const buildExternalBackendUrl = (externalUrl: string, port: number): string => {
+  const parsed = new URL(externalUrl);
+  parsed.port = String(port);
+  return parsed.origin;
+};
+
+export type BrowserBackendUrls = {
+  browserUrl: string;
+  directUrl: string;
+};
+
+export const buildBrowserBackendUrl = (
+  basePath: string | undefined,
+  frontendUrl: string,
+  externalUrl: string | undefined,
+  bindHost: string,
+  backendPort: number,
+): BrowserBackendUrls => {
+  const directUrl = buildBackendUrl(backendPort, bindHost);
+  if (basePath) {
+    return {
+      browserUrl: `${frontendUrl}${basePath}`,
+      directUrl,
+    };
+  }
+  return {
+    browserUrl: externalUrl ? buildExternalBackendUrl(externalUrl, backendPort) : directUrl,
+    directUrl,
+  };
+};
+
+export type FrontendDisplayUrl = {
+  kind: "local" | "network";
+  url: string;
+};
+
+export const buildFrontendDisplayUrls = (
+  port: number,
+  externalUrl?: string,
+): FrontendDisplayUrl[] => {
+  const urls: FrontendDisplayUrl[] = [
+    { kind: "local", url: `http://localhost:${port}/` },
+    { kind: "local", url: `http://${LOCALHOST}:${port}/` },
+  ];
+  if (externalUrl) {
+    const externalDisplayUrl = `${externalUrl.replace(/\/$/, "")}/`;
+    if (!urls.some((entry) => entry.url === externalDisplayUrl)) {
+      urls.push({ kind: "network", url: externalDisplayUrl });
+    }
+  }
+  return urls;
+};
 
 const verifyBackendReadinessEffect = (
   backendUrl: string,

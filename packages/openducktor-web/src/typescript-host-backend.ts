@@ -32,6 +32,7 @@ import {
   WebOperationError,
 } from "./effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
+import { allowedHostnamesFor, isRequestHostAllowed } from "./http-origin";
 import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
 import {
   routeTaskEventHttpRequest,
@@ -60,6 +61,8 @@ export type TypescriptHostBackendOptions = {
   frontendOrigin: string;
   controlToken: string;
   appToken: string;
+  host?: string;
+  basePath?: string;
   logger: WebLogger;
   mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
   onBackgroundFailure(cause: unknown): void;
@@ -129,6 +132,7 @@ const tryUpgradeTerminalWebSocket = ({
   request,
   server,
   shutdownStarted,
+  terminalPath,
 }: {
   allowedOrigins: Set<string>;
   appSessionCookieName: string;
@@ -139,28 +143,38 @@ const tryUpgradeTerminalWebSocket = ({
   request: Request;
   server: Bun.Server<TerminalWebSocketData>;
   shutdownStarted: boolean;
+  terminalPath: string;
 }): TerminalUpgradeResult => {
-  if (new URL(request.url).pathname !== "/terminal") return { handled: false };
+  if (terminalPath !== "/terminal") return { handled: false };
   if (shutdownStarted) {
-    return { handled: true, response: new Response("Host is shutting down.", { status: 503 }) };
+    return {
+      handled: true,
+      response: new Response("Host is shutting down.", { status: 503 }),
+    };
   }
   const origin = request.headers.get("origin")?.trim();
   if (!origin || !allowedOrigins.has(origin)) {
     return {
       handled: true,
-      response: new Response("Terminal origin is not allowed.", { status: 403 }),
+      response: new Response("Terminal origin is not allowed.", {
+        status: 403,
+      }),
     };
   }
   if (readCookie(request, appSessionCookieName) !== appToken) {
     return {
       handled: true,
-      response: new Response("Terminal session is unauthorized.", { status: 401 }),
+      response: new Response("Terminal session is unauthorized.", {
+        status: 401,
+      }),
     };
   }
   if (request.headers.get("sec-websocket-protocol")?.trim() !== TERMINAL_PROTOCOL_SUBPROTOCOL) {
     return {
       handled: true,
-      response: new Response("Terminal protocol version is unsupported.", { status: 426 }),
+      response: new Response("Terminal protocol version is unsupported.", {
+        status: 426,
+      }),
     };
   }
   const upgraded = server.upgrade(request, {
@@ -261,7 +275,9 @@ const preflightResponse = (request: Request, allowedOrigins: Set<string>): Respo
   });
 };
 
-const hostFailureDetailsSchema = z.object({ failureKind: failureKindSchema.optional() });
+const hostFailureDetailsSchema = z.object({
+  failureKind: failureKindSchema.optional(),
+});
 const hostFailureCauseSchema = z.object({
   cause: z.unknown().optional(),
   details: hostFailureDetailsSchema.optional(),
@@ -612,6 +628,7 @@ const routeCorsRequest = ({
   logger,
   request,
   requestTimeouts,
+  sessionCookieSecure,
   shutdownStarted,
   beginShutdown,
   stop,
@@ -628,6 +645,7 @@ const routeCorsRequest = ({
   logger: WebLogger;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
+  sessionCookieSecure: boolean;
   shutdownStarted: boolean;
   beginShutdown: () => void;
   stop: () => Promise<void>;
@@ -640,11 +658,20 @@ const routeCorsRequest = ({
 
     if (requestUrl.pathname === "/session" && request.method === "POST") {
       yield* validateAppTokenHeader(request, appToken);
+      const sessionCookieAttributes = [
+        `${appSessionCookieName}=${appToken}`,
+        "HttpOnly",
+        "SameSite=Strict",
+        "Path=/",
+      ];
+      if (sessionCookieSecure) {
+        sessionCookieAttributes.push("Secure");
+      }
       return jsonResponse(
         { ok: true },
         {
           headers: {
-            "set-cookie": `${appSessionCookieName}=${appToken}; HttpOnly; SameSite=Strict; Path=/`,
+            "set-cookie": sessionCookieAttributes.join("; "),
           },
         },
         corsHeaders,
@@ -776,6 +803,7 @@ export const handleTypescriptHostBackendRequest = ({
   logger,
   request,
   requestTimeouts,
+  sessionCookieSecure,
   shutdownStarted,
   beginShutdown,
   stop,
@@ -792,6 +820,7 @@ export const handleTypescriptHostBackendRequest = ({
   logger: WebLogger;
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
+  sessionCookieSecure: boolean;
   shutdownStarted: boolean;
   beginShutdown: () => void;
   stop: () => Promise<void>;
@@ -818,6 +847,7 @@ export const handleTypescriptHostBackendRequest = ({
       logger,
       request,
       requestTimeouts,
+      sessionCookieSecure,
       shutdownStarted,
       beginShutdown,
       stop,
@@ -830,11 +860,73 @@ export const handleTypescriptHostBackendRequest = ({
     );
   });
 
+const stripBasePath = (basePath: string | undefined, requestUrl: string): string => {
+  if (!basePath) {
+    return requestUrl;
+  }
+  const parsed = new URL(requestUrl);
+  if (parsed.pathname === basePath) {
+    parsed.pathname = "/";
+    return parsed.toString();
+  }
+  if (parsed.pathname.startsWith(`${basePath}/`)) {
+    parsed.pathname = parsed.pathname.slice(basePath.length);
+    return parsed.toString();
+  }
+  return requestUrl;
+};
+
+type HostFetchInput = Omit<
+  Parameters<typeof handleTypescriptHostBackendRequest>[0],
+  "hostCommandRouter" | "request" | "requestTimeouts"
+> & {
+  allowedHostnames: ReadonlySet<string>;
+  basePath: string | undefined;
+  hostCommandRouter: EffectNodeHostCommandRouter;
+  onBackgroundFailure(cause: unknown): void;
+  request: Request;
+  server: Bun.Server<TerminalWebSocketData>;
+};
+
+export const handleHostFetch = (
+  input: HostFetchInput,
+): Response | Promise<Response> | undefined => {
+  const { allowedHostnames, basePath, onBackgroundFailure, request, server, ...backendInput } =
+    input;
+  if (!isRequestHostAllowed(request, allowedHostnames)) {
+    return new Response("Host not allowed.", { status: 403 });
+  }
+  const routedUrl = stripBasePath(basePath, request.url);
+  const routedRequest = routedUrl === request.url ? request : new Request(routedUrl, request);
+  const terminalUpgrade = tryUpgradeTerminalWebSocket({
+    allowedOrigins: backendInput.allowedOrigins,
+    appSessionCookieName: backendInput.appSessionCookieName,
+    appToken: backendInput.appToken,
+    hostCommandRouter: backendInput.hostCommandRouter,
+    logger: backendInput.logger,
+    onBackgroundFailure,
+    request,
+    server,
+    shutdownStarted: backendInput.shutdownStarted,
+    terminalPath: new URL(routedUrl).pathname,
+  });
+  if (terminalUpgrade.handled) return terminalUpgrade.response;
+  return Effect.runPromise(
+    handleTypescriptHostBackendRequest({
+      ...backendInput,
+      request: routedRequest,
+      requestTimeouts: server,
+    }),
+  );
+};
+
 export const startTypescriptHostBackendEffect = ({
   port,
   frontendOrigin,
   controlToken,
   appToken,
+  host,
+  basePath,
   logger,
   mcpBridgeDiscoveryMode,
   onBackgroundFailure,
@@ -848,6 +940,11 @@ export const startTypescriptHostBackendEffect = ({
       Effect.mapError((cause) => toWebOperationError(cause, "web.host.validate-frontend-origin")),
     );
     const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin);
+    const allowedHostnames = allowedHostnamesFor({
+      bindHost: host ?? LOCALHOST,
+      externalUrl: validatedFrontendOrigin,
+    });
+    const sessionCookieSecure = new URL(validatedFrontendOrigin).protocol === "https:";
     const eventBus = new BufferedHostEventBus({
       report: ({ channel, cause }) =>
         scheduleNonFatalWebEventFailure(
@@ -958,41 +1055,31 @@ export const startTypescriptHostBackendEffect = ({
         server = yield* Effect.try({
           try: () =>
             Bun.serve<TerminalWebSocketData>({
-              hostname: LOCALHOST,
+              hostname: host ?? LOCALHOST,
               idleTimeout: HOST_IDLE_TIMEOUT_SECONDS,
               port,
               fetch(request, server) {
-                const terminalUpgrade = tryUpgradeTerminalWebSocket({
+                return handleHostFetch({
+                  allowedHostnames,
                   allowedOrigins,
                   appSessionCookieName,
                   appToken,
+                  controlToken,
+                  eventBus,
                   hostCommandRouter,
+                  taskAssetReadService: hostCommandRouter.taskAssetReadService,
+                  taskEventLeaseManager,
+                  localAttachments,
                   logger,
+                  basePath,
                   onBackgroundFailure,
                   request,
                   server,
+                  sessionCookieSecure,
                   shutdownStarted,
+                  beginShutdown,
+                  stop,
                 });
-                if (terminalUpgrade.handled) return terminalUpgrade.response;
-                return Effect.runPromise(
-                  handleTypescriptHostBackendRequest({
-                    allowedOrigins,
-                    appSessionCookieName,
-                    appToken,
-                    controlToken,
-                    eventBus,
-                    hostCommandRouter,
-                    taskEventLeaseManager,
-                    taskAssetReadService: hostCommandRouter.taskAssetReadService,
-                    localAttachments,
-                    logger,
-                    request,
-                    requestTimeouts: server,
-                    shutdownStarted,
-                    beginShutdown,
-                    stop,
-                  }),
-                );
               },
               websocket: terminalWebSocketHandler,
             }),

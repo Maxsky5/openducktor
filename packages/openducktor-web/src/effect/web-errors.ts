@@ -2,7 +2,9 @@ import { Cause, Data, Effect, Exit } from "effect";
 import type { FailureKind, HostInvokeFailure } from "@openducktor/contracts";
 
 export type WebValidationErrorDetails =
+  | { readonly basePath: string }
   | { readonly browserOrigin: string }
+  | { readonly host: string }
   | { readonly mcpEntrypoint: string; readonly packageRoot: string }
   | { readonly option: string | undefined }
   | { readonly origin: string }

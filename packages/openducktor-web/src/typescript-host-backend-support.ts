@@ -18,6 +18,7 @@ import {
   WebValidationError,
 } from "./effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
+import { parseHttpOriginEffect, portOfHttpOrigin } from "./http-origin";
 
 export type BufferedHostEvent = {
   id: number;
@@ -167,53 +168,9 @@ export const validateWebFrontendOriginEffect = (
       });
     }
 
-    const parsed = yield* Effect.try({
-      try: () => new URL(trimmed),
-      catch: (cause) =>
-        new WebValidationError({
-          field: "frontendOrigin",
-          message: `invalid browser frontend origin configured: ${trimmed}`,
-          cause,
-          details: { origin },
-        }),
+    const parsed = yield* parseHttpOriginEffect(trimmed, "browser frontend origin", {
+      field: "frontendOrigin",
     });
-
-    if (parsed.protocol !== "http:") {
-      return yield* new WebValidationError({
-        field: "frontendOrigin",
-        message: "browser frontend origin must use http",
-        details: { origin },
-      });
-    }
-    if (parsed.username || parsed.password) {
-      return yield* new WebValidationError({
-        field: "frontendOrigin",
-        message: "browser frontend origin must not include credentials",
-        details: { origin },
-      });
-    }
-    if (parsed.port.length === 0) {
-      return yield* new WebValidationError({
-        field: "frontendOrigin",
-        message: "browser frontend origin must include an explicit port",
-        details: { origin },
-      });
-    }
-    if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
-      return yield* new WebValidationError({
-        field: "frontendOrigin",
-        message: "browser frontend origin must not include a path, query string, or fragment",
-        details: { origin },
-      });
-    }
-    if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsed.hostname)) {
-      return yield* new WebValidationError({
-        field: "frontendOrigin",
-        message: "browser frontend origin must target 127.0.0.1, localhost, or [::1]",
-        details: { origin },
-      });
-    }
-
     return parsed.origin;
   });
 
@@ -222,10 +179,12 @@ export const validateWebFrontendOrigin = (origin: string): string =>
 
 export const allowedOriginsForFrontendOrigin = (frontendOrigin: string): Set<string> => {
   const parsed = new URL(frontendOrigin);
+  const port = portOfHttpOrigin(parsed);
   return new Set([
-    `http://127.0.0.1:${parsed.port}`,
-    `http://localhost:${parsed.port}`,
-    `http://[::1]:${parsed.port}`,
+    parsed.origin,
+    `http://127.0.0.1:${port}`,
+    `http://localhost:${port}`,
+    `http://[::1]:${port}`,
   ]);
 };
 

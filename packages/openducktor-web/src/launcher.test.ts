@@ -10,10 +10,14 @@ import {
   preserveLauncherFailureAfterStop,
   resolveWebMcpBridgeDiscoveryMode,
   runWebSignalShutdown,
+  validateLauncherNetworkOptionsEffect,
+  viteServerOptions,
   writeRuntimeConfigResponse,
 } from "./launcher";
 import {
+  buildBrowserBackendUrl,
   buildBrowserRuntimeConfigJson,
+  buildExternalBackendUrl,
   buildFrontendDisplayUrls,
   closeFrontendServer,
   closeViteFrontendServer,
@@ -24,6 +28,7 @@ import {
   stopLauncherServices,
   waitForBackend,
 } from "./launcher-support";
+import { allowedHostnamesFor, isRequestHostAllowed, LOCALHOST } from "./http-origin";
 import type { WebLogger } from "./logger";
 
 const testLogger: WebLogger = {
@@ -41,6 +46,179 @@ describe("launcher internals", () => {
 
   test("uses production discovery for installed static launches", () => {
     expect(resolveWebMcpBridgeDiscoveryMode(false)).toBe("production");
+  });
+
+  test("rejects a non-loopback bind without an external URL", async () => {
+    await expect(
+      Effect.runPromise(
+        validateLauncherNetworkOptionsEffect({
+          basePath: undefined,
+          bindHost: "0.0.0.0",
+          externalUrl: undefined,
+        }),
+      ),
+    ).rejects.toThrow("binds a non-loopback host");
+  });
+
+  test("rejects a non-loopback bind with a loopback external URL", async () => {
+    await expect(
+      Effect.runPromise(
+        validateLauncherNetworkOptionsEffect({
+          basePath: undefined,
+          bindHost: "0.0.0.0",
+          externalUrl: "http://127.0.0.1:1420",
+        }),
+      ),
+    ).rejects.toThrow("binds a non-loopback host");
+  });
+
+  test("accepts a non-loopback bind with a remote external URL", async () => {
+    await Effect.runPromise(
+      validateLauncherNetworkOptionsEffect({
+        basePath: undefined,
+        bindHost: "0.0.0.0",
+        externalUrl: "http://100.64.0.1:1420",
+      }),
+    );
+  });
+
+  test("rejects a trailing-dot loopback external URL with a non-loopback bind", async () => {
+    await expect(
+      Effect.runPromise(
+        validateLauncherNetworkOptionsEffect({
+          basePath: undefined,
+          bindHost: "0.0.0.0",
+          externalUrl: "http://localhost.:1420",
+        }),
+      ),
+    ).rejects.toThrow("binds a non-loopback host");
+  });
+
+  test("accepts a trailing-dot loopback bind with a remote external URL", async () => {
+    await Effect.runPromise(
+      validateLauncherNetworkOptionsEffect({
+        basePath: undefined,
+        bindHost: "localhost.",
+        externalUrl: "https://machine.ts.net",
+      }),
+    );
+  });
+
+  test("rejects a base path without an external URL", async () => {
+    await expect(
+      Effect.runPromise(
+        validateLauncherNetworkOptionsEffect({
+          basePath: "/api",
+          bindHost: LOCALHOST,
+          externalUrl: undefined,
+        }),
+      ),
+    ).rejects.toThrow("--base-path without --external-url");
+  });
+
+  test("accepts a base path with an external URL", async () => {
+    await Effect.runPromise(
+      validateLauncherNetworkOptionsEffect({
+        basePath: "/api",
+        bindHost: LOCALHOST,
+        externalUrl: "https://machine.ts.net",
+      }),
+    );
+  });
+
+  test("scopes Vite fs.allow to the web package and frontend sources", () => {
+    expect(
+      viteServerOptions({
+        backendPort: 14327,
+        frontendPort: 1420,
+        packageRoot: "/web-package",
+        workspaceMode: false,
+      }).fs?.allow,
+    ).toEqual(["/web-package", "/frontend/src"]);
+  });
+
+  test("does not restrict Vite hosts for IP external URLs", () => {
+    expect(
+      viteServerOptions({
+        backendPort: 14327,
+        externalUrl: "http://100.64.0.1:1420",
+        frontendPort: 1420,
+        packageRoot: "/web-package",
+        workspaceMode: false,
+      }),
+    ).not.toHaveProperty("allowedHosts");
+  });
+
+  test("allows the external hostname in Vite when it is not an IP address", () => {
+    expect(
+      viteServerOptions({
+        backendPort: 14327,
+        externalUrl: "https://machine.ts.net",
+        frontendPort: 1420,
+        packageRoot: "/web-package",
+        workspaceMode: false,
+      }).allowedHosts,
+    ).toEqual(["localhost", ".localhost", "machine.ts.net"]);
+  });
+
+  test("allows only loopback, bind, and external hosts on remote frontend servers", () => {
+    const hostnames = allowedHostnamesFor({
+      bindHost: "0.0.0.0",
+      externalUrl: "http://100.64.0.1:1420",
+    });
+    expect(hostnames).toEqual(
+      new Set(["127.0.0.1", "localhost", "[::1]", "::1", "100.64.0.1", "0.0.0.0"]),
+    );
+    for (const host of ["100.64.0.1:1420", "localhost:1420", "[::1]:1420"]) {
+      expect(
+        isRequestHostAllowed(new Request("http://frontend/", { headers: { host } }), hostnames),
+      ).toBe(true);
+    }
+    expect(
+      isRequestHostAllowed(
+        new Request("http://frontend/", { headers: { host: "evil.example" } }),
+        hostnames,
+      ),
+    ).toBe(false);
+    expect(
+      isRequestHostAllowed(
+        new Request("http://127.0.0.1:1420/", {
+          headers: { host: "evil.example" },
+        }),
+        hostnames,
+      ),
+    ).toBe(false);
+  });
+
+  test("allows the proxy hostname and loopback hosts on loopback frontend servers", () => {
+    const hostnames = allowedHostnamesFor({
+      bindHost: "127.0.0.1",
+      externalUrl: "https://machine.ts.net",
+    });
+    expect(
+      isRequestHostAllowed(
+        new Request("https://frontend/", {
+          headers: { host: "machine.ts.net" },
+        }),
+        hostnames,
+      ),
+    ).toBe(true);
+    expect(
+      isRequestHostAllowed(
+        new Request("http://frontend/", {
+          headers: { host: "127.0.0.1:1420" },
+        }),
+        hostnames,
+      ),
+    ).toBe(true);
+    expect(
+      isRequestHostAllowed(
+        new Request("http://frontend/", {
+          headers: { host: "192.168.1.20:1420" },
+        }),
+        hostnames,
+      ),
+    ).toBe(false);
   });
 
   test("reports runtime-config response failures instead of rejecting without an owner", async () => {
@@ -65,7 +243,11 @@ describe("launcher internals", () => {
   });
 
   test("waits for the fake host health and token-authenticated session endpoints", async () => {
-    const requests: Array<{ url: string; method: string | undefined; token: string | null }> = [];
+    const requests: Array<{
+      url: string;
+      method: string | undefined;
+      token: string | null;
+    }> = [];
     let healthAttempts = 0;
     const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
@@ -92,7 +274,11 @@ describe("launcher internals", () => {
     expect(requests).toEqual([
       { url: "http://127.0.0.1:14327/health", method: undefined, token: null },
       { url: "http://127.0.0.1:14327/health", method: undefined, token: null },
-      { url: "http://127.0.0.1:14327/session", method: "POST", token: "app-token" },
+      {
+        url: "http://127.0.0.1:14327/session",
+        method: "POST",
+        token: "app-token",
+      },
     ]);
   });
 
@@ -707,7 +893,10 @@ describe("launcher internals", () => {
       details: {
         failures: [
           expect.objectContaining({ cause: frontendFailure }),
-          expect.objectContaining({ cause: hostExitFailure, operation: "await-exit" }),
+          expect.objectContaining({
+            cause: hostExitFailure,
+            operation: "await-exit",
+          }),
         ],
       },
     });
@@ -797,9 +986,56 @@ describe("launcher internals", () => {
 
   test("prints localhost first in the frontend availability URLs", () => {
     expect(buildFrontendDisplayUrls(1420)).toEqual([
-      "http://localhost:1420/",
-      "http://127.0.0.1:1420/",
+      { kind: "local", url: "http://localhost:1420/" },
+      { kind: "local", url: "http://127.0.0.1:1420/" },
     ]);
+  });
+
+  test("adds the external URL to the frontend availability URLs", () => {
+    expect(buildFrontendDisplayUrls(1420, "http://100.64.0.1:1420")).toEqual([
+      { kind: "local", url: "http://localhost:1420/" },
+      { kind: "local", url: "http://127.0.0.1:1420/" },
+      { kind: "network", url: "http://100.64.0.1:1420/" },
+    ]);
+  });
+
+  test("derives the external backend URL from the external frontend URL and the bound host port", () => {
+    expect(buildExternalBackendUrl("http://100.64.0.1:1420", 14327)).toBe(
+      "http://100.64.0.1:14327",
+    );
+  });
+
+  test("publishes a same-origin backend URL when a base path is configured", () => {
+    expect(
+      buildBrowserBackendUrl(
+        "/api",
+        "http://100.64.0.1:1420",
+        "http://100.64.0.1:1420",
+        "0.0.0.0",
+        14327,
+      ),
+    ).toEqual({
+      browserUrl: "http://100.64.0.1:1420/api",
+      directUrl: "http://0.0.0.0:14327",
+    });
+    expect(
+      buildBrowserBackendUrl(
+        undefined,
+        "http://100.64.0.1:1420",
+        "http://100.64.0.1:1420",
+        "0.0.0.0",
+        14327,
+      ),
+    ).toEqual({
+      browserUrl: "http://100.64.0.1:14327",
+      directUrl: "http://0.0.0.0:14327",
+    });
+    expect(
+      buildBrowserBackendUrl(undefined, "http://127.0.0.1:1420", undefined, "127.0.0.1", 14327),
+    ).toEqual({
+      browserUrl: "http://127.0.0.1:14327",
+      directUrl: "http://127.0.0.1:14327",
+    });
   });
 
   test("rejects static asset paths that escape the web shell root", () => {
