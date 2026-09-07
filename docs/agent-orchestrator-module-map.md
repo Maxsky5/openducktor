@@ -300,6 +300,6 @@ Startup is complete when the task record query and first host snapshot have prod
 
 ## Generated image projection
 
-Files: `support/image-generation-messages.ts`, `support/chat-message-ids.ts`, `support/history-message-merge.ts`, and `state/queries/agent-generated-images.ts`.
+Files: `support/image-generation-messages.ts`, `support/image-generation-settlement.ts`, `support/chat-message-ids.ts`, and `support/history-message-merge.ts`.
 
-The image helper projects normalized parts from live events and history into one row per native item and turn. The shared core merge rule preserves known outcomes across replay. Image updates do not change activity, pending input, runtime routes, or session selection. The transcript presentation carries the repository and displayed session reference to the shared preview component. See [the runtime guide](runtime-integration-guide.md#generated-images) and [the Query cache strategy](tanstack-query-cache-strategy.md#generated-images) for access and preview lifetime.
+These helpers create one chat row per image item and turn, apply image lifecycle events, and merge live messages with history. The transcript passes the displayed session reference to the preview component. See [the runtime guide](runtime-integration-guide.md#generated-images) for lifecycle and access rules, and [the Query cache strategy](tanstack-query-cache-strategy.md#generated-images) for image reads and preview cleanup.

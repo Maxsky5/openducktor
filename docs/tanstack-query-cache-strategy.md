@@ -103,6 +103,8 @@ Keep these values outside TanStack Query:
 
 ## Generated images
 
-`agent-generated-images.ts` owns bounded generated-image reads. Its key includes repository, runtime kind, working directory, external session ID, turn and item IDs, and the normalized output reference. Saved-path metadata also separates changed output locations.
+`state/queries/agent-generated-images.ts` owns generated image queries. The query key includes repository, runtime kind, working directory, session ID, turn and item IDs, output reference, and saved path. The host enforces the [image format and byte limits](runtime-integration-guide.md#image-reads).
 
-The query caches a Blob, never base64. It has no automatic retry, polling, focus refetch, reconnect refetch, or previous-session placeholder. It remains fresh while observed and uses `gcTime: 0` after its last observer leaves. The query checks cancellation and echoed identity before it publishes bytes. The preview component owns image decoding and object URLs, and revokes each URL when its source or session changes or it unmounts.
+The query caches a Blob, never base64. It disables retries and refetches on mount, window focus, and reconnect. It uses no polling or previous-session placeholder and stays fresh while observed. `gcTime: 0` removes the cache entry after its last observer leaves. Before returning the Blob, the query checks cancellation and verifies that the response matches the requested session and image IDs.
+
+The preview hook owns image decoding and object URLs. It revokes each URL when the source changes or the component unmounts. Changing the session or image remounts the preview component.
