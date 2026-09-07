@@ -9,6 +9,8 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
+import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
+import { withMockedToast } from "@/test-utils/mock-toast";
 import {
   AgentOperationsContext,
   RuntimeDefinitionsContext,
@@ -355,4 +357,25 @@ test("missing failure details state the limitation and an action", () => {
   expect(screen.getByRole("alert").textContent).toContain(
     "Ask the agent to explain this failure before trying again.",
   );
+});
+
+test("copies the exact generated file path without opening the prompt", async () => {
+  const writeText = mock(async (_value: string) => {});
+  const restoreClipboard = replaceNavigatorClipboard(writeText);
+  try {
+    await withMockedToast(async ({ toastSuccessMock }) => {
+      const savedPath = "/runtime/generated/my duck.png";
+      harness(undefined, true, { ...part, savedPath, status: "running" });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Copy generated image path" }));
+      });
+      expect(writeText).toHaveBeenCalledWith(savedPath);
+      expect(toastSuccessMock).toHaveBeenCalledWith("Copied!", { description: savedPath });
+      expect(
+        screen.getByRole("button", { name: "View prompt" }).getAttribute("aria-expanded"),
+      ).toBe("false");
+    });
+  } finally {
+    restoreClipboard();
+  }
 });

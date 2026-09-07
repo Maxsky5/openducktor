@@ -11,6 +11,9 @@ import { type ReactElement, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CopyIconButton } from "@/components/ui/copy-icon-button";
+import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
+import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
@@ -38,7 +41,12 @@ export function AgentChatImageGeneration({
 }): ReactElement {
   const sessionRef = useContext(AgentChatImageSessionContext);
   return (
-    <div className="my-2 flex w-full min-w-0 max-w-lg flex-col gap-3 rounded-xl border border-border bg-card p-3 text-foreground shadow-sm">
+    <div
+      className={cn(
+        "my-2 flex w-full min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-3 text-foreground shadow-sm",
+        part.status !== "completed" && "max-w-lg",
+      )}
+    >
       <p role="status" className="inline-flex items-center gap-2 text-sm font-medium">
         {part.status === "running" ? (
           <LoaderCircle
@@ -94,10 +102,7 @@ function ImageDetails({ part }: { part: AgentImageGenerationPart }): ReactElemen
   return (
     <div className="flex min-w-0 flex-col gap-3">
       {part.savedPath !== undefined ? (
-        <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-xs font-medium text-muted-foreground">Saved file</p>
-          <p className="break-all font-mono text-xs text-muted-foreground">{part.savedPath}</p>
-        </div>
+        <SavedImagePath key={part.savedPath} path={part.savedPath} />
       ) : null}
       {part.transparentBackground !== undefined ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -125,16 +130,37 @@ function ImageDetails({ part }: { part: AgentImageGenerationPart }): ReactElemen
           <CollapsibleContent>
             <div className="mt-2 flex flex-col gap-2 rounded-lg bg-muted/50 p-3">
               <p className="text-xs font-medium text-muted-foreground">Generation prompt</p>
-              <p
-                className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed"
-                tabIndex={0}
-              >
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                 {part.revisedPrompt}
               </p>
             </div>
           </CollapsibleContent>
         </Collapsible>
       ) : null}
+    </div>
+  );
+}
+
+function SavedImagePath({ path }: { path: string }): ReactElement {
+  const { copied, copyToClipboard } = useCopyToClipboard({
+    getSuccessDescription: (value) => value,
+    errorLogContext: "AgentChatImageGeneration",
+  });
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className="text-xs font-medium text-muted-foreground">Saved file</p>
+        <p className="break-all font-mono text-xs text-muted-foreground">{path}</p>
+      </div>
+      <CopyIconButton
+        copied={copied}
+        ariaLabel="Copy generated image path"
+        tooltipLabel={copied ? "Copied" : "Copy generated image path"}
+        className="size-6 shrink-0 border-transparent bg-transparent hover:bg-muted"
+        onClick={() => {
+          void copyToClipboard(path);
+        }}
+      />
     </div>
   );
 }

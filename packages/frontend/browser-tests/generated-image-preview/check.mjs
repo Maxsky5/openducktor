@@ -69,6 +69,8 @@ try {
         `(() => {
         const root = document.querySelector('#root');
         const image = root.querySelector('img');
+        const card = root.firstElementChild;
+        if (Math.abs(card.getBoundingClientRect().width - root.getBoundingClientRect().width) > 1) throw new Error('Completed card does not fill the available width');
         const button = root.querySelector('[data-slot="collapsible-trigger"]');
         if (button.getAttribute('aria-expanded') !== 'false' || root.textContent.includes(image.alt)) throw new Error('Prompt is not collapsed by default');
         if (!root.textContent.includes('/runtime/generated/duck.png') || !root.textContent.includes('Opaque')) throw new Error('File and background details are not visible');
@@ -86,6 +88,8 @@ try {
         `(() => {
         const root = document.querySelector('#root');
         if (!root.textContent.includes(root.querySelector('img').alt)) throw new Error('Prompt did not expand in full');
+        const prompt = [...root.querySelectorAll('p')].find(p => p.textContent === root.querySelector('img').alt);
+        if (prompt.scrollHeight > prompt.clientHeight + 1 || getComputedStyle(prompt).maxHeight !== 'none') throw new Error('Prompt has an inner scroll area');
         if (root.querySelector('[data-slot="collapsible-trigger"]').getAttribute('aria-expanded') !== 'true') throw new Error('Expanded state is missing');
         if (root.scrollWidth > innerWidth) throw new Error('Expanded prompt exceeds viewport');
       })()`,
