@@ -21,7 +21,6 @@ import {
   type ToolDiscoveryContext,
   type ToolDiscoveryDescriptor,
   type ToolDiscoveryPathOptions,
-  type ToolDiscoverySource,
 } from "./tool-discovery-descriptors";
 
 export type { ToolDiscoveryPathOptions } from "./tool-discovery-descriptors";
@@ -179,15 +178,12 @@ const missingToolError = (descriptor: ToolDiscoveryDescriptor, checked: readonly
 const missingRequiredSourceError = (
   descriptor: ToolDiscoveryDescriptor,
   checked: readonly string[],
-  source: Extract<ToolDiscoverySource, { kind: "searchDirectories" }>,
   directories: readonly string[],
 ) =>
   new HostDependencyError<ToolDiscoveryDetails>({
     dependency: descriptor.command,
     operation: "toolDiscovery.discoverTool",
-    message:
-      source.requiredMissingMessage?.({ descriptor, directories }) ??
-      `${descriptor.command} not found. Checked ${checked.join(", ")}. ${descriptor.installHint}`,
+    message: `${descriptor.command} not found. Checked ${checked.join(", ")}. ${descriptor.installHint}`,
     details: { directories, requiredSource: true },
   });
 
@@ -247,9 +243,9 @@ const discoverDescriptorToolPath = ({
           for (const candidate of candidates) {
             if (yield* isExecutableCommandFile(candidate, context.platform)) {
               return {
-                displayLabel: source.displayLabel ?? source.label,
+                displayLabel: source.label,
                 path: candidate,
-                sourceCategory: source.sourceCategory ?? "system_path",
+                sourceCategory: "system_path",
               } satisfies ResolvedTool;
             }
           }
@@ -264,9 +260,7 @@ const discoverDescriptorToolPath = ({
           if (directories.length === 0) {
             break;
           }
-          checked.push(
-            `${source.label ?? "search directories"} (${describeLocations(directories)})`,
-          );
+          checked.push(`${source.label} (${describeLocations(directories)})`);
           const resolved = yield* resolveDirectoryCommand(
             descriptor.command,
             directories,
@@ -275,15 +269,13 @@ const discoverDescriptorToolPath = ({
           );
           if (resolved !== null) {
             return {
-              displayLabel: source.displayLabel ?? source.label ?? "Search directory",
+              displayLabel: source.label,
               path: resolved,
-              sourceCategory: source.sourceCategory ?? "system_path",
+              sourceCategory: "system_path",
             } satisfies ResolvedTool;
           }
           if (source.policy === "required") {
-            return yield* Effect.fail(
-              missingRequiredSourceError(descriptor, checked, source, directories),
-            );
+            return yield* Effect.fail(missingRequiredSourceError(descriptor, checked, directories));
           }
           break;
         }

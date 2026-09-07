@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -145,55 +145,89 @@ describe("discoverToolPath", () => {
   test("uses descriptor bundled and standard sources before PATH", async () => {
     await withTempDir(async (root) => {
       const bundledDir = join(root, "bundled");
-      await mkdir(bundledDir);
-      const bundled = join(bundledDir, "opencode");
-      await writeExecutable(bundled);
-
-      const bundledOptions = {
-        bundledToolBinDirs: { opencode: bundledDir },
-        homeDir: root,
-        platform: "linux" as const,
-      };
-      await expect(
-        discoverBuiltInTool({
-          options: bundledOptions,
-          systemCommands: createSystemCommandRunner({
-            env: { PATH: "" },
-            platform: "linux",
-          }),
-          toolId: "opencode",
-        }),
-      ).resolves.toBe(bundled);
-
-      await rm(bundledDir, { force: true, recursive: true });
       const standardDir = join(root, ".opencode", "bin");
-      await mkdir(standardDir, { recursive: true });
-      const standard = join(standardDir, "opencode");
-      await writeExecutable(standard);
-      const standardOptions = {
-        homeDir: root,
-        platform: "linux" as const,
-      };
+      const pathDir = join(root, "path");
+      for (const directory of [bundledDir, standardDir, pathDir]) {
+        await mkdir(directory, { recursive: true });
+        await writeExecutable(join(directory, "opencode"));
+      }
+      const env = { PATH: pathDir };
+      const systemCommands = createSystemCommandRunner({ env, platform: "linux" });
+      const resolve = spyOn(systemCommands, "resolveCommandPath");
+      const options = { homeDir: root, platform: "linux" as const };
 
       await expect(
-        discoverBuiltInTool({
-          options: standardOptions,
-          systemCommands: createSystemCommandRunner({
-            env: { PATH: "" },
-            platform: "linux",
-          }),
+        discoverBuiltInToolResult({
+          env,
+          options: { ...options, bundledToolBinDirs: { opencode: bundledDir } },
+          systemCommands,
           toolId: "opencode",
         }),
-      ).resolves.toBe(standard);
+      ).resolves.toEqual({
+        displayLabel: "bundled tool directory",
+        path: join(bundledDir, "opencode"),
+        sourceCategory: "system_path",
+      });
+      expect(resolve.mock.calls).toEqual([["opencode", { env, searchPath: [bundledDir] }]]);
+      resolve.mockClear();
+
+      await expect(
+        discoverBuiltInToolResult({ env, options, systemCommands, toolId: "opencode" }),
+      ).resolves.toEqual({
+        displayLabel: "standard install directories",
+        path: join(standardDir, "opencode"),
+        sourceCategory: "system_path",
+      });
+      expect(resolve.mock.calls).toEqual([["opencode", { env, searchPath: [standardDir] }]]);
+      resolve.mockClear();
 
       await rm(standardDir, { force: true, recursive: true });
       await expect(
-        discoverBuiltInTool({
-          options: standardOptions,
-          systemCommands: createSystemCommands({ available: ["opencode"] }),
-          toolId: "opencode",
-        }),
-      ).resolves.toBe("/path/opencode");
+        discoverBuiltInTool({ env, options, systemCommands, toolId: "opencode" }),
+      ).resolves.toBe(join(pathDir, "opencode"));
+      expect(resolve.mock.calls).toEqual([
+        ["opencode", { env, searchPath: [standardDir] }],
+        ["opencode", { env }],
+      ]);
+    });
+  });
+
+  test("uses macOS application candidates in order before PATH", async () => {
+    await withTempDir(async (root) => {
+      const applicationsDir = join(root, "Applications");
+      const homeDir = join(root, "home");
+      const appResources = ["Codex.app", "Contents", "Resources"];
+      const systemAppDir = join(applicationsDir, ...appResources);
+      const userAppDir = join(homeDir, "Applications", ...appResources);
+      for (const directory of [systemAppDir, userAppDir]) {
+        await mkdir(directory, { recursive: true });
+        await writeExecutable(join(directory, "codex"));
+      }
+      const systemCommands = createSystemCommands({ available: ["codex"] });
+      const resolve = spyOn(systemCommands, "resolveCommandPath");
+      const options = { applicationsDir, homeDir, platform: "darwin" as const };
+
+      for (const directory of [systemAppDir, userAppDir]) {
+        const executable = join(directory, "codex");
+        await expect(
+          discoverBuiltInToolResult({ options, systemCommands, toolId: "codex" }),
+        ).resolves.toEqual({
+          displayLabel: "standard install locations",
+          path: executable,
+          sourceCategory: "system_path",
+        });
+        expect(resolve).not.toHaveBeenCalled();
+        await rm(executable);
+      }
+
+      await expect(
+        discoverBuiltInToolResult({ options, systemCommands, toolId: "codex" }),
+      ).resolves.toEqual({
+        displayLabel: "System PATH",
+        path: "/path/codex",
+        sourceCategory: "system_path",
+      });
+      expect(resolve.mock.calls).toEqual([["codex", { env: {} }]]);
     });
   });
 
@@ -277,22 +311,29 @@ describe("discoverToolPath", () => {
   });
 
   test("fails at a required bundled source before PATH", async () => {
+    const systemCommands = createSystemCommands({ available: ["opencode"] });
+    const resolve = spyOn(systemCommands, "resolveCommandPath");
     const adapter = createToolDiscoveryAdapter({
       env: {},
       options: {
         bundledToolBinDirs: { opencode: "/opt/OpenDucktor/bin" },
         platform: "linux",
       },
-      systemCommands: createSystemCommands({ available: ["opencode"] }),
+      systemCommands,
     });
     const exit = await Effect.runPromiseExit(adapter.resolveToolPath("opencode"));
 
+    expect(resolve.mock.calls).toEqual([
+      ["opencode", { env: {}, searchPath: ["/opt/OpenDucktor/bin"] }],
+    ]);
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
       const failures = Array.from(Cause.failures(exit.cause));
       expect(failures).toEqual([
         expect.objectContaining({
           _tag: "HostDependencyError",
+          dependency: "opencode",
+          operation: "toolDiscovery.discoverTool",
           details: {
             directories: ["/opt/OpenDucktor/bin"],
             requiredSource: true,
