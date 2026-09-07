@@ -147,14 +147,15 @@ describe("discoverToolPath", () => {
       const bundledDir = join(root, "bundled");
       const standardDir = join(root, ".opencode", "bin");
       const pathDir = join(root, "path");
+      const executableName = process.platform === "win32" ? "opencode.EXE" : "opencode";
       for (const directory of [bundledDir, standardDir, pathDir]) {
         await mkdir(directory, { recursive: true });
-        await writeExecutable(join(directory, "opencode"));
+        await writeExecutable(join(directory, executableName));
       }
       const env = { PATH: pathDir };
-      const systemCommands = createSystemCommandRunner({ env, platform: "linux" });
+      const systemCommands = createSystemCommandRunner({ env, platform: process.platform });
       const resolve = spyOn(systemCommands, "resolveCommandPath");
-      const options = { homeDir: root, platform: "linux" as const };
+      const options = { homeDir: root, platform: process.platform };
 
       await expect(
         discoverBuiltInToolResult({
@@ -165,7 +166,7 @@ describe("discoverToolPath", () => {
         }),
       ).resolves.toEqual({
         displayLabel: "bundled tool directory",
-        path: join(bundledDir, "opencode"),
+        path: join(bundledDir, executableName),
         sourceCategory: "system_path",
       });
       expect(resolve.mock.calls).toEqual([["opencode", { env, searchPath: [bundledDir] }]]);
@@ -175,20 +176,18 @@ describe("discoverToolPath", () => {
         discoverBuiltInToolResult({ env, options, systemCommands, toolId: "opencode" }),
       ).resolves.toEqual({
         displayLabel: "standard install directories",
-        path: join(standardDir, "opencode"),
+        path: join(standardDir, executableName),
         sourceCategory: "system_path",
       });
-      expect(resolve.mock.calls).toEqual([
-        ["opencode", { env, searchPath: [posix.join(root, ".opencode", "bin")] }],
-      ]);
+      expect(resolve.mock.calls).toEqual([["opencode", { env, searchPath: [standardDir] }]]);
       resolve.mockClear();
 
       await rm(standardDir, { force: true, recursive: true });
       await expect(
         discoverBuiltInTool({ env, options, systemCommands, toolId: "opencode" }),
-      ).resolves.toBe(join(pathDir, "opencode"));
+      ).resolves.toBe(join(pathDir, executableName));
       expect(resolve.mock.calls).toEqual([
-        ["opencode", { env, searchPath: [posix.join(root, ".opencode", "bin")] }],
+        ["opencode", { env, searchPath: [standardDir] }],
         ["opencode", { env }],
       ]);
     });
