@@ -1413,3 +1413,103 @@ test("applies a claim from a repeated selection before returning the cached sele
   expect(await peer.claimExternalDelivery(occurrence.occurrenceId)).toBe(false);
   peer.dispose();
 });
+
+test.each(["selection", "timeout", "dispose"] as const)(
+  "settles concurrent publications and clears selection deadlines on %s",
+  async (outcome) => {
+    const hub = new FakeBroadcastHub(false);
+    const locks = new FakeLockManager();
+    let ownerChannel!: FakeBroadcastChannel;
+    let peerChannel!: FakeBroadcastChannel;
+    const owner = createBrowserNotificationCoordinator({
+      createChannel: () => (ownerChannel = hub.createChannel()),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "owner",
+    });
+    const peer = createBrowserNotificationCoordinator({
+      createChannel: () => (peerChannel = hub.createChannel()),
+      locks,
+      focusDocument: { hasFocus: () => false },
+      focusWindow: new FakeFocusWindow(),
+      tabId: "peer",
+    });
+    const originalSetTimeout = globalThis.setTimeout;
+    const deadlines: Array<{ timer: ReturnType<typeof setTimeout>; expire(): void }> = [];
+    const timerSpy = spyOn(globalThis, "setTimeout").mockImplementation(
+      Object.assign((...args: Parameters<typeof setTimeout>) => {
+        const timer = originalSetTimeout(...args);
+        const [callback, delay, ...callbackArgs] = args;
+        if (delay === 5000) {
+          deadlines.push({ timer, expire: () => callback(...callbackArgs) });
+        }
+        return timer;
+      }, originalSetTimeout),
+    );
+    const clearSpy = spyOn(globalThis, "clearTimeout");
+    try {
+      await waitFor(() => owner.isExternalDeliveryOwner());
+      const selected = mock(() => {});
+      peer.subscribeOccurrences(selected);
+      const first = peer.publishOccurrence(occurrence, settings).catch((cause: unknown) => cause);
+      const second = peer.publishOccurrence(occurrence, settings).catch((cause: unknown) => cause);
+      const otherOccurrence = { ...occurrence, occurrenceId: "other-occurrence" };
+      let otherSettled = false;
+      const other = peer.publishOccurrence(otherOccurrence, settings).then(
+        (value) => {
+          otherSettled = true;
+          return value;
+        },
+        (cause: unknown) => {
+          otherSettled = true;
+          return cause;
+        },
+      );
+      expect(deadlines).toHaveLength(3);
+      if (outcome === "selection") {
+        await hub.flushNext(ownerChannel, "occurrence_candidate");
+        await hub.flushNext(peerChannel, "occurrence_selected");
+        expect(await first).toEqual({ occurrence, settings });
+        expect(await second).toEqual({ occurrence, settings });
+      } else {
+        if (outcome === "dispose") peer.dispose();
+        else deadlines[0]?.expire();
+        const message =
+          outcome === "dispose"
+            ? "Browser notification coordination stopped before occurrence selection."
+            : "A browser tab did not select the notification occurrence. Close or reload unresponsive OpenDucktor tabs.";
+        expect(await first).toEqual(new Error(message));
+        expect(await second).toEqual(new Error(message));
+        expect(selected).not.toHaveBeenCalled();
+        if (outcome === "timeout") {
+          expect(peer.getFailureMessage()).toContain("Close or reload");
+          expect(peer.isExternalDeliveryOwner()).toBe(false);
+          expect(await peer.claimExternalDelivery(occurrence.occurrenceId)).toBe(false);
+        }
+      }
+      for (const deadline of deadlines.slice(0, 2)) {
+        expect(clearSpy.mock.calls.some(([timer]) => timer === deadline.timer)).toBe(true);
+      }
+      if (outcome !== "dispose") {
+        expect(otherSettled).toBe(false);
+        expect(clearSpy.mock.calls.some(([timer]) => timer === deadlines[2]?.timer)).toBe(false);
+        hub.flushAll();
+        hub.flushAll();
+        expect(await other).toEqual({ occurrence: otherOccurrence, settings });
+        expect(selected).toHaveBeenCalledTimes(2);
+        expect(peer.getFailureMessage()).toBeNull();
+        peerChannel.emit({ type: "occurrence_selected", occurrence, settings });
+        expect(selected).toHaveBeenCalledTimes(2);
+      } else {
+        expect(await other).toBeInstanceOf(Error);
+      }
+      expect(clearSpy.mock.calls.some(([timer]) => timer === deadlines[2]?.timer)).toBe(true);
+    } finally {
+      peer.dispose();
+      owner.dispose();
+      timerSpy.mockRestore();
+      clearSpy.mockRestore();
+    }
+  },
+);

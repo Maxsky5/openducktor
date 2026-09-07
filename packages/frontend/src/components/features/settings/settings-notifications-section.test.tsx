@@ -176,7 +176,11 @@ describe("SettingsNotificationsSection", () => {
       canOpenSystemSettings: false,
       failureMessage: "Browser notification coordination failed: Lock snapshot failed.",
     }));
-    const testInApp = mock(async () => {});
+    let finishInApp = () => {};
+    const pendingInApp = new Promise<void>((resolve) => {
+      finishInApp = resolve;
+    });
+    const testInApp = mock(() => pendingInApp);
     const testOs = mock(async () => ({ status: "shown" as const }));
     render(
       <NotificationsHarness
@@ -190,7 +194,13 @@ describe("SettingsNotificationsSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Test in-app" }));
     await waitFor(() => expect(testInApp).toHaveBeenCalledTimes(1));
     const testOsButton = screen.getByRole("button", { name: "Test OS" });
-    expect(testOsButton.hasAttribute("disabled")).toBe(false);
+    expect(testOsButton.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Test in-app" }).hasAttribute("disabled")).toBe(true);
+    await act(async () => {
+      finishInApp();
+      await pendingInApp;
+    });
+    await waitFor(() => expect(testOsButton.hasAttribute("disabled")).toBe(false));
     fireEvent.click(testOsButton);
     await waitFor(() => expect(testOs).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getCapability).toHaveBeenCalledTimes(2));

@@ -11,6 +11,7 @@ const EXTERNAL_DELIVERY_LOCK_NAME = "openducktor:notifications:external-delivery
 const TAB_LOCK_NAME_PREFIX = "openducktor:notifications:tab:";
 const APP_FOCUS_LOCK_NAME = "openducktor:notifications:app-focus";
 const CLAIM_ACKNOWLEDGEMENT_TIMEOUT_MS = 5000;
+const OCCURRENCE_SELECTION_TIMEOUT_MS = 5000;
 const COORDINATION_DISPOSED_MESSAGE =
   "Browser notification coordination stopped before occurrence selection.";
 
@@ -74,6 +75,7 @@ type FocusWindow = {
 
 type CoordinationOperation =
   | "tab_registration"
+  | "selection"
   | "claim"
   | "external_ownership"
   | "remote_focus"
@@ -199,14 +201,20 @@ export const createBrowserNotificationCoordinator = ({
     failureMessages.set(operation, cause instanceof Error ? cause.message : String(cause));
   };
 
+  const rejectPublication = (occurrenceId: string, error: Error): void => {
+    const settlements = publicationSettlements.get(occurrenceId);
+    publicationSettlements.delete(occurrenceId);
+    candidateOccurrences.delete(occurrenceId);
+    for (const settlement of settlements ?? []) {
+      settlement.reject(error);
+    }
+  };
+
   const rejectPendingPublications = (cause: unknown): void => {
     const error = cause instanceof Error ? cause : new Error(String(cause));
-    for (const settlements of publicationSettlements.values()) {
-      for (const settlement of settlements) {
-        settlement.reject(error);
-      }
+    for (const occurrenceId of publicationSettlements.keys()) {
+      rejectPublication(occurrenceId, error);
     }
-    publicationSettlements.clear();
     candidateOccurrences.clear();
   };
 
@@ -356,6 +364,7 @@ export const createBrowserNotificationCoordinator = ({
       pendingOccurrences.delete(occurrenceId);
     }
     if (selectedOccurrences.has(occurrenceId)) return false;
+    failureMessages.delete("selection");
     selectedOccurrences.set(occurrenceId, selection);
     candidateOccurrences.delete(occurrenceId);
     if (!claimedOccurrences.has(occurrenceId)) {
@@ -561,8 +570,24 @@ export const createBrowserNotificationCoordinator = ({
       };
       candidateOccurrences.set(parsed.occurrenceId, candidate);
       const selection = new Promise<PendingOccurrence>((resolve, reject) => {
+        const deadline = setTimeout(() => {
+          const error = new Error(
+            "A browser tab did not select the notification occurrence. Close or reload unresponsive OpenDucktor tabs.",
+          );
+          recordFailure("selection", error);
+          rejectPublication(parsed.occurrenceId, error);
+        }, OCCURRENCE_SELECTION_TIMEOUT_MS);
         const settlements = publicationSettlements.get(parsed.occurrenceId) ?? new Set();
-        settlements.add({ resolve, reject });
+        settlements.add({
+          resolve(selectedOccurrence: PendingOccurrence) {
+            clearTimeout(deadline);
+            resolve(selectedOccurrence);
+          },
+          reject(error: Error) {
+            clearTimeout(deadline);
+            reject(error);
+          },
+        });
         publicationSettlements.set(parsed.occurrenceId, settlements);
       });
       if (externalDeliveryOwner) {
