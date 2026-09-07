@@ -1145,6 +1145,7 @@ describe("KanbanPage session start modal flow", () => {
         role: "build",
         session: sessionIdentity("session-1"),
       }),
+      "config unavailable",
     );
     expect(toastErrorMock).not.toHaveBeenCalled();
 

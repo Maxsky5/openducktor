@@ -1,6 +1,7 @@
 import type { GitTargetBranch, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
+import { AgentMessageSendError } from "@/lib/agent-message-send-error";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -86,6 +87,7 @@ export type SessionStartNotificationInput = {
   taskTitle?: string;
   role: SessionStartFlowRequest["role"];
   session?: AgentSessionIdentity;
+  errorAttentionId?: string;
 };
 
 export type SessionStartNotificationPublisher = {
@@ -367,8 +369,14 @@ export const createSessionStartWorkflowRunner = ({
     const notificationWithSession = { ...notificationInput, session };
     try {
       if (postStartActionError) {
+        if (postStartActionError instanceof AgentMessageSendError) {
+          notificationWithSession.errorAttentionId = postStartActionError.errorAttentionId;
+        }
         const feedbackHandled =
-          (await notifications?.publishSessionError(notificationWithSession)) ?? false;
+          (await notifications?.publishSessionError(
+            notificationWithSession,
+            postStartActionError.message,
+          )) ?? false;
         return {
           ...result,
           postStartActionError: new SessionStartWorkflowError(

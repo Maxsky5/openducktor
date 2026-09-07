@@ -7,7 +7,10 @@ import {
 import { QueryClient } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { toast } from "sonner";
-import { createNotificationPolicy } from "@/features/notifications/notification-policy";
+import {
+  createNotificationPolicy,
+  type NotificationDispatchContext,
+} from "@/features/notifications/notification-policy";
 import { startKanbanSessionFlow } from "@/pages/kanban/kanban-session-start-actions";
 import { createMessageCardElement } from "@/components/features/agents/agent-chat/agent-chat-message-card-test-harness";
 import { buildSessionStartErrorOccurrence } from "@/features/notifications/session-start-occurrences";
@@ -326,8 +329,109 @@ describe("session-start notifications", () => {
 
     expect(notifications.publishSessionError).toHaveBeenCalledWith(
       expect.objectContaining({ launchAttemptId: "launch-post-error", session }),
+      "message failed",
     );
     expect(notifications.publishSessionStarted).not.toHaveBeenCalled();
+  });
+
+  test("shows preparation failure details and opens the session without a missing error target", async () => {
+    const detail = "Runtime readiness failed. Start the runtime and try again.";
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "starting", workingDirectory: session.workingDirectory }),
+    ]);
+    const actions = createSessionActions({
+      sessionsRef,
+      ensureExistingSessionRuntime: async () => {
+        throw new Error(detail);
+      },
+    });
+    const settings = createDefaultNotificationSettings();
+    settings.volumePercent = 0;
+    settings.kinds["agent.session_error"].target = "in_app";
+    const deliver = mock(async () => {});
+    const policy = createNotificationPolicy({
+      loadSettings: async () => settings,
+      inApp: { deliver },
+      os: { deliver: async () => {} },
+      sound: { play: async () => {} },
+      onFailure: () => {},
+    });
+    const occurrences: NotificationOccurrence[] = [];
+    const runner = createSessionStartWorkflowRunner({
+      queryClient: new QueryClient(),
+      workspaceId: "workspace-1",
+      startAgentSession: async () => session,
+      sendAgentMessage: actions.sendAgentMessage,
+      notifications: {
+        ...createPublisher(),
+        publishSessionError: async (input, localErrorMessage) => {
+          const occurrence = buildSessionStartErrorOccurrence(
+            { repoPath: "/repo", repositoryLabel: "Repo" },
+            input,
+          );
+          occurrences.push(occurrence);
+          const context: NotificationDispatchContext = { phase: "local" };
+          if (localErrorMessage !== undefined) context.errorMessage = localErrorMessage;
+          const result = await policy.dispatch(occurrence, context, settings);
+          return result.inAppDelivered;
+        },
+      },
+    });
+    const result = await runner({
+      ...baseInput,
+      request: { ...baseInput.request, postStartAction: "send_message", message: "Continue" },
+    });
+    expect(result).toMatchObject(session);
+    expect(result.postStartActionError?.message).toBe(detail);
+    expect(deliver).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.stringContaining(detail) }),
+      expect.anything(),
+    );
+    expect(occurrences[0]?.navigationTarget).toEqual({
+      type: "agent_session",
+      repoPath: "/repo",
+      taskId: "task-1",
+      session,
+    });
+    expect(
+      sessionMessagesToArray(getSession(sessionsRef)).some(
+        (message) =>
+          message.meta?.kind === "session_notice" && message.meta.reason === "session_error",
+      ),
+    ).toBe(false);
+    expect(isSessionStartFailureFeedbackHandled(result.postStartActionError)).toBe(true);
+  });
+
+  test("does not claim an error target when the session disappears during send", async () => {
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "starting", workingDirectory: session.workingDirectory }),
+    ]);
+    const adapter = new OpencodeSdkAdapter();
+    adapter.sendUserMessage = async () => {
+      sessionsRef.current = createSessionsRef().current;
+      throw new Error("Session disconnected during send");
+    };
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureExistingSessionRuntime: async () => {},
+    });
+    const notifications = createPublisher();
+    const runner = createSessionStartWorkflowRunner({
+      queryClient: new QueryClient(),
+      workspaceId: "workspace-1",
+      startAgentSession: async () => session,
+      sendAgentMessage: actions.sendAgentMessage,
+      notifications,
+    });
+    await runner({
+      ...baseInput,
+      request: { ...baseInput.request, postStartAction: "send_message", message: "Continue" },
+    });
+    expect(notifications.publishSessionError).toHaveBeenCalledWith(
+      expect.not.objectContaining({ errorAttentionId: expect.anything() }),
+      "Session disconnected during send",
+    );
   });
 
   test("focuses the exact rendered error after a post-start message failure", async () => {

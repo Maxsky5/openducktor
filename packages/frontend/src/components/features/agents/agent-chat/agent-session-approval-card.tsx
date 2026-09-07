@@ -42,6 +42,50 @@ type AgentSessionApprovalCardProps = {
   onReply: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
 };
 
+function ApprovalRequestDetails({ request }: { request: AgentApprovalRequest }): ReactElement {
+  const toolInputText =
+    request.tool?.input && !request.command ? formatToolInput(request.tool.input) : null;
+
+  return (
+    <div className="space-y-1">
+      {request.title ? (
+        <p className="text-sm font-medium text-foreground">{request.title}</p>
+      ) : null}
+      {request.summary ? <p className="text-xs text-foreground">{request.summary}</p> : null}
+      {request.details ? <p className="text-xs text-muted-foreground">{request.details}</p> : null}
+      {request.affectedPaths?.length ? (
+        <div className="space-y-1">
+          <p className="text-xs text-foreground">Affected paths:</p>
+          <div className="max-h-24 overflow-auto rounded-md border border-border bg-muted p-2">
+            <ul className="space-y-1">
+              {request.affectedPaths.map((path) => (
+                <li key={path}>
+                  <code className={AFFECTED_PATH_CODE_CLASS_NAME}>{path}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+      {request.command ? (
+        <p className="text-xs text-foreground">Command: {request.command.command}</p>
+      ) : null}
+      {request.action ? (
+        <p className="text-xs text-foreground">Action: {request.action.name}</p>
+      ) : null}
+      {request.tool ? <p className="text-xs text-foreground">Tool: {request.tool.name}</p> : null}
+      {toolInputText ? (
+        <div className="space-y-1">
+          <p className="text-xs text-foreground">Tool input:</p>
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted p-2 font-mono text-[11px] leading-relaxed text-foreground">
+            {toolInputText}
+          </pre>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function AgentSessionApprovalCard({
   request,
   runtimeSupportedReplyOutcomes,
@@ -72,8 +116,6 @@ export function AgentSessionApprovalCard({
     ? "This runtime does not support any declared approval outcomes for this request."
     : "Runtime approval capabilities are unavailable for this request. Refresh runtime checks or open the session again, then try again.";
   const sourceLabel = request.source?.kind === "subagent" ? "Subagent request" : null;
-  const toolInputText =
-    request.tool?.input && !request.command ? formatToolInput(request.tool.input) : null;
 
   return (
     <section
@@ -96,46 +138,7 @@ export function AgentSessionApprovalCard({
       </header>
 
       <div className="space-y-2 p-2.5">
-        <div className="space-y-1">
-          {request.title ? (
-            <p className="text-sm font-medium text-foreground">{request.title}</p>
-          ) : null}
-          {request.summary ? <p className="text-xs text-foreground">{request.summary}</p> : null}
-          {request.details ? (
-            <p className="text-xs text-muted-foreground">{request.details}</p>
-          ) : null}
-          {request.affectedPaths?.length ? (
-            <div className="space-y-1">
-              <p className="text-xs text-foreground">Affected paths:</p>
-              <div className="max-h-24 overflow-auto rounded-md border border-border bg-muted p-2">
-                <ul className="space-y-1">
-                  {request.affectedPaths.map((path) => (
-                    <li key={path}>
-                      <code className={AFFECTED_PATH_CODE_CLASS_NAME}>{path}</code>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          ) : null}
-          {request.command ? (
-            <p className="text-xs text-foreground">Command: {request.command.command}</p>
-          ) : null}
-          {request.action ? (
-            <p className="text-xs text-foreground">Action: {request.action.name}</p>
-          ) : null}
-          {request.tool ? (
-            <p className="text-xs text-foreground">Tool: {request.tool.name}</p>
-          ) : null}
-          {toolInputText ? (
-            <div className="space-y-1">
-              <p className="text-xs text-foreground">Tool input:</p>
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted p-2 font-mono text-[11px] leading-relaxed text-foreground">
-                {toolInputText}
-              </pre>
-            </div>
-          ) : null}
-        </div>
+        <ApprovalRequestDetails request={request} />
 
         <div className="flex flex-wrap gap-2 pt-1">
           {supportedOutcomes.map((outcome) => (

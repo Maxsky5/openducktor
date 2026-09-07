@@ -4,6 +4,7 @@ import {
   type NotificationOccurrence,
   type NotificationSettings,
 } from "@openducktor/contracts";
+import { createNotificationRuntime } from "../../frontend/src/features/notifications/notification-runtime";
 import { createBrowserNotificationBridge } from "./browser-notification-bridge";
 import { createBrowserNotificationCoordinator } from "./browser-notification-coordinator";
 
@@ -365,6 +366,73 @@ describe("FakeLockManager", () => {
 });
 
 describe("browser notification coordinator", () => {
+  test.each(["createChannel", "locks", "focusDocument", "focusWindow"] as const)(
+    "reports missing %s during external delivery while keeping local delivery",
+    async (missing) => {
+      for (const rule of ["os", "both", "sound", "local"] as const) {
+        const coordinator = createBrowserNotificationCoordinator({
+          createChannel: () => new FakeBroadcastHub().createChannel(),
+          locks: new FakeLockManager(),
+          focusDocument: { hasFocus: () => false },
+          focusWindow: new FakeFocusWindow(),
+          [missing]: null,
+        });
+        const constructed = mock(() => {});
+        class TestNotification {
+          static permission = "granted" as const;
+          static requestPermission = async () => "granted" as const;
+          onclick = null;
+          onclose = null;
+          onerror = null;
+          onshow = null;
+          silent = null;
+          close() {}
+          constructor() {
+            constructed();
+          }
+        }
+        const bridge = createBrowserNotificationBridge({
+          NativeNotification: TestNotification,
+          coordinator,
+          canGuaranteeSilent: true,
+          focusWindow: () => {},
+        });
+        const config = createDefaultNotificationSettings();
+        config.volumePercent = rule === "sound" ? 30 : 0;
+        config.kinds["workflow.closed"].target =
+          rule === "sound" || rule === "local" ? "in_app" : rule;
+        const deliver = mock(async () => {});
+        const play = mock(async () => {});
+        const onFailure = mock(() => {});
+        const runtime = createNotificationRuntime({
+          bridge,
+          loadSettings: async () => config,
+          navigate: async () => {},
+          onFailure,
+          onCoordinationRecovered: () => {},
+          inApp: { deliver },
+          sound: { play },
+        });
+        try {
+          await runtime.publishAndWait(occurrence);
+          expect(deliver).toHaveBeenCalledTimes(rule === "os" ? 0 : 1);
+          expect(constructed).not.toHaveBeenCalled();
+          expect(play).not.toHaveBeenCalled();
+          expect(onFailure).toHaveBeenCalledTimes(rule === "local" ? 0 : 1);
+          if (rule !== "local")
+            expect(onFailure).toHaveBeenCalledWith(
+              expect.objectContaining({
+                channel: "coordination",
+                message: coordinator.getFailureMessage(),
+              }),
+            );
+        } finally {
+          bridge.dispose();
+        }
+      }
+    },
+  );
+
   test("waits for focus acquisition and release before querying focus", async () => {
     const locks = new FakeLockManager();
     const focusWindow = new FakeFocusWindow();

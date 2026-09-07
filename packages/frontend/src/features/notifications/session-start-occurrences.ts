@@ -66,13 +66,20 @@ export const buildSessionStartErrorOccurrence = (
     role: input.role,
     status: "Agent Session failed to start or send its first message.",
     navigationTarget: input.session
-      ? {
-          type: "session_error",
-          repoPath: workspace.repoPath,
-          taskId: input.taskId,
-          session: toSession(input.session),
-          errorId: input.launchAttemptId,
-        }
+      ? input.errorAttentionId
+        ? {
+            type: "session_error",
+            repoPath: workspace.repoPath,
+            taskId: input.taskId,
+            session: toSession(input.session),
+            errorId: input.errorAttentionId,
+          }
+        : {
+            type: "agent_session",
+            repoPath: workspace.repoPath,
+            taskId: input.taskId,
+            session: toSession(input.session),
+          }
       : {
           type: "agent_studio_task",
           repoPath: workspace.repoPath,

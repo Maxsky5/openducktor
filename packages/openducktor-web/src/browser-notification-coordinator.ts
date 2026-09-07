@@ -152,14 +152,16 @@ export const createBrowserNotificationCoordinator = ({
 }: CreateBrowserNotificationCoordinatorOptions = {}): BrowserNotificationCoordinator => {
   const supported = Boolean(createChannel && locks && focusDocument && focusWindow);
   if (!createChannel || !locks || !focusDocument || !focusWindow) {
+    const failureMessage = "This browser cannot coordinate notifications and sound across tabs.";
     return {
       supported: false,
-      getFailureMessage: () =>
-        "This browser cannot coordinate notifications and sound across tabs.",
+      getFailureMessage: () => failureMessage,
       publishOccurrence: async (occurrence, settings) => ({ occurrence, settings }),
       subscribeOccurrences: () => () => {},
       isExternalDeliveryOwner: () => false,
-      claimExternalDelivery: async () => false,
+      claimExternalDelivery: async () => {
+        throw new Error(failureMessage);
+      },
       isAnyTabFocused: async () => false,
       dispose: () => {},
     };
