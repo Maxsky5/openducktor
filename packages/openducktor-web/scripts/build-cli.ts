@@ -21,7 +21,7 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
       "--entry-naming",
       "[name].[ext]",
       "src/cli.ts",
-      "../host/src/adapters/attachments/generated-image-worker.ts",
+      "src/generated-image-worker.ts",
     ] satisfies readonly [string, ...string[]];
     yield* Effect.tryPromise({
       try: () => runCommand({ command, cwd: packageRoot, label: "Web CLI build" }),
