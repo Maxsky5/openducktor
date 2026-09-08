@@ -269,6 +269,12 @@
       },
     },
   },
+  "trustedDependencies": [
+    "electron-winstaller",
+    "node-pty",
+    "node-mac-permissions",
+    "esbuild",
+  ],
   "overrides": {
     "@hono/node-server": "^1.19.11",
     "express-rate-limit": "^8.2.2",

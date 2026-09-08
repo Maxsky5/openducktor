@@ -118,10 +118,10 @@ describe("build Electron release artifact", () => {
     ]);
   });
 
-  it("builds local unsigned macOS packages without update metadata", () => {
+  it.each(["arm64", "x64"] as const)("ad-hoc signs local macOS %s packages", (arch) => {
     expect(
       resolveElectronBuilderArgs({
-        arch: "x64",
+        arch,
         platform: "macos",
         signed: false,
         stageReleaseArtifacts: false,
@@ -131,10 +131,12 @@ describe("build Electron release artifact", () => {
       "electron-builder.yml",
       "--mac",
       "dmg",
-      "--x64",
+      `--${arch}`,
       "--publish",
       "never",
       "-c.mac.notarize=false",
+      "-c.mac.identity=-",
+      "-c.mac.hardenedRuntime=false",
       "-c.dmg.writeUpdateInfo=false",
     ]);
 
