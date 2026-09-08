@@ -5,6 +5,7 @@ import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
 import type { McpBridgeDiscoveryMode } from "@openducktor/host";
 import { Effect } from "effect";
 import { z } from "zod";
+import { parseBasePathEffect } from "./browser-url-validation";
 import {
   type BrowserRuntimeConfigState,
   createBrowserRuntimeConfigState,
@@ -722,7 +723,7 @@ export const validateLauncherNetworkOptionsEffect = (options: {
   basePath: string | undefined;
   bindHost: string;
   externalUrl: string | undefined;
-}): Effect.Effect<void, WebValidationError> =>
+}): Effect.Effect<string | undefined, WebValidationError> =>
   Effect.gen(function* () {
     if (options.externalUrl !== undefined) {
       yield* parseHttpOriginEffect(options.externalUrl, "OpenDucktor web --external-url", {
@@ -746,6 +747,9 @@ export const validateLauncherNetworkOptionsEffect = (options: {
         details: { basePath: options.basePath },
       });
     }
+    return options.basePath === undefined
+      ? undefined
+      : yield* parseBasePathEffect(options.basePath, "--base-path");
   });
 
 export const runLauncherEffect = (
@@ -760,7 +764,7 @@ export const runLauncherEffect = (
     const developmentInstanceId = options.workspaceMode ? options.developmentInstanceId : undefined;
     const bindHost = options.host?.trim() || LOCALHOST;
     const externalUrl = options.externalUrl?.trim() || undefined;
-    yield* validateLauncherNetworkOptionsEffect({
+    const basePath = yield* validateLauncherNetworkOptionsEffect({
       basePath: options.basePath,
       bindHost,
       externalUrl,
@@ -810,8 +814,8 @@ export const runLauncherEffect = (
           startWebLauncherHostBackendEffect({
             port: options.backendPort,
             host: bindHost,
-            ...(options.basePath !== undefined && {
-              basePath: options.basePath,
+            ...(basePath !== undefined && {
+              basePath,
             }),
             frontendOrigin: frontendUrl,
             frontendPort: frontendServer.port,
@@ -833,7 +837,7 @@ export const runLauncherEffect = (
         }
         const hostBackend = hostBackendExit.value;
         yield* owner.registerHost(hostBackend);
-        if (parsedExternalUrl?.protocol === "https:" && options.basePath === undefined) {
+        if (parsedExternalUrl?.protocol === "https:" && basePath === undefined) {
           yield* writeWebLogEffect(
             logger,
             "info",
@@ -841,7 +845,7 @@ export const runLauncherEffect = (
           );
         }
         const { browserUrl } = buildBrowserBackendUrl(
-          options.basePath,
+          basePath,
           frontendUrl,
           externalUrl,
           bindHost,

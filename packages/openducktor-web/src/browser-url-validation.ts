@@ -1,6 +1,34 @@
 import { Effect } from "effect";
 import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
 
+export const parseBasePathEffect = (
+  raw: string | undefined,
+  flag: string,
+): Effect.Effect<string, WebValidationError> =>
+  Effect.gen(function* () {
+    if (raw === undefined) {
+      return yield* new WebValidationError({
+        message: `Missing value for ${flag}.`,
+        field: flag,
+      });
+    }
+    const trimmed = raw.trim().replace(/\/+$/u, "");
+    const segments = trimmed.split("/");
+    if (
+      trimmed === "" ||
+      !/^\/[A-Za-z0-9._~-]+(\/[A-Za-z0-9._~-]+)*$/u.test(trimmed) ||
+      segments.includes(".") ||
+      segments.includes("..")
+    ) {
+      return yield* new WebValidationError({
+        message: `Invalid ${flag} value: ${raw}. Expected a path starting with / with no empty, dot, or double-dot segments, query string, or fragment.`,
+        field: flag,
+        details: { raw },
+      });
+    }
+    return trimmed;
+  });
+
 export const validateExternalBrowserUrlEffect = (
   url: string,
 ): Effect.Effect<string, WebValidationError> =>

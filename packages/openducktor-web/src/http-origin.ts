@@ -7,7 +7,15 @@ export const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]
 const stripTrailingDot = (host: string): string => host.replace(/\.$/u, "");
 
 export const isLoopbackHost = (host: string): boolean => {
-  const hostname = stripTrailingDot(host);
+  let hostname = stripTrailingDot(host);
+  // URL hostnames use compressed hex; programmatic bind hosts can use dotted IPv4.
+  const mapped = /^(?:\[::ffff:([^\]]+)\]|::ffff:(.+))$/iu.exec(hostname);
+  if (mapped) {
+    hostname = mapped[1] ?? mapped[2] ?? "";
+    if (!/^127(\.\d{1,3}){3}$/u.test(hostname)) {
+      return /^7f[0-9a-f]{2}:[0-9a-f]{1,4}$/iu.test(hostname);
+    }
+  }
   return (
     LOOPBACK_HOSTS.has(hostname) ||
     hostname.endsWith(".localhost") ||

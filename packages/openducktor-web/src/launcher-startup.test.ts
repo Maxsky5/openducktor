@@ -48,13 +48,14 @@ test("Vite accepts both external hostname forms and rejects unknown hosts", asyn
 }, 10_000);
 
 test.each([
-  { externalUrl: "https://machine.ts.net", failAdvisory: true, warns: false },
-  { externalUrl: "https://machine.ts.net", failAdvisory: false, warns: true },
-  { externalUrl: "http://localhost:1420", failAdvisory: false, warns: false },
-  { externalUrl: "http://127.0.0.2:1420", failAdvisory: false, warns: false },
+  { externalUrl: "https://machine.ts.net", basePath: undefined, failAdvisory: true, warns: false },
+  { externalUrl: "https://machine.ts.net", basePath: undefined, failAdvisory: false, warns: true },
+  { externalUrl: "http://localhost:1420", basePath: undefined, failAdvisory: false, warns: false },
+  { externalUrl: "http://127.0.0.2:1420", basePath: undefined, failAdvisory: false, warns: false },
+  { externalUrl: "https://machine.ts.net", basePath: "/api/", failAdvisory: false, warns: true },
 ])(
   "cleans up startup and reports remote access: %j",
-  async ({ externalUrl, failAdvisory, warns }) => {
+  async ({ externalUrl, basePath, failAdvisory, warns }) => {
     const packageRoot = await mkdtemp(path.join(os.tmpdir(), "odt-launcher-startup-"));
     const messages: string[] = [];
     const loggingFailure = new Error("TLS advisory log failed");
@@ -70,6 +71,7 @@ test.each([
     );
     const readiness = spyOn(support, "waitForBackendEffect").mockReturnValue(Effect.void);
     const closeFrontend = spyOn(support, "closeFrontendServerEffect");
+    const runtimeConfig = spyOn(support, "buildBrowserRuntimeConfigJson");
     try {
       await mkdir(path.join(packageRoot, "dist/web-shell"), { recursive: true });
       await writeFile(path.join(packageRoot, "dist/web-shell/index.html"), "<html></html>");
@@ -82,6 +84,7 @@ test.each([
             backendPort: 0,
             host: "127.0.0.1",
             externalUrl,
+            ...(basePath !== undefined && { basePath }),
           },
           {
             error: () => Effect.void,
@@ -110,12 +113,17 @@ test.each([
         expect(await result).toBe(0);
       }
       expect(startHost).toHaveBeenCalledTimes(1);
+      if (basePath !== undefined) {
+        expect(startHost.mock.calls[0]?.[0].basePath).toBe("/api");
+        expect(runtimeConfig.mock.calls[0]?.[0]).toBe(`${externalUrl}/api`);
+      }
       expect(closeFrontend).toHaveBeenCalledTimes(1);
       expect(messages.some((message) => message.includes("proxy access controls"))).toBe(warns);
     } finally {
       startHost.mockRestore();
       readiness.mockRestore();
       closeFrontend.mockRestore();
+      runtimeConfig.mockRestore();
       await rm(packageRoot, { recursive: true, force: true });
     }
   },

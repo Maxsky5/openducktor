@@ -61,6 +61,12 @@ describe("launcher internals", () => {
     "nested.runner.localhost.",
     "::1",
     "[::1]",
+    "[::ffff:127.0.0.0]",
+    "[::ffff:127.255.255.255]",
+    "::ffff:127.0.0.1",
+    "[::ffff:7f00:0]",
+    "[::ffff:7fff:ffff]",
+    "::ffff:7f00:1",
   ])("recognizes loopback host %s", (host) => {
     expect(isLoopbackHost(host)).toBe(true);
   });
@@ -80,6 +86,15 @@ describe("launcher internals", () => {
     "127..0.1",
     "notlocalhost",
     "localhost.example",
+    "[::ffff:126.255.255.255]",
+    "[::ffff:128.0.0.0]",
+    "[::ffff:7eff:ffff]",
+    "[::ffff:8000:0]",
+    "[::ffff:127.256.0.1]",
+    "[::ffff:7f00:10000]",
+    "[::ffff:localhost]",
+    "[::ffff:runner.localhost]",
+    "[::7f00:1]",
   ])("does not classify invalid or remote host %s as loopback", (host) => {
     expect(isLoopbackHost(host)).toBe(false);
   });
@@ -89,6 +104,12 @@ describe("launcher internals", () => {
     "127.0.0.2",
     "127.255.255.255",
     "0x7f000002",
+    "[::ffff:127.0.0.0]",
+    "[::ffff:127.0.0.1]",
+    "[::ffff:127.255.255.255]",
+    "[::ffff:7f00:0]",
+    "[::ffff:7fff:ffff]",
+    "[0:0:0:0:0:ffff:127.0.0.1]",
     "runner.localhost",
     "nested.runner.localhost.",
   ])(
@@ -130,6 +151,9 @@ describe("launcher internals", () => {
   );
 
   test("does not expand the request Host allowlist to the loopback block", () => {
+    expect(
+      allowedHostnamesFor({ bindHost: LOCALHOST, externalUrl: undefined }).has("[::ffff:7f00:1]"),
+    ).toBe(false);
     expect(
       allowedHostnamesFor({ bindHost: LOCALHOST, externalUrl: undefined }).has("runner.localhost"),
     ).toBe(false);
@@ -282,6 +306,34 @@ describe("launcher internals", () => {
     );
   });
 
+  test.each([
+    "/api/.",
+    "/foo/../api",
+    "/api//nested",
+    "/",
+    "",
+    "api",
+    "/api?x=1",
+    "/api#x",
+    "/%61pi",
+  ])("rejects programmatic base path %s before startup", async (basePath) => {
+    await expect(
+      Effect.runPromise(
+        runLauncherEffect(
+          {
+            packageRoot: "/missing-web-package",
+            workspaceMode: false,
+            frontendPort: 0,
+            backendPort: 0,
+            externalUrl: "https://machine.ts.net",
+            basePath,
+          },
+          testLogger,
+        ),
+      ),
+    ).rejects.toThrow("Invalid --base-path value");
+  });
+
   test("scopes Vite fs.allow to the web package and frontend sources", () => {
     expect(
       viteServerOptions({
@@ -422,6 +474,9 @@ describe("launcher internals", () => {
   test("probes readiness over loopback when the bind covers all interfaces", () => {
     expect(readinessHostForBind("0.0.0.0")).toBe(LOCALHOST);
     expect(readinessHostForBind("[::]")).toBe("::1");
+    expect(readinessHostForBind("::")).toBe("::1");
+    expect(readinessHostForBind("2001:db8::1")).toBe("2001:db8::1");
+    expect(readinessHostForBind("[2001:db8::1]")).toBe("[2001:db8::1]");
     expect(readinessHostForBind("127.0.0.1")).toBe("127.0.0.1");
     expect(readinessHostForBind("::1")).toBe("::1");
     expect(readinessHostForBind("10.0.0.5")).toBe("10.0.0.5");

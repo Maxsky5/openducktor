@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateDevelopmentInstanceId } from "@openducktor/host";
 import { Effect } from "effect";
+import { parseBasePathEffect } from "./browser-url-validation";
 import {
   errorMessage,
   runWebBoundary,
@@ -132,34 +133,6 @@ const parseHostEffect = (
       return yield* invalidHostError(raw, flag);
     }
     return parsed.hostname;
-  });
-
-const parseBasePathEffect = (
-  raw: string | undefined,
-  flag: string,
-): Effect.Effect<string, WebValidationError> =>
-  Effect.gen(function* () {
-    if (raw === undefined) {
-      return yield* new WebValidationError({
-        message: `Missing value for ${flag}.`,
-        field: flag,
-      });
-    }
-    const trimmed = raw.trim().replace(/\/+$/u, "");
-    const segments = trimmed.split("/");
-    if (
-      trimmed === "" ||
-      !/^\/[A-Za-z0-9._~-]+(\/[A-Za-z0-9._~-]+)*$/u.test(trimmed) ||
-      segments.includes(".") ||
-      segments.includes("..")
-    ) {
-      return yield* new WebValidationError({
-        message: `Invalid ${flag} value: ${raw}. Expected a path starting with / with no empty, dot, or double-dot segments, query string, or fragment.`,
-        field: flag,
-        details: { raw },
-      });
-    }
-    return trimmed;
   });
 
 const parseExternalUrlEffect = (

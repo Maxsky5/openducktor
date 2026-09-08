@@ -67,7 +67,7 @@ export const readinessHostForBind = (bindHost: string): string => {
   if (bindHost === "0.0.0.0") {
     return LOCALHOST;
   }
-  if (bindHost === "[::]") {
+  if (bindHost === "::" || bindHost === "[::]") {
     return "::1";
   }
   return bindHost;

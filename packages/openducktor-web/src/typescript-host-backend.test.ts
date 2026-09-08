@@ -18,6 +18,8 @@ import { HostOperationError } from "../../host/src/effect/host-errors";
 import type { HostCommandHandlerError } from "../../host/src/interface/router/host-command-router";
 import type { WebLogger } from "./logger";
 import { allowedHostnamesFor } from "./http-origin";
+import { validateLauncherNetworkOptionsEffect } from "./launcher";
+import { buildBackendUrl, readinessHostForBind, waitForBackend } from "./launcher-support";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
 import {
   allowedOriginsForFrontendOrigin,
@@ -238,14 +240,17 @@ describe("TypeScript web host backend", () => {
   const TERMINAL_UPGRADE_FRONTEND_ORIGIN = "http://127.0.0.1:1420";
   const TERMINAL_UPGRADE_BASE_PATH = "/api";
 
-  const createTerminalUpgradeTestServer = (): ReturnType<typeof Bun.serve> =>
+  const createTerminalUpgradeTestServer = (
+    basePath = TERMINAL_UPGRADE_BASE_PATH,
+    bindHost = "127.0.0.1",
+  ): ReturnType<typeof Bun.serve> =>
     Bun.serve({
-      hostname: "127.0.0.1",
+      hostname: bindHost,
       port: 0,
       fetch: (request, requestServer) =>
         handleHostFetch({
           allowedHostnames: allowedHostnamesFor({
-            bindHost: "127.0.0.1",
+            bindHost,
             externalUrl: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
           }),
           allowedOrigins: allowedOriginsForFrontendOrigin(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
@@ -257,7 +262,7 @@ describe("TypeScript web host backend", () => {
           taskAssetReadService: missingTaskAssetReadService,
           localAttachments: createLocalAttachmentAdapter(),
           logger: testLogger,
-          basePath: TERMINAL_UPGRADE_BASE_PATH,
+          basePath,
           onBackgroundFailure: () => {},
           request,
           server: requestServer,
@@ -324,21 +329,69 @@ describe("TypeScript web host backend", () => {
     );
   });
 
-  test("upgrades the terminal WebSocket when the request path carries the configured base path", async () => {
-    const server = createTerminalUpgradeTestServer();
+  test.each(["/api", "/api/"])(
+    "routes normalized launcher base path %s with POST bodies and WebSocket upgrades",
+    async (rawBasePath) => {
+      const basePath = await Effect.runPromise(
+        validateLauncherNetworkOptionsEffect({
+          basePath: rawBasePath,
+          bindHost: "127.0.0.1",
+          externalUrl: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+        }),
+      );
+      expect(basePath).toBe("/api");
+      const server = createTerminalUpgradeTestServer(basePath);
 
+      try {
+        const port = server.port;
+        if (port === undefined) {
+          throw new Error("Expected the test server to expose a port.");
+        }
+        const session = await Bun.fetch(`http://127.0.0.1:${port}/api/session`, {
+          method: "POST",
+          headers: { "x-openducktor-app-token": APP_TOKEN },
+        });
+        expect(session.status).toBe(200);
+        await session.text();
+        const command = await Bun.fetch(`http://127.0.0.1:${port}/api/invoke/runtime_ensure`, {
+          method: "POST",
+          headers: { "x-openducktor-app-token": APP_TOKEN, "content-type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        expect(command.status).toBe(200);
+        await command.json();
+        const responseHead = await performWebSocketUpgrade(
+          port,
+          `${TERMINAL_UPGRADE_BASE_PATH}/terminal`,
+          TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+        );
+        expect(responseHead).toContain("101 Switching Protocols");
+        expect(responseHead).toContain(`Sec-WebSocket-Protocol: ${TERMINAL_PROTOCOL_SUBPROTOCOL}`);
+      } finally {
+        server.stop(true);
+      }
+    },
+  );
+
+  test("probes a bare IPv6 wildcard bind through the allowed loopback Host", async () => {
+    const server = createTerminalUpgradeTestServer("/api", "::");
     try {
       const port = server.port;
-      if (port === undefined) {
-        throw new Error("Expected the test server to expose a port.");
+      if (port === undefined) throw new Error("Expected the test server to expose a port.");
+      // Connect through ::1 on every OS, with the Host that each readiness URL sends.
+      for (const [host, status] of [
+        ["[::]", 403],
+        ["[::1]", 200],
+      ] as const) {
+        const response = await Bun.fetch(`http://[::1]:${port}/health`, {
+          headers: { host: `${host}:${port}` },
+        });
+        expect(response.status).toBe(status);
+        await response.text();
       }
-      const responseHead = await performWebSocketUpgrade(
-        port,
-        `${TERMINAL_UPGRADE_BASE_PATH}/terminal`,
-        TERMINAL_UPGRADE_FRONTEND_ORIGIN,
-      );
-      expect(responseHead).toContain("101 Switching Protocols");
-      expect(responseHead).toContain(`Sec-WebSocket-Protocol: ${TERMINAL_PROTOCOL_SUBPROTOCOL}`);
+      await waitForBackend(buildBackendUrl(port, readinessHostForBind("::")), APP_TOKEN, 1000, {
+        exited: new Promise<number>(() => {}),
+      });
     } finally {
       server.stop(true);
     }
