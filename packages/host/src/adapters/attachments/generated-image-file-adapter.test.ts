@@ -106,13 +106,17 @@ test("32 MiB is accepted and one extra decoded byte is rejected, including equal
     (await Effect.runPromise(reader.read({ representation: "inline", base64: exact }, "image")))
       .byteLength,
   ).toBe(LOCAL_ATTACHMENT_BYTE_LIMIT);
-  await expect(
-    Effect.runPromise(reader.read({ representation: "inline", base64: larger }, "image")),
-  ).rejects.toThrow("32 MiB");
+  const oversizedInline = await Effect.runPromise(
+    Effect.either(reader.read({ representation: "inline", base64: larger }, "image")),
+  );
+  expect(oversizedInline._tag).toBe("Left");
+  if (oversizedInline._tag === "Left") expect(oversizedInline.left.message).toContain("32 MiB");
   const path = await imageFile(bytes);
-  await expect(
-    Effect.runPromise(reader.read({ representation: "saved_file", path }, "image")),
-  ).rejects.toThrow("32 MiB");
+  const oversizedFile = await Effect.runPromise(
+    Effect.either(reader.read({ representation: "saved_file", path }, "image")),
+  );
+  expect(oversizedFile._tag).toBe("Left");
+  if (oversizedFile._tag === "Left") expect(oversizedFile.left.message).toContain("32 MiB");
 });
 
 for (const readFails of [false, true]) {

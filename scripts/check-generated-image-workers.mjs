@@ -98,6 +98,24 @@ if (!workerPath) {
       history.part.output.revision,
       createHash("sha256").update(`inline\0${png}`).digest("hex"),
     );
+    const limit = 32 * 1024 * 1024;
+    const boundary = Buffer.alloc(limit + 1);
+    Buffer.from(png, "base64").copy(boundary);
+    assert.deepEqual(
+      await send({
+        kind: "inline",
+        base64: boundary.subarray(0, limit).toString("base64"),
+        itemId: "limit",
+      }),
+      { kind: "inline", byteLength: limit },
+    );
+    const oversized = await send({
+      kind: "inline",
+      base64: boundary.toString("base64"),
+      itemId: "oversized",
+    });
+    assert.equal(oversized.kind, "invalid");
+    assert.ok(oversized.message.includes("32 MiB"));
     const invalid = await send({ kind: "inline", base64: "!!!!", itemId: "invalid" });
     assert.equal(invalid.kind, "invalid");
     assert.ok(!invalid.message.includes("!!!!"));
