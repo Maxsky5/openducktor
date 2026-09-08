@@ -71,6 +71,10 @@ describe("electron local attachment previews", () => {
     let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
     const resolvedPaths: string[] = [];
     const servedUrls: string[] = [];
+    const resolvedPath =
+      process.platform === "win32"
+        ? "C:/tmp/openducktor-local-attachments/resolved.png"
+        : "/tmp/openducktor-local-attachments/resolved.png";
 
     registerElectronLocalAttachmentPreviewProtocol({
       session: {
@@ -89,7 +93,7 @@ describe("electron local attachment previews", () => {
       },
       async resolveLocalAttachmentPath(filePath) {
         resolvedPaths.push(filePath);
-        return "/tmp/openducktor-local-attachments/resolved.png";
+        return resolvedPath;
       },
     });
 
@@ -104,7 +108,11 @@ describe("electron local attachment previews", () => {
     );
 
     expect(resolvedPaths).toEqual(["/tmp/openducktor-local-attachments/staged.png"]);
-    expect(servedUrls).toEqual(["file:///tmp/openducktor-local-attachments/resolved.png"]);
+    expect(servedUrls).toEqual([
+      process.platform === "win32"
+        ? "file:///C:/tmp/openducktor-local-attachments/resolved.png"
+        : "file:///tmp/openducktor-local-attachments/resolved.png",
+    ]);
     expect(await response.text()).toBe("image bytes");
   });
 
