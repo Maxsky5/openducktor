@@ -9,11 +9,18 @@ type PromptRequest = {
   selectedTargetBranch: string;
 };
 
+type KickoffPromptState = {
+  kickoffPrompt: string | undefined;
+  isKickoffPromptLoading: boolean;
+  kickoffPromptError: string | null;
+  onRetryKickoffPrompt: () => void;
+};
+
 export function useSessionStartKickoffPrompt({
   requestId,
   resolveKickoffPrompt,
   selectedTargetBranch,
-}: PromptRequest) {
+}: PromptRequest): KickoffPromptState {
   const [retryVersion, setRetryVersion] = useState(0);
   // Returning to an earlier branch still needs a new read; equal inputs cannot revive its old result.
   const request = useMemo(

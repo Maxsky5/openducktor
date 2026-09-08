@@ -1,7 +1,25 @@
-import { useState } from "react";
+import { type JSX, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+
+type KickoffDraft = {
+  hasPrompt: boolean;
+  enabled: boolean;
+  text: string;
+  invalid: boolean;
+  value: string | undefined;
+  setEnabled: (enabled: boolean) => void;
+  setText: (text: string) => void;
+};
+
+type SessionStartKickoffFieldProps = {
+  draft: KickoffDraft;
+  disabled: boolean;
+  loading: boolean | undefined;
+  error: string | null | undefined;
+  onRetry: (() => void) | undefined;
+};
 
 export function SessionStartKickoffField({
   draft,
@@ -9,13 +27,7 @@ export function SessionStartKickoffField({
   loading,
   error,
   onRetry,
-}: {
-  draft: ReturnType<typeof useSessionStartKickoffDraft>;
-  disabled: boolean;
-  loading: boolean | undefined;
-  error: string | null | undefined;
-  onRetry: (() => void) | undefined;
-}) {
+}: SessionStartKickoffFieldProps): JSX.Element {
   return (
     <>
       {loading ? (
@@ -79,7 +91,7 @@ export function useSessionStartKickoffDraft({
   requestId: string | undefined;
   open: boolean;
   prompt: string | undefined;
-}) {
+}): KickoffDraft {
   const [draft, setDraft] = useState<{
     requestId: string | undefined;
     open: boolean;

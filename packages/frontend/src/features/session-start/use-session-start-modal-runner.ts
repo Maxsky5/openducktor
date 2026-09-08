@@ -45,6 +45,14 @@ type SessionStartModalRunResult = {
   request: SessionStartModalOpenRequest;
 };
 
+type SessionStartModalRunnerResult = {
+  sessionStartModal: SessionStartModalModel | null;
+  runSessionStartRequest: <T>(
+    request: SessionStartModalOpenRequest,
+    execute: (result: SessionStartModalRunResult) => Promise<T>,
+  ) => Promise<T | undefined>;
+};
+
 type PendingModalRun = {
   scopeKey: string | null;
   request: SessionStartModalOpenRequest;
@@ -65,7 +73,7 @@ export function useSessionStartModalRunner({
   repoSettings: RepoSettingsInput | null;
   workspaceRepoPath: string | null;
   scopeKey?: string | null;
-}) {
+}): SessionStartModalRunnerResult {
   const scopeRef = useRef(scopeKey);
   const selectionRef = useRef<AgentModelSelection | null>(null);
   const pendingRunRef = useRef<PendingModalRun | null>(null);
@@ -400,12 +408,6 @@ export function useSessionStartModalRunner({
   return {
     sessionStartModal,
     runSessionStartRequest,
-  } satisfies {
-    sessionStartModal: SessionStartModalModel | null;
-    runSessionStartRequest: <T>(
-      request: SessionStartModalOpenRequest,
-      execute: (result: SessionStartModalRunResult) => Promise<T>,
-    ) => Promise<T | undefined>;
   };
 }
 
