@@ -1,6 +1,10 @@
-import { expect, test } from "bun:test";
+import { expect, test, mock } from "bun:test";
 import type { CodexAppServerThreadItem } from "@openducktor/contracts";
-import { codexImageGenerationPart, type CodexImageGenerationItem } from "./codex-image-generation";
+import {
+  codexImageGenerationPart,
+  type CodexImageGenerationItem,
+  type CodexImageGenerationPreparer,
+} from "./codex-image-generation";
 import {
   codexThreadFixture,
   codexTurnFixture,
@@ -29,11 +33,12 @@ const createImageHarness = (
   items: CodexAppServerThreadItem[] = [completed()],
   cwd = "/repo",
   threadId = ref.externalSessionId,
+  prepareImageGenerations?: CodexImageGenerationPreparer,
 ) => {
   const calls: Array<{ method: string; params: unknown }> = [];
   const gate = createDeferred<void>();
   let deferred = false;
-  const { adapter } = createHarness({
+  const options: Parameters<typeof createHarness>[0] = {
     transportFactory: (runtimeId) => {
       const transport = new RecordingTransport(runtimeId, false);
       return {
@@ -53,7 +58,9 @@ const createImageHarness = (
         },
       };
     },
-  });
+  };
+  if (prepareImageGenerations) options.prepareImageGenerations = prepareImageGenerations;
+  const { adapter } = createHarness(options);
   return {
     adapter,
     calls,
@@ -228,3 +235,83 @@ test("runtime replacement during route resolution rejects the read before histor
   expect([...transports.values()].flatMap((transport) => transport.calls)).toEqual([]);
   adapter.releaseRuntime("runtime-live");
 });
+
+test("source verification awaits image preparation and rejects a replaced runtime", async () => {
+  const native = completed();
+  const started = createDeferred<void>();
+  const result = createDeferred<ReturnType<typeof codexImageGenerationPart>[]>();
+  const prepare = mock(async () => {
+    started.resolve();
+    return result.promise;
+  });
+  const { adapter } = createImageHarness([native], "/repo", ref.externalSessionId, prepare);
+  await adapter.prepareRuntime("runtime-live");
+  const pending = adapter.resolveGeneratedImageSource({
+    ref,
+    itemId: native.id,
+    revision: codexImageGenerationPart(native).output!.revision,
+  });
+  await started.promise;
+  adapter.releaseRuntime("runtime-live");
+  await adapter.prepareRuntime("runtime-live");
+  result.resolve([codexImageGenerationPart(native)]);
+  try {
+    await expect(pending).rejects.toThrow("runtime changed");
+  } finally {
+    adapter.releaseRuntime("runtime-live");
+  }
+});
+
+test("oversized inline output is rejected before preparation but does not replace a saved source", async () => {
+  const result = "AAAA".repeat(Math.ceil((32 * 1024 * 1024 + 1) / 3));
+  const prepare = mock(async (images: Parameters<CodexImageGenerationPreparer>[0]) =>
+    images.map(({ item }) => codexImageGenerationPart(item)),
+  );
+  for (const savedPath of [undefined, "/generated.png"]) {
+    const native: CodexImageGenerationItem = { ...completed(), result };
+    if (savedPath) native.savedPath = savedPath;
+    const { adapter } = createImageHarness([native], "/repo", ref.externalSessionId, prepare);
+    await adapter.prepareRuntime("runtime-live");
+    try {
+      const pending = adapter.resolveGeneratedImageSource({
+        ref,
+        itemId: native.id,
+        revision: savedPath ? codexImageGenerationPart(native).output!.revision : "oversized",
+      });
+      if (savedPath) {
+        expect(await pending).toEqual({ representation: "saved_file", path: savedPath });
+        expect(prepare.mock.calls.at(-1)![0][0]!.item.result).toBe("");
+      } else {
+        await expect(pending).rejects.toThrow("32 MiB");
+        expect(prepare).not.toHaveBeenCalled();
+      }
+    } finally {
+      adapter.releaseRuntime("runtime-live");
+    }
+  }
+});
+
+for (const failure of ["wrong item", "missing", "worker failure"] as const) {
+  test(`source verification rejects ${failure} without synchronous preparation`, async () => {
+    const native = completed();
+    const prepare: CodexImageGenerationPreparer = async () => {
+      if (failure === "worker failure") throw new Error("worker failed");
+      return failure === "missing"
+        ? []
+        : [{ ...codexImageGenerationPart(native), itemId: "other" }];
+    };
+    const { adapter } = createImageHarness([native], "/repo", ref.externalSessionId, prepare);
+    await adapter.prepareRuntime("runtime-live");
+    try {
+      await expect(
+        adapter.resolveGeneratedImageSource({
+          ref,
+          itemId: native.id,
+          revision: codexImageGenerationPart(native).output!.revision,
+        }),
+      ).rejects.toThrow(failure === "worker failure" ? "worker failed" : "wrong item");
+    } finally {
+      adapter.releaseRuntime("runtime-live");
+    }
+  });
+}

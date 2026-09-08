@@ -105,7 +105,10 @@ for (const readFails of [false, true]) {
     const path = await imageFile();
     const handle = await open(path, "r");
     const closeHandle = handle.close.bind(handle);
-    const openFile = spyOn(fs, "open").mockResolvedValue(handle);
+    const realOpen = fs.open;
+    const openFile = spyOn(fs, "open").mockImplementation((...args) =>
+      args[0] === path ? Promise.resolve(handle) : realOpen(...args),
+    );
     const readFile = readFails
       ? spyOn(handle, "read").mockRejectedValue(new Error("read failed"))
       : undefined;
@@ -151,7 +154,10 @@ test("interruption waits for file cleanup and preserves its interruption cause",
   const readResult = Promise.withResolvers<never>();
   const closeStarted = Promise.withResolvers<void>();
   const closeResult = Promise.withResolvers<void>();
-  const openFile = spyOn(fs, "open").mockResolvedValue(handle);
+  const realOpen = fs.open;
+  const openFile = spyOn(fs, "open").mockImplementation((...args) =>
+    args[0] === path ? Promise.resolve(handle) : realOpen(...args),
+  );
   const stat = spyOn(handle, "stat").mockImplementation(() => {
     readStarted.resolve();
     return readResult.promise;
@@ -164,6 +170,11 @@ test("interruption waits for file cleanup and preserves its interruption cause",
   const fiber = Effect.runFork(reader.read({ representation: "saved_file", path }, "image"));
   try {
     await readStarted.promise;
+    const otherPath = await imageFile();
+    const other = await Effect.runPromise(
+      reader.read({ representation: "saved_file", path: otherPath }, "other"),
+    );
+    expect(other.byteLength).toBe(png.byteLength);
     const interrupted = Effect.runPromise(Fiber.interrupt(fiber));
     await closeStarted.promise;
     expect(Option.isNone(await Effect.runPromise(Fiber.poll(fiber)))).toBe(true);

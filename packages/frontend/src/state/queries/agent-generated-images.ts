@@ -1,3 +1,4 @@
+import { runImagePreview } from "@/lib/generated-images/image-preview-queue";
 import { decodeGeneratedImage } from "@/lib/generated-images/image-worker-client";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
@@ -17,30 +18,31 @@ export const agentGeneratedImageQueryOptions = (
 ) =>
   queryOptions({
     queryKey: agentGeneratedImageQueryKeys.image(input),
-    queryFn: async ({ signal }): Promise<Blob> => {
-      signal.throwIfAborted();
-      const request: AgentGeneratedImageReadInput = {
-        ref: input.ref,
-        itemId: input.itemId,
-        revision: input.revision,
-      };
-      if (input.turnId !== undefined) request.turnId = input.turnId;
-      const result = await read(request);
-      signal.throwIfAborted();
-      if (
-        JSON.stringify(imageReadIdentity(result)) !== JSON.stringify(imageReadIdentity(request))
-      ) {
-        throw new Error(
-          "The image response belongs to another session, item, or output revision. Reopen this session.",
+    queryFn: ({ signal }): Promise<Blob> =>
+      runImagePreview(signal, async () => {
+        signal.throwIfAborted();
+        const request: AgentGeneratedImageReadInput = {
+          ref: input.ref,
+          itemId: input.itemId,
+          revision: input.revision,
+        };
+        if (input.turnId !== undefined) request.turnId = input.turnId;
+        const result = await read(request);
+        signal.throwIfAborted();
+        if (
+          JSON.stringify(imageReadIdentity(result)) !== JSON.stringify(imageReadIdentity(request))
+        ) {
+          throw new Error(
+            "The image response belongs to another session, item, or output revision. Reopen this session.",
+          );
+        }
+        const bytes = await decodeGeneratedImage(
+          { base64: result.base64, mime: result.mime, byteLength: result.byteLength },
+          signal,
         );
-      }
-      const bytes = await decodeGeneratedImage(
-        { base64: result.base64, mime: result.mime, byteLength: result.byteLength },
-        signal,
-      );
-      signal.throwIfAborted();
-      return new Blob([bytes], { type: result.mime });
-    },
+        signal.throwIfAborted();
+        return new Blob([bytes], { type: result.mime });
+      }),
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 0,
     retry: false,

@@ -179,3 +179,36 @@ test("switching image revisions terminates decoding and rejects a late worker re
     Object.defineProperty(globalThis, "Worker", descriptor);
   }
 });
+
+test("limits pending host reads to two and removes cancelled previews from the queue", async () => {
+  const client = new QueryClient();
+  const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+  const calls: string[] = [];
+  const read = async (request: AgentGeneratedImageReadInput) => {
+    const index = calls.length;
+    calls.push(request.itemId);
+    if (index < 2) await gates[index]!.promise;
+    return payload(request);
+  };
+  const options = ["one", "two", "cancelled", "four"].map((itemId) =>
+    agentGeneratedImageQueryOptions({ ...input, itemId }, read),
+  );
+  const observers = options.map((option) => new QueryObserver(client, option));
+  const remove = observers.map((observer) => observer.subscribe(() => {}));
+  try {
+    await waitFor(() => expect(calls).toEqual(["one", "two"]));
+    remove[0]!();
+    remove[2]!();
+    expect(calls).toEqual(["one", "two"]);
+    gates[0]!.resolve();
+    await waitFor(() => expect(calls).toEqual(["one", "two", "four"]));
+    gates[1]!.resolve();
+    await observers[1]!.refetch();
+    await observers[3]!.refetch();
+    expect(client.getQueryData(options[2]!.queryKey)).toBeUndefined();
+  } finally {
+    gates.forEach((gate) => gate.resolve());
+    remove.forEach((unsubscribe) => unsubscribe());
+    client.clear();
+  }
+});

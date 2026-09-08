@@ -50,8 +50,56 @@ const images: HTMLImageElement[] = [];
 const originalImage = globalThis.Image;
 let createUrl: ReturnType<typeof spyOn<typeof URL, "createObjectURL">>;
 let revokeUrl: ReturnType<typeof spyOn<typeof URL, "revokeObjectURL">>;
+const originalObserver = globalThis.IntersectionObserver;
+let initiallyVisible = true;
+const observers: PreviewIntersectionObserver[] = [];
+class PreviewIntersectionObserver implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = "200px";
+  readonly scrollMargin = "0px";
+  readonly thresholds = [0];
+  private target: Element | undefined;
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    observers.push(this);
+  }
+  observe(target: Element) {
+    this.target = target;
+    this.show(initiallyVisible);
+  }
+  show(isIntersecting: boolean) {
+    const target = this.target;
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    this.callback(
+      [
+        {
+          isIntersecting,
+          target,
+          time: 0,
+          intersectionRatio: isIntersecting ? 1 : 0,
+          boundingClientRect: rect,
+          intersectionRect: rect,
+          rootBounds: null,
+        },
+      ],
+      this,
+    );
+  }
+  disconnect() {
+    this.target = undefined;
+  }
+  unobserve() {
+    this.target = undefined;
+  }
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+}
 beforeEach(() => {
   images.length = 0;
+  initiallyVisible = true;
+  observers.length = 0;
+  globalThis.IntersectionObserver = PreviewIntersectionObserver;
   globalThis.Image = class extends originalImage {
     constructor() {
       super();
@@ -64,6 +112,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   globalThis.Image = originalImage;
+  globalThis.IntersectionObserver = originalObserver;
   createUrl.mockRestore();
   revokeUrl.mockRestore();
 });
@@ -399,5 +448,47 @@ test("copies the exact generated file path without opening the prompt", async ()
     });
   } finally {
     restoreClipboard();
+  }
+});
+
+test("offscreen previews do not read images and release bytes after leaving the viewport", async () => {
+  initiallyVisible = false;
+  const { view, client, read } = harness();
+  try {
+    expect(read).not.toHaveBeenCalled();
+    await act(async () => observers[0]!.show(true));
+    await loadImage();
+    expect(read).toHaveBeenCalledTimes(1);
+    await act(async () => observers[0]!.show(false));
+    expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
+    await waitFor(() =>
+      expect(
+        client.getQueryCache().findAll({ queryKey: agentGeneratedImageQueryKeys.all }),
+      ).toHaveLength(0),
+    );
+    await act(async () => observers[0]!.show(true));
+    await loadImage(1);
+    expect(read).toHaveBeenCalledTimes(2);
+  } finally {
+    view.unmount();
+    client.clear();
+  }
+});
+
+test("an open dialog retains its preview until it closes outside the viewport", async () => {
+  const { view, client } = harness();
+  try {
+    await loadImage();
+    fireEvent.click(screen.getByRole("button", { name: "Open generated image preview" }));
+    await screen.findByRole("dialog");
+    await act(async () => observers[0]!.show(false));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(revokeUrl).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
+  } finally {
+    view.unmount();
+    client.clear();
   }
 });

@@ -107,4 +107,6 @@ Keep these values outside TanStack Query:
 
 The query caches a Blob, never base64. It disables retries and refetches on mount, window focus, and reconnect. It uses no polling or previous-session placeholder and stays fresh while observed. `gcTime: 0` removes the cache entry after its last observer leaves. Before returning the Blob, the query checks cancellation and verifies that the response matches the requested session, image IDs, and output revision.
 
+Only previews near the visible area or in an open image dialog observe these queries. A placeholder keeps the last preview height when the reader unmounts. At most two preview reads and decodes run at once. Cancellation removes queued work; an active host read retains its slot until it finishes.
+
 The preview hook owns image decoding and object URLs. It revokes each URL when the source changes or the component unmounts. Changing the session or image remounts the preview component.

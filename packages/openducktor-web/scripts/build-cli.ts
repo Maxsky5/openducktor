@@ -16,9 +16,12 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
       "--target=bun",
       "--external",
       "vite",
-      "--outfile",
-      outputPath,
+      "--outdir",
+      dirname(outputPath),
+      "--entry-naming",
+      "[name].[ext]",
       "src/cli.ts",
+      "../host/src/adapters/attachments/generated-image-worker.ts",
     ] satisfies readonly [string, ...string[]];
     yield* Effect.tryPromise({
       try: () => runCommand({ command, cwd: packageRoot, label: "Web CLI build" }),

@@ -284,6 +284,8 @@ During cleanup, the host calls an adapter's optional `settleRuntimeTranscript` h
 
 The Codex adapter selects a runtime-supplied saved path before inline output. It derives the output revision from a SHA-256 digest of the selected source kind and path or inline data. It does not read files to build transcript parts, so the revision does not detect external edits to the same saved path. If that file is missing, unreadable, or invalid, report a preview error. Do not substitute inline bytes. The host accepts PNG output up to 32 MiB and bounds both encoded and decoded sizes. It reads regular files through a read-only handle and rejects files that grow during the read. The frontend decodes the image before showing a preview. Reads use the existing authenticated browser invoke or Electron IPC transport.
 
+The host checks inline size before revision preparation. It runs revision preparation, base64 validation, PNG detection, and payload conversion in workers, with at most two active workers. It rechecks runtime identity after asynchronous revision preparation. Worker failures return typed image errors, and interruption stops the worker. Electron and the web CLI include the worker as a separate bundle beside their main entry.
+
 Keep image bytes out of transcript state and durable session records. The runtime owns image retention; OpenDucktor keeps no image archive. A known generation outcome can remain visible after its preview becomes unavailable. See [the Query cache strategy](tanstack-query-cache-strategy.md#generated-images) for preview lifetime.
 
 ### Failure details

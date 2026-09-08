@@ -7,7 +7,7 @@ import {
   TextAlignStart,
   TriangleAlert,
 } from "lucide-react";
-import { type ReactElement, useContext, useState } from "react";
+import { type ReactElement, useContext, useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -243,9 +243,48 @@ function GeneratedImagePreview({
   input: AgentGeneratedImageQueryInput;
   alt: string;
 }): ReactElement {
+  const container = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [height, setHeight] = useState(160);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return;
+        if (!entry.isIntersecting) setHeight(Math.max(160, entry.boundingClientRect.height));
+        setVisible(entry.isIntersecting);
+      },
+      { root: element.closest(".agent-chat-scroll-region"), rootMargin: "200px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div ref={container} style={{ minHeight: height }}>
+      {visible || open ? (
+        <LoadedImagePreview input={input} alt={alt} open={open} onOpenChange={setOpen} />
+      ) : (
+        <Skeleton className="h-40 w-full" aria-label="Generated image preview" />
+      )}
+    </div>
+  );
+}
+
+function LoadedImagePreview({
+  input,
+  alt,
+  open,
+  onOpenChange,
+}: {
+  input: AgentGeneratedImageQueryInput;
+  alt: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}): ReactElement {
   const { readGeneratedImage } = useAgentOperationsContext();
   const preview = useAgentGeneratedImagePreview(input, readGeneratedImage);
-  const [open, setOpen] = useState(false);
   const [displayFailed, setDisplayFailed] = useState(false);
   const error =
     preview.error ?? (displayFailed ? "Preview unavailable. Check the runtime output file." : null);
@@ -265,10 +304,10 @@ function GeneratedImagePreview({
   const src = preview.src;
   const onImageError = () => {
     setDisplayFailed(true);
-    setOpen(false);
+    onOpenChange(false);
   };
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button
           type="button"

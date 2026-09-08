@@ -1,3 +1,4 @@
+import { prepareHostCodexImages } from "../attachments/generated-image-worker-client";
 import { createCodexImageSettlement } from "./codex-live-session-images";
 import {
   CodexAppServerAdapter,
@@ -102,7 +103,7 @@ const requireRuntime = (
 };
 
 const defaultCreateController = (options: CodexAppServerAdapterOptions): CodexSessionController =>
-  new CodexAppServerAdapter(options);
+  new CodexAppServerAdapter({ ...options, prepareImageGenerations: prepareHostCodexImages });
 
 export const createCodexLiveSessionAdapterPreparer =
   ({

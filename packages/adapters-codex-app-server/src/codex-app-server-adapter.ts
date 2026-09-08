@@ -202,6 +202,7 @@ export class CodexAppServerAdapter
     this.generatedImages = new CodexGeneratedImageResolver(
       this.runtimeClients,
       this.threadInventory,
+      options.prepareImageGenerations,
     );
     const onLiveSessionMutation = options.onLiveSessionMutation;
     const onCatalogInvalidated = options.onCatalogInvalidated;

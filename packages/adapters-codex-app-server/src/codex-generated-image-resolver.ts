@@ -1,7 +1,13 @@
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
-import { LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT } from "@openducktor/contracts";
+import {
+  LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT,
+  LOCAL_ATTACHMENT_BYTE_LIMIT,
+} from "@openducktor/contracts";
 import type { AgentGeneratedImageSource } from "@openducktor/core";
-import { codexImageGenerationPart } from "./codex-image-generation";
+import {
+  codexImageGenerationPart,
+  type CodexImageGenerationPreparer,
+} from "./codex-image-generation";
 import type { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexThreadHistoryReadResponse } from "./types";
@@ -15,6 +21,7 @@ export class CodexGeneratedImageResolver {
   constructor(
     private readonly clients: CodexRuntimeClientResolver,
     private readonly history: CodexThreadInventoryReader,
+    private readonly prepareImages?: CodexImageGenerationPreparer,
   ) {}
 
   prepareRuntime(runtimeId: string): void {
@@ -69,7 +76,23 @@ export class CodexGeneratedImageResolver {
         "public history does not contain one matching generation item. Check the session history.",
       );
     }
-    const part = codexImageGenerationPart(item);
+    if (
+      item.savedPath === undefined &&
+      (item.result.length > LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT ||
+        (item.result.length / 4) * 3 -
+          (item.result.endsWith("==") ? 2 : item.result.endsWith("=") ? 1 : 0) >
+          LOCAL_ATTACHMENT_BYTE_LIMIT)
+    )
+      throw unavailable("the inline image exceeds the 32 MiB preview limit.");
+    const sourceItem = item.savedPath === undefined ? item : { ...item, result: "" };
+    const parts = this.prepareImages
+      ? await this.prepareImages([{ item: sourceItem, context: {} }])
+      : [codexImageGenerationPart(sourceItem)];
+    const part = parts[0];
+    if (this.runtimes.get(runtimeId) !== reads)
+      throw unavailable("the runtime changed during the read. Reopen the session.");
+    if (parts.length !== 1 || !part || part.itemId !== item.id || part.turnId !== undefined)
+      throw unavailable("image preparation returned the wrong item. Reopen the session.");
     if (part.status !== "completed") throw unavailable("generation has no completed result.");
     if (!part.output)
       throw unavailable(
@@ -80,8 +103,6 @@ export class CodexGeneratedImageResolver {
         "the generated output changed. Reload the session history before opening the preview.",
       );
     if (item.savedPath !== undefined) return { representation: "saved_file", path: item.savedPath };
-    if (item.result.length > LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT)
-      throw unavailable("the inline image exceeds the 32 MiB preview limit.");
     return { representation: "inline", base64: item.result };
   }
 }
