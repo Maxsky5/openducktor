@@ -1,9 +1,11 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { afterEach, expect, spyOn, test } from "bun:test";
+import { mkdtemp, open, rm, writeFile } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Cause, Effect, Exit, Fiber, Option } from "effect";
+import { causeToHostBoundaryError } from "../../effect/host-errors";
 import { createGeneratedImageFileAdapter } from "./generated-image-file-adapter";
 
 const png = Buffer.from(
@@ -96,4 +98,89 @@ test("32 MiB is accepted and one extra decoded byte is rejected, including equal
   await expect(
     Effect.runPromise(reader.read({ representation: "saved_file", path }, "image")),
   ).rejects.toThrow("32 MiB");
+});
+
+for (const readFails of [false, true]) {
+  test(`close failure stays typed when reading ${readFails ? "fails" : "succeeds"}`, async () => {
+    const path = await imageFile();
+    const handle = await open(path, "r");
+    const closeHandle = handle.close.bind(handle);
+    const openFile = spyOn(fs, "open").mockResolvedValue(handle);
+    const readFile = readFails
+      ? spyOn(handle, "read").mockRejectedValue(new Error("read failed"))
+      : undefined;
+    const closeFile = spyOn(handle, "close").mockImplementation(async () => {
+      await closeHandle();
+      throw new Error("close failed");
+    });
+    try {
+      const exit = await Effect.runPromiseExit(
+        reader.read({ representation: "saved_file", path }, "image"),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (!Exit.isFailure(exit)) throw new Error("Expected an image read failure");
+      const failures = [...Cause.failures(exit.cause)];
+      expect(failures).toHaveLength(readFails ? 2 : 1);
+      expect([...Cause.defects(exit.cause)]).toEqual([]);
+      for (const failure of failures) {
+        if (failure._tag !== "HostOperationError")
+          throw new Error("Expected a typed operation error");
+        expect(failure.operation).toBe("generated-image.read");
+        expect(failure.details).toEqual({ itemId: "image" });
+      }
+      expect(failures.at(-1)?.message).toContain("could not be closed");
+      expect(causeToHostBoundaryError(exit.cause)).toBe(failures[0]!);
+      expect(failures[0]?.message).toContain(
+        readFails ? "could not be read" : "could not be closed",
+      );
+      expect(closeFile).toHaveBeenCalledTimes(1);
+    } finally {
+      openFile.mockRestore();
+      readFile?.mockRestore();
+      closeFile.mockRestore();
+      await closeHandle();
+    }
+  });
+}
+
+test("interruption waits for file cleanup and preserves its interruption cause", async () => {
+  const path = await imageFile();
+  const handle = await open(path, "r");
+  const closeHandle = handle.close.bind(handle);
+  const readStarted = Promise.withResolvers<void>();
+  const readResult = Promise.withResolvers<never>();
+  const closeStarted = Promise.withResolvers<void>();
+  const closeResult = Promise.withResolvers<void>();
+  const openFile = spyOn(fs, "open").mockResolvedValue(handle);
+  const stat = spyOn(handle, "stat").mockImplementation(() => {
+    readStarted.resolve();
+    return readResult.promise;
+  });
+  const closeFile = spyOn(handle, "close").mockImplementation(async () => {
+    closeStarted.resolve();
+    await closeResult.promise;
+    await closeHandle();
+  });
+  const fiber = Effect.runFork(reader.read({ representation: "saved_file", path }, "image"));
+  try {
+    await readStarted.promise;
+    const interrupted = Effect.runPromise(Fiber.interrupt(fiber));
+    await closeStarted.promise;
+    expect(Option.isNone(await Effect.runPromise(Fiber.poll(fiber)))).toBe(true);
+    closeResult.resolve();
+    const exit = await interrupted;
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (!Exit.isFailure(exit)) throw new Error("Expected interruption");
+    expect(Cause.isInterrupted(exit.cause)).toBe(true);
+    expect([...Cause.defects(exit.cause)]).toEqual([]);
+    expect(closeFile).toHaveBeenCalledTimes(1);
+  } finally {
+    readResult.reject(new Error("Read cancelled"));
+    closeResult.resolve();
+    await Effect.runPromise(Fiber.interrupt(fiber));
+    openFile.mockRestore();
+    stat.mockRestore();
+    closeFile.mockRestore();
+    await closeHandle();
+  }
 });

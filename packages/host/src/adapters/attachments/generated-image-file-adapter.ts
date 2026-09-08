@@ -5,7 +5,7 @@ import {
   LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT,
   LOCAL_ATTACHMENT_BYTE_LIMIT,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import { fileTypeFromBuffer } from "file-type";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GeneratedImageFilePort } from "../../ports/generated-image-file-port";
@@ -98,14 +98,17 @@ const decodeInlineImage = (base64: string, itemId: string): Buffer => {
 const readSavedImage = (path: string, itemId: string): Effect.Effect<Buffer, HostError> => {
   if (!isAbsolute(path) || path.includes("\0"))
     return Effect.fail(invalidImage(itemId, "the runtime returned an invalid saved-file path."));
-  return Effect.acquireUseRelease(
-    Effect.tryPromise({
-      try: () =>
-        open(path, constants.O_RDONLY | (process.platform === "win32" ? 0 : constants.O_NONBLOCK)),
-      catch: imageReadError(itemId),
-    }),
-    (handle) =>
-      Effect.gen(function* () {
+  return Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const handle = yield* Effect.tryPromise({
+        try: () =>
+          open(
+            path,
+            constants.O_RDONLY | (process.platform === "win32" ? 0 : constants.O_NONBLOCK),
+          ),
+        catch: imageReadError(itemId),
+      });
+      const read = Effect.gen(function* () {
         const metadata = yield* Effect.tryPromise({
           try: () => handle.stat(),
           catch: imageReadError(itemId),
@@ -137,10 +140,20 @@ const readSavedImage = (path: string, itemId: string): Effect.Effect<Buffer, Hos
             ),
           );
         return bytes.subarray(0, offset);
-      }),
-    (handle) =>
-      Effect.tryPromise({ try: () => handle.close(), catch: imageReadError(itemId) }).pipe(
-        Effect.orDie,
-      ),
+      });
+      const readExit = yield* Effect.exit(restore(read));
+      const closeExit = yield* Effect.exit(
+        Effect.tryPromise({
+          try: () => handle.close(),
+          catch: () =>
+            new HostOperationError({
+              operation: "generated-image.read",
+              message: `Image '${itemId}' could not be previewed because its saved file could not be closed. Reopen the preview.`,
+              details: { itemId },
+            }),
+        }),
+      );
+      return yield* Exit.zipLeft(readExit, closeExit);
+    }),
   );
 };
