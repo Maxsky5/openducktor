@@ -1,9 +1,11 @@
+import type { ServerOptions as ViteServerOptions } from "vite";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
 import type { McpBridgeDiscoveryMode } from "@openducktor/host";
 import { Effect } from "effect";
 import { z } from "zod";
+import { parseBasePathEffect } from "./browser-url-validation";
 import {
   type BrowserRuntimeConfigState,
   createBrowserRuntimeConfigState,
@@ -17,10 +19,12 @@ import {
   WebDependencyError,
   type WebError,
   WebResourceError,
+  WebValidationError,
 } from "./effect/web-errors";
 import { createWebLauncherLifecycle, type WebLauncherLifecycle } from "./launcher-lifecycle";
 import {
   buildBackendUrl,
+  buildBrowserBackendUrl,
   buildBrowserRuntimeConfigJson,
   buildFrontendDisplayUrls,
   buildFrontendUrl,
@@ -29,11 +33,22 @@ import {
   type FrontendServer,
   indexStaticAssetPaths,
   keepProcessAliveDuringEffect,
-  LOCALHOST,
+  readinessHostForBind,
   resolveIndexedStaticAssetPath,
   stopLauncherServicesEffect,
   waitForBackendEffect,
 } from "./launcher-support";
+import {
+  allowedHostnamesFor,
+  isIpLiteral,
+  isLoopbackHost,
+  isRemoteExternalOrigin,
+  isRequestHostAllowed,
+  LOCALHOST,
+  parseHostEffect,
+  parseHttpOriginEffect,
+  portOfHttpOrigin,
+} from "./http-origin";
 import { type WebLogger, writeWebLogEffect } from "./logger";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
 import {
@@ -48,6 +63,9 @@ type CommonLauncherOptions = {
   packageRoot: string;
   frontendPort: number;
   backendPort: number;
+  host?: string;
+  externalUrl?: string;
+  basePath?: string;
   readinessTimeoutMs?: number;
 };
 
@@ -102,16 +120,26 @@ const logFrontendAvailability = (
   port: number,
   backendUrl: string,
   developmentInstanceId: string | undefined,
+  externalUrl: string | undefined,
+  bindHost: string,
   logger: WebLogger,
 ): Effect.Effect<void, WebError> =>
   Effect.gen(function* () {
     yield* writeWebLogEffect(logger, "success", "OpenDucktor web is ready:");
-    for (const url of buildFrontendDisplayUrls(port)) {
-      yield* writeWebLogEffect(logger, "success", `  ➜  Local:   ${url}`);
+    for (const { kind, url } of buildFrontendDisplayUrls(port, bindHost, externalUrl)) {
+      const label = kind === "local" ? "Local:   " : "Network: ";
+      yield* writeWebLogEffect(logger, "success", `  ➜  ${label}${url}`);
     }
     yield* writeWebLogEffect(logger, "success", `  ➜  Backend: ${backendUrl}`);
     if (developmentInstanceId) {
       yield* writeWebLogEffect(logger, "success", `  ➜  Instance: ${developmentInstanceId}`);
+    }
+    if (isRemoteExternalOrigin(externalUrl)) {
+      yield* writeWebLogEffect(
+        logger,
+        "info",
+        "OpenDucktor web is reachable outside this machine. Restrict access with proxy access controls, a firewall, or a Tailscale ACL before using it.",
+      );
     }
   });
 
@@ -289,6 +317,33 @@ const cleanupStartedFrontendServerEffect = (
     }
   });
 
+export const viteServerOptions = (options: LauncherOptions): ViteServerOptions => {
+  const serverOptions: ViteServerOptions = {
+    host: options.host?.trim() || LOCALHOST,
+    port: options.frontendPort,
+    strictPort: true,
+    fs: {
+      allow: [options.packageRoot, path.join(options.packageRoot, "../frontend/src")],
+    },
+  };
+  const externalUrl = options.externalUrl?.trim();
+  const allowedHosts = ["localhost", ".localhost"];
+  if (externalUrl) {
+    const hostname = new URL(externalUrl).hostname;
+    if (!isIpLiteral(hostname)) {
+      allowedHosts.push(hostname, hostname.replace(/\.$/u, ""));
+    }
+  }
+  const bindHostname = options.host?.trim();
+  if (bindHostname && !isIpLiteral(bindHostname) && !isLoopbackHost(bindHostname)) {
+    allowedHosts.push(bindHostname, bindHostname.replace(/\.$/u, ""));
+  }
+  if (allowedHosts.length > 2) {
+    serverOptions.allowedHosts = [...new Set(allowedHosts)];
+  }
+  return serverOptions;
+};
+
 const startViteServerEffect = (
   options: LauncherOptions,
   runtimeConfigState: BrowserRuntimeConfigState,
@@ -327,9 +382,7 @@ const startViteServerEffect = (
                 },
               ],
               server: {
-                host: LOCALHOST,
-                port: options.frontendPort,
-                strictPort: true,
+                ...viteServerOptions(options),
               },
             }),
           catch: (cause) =>
@@ -440,13 +493,21 @@ const startStaticFrontendServerEffect = (
       });
     }
 
+    const allowedHostnames = allowedHostnamesFor({
+      bindHost: options.host?.trim() || LOCALHOST,
+      externalUrl: options.externalUrl?.trim() || undefined,
+    });
+
     return yield* Effect.uninterruptible(
       Effect.try({
         try: () =>
           Bun.serve({
-            hostname: LOCALHOST,
+            hostname: options.host?.trim() || LOCALHOST,
             port: options.frontendPort,
             async fetch(request) {
+              if (!isRequestHostAllowed(request, allowedHostnames)) {
+                return new Response("Host not allowed.", { status: 403 });
+              }
               const requestUrl = new URL(request.url);
               if (requestUrl.pathname === RUNTIME_CONFIG_PATH) {
                 const runtimeConfig = await readBrowserRuntimeConfig(runtimeConfigState);
@@ -566,21 +627,27 @@ const createLauncherLifecycle = (logger: WebLogger): Effect.Effect<WebLauncherLi
 const runStartedLauncherEffect = ({
   appToken,
   backendUrl,
+  bindHost,
   developmentInstanceId,
+  externalUrl,
   frontendServer,
   hostBackend,
   logger,
   owner,
   readinessTimeoutMs,
+  readinessUrl,
 }: {
   appToken: string;
   backendUrl: string;
+  bindHost: string;
   developmentInstanceId: string | undefined;
+  externalUrl: string | undefined;
   frontendServer: StartedFrontendServer;
   hostBackend: TypescriptHostBackend;
   logger: WebLogger;
   owner: WebLauncherLifecycle;
   readinessTimeoutMs: number;
+  readinessUrl: string;
 }): Effect.Effect<number, WebError> =>
   Effect.gen(function* () {
     const launcherExit = yield* Effect.exit(
@@ -590,11 +657,13 @@ const runStartedLauncherEffect = ({
           "info",
           "Waiting for OpenDucktor TypeScript host readiness...",
         );
-        yield* waitForBackendEffect(backendUrl, appToken, readinessTimeoutMs, hostBackend);
+        yield* waitForBackendEffect(readinessUrl, appToken, readinessTimeoutMs, hostBackend);
         yield* logFrontendAvailability(
           frontendServer.port,
           backendUrl,
           developmentInstanceId,
+          externalUrl,
+          bindHost,
           logger,
         );
 
@@ -649,6 +718,39 @@ const runWithLauncherSignalsEffect = <Success, Failure>(
   );
 };
 
+export const validateLauncherNetworkOptionsEffect = (options: {
+  basePath: string | undefined;
+  bindHost: string;
+  externalUrl: string | undefined;
+}): Effect.Effect<string | undefined, WebValidationError> =>
+  Effect.gen(function* () {
+    if (options.externalUrl !== undefined) {
+      yield* parseHttpOriginEffect(options.externalUrl, "OpenDucktor web --external-url", {
+        field: "externalUrl",
+      });
+    }
+    const remoteExternalUrl = isRemoteExternalOrigin(options.externalUrl);
+    if (!isLoopbackHost(options.bindHost) && !remoteExternalUrl) {
+      return yield* new WebValidationError({
+        field: "externalUrl",
+        message:
+          "OpenDucktor web binds a non-loopback host without a remote --external-url. Browsers cannot reach a loopback backend URL from another machine; set --external-url to the URL browsers will use.",
+        details: { host: options.bindHost },
+      });
+    }
+    if (options.basePath !== undefined && options.externalUrl === undefined) {
+      return yield* new WebValidationError({
+        field: "basePath",
+        message:
+          "OpenDucktor web serves the TypeScript host under --base-path without --external-url. The base path is only reachable through a reverse proxy; set --external-url to the URL browsers will use.",
+        details: { basePath: options.basePath },
+      });
+    }
+    return options.basePath === undefined
+      ? undefined
+      : yield* parseBasePathEffect(options.basePath, "--base-path");
+  });
+
 export const runLauncherEffect = (
   options: LauncherOptions,
   logger: WebLogger,
@@ -659,6 +761,13 @@ export const runLauncherEffect = (
     const appToken = randomUUID();
     const runtimeConfigState = createBrowserRuntimeConfigState();
     const developmentInstanceId = options.workspaceMode ? options.developmentInstanceId : undefined;
+    const bindHost = yield* parseHostEffect(options.host ?? LOCALHOST, "--host", true);
+    const externalUrl = options.externalUrl?.trim();
+    const basePath = yield* validateLauncherNetworkOptionsEffect({
+      basePath: options.basePath,
+      bindHost,
+      externalUrl,
+    });
     const runtimeDistributionInput: Parameters<typeof resolveWebRuntimeDistributionEffect>[0] = {
       packageRoot: options.packageRoot,
       workspaceMode: options.workspaceMode,
@@ -682,17 +791,33 @@ export const runLauncherEffect = (
       Effect.gen(function* () {
         yield* writeWebLogEffect(logger, "info", "Starting OpenDucktor frontend server...");
         const frontendServer = yield* startFrontendServerEffect(
-          options,
+          { ...options, host: bindHost },
           runtimeConfigState,
           logger,
         );
         yield* owner.registerFrontend(frontendServer);
-        const frontendUrl = buildFrontendUrl(frontendServer.port);
+        const frontendUrl = externalUrl ?? buildFrontendUrl(frontendServer.port, bindHost);
+        const parsedExternalUrl = externalUrl === undefined ? undefined : new URL(externalUrl);
+        if (
+          parsedExternalUrl !== undefined &&
+          portOfHttpOrigin(parsedExternalUrl) !== String(frontendServer.port)
+        ) {
+          yield* writeWebLogEffect(
+            logger,
+            "info",
+            `The --external-url port does not match the frontend port ${frontendServer.port}. Browsers reach the frontend only through --external-url. Set --port to match, or map the port in the proxy.`,
+          );
+        }
         yield* writeWebLogEffect(logger, "info", "Starting OpenDucktor TypeScript host...");
         const hostBackendExit = yield* Effect.exit(
           startWebLauncherHostBackendEffect({
             port: options.backendPort,
+            host: bindHost,
+            ...(basePath !== undefined && {
+              basePath,
+            }),
             frontendOrigin: frontendUrl,
+            frontendPort: frontendServer.port,
             controlToken,
             appToken,
             onBackgroundFailure: defaultWebSignalProcessBoundary.reportFailure,
@@ -711,19 +836,35 @@ export const runLauncherEffect = (
         }
         const hostBackend = hostBackendExit.value;
         yield* owner.registerHost(hostBackend);
-        const backendUrl = buildBackendUrl(hostBackend.port);
+        if (parsedExternalUrl?.protocol === "https:" && basePath === undefined) {
+          yield* writeWebLogEffect(
+            logger,
+            "info",
+            `The --external-url origin is https without --base-path. The browser reaches the TypeScript host at https://${parsedExternalUrl.hostname}:${hostBackend.port}. Terminate TLS for that port in the proxy.`,
+          );
+        }
+        const { browserUrl } = buildBrowserBackendUrl(
+          basePath,
+          frontendUrl,
+          externalUrl,
+          bindHost,
+          hostBackend.port,
+        );
         yield* Effect.sync(() => {
-          runtimeConfigState.publish(buildBrowserRuntimeConfigJson(backendUrl, appToken));
+          runtimeConfigState.publish(buildBrowserRuntimeConfigJson(browserUrl, appToken));
         });
         return yield* runStartedLauncherEffect({
           appToken,
-          backendUrl,
+          backendUrl: browserUrl,
+          bindHost,
           developmentInstanceId,
+          externalUrl,
           frontendServer,
           hostBackend,
           logger,
           owner,
           readinessTimeoutMs,
+          readinessUrl: buildBackendUrl(hostBackend.port, readinessHostForBind(bindHost)),
         });
       }),
     );

@@ -1,6 +1,8 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
+// Use the package entry point, not Bun's proxy-aware "undici" shim.
+import { Agent, fetch as directFetch } from "undici/index.js";
 import {
   causeToWebBoundaryError,
   combineWebErrors,
@@ -11,6 +13,7 @@ import {
   WebOperationError,
 } from "./effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
+import { formatHost, isLoopbackHost, isRemoteExternalOrigin, LOCALHOST } from "./http-origin";
 import type { TypescriptHostBackend } from "./typescript-host-backend";
 
 interface LauncherEarlyExitRef {
@@ -21,7 +24,15 @@ interface LauncherEarlyExitRef {
 }
 
 type ManagedHost = Pick<Bun.Subprocess, "exited"> | TypescriptHostBackend;
-type FetchFunction = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+type ReadinessRequestInit = {
+  method?: string;
+  headers?: Record<string, string>;
+  signal?: AbortSignal;
+};
+type FetchFunction = (
+  input: string,
+  init?: ReadinessRequestInit,
+) => Promise<Pick<Response, "ok" | "status">>;
 type SleepFunction = (durationMs: number) => Promise<void>;
 type BackendReadinessDependencies = {
   fetch: FetchFunction;
@@ -53,19 +64,102 @@ const scheduleInterval = (callback: () => void, durationMs: number): (() => void
   return () => clearInterval(intervalId);
 };
 
-export const LOCALHOST = "127.0.0.1";
-
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SHUTDOWN_KEEP_ALIVE_INTERVAL_MS = 1_000;
 
-export const buildFrontendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
+const fetchBackendDirectly: FetchFunction = async (input, init) => {
+  const dispatcher = new Agent();
+  try {
+    const response = await directFetch(input, { ...init, dispatcher, redirect: "error" });
+    await response.body?.cancel();
+    return { ok: response.ok, status: response.status };
+  } finally {
+    await dispatcher.destroy();
+  }
+};
 
-export const buildBackendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
+export const buildFrontendUrl = (port: number, host: string = LOCALHOST): string =>
+  `http://${formatHost(host)}:${port}`;
 
-export const buildFrontendDisplayUrls = (port: number): string[] => [
-  `http://localhost:${port}/`,
-  `http://${LOCALHOST}:${port}/`,
-];
+export const buildBackendUrl = (port: number, host: string = LOCALHOST): string =>
+  `http://${formatHost(host)}:${port}`;
+
+export const readinessHostForBind = (bindHost: string): string => {
+  if (bindHost === "0.0.0.0" || bindHost === "[::ffff:0:0]") {
+    return LOCALHOST;
+  }
+  if (bindHost === "::" || bindHost === "[::]") {
+    return "::1";
+  }
+  return bindHost;
+};
+
+export const buildExternalBackendUrl = (externalUrl: string, port: number): string => {
+  const parsed = new URL(externalUrl);
+  parsed.port = String(port);
+  return parsed.origin;
+};
+
+export type BrowserBackendUrls = {
+  browserUrl: string;
+  directUrl: string;
+};
+
+export const buildBrowserBackendUrl = (
+  basePath: string | undefined,
+  frontendUrl: string,
+  externalUrl: string | undefined,
+  bindHost: string,
+  backendPort: number,
+): BrowserBackendUrls => {
+  const directUrl = buildBackendUrl(backendPort, bindHost);
+  if (basePath) {
+    return {
+      browserUrl: `${new URL(frontendUrl).origin}${basePath}`,
+      directUrl,
+    };
+  }
+  return {
+    browserUrl: externalUrl ? buildExternalBackendUrl(externalUrl, backendPort) : directUrl,
+    directUrl,
+  };
+};
+
+export type FrontendDisplayUrl = {
+  kind: "local" | "network";
+  url: string;
+};
+
+export const buildFrontendDisplayUrls = (
+  port: number,
+  bindHost: string,
+  externalUrl?: string,
+): FrontendDisplayUrl[] => {
+  if (
+    externalUrl &&
+    (isRemoteExternalOrigin(externalUrl) || new URL(externalUrl).protocol === "https:")
+  ) {
+    return [{ kind: "network", url: `${externalUrl.replace(/\/$/, "")}/` }];
+  }
+  const urls: FrontendDisplayUrl[] = [];
+  if (bindHost === LOCALHOST || bindHost === "0.0.0.0") {
+    urls.push(
+      { kind: "local", url: `http://localhost:${port}/` },
+      { kind: "local", url: `http://${LOCALHOST}:${port}/` },
+    );
+  } else if (["::", "[::]", "::1", "[::1]"].includes(bindHost)) {
+    urls.push({ kind: "local", url: `http://[::1]:${port}/` });
+  } else if (isLoopbackHost(bindHost)) {
+    urls.push({ kind: "local", url: `http://${bindHost}:${port}/` });
+  }
+  if (externalUrl) {
+    const externalDisplayUrl = `${externalUrl.replace(/\/$/, "")}/`;
+    if (!urls.some((entry) => entry.url === externalDisplayUrl)) {
+      urls.push({ kind: "network", url: externalDisplayUrl });
+    }
+  }
+  return urls;
+};
 
 const verifyBackendReadinessEffect = (
   backendUrl: string,
@@ -96,7 +190,7 @@ const verifyBackendReadinessEffect = (
 
     const sessionResponse = yield* Effect.tryPromise({
       try: () => {
-        const init: RequestInit = {
+        const init: ReadinessRequestInit = {
           method: "POST",
           headers: {
             [APP_TOKEN_HEADER]: appToken,
@@ -174,7 +268,7 @@ export const waitForBackendEffect = (
   appToken: string,
   timeoutMs: number,
   hostProcess: ManagedHost,
-  dependencies: BackendReadinessDependencies = { fetch, sleep: Bun.sleep },
+  dependencies: BackendReadinessDependencies = { fetch: fetchBackendDirectly, sleep: Bun.sleep },
 ): Effect.Effect<void, WebDependencyError | WebOperationError> =>
   Effect.gen(function* () {
     const startedAt = Date.now();
@@ -271,7 +365,7 @@ export const waitForBackend = (
   appToken: string,
   timeoutMs: number,
   hostProcess: ManagedHost,
-  dependencies: BackendReadinessDependencies = { fetch, sleep: Bun.sleep },
+  dependencies: BackendReadinessDependencies = { fetch: fetchBackendDirectly, sleep: Bun.sleep },
 ): Promise<void> =>
   runWebBoundary(waitForBackendEffect(backendUrl, appToken, timeoutMs, hostProcess, dependencies));
 

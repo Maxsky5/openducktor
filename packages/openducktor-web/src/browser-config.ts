@@ -1,6 +1,13 @@
 import { Effect } from "effect";
 import { z } from "zod";
 import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
+import {
+  formatHost,
+  isLoopbackHost,
+  LOOPBACK_HOSTS,
+  parseHttpOriginEffect,
+  portOfHttpOrigin,
+} from "./http-origin";
 
 type BrowserEnvValues = {
   VITE_ODT_BROWSER_AUTH_TOKEN?: string;
@@ -41,7 +48,6 @@ const readBrowserEnv = (): BrowserEnv => {
   return env;
 };
 
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 const OPAQUE_BROWSER_ORIGIN = "null";
 
 const isUsableBrowserOrigin = (origin: string | undefined): origin is string =>
@@ -77,61 +83,13 @@ const requireBrowserEnvValueEffect = (
     return value;
   });
 
-const parseLoopbackHttpOriginEffect = (rawUrl: string): Effect.Effect<URL, WebValidationError> =>
-  Effect.gen(function* () {
-    const parsed = yield* Effect.try({
-      try: () => new URL(rawUrl),
-      catch: (cause) =>
-        new WebValidationError({
-          message:
-            "OpenDucktor web backend URL is invalid. Start the app through @openducktor/web.",
-          cause,
-          details: { rawUrl },
-        }),
-    });
-
-    if (parsed.protocol !== "http:") {
-      return yield* new WebValidationError({
-        message: "OpenDucktor web backend URL must use http on a loopback interface.",
-        details: { rawUrl },
-      });
-    }
-    if (!LOOPBACK_HOSTS.has(parsed.hostname)) {
-      return yield* new WebValidationError({
-        message: "OpenDucktor web backend URL must target 127.0.0.1, localhost, or [::1].",
-        details: { rawUrl },
-      });
-    }
-    if (!parsed.port) {
-      return yield* new WebValidationError({
-        message: "OpenDucktor web backend URL must include an explicit port.",
-        details: { rawUrl },
-      });
-    }
-    if (
-      parsed.username ||
-      parsed.password ||
-      parsed.pathname !== "/" ||
-      parsed.search ||
-      parsed.hash
-    ) {
-      return yield* new WebValidationError({
-        message:
-          "OpenDucktor web backend URL must be an origin only, without credentials, path, query, or fragment.",
-        details: { rawUrl },
-      });
-    }
-
-    return parsed;
-  });
-
-const hostForOrigin = (hostname: string): string => {
-  if (hostname === "::1" || hostname === "[::1]") {
-    return "[::1]";
-  }
-
-  return hostname;
+const originWithPath = (url: URL): string => {
+  const path = url.pathname === "/" ? "" : url.pathname.replace(/\/$/u, "");
+  return `${url.origin}${path}`;
 };
+
+const isHttpLoopbackOrigin = (url: URL): boolean =>
+  url.protocol === "http:" && isLoopbackHost(url.hostname);
 
 const alignBackendOriginWithBrowserOriginEffect = (
   backendOrigin: URL,
@@ -139,7 +97,7 @@ const alignBackendOriginWithBrowserOriginEffect = (
 ): Effect.Effect<string, WebValidationError> =>
   Effect.gen(function* () {
     if (!isUsableBrowserOrigin(browserOrigin)) {
-      return backendOrigin.origin;
+      return originWithPath(backendOrigin);
     }
 
     const frontendOrigin = yield* Effect.try({
@@ -152,21 +110,38 @@ const alignBackendOriginWithBrowserOriginEffect = (
         }),
     });
 
-    if (frontendOrigin.protocol !== "http:" || !LOOPBACK_HOSTS.has(frontendOrigin.hostname)) {
-      return backendOrigin.origin;
+    if (!isHttpLoopbackOrigin(frontendOrigin) || !isHttpLoopbackOrigin(backendOrigin)) {
+      return originWithPath(backendOrigin);
     }
 
-    return new URL(
-      `${frontendOrigin.protocol}//${hostForOrigin(frontendOrigin.hostname)}:${backendOrigin.port}`,
-    ).origin;
+    if (frontendOrigin.hostname === backendOrigin.hostname) {
+      return originWithPath(backendOrigin);
+    }
+    if (!LOOPBACK_HOSTS.has(frontendOrigin.hostname)) {
+      return yield* new WebValidationError({
+        message: `OpenDucktor web cannot use ${frontendOrigin.hostname} in place of the configured backend hostname. Open the launcher URL or configure --external-url with the desired browser origin.`,
+        details: { browserOrigin, rawUrl: backendOrigin.href },
+      });
+    }
+
+    const alignedUrl = new URL(
+      `${frontendOrigin.protocol}//${formatHost(frontendOrigin.hostname)}:${portOfHttpOrigin(
+        backendOrigin,
+      )}${backendOrigin.pathname}`,
+    );
+    return originWithPath(alignedUrl);
   });
 
-const normalizeLoopbackHttpUrlEffect = (
+const normalizeHttpUrlEffect = (
   rawUrl: string,
   browserOrigin?: string,
+  options: { allowPath?: boolean } = {},
 ): Effect.Effect<string, WebValidationError> =>
   Effect.gen(function* () {
-    const parsed = yield* parseLoopbackHttpOriginEffect(rawUrl);
+    const parsed = yield* parseHttpOriginEffect(rawUrl, undefined, {
+      ...options,
+      remediation: "Start the app through @openducktor/web.",
+    });
 
     return yield* alignBackendOriginWithBrowserOriginEffect(parsed, browserOrigin);
   });
@@ -184,7 +159,9 @@ export const getBrowserBackendUrlEffect = (
           "VITE_ODT_BROWSER_BACKEND_URL",
           "the local web host URL",
         );
-    return yield* normalizeLoopbackHttpUrlEffect(rawUrl, browserOrigin);
+    return yield* normalizeHttpUrlEffect(rawUrl, browserOrigin, {
+      allowPath: true,
+    });
   });
 
 export const getBrowserBackendUrl = (

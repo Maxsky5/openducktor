@@ -101,7 +101,7 @@ const colorSuccessMessage = (useColor: boolean, message: string): string => {
     return message;
   }
 
-  const availabilityLine = message.match(/^(\s*)(➜)(\s+)(Local:)(\s+)(https?:\/\/\S+)$/);
+  const availabilityLine = message.match(/^(\s*)(➜)(\s+)(Local:|Network:)(\s+)(https?:\/\/\S+)$/);
   if (availabilityLine) {
     const [, indent, arrow, arrowGap, label, labelGap, url] = availabilityLine;
     return `${indent}${BOLD}${MAGENTA}${arrow}${RESET}${arrowGap}${BLUE}${label}${RESET}${labelGap}${BOLD}${CYAN}${url}${RESET}`;

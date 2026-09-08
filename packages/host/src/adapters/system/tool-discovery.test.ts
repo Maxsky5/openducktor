@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { Cause, Effect, Exit } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ResolvedTool, ToolDiscoveryId } from "../../ports/tool-discovery-port";
@@ -147,14 +147,15 @@ describe("discoverToolPath", () => {
       const bundledDir = join(root, "bundled");
       const standardDir = join(root, ".opencode", "bin");
       const pathDir = join(root, "path");
+      const executableName = process.platform === "win32" ? "opencode.EXE" : "opencode";
       for (const directory of [bundledDir, standardDir, pathDir]) {
         await mkdir(directory, { recursive: true });
-        await writeExecutable(join(directory, "opencode"));
+        await writeExecutable(join(directory, executableName));
       }
       const env = { PATH: pathDir };
-      const systemCommands = createSystemCommandRunner({ env, platform: "linux" });
+      const systemCommands = createSystemCommandRunner({ env, platform: process.platform });
       const resolve = spyOn(systemCommands, "resolveCommandPath");
-      const options = { homeDir: root, platform: "linux" as const };
+      const options = { homeDir: root, platform: process.platform };
 
       await expect(
         discoverBuiltInToolResult({
@@ -165,7 +166,7 @@ describe("discoverToolPath", () => {
         }),
       ).resolves.toEqual({
         displayLabel: "bundled tool directory",
-        path: join(bundledDir, "opencode"),
+        path: join(bundledDir, executableName),
         sourceCategory: "system_path",
       });
       expect(resolve.mock.calls).toEqual([["opencode", { env, searchPath: [bundledDir] }]]);
@@ -175,7 +176,7 @@ describe("discoverToolPath", () => {
         discoverBuiltInToolResult({ env, options, systemCommands, toolId: "opencode" }),
       ).resolves.toEqual({
         displayLabel: "standard install directories",
-        path: join(standardDir, "opencode"),
+        path: join(standardDir, executableName),
         sourceCategory: "system_path",
       });
       expect(resolve.mock.calls).toEqual([["opencode", { env, searchPath: [standardDir] }]]);
@@ -184,7 +185,7 @@ describe("discoverToolPath", () => {
       await rm(standardDir, { force: true, recursive: true });
       await expect(
         discoverBuiltInTool({ env, options, systemCommands, toolId: "opencode" }),
-      ).resolves.toBe(join(pathDir, "opencode"));
+      ).resolves.toBe(join(pathDir, executableName));
       expect(resolve.mock.calls).toEqual([
         ["opencode", { env, searchPath: [standardDir] }],
         ["opencode", { env }],
@@ -197,8 +198,8 @@ describe("discoverToolPath", () => {
       const applicationsDir = join(root, "Applications");
       const homeDir = join(root, "home");
       const appResources = ["Codex.app", "Contents", "Resources"];
-      const systemAppDir = join(applicationsDir, ...appResources);
-      const userAppDir = join(homeDir, "Applications", ...appResources);
+      const systemAppDir = posix.join(applicationsDir, ...appResources);
+      const userAppDir = posix.join(homeDir, "Applications", ...appResources);
       for (const directory of [systemAppDir, userAppDir]) {
         await mkdir(directory, { recursive: true });
         await writeExecutable(join(directory, "codex"));
@@ -208,7 +209,7 @@ describe("discoverToolPath", () => {
       const options = { applicationsDir, homeDir, platform: "darwin" as const };
 
       for (const directory of [systemAppDir, userAppDir]) {
-        const executable = join(directory, "codex");
+        const executable = posix.join(directory, "codex");
         await expect(
           discoverBuiltInToolResult({ options, systemCommands, toolId: "codex" }),
         ).resolves.toEqual({

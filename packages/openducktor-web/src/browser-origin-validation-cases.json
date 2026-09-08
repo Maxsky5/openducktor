@@ -15,29 +15,44 @@
     "expected": "http://[::1]:14327"
   },
   {
+    "name": "expanded ipv6 loopback origin",
+    "input": "http://[0:0:0:0:0:0:0:1]:14327",
+    "expected": "http://[::1]:14327"
+  },
+  {
     "name": "trimmed loopback origin",
     "input": " http://127.0.0.1:14327 ",
     "expected": "http://127.0.0.1:14327"
   },
   {
-    "name": "https origin is rejected",
+    "name": "https origin",
     "input": "https://127.0.0.1:14327",
-    "errorIncludes": "must use http"
+    "expected": "https://127.0.0.1:14327"
   },
   {
-    "name": "remote host is rejected",
+    "name": "ftp origin is rejected",
+    "input": "ftp://127.0.0.1:14327",
+    "errorIncludes": "must use http or https"
+  },
+  {
+    "name": "remote http origin",
     "input": "http://example.com:14327",
-    "errorIncludes": "must target"
+    "expected": "http://example.com:14327"
   },
   {
-    "name": "missing port is rejected",
+    "name": "tailscale origin",
+    "input": "http://100.64.0.1:14327",
+    "expected": "http://100.64.0.1:14327"
+  },
+  {
+    "name": "default port origin is accepted",
     "input": "http://127.0.0.1",
-    "errorIncludes": "explicit port"
+    "expected": "http://127.0.0.1"
   },
   {
-    "name": "path is rejected",
-    "input": "http://127.0.0.1:14327/app",
-    "errorIncludes": "path"
+    "name": "backend path is accepted",
+    "input": "http://127.0.0.1:14327/api",
+    "expected": "http://127.0.0.1:14327/api"
   },
   {
     "name": "query string is rejected",
@@ -48,5 +63,10 @@
     "name": "credentials are rejected",
     "input": "http://user:pass@127.0.0.1:14327",
     "errorIncludes": "credentials"
+  },
+  {
+    "name": "port zero origin is rejected",
+    "input": "http://127.0.0.1:0",
+    "errorIncludes": "port 0"
   }
 ]

@@ -1,8 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
+import { TERMINAL_PROTOCOL_SUBPROTOCOL, type HostEventEnvelope } from "@openducktor/contracts";
 import {
   CodexSessionHistoryError,
   createLocalAttachmentAdapter,
   type EffectHostCommandRouter,
+  type EffectNodeHostCommandRouter,
   type HostCommandArgs,
   type HostCommandName,
   type HostCommandResult,
@@ -10,14 +12,22 @@ import {
   type TaskAssetReadService,
   TerminalServiceError,
 } from "@openducktor/host";
-import type { HostEventEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { WorkspaceTextFileWriteError } from "../../host/src/application/filesystem/workspace-text-file-service";
 import { HostOperationError } from "../../host/src/effect/host-errors";
 import type { HostCommandHandlerError } from "../../host/src/interface/router/host-command-router";
 import type { WebLogger } from "./logger";
+import { allowedHostnamesFor, parseHostEffect } from "./http-origin";
+import { validateLauncherNetworkOptionsEffect } from "./launcher";
+import {
+  buildBackendUrl,
+  buildBrowserBackendUrl,
+  readinessHostForBind,
+  waitForBackend,
+} from "./launcher-support";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
 import {
+  allowedOriginsForFrontendOrigin,
   BufferedHostEventBus,
   stopTypescriptHostBackendServices,
   validateWebFrontendOrigin,
@@ -30,8 +40,10 @@ Object.defineProperty(globalThis, "Response", {
   value: nativeResponse.constructor,
 });
 
-const { handleTypescriptHostBackendRequest, resolveAppSessionCookieName } =
+const { handleHostFetch, handleTypescriptHostBackendRequest, resolveAppSessionCookieName } =
   await import("./typescript-host-backend");
+
+const { terminalWebSocketHandler } = await import("./terminals/terminal-websocket-handler");
 
 const APP_TOKEN = "app-token";
 const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
@@ -114,6 +126,80 @@ const missingTaskAssetReadService: TaskAssetReadService = {
   readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
 };
 
+const unexpectedTerminalOperation = (operation: string): Effect.Effect<never> =>
+  Effect.dieMessage(`Unexpected terminal service operation: ${operation}`);
+
+const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
+  ...createTestHostCommandRouter(),
+  taskAssetReadService: missingTaskAssetReadService,
+  taskEventStream: {
+    acknowledge: () => {},
+    publish: () => {},
+    subscribe: () => ({
+      subscriptionId: "test-subscription",
+      unsubscribe: () => {},
+    }),
+  },
+  terminalService: {
+    acknowledge: () => unexpectedTerminalOperation("acknowledge"),
+    acquireTaskCleanup: () => unexpectedTerminalOperation("acquireTaskCleanup"),
+    attach: () => unexpectedTerminalOperation("attach"),
+    close: () => unexpectedTerminalOperation("close"),
+    closeByTaskScope: () => unexpectedTerminalOperation("closeByTaskScope"),
+    create: () => unexpectedTerminalOperation("create"),
+    detach: () => unexpectedTerminalOperation("detach"),
+    dispose: () => unexpectedTerminalOperation("dispose"),
+    hostInstanceId: "test-instance",
+    list: () => unexpectedTerminalOperation("list"),
+    preparePathInput: () => unexpectedTerminalOperation("preparePathInput"),
+    resize: () => unexpectedTerminalOperation("resize"),
+    write: () => unexpectedTerminalOperation("write"),
+  },
+});
+
+const performWebSocketUpgrade = (
+  port: number,
+  path: string,
+  origin: string,
+  host: string = `127.0.0.1:${port}`,
+): Promise<string> =>
+  new Promise((resolve, reject) => {
+    let responseText = "";
+    Bun.connect({
+      hostname: "127.0.0.1",
+      port,
+      socket: {
+        open(socket) {
+          socket.write(
+            [
+              `GET ${path} HTTP/1.1`,
+              `Host: ${host}`,
+              "Upgrade: websocket",
+              "Connection: Upgrade",
+              "Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==",
+              "Sec-WebSocket-Version: 13",
+              `Origin: ${origin}`,
+              `Sec-WebSocket-Protocol: ${TERMINAL_PROTOCOL_SUBPROTOCOL}`,
+              `Cookie: ${APP_SESSION_COOKIE_NAME}=${APP_TOKEN}`,
+              "\r\n",
+            ].join("\r\n"),
+          );
+        },
+        data(socket, data) {
+          responseText += new TextDecoder().decode(data);
+          const headEnd = responseText.indexOf("\r\n\r\n");
+          if (headEnd !== -1) {
+            socket.end();
+            resolve(responseText.slice(0, headEnd));
+          }
+        },
+        error(socket, error) {
+          reject(error);
+        },
+      },
+    });
+  });
+
 type TestRequestOptions = Partial<{
   appSessionCookieName: string;
   appToken: string;
@@ -125,6 +211,7 @@ type TestRequestOptions = Partial<{
   shutdownStarted: boolean;
   stop: () => Promise<void>;
   taskEventLeaseManager: TaskEventLeaseManager;
+  sessionCookieSecure: boolean;
 }>;
 
 const handleTestRequest = (
@@ -143,6 +230,7 @@ const handleTestRequest = (
     localAttachments: createLocalAttachmentAdapter(),
     logger: testLogger,
     request,
+    sessionCookieSecure: options.sessionCookieSecure ?? false,
     shutdownStarted: options.shutdownStarted ?? false,
     beginShutdown: options.beginShutdown ?? (() => {}),
     stop: options.stop ?? (async () => {}),
@@ -154,6 +242,43 @@ const handleTestRequest = (
 };
 
 describe("TypeScript web host backend", () => {
+  const TERMINAL_UPGRADE_FRONTEND_ORIGIN = "http://127.0.0.1:1420";
+  const TERMINAL_UPGRADE_BASE_PATH = "/api";
+
+  const createTerminalUpgradeTestServer = (
+    basePath = TERMINAL_UPGRADE_BASE_PATH,
+    bindHost = "127.0.0.1",
+  ): ReturnType<typeof Bun.serve> =>
+    Bun.serve({
+      hostname: bindHost,
+      port: 0,
+      fetch: (request, requestServer) =>
+        handleHostFetch({
+          allowedHostnames: allowedHostnamesFor({
+            bindHost,
+            externalUrl: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+          }),
+          allowedOrigins: allowedOriginsForFrontendOrigin(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
+          appSessionCookieName: APP_SESSION_COOKIE_NAME,
+          appToken: APP_TOKEN,
+          controlToken: CONTROL_TOKEN,
+          eventBus: new BufferedHostEventBus({ report: () => {} }),
+          hostCommandRouter: createTestNodeHostCommandRouter(),
+          taskAssetReadService: missingTaskAssetReadService,
+          localAttachments: createLocalAttachmentAdapter(),
+          logger: testLogger,
+          basePath,
+          onBackgroundFailure: () => {},
+          request,
+          server: requestServer,
+          sessionCookieSecure: false,
+          shutdownStarted: false,
+          beginShutdown: () => {},
+          stop: () => Promise.resolve(),
+        }),
+      websocket: terminalWebSocketHandler,
+    });
+
   test("uses one session cookie name per development instance", () => {
     expect(
       resolveAppSessionCookieName("development", {
@@ -188,15 +313,348 @@ describe("TypeScript web host backend", () => {
     expect(session.headers.get("set-cookie")).toContain(
       `${DEVELOPMENT_APP_SESSION_COOKIE_NAME}=${APP_TOKEN}`,
     );
+    expect(session.headers.get("set-cookie")).toContain("HttpOnly; SameSite=Strict; Path=/");
+    expect(session.headers.get("set-cookie")).not.toContain("Secure");
+  });
+
+  test("marks the session cookie Secure when the frontend origin uses https", async () => {
+    const session = await handleTestRequest(
+      new Request("http://127.0.0.1/session", {
+        method: "POST",
+        headers: { "x-openducktor-app-token": APP_TOKEN },
+      }),
+      {
+        appSessionCookieName: DEVELOPMENT_APP_SESSION_COOKIE_NAME,
+        sessionCookieSecure: true,
+      },
+    );
+    expect(session.status).toBe(200);
+    expect(session.headers.get("set-cookie")).toContain(
+      `${DEVELOPMENT_APP_SESSION_COOKIE_NAME}=${APP_TOKEN}; HttpOnly; SameSite=Strict; Path=/; Secure`,
+    );
+  });
+
+  test.each(["/api", "/api/"])(
+    "routes normalized launcher base path %s with POST bodies and WebSocket upgrades",
+    async (rawBasePath) => {
+      const basePath = await Effect.runPromise(
+        validateLauncherNetworkOptionsEffect({
+          basePath: rawBasePath,
+          bindHost: "127.0.0.1",
+          externalUrl: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+        }),
+      );
+      expect(basePath).toBe("/api");
+      const server = createTerminalUpgradeTestServer(basePath);
+
+      try {
+        const port = server.port;
+        if (port === undefined) {
+          throw new Error("Expected the test server to expose a port.");
+        }
+        const externalUrl = `http://127.0.0.1:${port}/`;
+        const { browserUrl } = buildBrowserBackendUrl(
+          basePath,
+          externalUrl,
+          externalUrl,
+          "127.0.0.1",
+          port,
+        );
+        expect(new URL(`${browserUrl}/session`).pathname).toBe("/api/session");
+        const session = await Bun.fetch(`${browserUrl}/session`, {
+          method: "POST",
+          headers: { "x-openducktor-app-token": APP_TOKEN },
+        });
+        expect(session.status).toBe(200);
+        await session.text();
+        const command = await Bun.fetch(`http://127.0.0.1:${port}/api/invoke/runtime_ensure`, {
+          method: "POST",
+          headers: { "x-openducktor-app-token": APP_TOKEN, "content-type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        expect(command.status).toBe(200);
+        await command.json();
+        const responseHead = await performWebSocketUpgrade(
+          port,
+          `${TERMINAL_UPGRADE_BASE_PATH}/terminal`,
+          TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+        );
+        expect(responseHead).toContain("101 Switching Protocols");
+        expect(responseHead).toContain(`Sec-WebSocket-Protocol: ${TERMINAL_PROTOCOL_SUBPROTOCOL}`);
+      } finally {
+        server.stop(true);
+      }
+    },
+  );
+
+  test("probes a normalized IPv6 wildcard bind through the allowed loopback Host", async () => {
+    const bindHost = await Effect.runPromise(parseHostEffect("::", "--host", true));
+    const server = createTerminalUpgradeTestServer("/api", bindHost);
+    try {
+      const port = server.port;
+      if (port === undefined) throw new Error("Expected the test server to expose a port.");
+      // Connect through ::1 on every OS, with the Host that each readiness URL sends.
+      for (const [host, status] of [
+        ["[::]", 200],
+        ["[::1]", 200],
+        ["unknown.example", 403],
+      ] as const) {
+        const response = await Bun.fetch(`http://[::1]:${port}/health`, {
+          headers: { host: `${host}:${port}` },
+        });
+        expect(response.status).toBe(status);
+        await response.text();
+      }
+      await waitForBackend(buildBackendUrl(port, readinessHostForBind(bindHost)), APP_TOKEN, 1000, {
+        exited: new Promise<number>(() => {}),
+      });
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("rejects terminal upgrades when the Host header is not allowed", async () => {
+    const server = createTerminalUpgradeTestServer();
+
+    try {
+      const port = server.port;
+      if (port === undefined) {
+        throw new Error("Expected the test server to expose a port.");
+      }
+      const responseHead = await performWebSocketUpgrade(
+        port,
+        `${TERMINAL_UPGRADE_BASE_PATH}/terminal`,
+        TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+        "evil.example",
+      );
+      expect(responseHead).toContain("403");
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("probes a mapped wildcard with an isolated proxy and loopback bypass", async () => {
+    const bindHost = await Effect.runPromise(parseHostEffect("[::ffff:0.0.0.0]", "--host"));
+    const server = createTerminalUpgradeTestServer("/api", bindHost);
+    let proxyRequests = 0;
+    const proxy = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => {
+        proxyRequests += 1;
+        return new Response("test proxy", { status: 503 });
+      },
+    });
+    const proxyUrl = `http://127.0.0.1:${proxy.port}`;
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "--eval",
+        `import { buildBackendUrl, readinessHostForBind, waitForBackend } from ${JSON.stringify(new URL("./launcher-support.ts", import.meta.url).href)};
+         const control = await fetch("http://proxy-check.invalid/", { signal: AbortSignal.timeout(2000) });
+         if (control.status !== 503 || await control.text() !== "test proxy") throw new Error("Proxy control failed");
+         const host = readinessHostForBind(${JSON.stringify(bindHost)});
+         if (host !== "127.0.0.1") throw new Error("Expected IPv4 loopback readiness host");
+         await waitForBackend(buildBackendUrl(${server.port}, host), ${JSON.stringify(APP_TOKEN)}, 2000, { exited: new Promise(() => {}) });`,
+      ],
+      env: {
+        ...process.env,
+        HTTP_PROXY: proxyUrl,
+        http_proxy: proxyUrl,
+        HTTPS_PROXY: proxyUrl,
+        https_proxy: proxyUrl,
+        ALL_PROXY: proxyUrl,
+        all_proxy: proxyUrl,
+        NO_PROXY: "127.0.0.1,localhost,::1",
+        no_proxy: "127.0.0.1,localhost,::1",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    try {
+      const [exitCode, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+      ]);
+      expect(exitCode, stderr).toBe(0);
+      expect(proxyRequests).toBe(1);
+    } finally {
+      child.kill();
+      await child.exited;
+      server.stop(true);
+      proxy.stop(true);
+    }
+  }, 10_000);
+
+  test.each(["runner.localhost", "nested.runner.localhost", "127.0.0.2", "[::ffff:7f00:1]"])(
+    "rejects unconfigured Host and Origin %s",
+    async (hostname) => {
+      const server = createTerminalUpgradeTestServer();
+      try {
+        for (const headers of [
+          { host: `${hostname}:${server.port}` },
+          { origin: `http://${hostname}:1420` },
+        ]) {
+          const response = await Bun.fetch(`http://127.0.0.1:${server.port}/session`, {
+            method: "POST",
+            headers: { ...headers, "x-openducktor-app-token": APP_TOKEN },
+          });
+          expect(response.status).toBe(403);
+          await response.text();
+        }
+      } finally {
+        server.stop(true);
+      }
+    },
+  );
+
+  test("routes a base-prefixed POST body to the host command router", async () => {
+    const BASE_PATH = "/api";
+    const eventBus = new BufferedHostEventBus({ report: () => {} });
+    let shutdownStarted = false;
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, requestServer) =>
+        handleHostFetch({
+          allowedHostnames: allowedHostnamesFor({
+            bindHost: "127.0.0.1",
+            externalUrl: undefined,
+          }),
+          allowedOrigins: new Set(),
+          appSessionCookieName: APP_SESSION_COOKIE_NAME,
+          appToken: APP_TOKEN,
+          controlToken: CONTROL_TOKEN,
+          eventBus,
+          hostCommandRouter: createTestNodeHostCommandRouter(),
+          taskAssetReadService: missingTaskAssetReadService,
+          localAttachments: createLocalAttachmentAdapter(),
+          logger: testLogger,
+          basePath: BASE_PATH,
+          onBackgroundFailure: () => {},
+          request,
+          server: requestServer,
+          sessionCookieSecure: false,
+          shutdownStarted,
+          beginShutdown: () => {
+            shutdownStarted = true;
+          },
+          stop: () => Promise.resolve(),
+        }),
+      websocket: terminalWebSocketHandler,
+    });
+
+    try {
+      const port = server.port;
+      if (port === undefined) {
+        throw new Error("Expected the test server to expose a port.");
+      }
+      const response = await Bun.fetch(`http://127.0.0.1:${port}/api/invoke/runtime_ensure`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: JSON.stringify({}),
+      });
+      expect(response.status).toBe(200);
+      await response.json();
+    } finally {
+      server.stop(true);
+    }
   });
 
   test("rejects invalid browser frontend origins before opening a host port", () => {
-    expect(() => validateWebFrontendOrigin("https://127.0.0.1:1420")).toThrow(
-      "browser frontend origin must use http",
+    expect(() => validateWebFrontendOrigin("ftp://127.0.0.1:1420")).toThrow(
+      "browser frontend origin must use http or https",
     );
-    expect(() => validateWebFrontendOrigin("http://example.com:1420")).toThrow(
-      "browser frontend origin must target 127.0.0.1, localhost, or [::1]",
+    expect(() => validateWebFrontendOrigin("http://user:pass@127.0.0.1:1420")).toThrow(
+      "browser frontend origin must not include credentials",
     );
+  });
+
+  test("accepts remote and https browser frontend origins for network deployments", () => {
+    expect(validateWebFrontendOrigin("http://100.64.0.1:1420")).toBe("http://100.64.0.1:1420");
+    expect(validateWebFrontendOrigin("https://machine.ts.net:443")).toBe("https://machine.ts.net");
+    expect(allowedOriginsForFrontendOrigin("http://100.64.0.1:1420")).toEqual(
+      new Set([
+        "http://100.64.0.1:1420",
+        "http://127.0.0.1:1420",
+        "http://localhost:1420",
+        "http://[::1]:1420",
+      ]),
+    );
+    expect(allowedOriginsForFrontendOrigin("https://machine.ts.net")).toEqual(
+      new Set([
+        "https://machine.ts.net",
+        "http://127.0.0.1:443",
+        "http://localhost:443",
+        "http://[::1]:443",
+      ]),
+    );
+    expect(allowedOriginsForFrontendOrigin("https://machine.ts.net", 1420)).toEqual(
+      new Set([
+        "https://machine.ts.net",
+        "http://127.0.0.1:1420",
+        "http://localhost:1420",
+        "http://[::1]:1420",
+      ]),
+    );
+    expect(allowedOriginsForFrontendOrigin("http://100.64.0.1:80")).toEqual(
+      new Set(["http://100.64.0.1", "http://127.0.0.1", "http://localhost", "http://[::1]"]),
+    );
+  });
+
+  test.each([
+    "https://machine.ts.net.",
+    "https://machine.ts.net.:443",
+    "https://machine.ts.net.:8443",
+    "http://machine.ts.net.:80",
+  ])("allows configured and canonical CORS origins for %s", async (frontendOrigin) => {
+    const configured = new URL(frontendOrigin);
+    const canonical = new URL(frontendOrigin);
+    canonical.hostname = "machine.ts.net";
+    const allowedOrigins = allowedOriginsForFrontendOrigin(frontendOrigin, 1420);
+    expect(allowedOrigins).toEqual(
+      new Set([
+        configured.origin,
+        canonical.origin,
+        "http://127.0.0.1:1420",
+        "http://localhost:1420",
+        "http://[::1]:1420",
+      ]),
+    );
+    for (const origin of [
+      configured.origin,
+      canonical.origin,
+      "https://unknown.example",
+      "https://sub.machine.ts.net",
+    ]) {
+      const response = await Effect.runPromise(
+        handleTypescriptHostBackendRequest({
+          allowedOrigins,
+          appSessionCookieName: APP_SESSION_COOKIE_NAME,
+          appToken: APP_TOKEN,
+          controlToken: CONTROL_TOKEN,
+          eventBus: new BufferedHostEventBus({ report: () => {} }),
+          hostCommandRouter: createTestHostCommandRouter(),
+          taskAssetReadService: missingTaskAssetReadService,
+          localAttachments: createLocalAttachmentAdapter(),
+          logger: testLogger,
+          request: new Request("http://127.0.0.1/session", {
+            method: "OPTIONS",
+            headers: { origin, "access-control-request-method": "POST" },
+          }),
+          sessionCookieSecure: configured.protocol === "https:",
+          shutdownStarted: false,
+          beginShutdown: () => {},
+          stop: async () => {},
+        }),
+      );
+      const allowed = origin === configured.origin || origin === canonical.origin;
+      expect(response.status).toBe(allowed ? 204 : 403);
+      expect(response.headers.get("access-control-allow-origin")).toBe(allowed ? origin : null);
+    }
   });
 
   test("preserves structured host command failure kind in invoke error responses", async () => {
@@ -481,7 +939,10 @@ describe("TypeScript web host backend", () => {
     const create = await handleTestRequest(
       new Request("http://127.0.0.1/task-events/subscriptions", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-openducktor-app-token": APP_TOKEN },
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
         body: JSON.stringify({ cursor: null }),
       }),
       { taskEventLeaseManager },
@@ -520,7 +981,9 @@ describe("TypeScript web host backend", () => {
     const reconnect = await handleTestRequest(
       new TestServerRequest(
         `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
-        { headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]) },
+        {
+          headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
+        },
       ),
       { taskEventLeaseManager },
     );
@@ -554,7 +1017,9 @@ describe("TypeScript web host backend", () => {
     const expired = await handleTestRequest(
       new TestServerRequest(
         `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=${created.streamToken}`,
-        { headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]) },
+        {
+          headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
+        },
       ),
       { taskEventLeaseManager },
     );
@@ -564,7 +1029,9 @@ describe("TypeScript web host backend", () => {
     const tampered = await handleTestRequest(
       new TestServerRequest(
         `http://127.0.0.1/task-events/subscriptions/${created.subscriptionId}/stream?token=tampered`,
-        { headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]) },
+        {
+          headers: new Headers([["cookie", `openducktor_web_session=${APP_TOKEN}`]]),
+        },
       ),
       { taskEventLeaseManager },
     );
@@ -650,7 +1117,10 @@ describe("TypeScript web host backend", () => {
     unsubscribeDuringDelivery = unsubscribeReceived;
 
     expect(() =>
-      eventBus.publish({ channel: "openducktor://run-event", payload: { type: "run" } }),
+      eventBus.publish({
+        channel: "openducktor://run-event",
+        payload: { type: "run" },
+      }),
     ).not.toThrow();
     expect(received).toHaveBeenCalledWith({
       channel: "openducktor://run-event",
@@ -915,7 +1385,9 @@ describe("TypeScript web host backend", () => {
     };
     const url = `http://127.0.0.1/task-assets/${context.workspaceId}/${context.taskId}/${context.scope}/${context.assetId}`;
 
-    const unauthorized = await handleTestRequest(new Request(url), { taskAssetReadService });
+    const unauthorized = await handleTestRequest(new Request(url), {
+      taskAssetReadService,
+    });
     expect(unauthorized.status).toBe(401);
     expect(readInput).toBeUndefined();
 
@@ -1091,6 +1563,7 @@ describe("TypeScript web host backend", () => {
             logger: testLogger,
             request,
             requestTimeouts: requestServer,
+            sessionCookieSecure: false,
             shutdownStarted,
             beginShutdown: () => {
               shutdownStarted = true;
@@ -1116,7 +1589,10 @@ describe("TypeScript web host backend", () => {
 
       const shutdown = stop();
       await disposeStarted.promise;
-      eventBus.publish({ channel: "openducktor://run-event", payload: { type: "run" } });
+      eventBus.publish({
+        channel: "openducktor://run-event",
+        payload: { type: "run" },
+      });
       expect(new TextDecoder().decode((await reader.read()).value)).toContain('"type":"run"');
 
       disposeReleased.resolve();
@@ -1140,6 +1616,55 @@ describe("TypeScript web host backend", () => {
         // Bun rejects an SSE reader after server.stop(true) force-closes its socket.
       }
     }
+  });
+
+  test("applies the SSE no-timeout override to the original request under a base path", async () => {
+    const timeoutRequests: Request[] = [];
+    // SAFETY: the SSE route calls only server.timeout on this fake; the request path is not a terminal upgrade, so server.upgrade is never invoked.
+    const fakeServer = {
+      timeout(request: Request, _seconds: number) {
+        timeoutRequests.push(request);
+      },
+    } as Parameters<typeof handleHostFetch>[0]["server"];
+    const originalRequest = new Request(
+      `http://127.0.0.1:1420${TERMINAL_UPGRADE_BASE_PATH}/events`,
+      {
+        headers: {
+          host: "127.0.0.1:1420",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+      },
+    );
+    const response = await handleHostFetch({
+      allowedHostnames: allowedHostnamesFor({
+        bindHost: "127.0.0.1",
+        externalUrl: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
+      }),
+      allowedOrigins: allowedOriginsForFrontendOrigin(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
+      appSessionCookieName: APP_SESSION_COOKIE_NAME,
+      appToken: APP_TOKEN,
+      controlToken: CONTROL_TOKEN,
+      eventBus: new BufferedHostEventBus({ report: () => {} }),
+      hostCommandRouter: createTestNodeHostCommandRouter(),
+      taskAssetReadService: missingTaskAssetReadService,
+      localAttachments: createLocalAttachmentAdapter(),
+      logger: testLogger,
+      basePath: TERMINAL_UPGRADE_BASE_PATH,
+      onBackgroundFailure: () => {},
+      request: originalRequest,
+      server: fakeServer,
+      sessionCookieSecure: false,
+      shutdownStarted: false,
+      beginShutdown: () => {},
+      stop: () => Promise.resolve(),
+    });
+    expect(response).toBeInstanceOf(Response);
+    if (!(response instanceof Response)) {
+      throw new Error("Expected an SSE response.");
+    }
+    expect(timeoutRequests).toHaveLength(1);
+    expect(timeoutRequests[0]).toBe(originalRequest);
+    await response.body?.cancel();
   });
 
   test("keeps the backend server alive until host disposal finishes", async () => {
