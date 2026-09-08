@@ -707,13 +707,13 @@ export function AgentChatComposer({
     onComposerEditorInput();
     scheduleComposerFocus();
     try {
-      const didSend = await latestOnSendRef.current(submittedDraft);
-      if (didSend !== true && didSend !== false) {
-        restoreSubmittedDraft(submittedSnapshot, didSend);
-        toast.error("Unable to send message", { description: didSend.error.message });
+      const result = await latestOnSendRef.current(submittedDraft);
+      if (result !== true && result !== false) {
+        restoreSubmittedDraft(submittedSnapshot, result);
+        toast.error("Unable to send message", { description: result.error.message });
         return;
       }
-      if (!didSend) {
+      if (!result) {
         restoreSubmittedDraft(submittedSnapshot);
         if (latestDraftScopeKeyRef.current === submittedSnapshot.key) {
           onComposerEditorInput();

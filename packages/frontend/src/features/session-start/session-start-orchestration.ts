@@ -32,10 +32,6 @@ export type SessionStartLaunchRequest = SessionStartFlowRequest;
 
 export type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;
 
-type SessionStartModalRunRequest = SessionStartModalOpenRequest & {
-  selectedModel?: AgentModelSelection | null;
-};
-
 type SessionStartContextSession = {
   externalSessionId: string;
   runtimeKind: AgentSessionSummary["runtimeKind"];
@@ -186,7 +182,7 @@ export const buildSessionStartModalRequest = ({
   taskSessions,
   preferredSourceSession,
   selectedTask,
-}: BuildSessionStartModalRequestArgs): SessionStartModalRunRequest => {
+}: BuildSessionStartModalRequestArgs): SessionStartModalOpenRequest => {
   const existingSessionOptions = resolveExistingSessionOptions(request, taskSessions);
   const initialSourceSession = resolveInitialSourceSession({
     request,
@@ -196,7 +192,7 @@ export const buildSessionStartModalRequest = ({
   const initialTargetBranch = request.initialTargetBranch ?? selectedTask?.targetBranch ?? null;
   const initialTargetBranchError =
     request.initialTargetBranchError ?? selectedTask?.targetBranchError ?? null;
-  const modalRequest: SessionStartModalRunRequest = {
+  const modalRequest: SessionStartModalOpenRequest = {
     source,
     taskId: request.taskId,
     role: request.role,

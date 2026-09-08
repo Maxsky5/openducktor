@@ -1,6 +1,4 @@
-import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
-export { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
-import type { GitBranch, GitTargetBranch, RuntimeKind } from "@openducktor/contracts";
+import type { GitBranch, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -20,15 +18,12 @@ import type {
   NewSessionStartDecision,
   SessionStartExistingSessionOption,
 } from "./session-start-types";
+import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
 import { useSessionStartKickoffPrompt } from "./use-session-start-kickoff-prompt";
 
 export type SessionStartModalDecision = Exclude<NewSessionStartDecision, null>;
-
-type SessionStartModalRunRequest = SessionStartModalOpenRequest & {
-  selectedModel?: AgentModelSelection | null;
-};
 
 type SessionStartModalConfirmPayload = Exclude<
   Parameters<SessionStartModalModel["onConfirm"]>[0],
@@ -37,126 +32,27 @@ type SessionStartModalConfirmPayload = Exclude<
 
 type SessionStartDecisionInput = Omit<SessionStartModalConfirmPayload, "runInBackground">;
 
-type SessionStartTargetBranchFields = {
-  kickoffPrompt?: string;
-  targetBranch?: GitTargetBranch;
-};
+type LaunchFields = Pick<SessionStartModalDecision, "targetBranch" | "kickoffPrompt">;
 
 type SessionStartDecisionRequestContext = Pick<
-  SessionStartModalRunRequest,
+  SessionStartModalOpenRequest,
   "role" | "launchActionId" | "taskId"
 >;
 
 type SessionStartModalRunResult = {
   decision: SessionStartModalDecision;
   runInBackground: boolean;
-  request: SessionStartModalRunRequest;
+  request: SessionStartModalOpenRequest;
 };
 
 type PendingModalRun = {
   scopeKey: string | null;
-  request: SessionStartModalRunRequest;
+  request: SessionStartModalOpenRequest;
   execute: (result: SessionStartModalRunResult) => Promise<() => void>;
   cancel: () => void;
 };
 
-const requireSelectedModel = (
-  selection: AgentModelSelection | null,
-  request: SessionStartDecisionRequestContext,
-): AgentModelSelection => {
-  if (selection) {
-    return selection;
-  }
-
-  throw new Error(
-    `Starting a ${request.role} ${request.launchActionId} session for ${request.taskId} requires an explicit model selection.`,
-  );
-};
-
-const requireSourceSession = (
-  sourceSessionOptionValue: string | null,
-  existingSessionOptions: SessionStartExistingSessionOption[],
-  request: SessionStartDecisionRequestContext,
-): AgentSessionIdentity => {
-  const sourceSessionOption = existingSessionOptions.find(
-    (option) => option.value === sourceSessionOptionValue,
-  );
-  if (sourceSessionOption) {
-    return sourceSessionOption.sourceSession;
-  }
-
-  throw new Error(
-    `Starting a ${request.role} ${request.launchActionId} session for ${request.taskId} requires a source session.`,
-  );
-};
-
-export const buildSessionStartModalDecision = ({
-  input,
-  existingSessionOptions,
-  requestContext,
-  selectedModel,
-}: {
-  input: SessionStartDecisionInput;
-  existingSessionOptions: SessionStartExistingSessionOption[];
-  requestContext: SessionStartDecisionRequestContext;
-  selectedModel: AgentModelSelection | null;
-}): SessionStartModalDecision => {
-  const buildTargetBranchFields = (): SessionStartTargetBranchFields => {
-    const fields: SessionStartTargetBranchFields = {};
-    if (input.targetBranch) fields.targetBranch = targetBranchFromSelection(input.targetBranch);
-    if (input.kickoffPrompt !== undefined) fields.kickoffPrompt = input.kickoffPrompt;
-    return fields;
-  };
-
-  if (input.startMode === "reuse") {
-    const sourceSession = requireSourceSession(
-      input.sourceSessionOptionValue,
-      existingSessionOptions,
-      requestContext,
-    );
-
-    return {
-      startMode: "reuse",
-      sourceSession,
-      ...buildTargetBranchFields(),
-    };
-  }
-
-  const resolvedSelectedModel = requireSelectedModel(selectedModel, requestContext);
-
-  if (input.startMode === "fork") {
-    const sourceSession = requireSourceSession(
-      input.sourceSessionOptionValue,
-      existingSessionOptions,
-      requestContext,
-    );
-
-    return {
-      startMode: "fork",
-      selectedModel: resolvedSelectedModel,
-      sourceSession,
-      ...buildTargetBranchFields(),
-    };
-  }
-
-  return {
-    startMode: "fresh",
-    selectedModel: resolvedSelectedModel,
-    ...buildTargetBranchFields(),
-  };
-};
-
-export const requireSourceSessionRuntimeKind = (
-  sourceSession: SessionStartExistingSessionOption | null | undefined,
-): RuntimeKind => {
-  const runtimeKind = sourceSession?.sourceSession.runtimeKind ?? null;
-  if (runtimeKind) {
-    return runtimeKind;
-  }
-
-  throw new Error("Reusable session is missing a runtime kind.");
-};
-
+/** Keeps a start locked to its scope until execution ends, even if another scope opens a modal. */
 export function useSessionStartModalRunner({
   branches = [],
   favoriteState,
@@ -266,7 +162,7 @@ export function useSessionStartModalRunner({
 
   const runSessionStartRequest = useCallback(
     <T>(
-      request: SessionStartModalRunRequest,
+      request: SessionStartModalOpenRequest,
       execute: (result: SessionStartModalRunResult) => Promise<T>,
     ): Promise<T | undefined> => {
       if (confirmationsRef.current.has(scopeKey)) {
@@ -507,8 +403,105 @@ export function useSessionStartModalRunner({
   } satisfies {
     sessionStartModal: SessionStartModalModel | null;
     runSessionStartRequest: <T>(
-      request: SessionStartModalRunRequest,
+      request: SessionStartModalOpenRequest,
       execute: (result: SessionStartModalRunResult) => Promise<T>,
     ) => Promise<T | undefined>;
   };
 }
+
+export const buildSessionStartModalDecision = ({
+  input,
+  existingSessionOptions,
+  requestContext,
+  selectedModel,
+}: {
+  input: SessionStartDecisionInput;
+  existingSessionOptions: SessionStartExistingSessionOption[];
+  requestContext: SessionStartDecisionRequestContext;
+  selectedModel: AgentModelSelection | null;
+}): SessionStartModalDecision => {
+  if (input.startMode === "reuse") {
+    const sourceSession = requireSourceSession(
+      input.sourceSessionOptionValue,
+      existingSessionOptions,
+      requestContext,
+    );
+
+    return {
+      startMode: "reuse",
+      sourceSession,
+      ...buildLaunchFields(input),
+    };
+  }
+
+  const resolvedSelectedModel = requireSelectedModel(selectedModel, requestContext);
+
+  if (input.startMode === "fork") {
+    const sourceSession = requireSourceSession(
+      input.sourceSessionOptionValue,
+      existingSessionOptions,
+      requestContext,
+    );
+
+    return {
+      startMode: "fork",
+      selectedModel: resolvedSelectedModel,
+      sourceSession,
+      ...buildLaunchFields(input),
+    };
+  }
+
+  return {
+    startMode: "fresh",
+    selectedModel: resolvedSelectedModel,
+    ...buildLaunchFields(input),
+  };
+};
+
+export const requireSourceSessionRuntimeKind = (
+  sourceSession: SessionStartExistingSessionOption | null | undefined,
+): RuntimeKind => {
+  const runtimeKind = sourceSession?.sourceSession.runtimeKind ?? null;
+  if (runtimeKind) {
+    return runtimeKind;
+  }
+
+  throw new Error("Reusable session is missing a runtime kind.");
+};
+
+const buildLaunchFields = (input: SessionStartDecisionInput): LaunchFields => {
+  const fields: LaunchFields = {};
+  if (input.targetBranch) fields.targetBranch = targetBranchFromSelection(input.targetBranch);
+  if (input.kickoffPrompt !== undefined) fields.kickoffPrompt = input.kickoffPrompt;
+  return fields;
+};
+
+const requireSelectedModel = (
+  selection: AgentModelSelection | null,
+  request: SessionStartDecisionRequestContext,
+): AgentModelSelection => {
+  if (selection) {
+    return selection;
+  }
+
+  throw new Error(
+    `Starting a ${request.role} ${request.launchActionId} session for ${request.taskId} requires an explicit model selection.`,
+  );
+};
+
+const requireSourceSession = (
+  sourceSessionOptionValue: string | null,
+  existingSessionOptions: SessionStartExistingSessionOption[],
+  request: SessionStartDecisionRequestContext,
+): AgentSessionIdentity => {
+  const sourceSessionOption = existingSessionOptions.find(
+    (option) => option.value === sourceSessionOptionValue,
+  );
+  if (sourceSessionOption) {
+    return sourceSessionOption.sourceSession;
+  }
+
+  throw new Error(
+    `Starting a ${request.role} ${request.launchActionId} session for ${request.taskId} requires a source session.`,
+  );
+};

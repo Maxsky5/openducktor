@@ -15,6 +15,7 @@ export function useSessionStartKickoffPrompt({
   selectedTargetBranch,
 }: PromptRequest) {
   const [retryVersion, setRetryVersion] = useState(0);
+  // Returning to an earlier branch still needs a new read; equal inputs cannot revive its old result.
   const request = useMemo(
     () => ({ requestId, resolveKickoffPrompt, selectedTargetBranch, retryVersion }),
     [requestId, resolveKickoffPrompt, selectedTargetBranch, retryVersion],

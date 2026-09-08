@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 
-/** A callback captured by an operation becomes stale after any context switch. */
+/** An operation stays canceled after leaving its context, even if that context is selected again. */
 export function useSessionStartContext(key: string | null): () => boolean {
   const context = useMemo(() => ({ key }), [key]);
   const current = useRef(context);

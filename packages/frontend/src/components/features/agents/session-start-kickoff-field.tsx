@@ -3,39 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
-export function useSessionStartKickoffDraft({
-  requestId,
-  open,
-  prompt,
-}: {
-  requestId: string | undefined;
-  open: boolean;
-  prompt: string | undefined;
-}) {
-  const [draft, setDraft] = useState<{
-    requestId: string | undefined;
-    open: boolean;
-    enabled: boolean;
-    text: string | null;
-  }>({ requestId, open, enabled: false, text: null });
-  if (draft.requestId !== requestId || draft.open !== open) {
-    setDraft({ requestId, open, enabled: false, text: null });
-  }
-  const hasPrompt = Boolean(prompt?.trim());
-  let value: string | undefined;
-  if (hasPrompt) value = draft.enabled ? (draft.text ?? "") : prompt;
-  return {
-    hasPrompt,
-    enabled: draft.enabled,
-    text: draft.text ?? "",
-    invalid: hasPrompt && draft.enabled && !draft.text?.trim(),
-    value,
-    setEnabled: (enabled: boolean) =>
-      setDraft((current) => ({ ...current, enabled, text: current.text ?? prompt ?? "" })),
-    setText: (text: string) => setDraft((current) => ({ ...current, text })),
-  };
-}
-
 export function SessionStartKickoffField({
   draft,
   disabled,
@@ -102,4 +69,37 @@ export function SessionStartKickoffField({
       ) : null}
     </>
   );
+}
+
+export function useSessionStartKickoffDraft({
+  requestId,
+  open,
+  prompt,
+}: {
+  requestId: string | undefined;
+  open: boolean;
+  prompt: string | undefined;
+}) {
+  const [draft, setDraft] = useState<{
+    requestId: string | undefined;
+    open: boolean;
+    enabled: boolean;
+    text: string | null;
+  }>({ requestId, open, enabled: false, text: null });
+  if (draft.requestId !== requestId || draft.open !== open) {
+    setDraft({ requestId, open, enabled: false, text: null });
+  }
+  const hasPrompt = Boolean(prompt?.trim());
+  let value: string | undefined;
+  if (hasPrompt) value = draft.enabled ? (draft.text ?? "") : prompt;
+  return {
+    hasPrompt,
+    enabled: draft.enabled,
+    text: draft.text ?? "",
+    invalid: hasPrompt && draft.enabled && !draft.text?.trim(),
+    value,
+    setEnabled: (enabled: boolean) =>
+      setDraft((current) => ({ ...current, enabled, text: current.text ?? prompt ?? "" })),
+    setText: (text: string) => setDraft((current) => ({ ...current, text })),
+  };
 }

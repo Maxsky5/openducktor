@@ -37,21 +37,14 @@ type UseAgentChatComposerDraftStateResult = {
   ) => void;
 };
 
-const createInitialDraftState = ({
-  key,
-  persistence,
-}: AgentChatDraftScope): ComposerDraftState => ({
-  key,
-  persistence,
-  draft: persistence?.hydrate() ?? createEmptyComposerDraft(),
-});
-
+/** Keeps failed sends for their own draft scope without replacing newer edits. */
 export function useAgentChatComposerDraftState({
   scope,
 }: UseAgentChatComposerDraftStateArgs): UseAgentChatComposerDraftStateResult {
   const [state, setState] = useState<ComposerDraftState>(() => createInitialDraftState(scope));
   const latestStateRef = useRef(state);
   const pendingRecoveryRef = useRef(new Map<string, AgentChatComposerDraft>());
+  // Count edits across scopes so a late failure cannot restore text the user has since cleared.
   const editSequenceRef = useRef(0);
   const scopeEditsRef = useRef(new Map<string, number>());
   const nextKey = scope.key;
@@ -67,8 +60,8 @@ export function useAgentChatComposerDraftState({
     const isSamePersistenceTarget = current.persistence?.targetKey === nextPersistence?.targetKey;
     if (isSameDraft && isSamePersistenceTarget) {
       if (current.persistence !== nextPersistence) {
-        // Equivalent wrappers may be recreated every render. Updating state here would loop;
-        // callbacks and lifecycle handlers read this ref until the next state update catches up.
+        // Callers can pass a new wrapper for the same store on each render.
+        // Update the ref alone to avoid a render loop.
         latestStateRef.current = {
           key: current.key,
           persistence: nextPersistence,
@@ -233,3 +226,12 @@ export function useAgentChatComposerDraftState({
     ],
   );
 }
+
+const createInitialDraftState = ({
+  key,
+  persistence,
+}: AgentChatDraftScope): ComposerDraftState => ({
+  key,
+  persistence,
+  draft: persistence?.hydrate() ?? createEmptyComposerDraft(),
+});

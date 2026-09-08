@@ -71,17 +71,17 @@ export const createAgentStudioReviewCommentComposerAdapter = (
       const submissionId = store.beginSubmittingDrafts(pendingDraftSnapshots);
 
       try {
-        const didSend = await onSend(nextDraft);
+        const result = await onSend(nextDraft);
         if (!submissionId) {
-          return didSend;
+          return result;
         }
 
-        if (didSend === true) {
+        if (result === true) {
           getStore().completeSubmittingDrafts(submissionId);
         } else {
           getStore().restoreSubmittingDrafts(submissionId);
         }
-        return didSend;
+        return result;
       } catch (error) {
         if (submissionId) {
           getStore().restoreSubmittingDrafts(submissionId);

@@ -8,11 +8,11 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import {
-  assertRuntimeSupportsSelectedStartMode,
   buildSessionStartModalDecision,
   requireSourceSessionRuntimeKind,
   useSessionStartModalRunner,
 } from "./use-session-start-modal-runner";
+import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
 
 enableReactActEnvironment();
 
