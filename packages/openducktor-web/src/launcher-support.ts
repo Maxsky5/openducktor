@@ -1,6 +1,8 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
+// Use the package entry point, not Bun's proxy-aware "undici" shim.
+import { Agent, fetch as directFetch } from "undici/index.js";
 import {
   causeToWebBoundaryError,
   combineWebErrors,
@@ -22,7 +24,15 @@ interface LauncherEarlyExitRef {
 }
 
 type ManagedHost = Pick<Bun.Subprocess, "exited"> | TypescriptHostBackend;
-type FetchFunction = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+type ReadinessRequestInit = {
+  method?: string;
+  headers?: Record<string, string>;
+  signal?: AbortSignal;
+};
+type FetchFunction = (
+  input: string,
+  init?: ReadinessRequestInit,
+) => Promise<Pick<Response, "ok" | "status">>;
 type SleepFunction = (durationMs: number) => Promise<void>;
 type BackendReadinessDependencies = {
   fetch: FetchFunction;
@@ -56,6 +66,17 @@ const scheduleInterval = (callback: () => void, durationMs: number): (() => void
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SHUTDOWN_KEEP_ALIVE_INTERVAL_MS = 1_000;
+
+const fetchBackendDirectly: FetchFunction = async (input, init) => {
+  const dispatcher = new Agent();
+  try {
+    const response = await directFetch(input, { ...init, dispatcher, redirect: "error" });
+    await response.body?.cancel();
+    return { ok: response.ok, status: response.status };
+  } finally {
+    await dispatcher.destroy();
+  }
+};
 
 export const buildFrontendUrl = (port: number, host: string = LOCALHOST): string =>
   `http://${formatHost(host)}:${port}`;
@@ -169,7 +190,7 @@ const verifyBackendReadinessEffect = (
 
     const sessionResponse = yield* Effect.tryPromise({
       try: () => {
-        const init: RequestInit = {
+        const init: ReadinessRequestInit = {
           method: "POST",
           headers: {
             [APP_TOKEN_HEADER]: appToken,
@@ -247,7 +268,7 @@ export const waitForBackendEffect = (
   appToken: string,
   timeoutMs: number,
   hostProcess: ManagedHost,
-  dependencies: BackendReadinessDependencies = { fetch, sleep: Bun.sleep },
+  dependencies: BackendReadinessDependencies = { fetch: fetchBackendDirectly, sleep: Bun.sleep },
 ): Effect.Effect<void, WebDependencyError | WebOperationError> =>
   Effect.gen(function* () {
     const startedAt = Date.now();
@@ -344,7 +365,7 @@ export const waitForBackend = (
   appToken: string,
   timeoutMs: number,
   hostProcess: ManagedHost,
-  dependencies: BackendReadinessDependencies = { fetch, sleep: Bun.sleep },
+  dependencies: BackendReadinessDependencies = { fetch: fetchBackendDirectly, sleep: Bun.sleep },
 ): Promise<void> =>
   runWebBoundary(waitForBackendEffect(backendUrl, appToken, timeoutMs, hostProcess, dependencies));
 
