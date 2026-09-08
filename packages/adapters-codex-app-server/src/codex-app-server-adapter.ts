@@ -62,6 +62,7 @@ import { CodexContextUsageLoader } from "./codex-context-usage-loader";
 import { fileDiffsFromUnifiedDiff } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import { CodexPendingInputState } from "./codex-pending-input-state";
+import { resolveCodexRetainedSessionOwner } from "./codex-retained-session-owner";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
@@ -636,33 +637,18 @@ export class CodexAppServerAdapter
   ): AgentSessionLiveSnapshot[] {
     const snapshots: AgentSessionLiveSnapshot[] = [];
     for (const threadId of changedSessionIds) {
-      const session = this.localSessions.get(threadId);
-      if (session) {
-        if (session.runtimeId === runtimeId) {
-          snapshots.push(this.toLiveSessionSnapshot(session));
-        }
-        continue;
-      }
-      const route = this.subagents.routeForChild(threadId, runtimeId);
-      if (!route) {
-        continue;
-      }
-      const visited = new Set([threadId]);
-      let ancestorId = route.parentExternalSessionId;
-      while (!visited.has(ancestorId)) {
-        visited.add(ancestorId);
-        const ancestor = this.localSessions.get(ancestorId);
-        if (ancestor) {
-          if (ancestor.runtimeId === runtimeId) {
-            snapshots.push(this.toRoutedChildLiveSessionSnapshot(ancestor, route));
-          }
-          break;
-        }
-        const ancestorRoute = this.subagents.routeForChild(ancestorId, runtimeId);
-        if (!ancestorRoute) {
-          break;
-        }
-        ancestorId = ancestorRoute.parentExternalSessionId;
+      const owner = resolveCodexRetainedSessionOwner({
+        sessions: this.localSessions,
+        subagents: this.subagents,
+        runtimeId,
+        threadId,
+      });
+      if (owner) {
+        snapshots.push(
+          owner.route
+            ? this.toRoutedChildLiveSessionSnapshot(owner.retainedSession, owner.route)
+            : this.toLiveSessionSnapshot(owner.retainedSession),
+        );
       }
     }
     return snapshots;

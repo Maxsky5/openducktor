@@ -33,6 +33,7 @@ import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
+import { resolveCodexRetainedSessionOwner } from "./codex-retained-session-owner";
 import {
   CodexRuntimeEventSubscriptions,
   type CodexRuntimeStreamEvent,
@@ -772,29 +773,21 @@ export class CodexRuntimeSessionEvents {
     targetExternalSessionId: string,
     runtimeId: string,
   ): CodexRuntimeStreamEventSessionOwner | undefined {
-    const visited = new Set<string>();
-    let currentExternalSessionId = targetExternalSessionId;
-    while (!visited.has(currentExternalSessionId)) {
-      visited.add(currentExternalSessionId);
-      const retainedSession = this.deps.sessions.get(currentExternalSessionId);
-      if (retainedSession) {
-        return retainedSession.runtimeId === runtimeId
-          ? {
-              retainedSession,
-              targetSession:
-                currentExternalSessionId === targetExternalSessionId
-                  ? retainedSession
-                  : routedSession(retainedSession, targetExternalSessionId),
-            }
-          : undefined;
-      }
-      const route = this.deps.subagents.routeForChild(currentExternalSessionId, runtimeId);
-      if (!route || (route.runtimeId && route.runtimeId !== runtimeId)) {
-        return undefined;
-      }
-      currentExternalSessionId = route.parentExternalSessionId;
+    const owner = resolveCodexRetainedSessionOwner({
+      sessions: this.deps.sessions,
+      subagents: this.deps.subagents,
+      runtimeId,
+      threadId: targetExternalSessionId,
+    });
+    if (!owner) {
+      return undefined;
     }
-    return undefined;
+    return {
+      retainedSession: owner.retainedSession,
+      targetSession: owner.route
+        ? routedSession(owner.retainedSession, targetExternalSessionId)
+        : owner.retainedSession,
+    };
   }
 
   private emitCrossRuntimeRouteError(
