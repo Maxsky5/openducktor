@@ -97,6 +97,8 @@ Files: `events/session-transcript-events.ts`, `events/session-event-types.ts`, `
 
 Owns transcript event routing, per-session batching, todo event forwarding, active-turn anchors, and duration.
 
+`support/image-generation-messages.ts` owns image message projection. `support/image-generation-settlement.ts` applies image lifecycle outcomes.
+
 Rules:
 
 - Live activity, pending input, context, and removal arrive as live-state messages. Only `agent-session-live-projection.ts` applies them.
@@ -297,9 +299,3 @@ Startup is complete when the task record query and first host snapshot have prod
 - Child sessions own pending requests. Parent rows only link to child IDs.
 - Operations context does not own read-model state or task-session refresh.
 - Build one selected candidate list. Do not split live and durable selection paths.
-
-## Generated image projection
-
-Files: `support/image-generation-messages.ts`, `support/image-generation-settlement.ts`, `support/chat-message-ids.ts`, and `support/history-message-merge.ts`.
-
-These helpers create one chat row per image item and turn, apply image lifecycle events, and merge live messages with history. The transcript passes the displayed session reference to the preview component. See [the runtime guide](runtime-integration-guide.md#generated-images) for lifecycle and access rules, and [the Query cache strategy](tanstack-query-cache-strategy.md#generated-images) for image reads and preview cleanup.

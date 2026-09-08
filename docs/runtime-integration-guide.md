@@ -142,6 +142,7 @@ A prompt cannot mix a slash command and attachments because a slash command uses
 | `optionalSurfaces.supportsDiff` | Runtime provides session or workspace diff |
 | `optionalSurfaces.supportsFileStatus` | Runtime provides file status |
 | `optionalSurfaces.supportsMcpStatus` | Runtime provides MCP connection state |
+| `optionalSurfaces.supportsImageGeneration` | OpenDucktor can display native generated images |
 | `optionalSurfaces.supportsSubagents` | OpenDucktor can observe native subagent work |
 | `optionalSurfaces.supportedSubagentExecutionModes` | Supports `foreground` or `background` subagents |
 
@@ -164,7 +165,7 @@ A prompt cannot mix a slash command and attachments because a slash command uses
 | Policy | Capability keys |
 |---|---|
 | Required | ODT workflow tools, read-only auto-reject, start modes, and prompt parts |
-| Optional | Queued messages, history, approvals, questions, attachments, slash commands, file search, skill and subagent references, profiles, variants, todos, diff, file status, MCP status, and subagents |
+| Optional | Queued messages, history, approvals, questions, attachments, slash commands, file search, skill and subagent references, profiles, variants, todos, diff, file status, MCP status, generated images, and subagents |
 
 Capability classes record why a gate exists.
 
@@ -244,6 +245,7 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 | Feature | Rule |
 |---|---|
 | Todos | Live events and history build the same todo list and tool name. |
+| Generated images | Map native items to `image_generation` in live events and history. Keep generation outcome separate from preview availability. |
 | Subagents | Parent and child keep the description, mode, ID, transcript, pending input, and final state. |
 | Queued messages | One user-message ID keeps queued state live and in history. |
 | Compaction | Map requested, started, completed, and failed states without showing synthetic control messages. |
@@ -257,39 +259,3 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 | Live-session adapters | `packages/host/src/adapters/agent-sessions` |
 | Runtime registry | `packages/host/src/adapters/runtimes/runtime-registry.ts` |
 | Native adapters | `packages/adapters-opencode-sdk/src`, `packages/adapters-codex-app-server/src`, `packages/host/src/adapters/claude` |
-
-## Generated images
-
-`optionalSurfaces.supportsImageGeneration` enables generated image previews. Codex supports this capability; the other built-in runtimes report false. Image input support and workflow role eligibility use separate capabilities.
-
-### Lifecycle
-
-Adapters emit `image_generation` parts with stable item and turn identity. Keep generation status separate from preview availability. A completed image can have an unavailable preview. Preserve native completed and failed outcomes across live events and history loads. When a turn ends, mark any unfinished generation incomplete unless the runtime confirms an interruption.
-
-An output carries an opaque `revision`. Keep it stable across live replay and history for the same reported output, and change it when that output changes. Shared code compares revisions without interpreting them. Keep file paths as optional display metadata; a path does not authorize an image read. Do not put native source representations or usage-limit identifiers in image parts.
-
-Capture the current image parts before a history read. Fresh history can replace an unchanged terminal item and its output metadata. Preserve a terminal result that changed during the read. Without a read-start snapshot, keep the current terminal result. An unknown native image status must not hide a confirmed turn interruption or failure. Native image completion and failure retain priority over turn outcomes.
-
-| Transcript event | Rule |
-|---|---|
-| `image_generation_turn_started` | Record the new turn so earlier session ends do not mark its images incomplete. Do not revive an ended turn. |
-| `image_generation_settled` with a turn ID | Apply the outcome only to that turn, even if no image start event arrived. |
-| `image_generation_settled` without a turn ID | Ignore stale or duplicate session cutoffs before changing turn state. Apply a newer cutoff to unfinished images at or before its timestamp, including history with unknown or approximate timestamps. Do not infer a confirmed interruption from a session end. |
-
-Keep this state transient and apply it to history that arrives later. A later runtime failure replaces a provisional `turn_ended` reason. Later idle events cannot replace a runtime failure or a confirmed interruption. Keep adapter image tracking only in adapters that consume live events. Request-only adapters project public history without retaining image lifecycle state; the frontend merges that history with its live state. A history load timestamp does not prove that generation started after a session ended. Use the [shared core lifecycle policy](../packages/core/src/services/agent-image-generation-lifecycle.ts) for these rules. Image events do not change session activity or pending input. Once a runtime supplies image settlement events, generic session events must not override image outcomes.
-
-During cleanup, the host calls an adapter's optional `settleRuntimeTranscript` hook under the lifecycle lock. It publishes the returned events before removing sessions. The hook must not call the lifecycle coordinator. Codex uses it to mark unfinished image outcomes incomplete on runtime release.
-
-### Image reads
-
-`agent_session_read_generated_image` accepts repository, runtime, working directory, session, image item identity, and the expected output revision, with an optional turn ID. The adapter verifies that revision against the output in runtime history before returning a source. A changed output produces an image-specific error before the host reads bytes. The response echoes the verified revision, and the frontend rejects a response for another revision. The renderer does not choose a file path or URL. The host resolves the image source through public runtime history without resuming the turn. Codex reads `thread/read` with `includeTurns: false`, then pages through `thread/turns/list` with `itemsView: full`. Concurrent reads can share a pending history request. The adapter removes that request from its cache when the history read finishes.
-
-The Codex adapter selects a runtime-supplied saved path before inline output. It derives the output revision from a SHA-256 digest of the selected source kind and path or inline data. It does not read files to build transcript parts, so the revision does not detect external edits to the same saved path. If that file is missing, unreadable, or invalid, report a preview error. Do not substitute inline bytes. The host accepts PNG output up to 32 MiB and bounds both encoded and decoded sizes. It reads regular files through a read-only handle and rejects files that grow during the read. The frontend decodes the image before showing a preview. Reads use the existing authenticated browser invoke or Electron IPC transport.
-
-The host checks inline size before revision preparation. It runs revision preparation, base64 validation, PNG detection, and payload conversion in workers, with at most two active workers. It rechecks runtime identity after asynchronous revision preparation. Worker failures return typed image errors, and interruption stops the worker. Electron and the web CLI include the worker as a separate bundle beside their main entry.
-
-Keep image bytes out of transcript state and durable session records. The runtime owns image retention; OpenDucktor keeps no image archive. A known generation outcome can remain visible after its preview becomes unavailable. See [the Query cache strategy](tanstack-query-cache-strategy.md#generated-images) for preview lifetime.
-
-### Failure details
-
-Codex 0.153.0 supplies structured details for image usage limits. For other extension failures, it sends the error to the agent through `RespondToModel` and leaves the image result empty. See the [native failure path](https://github.com/openai/codex/blob/rust-v0.153.0/codex-rs/ext/image-generation/src/tool.rs#L190-L209). When the image result has no reason, the card says so and directs the user to ask the agent for an explanation. Do not invent a cause or interpret image bytes as error text.
