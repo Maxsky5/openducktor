@@ -58,18 +58,18 @@ test("missing, directory, relative, and URL paths fail without file bytes", asyn
   }
 });
 
-test("malformed base64 and non-PNG output fail without including payloads", async () => {
-  for (const base64 of [
-    "private-invalid-payload",
-    "=AAA",
-    "A===",
-    "AB==",
-    "AAB=",
-    "AAAA\n",
-    "",
-    Buffer.from("not a PNG").toString("base64"),
-    "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
-  ]) {
+for (const [name, base64] of [
+  ["invalid characters", "private-invalid-payload"],
+  ["leading padding", "=AAA"],
+  ["excess padding", "A==="],
+  ["nonzero bits before double padding", "AB=="],
+  ["nonzero bits before single padding", "AAB="],
+  ["a trailing newline", "AAAA\n"],
+  ["empty output", ""],
+  ["plain text bytes", Buffer.from("not a PNG").toString("base64")],
+  ["GIF bytes", "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="],
+] as const) {
+  test(`${name} fails without including image payloads`, async () => {
     const result = await Effect.runPromise(
       Effect.either(reader.read({ representation: "inline", base64 }, "image")),
     );
@@ -78,8 +78,8 @@ test("malformed base64 and non-PNG output fail without including payloads", asyn
       expect(result.left.message).toContain("Image 'image'");
       expect(result.left.message).not.toContain("private-invalid-payload");
     }
-  }
-});
+  });
+}
 
 test("32 MiB is accepted and one extra decoded byte is rejected, including equal encoded lengths", async () => {
   const bytes = Buffer.alloc(LOCAL_ATTACHMENT_BYTE_LIMIT + 1);
