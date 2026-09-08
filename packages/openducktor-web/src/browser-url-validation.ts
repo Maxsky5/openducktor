@@ -1,6 +1,19 @@
 import { Effect } from "effect";
 import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
 
+// Keep mount paths separate from unprefixed HTTP and WebSocket route namespaces.
+const BACKEND_ROUTE_NAMESPACES = new Set([
+  "health",
+  "session",
+  "shutdown",
+  "events",
+  "local-attachment-preview",
+  "invoke",
+  "task-events",
+  "task-assets",
+  "terminal",
+]);
+
 export const parseBasePathEffect = (
   raw: string | undefined,
   flag: string,
@@ -22,6 +35,13 @@ export const parseBasePathEffect = (
     ) {
       return yield* new WebValidationError({
         message: `Invalid ${flag} value: ${raw}. Expected a path starting with / with no empty, dot, or double-dot segments, query string, or fragment.`,
+        field: flag,
+        details: { raw },
+      });
+    }
+    if (BACKEND_ROUTE_NAMESPACES.has(segments[1] ?? "")) {
+      return yield* new WebValidationError({
+        message: `Invalid ${flag} value: ${raw}. The first path segment conflicts with a backend route namespace. Use /api or another nonconflicting path.`,
         field: flag,
         details: { raw },
       });

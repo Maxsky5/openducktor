@@ -504,6 +504,17 @@ describe("launcher internals", () => {
     expect(readinessHostForBind("10.0.0.5")).toBe("10.0.0.5");
   });
 
+  test.each(["[::ffff:0.0.0.0]", "[::ffff:0:0]", "[0:0:0:0:0:ffff:0:0]", "::ffff:0.0.0.0"])(
+    "probes parsed mapped wildcard %s through IPv4 loopback",
+    async (host) => {
+      const parsed = await Effect.runPromise(parseHostEffect(host, "--host", true));
+      expect(parsed).toBe("[::ffff:0:0]");
+      expect(readinessHostForBind(parsed)).toBe(LOCALHOST);
+      const specific = await Effect.runPromise(parseHostEffect("[::ffff:127.0.0.2]", "--host"));
+      expect(readinessHostForBind(specific)).toBe("[::ffff:7f00:2]");
+    },
+  );
+
   test("reports runtime-config response failures instead of rejecting without an owner", async () => {
     const failure = new Error("client disconnected");
     const reportedFailures: unknown[] = [];

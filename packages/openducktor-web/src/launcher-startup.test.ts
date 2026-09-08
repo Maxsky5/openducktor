@@ -39,6 +39,40 @@ test.each(["", " \t\n "])(
   },
 );
 
+test.each(["/session", "/health", "/invoke", "/task-events/subscriptions", "/task-assets/w/t"])(
+  "rejects conflicting base path %s before discovery or binds",
+  async (basePath) => {
+    const discover = spyOn(discovery, "resolveWebProvidedToolPathsEffect");
+    const serve = spyOn(Bun, "serve");
+    try {
+      await expect(
+        runWebBoundary(
+          runLauncherEffect(
+            {
+              packageRoot: "/missing-web-package",
+              workspaceMode: false,
+              frontendPort: 0,
+              backendPort: 0,
+              externalUrl: "https://machine.ts.net",
+              basePath,
+            },
+            { error: () => Effect.void, info: () => Effect.void, success: () => Effect.void },
+          ),
+        ),
+      ).rejects.toMatchObject({
+        _tag: "WebValidationError",
+        field: "--base-path",
+        message: expect.stringContaining("Use /api or another nonconflicting path"),
+      });
+      expect(discover).not.toHaveBeenCalled();
+      expect(serve).not.toHaveBeenCalled();
+    } finally {
+      discover.mockRestore();
+      serve.mockRestore();
+    }
+  },
+);
+
 test("Vite accepts both external hostname forms and rejects unknown hosts", async () => {
   const { createServer } = await import("vite");
   const server = await createServer({

@@ -66,13 +66,6 @@ describe("browser web host config", () => {
   test("uses the browser loopback hostname for backend requests", () => {
     expect(
       getBrowserBackendUrl(
-        { VITE_ODT_BROWSER_BACKEND_URL: "http://127.255.255.255:14327" },
-        "http://127.0.0.2:1420",
-      ),
-    ).toBe("http://127.0.0.2:14327");
-
-    expect(
-      getBrowserBackendUrl(
         { VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327" },
         "http://localhost:1420",
       ),
@@ -95,23 +88,32 @@ describe("browser web host config", () => {
     ).toBe("http://127.0.0.1:14327");
   });
 
-  test.each(["runner.localhost", "nested.runner.localhost."])(
-    "aligns loopback backend and browser hostnames for %s",
-    (hostname) => {
-      expect(
-        getBrowserBackendUrl(
-          { VITE_ODT_BROWSER_BACKEND_URL: `http://${hostname}:14327/api` },
-          "http://localhost:1420",
-        ),
-      ).toBe("http://localhost:14327/api");
-      expect(
-        getBrowserBackendUrl(
-          { VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327/api" },
-          `http://${hostname}:1420`,
-        ),
-      ).toBe(`http://${hostname}:14327/api`);
-    },
-  );
+  test.each([
+    "runner.localhost",
+    "nested.runner.localhost",
+    "nested.runner.localhost.",
+    "127.0.0.2",
+    "127.255.255.255",
+    "[::ffff:7f00:1]",
+  ])("preserves configured %s but rejects an unconfigured substitution", (hostname) => {
+    expect(
+      getBrowserBackendUrl(
+        { VITE_ODT_BROWSER_BACKEND_URL: `http://${hostname}:14327/api` },
+        "http://localhost:1420",
+      ),
+    ).toBe("http://localhost:14327/api");
+    const substitute = () =>
+      getBrowserBackendUrl(
+        { VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327/api" },
+        `http://${hostname}:1420`,
+      );
+    expect(substitute).toThrow("Open the launcher URL or configure --external-url");
+    expect(substitute).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+    configureBrowserRuntimeConfig({ backendUrl: `http://${hostname}:14327/api` });
+    expect(getBrowserBackendUrl(undefined, `http://${hostname}:1420`)).toBe(
+      `http://${hostname}:14327/api`,
+    );
+  });
 
   test("keeps the injected backend hostname for opaque browser origins", () => {
     expect(

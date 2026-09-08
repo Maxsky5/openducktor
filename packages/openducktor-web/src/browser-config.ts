@@ -1,7 +1,13 @@
 import { Effect } from "effect";
 import { z } from "zod";
 import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
-import { formatHost, isLoopbackHost, parseHttpOriginEffect, portOfHttpOrigin } from "./http-origin";
+import {
+  formatHost,
+  isLoopbackHost,
+  LOOPBACK_HOSTS,
+  parseHttpOriginEffect,
+  portOfHttpOrigin,
+} from "./http-origin";
 
 type BrowserEnvValues = {
   VITE_ODT_BROWSER_AUTH_TOKEN?: string;
@@ -106,6 +112,16 @@ const alignBackendOriginWithBrowserOriginEffect = (
 
     if (!isHttpLoopbackOrigin(frontendOrigin) || !isHttpLoopbackOrigin(backendOrigin)) {
       return originWithPath(backendOrigin);
+    }
+
+    if (frontendOrigin.hostname === backendOrigin.hostname) {
+      return originWithPath(backendOrigin);
+    }
+    if (!LOOPBACK_HOSTS.has(frontendOrigin.hostname)) {
+      return yield* new WebValidationError({
+        message: `OpenDucktor web cannot use ${frontendOrigin.hostname} in place of the configured backend hostname. Open the launcher URL or configure --external-url with the desired browser origin.`,
+        details: { browserOrigin, rawUrl: backendOrigin.href },
+      });
     }
 
     const alignedUrl = new URL(

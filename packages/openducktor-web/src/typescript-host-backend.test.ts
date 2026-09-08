@@ -433,6 +433,81 @@ describe("TypeScript web host backend", () => {
     }
   });
 
+  test("probes a mapped wildcard with an isolated proxy and loopback bypass", async () => {
+    const bindHost = await Effect.runPromise(parseHostEffect("[::ffff:0.0.0.0]", "--host"));
+    const server = createTerminalUpgradeTestServer("/api", bindHost);
+    let proxyRequests = 0;
+    const proxy = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => {
+        proxyRequests += 1;
+        return new Response("test proxy", { status: 503 });
+      },
+    });
+    const proxyUrl = `http://127.0.0.1:${proxy.port}`;
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "--eval",
+        `import { buildBackendUrl, readinessHostForBind, waitForBackend } from ${JSON.stringify(new URL("./launcher-support.ts", import.meta.url).href)};
+         const control = await fetch("http://proxy-check.invalid/", { signal: AbortSignal.timeout(2000) });
+         if (control.status !== 503 || await control.text() !== "test proxy") throw new Error("Proxy control failed");
+         const host = readinessHostForBind(${JSON.stringify(bindHost)});
+         if (host !== "127.0.0.1") throw new Error("Expected IPv4 loopback readiness host");
+         await waitForBackend(buildBackendUrl(${server.port}, host), ${JSON.stringify(APP_TOKEN)}, 2000, { exited: new Promise(() => {}) });`,
+      ],
+      env: {
+        ...process.env,
+        HTTP_PROXY: proxyUrl,
+        http_proxy: proxyUrl,
+        HTTPS_PROXY: proxyUrl,
+        https_proxy: proxyUrl,
+        ALL_PROXY: proxyUrl,
+        all_proxy: proxyUrl,
+        NO_PROXY: "127.0.0.1,localhost,::1",
+        no_proxy: "127.0.0.1,localhost,::1",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    try {
+      const [exitCode, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+      ]);
+      expect(exitCode, stderr).toBe(0);
+      expect(proxyRequests).toBe(1);
+    } finally {
+      child.kill();
+      await child.exited;
+      server.stop(true);
+      proxy.stop(true);
+    }
+  }, 10_000);
+
+  test.each(["runner.localhost", "nested.runner.localhost", "127.0.0.2", "[::ffff:7f00:1]"])(
+    "rejects unconfigured Host and Origin %s",
+    async (hostname) => {
+      const server = createTerminalUpgradeTestServer();
+      try {
+        for (const headers of [
+          { host: `${hostname}:${server.port}` },
+          { origin: `http://${hostname}:1420` },
+        ]) {
+          const response = await Bun.fetch(`http://127.0.0.1:${server.port}/session`, {
+            method: "POST",
+            headers: { ...headers, "x-openducktor-app-token": APP_TOKEN },
+          });
+          expect(response.status).toBe(403);
+          await response.text();
+        }
+      } finally {
+        server.stop(true);
+      }
+    },
+  );
+
   test("routes a base-prefixed POST body to the host command router", async () => {
     const BASE_PATH = "/api";
     const eventBus = new BufferedHostEventBus({ report: () => {} });

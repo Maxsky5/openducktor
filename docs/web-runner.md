@@ -40,6 +40,8 @@ The production static frontend and the backend accept only requests whose `Host`
 
 The workspace frontend uses Vite's Host checks instead. Vite allows all IP literals, `localhost`, and `.localhost` subdomains by default, plus the configured bind and external hostnames. Host checks do not authenticate clients. Restrict network and proxy access in both modes.
 
+Automatic browser hostname alignment supports only `localhost`, `127.0.0.1`, and `::1`. To use another loopback hostname, such as `runner.localhost`, configure that browser origin with `--external-url` and open that URL. Vite accepting a hostname does not grant backend access.
+
 The launcher fails fast when it binds a non-loopback host without `--external-url`. Browsers on another machine cannot reach a loopback backend URL.
 
 ## Serve both apps under one origin
@@ -55,6 +57,8 @@ The browser config uses `https://machine.ts.net/api` as the host URL. The host s
 - Tailscale Serve keeps the prefix: `tailscale serve --bg --set-path /api http://127.0.0.1:14327`
 - Caddy can strip it: `handle_path /api/* { reverse_proxy 127.0.0.1:14327 }`
 - nginx can strip it with `location /api/ { proxy_pass http://127.0.0.1:14327/; }`
+
+The first `--base-path` segment must not match a backend route namespace: `health`, `session`, `shutdown`, `events`, `local-attachment-preview`, `invoke`, `task-events`, `task-assets`, or `terminal`. This restriction also applies to nested paths, such as `/invoke/custom`. Use `/api`, `/api/v1`, or another nonconflicting path so that unprefixed routes remain reachable.
 
 The example mounts the host at port 443, which differs from the frontend port 1420. The launcher logs an info message about this port mismatch. It is expected behind a proxy.
 

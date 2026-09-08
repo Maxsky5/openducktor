@@ -107,6 +107,7 @@ describe("web CLI argument parsing", () => {
     expect(parseCliArgs(["--base-path", "/deep/nested/api"])).toMatchObject({
       basePath: "/deep/nested/api",
     });
+    expect(parseCliArgs(["--base-path", "/api/v1"])).toMatchObject({ basePath: "/api/v1" });
 
     const parseNoLeadingSlash = () => parseCliArgs(["--base-path", "api"]);
     expect(parseNoLeadingSlash).toThrow("Invalid --base-path value");
@@ -119,6 +120,23 @@ describe("web CLI argument parsing", () => {
     const parseMissingBasePath = () => parseCliArgs(["--base-path"]);
     expect(parseMissingBasePath).toThrow("Missing value for --base-path.");
     expect(parseMissingBasePath).toThrow(expect.objectContaining({ _tag: "WebValidationError" }));
+  });
+
+  test.each([
+    "/session",
+    "/health",
+    "/shutdown",
+    "/events",
+    "/local-attachment-preview",
+    "/invoke",
+    "/invoke/runtime_ensure",
+    "/task-events/subscriptions",
+    "/task-assets/workspace/task",
+    "/terminal",
+  ])("rejects backend namespace base path %s", (basePath) => {
+    expect(() => parseCliArgs(["--base-path", basePath])).toThrow(
+      "Use /api or another nonconflicting path",
+    );
   });
 
   test("rejects malformed port values instead of truncating trailing text", () => {
