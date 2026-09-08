@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { beforeEach, afterEach, expect, spyOn, test } from "bun:test";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -45,7 +46,19 @@ for (const cancel of [false, true]) {
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const fiber = Effect.runFork(
         createGeneratedImageFileAdapter(workers).read(
-          { representation: "saved_file", path },
+          {
+            representation: "saved_file",
+            revision: createHash("sha256")
+              .update("saved_file\0")
+              .update(
+                Buffer.from(
+                  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
+                  "base64",
+                ),
+              )
+              .digest("hex"),
+            path,
+          },
           "fifo-image",
         ),
       );

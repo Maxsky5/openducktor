@@ -273,6 +273,12 @@ const sessionIdentity = (externalSessionId: string) => ({
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
 let agentOperations: AgentOperationsContextValue = {
+  beginGeneratedImageBatch: async () => {
+    throw new Error("Unexpected beginGeneratedImageBatch");
+  },
+  releaseGeneratedImageBatch: async () => {
+    throw new Error("Unexpected releaseGeneratedImageBatch");
+  },
   readGeneratedImage: async () => {
     throw new Error("Unexpected generated image read");
   },
@@ -711,6 +717,12 @@ beforeEach(async () => {
     isLoadingRepoSettings: false,
   };
   agentOperations = {
+    beginGeneratedImageBatch: async () => {
+      throw new Error("Unexpected beginGeneratedImageBatch");
+    },
+    releaseGeneratedImageBatch: async () => {
+      throw new Error("Unexpected releaseGeneratedImageBatch");
+    },
     readGeneratedImage: async () => {
       throw new Error("Unexpected generated image read");
     },

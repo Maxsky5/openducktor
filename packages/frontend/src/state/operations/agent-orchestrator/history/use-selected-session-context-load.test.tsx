@@ -40,6 +40,12 @@ describe("useSelectedSessionContextLoad", () => {
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
     const operations: AgentOperationsContextValue = {
+      beginGeneratedImageBatch: async () => {
+        throw new Error("Unexpected beginGeneratedImageBatch");
+      },
+      releaseGeneratedImageBatch: async () => {
+        throw new Error("Unexpected releaseGeneratedImageBatch");
+      },
       readGeneratedImage: async () => {
         throw new Error("Unexpected generated image read");
       },
@@ -87,6 +93,12 @@ describe("useSelectedSessionContextLoad", () => {
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
     const operations: AgentOperationsContextValue = {
+      beginGeneratedImageBatch: async () => {
+        throw new Error("Unexpected beginGeneratedImageBatch");
+      },
+      releaseGeneratedImageBatch: async () => {
+        throw new Error("Unexpected releaseGeneratedImageBatch");
+      },
       readGeneratedImage: async () => {
         throw new Error("Unexpected generated image read");
       },
@@ -131,6 +143,12 @@ describe("useSelectedSessionContextLoad", () => {
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
     const operations: AgentOperationsContextValue = {
+      beginGeneratedImageBatch: async () => {
+        throw new Error("Unexpected beginGeneratedImageBatch");
+      },
+      releaseGeneratedImageBatch: async () => {
+        throw new Error("Unexpected releaseGeneratedImageBatch");
+      },
       readGeneratedImage: async () => {
         throw new Error("Unexpected generated image read");
       },
@@ -177,6 +195,12 @@ describe("useSelectedSessionContextLoad", () => {
     async (hasModel) => {
       const loadAgentSessionContext = mock(async () => undefined);
       const operations: AgentOperationsContextValue = {
+        beginGeneratedImageBatch: async () => {
+          throw new Error("Unexpected beginGeneratedImageBatch");
+        },
+        releaseGeneratedImageBatch: async () => {
+          throw new Error("Unexpected releaseGeneratedImageBatch");
+        },
         readGeneratedImage: async () => {
           throw new Error("Unexpected generated image read");
         },
@@ -223,6 +247,12 @@ describe("useSelectedSessionContextLoad", () => {
       throw new Error("thread resume failed");
     });
     const operations: AgentOperationsContextValue = {
+      beginGeneratedImageBatch: async () => {
+        throw new Error("Unexpected beginGeneratedImageBatch");
+      },
+      releaseGeneratedImageBatch: async () => {
+        throw new Error("Unexpected releaseGeneratedImageBatch");
+      },
       readGeneratedImage: async () => {
         throw new Error("Unexpected generated image read");
       },

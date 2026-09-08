@@ -10,6 +10,80 @@ import {
   flushCodexAdapterWork,
 } from "./codex-app-server-adapter.test-harness";
 
+test("external turns ignore stale idle cutoffs and publish the original settlement timestamp", async () => {
+  const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+  const { adapter } = createHarness({ subscribeEvents });
+  await adapter.startSession(codexStartSessionInput());
+  const ref = codexSessionRuntimeRef();
+  const events: AgentEvent[] = [];
+  const unsubscribe = await adapter.subscribeEvents(ref, (event) => events.push(event));
+  const start = "2026-09-06T10:00:02.000Z";
+  const end = "2026-09-06T10:00:03.000Z";
+  const idle = {
+    method: "thread/status/changed",
+    params: { threadId: ref.externalSessionId, status: { type: "idle" } },
+  };
+  try {
+    emitNotification(
+      {
+        method: "turn/started",
+        params: {
+          threadId: ref.externalSessionId,
+          turn: codexTurnFixture({ id: "external", status: "inProgress", items: [] }),
+        },
+      },
+      start,
+    );
+    emitNotification(
+      {
+        method: "item/started",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId: "external",
+          startedAtMs: Date.parse(start),
+          item: {
+            type: "imageGeneration",
+            id: "image",
+            status: "in_progress",
+            result: "",
+            revisedPrompt: null,
+            failure: null,
+          },
+        },
+      },
+      start,
+    );
+    emitNotification(idle, "2026-09-06T10:00:01.000Z");
+    await flushCodexAdapterWork();
+    expect(events.filter((event) => event.type === "session_error")).toEqual([]);
+    expect(events.filter((event) => event.type === "image_generation_settled")).toEqual([]);
+    expect(events.filter((event) => event.type === "assistant_part").at(-1)).toMatchObject({
+      part: { status: "running" },
+    });
+    emitNotification(idle, end);
+    await flushCodexAdapterWork();
+    expect(events.filter((event) => event.type === "image_generation_settled")).toMatchObject([
+      { timestamp: end },
+    ]);
+    expect(events.filter((event) => event.type === "assistant_part").at(-1)).toMatchObject({
+      timestamp: end,
+      part: { status: "incomplete" },
+    });
+    events.length = 0;
+    emitNotification(idle, end);
+    emitNotification(idle, "2026-09-06T10:00:01.000Z");
+    await flushCodexAdapterWork();
+    expect(
+      events.filter(
+        (event) => event.type === "image_generation_settled" || event.type === "assistant_part",
+      ),
+    ).toEqual([]);
+  } finally {
+    unsubscribe();
+    adapter.releaseRuntime("runtime-live");
+  }
+});
+
 test("failed completion corrects provisional idle before later idle replay", async () => {
   const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
   const { adapter } = createHarness({ subscribeEvents });
@@ -25,7 +99,7 @@ test("failed completion corrects provisional idle before later idle replay", asy
       method: "turn/started",
       params: {
         threadId: ref.externalSessionId,
-        turn: codexTurnFixture({ id: "turn", status: "inProgress" }),
+        turn: codexTurnFixture({ id: "turn", status: "inProgress", items: [] }),
       },
     });
     emitNotification({
@@ -56,7 +130,7 @@ test("failed completion corrects provisional idle before later idle replay", asy
       method: "turn/completed",
       params: {
         threadId: ref.externalSessionId,
-        turn: codexTurnFixture({ id: "turn", status: "failed" }),
+        turn: codexTurnFixture({ id: "turn", status: "failed", items: [] }),
       },
     });
     await flushCodexAdapterWork();

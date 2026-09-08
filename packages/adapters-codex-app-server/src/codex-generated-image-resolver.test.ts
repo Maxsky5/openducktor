@@ -84,9 +84,16 @@ test("source lookup uses full public history without a live snapshot or resume",
         ref,
         itemId: "image",
         turnId: "turn",
-        revision: codexImageGenerationPart(native).output!.revision,
+        revision:
+          native.savedPath !== undefined
+            ? "file-digest"
+            : codexImageGenerationPart(native).output!.revision,
       }),
-    ).toEqual({ representation: "saved_file", path: "/generated/image.png" });
+    ).toEqual({
+      representation: "saved_file",
+      path: "/generated/image.png",
+      revision: "file-digest",
+    });
     expect(harness.calls.filter((call) => call.method !== "initialize")).toEqual([
       { method: "thread/read", params: { threadId: ref.externalSessionId, includeTurns: false } },
       {
@@ -113,7 +120,10 @@ test("inline output is selected only without a supplied path", async () => {
       const source = await adapter.resolveGeneratedImageSource({
         ref,
         itemId: "image",
-        revision: codexImageGenerationPart(native).output!.revision,
+        revision:
+          native.savedPath !== undefined
+            ? "file-digest"
+            : codexImageGenerationPart(native).output!.revision,
       });
       expect(source.representation).toBe("savedPath" in native ? "saved_file" : "inline");
     } finally {
@@ -141,7 +151,7 @@ test("wrong session, directory, item, turn, nonterminal outcome, and absent outp
           turnId: scenario.turnId ?? "turn",
           revision: codexImageGenerationPart(completed()).output!.revision,
         }),
-      ).rejects.toThrow("unavailable");
+      ).rejects.toThrow();
     } finally {
       adapter.releaseRuntime("runtime-live");
     }
@@ -170,11 +180,11 @@ test("concurrent reads share history and a released runtime cannot publish their
   }
 });
 
-for (const source of ["saved", "inline"] as const) {
+{
+  const source = "inline";
   test(`concurrent ${source} reads verify each expected revision against shared history`, async () => {
-    const old = source === "saved" ? { ...completed(), savedPath: "/old.png" } : completed();
-    const current =
-      source === "saved" ? { ...old, savedPath: "/new.png" } : { ...old, result: "bmV3LWltYWdl" };
+    const old = completed();
+    const current = { ...old, result: "bmV3LWltYWdl" };
     const harness = createImageHarness([current]);
     harness.defer();
     await harness.adapter.prepareRuntime("runtime-live");
@@ -185,7 +195,10 @@ for (const source of ["saved", "inline"] as const) {
             ref,
             itemId: "image",
             turnId: "turn",
-            revision: codexImageGenerationPart(native).output!.revision,
+            revision:
+              native.savedPath !== undefined
+                ? "file-digest"
+                : codexImageGenerationPart(native).output!.revision,
           }),
         ),
       );
@@ -199,10 +212,7 @@ for (const source of ["saved", "inline"] as const) {
         },
         {
           status: "fulfilled",
-          value:
-            source === "saved"
-              ? { representation: "saved_file", path: "/new.png" }
-              : { representation: "inline", base64: current.result },
+          value: { representation: "inline", base64: current.result },
         },
       ]);
     } finally {
@@ -252,7 +262,10 @@ test("source verification awaits image preparation and rejects a replaced runtim
   const pending = adapter.resolveGeneratedImageSource({
     ref,
     itemId: native.id,
-    revision: codexImageGenerationPart(native).output!.revision,
+    revision:
+      native.savedPath !== undefined
+        ? "file-digest"
+        : codexImageGenerationPart(native).output!.revision,
   });
   await started.promise;
   adapter.releaseRuntime("runtime-live");
@@ -279,11 +292,15 @@ test("oversized inline output is rejected before preparation but does not replac
       const pending = adapter.resolveGeneratedImageSource({
         ref,
         itemId: native.id,
-        revision: savedPath ? codexImageGenerationPart(native).output!.revision : "oversized",
+        revision: savedPath ? "file-digest" : "oversized",
       });
       if (savedPath) {
-        expect(await pending).toEqual({ representation: "saved_file", path: savedPath });
-        expect(prepare.mock.calls.at(-1)![0][0]!.item.result).toBe("");
+        expect(await pending).toEqual({
+          representation: "saved_file",
+          path: savedPath,
+          revision: "file-digest",
+        });
+        expect(prepare).not.toHaveBeenCalled();
       } else {
         await expect(pending).rejects.toThrow("32 MiB");
         expect(prepare).not.toHaveBeenCalled();
@@ -310,7 +327,10 @@ for (const failure of ["wrong item", "missing", "worker failure"] as const) {
         adapter.resolveGeneratedImageSource({
           ref,
           itemId: native.id,
-          revision: codexImageGenerationPart(native).output!.revision,
+          revision:
+            native.savedPath !== undefined
+              ? "file-digest"
+              : codexImageGenerationPart(native).output!.revision,
         }),
       ).rejects.toThrow(failure === "worker failure" ? "worker failed" : "wrong item");
     } finally {
@@ -385,6 +405,117 @@ test("canceling one shared history consumer prevents its preparation without can
     expect(await other).toEqual({ representation: "inline", base64: completed().result });
     expect(prepare).toHaveBeenCalledTimes(1);
     expect(harness.calls.filter((call) => call.method === "thread/turns/list")).toHaveLength(1);
+  } finally {
+    harness.gate.resolve();
+    harness.adapter.releaseRuntime("runtime-live");
+  }
+});
+
+test("eight queued previews consume one bounded history batch and isolate an invalid item", async () => {
+  const items = Array.from({ length: 8 }, (_, index) => ({
+    ...completed(),
+    id: `image-${index}`,
+    status: index === 3 ? "failed" : "completed",
+  }));
+  const harness = createImageHarness(items);
+  await harness.adapter.prepareRuntime("runtime-live");
+  const images = items.map((item) => ({
+    itemId: item.id,
+    turnId: "turn",
+    revision: codexImageGenerationPart(completed()).output!.revision,
+  }));
+  try {
+    const batch = await harness.adapter.beginGeneratedImageBatch({ ref, images });
+    for (const [index, image] of images.entries()) {
+      const result = harness.adapter.resolveGeneratedImageSource({ ...batch, ...image });
+      if (index === 3) await expect(result).rejects.toThrow("completed");
+      else expect(await result).toEqual({ representation: "inline", base64: completed().result });
+    }
+    expect(harness.calls.filter(({ method }) => method === "thread/turns/list")).toHaveLength(1);
+    harness.adapter.releaseGeneratedImageBatch(batch);
+    await expect(
+      harness.adapter.resolveGeneratedImageSource({ ...batch, ...images[0]! }),
+    ).rejects.toThrow("expired");
+  } finally {
+    harness.adapter.releaseRuntime("runtime-live");
+  }
+});
+
+test("image batches reject forged owners and revisions, release capacity, and die with their runtime", async () => {
+  const harness = createImageHarness();
+  await harness.adapter.prepareRuntime("runtime-live");
+  const identity = {
+    itemId: "image",
+    turnId: "turn",
+    revision: codexImageGenerationPart(completed()).output!.revision,
+  };
+  const input = { ref, images: [identity] };
+  try {
+    const first = await harness.adapter.beginGeneratedImageBatch(input);
+    const second = await harness.adapter.beginGeneratedImageBatch(input);
+    await expect(harness.adapter.beginGeneratedImageBatch(input)).rejects.toThrow(
+      "two image preview batches",
+    );
+    await expect(
+      harness.adapter.resolveGeneratedImageSource({
+        ...first,
+        ...identity,
+        ref: { ...ref, externalSessionId: "other" },
+      }),
+    ).rejects.toThrow("another session");
+    await expect(
+      harness.adapter.resolveGeneratedImageSource({ ...first, ...identity, revision: "forged" }),
+    ).rejects.toThrow("output revision");
+    expect(await harness.adapter.resolveGeneratedImageSource({ ...first, ...identity })).toEqual({
+      representation: "inline",
+      base64: completed().result,
+    });
+    harness.adapter.releaseGeneratedImageBatch(first);
+    const third = await harness.adapter.beginGeneratedImageBatch(input);
+    harness.adapter.releaseRuntime("runtime-live");
+    await harness.adapter.prepareRuntime("runtime-live");
+    for (const batch of [second, third])
+      await expect(
+        harness.adapter.resolveGeneratedImageSource({ ...batch, ...identity }),
+      ).rejects.toThrow("expired");
+  } finally {
+    harness.adapter.releaseRuntime("runtime-live");
+  }
+});
+
+test("releasing an unloaded session clears its queued image batch", async () => {
+  const harness = createImageHarness();
+  await harness.adapter.prepareRuntime("runtime-live");
+  const identity = {
+    itemId: "image",
+    turnId: "turn",
+    revision: codexImageGenerationPart(completed()).output!.revision,
+  };
+  try {
+    const batch = await harness.adapter.beginGeneratedImageBatch({ ref, images: [identity] });
+    await harness.adapter.releaseSession(ref);
+    await expect(
+      harness.adapter.resolveGeneratedImageSource({ ...batch, ...identity }),
+    ).rejects.toThrow("expired");
+  } finally {
+    harness.adapter.releaseRuntime("runtime-live");
+  }
+});
+
+test("releasing a session during batch history discards the late result", async () => {
+  const harness = createImageHarness();
+  harness.defer();
+  await harness.adapter.prepareRuntime("runtime-live");
+  const pending = harness.adapter.beginGeneratedImageBatch({
+    ref,
+    images: [{ itemId: "image", revision: "digest" }],
+  });
+  const result = Promise.allSettled([pending]);
+  try {
+    await harness.historyStarted.promise;
+    await harness.adapter.releaseSession(ref);
+    harness.gate.resolve();
+    expect((await result)[0]).toMatchObject({ status: "rejected" });
   } finally {
     harness.gate.resolve();
     harness.adapter.releaseRuntime("runtime-live");

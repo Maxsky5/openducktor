@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { beforeEach, afterEach, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -38,7 +39,19 @@ test("a denied file open returns an actionable error without reading bytes", asy
     await expect(
       Effect.runPromise(
         createGeneratedImageFileAdapter(workers).read(
-          { representation: "saved_file", path },
+          {
+            representation: "saved_file",
+            revision: createHash("sha256")
+              .update("saved_file\0")
+              .update(
+                Buffer.from(
+                  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
+                  "base64",
+                ),
+              )
+              .digest("hex"),
+            path,
+          },
           "image",
         ),
       ),
@@ -94,7 +107,19 @@ for (const outcome of ["success", "growth", "failure", "interruption"] as const)
     });
     try {
       const read = createGeneratedImageFileAdapter(workers).read(
-        { representation: "saved_file", path },
+        {
+          representation: "saved_file",
+          revision: createHash("sha256")
+            .update("saved_file\0")
+            .update(
+              Buffer.from(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
+                "base64",
+              ),
+            )
+            .digest("hex"),
+          path,
+        },
         "image",
       );
       if (outcome === "interruption") {

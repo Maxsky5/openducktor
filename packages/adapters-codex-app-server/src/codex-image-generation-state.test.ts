@@ -214,3 +214,75 @@ test("session-wide history context respects known time and exact owner", () => {
   expect(state.prepareHistory("other-runtime", "thread")(part("other")).status).toBe("running");
   expect(state.prepareHistory("runtime", "other-thread")(part("other")).status).toBe("running");
 });
+
+test("native session cutoffs reject older starts and duplicate ends before changing history", () => {
+  const state = new CodexImageGenerationState();
+  const start = "2026-09-06T10:00:02.000Z";
+  const end = "2026-09-06T10:00:03.000Z";
+  state.startTurn("runtime", "thread", "turn", start);
+  state.upsert("runtime", "thread", part("image"), start);
+  expect(
+    state.settle(
+      "runtime",
+      "thread",
+      {
+        scope: "session",
+        reason: "turn_ended",
+        timestamp,
+      },
+      timestamp,
+    ),
+  ).toBeNull();
+  expect(state.prepareHistory("runtime", "thread")(part("image"), start).status).toBe("running");
+  expect(
+    state.settle(
+      "runtime",
+      "thread",
+      {
+        scope: "session",
+        reason: "turn_ended",
+        timestamp: end,
+      },
+      end,
+    ),
+  ).toHaveLength(1);
+  for (const cutoff of [timestamp, end]) {
+    expect(
+      state.settle(
+        "runtime",
+        "thread",
+        {
+          scope: "session",
+          reason: "turn_ended",
+          timestamp: cutoff,
+        },
+        cutoff,
+      ),
+    ).toBeNull();
+  }
+  expect(state.prepareHistory("runtime", "thread")(part("late", "unknown"), start).status).toBe(
+    "incomplete",
+  );
+});
+
+test("a first live image protects its turn without a turn-start notification", () => {
+  const state = new CodexImageGenerationState();
+  state.upsert("runtime", "thread", part("image"), "2026-09-06T10:00:01.000Z");
+  expect(
+    state.settle(
+      "runtime",
+      "thread",
+      {
+        scope: "session",
+        reason: "turn_ended",
+        timestamp,
+      },
+      timestamp,
+    ),
+  ).toBeNull();
+  expect(state.upsert("runtime", "thread", part("image")).status).toBe("running");
+  // Explicit control must still clean up when the local clock equals an earlier cutoff.
+  expect(
+    state.settle("runtime", "thread", { scope: "session", reason: "turn_ended" }, timestamp),
+  ).toHaveLength(1);
+});

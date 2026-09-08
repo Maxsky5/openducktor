@@ -38,7 +38,11 @@ const definitions = {
 test("reads through the scoped adapter without live snapshot or resume and rejects forged command fields", async () => {
   const registry = createLiveSessionAdapterRegistry();
   const calls: unknown[] = [];
-  const source = { representation: "saved_file" as const, path: "/runtime/output.png" };
+  const source = {
+    representation: "saved_file" as const,
+    revision: input.revision,
+    path: "/runtime/output.png",
+  };
   await Effect.runPromise(
     registry.register(
       createAgentSessionRuntimeAdapterTestDouble(binding, {
@@ -165,4 +169,38 @@ test("a rejected output revision prevents file reads", async () => {
   if (result._tag === "Left") expect(result.left).toBe(rejected);
   expect(requests).toEqual([input]);
   expect(fileReads).toBe(0);
+});
+
+test("batch and metadata commands reject file paths, oversized batches, and invalid batch IDs", async () => {
+  const service = createGeneratedImageReadService(
+    createLiveSessionAdapterRegistry(),
+    {
+      read: () => Effect.dieMessage("Unexpected file read"),
+    },
+    definitions,
+  );
+  const commands = createGeneratedImageCommandHandlers(service);
+  for (const request of [
+    { ref: input.ref, images: [{ itemId: "image", path: "/private/file" }] },
+    { ref: input.ref, images: [{ itemId: "image" }], path: "/private/file" },
+  ])
+    await expect(
+      Effect.runPromise(commands.agent_session_describe_generated_images(request)),
+    ).rejects.toThrow("exact session and image identity");
+  await expect(
+    Effect.runPromise(
+      commands.agent_session_begin_generated_image_batch({
+        ref: input.ref,
+        images: Array.from({ length: 9 }, (_, index) => ({
+          itemId: `image-${index}`,
+          revision: "digest",
+        })),
+      }),
+    ),
+  ).rejects.toThrow("exact session and image identity");
+  await expect(
+    Effect.runPromise(
+      commands.agent_session_release_generated_image_batch({ ref: input.ref, batchId: "invalid" }),
+    ),
+  ).rejects.toThrow("exact session and image identity");
 });

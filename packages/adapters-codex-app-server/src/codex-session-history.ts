@@ -230,7 +230,21 @@ export const loadCodexSessionHistory = async ({
   if (prepareImageGenerations) {
     const images = codexTurnItemsFromThreadRead(response).flatMap(({ item, turn }) =>
       item.type === "imageGeneration"
-        ? [{ item, context: { turnId: turn.id, turnStatus: turn.status } }]
+        ? [
+            {
+              item,
+              context: {
+                turnId: turn.id,
+                turnStatus: turn.status,
+                ref: {
+                  repoPath: input.repoPath,
+                  workingDirectory: input.workingDirectory,
+                  externalSessionId: input.externalSessionId,
+                  runtimeKind: "codex" as const,
+                },
+              },
+            },
+          ]
         : [],
     );
     const parts = images.length > 0 ? await prepareImageGenerations(images) : [];

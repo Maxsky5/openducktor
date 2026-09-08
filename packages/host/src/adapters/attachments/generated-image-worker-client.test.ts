@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Worker } from "node:worker_threads";
 import {
@@ -63,7 +64,14 @@ test("history chunks preserve revisions, Unicode boundaries, and native outcomes
   });
   try {
     expect(await workers.prepareHistory(images)).toEqual(
-      images.map(({ item, context }) => codexImageGenerationPart(item, context)),
+      images.map(({ item, context }) =>
+        item.savedPath
+          ? expect.objectContaining({
+              ...codexImageGenerationPart(item, context),
+              previewUnavailableReason: expect.stringContaining("readable"),
+            })
+          : codexImageGenerationPart(item, context),
+      ),
     );
     expect(lengths.length).toBeGreaterThan(2);
     expect(Math.max(...lengths)).toBeLessThanOrEqual(1024 * 1024);
@@ -110,7 +118,15 @@ test("file buffers transfer ownership to the worker", async () => {
   const bytes = Buffer.alloc(Buffer.from(png, "base64").length);
   Buffer.from(png, "base64").copy(bytes);
   const result = await Effect.runPromise(
-    workers.preparePayload(Effect.succeed({ kind: "file", bytes, itemId: "file" }), "file"),
+    workers.preparePayload(
+      Effect.succeed({
+        kind: "file",
+        bytes,
+        revision: createHash("sha256").update("saved_file\0").update(bytes).digest("hex"),
+        itemId: "file",
+      }),
+      "file",
+    ),
   );
   expect(result.base64).toBe(png);
   expect(bytes.buffer.byteLength).toBe(0);

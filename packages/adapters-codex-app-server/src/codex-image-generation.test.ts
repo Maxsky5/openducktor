@@ -63,19 +63,19 @@ test("saved output wins, inline bytes stay outside the transcript, and null meta
     revisedPrompt: "A duck",
     savedPath: "/image.png",
   };
-  const part = codexImageGenerationPart(native);
+  expect(codexImageGenerationPart(native).output).toBeUndefined();
+  const part = codexImageGenerationPart(native, {}, "verified-file-digest");
   expect(part).toMatchObject({
     revisedPrompt: "A duck",
     savedPath: "/image.png",
+    output: { revision: "verified-file-digest" },
   });
   expect(part.transparentBackground).toBeUndefined();
-  expect(part.output!.revision.length).toBeGreaterThan(0);
   expect(Object.keys(part.output!)).toEqual(["revision"]);
   expect(JSON.stringify(part)).not.toContain("private-bytes");
-  expect(part.output).toEqual(codexImageGenerationPart({ ...native, result: "" }).output);
-  expect(part.output).not.toEqual(
-    codexImageGenerationPart({ ...native, savedPath: "/other.png" }).output,
-  );
+  expect(
+    codexImageGenerationPart({ ...native, result: "" }, {}, "verified-file-digest").output,
+  ).toEqual(part.output);
 });
 
 test("inline output revisions track reported bytes without exposing them", () => {

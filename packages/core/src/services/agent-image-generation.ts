@@ -25,15 +25,20 @@ export const mergeAgentImageGeneration = (
   if (source === "history" && isNativeTerminal(current) && current !== currentAtReadStart) {
     if (current.status !== incoming.status) return current;
     const merged = { ...incoming, ...current };
+    if (current.previewUnavailableReason) delete merged.output;
+    if (current.output) delete merged.previewUnavailableReason;
     if (current.output && current.output.revision !== incoming.output?.revision) {
       if (current.savedPath === undefined) delete merged.savedPath;
     }
     return merged;
   }
-  const { output, failure, incompleteReason, ...metadata } = current;
+  const { output, failure, incompleteReason, previewUnavailableReason, ...metadata } = current;
   const merged = { ...metadata, ...incoming };
   if (current.status === incoming.status) {
-    if (incoming.output === undefined && output !== undefined) merged.output = output;
+    if (incoming.output === undefined && output !== undefined && !incoming.previewUnavailableReason)
+      merged.output = output;
+    if (!incoming.output && !incoming.previewUnavailableReason && previewUnavailableReason)
+      merged.previewUnavailableReason = previewUnavailableReason;
     if (incoming.failure === undefined && failure !== undefined) merged.failure = failure;
     if (incoming.incompleteReason === undefined && incompleteReason !== undefined)
       merged.incompleteReason = incompleteReason;

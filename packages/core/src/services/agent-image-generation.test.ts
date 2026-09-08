@@ -156,3 +156,26 @@ test("a later terminal outcome retains prompt metadata but clears prior lifecycl
     revisedPrompt: "A duck",
   });
 });
+
+test("fresh history can remove an unavailable preview and later restore its content revision", () => {
+  const available = { ...part("completed"), output: { revision: "first" } };
+  const missing = { ...part("completed"), previewUnavailableReason: "Saved file is missing" };
+  const removed = mergeAgentImageGeneration(available, missing, "history", available);
+  expect(removed).toEqual(missing);
+  const restored = mergeAgentImageGeneration(
+    removed,
+    { ...available, output: { revision: "second" } },
+    "history",
+    removed,
+  );
+  expect(restored.output?.revision).toBe("second");
+  expect(restored.previewUnavailableReason).toBeUndefined();
+});
+
+test("late history cannot replace a newer live preview failure or restored output", () => {
+  const old = part("running");
+  const missing = { ...part("completed"), previewUnavailableReason: "Saved file is missing" };
+  const available = { ...part("completed"), output: { revision: "current" } };
+  expect(mergeAgentImageGeneration(missing, available, "history", old)).toEqual(missing);
+  expect(mergeAgentImageGeneration(available, missing, "history", old)).toEqual(available);
+});

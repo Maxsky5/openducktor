@@ -23,7 +23,7 @@ import type {
   SendAgentUserMessageInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
-import { Effect, Fiber } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import {
   type HostError,
@@ -197,6 +197,15 @@ const createControllerHarness = ({
     createController: (nextOptions: CodexAppServerAdapterOptions) => {
       options = nextOptions;
       return {
+        beginGeneratedImageBatch: async () => {
+          throw new Error("Unexpected beginGeneratedImageBatch");
+        },
+        describeGeneratedImages: async () => {
+          throw new Error("Unexpected describeGeneratedImages");
+        },
+        releaseGeneratedImageBatch: () => {
+          throw new Error("Unexpected releaseGeneratedImageBatch");
+        },
         resolveGeneratedImageSource: async () => {
           throw new Error("Unexpected generated image read");
         },
@@ -1369,6 +1378,87 @@ for (const action of ["stop", "release", "runtime"] as const) {
     expect(settled).toBeGreaterThanOrEqual(0);
     expect(removed).toBeGreaterThan(settled);
   });
+}
+
+for (const action of ["stop", "release"] as const) {
+  for (const cleanupFails of [false, true]) {
+    test(`${action} cleans up after image publication fails, cleanup failure: ${cleanupFails}`, async () => {
+      const changes: AgentSessionLiveAdapterChange[] = [];
+      let cleaned = false;
+      const harness = createControllerHarness({
+        settleGeneratedImages: () => [
+          {
+            type: "image_generation_settled",
+            externalSessionId: ref.externalSessionId,
+            sessionRef: ref,
+            timestamp: "2026-07-16T10:02:00.000Z",
+            reason: "turn_ended",
+          },
+        ],
+      });
+      const lifecycle = createLifecycle(changes);
+      const prepared = await Effect.runPromise(
+        createCodexLiveSessionAdapterPreparer({
+          prepareImageGenerations: async () => {
+            throw new Error("Unexpected image preparation");
+          },
+          liveSessionLifecycle: {
+            ...lifecycle,
+            runAdapterMutation: (mutation) =>
+              lifecycle.runAdapterMutation(
+                mutation.pipe(
+                  Effect.flatMap((result) =>
+                    result.changes.some((change) => change.type === "transcript_event")
+                      ? Effect.fail(
+                          new HostOperationError({
+                            operation: "test.publish",
+                            message: "Settlement publication failed",
+                          }),
+                        )
+                      : Effect.succeed(result),
+                  ),
+                ),
+              ),
+          },
+          codexAppServer: {
+            ...codexAppServer,
+            request: () => {
+              const result = threadReadResult(ref.externalSessionId, ref.workingDirectory);
+              result.thread.status = { type: "idle" };
+              return Effect.succeed(result);
+            },
+          },
+          onBackgroundFailure: noBackgroundFailure,
+          resolveRuntimePolicy,
+          createController: (options) => {
+            const controller = harness.createController(options);
+            return {
+              ...controller,
+              [action === "stop" ? "stopSession" : "releaseSession"]: async () => {
+                cleaned = true;
+                await controller.releaseSession(ref);
+                if (cleanupFails) throw new Error("Controller cleanup failed");
+              },
+            };
+          },
+        })(runtime),
+      );
+      await Effect.runPromise(prepared.startForwarding());
+      const result = await Effect.runPromiseExit(
+        action === "stop"
+          ? prepared.adapter.stopSession(ref)
+          : prepared.adapter.releaseSession(ref),
+      );
+      expect(cleaned).toBe(true);
+      expect(changes.some((change) => change.type === "session_removed")).toBe(true);
+      expect(Exit.isFailure(result)).toBe(true);
+      if (Exit.isFailure(result)) {
+        expect(Cause.pretty(result.cause)).toContain("Settlement publication failed");
+        if (cleanupFails) expect(Cause.pretty(result.cause)).toContain("Controller cleanup failed");
+      }
+      await Effect.runPromise(prepared.discard());
+    });
+  }
 }
 
 test("interrupting an image read aborts the controller's preparation signal", async () => {

@@ -89,6 +89,8 @@ const createAgentEngine = (
   runtimeKinds: RuntimeKind[],
 ): AgentEnginePort => {
   return {
+    beginGeneratedImageBatch: (input) => host.agentSessionBeginGeneratedImageBatch(input),
+    releaseGeneratedImageBatch: (input) => host.agentSessionReleaseGeneratedImageBatch(input),
     readGeneratedImage: (input) => host.agentSessionReadGeneratedImage(input),
     startSession: (input) => {
       if (input.sessionScope.kind === "workflow") {

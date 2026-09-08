@@ -7,18 +7,20 @@ import { z } from "zod";
 
 export type GeneratedImagePayloadRequest =
   | { kind: "inline"; base64: string; itemId: string }
-  | { kind: "file"; bytes: Uint8Array<ArrayBuffer>; itemId: string };
+  | { kind: "file"; bytes: Uint8Array<ArrayBuffer>; itemId: string; revision: string };
 
 export type GeneratedImageWorkerRequest =
   | GeneratedImagePayloadRequest
+  | { kind: "file-revision"; bytes: Uint8Array<ArrayBuffer>; itemId: string }
   | { kind: "history-start"; image: CodexImageGenerationPreparation; hasInlineOutput: boolean }
   | { kind: "history-chunk"; chunk: string }
   | { kind: "history-end" };
 
 export type GeneratedImageWorkerMessage = { id: number; request: GeneratedImageWorkerRequest };
 
-export const generatedImageWorkerResponseSchema = z.discriminatedUnion("kind", [
+const generatedImageWorkerResponseSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("ack") }),
+  z.object({ kind: z.literal("revision"), revision: z.string().min(1) }),
   z.object({ kind: z.literal("history"), part: agentImageGenerationPartSchema }),
   z.object({
     kind: z.literal("inline"),

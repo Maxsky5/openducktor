@@ -667,6 +667,9 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     };
     const otherAdapter: AgentSessionLiveAdapterPort = {
       supportsSessionControl: false,
+      beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
+      releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
+      describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
       resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
       binding: { runtimeId: "runtime-2", runtimeKind: "codex", repoPath: "/repo" },
       listSnapshots: (repoPath) => Effect.succeed(repoPath === "/repo" ? [otherSnapshot] : []),

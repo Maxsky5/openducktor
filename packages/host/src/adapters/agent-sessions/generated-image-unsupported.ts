@@ -10,3 +10,27 @@ export const unsupportedGeneratedImageSource = (input: AgentGeneratedImageReadIn
       details: { itemId: input.itemId, runtimeKind: input.ref.runtimeKind },
     }),
   );
+
+export const unsupportedGeneratedImageOperations = {
+  beginGeneratedImageBatch: () =>
+    Effect.fail(
+      new HostValidationError({
+        field: "runtimeKind",
+        message: "This runtime does not support generated image previews.",
+      }),
+    ),
+  releaseGeneratedImageBatch: () =>
+    Effect.fail(
+      new HostValidationError({
+        field: "runtimeKind",
+        message: "This runtime does not support generated image previews.",
+      }),
+    ),
+  describeGeneratedImages: () =>
+    Effect.fail(
+      new HostValidationError({
+        field: "runtimeKind",
+        message: "This runtime does not support generated image previews.",
+      }),
+    ),
+};

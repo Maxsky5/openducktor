@@ -56,7 +56,7 @@ if (!workerPath) {
       worker.once("exit", exit);
       worker.postMessage(
         { id: requestId, request },
-        request.kind === "file" ? [request.bytes.buffer] : [],
+        request.kind === "file" || request.kind === "file-revision" ? [request.bytes.buffer] : [],
       );
     });
   try {
@@ -68,7 +68,22 @@ if (!workerPath) {
     });
     const bytes = Buffer.alloc(68);
     Buffer.from(png, "base64").copy(bytes);
-    assert.deepEqual(await send({ kind: "file", bytes, itemId: "file" }), {
+    const revision = createHash("sha256").update("saved_file\0").update(bytes).digest("hex");
+    const revisionBytes = Uint8Array.from(bytes);
+    assert.deepEqual(await send({ kind: "file-revision", bytes: revisionBytes, itemId: "file" }), {
+      kind: "revision",
+      revision,
+    });
+    assert.equal(revisionBytes.buffer.byteLength, 0);
+    const stale = await send({
+      kind: "file",
+      bytes: Uint8Array.from(bytes),
+      itemId: "file",
+      revision: "old",
+    });
+    assert.equal(stale.kind, "invalid");
+    assert.ok(stale.message.includes("changed"));
+    assert.deepEqual(await send({ kind: "file", bytes, itemId: "file", revision }), {
       kind: "payload",
       payload: { mime: "image/png", byteLength: 68, base64: png },
     });

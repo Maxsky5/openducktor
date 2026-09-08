@@ -1,4 +1,7 @@
-import { unsupportedGeneratedImageSource } from "./generated-image-unsupported";
+import {
+  unsupportedGeneratedImageSource,
+  unsupportedGeneratedImageOperations,
+} from "./generated-image-unsupported";
 import {
   type OpencodeSessionRuntimeSignal,
   type PrepareOpencodeSessionRuntime,
@@ -261,6 +264,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        ...unsupportedGeneratedImageOperations,
         resolveGeneratedImageSource: unsupportedGeneratedImageSource,
         supportsSessionControl: true,
         binding: {

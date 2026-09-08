@@ -14,8 +14,16 @@ export type CodexTimedThreadItem = CodexAppServerThreadItem & {
 export type CodexLiveInput =
   | { kind: "notification"; notification: CodexNotificationRecord }
   | { kind: "server_request"; request: CodexServerRequestRecord }
-  | { kind: "item_started"; item: CodexTimedThreadItem }
-  | { kind: "item_completed"; item: CodexTimedThreadItem };
+  | {
+      kind: "item_started";
+      item: CodexTimedThreadItem;
+      preparedImageGeneration?: AgentImageGenerationPart | undefined;
+    }
+  | {
+      kind: "item_completed";
+      item: CodexTimedThreadItem;
+      preparedImageGeneration?: AgentImageGenerationPart | undefined;
+    };
 
 export type CodexThreadItemInput = {
   item: CodexTimedThreadItem;

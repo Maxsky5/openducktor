@@ -1,4 +1,13 @@
 import {
+  type AgentGeneratedImageBatch,
+  type AgentGeneratedImageBatchInput,
+  type AgentGeneratedImageDescribeInput,
+  agentGeneratedImageBatchSchema,
+  agentGeneratedImageBatchInputSchema,
+  agentGeneratedImageDescribeInputSchema,
+  agentGeneratedImageDescribeResultSchema,
+} from "@openducktor/contracts";
+import {
   type AgentGeneratedImageReadInput,
   type AgentGeneratedImageReadResult,
   agentGeneratedImageReadInputSchema,
@@ -53,6 +62,30 @@ import { arrayResultSchema, voidResultSchema } from "./invoke-utils";
 
 export class HostAgentSessionLiveClient {
   constructor(private readonly invokeFn: InvokeFn) {}
+
+  async agentSessionBeginGeneratedImageBatch(input: AgentGeneratedImageBatchInput) {
+    return this.invokeFn(
+      "agent_session_begin_generated_image_batch",
+      agentGeneratedImageBatchInputSchema.parse(input),
+      agentGeneratedImageBatchSchema,
+    );
+  }
+
+  async agentSessionReleaseGeneratedImageBatch(input: AgentGeneratedImageBatch) {
+    return this.invokeFn(
+      "agent_session_release_generated_image_batch",
+      agentGeneratedImageBatchSchema.parse(input),
+      voidResultSchema,
+    );
+  }
+
+  async agentSessionDescribeGeneratedImages(input: AgentGeneratedImageDescribeInput) {
+    return this.invokeFn(
+      "agent_session_describe_generated_images",
+      agentGeneratedImageDescribeInputSchema.parse(input),
+      agentGeneratedImageDescribeResultSchema,
+    );
+  }
 
   async agentSessionControlStart(
     input: AgentRepositorySessionStartInput,

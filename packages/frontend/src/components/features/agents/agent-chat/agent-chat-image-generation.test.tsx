@@ -152,6 +152,11 @@ const operations = (
   readGeneratedImage: AgentOperationsContextValue["readGeneratedImage"],
 ): AgentOperationsContextValue => ({
   readGeneratedImage,
+  beginGeneratedImageBatch: async ({ ref }) => ({
+    ref,
+    batchId: "00000000-0000-4000-8000-000000000000",
+  }),
+  releaseGeneratedImageBatch: async () => {},
   readSessionTodos: async () => [],
   readSessionHistory: async () => [],
   loadAgentSessionHistory: async () => null,

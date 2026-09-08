@@ -120,7 +120,10 @@ export const exchangeImageWorkerMessage = (
     worker.once("exit", exit);
     worker.once("messageerror", messageError);
     try {
-      worker.postMessage({ id, request }, request.kind === "file" ? [request.bytes.buffer] : []);
+      worker.postMessage(
+        { id, request },
+        request.kind === "file" || request.kind === "file-revision" ? [request.bytes.buffer] : [],
+      );
     } catch (cause) {
       finish(Effect.fail(imageWorkerFailure(itemId, "send", cause)));
     }

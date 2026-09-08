@@ -2,6 +2,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import type {
   AgentImageGenerationPart,
+  AgentSessionLiveRef,
   CodexAppServerThreadItem,
   CodexAppServerTurn,
 } from "@openducktor/contracts";
@@ -11,6 +12,7 @@ export type CodexImageGenerationItem = Extract<
   { type: "imageGeneration" }
 >;
 export type CodexImageGenerationContext = {
+  ref?: AgentSessionLiveRef;
   liveStart?: boolean;
   turnId?: string;
   turnStatus?: CodexAppServerTurn["status"];
@@ -34,15 +36,18 @@ export const codexImageGenerationPart = (
   if (item.savedPath !== undefined) part.savedPath = item.savedPath;
   if (item.status === "completed") {
     part.status = "completed";
-    if (item.savedPath !== undefined || item.result.length > 0 || preparedRevision !== undefined) {
+    if (
+      preparedRevision !== undefined ||
+      (item.savedPath === undefined && item.result.length > 0)
+    ) {
       part.output = {
         revision:
           preparedRevision ??
           bytesToHex(
             sha256
               .create()
-              .update(utf8ToBytes(item.savedPath !== undefined ? "saved_file\0" : "inline\0"))
-              .update(utf8ToBytes(item.savedPath ?? item.result))
+              .update(utf8ToBytes("inline\0"))
+              .update(utf8ToBytes(item.result))
               .digest(),
           ),
       };

@@ -1,3 +1,4 @@
+import { createCodexImageOperations } from "./codex-image-operations";
 import { createCodexImageSettlement } from "./codex-live-session-images";
 import {
   CodexAppServerAdapter,
@@ -14,7 +15,7 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import type { AgentRuntimePolicyBinding, AgentSessionSummary } from "@openducktor/core";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import type { z } from "zod";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import {
@@ -205,6 +206,26 @@ export const createCodexLiveSessionAdapterPreparer =
         );
 
       const images = createCodexImageSettlement(controller, runtime.runtimeId, refreshProjection);
+      const finishSession = (input: AgentSessionLiveRef, action: "stop" | "release") =>
+        Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const settlement = yield* Effect.exit(restore(images.settleSession(input)));
+            const cleanup = yield* Effect.exit(
+              Effect.tryPromise({
+                try: () =>
+                  action === "stop"
+                    ? controller.stopSession(input)
+                    : controller.releaseSession(input),
+                catch: sessionError(
+                  `codex-live-session.${action}-session`,
+                  input.externalSessionId,
+                ),
+              }),
+            );
+            const projection = yield* Effect.exit(refreshProjection());
+            return yield* Exit.zipRight(Exit.zipRight(settlement, cleanup), projection);
+          }),
+        );
       const releaseRuntime = (): Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError> =>
         projection.releaseRuntime(() => controller.releaseRuntime(runtime.runtimeId));
 
@@ -256,14 +277,7 @@ export const createCodexLiveSessionAdapterPreparer =
           });
 
       const adapter: AgentSessionRuntimeAdapterPort = {
-        resolveGeneratedImageSource: (input) =>
-          Effect.tryPromise({
-            try: (signal) => controller.resolveGeneratedImageSource(input, signal),
-            catch: sessionError(
-              "codex-live-session.read-generated-image",
-              input.ref.externalSessionId,
-            ),
-          }),
+        ...createCodexImageOperations(controller, sessionError),
         supportsSessionControl: true,
         binding: {
           runtimeId: runtime.runtimeId,
@@ -462,26 +476,8 @@ export const createCodexLiveSessionAdapterPreparer =
             runtimeId: runtime.runtimeId,
             externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,
-          }).pipe(
-            Effect.tap(() => images.settleSession(input)),
-            Effect.flatMap(() =>
-              Effect.tryPromise({
-                try: () => controller.stopSession(input),
-                catch: sessionError("codex-live-session.stop-session", input.externalSessionId),
-              }),
-            ),
-            Effect.tap(() => refreshProjection()),
-          ),
-        releaseSession: (input) =>
-          images.settleSession(input).pipe(
-            Effect.flatMap(() =>
-              Effect.tryPromise({
-                try: () => controller.releaseSession(input),
-                catch: sessionError("codex-live-session.release-session", input.externalSessionId),
-              }),
-            ),
-            Effect.tap(() => refreshProjection()),
-          ),
+          }).pipe(Effect.flatMap(() => finishSession(input, "stop"))),
+        releaseSession: (input) => finishSession(input, "release"),
       };
 
       return {

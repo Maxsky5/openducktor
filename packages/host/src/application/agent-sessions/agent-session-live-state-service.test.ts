@@ -51,6 +51,9 @@ const fakeAdapter = (input: {
     : {};
   const adapter = {
     supportsSessionControl: false,
+    beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
+    releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
+    describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
     resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
     binding: { runtimeId: input.runtimeId, runtimeKind, repoPath: "/repo" },
     ...refreshSnapshots,

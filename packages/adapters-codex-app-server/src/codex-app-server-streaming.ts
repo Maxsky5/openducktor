@@ -1,5 +1,9 @@
 import type { CodexImageGenerationEnd } from "./codex-image-generation-state";
-import type { CodexAppServerThreadStatus, CodexAppServerTurn } from "@openducktor/contracts";
+import type {
+  AgentImageGenerationPart,
+  CodexAppServerThreadStatus,
+  CodexAppServerTurn,
+} from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
   AgentEvent,
@@ -306,6 +310,7 @@ const emitStartedItem = (
   item: CodexTimedThreadItem,
   timestamp: string,
   turnId: string,
+  preparedImageGeneration?: AgentImageGenerationPart,
 ): void => {
   if (
     codexItemTypeMatches(item, "userMessage") ||
@@ -318,7 +323,7 @@ const emitStartedItem = (
   const startedItem = item;
   recordStartedItemTimestamp(context, session, startedItem);
   const canonicalEvents = context.eventMapperPipeline.runLive(
-    { kind: "item_started", item: startedItem },
+    { kind: "item_started", item: startedItem, preparedImageGeneration },
     { source: "live", runtimeId: session.runtimeId, threadId: session.threadId, timestamp, turnId },
   );
   for (const event of projectCodexCanonicalEvents(canonicalEvents)) {
@@ -348,6 +353,7 @@ const emitCompletedItem = (
   item: CodexTimedThreadItem,
   timestamp: string,
   turnId: string | null,
+  preparedImageGeneration?: AgentImageGenerationPart,
 ): void => {
   const itemId = item.id;
   if (codexItemTypeMatches(item, "userMessage")) {
@@ -416,7 +422,7 @@ const emitCompletedItem = (
 
   const completedItem = withRecordedStartedItemTimestamp(context, session, item);
   const canonicalEvents = context.eventMapperPipeline.runLive(
-    { kind: "item_completed", item: completedItem },
+    { kind: "item_completed", item: completedItem, preparedImageGeneration },
     (() => {
       const mappingContext: CodexMappingContext = {
         source: "live",
@@ -574,6 +580,7 @@ export const handleCodexPendingNotifications = async (
   context: CodexStreamingContext,
   session: CodexSessionState,
   notifications: CodexNotificationRecord[],
+  preparedImageGeneration?: AgentImageGenerationPart,
 ): Promise<void> => {
   for (const notification of notifications) {
     const notificationThreadId = codexNotificationThreadId(notification);
@@ -639,8 +646,13 @@ export const handleCodexPendingNotifications = async (
           context.settleImageGenerations(
             session,
             activeTurn?.turnId
-              ? { scope: "turn", turnId: activeTurn.turnId, reason: "turn_ended" }
-              : { scope: "session", reason: "turn_ended" },
+              ? {
+                  scope: "turn",
+                  turnId: activeTurn.turnId,
+                  reason: "turn_ended",
+                  timestamp: notification.receivedAt,
+                }
+              : { scope: "session", reason: "turn_ended", timestamp: notification.receivedAt },
           );
           emitUnlinkedSpawnFailures(context, session, timestamp);
         }
@@ -758,6 +770,7 @@ export const handleCodexPendingNotifications = async (
       context.settleImageGenerations(session, {
         scope: "turn",
         turnId,
+        timestamp: notification.receivedAt,
         reason:
           turn.status === "interrupted"
             ? "interrupted"
@@ -845,6 +858,7 @@ export const handleCodexPendingNotifications = async (
         { ...notification.params.item, startedAtMs: notification.params.startedAtMs },
         timestamp,
         notification.params.turnId,
+        preparedImageGeneration,
       );
       continue;
     }
@@ -856,6 +870,7 @@ export const handleCodexPendingNotifications = async (
         { ...notification.params.item, completedAtMs: notification.params.completedAtMs },
         timestamp,
         notificationTurnId,
+        preparedImageGeneration,
       );
     }
   }

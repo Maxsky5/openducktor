@@ -170,6 +170,12 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     agentSessionControlUpdateModel:
       agentSessionLiveClient.agentSessionControlUpdateModel.bind(agentSessionLiveClient),
     agentSessionLiveList: agentSessionLiveClient.agentSessionLiveList.bind(agentSessionLiveClient),
+    agentSessionBeginGeneratedImageBatch:
+      agentSessionLiveClient.agentSessionBeginGeneratedImageBatch.bind(agentSessionLiveClient),
+    agentSessionReleaseGeneratedImageBatch:
+      agentSessionLiveClient.agentSessionReleaseGeneratedImageBatch.bind(agentSessionLiveClient),
+    agentSessionDescribeGeneratedImages:
+      agentSessionLiveClient.agentSessionDescribeGeneratedImages.bind(agentSessionLiveClient),
     agentSessionReadGeneratedImage:
       agentSessionLiveClient.agentSessionReadGeneratedImage.bind(agentSessionLiveClient),
     agentSessionLiveLoadContext:

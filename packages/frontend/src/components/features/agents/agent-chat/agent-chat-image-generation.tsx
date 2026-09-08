@@ -183,8 +183,8 @@ function CompletedImage({
   if (!part.output)
     return (
       <p className="text-sm text-muted-foreground">
-        Preview unavailable: the runtime did not report image output. Check the session in the
-        runtime.
+        {part.previewUnavailableReason ??
+          "Preview unavailable: the runtime did not report image output. Check the session in the runtime."}
       </p>
     );
   const input: AgentGeneratedImageQueryInput = {
@@ -283,8 +283,8 @@ function LoadedImagePreview({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): ReactElement {
-  const { readGeneratedImage } = useAgentOperationsContext();
-  const preview = useAgentGeneratedImagePreview(input, readGeneratedImage);
+  const operations = useAgentOperationsContext();
+  const preview = useAgentGeneratedImagePreview(input, operations);
   const [displayFailed, setDisplayFailed] = useState(false);
   const error =
     preview.error ?? (displayFailed ? "Preview unavailable. Check the runtime output file." : null);

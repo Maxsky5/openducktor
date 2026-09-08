@@ -139,6 +139,12 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     },
   });
   const operations: AgentOperationsContextValue = {
+    beginGeneratedImageBatch: async () => {
+      throw new Error("Unexpected beginGeneratedImageBatch");
+    },
+    releaseGeneratedImageBatch: async () => {
+      throw new Error("Unexpected releaseGeneratedImageBatch");
+    },
     readGeneratedImage: async () => {
       throw new Error("Unexpected generated image read");
     },

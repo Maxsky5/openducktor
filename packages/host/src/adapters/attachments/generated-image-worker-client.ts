@@ -1,8 +1,10 @@
-import type {
-  CodexImageGenerationPreparer,
-  CodexImageGenerationPreparation,
+import {
+  codexImageGenerationPart,
+  type CodexImageGenerationPreparer,
+  type CodexImageGenerationPreparation,
 } from "@openducktor/adapters-codex-app-server";
-import { Deferred, Effect, Exit, Pool, Scope } from "effect";
+import { Deferred, Effect, Either, Exit, Pool, Scope } from "effect";
+import { readSavedImage } from "./generated-image-saved-file";
 import {
   causeToHostBoundaryError,
   toHostOperationError,
@@ -37,6 +39,26 @@ const prepareHistoryImage = (
 ) =>
   Effect.gen(function* () {
     const { item, context } = image;
+    if (item.status === "completed" && item.savedPath !== undefined) {
+      const read = yield* Effect.either(readSavedImage(item.savedPath, item.id));
+      if (Either.isLeft(read))
+        return {
+          ...codexImageGenerationPart(item, context),
+          previewUnavailableReason: read.left.message,
+        };
+      const result = yield* exchangeImageWorkerMessage(
+        channel,
+        {
+          kind: "file-revision",
+          bytes: read.right,
+          itemId: item.id,
+        },
+        item.id,
+        "revision",
+      );
+      if (result.kind !== "revision") return yield* imageWorkerFailure(item.id, "protocol");
+      return codexImageGenerationPart(item, context, result.revision);
+    }
     yield* exchangeImageWorkerMessage(
       channel,
       {

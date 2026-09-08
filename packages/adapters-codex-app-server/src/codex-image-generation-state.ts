@@ -8,12 +8,14 @@ import {
   type AgentImageGenerationSettlement,
 } from "@openducktor/core";
 
-export type CodexImageGenerationEnd =
+export type CodexImageGenerationEnd = (
   | { scope: "turn"; turnId: string; reason: AgentImageGenerationSettlement }
-  | { scope: "session"; reason: Exclude<AgentImageGenerationSettlement, "interrupted"> };
+  | { scope: "session"; reason: Exclude<AgentImageGenerationSettlement, "interrupted"> }
+) & { timestamp?: string };
 type ThreadImages = {
   items: Map<string, AgentImageGenerationPart>;
   lifecycle: AgentImageGenerationLifecycle;
+  latestStartTimestamp?: string;
 };
 export class CodexImageGenerationState {
   private readonly runtimes = new Map<string, Map<string, ThreadImages>>();
@@ -22,8 +24,12 @@ export class CodexImageGenerationState {
     runtimeId: string,
     threadId: string,
     incoming: AgentImageGenerationPart,
+    timestamp?: string,
   ): AgentImageGenerationPart {
-    return this.update(this.thread(runtimeId, threadId), incoming, "live");
+    const state = this.thread(runtimeId, threadId);
+    if (incoming.status === "running" && !state.items.has(itemKey(incoming)))
+      recordStartTimestamp(state, timestamp);
+    return this.update(state, incoming, "live");
   }
 
   /** Keep the state captured before the read so late history cannot revive a released session. */
@@ -47,8 +53,10 @@ export class CodexImageGenerationState {
     };
   }
 
-  startTurn(runtimeId: string, threadId: string, turnId: string): void {
+  startTurn(runtimeId: string, threadId: string, turnId: string, timestamp?: string): void {
     const state = this.thread(runtimeId, threadId);
+    if (!state.lifecycle.turnStarts?.has(turnId) && !state.lifecycle.turnEnds?.has(turnId))
+      recordStartTimestamp(state, timestamp);
     state.lifecycle = reduceAgentImageGenerationLifecycle(state.lifecycle, {
       type: "turn_started",
       turnId,
@@ -60,9 +68,19 @@ export class CodexImageGenerationState {
     threadId: string,
     end: CodexImageGenerationEnd,
     timestamp: string,
-  ): AgentImageGenerationPart[] {
+  ): AgentImageGenerationPart[] | null {
     const { reason } = end;
     const state = this.thread(runtimeId, threadId);
+    // Native idle cutoffs cannot end newer turns. Explicit stop/release has no native timestamp.
+    if (end.scope === "session" && end.timestamp !== undefined) {
+      const cutoff = Date.parse(end.timestamp);
+      if (
+        (state.lifecycle.sessionEnd &&
+          cutoff <= Date.parse(state.lifecycle.sessionEnd.timestamp)) ||
+        (state.latestStartTimestamp && cutoff < Date.parse(state.latestStartTimestamp))
+      )
+        return null;
+    }
     state.lifecycle = reduceAgentImageGenerationLifecycle(
       state.lifecycle,
       end.scope === "turn"
@@ -135,6 +153,15 @@ export class CodexImageGenerationState {
     return next;
   }
 }
+
+const recordStartTimestamp = (state: ThreadImages, timestamp?: string): void => {
+  if (
+    timestamp !== undefined &&
+    (state.latestStartTimestamp === undefined ||
+      Date.parse(timestamp) > Date.parse(state.latestStartTimestamp))
+  )
+    state.latestStartTimestamp = timestamp;
+};
 
 const itemKey = (part: AgentImageGenerationPart): string =>
   JSON.stringify([part.turnId ?? null, part.itemId]);

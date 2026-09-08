@@ -66,7 +66,19 @@ test("renderer history waits for prepared images and maps them without hashing a
     const pending = adapter.loadSessionHistory(ref);
     await entered.promise;
     expect(prepare.mock.calls[0]?.[0]).toEqual(
-      items.map((item) => ({ item, context: { turnId: "turn", turnStatus: "completed" } })),
+      items.map((item) => ({
+        item,
+        context: {
+          turnId: "turn",
+          turnStatus: "completed",
+          ref: {
+            repoPath: ref.repoPath,
+            workingDirectory: ref.workingDirectory,
+            externalSessionId: ref.externalSessionId,
+            runtimeKind: ref.runtimeKind,
+          },
+        },
+      })),
     );
     gate.resolve(parts);
     const history = await pending;

@@ -22,11 +22,8 @@ const prepare = async (
     if (history) throw new Error("Image history preparation already started.");
     const { item } = request.image;
     history = { image: request.image };
-    if (item.status === "completed" && (item.savedPath !== undefined || request.hasInlineOutput)) {
-      history.hash = createHash("sha256").update(
-        item.savedPath !== undefined ? "saved_file\0" : "inline\0",
-      );
-      if (item.savedPath !== undefined) history.hash.update(item.savedPath);
+    if (item.status === "completed" && item.savedPath === undefined && request.hasInlineOutput) {
+      history.hash = createHash("sha256").update("inline\0");
     }
     return { kind: "ack" };
   }
@@ -49,6 +46,15 @@ const prepare = async (
     request.kind === "inline"
       ? decodeInlineImage(request.base64, request.itemId)
       : Buffer.from(request.bytes.buffer, request.bytes.byteOffset, request.bytes.byteLength);
+  if (request.kind !== "inline") {
+    const revision = createHash("sha256").update("saved_file\0").update(bytes).digest("hex");
+    if (request.kind === "file-revision") return { kind: "revision", revision };
+    if (revision !== request.revision)
+      throw invalidImage(
+        request.itemId,
+        "the saved output changed. Reload the session history before opening the preview.",
+      );
+  }
   let detected;
   try {
     detected = await fileTypeFromBuffer(bytes);

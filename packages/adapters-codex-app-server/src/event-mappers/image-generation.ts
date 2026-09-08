@@ -19,6 +19,7 @@ export const imageGenerationMapper: CodexEventMapper = {
       input.item.type !== "imageGeneration"
     )
       return emptyCodexMappingResult();
+    if (input.preparedImageGeneration) return imageEvent(input.preparedImageGeneration, ctx);
     const context: CodexImageGenerationContext = { liveStart: input.kind === "item_started" };
     if (ctx.turnId !== undefined) context.turnId = ctx.turnId;
     return imageEvent(codexImageGenerationPart(input.item, context), ctx);

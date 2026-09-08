@@ -1,6 +1,8 @@
 import type {
   AgentGeneratedImageReadInput,
   AgentGeneratedImageReadResult,
+  AgentGeneratedImageBatch,
+  AgentGeneratedImageBatchInput,
   AgentSessionAssociation,
   AgentSessionControlForkInput,
   AgentSessionControlResumeInput,
@@ -308,10 +310,12 @@ export interface AgentWorkspaceInspectionPort {
 
 export interface AgentGeneratedImageReadPort {
   readGeneratedImage(input: AgentGeneratedImageReadInput): Promise<AgentGeneratedImageReadResult>;
+  beginGeneratedImageBatch(input: AgentGeneratedImageBatchInput): Promise<AgentGeneratedImageBatch>;
+  releaseGeneratedImageBatch(input: AgentGeneratedImageBatch): Promise<void>;
 }
 
 export type AgentGeneratedImageSource =
-  | { representation: "saved_file"; path: string }
+  | { representation: "saved_file"; path: string; revision: string }
   | { representation: "inline"; base64: string };
 
 export type AgentEnginePort = AgentGeneratedImageReadPort &

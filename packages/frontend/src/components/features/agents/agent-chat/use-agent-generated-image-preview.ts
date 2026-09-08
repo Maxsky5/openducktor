@@ -14,7 +14,10 @@ type DecodedPreview =
 
 export const useAgentGeneratedImagePreview = (
   input: AgentGeneratedImageQueryInput,
-  read: AgentEnginePort["readGeneratedImage"],
+  read: Pick<
+    AgentEnginePort,
+    "readGeneratedImage" | "beginGeneratedImageBatch" | "releaseGeneratedImageBatch"
+  >,
 ) => {
   const query = useQuery(agentGeneratedImageQueryOptions(input, read));
   const [preview, setPreview] = useState<DecodedPreview | null>(null);

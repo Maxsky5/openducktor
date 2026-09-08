@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { beforeEach, afterEach, expect, spyOn, test } from "bun:test";
 import { mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import * as fs from "node:fs/promises";
@@ -45,7 +46,22 @@ beforeEach(() => {
 test("saved and inline PNG output return the same bounded bytes", async () => {
   const path = await imageFile();
   const saved = await Effect.runPromise(
-    reader.read({ representation: "saved_file", path }, "image"),
+    reader.read(
+      {
+        representation: "saved_file",
+        revision: createHash("sha256")
+          .update("saved_file\0")
+          .update(
+            Buffer.from(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
+              "base64",
+            ),
+          )
+          .digest("hex"),
+        path,
+      },
+      "image",
+    ),
   );
   const inline = await Effect.runPromise(
     reader.read({ representation: "inline", base64: png.toString("base64") }, "image"),
@@ -68,7 +84,24 @@ test("missing, directory, relative, and URL paths fail without file bytes", asyn
     "/invalid\0path",
   ]) {
     await expect(
-      Effect.runPromise(reader.read({ representation: "saved_file", path: candidate }, "image")),
+      Effect.runPromise(
+        reader.read(
+          {
+            representation: "saved_file",
+            revision: createHash("sha256")
+              .update("saved_file\0")
+              .update(
+                Buffer.from(
+                  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
+                  "base64",
+                ),
+              )
+              .digest("hex"),
+            path: candidate,
+          },
+          "image",
+        ),
+      ),
     ).rejects.toThrow("Image 'image'");
   }
 });
@@ -113,7 +146,24 @@ test("32 MiB is accepted and one extra decoded byte is rejected, including equal
   if (oversizedInline._tag === "Left") expect(oversizedInline.left.message).toContain("32 MiB");
   const path = await imageFile(bytes);
   const oversizedFile = await Effect.runPromise(
-    Effect.either(reader.read({ representation: "saved_file", path }, "image")),
+    Effect.either(
+      reader.read(
+        {
+          representation: "saved_file",
+          revision: createHash("sha256")
+            .update("saved_file\0")
+            .update(
+              Buffer.from(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
+                "base64",
+              ),
+            )
+            .digest("hex"),
+          path,
+        },
+        "image",
+      ),
+    ),
   );
   expect(oversizedFile._tag).toBe("Left");
   if (oversizedFile._tag === "Left") expect(oversizedFile.left.message).toContain("32 MiB");
@@ -137,7 +187,22 @@ for (const readFails of [false, true]) {
     });
     try {
       const exit = await Effect.runPromiseExit(
-        reader.read({ representation: "saved_file", path }, "image"),
+        reader.read(
+          {
+            representation: "saved_file",
+            revision: createHash("sha256")
+              .update("saved_file\0")
+              .update(
+                Buffer.from(
+                  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
+                  "base64",
+                ),
+              )
+              .digest("hex"),
+            path,
+          },
+          "image",
+        ),
       );
       expect(Exit.isFailure(exit)).toBe(true);
       if (!Exit.isFailure(exit)) throw new Error("Expected an image read failure");
@@ -186,12 +251,44 @@ test("interruption waits for file cleanup and preserves its interruption cause",
     await closeResult.promise;
     await closeHandle();
   });
-  const fiber = Effect.runFork(reader.read({ representation: "saved_file", path }, "image"));
+  const fiber = Effect.runFork(
+    reader.read(
+      {
+        representation: "saved_file",
+        revision: createHash("sha256")
+          .update("saved_file\0")
+          .update(
+            Buffer.from(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
+              "base64",
+            ),
+          )
+          .digest("hex"),
+        path,
+      },
+      "image",
+    ),
+  );
   try {
     await readStarted.promise;
     const otherPath = await imageFile();
     const other = await Effect.runPromise(
-      reader.read({ representation: "saved_file", path: otherPath }, "other"),
+      reader.read(
+        {
+          representation: "saved_file",
+          revision: createHash("sha256")
+            .update("saved_file\0")
+            .update(
+              Buffer.from(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
+                "base64",
+              ),
+            )
+            .digest("hex"),
+          path: otherPath,
+        },
+        "other",
+      ),
     );
     expect(other.byteLength).toBe(png.byteLength);
     const interrupted = Effect.runPromise(Fiber.interrupt(fiber));
@@ -213,4 +310,54 @@ test("interruption waits for file cleanup and preserves its interruption cause",
     closeFile.mockRestore();
     await closeHandle();
   }
+});
+
+test("saved file revisions follow bytes and reject replacement between metadata and preview", async () => {
+  const path = await imageFile();
+  const preparation = [
+    {
+      item: {
+        type: "imageGeneration" as const,
+        id: "saved",
+        status: "completed",
+        result: "ignored-inline",
+        revisedPrompt: null,
+        failure: null,
+        savedPath: path,
+      },
+      context: { turnId: "turn" },
+    },
+  ];
+  const [first] = await workers.prepareHistory(preparation);
+  expect(first?.status).toBe("completed");
+  expect(first?.output?.revision).toBe(
+    createHash("sha256").update("saved_file\0").update(png).digest("hex"),
+  );
+  const changed = Buffer.from(png);
+  changed[changed.length - 1] = changed[changed.length - 1]! ^ 1;
+  await writeFile(path, changed);
+  await expect(
+    Effect.runPromise(
+      reader.read(
+        { representation: "saved_file", path, revision: first!.output!.revision },
+        "saved",
+      ),
+    ),
+  ).rejects.toThrow("changed");
+  const [second] = await workers.prepareHistory(preparation);
+  expect(second?.output?.revision).not.toBe(first?.output?.revision);
+  const payload = await Effect.runPromise(
+    reader.read(
+      { representation: "saved_file", path, revision: second!.output!.revision },
+      "saved",
+    ),
+  );
+  expect(payload.base64).toBe(changed.toString("base64"));
+  await rm(path);
+  const [missing] = await workers.prepareHistory(preparation);
+  expect(missing).toMatchObject({
+    status: "completed",
+    previewUnavailableReason: expect.stringContaining("readable"),
+  });
+  expect(missing?.output).toBeUndefined();
 });

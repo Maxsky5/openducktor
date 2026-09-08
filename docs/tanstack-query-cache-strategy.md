@@ -104,3 +104,7 @@ Keep these values outside TanStack Query:
 ## Generated images
 
 `state/queries/agent-generated-images.ts` keys image reads by repository, runtime, working directory, session, turn, item, and output revision. It caches a Blob with `staleTime: Infinity` and `gcTime: 0`. It disables refetch on mount because each output revision has its own query.
+
+Visible previews share a history read in batches of up to eight distinct images. Each runtime holds at most two batches. Each batch retains only its selected sources and expires after two minutes. Individual reads consume those sources through the two-slot preview queue. Completion, cancellation, session release, and runtime release discard the batch. Batch IDs do not form part of query keys.
+
+Saved-file revisions hash the file bytes in the host worker. The host checks the digest again when it reads a preview. A file-read failure leaves generation completed and removes preview availability. The renderer requests saved-file metadata by session and item identity; it does not supply paths for file access.

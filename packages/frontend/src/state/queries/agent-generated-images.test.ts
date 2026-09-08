@@ -4,8 +4,19 @@ import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
 import {
   agentGeneratedImageQueryKeys,
-  agentGeneratedImageQueryOptions,
+  agentGeneratedImageQueryOptions as queryOptions,
 } from "./agent-generated-images";
+
+const batchId = "00000000-0000-4000-8000-000000000000";
+const agentGeneratedImageQueryOptions = (
+  input: AgentGeneratedImageReadInput,
+  read: import("@openducktor/core").AgentGeneratedImageReadPort["readGeneratedImage"],
+) =>
+  queryOptions(input, {
+    readGeneratedImage: read,
+    beginGeneratedImageBatch: async ({ ref }) => ({ ref, batchId }),
+    releaseGeneratedImageBatch: async () => {},
+  });
 
 const input = {
   ref: {
@@ -53,8 +64,24 @@ test("a new output revision fetches new bytes while replay reuses the cached ima
     expect(next).not.toBe(first);
     expect(read).toHaveBeenCalledTimes(2);
     expect(read.mock.calls).toEqual([
-      [{ ref: input.ref, itemId: input.itemId, turnId: input.turnId, revision: input.revision }],
-      [{ ref: input.ref, itemId: input.itemId, turnId: input.turnId, revision: changed.revision }],
+      [
+        {
+          ref: input.ref,
+          itemId: input.itemId,
+          turnId: input.turnId,
+          revision: input.revision,
+          batchId,
+        },
+      ],
+      [
+        {
+          ref: input.ref,
+          itemId: input.itemId,
+          turnId: input.turnId,
+          revision: changed.revision,
+          batchId,
+        },
+      ],
     ]);
   } finally {
     client.clear();
@@ -73,6 +100,7 @@ test("reads identity only and caches a Blob rather than encoded bytes", async ()
     itemId: "image",
     turnId: "turn",
     revision: input.revision,
+    batchId,
   });
   expect(client.getQueryData<Blob>(agentGeneratedImageQueryKeys.image(input))).toBe(blob);
   client.clear();
@@ -209,6 +237,88 @@ test("limits pending host reads to two and removes cancelled previews from the q
   } finally {
     gates.forEach((gate) => gate.resolve());
     remove.forEach((unsubscribe) => unsubscribe());
+    client.clear();
+  }
+});
+
+test("eight preview queries share one batch while two reads run and one bad image stays isolated", async () => {
+  const client = new QueryClient();
+  const firstReads = Promise.withResolvers<void>();
+  let active = 0;
+  let maximum = 0;
+  const began = mock(
+    async ({ ref }: import("@openducktor/contracts").AgentGeneratedImageBatchInput) => ({
+      ref,
+      batchId,
+    }),
+  );
+  const released = mock(async () => {});
+  const reader = {
+    beginGeneratedImageBatch: began,
+    releaseGeneratedImageBatch: released,
+    readGeneratedImage: async (request: AgentGeneratedImageReadInput) => {
+      active++;
+      maximum = Math.max(maximum, active);
+      try {
+        await firstReads.promise;
+        if (request.itemId === "image-3") throw new Error("Image file is missing");
+        return payload(request);
+      } finally {
+        active--;
+      }
+    },
+  };
+  const queries = Array.from({ length: 8 }, (_, index) =>
+    queryOptions({ ...input, itemId: `image-${index}` }, reader),
+  );
+  const result = Promise.allSettled(queries.map((query) => client.fetchQuery(query)));
+  try {
+    await waitFor(() => expect(active).toBe(2));
+    expect(began).toHaveBeenCalledTimes(1);
+    expect(began.mock.calls[0]![0].images).toHaveLength(8);
+    expect(released).not.toHaveBeenCalled();
+    firstReads.resolve();
+    const results = await result;
+    expect(maximum).toBe(2);
+    expect(results.filter((entry) => entry.status === "fulfilled")).toHaveLength(7);
+    expect(results[3]).toMatchObject({
+      status: "rejected",
+      reason: expect.objectContaining({ message: "Image file is missing" }),
+    });
+    expect(released).toHaveBeenCalledTimes(1);
+    expect(released).toHaveBeenCalledWith({ ref: input.ref, batchId });
+  } finally {
+    firstReads.resolve();
+    await result;
+    client.clear();
+  }
+});
+
+test("new work at batch completion and concurrent revisions both reach a fresh batch", async () => {
+  const client = new QueryClient();
+  const begin = mock(
+    async ({ ref }: import("@openducktor/contracts").AgentGeneratedImageBatchInput) => ({
+      ref,
+      batchId,
+    }),
+  );
+  const reader = {
+    beginGeneratedImageBatch: begin,
+    releaseGeneratedImageBatch: async () => {},
+    readGeneratedImage: async (request: AgentGeneratedImageReadInput) => payload(request),
+  };
+  try {
+    const first = client.fetchQuery(queryOptions(input, reader));
+    const second = client.fetchQuery(queryOptions({ ...input, revision: "second" }, reader));
+    const third = first.then(() =>
+      client.fetchQuery(queryOptions({ ...input, itemId: "next" }, reader)),
+    );
+    const results = await Promise.all([first, second, third]);
+    expect(results.every((result) => result instanceof Blob)).toBe(true);
+    expect(begin.mock.calls.flatMap(([request]) => request.images)).toHaveLength(3);
+    for (const [request] of begin.mock.calls)
+      expect(new Set(request.images.map(({ itemId }) => itemId)).size).toBe(request.images.length);
+  } finally {
     client.clear();
   }
 });

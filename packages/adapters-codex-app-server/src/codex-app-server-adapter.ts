@@ -1,3 +1,8 @@
+import type {
+  AgentGeneratedImageBatch,
+  AgentGeneratedImageBatchInput,
+  AgentGeneratedImageDescribeInput,
+} from "@openducktor/contracts";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentGeneratedImageSource } from "@openducktor/core";
 import { CodexGeneratedImageResolver } from "./codex-generated-image-resolver";
@@ -210,6 +215,7 @@ export class CodexAppServerAdapter
       ConstructorParameters<typeof CodexRuntimeSessionEvents>[0],
       "subscribeEvents" | "onRuntimeEventQueueFailure"
     > = {
+      prepareImageGenerations: options.prepareImageGenerations,
       respondServerRequest: options.respondServerRequest,
       sessions: {
         get: (externalSessionId: string) => this.localSessions.get(externalSessionId),
@@ -301,6 +307,18 @@ export class CodexAppServerAdapter
     signal?: AbortSignal,
   ): Promise<AgentGeneratedImageSource> {
     return this.generatedImages.resolve(input, signal);
+  }
+
+  beginGeneratedImageBatch(input: AgentGeneratedImageBatchInput, signal?: AbortSignal) {
+    return this.generatedImages.beginBatch(input, signal);
+  }
+
+  releaseGeneratedImageBatch(input: AgentGeneratedImageBatch): void {
+    this.generatedImages.releaseImageBatch(input);
+  }
+
+  describeGeneratedImages(input: AgentGeneratedImageDescribeInput, signal?: AbortSignal) {
+    return this.generatedImages.describe(input, signal);
   }
 
   settleGeneratedImages(runtimeId: string, sessionRef?: SessionRef): AgentEvent[] {
@@ -839,6 +857,7 @@ export class CodexAppServerAdapter
     if (session) {
       this.releaseSessionTree(session);
     } else {
+      this.generatedImages.releaseSession(input);
       this.contextUsageLoader.cancelSession(input);
     }
   }
@@ -1212,7 +1231,13 @@ export class CodexAppServerAdapter
         );
       },
     );
+    this.generatedImages.releaseSession({ ...codexSessionRef(session), runtimeKind: "codex" });
     for (const route of descendants.toReversed()) {
+      this.generatedImages.releaseSession({
+        ...codexSessionRef(session),
+        runtimeKind: "codex",
+        externalSessionId: route.childExternalSessionId,
+      });
       this.contextUsageLoader.cancelSession({
         ...codexSessionRef(session),
         externalSessionId: route.childExternalSessionId,
