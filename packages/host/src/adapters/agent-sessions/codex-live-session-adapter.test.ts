@@ -347,6 +347,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness({ initialSnapshots: [initial, idle] });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation.");
+        },
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -1348,6 +1351,7 @@ for (const action of ["stop", "release", "runtime"] as const) {
     await Effect.runPromise(prepared.startForwarding());
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: runtime.runtimeId,
+      snapshotMode: "full",
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,
