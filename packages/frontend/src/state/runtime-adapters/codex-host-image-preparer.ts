@@ -38,6 +38,8 @@ export const createHostImagePreparer =
         batch.some(({ image }) => JSON.stringify(image.context.ref) !== JSON.stringify(ref))
       )
         throw new Error("Saved image preparation requires one exact session. Reload the session.");
+      // Await each group to bound public-history reads and queued file-hash work.
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop
       const result = await host.agentSessionDescribeGeneratedImages({
         ref,
         images: batch.map(({ image }) => {
