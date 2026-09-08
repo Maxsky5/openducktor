@@ -328,20 +328,18 @@ export const viteServerOptions = (options: LauncherOptions): ViteServerOptions =
   };
   const externalUrl = options.externalUrl?.trim();
   const allowedHosts = ["localhost", ".localhost"];
-  if (externalUrl && isRemoteExternalOrigin(externalUrl)) {
+  if (externalUrl) {
     const hostname = new URL(externalUrl).hostname;
     if (!isIpLiteral(hostname)) {
-      allowedHosts.push(...new Set([hostname, hostname.replace(/\.$/u, "")]));
+      allowedHosts.push(hostname, hostname.replace(/\.$/u, ""));
     }
   }
   const bindHostname = options.host?.trim();
   if (bindHostname && !isIpLiteral(bindHostname) && !isLoopbackHost(bindHostname)) {
-    if (!allowedHosts.includes(bindHostname)) {
-      allowedHosts.push(bindHostname);
-    }
+    allowedHosts.push(bindHostname, bindHostname.replace(/\.$/u, ""));
   }
   if (allowedHosts.length > 2) {
-    serverOptions.allowedHosts = allowedHosts;
+    serverOptions.allowedHosts = [...new Set(allowedHosts)];
   }
   return serverOptions;
 };

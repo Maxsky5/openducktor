@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
+import { z } from "zod";
 import { createBrowserRuntimeConfigState } from "./browser-runtime-config-state";
 import { parseCliArgs } from "./cli";
 import { WebOperationError } from "./effect/web-errors";
@@ -217,6 +219,94 @@ describe("launcher internals", () => {
       }).allowedHosts,
     ).toEqual(["localhost", ".localhost", "machine.ts.net.", "machine.ts.net"]);
   });
+
+  test.each([
+    {
+      host: "RUNNER.INTERNAL.",
+      externalUrl: "https://PUBLIC.EXAMPLE",
+      hostname: "runner.internal",
+    },
+    {
+      host: "RUNNER.INTERNAL.",
+      externalUrl: "https://RUNNER.INTERNAL.",
+      hostname: "runner.internal",
+    },
+    { host: LOCALHOST, externalUrl: "http://RUNNER.LOCALHOST.:1420", hostname: "runner.localhost" },
+    { host: LOCALHOST, externalUrl: "http://LOCALHOST.:1420", hostname: "localhost" },
+  ])(
+    "allows exact dotted and undotted Vite hosts for $externalUrl with $host",
+    async ({ host, externalUrl, hostname }) => {
+      const { createServer } = await import("vite");
+      const parsed = parseCliArgs(["--host", host, "--external-url", externalUrl]);
+      for (const input of [parsed, { host, externalUrl }]) {
+        const bindHost = await Effect.runPromise(parseHostEffect(input.host, "--host", true));
+        const options = viteServerOptions({
+          host: bindHost,
+          externalUrl: z.string().parse(input.externalUrl),
+          packageRoot: process.cwd(),
+          workspaceMode: false,
+          frontendPort: 0,
+          backendPort: 0,
+        });
+        expect(options.host).toBe(host.toLowerCase());
+        expect(options.allowedHosts).toEqual([
+          ...new Set([
+            "localhost",
+            ".localhost",
+            new URL(externalUrl).hostname,
+            new URL(externalUrl).hostname.replace(/\.$/u, ""),
+            ...(host === LOCALHOST ? [] : ["runner.internal.", "runner.internal"]),
+          ]),
+        ]);
+        const vite = await createServer({
+          configFile: false,
+          optimizeDeps: { noDiscovery: true, include: [] },
+          server: { ...options, middlewareMode: true, hmr: false, ws: false },
+          plugins: [
+            {
+              name: "test-host-response",
+              configureServer(server) {
+                return () =>
+                  server.middlewares.use((_request, response) => response.end("allowed"));
+              },
+            },
+          ],
+        });
+        // Keep the resolved bind hostname while sending real HTTP requests over loopback.
+        const server = createHttpServer(vite.middlewares);
+        try {
+          expect(vite.config.server.host).toBe(bindHost);
+          expect(vite.config.server.allowedHosts).toContain(hostname);
+          expect(vite.config.server.allowedHosts).toContain(`${hostname}.`);
+          await new Promise<void>((resolve) => server.listen(0, LOCALHOST, resolve));
+          const address = z.object({ port: z.number() }).parse(server.address());
+          for (const [requestHost, status] of [
+            [hostname, 200],
+            [`${hostname}.`, 200],
+            ["unknown.example", 403],
+            [`sub.${hostname}.`, 403],
+            ...(hostname === "runner.internal" ? [["sub.runner.internal", 403] as const] : []),
+          ] as const) {
+            const response = await fetch(`http://${LOCALHOST}:${address.port}/`, {
+              headers: { host: requestHost },
+              proxy: "",
+            });
+            expect(response.status).toBe(status);
+            await response.text();
+          }
+        } finally {
+          try {
+            await new Promise<void>((resolve, reject) =>
+              server.close((error) => (error ? reject(error) : resolve())),
+            );
+          } finally {
+            await vite.close();
+          }
+        }
+      }
+    },
+    10_000,
+  );
 
   test.each(["100.64.0.1", "2001:db8::1", "[2001:db8::1]", "runner.internal"])(
     "omits loopback display URLs for specific bind %s",
