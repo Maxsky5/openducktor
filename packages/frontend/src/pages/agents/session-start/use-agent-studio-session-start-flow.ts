@@ -322,23 +322,6 @@ export function useAgentStudioSessionStartFlow({
     ],
   );
 
-  const startSession = useCallback(
-    async (options?: {
-      holdForPostStartMessage?: boolean;
-    }): Promise<SessionStartWorkflowResult | undefined> => {
-      const params: Parameters<typeof runSessionStart>[0] = {
-        postStartAction: "none",
-      };
-
-      if (options?.holdForPostStartMessage) {
-        params.holdForPostStartMessage = true;
-      }
-
-      return runSessionStart(params);
-    },
-    [runSessionStart],
-  );
-
   const startSessionForMessage = useCallback(async (): Promise<
     SessionStartWorkflowResult | undefined
   > => {
@@ -528,7 +511,6 @@ export function useAgentStudioSessionStartFlow({
     sessionStartModal,
     humanReviewFeedbackModal,
     startSessionRequest,
-    startSession,
     startSessionForMessage,
     startLaunchKickoff,
     handleCreateSession: handleCreateSessionWithHumanFeedback,
@@ -541,9 +523,6 @@ export function useAgentStudioSessionStartFlow({
       request: AgentStudioSessionStartRequest,
     ) => Promise<SessionStartWorkflowResult | undefined>;
     startSessionForMessage: () => Promise<SessionStartWorkflowResult | undefined>;
-    startSession: (options?: {
-      holdForPostStartMessage?: boolean;
-    }) => Promise<SessionStartWorkflowResult | undefined>;
     startLaunchKickoff: () => Promise<void>;
     handleCreateSession: (option: SessionCreateOption) => void;
     handleQuickAction: (option: AgentStudioQuickActionOption) => void;

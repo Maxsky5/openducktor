@@ -7,9 +7,7 @@ type AgentStudioSendTargetInput = {
   canStartNewSession: boolean;
 };
 
-export type StartSessionForMessage = (options: {
-  holdForPostStartMessage: true;
-}) => Promise<SessionStartWorkflowResult | undefined>;
+export type StartSessionForMessage = () => Promise<SessionStartWorkflowResult | undefined>;
 
 type ResolveAgentStudioSendTargetInput = AgentStudioSendTargetInput & {
   startSession: StartSessionForMessage;
@@ -33,6 +31,6 @@ export const resolveAgentStudioSendTargetSession = async ({
     return null;
   }
 
-  const startedSession = await startSession({ holdForPostStartMessage: true });
+  const startedSession = await startSession();
   return startedSession ? toAgentSessionIdentity(startedSession) : null;
 };
