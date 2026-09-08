@@ -172,6 +172,7 @@ export const createCodexLiveSessionAdapterPreparer =
       ): Effect.Effect<void, HostError> =>
         projection.applyMutation({
           runtimeId: runtime.runtimeId,
+          snapshotMode: "full",
           snapshots: controller.listLiveSessionSnapshots(runtime.runtimeId),
           transcriptEvents,
           catalogInvalidated: false,

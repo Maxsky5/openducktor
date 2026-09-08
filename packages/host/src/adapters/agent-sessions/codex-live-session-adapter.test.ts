@@ -291,12 +291,24 @@ const createControllerHarness = ({
             state: "queued" as const,
           };
         },
-        updateSessionModel: async () => {},
+        updateSessionModel: async (
+          input: Parameters<CodexAppServerAdapter["updateSessionModel"]>[0],
+        ) => {
+          snapshots = snapshots.map((snapshot) => {
+            if (snapshot.ref.externalSessionId !== input.externalSessionId) return snapshot;
+            const updated = { ...snapshot };
+            if (input.model) updated.model = input.model;
+            else delete updated.model;
+            return updated;
+          });
+        },
         stopSession: async () => {
           snapshots = [];
         },
-        releaseSession: async () => {
-          snapshots = [];
+        releaseSession: async (input: Parameters<CodexAppServerAdapter["releaseSession"]>[0]) => {
+          snapshots = snapshots.filter(
+            (snapshot) => snapshot.ref.externalSessionId !== input.externalSessionId,
+          );
         },
       };
     },
@@ -315,6 +327,104 @@ const createControllerHarness = ({
 };
 
 describe("createCodexLiveSessionAdapterPreparer", () => {
+  test("preserves a control model change through text deltas and removes only the released session", async () => {
+    const originalModel = { providerId: "openai", modelId: "gpt-5", variant: "medium" };
+    const nextModel = { ...originalModel, variant: "high" };
+    const initial = { ...liveSnapshot(), model: originalModel };
+    const idle = {
+      ...liveSnapshot(),
+      ref: { ...ref, externalSessionId: "idle-thread" },
+      activity: "idle" as const,
+      pendingApprovals: [],
+    };
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const harness = createControllerHarness({ initialSnapshots: [initial, idle] });
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle(changes),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    if (!prepared.adapter.supportsSessionControl)
+      throw new Error("Expected Codex session controls.");
+    const adapter = prepared.adapter;
+    const onMutation = harness.getOptions().onLiveSessionMutation;
+    if (!onMutation) throw new Error("Expected Codex mutation callback.");
+    const changed = { ...initial, model: nextModel };
+    try {
+      await onMutation({
+        runtimeId: runtime.runtimeId,
+        snapshotMode: "full",
+        snapshots: [initial, idle],
+        transcriptEvents: [],
+        catalogInvalidated: false,
+      });
+      expect(await Effect.runPromise(adapter.listSnapshots("/repo"))).toEqual([initial, idle]);
+      changes.length = 0;
+      await Effect.runPromise(
+        adapter.updateSessionModel({
+          ...ref,
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          model: nextModel,
+        }),
+      );
+      expect(changes).toEqual([{ type: "session_upsert", snapshot: changed }]);
+      changes.length = 0;
+      for (const delta of ["first", "second", "third"]) {
+        await onMutation({
+          runtimeId: runtime.runtimeId,
+          snapshotMode: "delta",
+          snapshots: [],
+          removedRefs: [],
+          catalogInvalidated: false,
+          transcriptEvents: [
+            {
+              type: "assistant_delta",
+              sessionRef: ref,
+              externalSessionId: ref.externalSessionId,
+              timestamp: "2026-07-16T10:02:00.000Z",
+              messageId: "message-1",
+              channel: "text",
+              delta,
+            },
+          ],
+        });
+      }
+      expect(changes.map((change) => change.type)).toEqual([
+        "transcript_event",
+        "transcript_event",
+        "transcript_event",
+      ]);
+      expect(
+        changes.flatMap((change) =>
+          change.type === "transcript_event" && change.event.type === "assistant_delta"
+            ? [change.event.delta]
+            : [],
+        ),
+      ).toEqual(["first", "second", "third"]);
+      expect(await Effect.runPromise(adapter.listSnapshots("/repo"))).toEqual([changed, idle]);
+      changes.length = 0;
+      await Effect.runPromise(adapter.releaseSession(ref));
+      expect(changes).toEqual([{ type: "session_removed", ref }]);
+      expect(await Effect.runPromise(adapter.readSnapshot(ref))).toEqual({ type: "missing", ref });
+      await onMutation({
+        runtimeId: runtime.runtimeId,
+        snapshotMode: "delta",
+        snapshots: [],
+        removedRefs: [],
+        transcriptEvents: [],
+        catalogInvalidated: false,
+      });
+      expect(await Effect.runPromise(adapter.listSnapshots("/repo"))).toEqual([idle]);
+    } finally {
+      await Effect.runPromise(prepared.discard());
+    }
+  });
+
   test("exposes the controller's streamed session diff through the host adapter", async () => {
     const sessionDiffs = [
       {
@@ -537,6 +647,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -566,6 +678,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
 
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: runtime.runtimeId,
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: true,
@@ -598,6 +712,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -646,6 +762,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots,
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -691,6 +809,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
 
     const firstMutation = harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -707,6 +827,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
 
     const removeMutation = harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [ref],
       snapshots: [],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -732,6 +854,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await expect(
       harness.getOptions().onLiveSessionMutation?.({
         runtimeId: "runtime-1",
+        snapshotMode: "delta",
+        removedRefs: [],
         snapshots: [liveSnapshot()],
         transcriptEvents: [
           // @ts-expect-error This malformed event verifies contract validation before commit.
@@ -827,28 +951,34 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await expect(
       onLiveSessionMutation?.({
         runtimeId: runtime.runtimeId,
+        snapshotMode: "delta",
+        removedRefs: [],
         snapshots: [liveSnapshot()],
         transcriptEvents: [],
         catalogInvalidated: false,
         fault: "Codex event processing failed.",
         faultRef: { ...ref, repoPath: "/other-repo" },
       }),
-    ).rejects.toThrow("fault ref outside repo");
+    ).rejects.toThrow("faultRef outside repo");
     await expect(
       onLiveSessionMutation?.({
         runtimeId: runtime.runtimeId,
+        snapshotMode: "delta",
+        removedRefs: [],
         snapshots: [liveSnapshot()],
         transcriptEvents: [],
         catalogInvalidated: false,
         fault: "Codex event processing failed.",
         faultRef: { ...ref, runtimeKind: "opencode" },
       }),
-    ).rejects.toThrow("fault ref outside Codex runtime");
+    ).rejects.toThrow("faultRef outside Codex runtime");
     expect(changes).toEqual([]);
 
     await expect(
       onLiveSessionMutation?.({
         runtimeId: runtime.runtimeId,
+        snapshotMode: "delta",
+        removedRefs: [],
         snapshots: [liveSnapshot()],
         transcriptEvents: [],
         catalogInvalidated: false,
@@ -903,6 +1033,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
 
     const mutation = harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -931,6 +1063,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,
@@ -984,6 +1118,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(prepared.startForwarding());
     await harness.getOptions().onLiveSessionMutation?.({
       runtimeId: "runtime-1",
+      snapshotMode: "delta",
+      removedRefs: [],
       snapshots: [liveSnapshot()],
       transcriptEvents: [],
       catalogInvalidated: false,

@@ -229,6 +229,15 @@ export class CodexSubagentLinkState {
   private readonly linksByChildThreadId = new Map<string, CodexStoredSubagentLink>();
   private readonly linksByCorrelationKey = new Map<string, CodexStoredSubagentLink>();
   private readonly provisionalByParentKey = new Map<string, Map<string, CodexStoredSubagentLink>>();
+  private readonly snapshotListeners = new Set<CodexSubagentRouteListener>();
+
+  onSnapshotChanged(listener: CodexSubagentRouteListener): () => void {
+    this.snapshotListeners.add(listener);
+    return () => {
+      this.snapshotListeners.delete(listener);
+    };
+  }
+
   private readonly routeListeners = new Set<CodexSubagentRouteListener>();
 
   onRouteLearned(listener: CodexSubagentRouteListener): () => void {
@@ -411,6 +420,11 @@ export class CodexSubagentLinkState {
     }
     this.storeLink(link, parentItemKey);
     const route = routeFromLink(link);
+    if (route && (!sameRoute(previousRoute, route) || existing?.status !== status)) {
+      for (const listener of this.snapshotListeners) {
+        listener(route);
+      }
+    }
     if (route && !sameRoute(previousRoute, route)) {
       this.emitRouteLearned(route);
     }

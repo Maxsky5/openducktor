@@ -33,6 +33,7 @@ import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
+import { findRetainedSessionOwner } from "./codex-retained-session-owner";
 import {
   CodexRuntimeEventSubscriptions,
   type CodexRuntimeStreamEvent,
@@ -105,6 +106,7 @@ type CodexThreadDiffState = {
 export type CodexRuntimeLiveSessionMutation = {
   runtimeId: string;
   transcriptEvents: AgentSessionTranscriptEvent[];
+  changedSessionIds: Set<string>;
   catalogInvalidated: boolean;
   fault?: string;
   faultRef?: AgentSessionLiveRef;
@@ -182,6 +184,13 @@ export class CodexRuntimeSessionEvents {
       subagents: deps.subagents,
       emitParentSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
+    });
+    deps.subagents.onSnapshotChanged((route) => {
+      const runtimeId =
+        route.runtimeId ?? deps.sessions.get(route.parentExternalSessionId)?.runtimeId;
+      if (runtimeId) {
+        this.markSnapshotChanged(runtimeId, route.childExternalSessionId);
+      }
     });
     deps.subagents.onRouteLearned((route) => {
       this.applyLearnedSubagentRoute(route);
@@ -294,6 +303,7 @@ export class CodexRuntimeSessionEvents {
     const mutation: CodexRuntimeLiveSessionMutation = {
       runtimeId: event.runtimeId,
       transcriptEvents: [],
+      changedSessionIds: new Set(),
       catalogInvalidated: false,
     };
     this.activeMutationByRuntimeId.set(event.runtimeId, mutation);
@@ -445,6 +455,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void {
+    this.markSnapshotChanged(session.runtimeId, session.threadId);
     session.liveStatus = liveStatus;
     session.summary = {
       ...session.summary,
@@ -476,6 +487,18 @@ export class CodexRuntimeSessionEvents {
   }
 
   private applyLearnedSubagentRoute(route: CodexSubagentRoute): void {
+    const runtimeId =
+      route.runtimeId ?? this.deps.sessions.get(route.parentExternalSessionId)?.runtimeId;
+    if (runtimeId) {
+      this.markSnapshotChanged(runtimeId, route.childExternalSessionId);
+      for (const descendant of this.deps.subagents.descendantRoutesForParent(
+        route.childExternalSessionId,
+        runtimeId,
+        () => true,
+      )) {
+        this.markSnapshotChanged(runtimeId, descendant.childExternalSessionId);
+      }
+    }
     try {
       this.applyRouteToPendingInput(route);
       this.subagentLifecycle.projectBufferedRoute(route);
@@ -548,6 +571,7 @@ export class CodexRuntimeSessionEvents {
     }
     if (notification?.method === "thread/tokenUsage/updated") {
       this.contextUsage.observeNotification(event.runtimeId, notification);
+      this.markSnapshotChanged(event.runtimeId, notification.params.threadId);
     }
     const isServerRequest = isServerRequestStreamEvent(event);
     const threadId = threadIdFromRuntimeStreamEvent(event);
@@ -556,6 +580,9 @@ export class CodexRuntimeSessionEvents {
         this.emitUnroutableRuntimeServerRequest(event.runtimeId);
       }
       return;
+    }
+    if (isServerRequest || notification?.method === "serverRequest/resolved") {
+      this.markSnapshotChanged(event.runtimeId, threadId);
     }
     if (notification?.method === "serverRequest/resolved") {
       this.handleServerRequestResolvedNotification(event.runtimeId, notification);
@@ -746,29 +773,21 @@ export class CodexRuntimeSessionEvents {
     targetExternalSessionId: string,
     runtimeId: string,
   ): CodexRuntimeStreamEventSessionOwner | undefined {
-    const visited = new Set<string>();
-    let currentExternalSessionId = targetExternalSessionId;
-    while (!visited.has(currentExternalSessionId)) {
-      visited.add(currentExternalSessionId);
-      const retainedSession = this.deps.sessions.get(currentExternalSessionId);
-      if (retainedSession) {
-        return retainedSession.runtimeId === runtimeId
-          ? {
-              retainedSession,
-              targetSession:
-                currentExternalSessionId === targetExternalSessionId
-                  ? retainedSession
-                  : routedSession(retainedSession, targetExternalSessionId),
-            }
-          : undefined;
-      }
-      const route = this.deps.subagents.routeForChild(currentExternalSessionId, runtimeId);
-      if (!route || (route.runtimeId && route.runtimeId !== runtimeId)) {
-        return undefined;
-      }
-      currentExternalSessionId = route.parentExternalSessionId;
+    const owner = findRetainedSessionOwner({
+      sessions: this.deps.sessions,
+      subagents: this.deps.subagents,
+      runtimeId,
+      threadId: targetExternalSessionId,
+    });
+    if (!owner) {
+      return undefined;
     }
-    return undefined;
+    return {
+      retainedSession: owner.retainedSession,
+      targetSession: owner.route
+        ? routedSession(owner.retainedSession, targetExternalSessionId)
+        : owner.retainedSession,
+    };
   }
 
   private emitCrossRuntimeRouteError(
@@ -1101,6 +1120,10 @@ export class CodexRuntimeSessionEvents {
         .get(session.runtimeId)
         ?.transcriptEvents.push(agentSessionTranscriptEventSchema.parse(normalizedEvent));
     }
+  }
+
+  private markSnapshotChanged(runtimeId: string, threadId: string): void {
+    this.activeMutationByRuntimeId.get(runtimeId)?.changedSessionIds.add(threadId);
   }
 
   private clearTurnScopedMap<T>(map: Map<string, T>, externalSessionId: string): void {

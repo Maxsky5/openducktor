@@ -244,7 +244,10 @@ type CodexAppServerRequestOnlyOptions = {
 export type CodexAppServerAdapterOptions = CodexAppServerAdapterBaseOptions &
   (CodexAppServerStreamingOptions | CodexAppServerRequestOnlyOptions);
 
-export type CodexLiveSessionMutation = {
+export type CodexLiveSessionMutation = (
+  | { snapshotMode: "full"; removedRefs?: never }
+  | { snapshotMode: "delta"; removedRefs: AgentSessionLiveRef[] }
+) & {
   runtimeId: string;
   snapshots: AgentSessionLiveSnapshot[];
   transcriptEvents: AgentEvent[];

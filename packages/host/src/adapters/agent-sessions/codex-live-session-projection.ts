@@ -28,39 +28,17 @@ type QueuedMutation = {
   readonly reject: (cause: unknown) => void;
 };
 
-type NormalizedCodexLiveSessionMutation = Pick<
+type ParsedMutation = Pick<
   CodexLiveSessionMutation,
   "catalogInvalidated" | "fault" | "faultRef"
 > & {
   readonly snapshots: AgentSessionLiveSnapshot[];
+  readonly snapshotMode: "full" | "delta";
+  readonly removedRefs: AgentSessionLiveRef[];
   readonly transcriptEvents: Array<z.output<typeof agentSessionTranscriptEventSchema>>;
 };
 
 type OperationValidationDetails = { readonly operation: string };
-
-const refKey = (ref: AgentSessionLiveRef): string =>
-  [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
-
-const refsEqual = (left: AgentSessionLiveRef, right: AgentSessionLiveRef): boolean =>
-  refKey(left) === refKey(right);
-
-const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
-  JSON.stringify(left) === JSON.stringify(right);
-
-const parseProjectionValue = <Schema extends z.ZodType, Input>(
-  schema: Schema,
-  value: Input,
-  operation: string,
-): Effect.Effect<z.output<Schema>, HostValidationError<OperationValidationDetails>> =>
-  Effect.try({
-    try: () => schema.parse(value),
-    catch: (cause) =>
-      new HostValidationError<OperationValidationDetails>({
-        message: cause instanceof Error ? cause.message : String(cause),
-        cause,
-        details: { operation },
-      }),
-  });
 
 export const createCodexLiveSessionProjection = ({
   runtime,
@@ -75,7 +53,64 @@ export const createCodexLiveSessionProjection = ({
   let released = false;
   let forwardingChain = Promise.resolve();
 
-  const normalizeSnapshots = (snapshots: AgentSessionLiveSnapshot[]) =>
+  /** Parse all input before changing state so an invalid ref cannot leave partial changes. */
+  const applyMutation = (mutation: CodexLiveSessionMutation): Effect.Effect<void, HostError> =>
+    parseMutation(mutation).pipe(
+      Effect.flatMap((parsed) =>
+        liveSessionLifecycle.runAdapterMutation(
+          Effect.sync(() => {
+            if (released) {
+              return { value: undefined, changes: [] };
+            }
+            const changes: AgentSessionLiveAdapterChange[] = [];
+            const incomingKeys = new Set<string>();
+            for (const snapshot of parsed.snapshots) {
+              const key = refKey(snapshot.ref);
+              incomingKeys.add(key);
+              const previous = snapshotsByRef.get(key);
+              snapshotsByRef.set(key, snapshot);
+              if (!previous || !snapshotsEqual(previous, snapshot)) {
+                changes.push({ type: "session_upsert", snapshot });
+              }
+            }
+            const removals =
+              parsed.snapshotMode === "full"
+                ? [...snapshotsByRef.values()]
+                    .filter((snapshot) => !incomingKeys.has(refKey(snapshot.ref)))
+                    .map((snapshot) => snapshot.ref)
+                : parsed.removedRefs;
+            for (const ref of removals) {
+              const key = refKey(ref);
+              if (snapshotsByRef.delete(key)) {
+                changes.push({ type: "session_removed", ref });
+              }
+            }
+            for (const event of parsed.transcriptEvents) {
+              changes.push({ type: "transcript_event", event });
+            }
+            if (parsed.catalogInvalidated) {
+              changes.push({
+                type: "catalog_invalidated",
+                repoPath: runtime.repoPath,
+                runtimeKind: "codex",
+              });
+            }
+            if (parsed.fault) {
+              const fault = {
+                type: "fault",
+                repoPath: runtime.repoPath,
+                operation: "codex-live-session.process-event",
+                message: parsed.fault,
+              } satisfies AgentSessionLiveAdapterChange;
+              changes.push(parsed.faultRef ? { ...fault, ref: parsed.faultRef } : fault);
+            }
+            return { value: undefined, changes };
+          }),
+        ),
+      ),
+    );
+
+  const parseSnapshots = (snapshots: AgentSessionLiveSnapshot[]) =>
     Effect.forEach(snapshots, (snapshot) =>
       parseProjectionValue(
         agentSessionLiveSnapshotSchema,
@@ -96,18 +131,18 @@ export const createCodexLiveSessionProjection = ({
       ),
     );
 
-  const normalizeFaultRef = (faultRef: AgentSessionLiveRef) =>
+  const parseMutationRef = (ref: AgentSessionLiveRef, field: "faultRef" | "removedRefs") =>
     parseProjectionValue(
       agentSessionLiveRefSchema,
-      faultRef,
-      "codex-live-session.normalize-fault-ref",
+      ref,
+      `codex-live-session.normalize-${field}`,
     ).pipe(
       Effect.flatMap((parsed) => {
         if (parsed.repoPath !== runtime.repoPath) {
           return Effect.fail(
             new HostValidationError({
-              field: "faultRef.repoPath",
-              message: `Codex runtime '${runtime.runtimeId}' produced a fault ref outside repo '${runtime.repoPath}'.`,
+              field: `${field}.repoPath`,
+              message: `Codex runtime '${runtime.runtimeId}' produced ${field} outside repo '${runtime.repoPath}'.`,
               details: { runtimeId: runtime.runtimeId, ref: parsed },
             }),
           );
@@ -115,8 +150,8 @@ export const createCodexLiveSessionProjection = ({
         if (parsed.runtimeKind !== "codex") {
           return Effect.fail(
             new HostValidationError({
-              field: "faultRef.runtimeKind",
-              message: `Codex runtime '${runtime.runtimeId}' produced a fault ref outside Codex runtime.`,
+              field: `${field}.runtimeKind`,
+              message: `Codex runtime '${runtime.runtimeId}' produced ${field} outside Codex runtime.`,
               details: { runtimeId: runtime.runtimeId, ref: parsed },
             }),
           );
@@ -125,7 +160,7 @@ export const createCodexLiveSessionProjection = ({
       }),
     );
 
-  const normalizeMutation = (mutation: CodexLiveSessionMutation) =>
+  const parseMutation = (mutation: CodexLiveSessionMutation) =>
     Effect.gen(function* () {
       if (mutation.runtimeId !== runtime.runtimeId) {
         return yield* Effect.fail(
@@ -136,7 +171,13 @@ export const createCodexLiveSessionProjection = ({
           }),
         );
       }
-      const snapshots = yield* normalizeSnapshots(mutation.snapshots);
+      const snapshots = yield* parseSnapshots(mutation.snapshots);
+      const removedRefs =
+        mutation.snapshotMode === "delta"
+          ? yield* Effect.forEach(mutation.removedRefs, (ref) =>
+              parseMutationRef(ref, "removedRefs"),
+            )
+          : [];
       const transcriptEvents = yield* Effect.forEach(mutation.transcriptEvents, (event) =>
         parseProjectionValue(
           agentSessionTranscriptEventSchema,
@@ -144,70 +185,24 @@ export const createCodexLiveSessionProjection = ({
           "codex-live-session.normalize-transcript-event",
         ),
       );
-      const faultRef = mutation.faultRef ? yield* normalizeFaultRef(mutation.faultRef) : undefined;
-      const normalized: NormalizedCodexLiveSessionMutation = {
+      const faultRef = mutation.faultRef
+        ? yield* parseMutationRef(mutation.faultRef, "faultRef")
+        : undefined;
+      const parsed: ParsedMutation = {
         snapshots,
+        snapshotMode: mutation.snapshotMode,
+        removedRefs,
         transcriptEvents,
         catalogInvalidated: mutation.catalogInvalidated,
       };
       if (mutation.fault) {
-        normalized.fault = mutation.fault;
+        parsed.fault = mutation.fault;
       }
       if (faultRef) {
-        normalized.faultRef = faultRef;
+        parsed.faultRef = faultRef;
       }
-      return normalized;
+      return parsed;
     });
-
-  const applyMutation = (mutation: CodexLiveSessionMutation): Effect.Effect<void, HostError> =>
-    normalizeMutation(mutation).pipe(
-      Effect.flatMap((normalized) =>
-        liveSessionLifecycle.runAdapterMutation(
-          Effect.sync(() => {
-            if (released) {
-              return { value: undefined, changes: [] };
-            }
-            const changes: AgentSessionLiveAdapterChange[] = [];
-            const incomingKeys = new Set<string>();
-            for (const snapshot of normalized.snapshots) {
-              const key = refKey(snapshot.ref);
-              incomingKeys.add(key);
-              const previous = snapshotsByRef.get(key);
-              snapshotsByRef.set(key, snapshot);
-              if (!previous || !snapshotsEqual(previous, snapshot)) {
-                changes.push({ type: "session_upsert", snapshot });
-              }
-            }
-            for (const [key, snapshot] of snapshotsByRef) {
-              if (!incomingKeys.has(key)) {
-                snapshotsByRef.delete(key);
-                changes.push({ type: "session_removed", ref: snapshot.ref });
-              }
-            }
-            for (const event of normalized.transcriptEvents) {
-              changes.push({ type: "transcript_event", event });
-            }
-            if (normalized.catalogInvalidated) {
-              changes.push({
-                type: "catalog_invalidated",
-                repoPath: runtime.repoPath,
-                runtimeKind: "codex",
-              });
-            }
-            if (normalized.fault) {
-              const fault = {
-                type: "fault",
-                repoPath: runtime.repoPath,
-                operation: "codex-live-session.process-event",
-                message: normalized.fault,
-              } satisfies AgentSessionLiveAdapterChange;
-              changes.push(normalized.faultRef ? { ...fault, ref: normalized.faultRef } : fault);
-            }
-            return { value: undefined, changes };
-          }),
-        ),
-      ),
-    );
 
   const drainQueuedMutations = (): Promise<void> => {
     forwardingChain = forwardingChain.then(async () => {
@@ -299,3 +294,27 @@ export const createCodexLiveSessionProjection = ({
       }),
   };
 };
+
+const refKey = (ref: AgentSessionLiveRef): string =>
+  [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
+
+const refsEqual = (left: AgentSessionLiveRef, right: AgentSessionLiveRef): boolean =>
+  refKey(left) === refKey(right);
+
+const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
+  JSON.stringify(left) === JSON.stringify(right);
+
+const parseProjectionValue = <Schema extends z.ZodType, Input>(
+  schema: Schema,
+  value: Input,
+  operation: string,
+): Effect.Effect<z.output<Schema>, HostValidationError<OperationValidationDetails>> =>
+  Effect.try({
+    try: () => schema.parse(value),
+    catch: (cause) =>
+      new HostValidationError<OperationValidationDetails>({
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+        details: { operation },
+      }),
+  });
