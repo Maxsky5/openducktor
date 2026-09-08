@@ -12,6 +12,28 @@ const item = (status: string): CodexImageGenerationItem => ({
   transparentBackground: null,
 });
 
+test("terminal turns take precedence over unknown image statuses and live starts", () => {
+  for (const status of ["future_status", "", "in_progress"]) {
+    expect(
+      codexImageGenerationPart(item(status), { turnStatus: "interrupted", liveStart: true }),
+    ).toMatchObject({ status: "interrupted" });
+    expect(
+      codexImageGenerationPart(item(status), { turnStatus: "failed", liveStart: true }),
+    ).toMatchObject({ status: "incomplete", incompleteReason: "runtime_failure" });
+    expect(
+      codexImageGenerationPart(item(status), { turnStatus: "completed", liveStart: true }),
+    ).toMatchObject({ status: "incomplete", incompleteReason: "incomplete_history" });
+  }
+  for (const turnStatus of ["interrupted", "failed", "completed", "inProgress"] as const) {
+    for (const status of ["completed", "failed"]) {
+      expect(codexImageGenerationPart(item(status), { turnStatus }).status).toBe(status);
+    }
+  }
+  expect(
+    codexImageGenerationPart(item("future_status"), { turnStatus: "inProgress" }),
+  ).toMatchObject({ status: "incomplete", incompleteReason: "unknown_status" });
+});
+
 test("native status and turn context define truthful outcomes", () => {
   for (const status of ["", "in_progress"]) {
     expect(codexImageGenerationPart(item(status), { liveStart: true }).status).toBe("running");

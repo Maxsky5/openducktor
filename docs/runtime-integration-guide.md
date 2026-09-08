@@ -268,6 +268,8 @@ Adapters emit `image_generation` parts with stable item and turn identity. Keep 
 
 An output carries an opaque `revision`. Keep it stable across live replay and history for the same reported output, and change it when that output changes. Shared code compares revisions without interpreting them. Keep file paths as optional display metadata; a path does not authorize an image read. Do not put native source representations or usage-limit identifiers in image parts.
 
+Capture the current image parts before a history read. Fresh history can replace an unchanged terminal item and its output metadata. Preserve a terminal result that changed during the read. Without a read-start snapshot, keep the current terminal result. An unknown native image status must not hide a confirmed turn interruption or failure. Native image completion and failure retain priority over turn outcomes.
+
 | Transcript event | Rule |
 |---|---|
 | `image_generation_turn_started` | Record the new turn so earlier session ends do not mark its images incomplete. Do not revive an ended turn. |

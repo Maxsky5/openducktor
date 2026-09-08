@@ -106,6 +106,35 @@ test("matching revisions can fill file metadata without replacing the output", (
   expect(mergeAgentImageGeneration(withPath, current, "live")).toEqual(withPath);
 });
 
+test("fresh history replaces the output captured before the read", () => {
+  const previous = {
+    ...part("completed"),
+    savedPath: "/old.png",
+    output: { revision: "old" },
+  };
+  const refreshed = { ...part("completed"), output: { revision: "new" } };
+  expect(mergeAgentImageGeneration(previous, refreshed, "history", previous)).toEqual(refreshed);
+  expect(
+    mergeAgentImageGeneration(
+      previous,
+      { ...refreshed, savedPath: "/new.png" },
+      "history",
+      previous,
+    ),
+  ).toEqual({ ...refreshed, savedPath: "/new.png" });
+});
+
+test("a live completion during the history read keeps its own output revision", () => {
+  const beforeRead = part("running");
+  const live = { ...part("completed"), output: { revision: "live" } };
+  const history = {
+    ...part("completed"),
+    output: { revision: "history" },
+    savedPath: "/history.png",
+  };
+  expect(mergeAgentImageGeneration(live, history, "history", beforeRead)).toEqual(live);
+});
+
 test("completion replay without media preserves the known output and metadata", () => {
   const completed: AgentImageGenerationPart = {
     ...part("completed"),

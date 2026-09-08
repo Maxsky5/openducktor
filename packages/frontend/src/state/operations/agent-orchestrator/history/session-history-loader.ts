@@ -191,12 +191,15 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     if (systemPromptContext) {
       historyInput.systemPromptContext = systemPromptContext;
     }
+    const messagesAtReadStart = readSessionSnapshot(identity)?.messages;
     const history = await adapter.loadSessionHistory(historyInput);
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
     }
 
-    return updateSession(identity, (current) => policy.applyLoadedHistory(current, history));
+    return updateSession(identity, (current) =>
+      policy.applyLoadedHistory(current, history, messagesAtReadStart),
+    );
   } catch (error) {
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();

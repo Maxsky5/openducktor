@@ -12,6 +12,39 @@ const part = (itemId: string, turnId = "turn"): AgentImageGenerationPart => ({
   status: "running",
 });
 
+test("later history refreshes an unchanged terminal image and clears its old file path", () => {
+  const state = new CodexImageGenerationState();
+  const first: AgentImageGenerationPart = {
+    ...part("image"),
+    status: "completed",
+    output: { revision: "first" },
+    savedPath: "/first.png",
+  };
+  state.prepareHistory("runtime", "thread")(first);
+  const second = { ...first, output: { revision: "second" }, savedPath: "/second.png" };
+  expect(state.prepareHistory("runtime", "thread")(second)).toEqual(second);
+  const third: AgentImageGenerationPart = {
+    ...part("image"),
+    status: "completed",
+    output: { revision: "third" },
+  };
+  expect(state.prepareHistory("runtime", "thread")(third)).toEqual(third);
+});
+
+test("history cannot replace an image updated after the read started", () => {
+  const state = new CodexImageGenerationState();
+  const first: AgentImageGenerationPart = {
+    ...part("image"),
+    status: "completed",
+    output: { revision: "first" },
+  };
+  state.prepareHistory("runtime", "thread")(first);
+  const pendingHistory = state.prepareHistory("runtime", "thread");
+  const live = { ...first, output: { revision: "live" } };
+  state.upsert("runtime", "thread", live);
+  expect(pendingHistory({ ...first, savedPath: "/old.png" })).toEqual(live);
+});
+
 test("settlement only affects active images in the exact runtime, session, and turn", () => {
   const state = new CodexImageGenerationState();
   state.upsert("runtime", "thread", part("one"));

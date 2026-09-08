@@ -62,17 +62,17 @@ export const codexImageGenerationPart = (
     }
     return part;
   }
-  if (item.status !== "in_progress" && item.status !== "") {
-    part.incompleteReason = "unknown_status";
-    return part;
-  }
   if (context.turnStatus === "interrupted") {
     part.status = "interrupted";
+  } else if (context.turnStatus === "failed" || context.turnStatus === "completed") {
+    part.incompleteReason =
+      context.turnStatus === "failed" ? "runtime_failure" : "incomplete_history";
+  } else if (item.status !== "in_progress" && item.status !== "") {
+    part.incompleteReason = "unknown_status";
   } else if (context.liveStart || context.turnStatus === "inProgress") {
     part.status = "running";
   } else {
-    part.incompleteReason =
-      context.turnStatus === "failed" ? "runtime_failure" : "incomplete_history";
+    part.incompleteReason = "incomplete_history";
   }
   return part;
 };

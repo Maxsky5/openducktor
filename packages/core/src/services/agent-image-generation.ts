@@ -1,10 +1,11 @@
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 
-/** Merge one session's image item without letting old history replace a runtime result. */
+/** History can refresh an unchanged item, but cannot replace a result received during the read. */
 export const mergeAgentImageGeneration = (
   current: AgentImageGenerationPart,
   incoming: AgentImageGenerationPart,
   source: "live" | "history",
+  currentAtReadStart?: AgentImageGenerationPart,
 ): AgentImageGenerationPart => {
   if (
     current.itemId !== incoming.itemId ||
@@ -20,7 +21,8 @@ export const mergeAgentImageGeneration = (
   )
     return current;
   if (current.status !== "running" && incoming.status === "running") return current;
-  if (source === "history" && isNativeTerminal(current)) {
+  // Image parts are immutable. The same object means no update arrived during the read.
+  if (source === "history" && isNativeTerminal(current) && current !== currentAtReadStart) {
     if (current.status !== incoming.status) return current;
     const merged = { ...incoming, ...current };
     if (current.output && current.output.revision !== incoming.output?.revision) {

@@ -202,6 +202,7 @@ const findMatchingCurrentMessages = ({
 const mergeSameMessageId = (
   loadedMessage: AgentChatMessage,
   currentMessage: AgentChatMessage | undefined,
+  messagesAtReadStart?: AgentSessionState["messages"],
 ): AgentChatMessage => {
   if (!currentMessage) {
     return loadedMessage;
@@ -240,9 +241,17 @@ const mergeSameMessageId = (
     loadedMessage.meta?.kind === "image_generation" &&
     currentMessage.meta?.kind === "image_generation"
   ) {
+    const beforeRead = messagesAtReadStart?.items.find(
+      (message) => message.id === currentMessage.id,
+    )?.meta;
     return {
       ...currentMessage,
-      meta: mergeAgentImageGeneration(currentMessage.meta, loadedMessage.meta, "history"),
+      meta: mergeAgentImageGeneration(
+        currentMessage.meta,
+        loadedMessage.meta,
+        "history",
+        beforeRead?.kind === "image_generation" ? beforeRead : undefined,
+      ),
     };
   }
 
@@ -277,6 +286,7 @@ export const mergeHistoryMessages = (
   externalSessionId: string,
   loadedMessages: AgentSessionState["messages"],
   currentMessages: AgentSessionState["messages"],
+  messagesAtReadStart?: AgentSessionState["messages"],
 ): AgentSessionState["messages"] => {
   const currentOwner = { externalSessionId, messages: currentMessages };
   const loadedOwner = { externalSessionId, messages: loadedMessages };
@@ -309,7 +319,7 @@ export const mergeHistoryMessages = (
     }
     const mergedMessage = matchingCurrentMessages.reduce<AgentChatMessage>(
       (currentMerged, matchingCurrentMessage) =>
-        mergeSameMessageId(currentMerged, matchingCurrentMessage),
+        mergeSameMessageId(currentMerged, matchingCurrentMessage, messagesAtReadStart),
       message,
     );
     mergedMessages.push(mergedMessage);

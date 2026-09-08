@@ -419,6 +419,7 @@ export const historyToChatMessages = (
 export const applyLoadedSessionHistory = (
   session: AgentSessionState,
   history: AgentSessionHistoryMessage[],
+  messagesAtReadStart?: AgentSessionState["messages"],
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, {
     role: session.sessionAssociation.kind === "workflow" ? session.sessionAssociation.role : null,
@@ -431,7 +432,12 @@ export const applyLoadedSessionHistory = (
     historyLoadFailure: null,
     messages: settleImageGenerationMessages({
       ...session,
-      messages: mergeHistoryMessages(session.externalSessionId, loadedMessages, session.messages),
+      messages: mergeHistoryMessages(
+        session.externalSessionId,
+        loadedMessages,
+        session.messages,
+        messagesAtReadStart,
+      ),
     }),
   };
 };

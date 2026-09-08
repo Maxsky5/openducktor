@@ -32,8 +32,15 @@ export class CodexImageGenerationState {
     threadId: string,
   ): (part: AgentImageGenerationPart, occurredAt?: string) => AgentImageGenerationPart {
     const owner = this.thread(runtimeId, threadId);
+    const itemsAtReadStart = new Map(owner.items);
     return (part, occurredAt) => {
-      const image = this.update(owner, part, "history", occurredAt);
+      const image = this.update(
+        owner,
+        part,
+        "history",
+        occurredAt,
+        itemsAtReadStart.get(itemKey(part)),
+      );
       return this.runtimes.get(runtimeId)?.get(threadId) === owner
         ? image
         : settleAgentImageGeneration(image, "runtime_failure");
@@ -111,10 +118,13 @@ export class CodexImageGenerationState {
     incoming: AgentImageGenerationPart,
     source: "live" | "history",
     occurredAt?: string,
+    currentAtReadStart?: AgentImageGenerationPart,
   ): AgentImageGenerationPart {
     const key = itemKey(incoming);
     const current = state.items.get(key);
-    const merged = current ? mergeAgentImageGeneration(current, incoming, source) : incoming;
+    const merged = current
+      ? mergeAgentImageGeneration(current, incoming, source, currentAtReadStart)
+      : incoming;
     const terminal = resolveAgentImageGenerationSettlement(
       state.lifecycle,
       { turnId: merged.turnId, timestamp: occurredAt },
