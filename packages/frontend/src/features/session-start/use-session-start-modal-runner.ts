@@ -22,6 +22,7 @@ import type {
 } from "./session-start-types";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";
+import { useSessionStartKickoffPrompt } from "./use-session-start-kickoff-prompt";
 
 export type SessionStartModalDecision = Exclude<NewSessionStartDecision, null>;
 
@@ -175,12 +176,6 @@ export function useSessionStartModalRunner({
   const confirmationsRef = useRef(new Map<string | null, PendingModalRun>());
   const [confirmations, setConfirmations] = useState(confirmationsRef.current);
   const isStarting = confirmations.has(scopeKey);
-  const [promptRetry, setPromptRetry] = useState(0);
-  const [promptState, setPromptState] = useState<{
-    key: string;
-    text?: string;
-    error?: string;
-  } | null>(null);
 
   const {
     intent,
@@ -225,28 +220,12 @@ export function useSessionStartModalRunner({
   });
 
   selectionRef.current = selection;
-  const promptKey = `${intent?.requestId ?? ""}:${selectedTargetBranch}:${promptRetry}`;
-  const needsPrompt = Boolean(intent?.resolveKickoffPrompt);
-  const promptLoading = needsPrompt && promptState?.key !== promptKey;
-  useEffect(() => {
-    const resolve = intent?.resolveKickoffPrompt;
-    if (!resolve) return;
-    let active = true;
-    void (async () => {
-      try {
-        const branch = selectedTargetBranch
-          ? targetBranchFromSelection(selectedTargetBranch)
-          : undefined;
-        const text = await resolve(branch);
-        if (active) setPromptState({ key: promptKey, text });
-      } catch (cause) {
-        if (active) setPromptState({ key: promptKey, error: errorMessage(cause) });
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [intent?.resolveKickoffPrompt, promptKey, selectedTargetBranch]);
+  const { kickoffPrompt, isKickoffPromptLoading, kickoffPromptError, onRetryKickoffPrompt } =
+    useSessionStartKickoffPrompt({
+      requestId: intent?.requestId,
+      resolveKickoffPrompt: intent?.resolveKickoffPrompt,
+      selectedTargetBranch,
+    });
 
   const handleRetryRuntimeDefinitions = useCallback((): void => {
     void retryRuntimeDefinitions().catch((error) => {
@@ -330,8 +309,8 @@ export function useSessionStartModalRunner({
         !input ||
         input === true ||
         confirmationsRef.current.has(scopeKey) ||
-        promptLoading ||
-        (needsPrompt && promptState?.error)
+        isKickoffPromptLoading ||
+        kickoffPromptError
       ) {
         return;
       }
@@ -410,9 +389,8 @@ export function useSessionStartModalRunner({
     [
       intent?.requestId,
       scopeKey,
-      promptLoading,
-      needsPrompt,
-      promptState,
+      isKickoffPromptLoading,
+      kickoffPromptError,
       eligibleRuntimeDefinitions,
       existingSessionOptions,
       resolvePendingRun,
@@ -429,11 +407,10 @@ export function useSessionStartModalRunner({
     return {
       open: isOpen,
       requestId: intent.requestId,
-      kickoffPrompt: needsPrompt && promptState?.key === promptKey ? promptState.text : undefined,
-      isKickoffPromptLoading: promptLoading,
-      kickoffPromptError:
-        needsPrompt && promptState?.key === promptKey ? (promptState.error ?? null) : null,
-      onRetryKickoffPrompt: () => setPromptRetry((value) => value + 1),
+      kickoffPrompt,
+      isKickoffPromptLoading,
+      kickoffPromptError,
+      onRetryKickoffPrompt,
       title: intent.title,
       description:
         intent.description ??
@@ -483,10 +460,10 @@ export function useSessionStartModalRunner({
       onConfirm: confirmModal,
     };
   }, [
-    needsPrompt,
-    promptState,
-    promptKey,
-    promptLoading,
+    kickoffPrompt,
+    isKickoffPromptLoading,
+    kickoffPromptError,
+    onRetryKickoffPrompt,
     runtimeProfileOptions,
     availableStartModes,
     catalogError,

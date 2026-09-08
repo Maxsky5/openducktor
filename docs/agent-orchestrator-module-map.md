@@ -227,6 +227,7 @@ Rules:
 - `RunSessionStartWorkflow` awaits the first message. It reports a send failure in `postStartActionError`.
 - Agent Studio, Kanban, and Autopilot call the same `RunSessionStartWorkflow` command.
 - Sessionless composer submission keeps explicit choices separate from initial defaults. It validates the exact model selection and catalog, then starts a fresh task workflow session through `startSessionForMessage`. It sends typed draft parts without a start modal or generated kickoff.
+- `use-session-start-kickoff-prompt.ts` owns modal prompt loading, explicit retry, and stale-result rejection. Each request, resolver, branch change, or retry requires its own result before confirmation.
 - Explicit launches resolve the kickoff through `session-start-kickoff.ts` before the shared modal can confirm. The modal edits one optional string and owns no task or settings reads. The workflow validates the baseline before pre-start mutations and sends the confirmed text once. It sets the frontend `preserveTextWhitespace` send option; runtime encoders preserve text boundaries without a new protocol field.
 - Failed kickoff sends retain the session and text for an explicit message retry. Failed first composer sends return an exact origin and recovery draft key. The composer keeps that recovery in memory until the matching session is visible and never overwrites newer input.
 - The start modal reads runtime definitions from runtime availability context.

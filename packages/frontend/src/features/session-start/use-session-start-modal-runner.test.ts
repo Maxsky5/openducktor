@@ -595,6 +595,26 @@ test("ignores out-of-order branch prompt results and blocks unresolved confirmat
     expect(harness.getLatest().sessionStartModal?.kickoffPrompt).toBe("prompt for two");
     expect(harness.getLatest().sessionStartModal?.kickoffPromptError).toBeNull();
     expect(execute).not.toHaveBeenCalled();
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onSelectTargetBranch?.("refs/heads/one");
+    });
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onSelectTargetBranch?.("refs/heads/two");
+    });
+    expect(resolutions).toHaveLength(5);
+    expect(harness.getLatest().sessionStartModal?.kickoffPrompt).toBeUndefined();
+    expect(harness.getLatest().sessionStartModal?.isKickoffPromptLoading).toBe(true);
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onConfirm({
+        startMode: "fresh",
+        sourceSessionOptionValue: null,
+        kickoffPrompt: "prompt for two",
+        runInBackground: false,
+      });
+    });
+    expect(execute).not.toHaveBeenCalled();
+    await harness.run(() => resolutions[4]!.resolve("refreshed prompt for two"));
+    expect(harness.getLatest().sessionStartModal?.kickoffPrompt).toBe("refreshed prompt for two");
   } finally {
     await harness.run((runner) => {
       runner.sessionStartModal?.onOpenChange(false);
