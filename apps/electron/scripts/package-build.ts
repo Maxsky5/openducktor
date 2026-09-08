@@ -148,7 +148,8 @@ export const resolveElectronBuilderArgs = ({
   }
 
   if (!signed && platform === "macos") {
-    args.push("-c.mac.notarize=false");
+    // Match development signing so macOS can authorize native notifications.
+    args.push("-c.mac.notarize=false", "-c.mac.identity=-", "-c.mac.hardenedRuntime=false");
   }
 
   if (!signed && platform === "windows") {

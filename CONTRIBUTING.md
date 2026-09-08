@@ -37,6 +37,8 @@ Useful alternative:
 
 - Browser mode if you want agents to access it with tools like `agent-browser`: `bun run browser:dev`.
 
+Use `bun run electron:package` to build a local desktop installer. Local macOS packages use an ad-hoc signature, as the development launcher does, so macOS can identify the app for notifications. These local packages do not use a Developer ID certificate or notarization.
+
 ## Local Tooling Reference
 
 Core tooling:
