@@ -575,13 +575,6 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
           <DialogBody className="pt-2 pb-4">
             <fieldset className="space-y-5" disabled={isStarting}>
-              <SessionStartKickoffField
-                draft={kickoffDraft}
-                disabled={isStarting}
-                loading={model.isKickoffPromptLoading}
-                error={model.kickoffPromptError}
-                onRetry={model.onRetryKickoffPrompt}
-              />
               <StartModeField
                 availableStartModes={availableStartModes}
                 hasExistingSessionOptions={hasExistingSessionOptions}
@@ -630,6 +623,14 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                 variantDisabled={variantDisabled}
                 variantOptions={variantOptions}
                 onSelectVariant={onSelectVariant}
+              />
+
+              <SessionStartKickoffField
+                draft={kickoffDraft}
+                disabled={isStarting}
+                loading={model.isKickoffPromptLoading}
+                error={model.kickoffPromptError}
+                onRetry={model.onRetryKickoffPrompt}
               />
             </fieldset>
           </DialogBody>
