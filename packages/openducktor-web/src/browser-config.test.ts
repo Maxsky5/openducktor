@@ -95,6 +95,24 @@ describe("browser web host config", () => {
     ).toBe("http://127.0.0.1:14327");
   });
 
+  test.each(["runner.localhost", "nested.runner.localhost."])(
+    "aligns loopback backend and browser hostnames for %s",
+    (hostname) => {
+      expect(
+        getBrowserBackendUrl(
+          { VITE_ODT_BROWSER_BACKEND_URL: `http://${hostname}:14327/api` },
+          "http://localhost:1420",
+        ),
+      ).toBe("http://localhost:14327/api");
+      expect(
+        getBrowserBackendUrl(
+          { VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327/api" },
+          `http://${hostname}:1420`,
+        ),
+      ).toBe(`http://${hostname}:14327/api`);
+    },
+  );
+
   test("keeps the injected backend hostname for opaque browser origins", () => {
     expect(
       getBrowserBackendUrl({ VITE_ODT_BROWSER_BACKEND_URL: "http://127.0.0.1:14327" }, "null"),

@@ -461,6 +461,58 @@ describe("TypeScript web host backend", () => {
     );
   });
 
+  test.each([
+    "https://machine.ts.net.",
+    "https://machine.ts.net.:443",
+    "https://machine.ts.net.:8443",
+    "http://machine.ts.net.:80",
+  ])("allows configured and canonical CORS origins for %s", async (frontendOrigin) => {
+    const configured = new URL(frontendOrigin);
+    const canonical = new URL(frontendOrigin);
+    canonical.hostname = "machine.ts.net";
+    const allowedOrigins = allowedOriginsForFrontendOrigin(frontendOrigin, 1420);
+    expect(allowedOrigins).toEqual(
+      new Set([
+        configured.origin,
+        canonical.origin,
+        "http://127.0.0.1:1420",
+        "http://localhost:1420",
+        "http://[::1]:1420",
+      ]),
+    );
+    for (const origin of [
+      configured.origin,
+      canonical.origin,
+      "https://unknown.example",
+      "https://sub.machine.ts.net",
+    ]) {
+      const response = await Effect.runPromise(
+        handleTypescriptHostBackendRequest({
+          allowedOrigins,
+          appSessionCookieName: APP_SESSION_COOKIE_NAME,
+          appToken: APP_TOKEN,
+          controlToken: CONTROL_TOKEN,
+          eventBus: new BufferedHostEventBus({ report: () => {} }),
+          hostCommandRouter: createTestHostCommandRouter(),
+          taskAssetReadService: missingTaskAssetReadService,
+          localAttachments: createLocalAttachmentAdapter(),
+          logger: testLogger,
+          request: new Request("http://127.0.0.1/session", {
+            method: "OPTIONS",
+            headers: { origin, "access-control-request-method": "POST" },
+          }),
+          sessionCookieSecure: configured.protocol === "https:",
+          shutdownStarted: false,
+          beginShutdown: () => {},
+          stop: async () => {},
+        }),
+      );
+      const allowed = origin === configured.origin || origin === canonical.origin;
+      expect(response.status).toBe(allowed ? 204 : 403);
+      expect(response.headers.get("access-control-allow-origin")).toBe(allowed ? origin : null);
+    }
+  });
+
   test("preserves structured host command failure kind in invoke error responses", async () => {
     const hostCommandRouter = createTestHostCommandRouter((command) =>
       Effect.fail(

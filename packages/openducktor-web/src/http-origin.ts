@@ -10,6 +10,7 @@ export const isLoopbackHost = (host: string): boolean => {
   const hostname = stripTrailingDot(host);
   return (
     LOOPBACK_HOSTS.has(hostname) ||
+    hostname.endsWith(".localhost") ||
     (/^127(\.\d{1,3}){3}$/u.test(hostname) &&
       hostname.split(".").every((octet) => Number(octet) <= 255))
   );

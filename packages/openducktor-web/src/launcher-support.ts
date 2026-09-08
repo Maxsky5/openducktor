@@ -11,7 +11,7 @@ import {
   WebOperationError,
 } from "./effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
-import { formatHost, LOCALHOST } from "./http-origin";
+import { formatHost, isLoopbackHost, isRemoteExternalOrigin, LOCALHOST } from "./http-origin";
 import type { TypescriptHostBackend } from "./typescript-host-backend";
 
 interface LauncherEarlyExitRef {
@@ -114,6 +114,9 @@ export const buildFrontendDisplayUrls = (
   bindHost: string,
   externalUrl?: string,
 ): FrontendDisplayUrl[] => {
+  if (externalUrl && isRemoteExternalOrigin(externalUrl)) {
+    return [{ kind: "network", url: `${externalUrl.replace(/\/$/, "")}/` }];
+  }
   const urls: FrontendDisplayUrl[] = [];
   if (bindHost === LOCALHOST || bindHost === "0.0.0.0") {
     urls.push(
@@ -122,7 +125,7 @@ export const buildFrontendDisplayUrls = (
     );
   } else if (["::", "[::]", "::1", "[::1]"].includes(bindHost)) {
     urls.push({ kind: "local", url: `http://[::1]:${port}/` });
-  } else if (bindHost === "localhost" || bindHost === "localhost.") {
+  } else if (isLoopbackHost(bindHost)) {
     urls.push({ kind: "local", url: `http://${bindHost}:${port}/` });
   }
   if (externalUrl) {

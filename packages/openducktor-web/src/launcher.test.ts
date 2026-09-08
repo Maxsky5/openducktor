@@ -56,6 +56,9 @@ describe("launcher internals", () => {
     "127.0.0.2.",
     "localhost",
     "localhost.",
+    "runner.localhost",
+    "nested.runner.localhost",
+    "nested.runner.localhost.",
     "::1",
     "[::1]",
   ])("recognizes loopback host %s", (host) => {
@@ -75,11 +78,20 @@ describe("launcher internals", () => {
     "127.0.0.1.2",
     "127.0.0.0000",
     "127..0.1",
+    "notlocalhost",
+    "localhost.example",
   ])("does not classify invalid or remote host %s as loopback", (host) => {
     expect(isLoopbackHost(host)).toBe(false);
   });
 
-  test.each(["127.0.0.0", "127.0.0.2", "127.255.255.255", "0x7f000002"])(
+  test.each([
+    "127.0.0.0",
+    "127.0.0.2",
+    "127.255.255.255",
+    "0x7f000002",
+    "runner.localhost",
+    "nested.runner.localhost.",
+  ])(
     "rejects loopback external host %s through CLI and programmatic launch paths",
     async (host) => {
       const externalUrl = `http://${host}:1420`;
@@ -118,6 +130,9 @@ describe("launcher internals", () => {
   );
 
   test("does not expand the request Host allowlist to the loopback block", () => {
+    expect(
+      allowedHostnamesFor({ bindHost: LOCALHOST, externalUrl: undefined }).has("runner.localhost"),
+    ).toBe(false);
     expect(
       allowedHostnamesFor({ bindHost: LOCALHOST, externalUrl: undefined }).has("127.0.0.2"),
     ).toBe(false);
@@ -172,11 +187,14 @@ describe("launcher internals", () => {
     ]);
   });
 
-  test.each(["localhost", "localhost."])("prints the loopback hostname bind %s", (bindHost) => {
-    expect(buildFrontendDisplayUrls(1420, bindHost)).toEqual([
-      { kind: "local", url: `http://${bindHost}:1420/` },
-    ]);
-  });
+  test.each(["localhost", "localhost.", "runner.localhost", "127.0.0.2", "127.42.3.4"])(
+    "prints the configured loopback bind %s",
+    (bindHost) => {
+      expect(buildFrontendDisplayUrls(1420, bindHost)).toEqual([
+        { kind: "local", url: `http://${bindHost}:1420/` },
+      ]);
+    },
+  );
 
   test("uses development discovery for workspace source launches", () => {
     expect(resolveWebMcpBridgeDiscoveryMode(true)).toBe("development");
@@ -1179,11 +1197,30 @@ describe("launcher internals", () => {
     ]);
   });
 
-  test("adds the external URL to the frontend availability URLs", () => {
+  test("prints only the remote external URL in the frontend availability URLs", () => {
     expect(buildFrontendDisplayUrls(1420, "0.0.0.0", "http://100.64.0.1:1420")).toEqual([
+      { kind: "network", url: "http://100.64.0.1:1420/" },
+    ]);
+  });
+
+  test.each([LOCALHOST, "127.0.0.2", "localhost", "[::1]", "0.0.0.0", "[::]"])(
+    "prints only the remote origin for bind %s with or without a backend base path",
+    (bindHost) => {
+      const externalUrl = "https://machine.ts.net";
+      for (const basePath of [undefined, "/api"]) {
+        const backend = buildBrowserBackendUrl(basePath, externalUrl, externalUrl, bindHost, 14327);
+        expect(backend.browserUrl).toBe(basePath ? `${externalUrl}/api` : `${externalUrl}:14327`);
+        expect(buildFrontendDisplayUrls(1420, bindHost, externalUrl)).toEqual([
+          { kind: "network", url: `${externalUrl}/` },
+        ]);
+      }
+    },
+  );
+
+  test("keeps local-only display links without duplicate external URLs", () => {
+    expect(buildFrontendDisplayUrls(1420, LOCALHOST, "http://localhost:1420")).toEqual([
       { kind: "local", url: "http://localhost:1420/" },
       { kind: "local", url: "http://127.0.0.1:1420/" },
-      { kind: "network", url: "http://100.64.0.1:1420/" },
     ]);
   });
 
