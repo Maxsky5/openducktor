@@ -160,7 +160,11 @@ export const parseHttpOriginEffect = (
       });
     }
 
-    if (parsed.hostname === "0.0.0.0" || parsed.hostname === "[::]") {
+    if (
+      parsed.hostname === "0.0.0.0" ||
+      parsed.hostname === "[::]" ||
+      parsed.hostname === "[::ffff:0:0]"
+    ) {
       return yield* originError(options.field, {
         message: `${originDescription} must not use a wildcard address. Use the real IP address or DNS name that browsers will reach; use wildcard addresses only for --host.`,
         details: { rawUrl },

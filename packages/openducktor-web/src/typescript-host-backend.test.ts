@@ -17,7 +17,7 @@ import { WorkspaceTextFileWriteError } from "../../host/src/application/filesyst
 import { HostOperationError } from "../../host/src/effect/host-errors";
 import type { HostCommandHandlerError } from "../../host/src/interface/router/host-command-router";
 import type { WebLogger } from "./logger";
-import { allowedHostnamesFor } from "./http-origin";
+import { allowedHostnamesFor, parseHostEffect } from "./http-origin";
 import { validateLauncherNetworkOptionsEffect } from "./launcher";
 import {
   buildBackendUrl,
@@ -387,15 +387,17 @@ describe("TypeScript web host backend", () => {
     },
   );
 
-  test("probes a bare IPv6 wildcard bind through the allowed loopback Host", async () => {
-    const server = createTerminalUpgradeTestServer("/api", "::");
+  test("probes a normalized IPv6 wildcard bind through the allowed loopback Host", async () => {
+    const bindHost = await Effect.runPromise(parseHostEffect("::", "--host", true));
+    const server = createTerminalUpgradeTestServer("/api", bindHost);
     try {
       const port = server.port;
       if (port === undefined) throw new Error("Expected the test server to expose a port.");
       // Connect through ::1 on every OS, with the Host that each readiness URL sends.
       for (const [host, status] of [
-        ["[::]", 403],
+        ["[::]", 200],
         ["[::1]", 200],
+        ["unknown.example", 403],
       ] as const) {
         const response = await Bun.fetch(`http://[::1]:${port}/health`, {
           headers: { host: `${host}:${port}` },
@@ -403,7 +405,7 @@ describe("TypeScript web host backend", () => {
         expect(response.status).toBe(status);
         await response.text();
       }
-      await waitForBackend(buildBackendUrl(port, readinessHostForBind("::")), APP_TOKEN, 1000, {
+      await waitForBackend(buildBackendUrl(port, readinessHostForBind(bindHost)), APP_TOKEN, 1000, {
         exited: new Promise<number>(() => {}),
       });
     } finally {

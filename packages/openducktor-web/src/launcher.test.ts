@@ -163,24 +163,45 @@ describe("launcher internals", () => {
     ).toBe(false);
   });
 
-  test.each(["http://0.0.0.0:1420", "http://[::]:1420"])(
-    "rejects wildcard external origin %s before starting servers",
-    async (externalUrl) => {
-      await expect(
-        Effect.runPromise(
-          runLauncherEffect(
-            {
-              packageRoot: "/missing-web-package",
-              workspaceMode: false,
-              frontendPort: 0,
-              backendPort: 0,
-              host: "0.0.0.0",
-              externalUrl,
-            },
-            testLogger,
-          ),
+  test.each([
+    "http://0.0.0.0:1420",
+    "http://[::]:1420",
+    "http://[::ffff:0.0.0.0]:1420",
+    "http://[::ffff:0:0]:1420",
+    "http://[0:0:0:0:0:ffff:0:0]:1420",
+  ])("rejects wildcard external origin %s before starting servers", async (externalUrl) => {
+    await expect(
+      Effect.runPromise(
+        runLauncherEffect(
+          {
+            packageRoot: "/missing-web-package",
+            workspaceMode: false,
+            frontendPort: 0,
+            backendPort: 0,
+            host: "0.0.0.0",
+            externalUrl,
+          },
+          testLogger,
         ),
-      ).rejects.toThrow("Use the real IP address or DNS name");
+      ),
+    ).rejects.toThrow("Use the real IP address or DNS name");
+  });
+
+  test.each(["0.0.0.0", "[::]", "[::ffff:0.0.0.0]"])(
+    "accepts wildcard bind %s with a non-wildcard mapped external origin",
+    async (host) => {
+      const externalUrl = "http://[::ffff:100.64.0.1]:1420";
+      const parsed = parseCliArgs(["--host", host, "--external-url", externalUrl]);
+      expect(parsed.externalUrl).toBe("http://[::ffff:6440:1]:1420");
+      for (const url of [externalUrl, parsed.externalUrl]) {
+        await Effect.runPromise(
+          validateLauncherNetworkOptionsEffect({
+            basePath: undefined,
+            bindHost: await Effect.runPromise(parseHostEffect(host, "--host", true)),
+            externalUrl: url,
+          }),
+        );
+      }
     },
   );
 

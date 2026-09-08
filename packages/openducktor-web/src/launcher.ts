@@ -764,7 +764,7 @@ export const runLauncherEffect = (
     const runtimeConfigState = createBrowserRuntimeConfigState();
     const developmentInstanceId = options.workspaceMode ? options.developmentInstanceId : undefined;
     const bindHost = yield* parseHostEffect(options.host ?? LOCALHOST, "--host", true);
-    const externalUrl = options.externalUrl?.trim() || undefined;
+    const externalUrl = options.externalUrl?.trim();
     const basePath = yield* validateLauncherNetworkOptionsEffect({
       basePath: options.basePath,
       bindHost,

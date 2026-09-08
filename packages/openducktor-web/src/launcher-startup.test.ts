@@ -8,6 +8,36 @@ import { runWebBoundary } from "./effect/web-errors";
 import { runLauncherEffect, viteServerOptions } from "./launcher";
 import * as support from "./launcher-support";
 import * as backend from "./typescript-host-backend";
+import * as discovery from "./web-tool-discovery";
+
+test.each(["", " \t\n "])(
+  "rejects blank external URL %j before discovery or binds",
+  async (externalUrl) => {
+    const discover = spyOn(discovery, "resolveWebProvidedToolPathsEffect");
+    const serve = spyOn(Bun, "serve");
+    try {
+      await expect(
+        runWebBoundary(
+          runLauncherEffect(
+            {
+              packageRoot: "/missing-web-package",
+              workspaceMode: false,
+              frontendPort: 0,
+              backendPort: 0,
+              externalUrl,
+            },
+            { error: () => Effect.void, info: () => Effect.void, success: () => Effect.void },
+          ),
+        ),
+      ).rejects.toMatchObject({ _tag: "WebValidationError", field: "externalUrl" });
+      expect(discover).not.toHaveBeenCalled();
+      expect(serve).not.toHaveBeenCalled();
+    } finally {
+      discover.mockRestore();
+      serve.mockRestore();
+    }
+  },
+);
 
 test("Vite accepts both external hostname forms and rejects unknown hosts", async () => {
   const { createServer } = await import("vite");
@@ -48,6 +78,13 @@ test("Vite accepts both external hostname forms and rejects unknown hosts", asyn
 }, 10_000);
 
 test.each([
+  { externalUrl: undefined, basePath: undefined, failAdvisory: false, warns: false },
+  {
+    externalUrl: " https://machine.ts.net ",
+    basePath: undefined,
+    failAdvisory: false,
+    warns: true,
+  },
   { externalUrl: "https://machine.ts.net", basePath: undefined, failAdvisory: true, warns: false },
   { externalUrl: "https://machine.ts.net", basePath: undefined, failAdvisory: false, warns: true },
   { externalUrl: "http://localhost:1420", basePath: undefined, failAdvisory: false, warns: false },
@@ -96,7 +133,7 @@ test.each([
             frontendPort: 0,
             backendPort: 0,
             host: "127.0.0.1",
-            externalUrl,
+            ...(externalUrl !== undefined && { externalUrl }),
             ...(basePath !== undefined && { basePath }),
           },
           {
@@ -126,7 +163,10 @@ test.each([
         expect(await result).toBe(0);
       }
       expect(startHost).toHaveBeenCalledTimes(1);
-      if (basePath !== undefined) {
+      if (externalUrl !== undefined) {
+        expect(startHost.mock.calls[0]?.[0].frontendOrigin).toBe(externalUrl.trim());
+      }
+      if (basePath !== undefined && externalUrl !== undefined) {
         expect(startHost.mock.calls[0]?.[0].basePath).toBe("/api");
         expect(runtimeConfig.mock.calls[0]?.[0]).toBe(`${new URL(externalUrl).origin}/api`);
       }
