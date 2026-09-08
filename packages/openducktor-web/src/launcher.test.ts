@@ -36,6 +36,7 @@ import {
   isLoopbackHost,
   isRequestHostAllowed,
   LOCALHOST,
+  parseHostEffect,
 } from "./http-origin";
 import type { WebLogger } from "./logger";
 
@@ -1278,6 +1279,65 @@ describe("launcher internals", () => {
       { kind: "local", url: "http://127.0.0.1:1420/" },
     ]);
   });
+
+  test.each(["https://localhost", "https://127.0.0.1", "https://[::1]:8443"])(
+    "prints only the HTTPS loopback external URL %s",
+    (externalUrl) => {
+      for (const bindHost of [LOCALHOST, "localhost", "[::1]"]) {
+        expect(buildFrontendDisplayUrls(1420, bindHost, externalUrl)).toEqual([
+          { kind: "network", url: `${externalUrl}/` },
+        ]);
+      }
+    },
+  );
+
+  test.each([
+    "https://machine.ts.net",
+    "https://machine.ts.net/",
+    "https://machine.ts.net:443/",
+    "https://machine.ts.net:8443/",
+    "http://machine.ts.net:80/",
+    "http://machine.ts.net:1420",
+  ])("appends the base path to the canonical origin of %s", (externalUrl) => {
+    const urls = buildBrowserBackendUrl("/api", externalUrl, externalUrl, LOCALHOST, 14327);
+    expect(urls.browserUrl).toBe(`${new URL(externalUrl).origin}/api`);
+    expect(new URL(`${urls.browserUrl}/session`).pathname).toBe("/api/session");
+    expect(urls.directUrl).toBe("http://127.0.0.1:14327");
+  });
+
+  test("normalizes the bind hostname for incoming Host checks", async () => {
+    const bindHost = await Effect.runPromise(parseHostEffect("RUNNER.INTERNAL", "--host", true));
+    expect(bindHost).toBe("runner.internal");
+    expect(
+      isRequestHostAllowed(
+        new Request("http://runner.internal/", {
+          headers: { host: "runner.internal" },
+        }),
+        allowedHostnamesFor({ bindHost, externalUrl: undefined }),
+      ),
+    ).toBe(true);
+  });
+
+  test.each(["runner:1420", "http://localhost", "localhost/path", "[invalid]", ""])(
+    "rejects invalid programmatic bind %s before startup",
+    async (host) => {
+      await expect(
+        Effect.runPromise(
+          runLauncherEffect(
+            {
+              packageRoot: "/missing-package-root",
+              workspaceMode: false,
+              frontendPort: 0,
+              backendPort: 0,
+              host,
+              externalUrl: "https://machine.ts.net",
+            },
+            testLogger,
+          ),
+        ),
+      ).rejects.toThrow("Invalid --host value");
+    },
+  );
 
   test("derives the external backend URL from the external frontend URL and the bound host port", () => {
     expect(buildExternalBackendUrl("http://100.64.0.1:1420", 14327)).toBe(

@@ -15,7 +15,7 @@ import {
 } from "./effect/web-errors";
 import { type LauncherOptions, runLauncherEffect } from "./launcher";
 import { createWebLogger, type WebLogger, writeWebLogEffect } from "./logger";
-import { parseHttpOriginEffect } from "./http-origin";
+import { parseHostEffect, parseHttpOriginEffect } from "./http-origin";
 
 type CliOptions = {
   workspaceMode: boolean;
@@ -101,38 +101,6 @@ const readFlagValue = (
       });
     }
     return value;
-  });
-
-const invalidHostError = (raw: string, flag: string): WebValidationError =>
-  new WebValidationError({
-    message: `Invalid ${flag} value: ${raw}. Expected a hostname or IP address without a scheme, port, or path.`,
-    field: flag,
-    details: { raw },
-  });
-
-const parseHostEffect = (
-  raw: string | undefined,
-  flag: string,
-): Effect.Effect<string, WebValidationError> =>
-  Effect.gen(function* () {
-    if (raw === undefined) {
-      return yield* new WebValidationError({
-        message: `Missing value for ${flag}.`,
-        field: flag,
-      });
-    }
-    const trimmed = raw.trim();
-    if (trimmed.includes(":") && !trimmed.startsWith("[")) {
-      return yield* invalidHostError(raw, flag);
-    }
-    const parsed = yield* Effect.try({
-      try: () => new URL(`http://${trimmed}`),
-      catch: () => invalidHostError(raw, flag),
-    });
-    if (parsed.href !== `http://${parsed.hostname}/`) {
-      return yield* invalidHostError(raw, flag);
-    }
-    return parsed.hostname;
   });
 
 const parseExternalUrlEffect = (

@@ -94,7 +94,7 @@ export const buildBrowserBackendUrl = (
   const directUrl = buildBackendUrl(backendPort, bindHost);
   if (basePath) {
     return {
-      browserUrl: `${frontendUrl}${basePath}`,
+      browserUrl: `${new URL(frontendUrl).origin}${basePath}`,
       directUrl,
     };
   }
@@ -114,7 +114,10 @@ export const buildFrontendDisplayUrls = (
   bindHost: string,
   externalUrl?: string,
 ): FrontendDisplayUrl[] => {
-  if (externalUrl && isRemoteExternalOrigin(externalUrl)) {
+  if (
+    externalUrl &&
+    (isRemoteExternalOrigin(externalUrl) || new URL(externalUrl).protocol === "https:")
+  ) {
     return [{ kind: "network", url: `${externalUrl.replace(/\/$/, "")}/` }];
   }
   const urls: FrontendDisplayUrl[] = [];

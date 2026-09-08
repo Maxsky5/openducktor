@@ -45,6 +45,7 @@ import {
   isRemoteExternalOrigin,
   isRequestHostAllowed,
   LOCALHOST,
+  parseHostEffect,
   parseHttpOriginEffect,
   portOfHttpOrigin,
 } from "./http-origin";
@@ -762,7 +763,7 @@ export const runLauncherEffect = (
     const appToken = randomUUID();
     const runtimeConfigState = createBrowserRuntimeConfigState();
     const developmentInstanceId = options.workspaceMode ? options.developmentInstanceId : undefined;
-    const bindHost = options.host?.trim() || LOCALHOST;
+    const bindHost = yield* parseHostEffect(options.host ?? LOCALHOST, "--host", true);
     const externalUrl = options.externalUrl?.trim() || undefined;
     const basePath = yield* validateLauncherNetworkOptionsEffect({
       basePath: options.basePath,
@@ -792,7 +793,7 @@ export const runLauncherEffect = (
       Effect.gen(function* () {
         yield* writeWebLogEffect(logger, "info", "Starting OpenDucktor frontend server...");
         const frontendServer = yield* startFrontendServerEffect(
-          options,
+          { ...options, host: bindHost },
           runtimeConfigState,
           logger,
         );

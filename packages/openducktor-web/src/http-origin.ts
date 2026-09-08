@@ -2,6 +2,43 @@ import { Effect } from "effect";
 import { WebValidationError } from "./effect/web-errors";
 
 export const LOCALHOST = "127.0.0.1";
+
+const invalidHostError = (raw: string, flag: string): WebValidationError =>
+  new WebValidationError({
+    message: `Invalid ${flag} value: ${raw}. Expected a hostname or IP address without a scheme, port, or path.`,
+    field: flag,
+    details: { raw },
+  });
+
+export const parseHostEffect = (
+  raw: string | undefined,
+  flag: string,
+  allowBareIpv6 = false,
+): Effect.Effect<string, WebValidationError> =>
+  Effect.gen(function* () {
+    if (raw === undefined) {
+      return yield* new WebValidationError({
+        message: `Missing value for ${flag}.`,
+        field: flag,
+      });
+    }
+    let hostname = raw.trim();
+    if (hostname.includes(":") && !hostname.startsWith("[")) {
+      if (!allowBareIpv6) {
+        return yield* invalidHostError(raw, flag);
+      }
+      hostname = `[${hostname}]`;
+    }
+    const parsed = yield* Effect.try({
+      try: () => new URL(`http://${hostname}`),
+      catch: () => invalidHostError(raw, flag),
+    });
+    if (parsed.href !== `http://${parsed.hostname}/`) {
+      return yield* invalidHostError(raw, flag);
+    }
+    return parsed.hostname;
+  });
+
 export const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
 const stripTrailingDot = (host: string): string => host.replace(/\.$/u, "");

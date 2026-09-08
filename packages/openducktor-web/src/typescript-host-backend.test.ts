@@ -19,7 +19,12 @@ import type { HostCommandHandlerError } from "../../host/src/interface/router/ho
 import type { WebLogger } from "./logger";
 import { allowedHostnamesFor } from "./http-origin";
 import { validateLauncherNetworkOptionsEffect } from "./launcher";
-import { buildBackendUrl, readinessHostForBind, waitForBackend } from "./launcher-support";
+import {
+  buildBackendUrl,
+  buildBrowserBackendUrl,
+  readinessHostForBind,
+  waitForBackend,
+} from "./launcher-support";
 import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
 import {
   allowedOriginsForFrontendOrigin,
@@ -347,7 +352,16 @@ describe("TypeScript web host backend", () => {
         if (port === undefined) {
           throw new Error("Expected the test server to expose a port.");
         }
-        const session = await Bun.fetch(`http://127.0.0.1:${port}/api/session`, {
+        const externalUrl = `http://127.0.0.1:${port}/`;
+        const { browserUrl } = buildBrowserBackendUrl(
+          basePath,
+          externalUrl,
+          externalUrl,
+          "127.0.0.1",
+          port,
+        );
+        expect(new URL(`${browserUrl}/session`).pathname).toBe("/api/session");
+        const session = await Bun.fetch(`${browserUrl}/session`, {
           method: "POST",
           headers: { "x-openducktor-app-token": APP_TOKEN },
         });
