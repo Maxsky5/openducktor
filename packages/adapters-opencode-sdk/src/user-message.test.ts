@@ -333,11 +333,24 @@ describe("OpencodeSdkAdapter user message", () => {
     expect(events.some((event) => event.type === "session_idle")).toBe(false);
   });
 
-  test("sendUserMessage emits the admitted user message without reloading history", async () => {
+  test("sendUserMessage emits exact admitted text once without reloading history", async () => {
     const mock = makeMockClient({});
+    const updates = deferred<OpenCodeProtocolObject>();
+    const delivered = deferred<void>();
+    Object.assign(mock.client.global, {
+      event: async () => ({
+        stream: (async function* () {
+          const update = await updates.promise;
+          for (const payload of createOpencodeEventFixtures(update, 0)) {
+            yield { directory: "/repo", payload };
+          }
+          delivered.resolve();
+        })(),
+      }),
+    });
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
-      now: () => "2026-02-17T12:00:00Z",
+      now: () => "2026-02-17T12:00:00.000Z",
     });
 
     await startDefaultSession(adapter, "build");
@@ -348,22 +361,36 @@ describe("OpencodeSdkAdapter user message", () => {
       (event) => events.push(event),
     );
 
+    const text = "\n  Kick off the builder\n ";
     await adapter.sendUserMessage({
       ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
-      parts: [{ kind: "text", text: "Kick off the builder" }],
+      parts: [{ kind: "text", text }],
+      model: { providerId: "openai", modelId: "gpt-5", profileId: "build" },
     });
 
+    const promptRequest: { messageID?: string } | undefined = mock.session.promptAsyncCalls[0];
+    updates.resolve({
+      type: "message.updated",
+      properties: {
+        info: {
+          id: promptRequest?.messageID,
+          role: "user",
+          sessionID: "session-opencode-1",
+          time: { created: Date.parse("2026-02-17T12:00:00Z") },
+        },
+      },
+    });
+    await delivered.promise;
     const userEvents = events.filter(
       (event): event is Extract<AgentEvent, { type: "user_message" }> =>
         event.type === "user_message",
     );
-    const promptRequest: { messageID?: string } | undefined = mock.session.promptAsyncCalls[0];
     expect(userEvents).toEqual([
       expect.objectContaining({
         messageId: expect.stringMatching(OPENCODE_MESSAGE_ID_PATTERN),
-        message: "Kick off the builder",
+        message: text,
         state: "read",
-        parts: [{ kind: "text", text: "Kick off the builder" }],
+        parts: [{ kind: "text", text }],
       }),
     ]);
     expect(userEvents[0]?.messageId).toBe(promptRequest?.messageID);

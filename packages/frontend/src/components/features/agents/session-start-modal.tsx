@@ -374,6 +374,164 @@ const runtimeProfileHelperTextFor = ({
   return null;
 };
 
+function SessionStartModelPicker({ model }: { model: SessionStartModalModel }): ReactElement {
+  const {
+    selectedModelSelection,
+    selectedStartMode,
+    isStarting,
+    modelPickerRuntimes,
+    favoriteState,
+    runtimeDefinitionsError,
+    isRuntimeDefinitionsLoading,
+    onRetryRuntimeDefinitions,
+    hasRuntimeSettingsSnapshot,
+    runtimeSettingsError,
+    isRuntimeSettingsLoading,
+    onRetryRuntimeSettings,
+    isSelectionCatalogLoading,
+    onSelectModelPair,
+  } = model;
+  const isReuseMode = selectedStartMode === "reuse";
+  const selectedPickerValue =
+    selectedModelSelection?.runtimeKind && selectedModelSelection.providerId
+      ? {
+          runtimeKind: selectedModelSelection.runtimeKind,
+          providerId: selectedModelSelection.providerId,
+          modelId: selectedModelSelection.modelId,
+        }
+      : null;
+  const modelReadOnlyReason = isStarting
+    ? "Session start is in progress."
+    : "Reuse mode keeps the source session runtime and model.";
+  if (runtimeDefinitionsError) {
+    return (
+      <div
+        className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm"
+        role="alert"
+      >
+        <span className="min-w-0 text-destructive">
+          Runtime definitions unavailable: {runtimeDefinitionsError}
+        </span>
+        <Button type="button" variant="outline" size="sm" onClick={onRetryRuntimeDefinitions}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+  if (isRuntimeDefinitionsLoading) {
+    return (
+      <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" role="status">
+        <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+        Loading agent runtimes...
+      </div>
+    );
+  }
+  if (!hasRuntimeSettingsSnapshot && runtimeSettingsError) {
+    return (
+      <div
+        className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm"
+        role="alert"
+      >
+        <span className="min-w-0 text-destructive">
+          Runtime settings unavailable: {runtimeSettingsError}
+        </span>
+        <Button type="button" variant="outline" size="sm" onClick={onRetryRuntimeSettings}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+  if (!hasRuntimeSettingsSnapshot && isRuntimeSettingsLoading) {
+    return (
+      <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" role="status">
+        <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+        Loading runtime settings...
+      </div>
+    );
+  }
+  return (
+    <ModelPicker
+      runtimes={modelPickerRuntimes}
+      value={selectedPickerValue}
+      favoriteState={favoriteState}
+      selectionPolicy={
+        isReuseMode || isStarting
+          ? {
+              kind: "read_only",
+              reason: modelReadOnlyReason,
+            }
+          : { kind: "editable" }
+      }
+      placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select a model"}
+      onValueChange={onSelectModelPair}
+    />
+  );
+}
+
+const sessionStartAvailability = (model: SessionStartModalModel) => {
+  const {
+    existingSessionOptions,
+    selectedStartMode,
+    selectedSourceSessionValue,
+    isStarting,
+    isRuntimeDefinitionsLoading,
+    runtimeDefinitionsError,
+    hasRuntimeSettingsSnapshot,
+    isRuntimeSettingsLoading,
+    runtimeSettingsError,
+    selectionCatalogError,
+    isSelectionCatalogLoading,
+    selectedRuntimeKind,
+    selectedModelSelection,
+    runtimeProfileOptions,
+    supportsVariants,
+    variantOptions,
+  } = model;
+  const hasExistingSessionOptions = existingSessionOptions.length > 0;
+  const isReuseMode = selectedStartMode === "reuse";
+  const requiresExistingSession = selectedStartMode === "reuse" || selectedStartMode === "fork";
+  const selectedSourceSessionOption = existingSessionOptions.find(
+    (option) => option.value === selectedSourceSessionValue,
+  );
+  const hasExistingSessionSelection = selectedSourceSessionOption !== undefined;
+  const confirmDisabled =
+    model.isKickoffPromptLoading ||
+    Boolean(model.kickoffPromptError) ||
+    isStarting ||
+    isRuntimeDefinitionsLoading ||
+    runtimeDefinitionsError !== null ||
+    (!hasRuntimeSettingsSnapshot && (isRuntimeSettingsLoading || runtimeSettingsError !== null)) ||
+    (!isReuseMode && selectionCatalogError !== null) ||
+    (!isReuseMode &&
+      (isSelectionCatalogLoading || !selectedRuntimeKind || !selectedModelSelection)) ||
+    (requiresExistingSession && !hasExistingSessionSelection);
+  const runtimeProfileDisabled =
+    isStarting || isReuseMode || isSelectionCatalogLoading || runtimeProfileOptions.length === 0;
+  const variantDisabled =
+    isStarting ||
+    isReuseMode ||
+    isSelectionCatalogLoading ||
+    !selectedModelSelection ||
+    !supportsVariants ||
+    variantOptions.length === 0;
+
+  return {
+    hasExistingSessionOptions,
+    isReuseMode,
+    requiresExistingSession,
+    confirmDisabled,
+    runtimeProfileDisabled,
+    variantDisabled,
+  } satisfies {
+    hasExistingSessionOptions: boolean;
+    isReuseMode: boolean;
+    requiresExistingSession: boolean;
+    confirmDisabled: boolean;
+    runtimeProfileDisabled: boolean;
+    variantDisabled: boolean;
+  };
+};
+
 export function SessionStartModal({ model }: { model: SessionStartModalModel }): ReactElement {
   const {
     open,
@@ -383,20 +541,9 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     backgroundConfirmLabel = "Run in background",
     cancelLabel = "Cancel",
     selectedModelSelection,
-    selectedRuntimeKind,
-    modelPickerRuntimes,
-    favoriteState,
     supportsProfiles,
     supportsVariants,
-    selectionCatalogError,
     isSelectionCatalogLoading,
-    runtimeDefinitionsError,
-    isRuntimeDefinitionsLoading,
-    onRetryRuntimeDefinitions,
-    runtimeSettingsError,
-    isRuntimeSettingsLoading,
-    hasRuntimeSettingsSnapshot,
-    onRetryRuntimeSettings,
     runtimeProfileOptions,
     variantOptions,
     availableStartModes,
@@ -410,7 +557,6 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     onSelectSourceSessionValue,
     onSelectTargetBranch,
     onSelectRuntimeProfile,
-    onSelectModelPair,
     onSelectVariant,
     allowRunInBackground = false,
     isStarting,
@@ -425,34 +571,16 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   });
 
   const selectedProfileId = selectedModelSelection?.profileId ?? "";
-  const selectedPickerValue =
-    selectedModelSelection?.runtimeKind && selectedModelSelection.providerId
-      ? {
-          runtimeKind: selectedModelSelection.runtimeKind,
-          providerId: selectedModelSelection.providerId,
-          modelId: selectedModelSelection.modelId,
-        }
-      : null;
   const selectedVariant = selectedModelSelection?.variant ?? "";
-  const hasExistingSessionOptions = existingSessionOptions.length > 0;
-  const isReuseMode = selectedStartMode === "reuse";
-  const requiresExistingSession = selectedStartMode === "reuse" || selectedStartMode === "fork";
-  const selectedSourceSessionOption = existingSessionOptions.find(
-    (option) => option.value === selectedSourceSessionValue,
-  );
-  const hasExistingSessionSelection = selectedSourceSessionOption !== undefined;
-  const confirmDisabled =
-    kickoffDraft.invalid ||
-    model.isKickoffPromptLoading ||
-    Boolean(model.kickoffPromptError) ||
-    isStarting ||
-    isRuntimeDefinitionsLoading ||
-    runtimeDefinitionsError !== null ||
-    (!hasRuntimeSettingsSnapshot && (isRuntimeSettingsLoading || runtimeSettingsError !== null)) ||
-    (!isReuseMode && selectionCatalogError !== null) ||
-    (!isReuseMode &&
-      (isSelectionCatalogLoading || !selectedRuntimeKind || !selectedModelSelection)) ||
-    (requiresExistingSession && !hasExistingSessionSelection);
+  const availability = sessionStartAvailability(model);
+  const {
+    hasExistingSessionOptions,
+    isReuseMode,
+    requiresExistingSession,
+    runtimeProfileDisabled,
+    variantDisabled,
+  } = availability;
+  const confirmDisabled = kickoffDraft.invalid || availability.confirmDisabled;
   const confirmInput: SessionStartModalConfirmDraft = {
     startMode: selectedStartMode,
     sourceSessionOptionValue: requiresExistingSession ? selectedSourceSessionValue : null,
@@ -473,88 +601,11 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     handleConfirm();
   };
 
-  const runtimeProfileDisabled =
-    isStarting || isReuseMode || isSelectionCatalogLoading || runtimeProfileOptions.length === 0;
-  const variantDisabled =
-    isStarting ||
-    isReuseMode ||
-    isSelectionCatalogLoading ||
-    !selectedModelSelection ||
-    !supportsVariants ||
-    variantOptions.length === 0;
   const runtimeProfileHelperText = runtimeProfileHelperTextFor({
     runtimeProfileOptions,
     isReuseMode,
     isSelectionCatalogLoading,
   });
-  const modelReadOnlyReason = isStarting
-    ? "Session start is in progress."
-    : "Reuse mode keeps the source session runtime and model.";
-  const runtimeModelControl = (() => {
-    if (runtimeDefinitionsError) {
-      return (
-        <div
-          className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm"
-          role="alert"
-        >
-          <span className="min-w-0 text-destructive">
-            Runtime definitions unavailable: {runtimeDefinitionsError}
-          </span>
-          <Button type="button" variant="outline" size="sm" onClick={onRetryRuntimeDefinitions}>
-            Retry
-          </Button>
-        </div>
-      );
-    }
-    if (isRuntimeDefinitionsLoading) {
-      return (
-        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" role="status">
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Loading agent runtimes...
-        </div>
-      );
-    }
-    if (!hasRuntimeSettingsSnapshot && runtimeSettingsError) {
-      return (
-        <div
-          className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm"
-          role="alert"
-        >
-          <span className="min-w-0 text-destructive">
-            Runtime settings unavailable: {runtimeSettingsError}
-          </span>
-          <Button type="button" variant="outline" size="sm" onClick={onRetryRuntimeSettings}>
-            Retry
-          </Button>
-        </div>
-      );
-    }
-    if (!hasRuntimeSettingsSnapshot && isRuntimeSettingsLoading) {
-      return (
-        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground" role="status">
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Loading runtime settings...
-        </div>
-      );
-    }
-    return (
-      <ModelPicker
-        runtimes={modelPickerRuntimes}
-        value={selectedPickerValue}
-        favoriteState={favoriteState}
-        selectionPolicy={
-          isReuseMode || isStarting
-            ? {
-                kind: "read_only",
-                reason: modelReadOnlyReason,
-              }
-            : { kind: "editable" }
-        }
-        placeholder={isSelectionCatalogLoading ? "Loading models..." : "Select a model"}
-        onValueChange={onSelectModelPair}
-      />
-    );
-  })();
 
   return (
     <Dialog
@@ -602,7 +653,7 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
 
               <div className="grid gap-1.5" data-testid="session-start-model-picker-field">
                 <p className="text-sm font-medium text-foreground">Runtime and model</p>
-                {runtimeModelControl}
+                <SessionStartModelPicker model={model} />
               </div>
 
               {supportsProfiles ? (

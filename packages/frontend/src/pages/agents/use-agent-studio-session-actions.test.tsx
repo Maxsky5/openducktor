@@ -1983,6 +1983,68 @@ describe("direct prepared submission", () => {
   test.each([
     ["spec", "spec_initial"],
     ["planner", "planner_initial"],
+    ["qa", "qa_review"],
+  ] as const)("ignores an unrelated target branch error for %s", async (role, launchActionId) => {
+    const start = mock(async () => sessionIdentity("direct"));
+    const send = mock(async () => {});
+    const persist = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role,
+      launchActionId,
+      selectedTask: createTask({
+        status: "ai_review",
+        targetBranchError: "Invalid task target branch",
+        agentWorkflows: {
+          ...createTask().agentWorkflows,
+          qa: { required: true, canSkip: false, available: true, completed: false },
+        },
+      }),
+      setTaskTargetBranch: persist,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      sendAgentMessage: send,
+    });
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        expect(await state.onSend(createComposerDraft("draft"))).toBe(true);
+      });
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(persist).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("rejects an invalid target branch for a prepared Builder", async () => {
+    const start = mock(async () => sessionIdentity("never"));
+    const send = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "build",
+      launchActionId: "build_implementation_start",
+      selectedTask: createTask({ targetBranchError: "Invalid task target branch" }),
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      sendAgentMessage: send,
+    });
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await expect(state.onSend(createComposerDraft("draft"))).rejects.toThrow(
+          "Invalid task target branch",
+        );
+      });
+      expect(start).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test.each([
+    ["spec", "spec_initial"],
+    ["planner", "planner_initial"],
     ["build", "build_implementation_start"],
     ["qa", "qa_review"],
   ] as const)(
@@ -2159,6 +2221,43 @@ describe("prepared composer catalog refresh", () => {
 });
 
 describe("direct submission context isolation", () => {
+  test("keeps a newer selected session when direct startup completes", async () => {
+    const creation = createDeferred<AgentSessionIdentity>();
+    const start = mock(() => creation.promise);
+    const send = mock(async () => {});
+    const navigation = mock(() => {});
+    const args = {
+      ...createBaseArgs(),
+      scheduleQueryUpdate: navigation,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      sendAgentMessage: send,
+    };
+    const harness = createHookHarness(args);
+    try {
+      await harness.mount();
+      let submitted!: Promise<AgentChatSendResult>;
+      await harness.run((state) => {
+        submitted = state.onSend(createComposerDraft("original"));
+      });
+      await harness.waitFor(() => start.mock.calls.length === 1);
+      await harness.update({
+        ...args,
+        selectedSession: selectedSessionFromIdentity(sessionIdentity("selected-later")),
+      });
+      await harness.run(async () => {
+        creation.resolve(sessionIdentity("created"));
+        expect(await submitted).toBe(true);
+      });
+      expect(navigation).not.toHaveBeenCalled();
+      expect(send).toHaveBeenCalledWith(sessionIdentity("created"), [
+        { kind: "text", text: "original" },
+      ]);
+      expect(start).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test.each(["workspace", "task", "role"] as const)(
     "keeps startup and send in the original context after a %s switch",
     async (context) => {

@@ -5,8 +5,8 @@ import {
   classifySystemSlashCommandInvocation,
   normalizeAgentUserMessageParts,
   type SendAgentUserMessageInput,
-  serializeAgentUserMessagePartsToText,
 } from "@openducktor/core";
+import { readVisibleUserTextFromDisplayParts } from "./message-normalizers";
 import { detectAgentFileReferenceMime } from "./file-reference-utils";
 import { createOpenCodeMessageId } from "./opencode-message-id";
 import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
@@ -428,10 +428,11 @@ export const sendUserMessage = async (input: {
     if (assistantMessageId) {
       input.session.activeAssistantMessageId = assistantMessageId;
     }
+    const parts = toAdmittedUserDisplayParts(input.request.parts);
     const admittedMessage: AdmittedUserMessage = {
       messageId,
-      message: serializeAgentUserMessagePartsToText(input.request.parts),
-      parts: toAdmittedUserDisplayParts(input.request.parts),
+      message: readVisibleUserTextFromDisplayParts(parts),
+      parts,
       state: isQueuedBehindActiveAssistant && !isManualSessionCompaction ? "queued" : "read",
     };
     if (model) {

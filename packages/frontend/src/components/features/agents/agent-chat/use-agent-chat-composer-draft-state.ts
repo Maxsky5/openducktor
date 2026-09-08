@@ -77,8 +77,9 @@ export function useAgentChatComposerDraftState({
       const nextDraft = hasCurrentDraft
         ? current.draft
         : (nextPersistence?.hydrate() ?? current.draft);
-      if (hasCurrentDraft) {
-        nextPersistence?.set(current.draft);
+      if (hasCurrentDraft && nextPersistence) {
+        nextPersistence.set(current.draft);
+        pendingRecoveryRef.current.delete(nextKey);
       }
       setState({
         key: current.key,
@@ -91,8 +92,15 @@ export function useAgentChatComposerDraftState({
     const nextState = createInitialDraftState({ key: nextKey, persistence: nextPersistence });
     const recovered = pendingRecoveryRef.current.get(nextKey);
     if (recovered) {
-      if (!draftHasMeaningfulContent(nextState.draft)) nextState.draft = recovered;
-      else pendingRecoveryRef.current.delete(nextKey);
+      if (draftHasMeaningfulContent(nextState.draft)) {
+        pendingRecoveryRef.current.delete(nextKey);
+      } else {
+        nextState.draft = recovered;
+        if (nextPersistence) {
+          nextPersistence.set(recovered);
+          pendingRecoveryRef.current.delete(nextKey);
+        }
+      }
     }
     latestStateRef.current = nextState;
     setState(nextState);
@@ -176,6 +184,10 @@ export function useAgentChatComposerDraftState({
         }
         pendingRecoveryRef.current.set(recovery.recoveryKey, snapshot.draft);
         if (current.key === recovery.recoveryKey) {
+          if (current.persistence) {
+            current.persistence.set(snapshot.draft);
+            pendingRecoveryRef.current.delete(current.key);
+          }
           const restored = { ...current, draft: snapshot.draft };
           latestStateRef.current = restored;
           setState(restored);

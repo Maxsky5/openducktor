@@ -193,7 +193,7 @@ describe("toClaudeMessageFromParts", () => {
 
       await expect(
         toClaudeMessageFromParts([
-          { kind: "text", text: "Inspect this" },
+          { kind: "text", text: "\n  Inspect this\n " },
           {
             kind: "attachment",
             attachment: {
@@ -204,7 +204,7 @@ describe("toClaudeMessageFromParts", () => {
               path: imagePath,
             },
           },
-          { kind: "text", text: " please" },
+          { kind: "text", text: "\n please\n " },
         ]),
       ).resolves.toEqual({
         type: "user",
@@ -212,7 +212,7 @@ describe("toClaudeMessageFromParts", () => {
         message: {
           role: "user",
           content: [
-            { type: "text", text: "Inspect this" },
+            { type: "text", text: "\n  Inspect this\n " },
             {
               type: "image",
               source: {
@@ -221,7 +221,7 @@ describe("toClaudeMessageFromParts", () => {
                 data: Buffer.from("png-bytes").toString("base64"),
               },
             },
-            { type: "text", text: "please" },
+            { type: "text", text: "\n please\n " },
           ],
         },
       });

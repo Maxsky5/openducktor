@@ -312,9 +312,8 @@ export const toClaudeMessageFromParts = async (
   let previousPart: AgentUserMessagePart | null = null;
 
   const flushText = () => {
-    const trimmed = text.trim();
-    if (trimmed.length > 0) {
-      content.push({ type: "text", text: trimmed });
+    if (text.trim().length > 0) {
+      content.push({ type: "text", text });
     }
     text = "";
   };

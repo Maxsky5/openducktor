@@ -1,10 +1,9 @@
 import { QueryClient } from "@tanstack/react-query";
 import { startSessionWorkflow } from "@/features/session-start/session-start-workflow";
-import { buildOpenCodePromptText } from "../../../../../../adapters-opencode-sdk/src/opencode-user-message-encoding";
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
-import type { AcceptedAgentUserMessage, AgentUserMessagePart } from "@openducktor/core";
+import type { AcceptedAgentUserMessage } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import {
@@ -28,13 +27,12 @@ import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.te
 import { acceptedUserMessage } from "./session-actions-send.test-support";
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
-  test("delivers confirmed kickoff whitespace through the real sender and OpenCode encoder", async () => {
+  test("delivers confirmed kickoff whitespace through the real sender to the adapter", async () => {
     const text = "\n\n  Custom instruction\n{{task.title}}\n ";
-    const sent: string[] = [];
     const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+    const sent: Array<Parameters<typeof adapter.sendUserMessage>[0]["parts"]> = [];
     adapter.sendUserMessage = async (input) => {
-      // SAFETY: Transport parts and core parts differ only in optional-field syntax.
-      sent.push(buildOpenCodePromptText(input.parts as AgentUserMessagePart[]).text);
+      sent.push(input.parts);
       return acceptedUserMessage(input);
     };
     const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
@@ -56,9 +54,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       startAgentSession: async () => session,
       sendAgentMessage: actions.sendAgentMessage,
     });
-    expect(sent).toEqual([text]);
+    expect(sent).toEqual([[{ kind: "text", text }]]);
     await actions.sendAgentMessage(session, [{ kind: "text", text }]);
-    expect(sent).toEqual([text, text.trimStart()]);
+    expect(sent).toEqual([[{ kind: "text", text }], [{ kind: "text", text: text.trimStart() }]]);
   });
 
   test("routes a normalized workflow control without loading runtime policy settings", async () => {

@@ -104,7 +104,6 @@ export const startSessionWorkflow = async ({
 
   requireCurrentContext();
   await runBeforeStartAction(beforeStartActionArgs);
-  requireCurrentContext();
 
   const session = await startSessionFromIntent({
     intent,

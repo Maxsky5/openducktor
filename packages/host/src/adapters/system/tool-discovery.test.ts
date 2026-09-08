@@ -145,7 +145,7 @@ describe("discoverToolPath", () => {
   test("uses descriptor bundled and standard sources before PATH", async () => {
     await withTempDir(async (root) => {
       const bundledDir = join(root, "bundled");
-      const standardDir = join(root, ".opencode", "bin");
+      const standardDir = posix.join(root, ".opencode", "bin");
       const pathDir = join(root, "path");
       const executableName = process.platform === "win32" ? "opencode.EXE" : "opencode";
       for (const directory of [bundledDir, standardDir, pathDir]) {

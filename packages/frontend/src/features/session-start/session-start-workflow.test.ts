@@ -3,6 +3,7 @@ import type { RepoConfig } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
 import {
+  createDeferred,
   createSettingsSnapshotFixture,
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
@@ -38,6 +39,81 @@ const sessionIdentity = (
   externalSessionId,
   runtimeKind,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
+test.each(["feedback", "branch"] as const)(
+  "finishes the captured launch after context changes during the %s mutation",
+  async (mutation) => {
+    const entered = createDeferred<void>();
+    const completed = createDeferred<void>();
+    let isCurrent = true;
+    const mutate = mock(async () => {
+      entered.resolve();
+      await completed.promise;
+    });
+    const start = mock(async () => sessionIdentity("original"));
+    const launch = startSessionWorkflow({
+      queryClient: new QueryClient(),
+      workspaceId: "workspace-1",
+      task: null,
+      isCurrent: () => isCurrent,
+      intent: {
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        startMode: "fresh",
+        postStartAction: "none",
+        ...(mutation === "feedback"
+          ? { beforeStartAction: { action: "human_request_changes" as const, note: "Rework" } }
+          : { targetBranch: { branch: "main" } }),
+      },
+      selection: BUILD_SELECTION,
+      startAgentSession: start,
+      humanRequestChangesTask: mutate,
+      persistTaskTargetBranch: mutate,
+    });
+    await entered.promise;
+    isCurrent = false;
+    completed.resolve();
+    await expect(launch).resolves.toEqual({
+      ...sessionIdentity("original"),
+      postStartActionError: null,
+    });
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith({
+      taskId: "TASK-1",
+      role: "build",
+      startMode: "fresh",
+      selectedModel: BUILD_SELECTION,
+      holdForPostStartMessage: false,
+    });
+  },
+);
+
+test("cancels a stale launch before any task mutation", async () => {
+  const mutate = mock(async () => {});
+  const start = mock(async () => sessionIdentity("never"));
+  await expect(
+    startSessionWorkflow({
+      queryClient: new QueryClient(),
+      workspaceId: "workspace-1",
+      task: null,
+      isCurrent: () => false,
+      intent: {
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        startMode: "fresh",
+        postStartAction: "none",
+        beforeStartAction: { action: "human_request_changes", note: "Rework" },
+      },
+      selection: BUILD_SELECTION,
+      startAgentSession: start,
+      humanRequestChangesTask: mutate,
+    }),
+  ).rejects.toThrow("selected context changed");
+  expect(mutate).not.toHaveBeenCalled();
+  expect(start).not.toHaveBeenCalled();
 });
 
 describe("session-start-workflow", () => {

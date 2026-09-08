@@ -181,7 +181,7 @@ describe("Claude session I/O attachments and invalid updates", () => {
         },
       });
 
-      expect(accepted.message).toBe("Before\n@src/after.ts");
+      expect(accepted.message).toBe("Before\n @src/after.ts");
       expect(accepted.parts.at(-1)).toEqual({
         kind: "file_reference",
         file: {

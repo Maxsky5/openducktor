@@ -479,3 +479,67 @@ test("first-message recovery does not overwrite newer session input", async () =
   expect(harness.getLatest().draft).toEqual(buildDraft("newer input"));
   await harness.unmount();
 });
+
+test.each(["current", "pending"] as const)(
+  "stores %s first-message recovery before page hide and remount",
+  async (timing) => {
+    const persistence = createFakePersistence();
+    const scope = { key: "created", persistence: persistence.adapter };
+    const harness = await mountHarness({ key: "new", persistence: null });
+    const draft = buildDraft("retry first message");
+    const snapshot = harness.getLatest().createSubmittedDraftSnapshot(draft);
+    if (timing === "current") await harness.update({ scope });
+    await harness.run((state) => {
+      state.restoreSubmittedDraft(snapshot, {
+        kind: "recover_draft",
+        originKey: "new",
+        recoveryKey: "created",
+        error: new Error("failed"),
+      });
+    });
+    if (timing === "pending") await harness.update({ scope });
+    expect(harness.getLatest().draft).toEqual(draft);
+    expect(persistence.readDraft()).toEqual(draft);
+    window.dispatchEvent(new Event("pagehide"));
+    expect(persistence.adapter.flush).toHaveBeenCalled();
+    await harness.unmount();
+
+    const remounted = await mountHarness(scope);
+    expect(remounted.getLatest().draft).toEqual(draft);
+    await remounted.unmount();
+  },
+);
+
+test.each(["edit", "clear", "resubmit"] as const)(
+  "does not restore an old recovery after %s and navigation",
+  async (action) => {
+    const persistence = createFakePersistence();
+    const scope = { key: "created", persistence: persistence.adapter };
+    const harness = await mountHarness({ key: "new", persistence: null });
+    const draft = buildDraft("old recovery");
+    const snapshot = harness.getLatest().createSubmittedDraftSnapshot(draft);
+    await harness.update({ scope });
+    await harness.run((state) => {
+      state.restoreSubmittedDraft(snapshot, {
+        kind: "recover_draft",
+        originKey: "new",
+        recoveryKey: "created",
+        error: new Error("failed"),
+      });
+    });
+    const expected = action === "edit" ? buildDraft("new input") : createEmptyComposerDraft();
+    await harness.run((state) => {
+      if (action === "resubmit") {
+        state.clearSubmittedDraft(state.createSubmittedDraftSnapshot(state.draft));
+        state.setDisplayedDraft(expected);
+      } else {
+        state.commitDraft(expected);
+      }
+    });
+    await harness.update({ scope: { key: "other", persistence: null } });
+    await harness.update({ scope });
+    if (action === "edit") expect(harness.getLatest().draft).toEqual(expected);
+    else expect(draftHasMeaningfulContent(harness.getLatest().draft)).toBe(false);
+    await harness.unmount();
+  },
+);

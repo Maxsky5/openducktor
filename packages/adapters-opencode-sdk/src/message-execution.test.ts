@@ -102,6 +102,7 @@ describe("message-execution", () => {
       expect.objectContaining({ parts: [{ type: "text", text }] }),
     );
     expect(result.parts).toEqual([{ kind: "text", text }]);
+    expect(result.message).toBe(text);
     expect(command).not.toHaveBeenCalled();
   });
   test("routes slash command messages through the native command transport", async () => {

@@ -112,6 +112,14 @@ export function useAgentStudioSessionStartFlow({
   const { availableRuntimeDefinitions } = useRuntimeAvailabilityContext();
   const contextKey = `${workspaceId}:${taskId}:${role}`;
   const isCurrentContext = useSessionStartContext(contextKey);
+  const isCurrentComposerContext = useSessionStartContext(
+    buildAgentStudioSessionActivityKey({
+      workspaceId,
+      taskId,
+      role,
+      session: selectedSessionIdentity,
+    }),
+  );
   const sessionStartGateScopeRef = useRef(workspaceId);
   const sessionStartGateRef = useRef<SessionStartGate<AgentStudioSessionStartGateResult> | null>(
     null,
@@ -340,10 +348,10 @@ export function useAgentStudioSessionStartFlow({
     });
     if (!repoSettings)
       throw new Error("Repository settings are unavailable. Reload before starting a session.");
-    const branchError = taskTargetBranchValidationError(selectedTask?.targetBranchError);
-    if (branchError) throw new Error(branchError);
     const decision: ResolvedSessionStartDecision = { startMode: "fresh", selectedModel };
     if (supportsTaskTargetBranchSelection(role, launchActionId)) {
+      const branchError = taskTargetBranchValidationError(selectedTask?.targetBranchError);
+      if (branchError) throw new Error(branchError);
       decision.targetBranch = effectiveTaskTargetBranch(
         selectedTask?.targetBranch,
         repoSettings.defaultTargetBranch,
@@ -367,7 +375,7 @@ export function useAgentStudioSessionStartFlow({
       };
       if (setTaskTargetBranch) input.persistTaskTargetBranch = setTaskTargetBranch;
       const result = await runSessionStartWorkflow(input);
-      if (isCurrentContext())
+      if (isCurrentComposerContext())
         scheduleQueryUpdate(
           buildAgentStudioSelectionQueryUpdate({
             taskId,
@@ -394,6 +402,7 @@ export function useAgentStudioSessionStartFlow({
     runSessionStartWorkflow,
     setTaskTargetBranch,
     isCurrentContext,
+    isCurrentComposerContext,
     scheduleQueryUpdate,
   ]);
 
