@@ -17,12 +17,9 @@ type UseAgentChatComposerDraftStateArgs = {
   scope: AgentChatDraftScope;
 };
 
-type SubmittedDraftSnapshot = {
-  key: string;
-  persistence: AgentChatDraftPersistence | null;
+type SubmittedDraftSnapshot = ComposerDraftState & {
   version: number | null;
   editSequence: number;
-  draft: AgentChatComposerDraft;
 };
 
 type UseAgentChatComposerDraftStateResult = {
@@ -174,10 +171,11 @@ export function useAgentChatComposerDraftState({
       const current = latestStateRef.current;
       if (recovery && recovery.originKey === snapshot.key) {
         if ((scopeEditsRef.current.get(recovery.recoveryKey) ?? 0) > snapshot.editSequence) return;
-        if (current.key !== recovery.recoveryKey) {
-          pendingRecoveryRef.current.set(recovery.recoveryKey, snapshot.draft);
-        } else if (!draftHasMeaningfulContent(current.draft)) {
-          pendingRecoveryRef.current.set(recovery.recoveryKey, snapshot.draft);
+        if (current.key === recovery.recoveryKey && draftHasMeaningfulContent(current.draft)) {
+          return;
+        }
+        pendingRecoveryRef.current.set(recovery.recoveryKey, snapshot.draft);
+        if (current.key === recovery.recoveryKey) {
           const restored = { ...current, draft: snapshot.draft };
           latestStateRef.current = restored;
           setState(restored);
