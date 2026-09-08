@@ -33,7 +33,7 @@ import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
-import { resolveCodexRetainedSessionOwner } from "./codex-retained-session-owner";
+import { findRetainedSessionOwner } from "./codex-retained-session-owner";
 import {
   CodexRuntimeEventSubscriptions,
   type CodexRuntimeStreamEvent,
@@ -773,7 +773,7 @@ export class CodexRuntimeSessionEvents {
     targetExternalSessionId: string,
     runtimeId: string,
   ): CodexRuntimeStreamEventSessionOwner | undefined {
-    const owner = resolveCodexRetainedSessionOwner({
+    const owner = findRetainedSessionOwner({
       sessions: this.deps.sessions,
       subagents: this.deps.subagents,
       runtimeId,

@@ -2,9 +2,9 @@
 
 `CodexLiveSessionMutation.snapshotMode` states whether `snapshots` replaces the full collection or updates only the supplied refs. A `delta` requires `removedRefs`; an omitted snapshot never means removal. The host validates the complete mutation before it changes live state. It applies snapshot updates, removals, transcript events, catalog invalidation, and faults in that order.
 
-`CodexRuntimeSessionEvents` collects changed session IDs during each ordered stream event. Activity updates, context notifications, pending-input requests and resolution, and subagent route or status changes mark the affected IDs. Event routing and delta snapshot construction use `resolveCodexRetainedSessionOwner` to find the same nearest retained ancestor. The helper keeps runtime checks and cycle handling in one place. The adapter builds only the affected snapshots. A newly connected route also admits its known descendants. Text and reasoning deltas do not mark snapshot state.
+`CodexRuntimeSessionEvents` collects changed session IDs during each ordered stream event. Activity updates, context notifications, pending-input requests and resolution, and subagent route or status changes mark the affected IDs. Event routing and delta snapshot builds use `findRetainedSessionOwner` to find the same nearest retained ancestor. The helper keeps runtime checks and cycle handling in one place. The adapter builds only the affected snapshots. A new route also includes its known descendants. Text and reasoning deltas do not mark snapshot state.
 
-Initial attachment and control-result reconciliation keep the full snapshot path. This includes model changes from controls and session release. The consumed native event path does not remove retained sessions; release remains a host control. The delta boundary supports explicit removals and tests their validation and delivery. This change adds no polling or persisted state.
+Initial attachment and control results use full snapshots. This includes model changes from controls and session release. Native events do not remove retained sessions; release remains a host control. Delta mutations support explicit removals. Tests check removal refs and delivery. This path uses no polling or persisted state.
 
 ## Replay evidence
 

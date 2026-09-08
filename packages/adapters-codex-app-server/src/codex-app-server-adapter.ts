@@ -62,7 +62,7 @@ import { CodexContextUsageLoader } from "./codex-context-usage-loader";
 import { fileDiffsFromUnifiedDiff } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import { CodexPendingInputState } from "./codex-pending-input-state";
-import { resolveCodexRetainedSessionOwner } from "./codex-retained-session-owner";
+import { findRetainedSessionOwner } from "./codex-retained-session-owner";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
@@ -637,7 +637,7 @@ export class CodexAppServerAdapter
   ): AgentSessionLiveSnapshot[] {
     const snapshots: AgentSessionLiveSnapshot[] = [];
     for (const threadId of changedSessionIds) {
-      const owner = resolveCodexRetainedSessionOwner({
+      const owner = findRetainedSessionOwner({
         sessions: this.localSessions,
         subagents: this.subagents,
         runtimeId,

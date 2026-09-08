@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveCodexRetainedSessionOwner } from "./codex-retained-session-owner";
+import { findRetainedSessionOwner } from "./codex-retained-session-owner";
 import type { CodexSubagentRoute } from "./codex-subagent-link-state";
 import type { CodexSessionState } from "./types";
 
@@ -29,7 +29,7 @@ const route = (child: string, parent: string, runtimeId = "runtime-1"): CodexSub
 });
 
 const resolve = (threadId: string, sessions: CodexSessionState[], routes: CodexSubagentRoute[]) =>
-  resolveCodexRetainedSessionOwner({
+  findRetainedSessionOwner({
     threadId,
     runtimeId: "runtime-1",
     sessions: new Map(sessions.map((value) => [value.threadId, value])),
@@ -39,7 +39,7 @@ const resolve = (threadId: string, sessions: CodexSessionState[], routes: CodexS
     },
   });
 
-describe("resolveCodexRetainedSessionOwner", () => {
+describe("findRetainedSessionOwner", () => {
   test("keeps a directly retained child as its own owner", () => {
     const root = session("root");
     const child = session("child");

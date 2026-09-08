@@ -62,7 +62,6 @@ test("stream deltas match full snapshot replay without rebuilding idle sessions"
         .map((event) => (event.type === "assistant_delta" ? event.delta : event.type)),
     ).toEqual(Array.from({ length: 100 }, (_, index) => `${index},`));
 
-    // Replay the former full-collection path with the same retained state.
     let baselineBuilds = 0;
     let baselineEqualityBytes = 0;
     for (let index = 0; index < 100; index++) {

@@ -2,13 +2,8 @@ import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexSubagentLinkState, CodexSubagentRoute } from "./codex-subagent-link-state";
 import type { CodexSessionState } from "./types";
 
-type CodexRetainedSessionOwner = {
-  retainedSession: CodexSessionState;
-  /** The target's route, or null when the target itself is retained. */
-  route: CodexSubagentRoute | null;
-};
-
-export const resolveCodexRetainedSessionOwner = ({
+/** Stop at the nearest retained session; never cross into another runtime. */
+export const findRetainedSessionOwner = ({
   sessions,
   subagents,
   runtimeId,
@@ -38,4 +33,10 @@ export const resolveCodexRetainedSessionOwner = ({
     currentThreadId = route.parentExternalSessionId;
   }
   return undefined;
+};
+
+type CodexRetainedSessionOwner = {
+  retainedSession: CodexSessionState;
+  /** Keep the target's route even when its retained owner is several parents above it. */
+  route: CodexSubagentRoute | null;
 };
