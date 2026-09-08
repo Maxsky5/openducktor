@@ -494,9 +494,120 @@ describe("launcher internals", () => {
     expect(exitCodes).toEqual([1]);
   });
 
-  test("does not wait for the host exit code when host stop fails", async () => {
+  test("closes the frontend without a host", async () => {
+    const calls: string[] = [];
+
+    await stopLauncherServices(
+      { frontendServer: null, hostBackend: null, logger: testLogger },
+      {
+        closeServer: async () => {
+          calls.push("close frontend");
+        },
+        stopHost: async () => {
+          calls.push("stop host");
+        },
+      },
+    );
+
+    expect(calls).toEqual(["close frontend"]);
+  });
+
+  test("reports frontend cleanup failure without a host", async () => {
+    const frontendFailure = new Error("frontend close failed");
+    const calls: string[] = [];
+
+    await expect(
+      stopLauncherServices(
+        {
+          frontendServer: null,
+          hostBackend: null,
+          logger: {
+            ...testLogger,
+            error: (message) => Effect.sync(() => calls.push(message)),
+          },
+        },
+        {
+          closeServer: async () => {
+            throw frontendFailure;
+          },
+          stopHost: async () => {
+            calls.push("stop host");
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "WebDependencyError",
+      dependency: "frontend-server",
+      operation: "close",
+      message: "frontend close failed",
+      cause: frontendFailure,
+    });
+    expect(calls).toEqual(["frontend close failed"]);
+  });
+
+  test("reports a nonzero host exit after a successful stop", async () => {
+    await expect(
+      stopLauncherServices(
+        {
+          frontendServer: null,
+          hostBackend: { exited: Promise.resolve(7), port: 14327, stop: async () => {} },
+          logger: testLogger,
+        },
+        { closeServer: async () => {}, stopHost: async () => {} },
+      ),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      operation: "web.launcher.shutdown",
+      message: "OpenDucktor TypeScript host shutdown failed with exit code 7.",
+      details: { hostExitCode: 7 },
+    });
+  });
+
+  test("finishes shutdown error logging before accessing the host exit", async () => {
+    const calls: string[] = [];
+    const frontendFailure = new Error("frontend close failed");
+
+    await expect(
+      stopLauncherServices(
+        {
+          frontendServer: null,
+          hostBackend: {
+            get exited() {
+              calls.push("read exit");
+              return Promise.resolve(0);
+            },
+            port: 14327,
+            stop: async () => {},
+          },
+          logger: {
+            ...testLogger,
+            error: (message) => {
+              calls.push(`log call: ${message}`);
+              return Effect.sync(() => {
+                calls.push("log finished");
+              });
+            },
+          },
+        },
+        {
+          closeServer: async () => {
+            throw frontendFailure;
+          },
+          stopHost: async () => {},
+        },
+      ),
+    ).rejects.toMatchObject({ cause: frontendFailure });
+    expect(calls).toEqual(["log call: frontend close failed", "log finished", "read exit"]);
+  });
+
+  test("does not read or await the host exit code when host stop fails", async () => {
+    let exitReads = 0;
+    const exited = new Promise<number>(() => {});
     const hostBackend = {
-      exited: new Promise<number>(() => {}),
+      get exited() {
+        exitReads += 1;
+        return exited;
+      },
       port: 14327,
       stop: async () => {},
     };
@@ -535,6 +646,7 @@ describe("launcher internals", () => {
       dependency: "typescript-host-backend",
       operation: "stop",
     });
+    expect(exitReads).toBe(0);
   });
 
   test("preserves frontend and host shutdown failures together", async () => {
