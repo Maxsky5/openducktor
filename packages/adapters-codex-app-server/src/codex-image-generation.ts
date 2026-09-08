@@ -19,6 +19,7 @@ export type CodexImageGenerationContext = {
 export const codexImageGenerationPart = (
   item: CodexImageGenerationItem,
   context: CodexImageGenerationContext = {},
+  preparedRevision?: string,
 ): AgentImageGenerationPart => {
   const part: AgentImageGenerationPart = {
     kind: "image_generation",
@@ -33,15 +34,17 @@ export const codexImageGenerationPart = (
   if (item.savedPath !== undefined) part.savedPath = item.savedPath;
   if (item.status === "completed") {
     part.status = "completed";
-    if (item.savedPath !== undefined || item.result.length > 0) {
+    if (item.savedPath !== undefined || item.result.length > 0 || preparedRevision !== undefined) {
       part.output = {
-        revision: bytesToHex(
-          sha256
-            .create()
-            .update(utf8ToBytes(item.savedPath !== undefined ? "saved_file\0" : "inline\0"))
-            .update(utf8ToBytes(item.savedPath ?? item.result))
-            .digest(),
-        ),
+        revision:
+          preparedRevision ??
+          bytesToHex(
+            sha256
+              .create()
+              .update(utf8ToBytes(item.savedPath !== undefined ? "saved_file\0" : "inline\0"))
+              .update(utf8ToBytes(item.savedPath ?? item.result))
+              .digest(),
+          ),
       };
     }
     return part;
@@ -84,4 +87,5 @@ export type CodexImageGenerationPreparation = {
 
 export type CodexImageGenerationPreparer = (
   images: readonly CodexImageGenerationPreparation[],
+  signal?: AbortSignal,
 ) => Promise<AgentImageGenerationPart[]>;

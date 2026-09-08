@@ -1,98 +1,199 @@
-import { Worker } from "node:worker_threads";
-import type { CodexImageGenerationPreparer } from "@openducktor/adapters-codex-app-server";
-import { Effect, Exit } from "effect";
+import type {
+  CodexImageGenerationPreparer,
+  CodexImageGenerationPreparation,
+} from "@openducktor/adapters-codex-app-server";
+import { Deferred, Effect, Exit, Pool, Scope } from "effect";
 import {
-  HostOperationError,
-  HostValidationError,
   causeToHostBoundaryError,
+  toHostOperationError,
   type HostError,
+  type HostOperationErrorAggregate,
 } from "../../effect/host-errors";
+import type { GeneratedImagePayload } from "../../ports/generated-image-file-port";
 import {
-  generatedImageWorkerResponseSchema,
-  type GeneratedImageWorkerRequest,
-  type GeneratedImageWorkerResponse,
-} from "./generated-image-worker-protocol";
+  acquireGeneratedImageWorker,
+  exchangeImageWorkerMessage,
+  imageWorkerFailure,
+  type GeneratedImageWorkerChannel,
+} from "./generated-image-worker-channel";
+import type { GeneratedImagePayloadRequest } from "./generated-image-worker-protocol";
 
-// Source execution uses the TypeScript entry; Electron ships its adjacent JavaScript bundle.
-const workerUrl = import.meta.url.endsWith(".ts")
-  ? new URL("./generated-image-worker.ts", import.meta.url)
-  : new URL("./generated-image-worker.js", import.meta.url);
-const slots = Effect.unsafeMakeSemaphore(2);
-const workerError = (itemId: string) =>
-  new HostOperationError({
-    operation: "generated-image.read",
-    details: { itemId },
-    message: `Image '${itemId}' could not be prepared. Reopen the session and try the preview again.`,
+const HISTORY_CHUNK_CHARACTERS = 1024 * 1024;
+const MAX_ADMITTED_JOBS = 8;
+const JOB_DEADLINE = "30 seconds";
+
+export type GeneratedImageWorkers = {
+  preparePayload(
+    request: Effect.Effect<GeneratedImagePayloadRequest, HostError>,
+    itemId: string,
+  ): Effect.Effect<GeneratedImagePayload, HostError>;
+  prepareHistory: CodexImageGenerationPreparer;
+  shutdown: Effect.Effect<void, HostError>;
+};
+
+const prepareHistoryImage = (
+  channel: GeneratedImageWorkerChannel,
+  image: CodexImageGenerationPreparation,
+) =>
+  Effect.gen(function* () {
+    const { item, context } = image;
+    yield* exchangeImageWorkerMessage(
+      channel,
+      {
+        kind: "history-start",
+        image: { item: { ...item, result: "" }, context },
+        hasInlineOutput: item.result.length > 0,
+      },
+      item.id,
+      "ack",
+    );
+    if (item.status === "completed" && item.savedPath === undefined) {
+      let offset = 0;
+      while (offset < item.result.length) {
+        let end = Math.min(offset + HISTORY_CHUNK_CHARACTERS, item.result.length);
+        // Match whole-string UTF-8 encoding when a surrogate pair crosses a chunk boundary.
+        const tail = item.result.charCodeAt(end - 1);
+        if (end < item.result.length && tail >= 0xd800 && tail <= 0xdbff) end--;
+        yield* exchangeImageWorkerMessage(
+          channel,
+          { kind: "history-chunk", chunk: item.result.slice(offset, end) },
+          item.id,
+          "ack",
+        );
+        offset = end;
+      }
+    }
+    const result = yield* exchangeImageWorkerMessage(
+      channel,
+      { kind: "history-end" },
+      item.id,
+      "history",
+    );
+    if (result.kind !== "history") return yield* imageWorkerFailure(item.id, "protocol");
+    return result.part;
   });
 
-const runWorker = (
-  request: GeneratedImageWorkerRequest,
-  itemId: string,
-): Effect.Effect<GeneratedImageWorkerResponse, HostError> =>
-  Effect.uninterruptibleMask((restore) =>
-    Effect.gen(function* () {
-      const worker = yield* Effect.try({
-        try: () => new Worker(workerUrl),
-        catch: () => workerError(itemId),
-      });
-      const result = yield* Effect.exit(
-        restore(
-          Effect.async<GeneratedImageWorkerResponse, HostError>((resume) => {
-            worker.once("error", () => resume(Effect.fail(workerError(itemId))));
-            worker.once("exit", () => resume(Effect.fail(workerError(itemId))));
-            worker.once("messageerror", () => resume(Effect.fail(workerError(itemId))));
-            worker.once("message", (raw: GeneratedImageWorkerResponse) => {
-              const parsed = generatedImageWorkerResponseSchema.safeParse(raw);
-              if (!parsed.success) resume(Effect.fail(workerError(itemId)));
-              else if (parsed.data.kind === "invalid")
-                resume(
-                  Effect.fail(
-                    new HostValidationError({
-                      field: "image",
-                      message: parsed.data.message,
-                      details: { itemId, operation: "generated-image.read" },
-                    }),
-                  ),
-                );
-              else resume(Effect.succeed(parsed.data));
-            });
-            try {
-              worker.postMessage(request);
-            } catch {
-              resume(Effect.fail(workerError(itemId)));
-            }
-          }),
-        ),
-      );
-      worker.removeAllListeners();
-      const stopped = yield* Effect.exit(
-        Effect.tryPromise({ try: () => worker.terminate(), catch: () => workerError(itemId) }),
-      );
-      return yield* Exit.zipLeft(result, stopped);
-    }),
-  ).pipe(slots.withPermits(1));
-
-export const prepareGeneratedImagePayload = (
-  request: Exclude<GeneratedImageWorkerRequest, { kind: "history" }>,
+/** The host owns this pool and must await shutdown before it exits. */
+export const createGeneratedImageWorkers = (
+  onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void>,
 ) =>
-  runWorker(request, request.itemId).pipe(
-    Effect.flatMap((result) =>
-      result.kind === "payload"
-        ? Effect.succeed(result.payload)
-        : Effect.fail(workerError(request.itemId)),
-    ),
-  );
+  Effect.gen(function* () {
+    const scope = yield* Scope.make();
+    const closing = yield* Deferred.make<never, HostError>();
+    let closed = false;
+    let terminationFailure: ReturnType<typeof imageWorkerFailure> | undefined;
+    const reportTerminationFailure = (failure: ReturnType<typeof imageWorkerFailure>) =>
+      Effect.gen(function* () {
+        terminationFailure ??= failure;
+        yield* Deferred.fail(closing, failure);
+        yield* onBackgroundFailure(failure);
+      });
+    let admitted = 0;
+    const pool = yield* Pool.makeWithTTL({
+      acquire: acquireGeneratedImageWorker(reportTerminationFailure),
+      min: 0,
+      max: 2,
+      targetUtilization: 1,
+      timeToLive: "30 seconds",
+    }).pipe(
+      Effect.interruptible,
+      Scope.extend(scope),
+      Effect.onError(() => Scope.close(scope, Exit.void)),
+    );
+    yield* Scope.addFinalizer(
+      scope,
+      Effect.gen(function* () {
+        closed = true;
+        yield* Deferred.fail(closing, imageWorkerFailure("worker", "shutdown"));
+      }),
+    );
 
-// The Codex adapter owns this Promise callback contract.
-export const prepareHostCodexImages: CodexImageGenerationPreparer = async (images) => {
-  const itemId = images[0]?.item.id ?? "history";
-  const exit = await Effect.runPromiseExit(
-    runWorker({ kind: "history", images }, itemId).pipe(
-      Effect.flatMap((result) =>
-        result.kind === "history" ? Effect.succeed(result.parts) : Effect.fail(workerError(itemId)),
+    const run = <A>(
+      itemId: string,
+      use: (channel: GeneratedImageWorkerChannel) => Effect.Effect<A, HostError>,
+    ): Effect.Effect<A, HostError> =>
+      Effect.acquireUseRelease(
+        Effect.suspend(() => {
+          if (terminationFailure) return Effect.fail(terminationFailure);
+          if (closed) return Effect.fail(imageWorkerFailure(itemId, "shutdown"));
+          if (admitted >= MAX_ADMITTED_JOBS)
+            return Effect.fail(imageWorkerFailure(itemId, "capacity"));
+          admitted++;
+          return Effect.void;
+        }),
+        () => {
+          const job = Effect.scoped(
+            Effect.gen(function* () {
+              const channel = yield* Pool.get(pool);
+              return yield* use(channel).pipe(
+                Effect.onExit((exit) =>
+                  Exit.isFailure(exit) ? Pool.invalidate(pool, channel) : Effect.void,
+                ),
+              );
+            }),
+          );
+          return Effect.raceFirst(job, Deferred.await(closing)).pipe(
+            Effect.timeoutFail({
+              duration: JOB_DEADLINE,
+              onTimeout: () => imageWorkerFailure(itemId, "deadline"),
+            }),
+            Effect.catchAllDefect((cause) =>
+              Effect.fail(toHostOperationError(cause, "generated-image.read")),
+            ),
+            Effect.withSpan("generated-image.prepare", { attributes: { itemId } }),
+          );
+        },
+        () =>
+          Effect.sync(() => {
+            admitted--;
+          }),
+      );
+
+    const preparePayload: GeneratedImageWorkers["preparePayload"] = (request, itemId) =>
+      run(itemId, (channel) =>
+        Effect.gen(function* () {
+          // Acquire capacity before reading a file or allocating its buffer.
+          const input = yield* request;
+          const result = yield* exchangeImageWorkerMessage(
+            channel,
+            input,
+            itemId,
+            input.kind === "inline" ? "inline" : "payload",
+          );
+          if (input.kind === "inline" && result.kind === "inline")
+            return {
+              mime: "image/png" as const,
+              byteLength: result.byteLength,
+              base64: input.base64,
+            };
+          if (result.kind === "payload") return result.payload;
+          return yield* imageWorkerFailure(itemId, "protocol");
+        }),
+      );
+
+    // This Promise callback is the Codex adapter boundary. Preserve its caller's cancellation.
+    const prepareHistory: CodexImageGenerationPreparer = async (images, signal) => {
+      const exit = await Effect.runPromiseExit(
+        Effect.forEach(
+          images,
+          (image) => run(image.item.id, (channel) => prepareHistoryImage(channel, image)),
+          { concurrency: 1 },
+        ),
+        signal ? { signal } : undefined,
+      );
+      if (Exit.isFailure(exit)) throw causeToHostBoundaryError(exit.cause);
+      return exit.value;
+    };
+    return {
+      preparePayload,
+      prepareHistory,
+      shutdown: Effect.gen(function* () {
+        yield* Scope.close(scope, Exit.void);
+        if (terminationFailure) return yield* terminationFailure;
+      }).pipe(
+        Effect.catchAllDefect((cause) =>
+          Effect.fail(toHostOperationError(cause, "generated-image.shutdown")),
+        ),
       ),
-    ),
-  );
-  if (Exit.isFailure(exit)) throw causeToHostBoundaryError(exit.cause);
-  return exit.value;
-};
+    } satisfies GeneratedImageWorkers;
+  }).pipe(Effect.uninterruptible);

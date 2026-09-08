@@ -37,6 +37,7 @@ const createImageHarness = (
 ) => {
   const calls: Array<{ method: string; params: unknown }> = [];
   const gate = createDeferred<void>();
+  const historyStarted = createDeferred<void>();
   let deferred = false;
   const options: Parameters<typeof createHarness>[0] = {
     transportFactory: (runtimeId) => {
@@ -47,6 +48,7 @@ const createImageHarness = (
           if (request.method === "thread/read")
             return { thread: codexThreadFixture({ id: threadId, cwd, status: { type: "idle" } }) };
           if (request.method === "thread/turns/list") {
+            historyStarted.resolve();
             if (deferred) await gate.promise;
             return {
               data: [codexTurnFixture({ id: "turn", status: "completed", items })],
@@ -65,6 +67,7 @@ const createImageHarness = (
     adapter,
     calls,
     gate,
+    historyStarted,
     defer: () => {
       deferred = true;
     },
@@ -315,3 +318,75 @@ for (const failure of ["wrong item", "missing", "worker failure"] as const) {
     }
   });
 }
+
+for (const cancel of ["caller", "runtime"] as const) {
+  test(`${cancel} cancellation reaches image preparation`, async () => {
+    const started = createDeferred<AbortSignal>();
+    const harness = createImageHarness(
+      [completed()],
+      "/repo",
+      ref.externalSessionId,
+      async (_images, signal) => {
+        if (!signal) throw new Error("Missing preparation signal");
+        started.resolve(signal);
+        await new Promise<void>((_resolve, reject) =>
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+        );
+        throw new Error("Unexpected preparation completion");
+      },
+    );
+    await harness.adapter.prepareRuntime("runtime-live");
+    const caller = new AbortController();
+    const pending = harness.adapter.resolveGeneratedImageSource(
+      { ref, itemId: "image", revision: codexImageGenerationPart(completed()).output!.revision },
+      caller.signal,
+    );
+    const settled = pending.then(
+      () => undefined,
+      (cause: unknown) => cause,
+    );
+    try {
+      const signal = await started.promise;
+      if (cancel === "caller") caller.abort(new Error("preview canceled"));
+      else harness.adapter.releaseRuntime("runtime-live");
+      expect(signal.aborted).toBe(true);
+      expect(await settled).toBe(signal.reason);
+    } finally {
+      caller.abort();
+      harness.adapter.releaseRuntime("runtime-live");
+      await settled;
+    }
+  });
+}
+
+test("canceling one shared history consumer prevents its preparation without canceling the other", async () => {
+  const prepare = mock<CodexImageGenerationPreparer>(async (images) =>
+    images.map(({ item, context }) => codexImageGenerationPart(item, context)),
+  );
+  const harness = createImageHarness([completed()], "/repo", ref.externalSessionId, prepare);
+  await harness.adapter.prepareRuntime("runtime-live");
+  harness.defer();
+  const input = {
+    ref,
+    itemId: "image",
+    revision: codexImageGenerationPart(completed()).output!.revision,
+  };
+  const caller = new AbortController();
+  const canceled = harness.adapter.resolveGeneratedImageSource(input, caller.signal).then(
+    () => undefined,
+    (cause: unknown) => cause,
+  );
+  const other = harness.adapter.resolveGeneratedImageSource(input);
+  try {
+    await harness.historyStarted.promise;
+    caller.abort(new Error("preview canceled"));
+    harness.gate.resolve();
+    expect(await canceled).toBe(caller.signal.reason);
+    expect(await other).toEqual({ representation: "inline", base64: completed().result });
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(harness.calls.filter((call) => call.method === "thread/turns/list")).toHaveLength(1);
+  } finally {
+    harness.gate.resolve();
+    harness.adapter.releaseRuntime("runtime-live");
+  }
+});

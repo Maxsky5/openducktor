@@ -1,4 +1,3 @@
-import { prepareHostCodexImages } from "../attachments/generated-image-worker-client";
 import { createCodexImageSettlement } from "./codex-live-session-images";
 import {
   CodexAppServerAdapter,
@@ -103,7 +102,7 @@ const requireRuntime = (
 };
 
 const defaultCreateController = (options: CodexAppServerAdapterOptions): CodexSessionController =>
-  new CodexAppServerAdapter({ ...options, prepareImageGenerations: prepareHostCodexImages });
+  new CodexAppServerAdapter(options);
 
 export const createCodexLiveSessionAdapterPreparer =
   ({
@@ -111,6 +110,7 @@ export const createCodexLiveSessionAdapterPreparer =
     codexAppServer,
     onBackgroundFailure,
     resolveRuntimePolicy,
+    prepareImageGenerations,
     createController = defaultCreateController,
   }: CreateCodexLiveSessionAdapterPreparerInput): CodexLiveSessionAdapterPreparer =>
   (runtimeInput) =>
@@ -125,6 +125,7 @@ export const createCodexLiveSessionAdapterPreparer =
       const controller = yield* Effect.try({
         try: () =>
           createController({
+            prepareImageGenerations,
             repoRuntimeResolver: {
               requireRepoRuntime: async () => runtime,
             },
@@ -257,7 +258,7 @@ export const createCodexLiveSessionAdapterPreparer =
       const adapter: AgentSessionRuntimeAdapterPort = {
         resolveGeneratedImageSource: (input) =>
           Effect.tryPromise({
-            try: () => controller.resolveGeneratedImageSource(input),
+            try: (signal) => controller.resolveGeneratedImageSource(input, signal),
             catch: sessionError(
               "codex-live-session.read-generated-image",
               input.ref.externalSessionId,

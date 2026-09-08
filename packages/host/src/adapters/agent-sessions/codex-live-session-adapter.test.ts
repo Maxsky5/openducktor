@@ -23,7 +23,7 @@ import type {
   SendAgentUserMessageInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import {
   type HostError,
@@ -444,6 +444,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness({ sessionDiffs });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -498,6 +501,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer: interruptingCodexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -538,6 +544,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -596,6 +605,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const policyScopes: AgentSessionScope[] = [];
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -642,6 +654,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: service,
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -673,6 +688,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -708,6 +726,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -757,6 +778,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness({ initialSnapshots: snapshots });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: service,
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -794,6 +818,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -848,6 +875,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -902,6 +932,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     } satisfies RuntimeLiveSessionLifecyclePort;
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: lifecycle,
         codexAppServer,
         onBackgroundFailure: (failure) =>
@@ -944,6 +977,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -1028,6 +1064,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: lifecycle,
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -1059,6 +1098,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -1114,6 +1156,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -1145,6 +1190,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     };
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -1192,6 +1240,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle(changes),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -1227,6 +1278,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness({ initialSnapshots: [] });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: createLifecycle([]),
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
@@ -1273,6 +1327,9 @@ for (const action of ["stop", "release", "runtime"] as const) {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
         liveSessionLifecycle: service,
         codexAppServer: {
           ...codexAppServer,
@@ -1309,3 +1366,41 @@ for (const action of ["stop", "release", "runtime"] as const) {
     expect(removed).toBeGreaterThan(settled);
   });
 }
+
+test("interrupting an image read aborts the controller's preparation signal", async () => {
+  const started = Promise.withResolvers<AbortSignal>();
+  const harness = createControllerHarness();
+  const prepared = await Effect.runPromise(
+    createCodexLiveSessionAdapterPreparer({
+      prepareImageGenerations: async () => {
+        throw new Error("Unexpected image preparation");
+      },
+      liveSessionLifecycle: createLifecycle([]),
+      codexAppServer,
+      onBackgroundFailure: noBackgroundFailure,
+      resolveRuntimePolicy,
+      createController: (options) => ({
+        ...harness.createController(options),
+        resolveGeneratedImageSource: async (_input, signal) => {
+          if (!signal) throw new Error("Missing image read signal");
+          started.resolve(signal);
+          await new Promise<void>((_resolve, reject) =>
+            signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+          );
+          throw new Error("Unexpected image read completion");
+        },
+      }),
+    })(runtime),
+  );
+  const fiber = Effect.runFork(
+    prepared.adapter.resolveGeneratedImageSource({ ref, itemId: "image", revision: "revision" }),
+  );
+  try {
+    const signal = await started.promise;
+    await Effect.runPromise(Fiber.interrupt(fiber));
+    expect(signal.aborted).toBe(true);
+  } finally {
+    await Effect.runPromise(Fiber.interrupt(fiber));
+    await Effect.runPromise(prepared.discard());
+  }
+});

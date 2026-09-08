@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { beforeEach, afterEach, expect, spyOn, test } from "bun:test";
 import { mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,6 +7,18 @@ import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import { Cause, Effect, Exit, Fiber, Option } from "effect";
 import { causeToHostBoundaryError } from "../../effect/host-errors";
 import { createGeneratedImageFileAdapter } from "./generated-image-file-adapter";
+import {
+  createGeneratedImageWorkers,
+  type GeneratedImageWorkers,
+} from "./generated-image-worker-client";
+
+let workers: GeneratedImageWorkers;
+beforeEach(async () => {
+  workers = await Effect.runPromise(createGeneratedImageWorkers(() => Effect.void));
+});
+afterEach(async () => {
+  await Effect.runPromise(workers.shutdown);
+});
 
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
@@ -25,7 +37,10 @@ const imageFile = async (bytes = png) => {
   await writeFile(path, bytes);
   return path;
 };
-const reader = createGeneratedImageFileAdapter();
+let reader: ReturnType<typeof createGeneratedImageFileAdapter>;
+beforeEach(() => {
+  reader = createGeneratedImageFileAdapter(workers);
+});
 
 test("saved and inline PNG output return the same bounded bytes", async () => {
   const path = await imageFile();

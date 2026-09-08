@@ -15,7 +15,10 @@ import type { CodexThreadHistoryReadResponse } from "./types";
 export class CodexGeneratedImageResolver {
   private readonly runtimes = new Map<
     string,
-    Map<string, Promise<CodexThreadHistoryReadResponse | undefined>>
+    {
+      reads: Map<string, Promise<CodexThreadHistoryReadResponse | undefined>>;
+      cancellation: AbortController;
+    }
   >();
 
   constructor(
@@ -25,22 +28,38 @@ export class CodexGeneratedImageResolver {
   ) {}
 
   prepareRuntime(runtimeId: string): void {
-    if (!this.runtimes.has(runtimeId)) this.runtimes.set(runtimeId, new Map());
+    if (!this.runtimes.has(runtimeId))
+      this.runtimes.set(runtimeId, { reads: new Map(), cancellation: new AbortController() });
   }
 
   releaseRuntime(runtimeId: string): void {
+    this.runtimes
+      .get(runtimeId)
+      ?.cancellation.abort(
+        new Error("The image runtime changed. Reopen the session on its runtime."),
+      );
     this.runtimes.delete(runtimeId);
   }
 
   /** Share pending history reads, but reject results if the runtime changes during either await. */
-  async resolve(input: AgentGeneratedImageReadInput): Promise<AgentGeneratedImageSource> {
+  async resolve(
+    input: AgentGeneratedImageReadInput,
+    signal?: AbortSignal,
+  ): Promise<AgentGeneratedImageSource> {
+    signal?.throwIfAborted();
     const snapshot = new Map(this.runtimes);
     const { client, runtimeId } = await this.clients.resolve(input.ref, "read generated image");
-    const reads = snapshot.get(runtimeId);
+    signal?.throwIfAborted();
+    const runtime = snapshot.get(runtimeId);
     const unavailable = (reason: string): Error =>
       new Error(`Image '${input.itemId}' is unavailable: ${reason}`);
-    if (!reads || this.runtimes.get(runtimeId) !== reads)
+    if (!runtime || this.runtimes.get(runtimeId) !== runtime)
       throw unavailable("the runtime changed during the read. Reopen the session on its runtime.");
+    const preparationSignal = signal
+      ? AbortSignal.any([signal, runtime.cancellation.signal])
+      : runtime.cancellation.signal;
+    preparationSignal.throwIfAborted();
+    const { reads } = runtime;
     const threadId = input.ref.externalSessionId;
     let pending = reads.get(threadId);
     if (!pending) {
@@ -53,7 +72,8 @@ export class CodexGeneratedImageResolver {
     } finally {
       if (reads.get(threadId) === pending) reads.delete(threadId);
     }
-    if (this.runtimes.get(runtimeId) !== reads)
+    preparationSignal.throwIfAborted();
+    if (this.runtimes.get(runtimeId) !== runtime)
       throw unavailable("the runtime changed during the read. Reopen the session.");
     if (
       !response ||
@@ -86,10 +106,11 @@ export class CodexGeneratedImageResolver {
       throw unavailable("the inline image exceeds the 32 MiB preview limit.");
     const sourceItem = item.savedPath === undefined ? item : { ...item, result: "" };
     const parts = this.prepareImages
-      ? await this.prepareImages([{ item: sourceItem, context: {} }])
+      ? await this.prepareImages([{ item: sourceItem, context: {} }], preparationSignal)
       : [codexImageGenerationPart(sourceItem)];
     const part = parts[0];
-    if (this.runtimes.get(runtimeId) !== reads)
+    preparationSignal.throwIfAborted();
+    if (this.runtimes.get(runtimeId) !== runtime)
       throw unavailable("the runtime changed during the read. Reopen the session.");
     if (parts.length !== 1 || !part || part.itemId !== item.id || part.turnId !== undefined)
       throw unavailable("image preparation returned the wrong item. Reopen the session.");

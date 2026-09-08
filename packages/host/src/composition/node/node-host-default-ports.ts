@@ -1,4 +1,5 @@
 import { createGeneratedImageFileAdapter } from "../../adapters/attachments/generated-image-file-adapter";
+import type { GeneratedImageWorkers } from "../../adapters/attachments/generated-image-worker-client";
 import {
   GeneratedImageFilePortTag,
   type GeneratedImageFilePort,
@@ -52,6 +53,7 @@ import {
 import { type WorktreeFilePort, WorktreeFilePortTag } from "../../ports/worktree-file-port";
 
 export type NodeHostDefaultPorts = {
+  imageWorkers: GeneratedImageWorkers;
   codexAppServer: CodexAppServerPort & CodexSessionHistoryPort;
   codexTransportRegistry: CodexAppServerTransportRegistry;
   devServerProcesses: DevServerProcessPort;
@@ -130,6 +132,7 @@ export type NodeHostDefaultPortServices =
 
 const makeNodeHostDefaultPorts = (
   input: CreateNodeHostDefaultPortsInput,
+  imageWorkers: GeneratedImageWorkers,
 ): Effect.Effect<NodeHostDefaultPorts> =>
   Effect.sync(() => {
     const processEnv = input.processEnv ?? createProcessEnvironment();
@@ -175,6 +178,7 @@ const makeNodeHostDefaultPorts = (
       input.codexAppServerTransportRegistry ?? input.codexAppServer ?? defaultCodexAppServer;
 
     return {
+      imageWorkers,
       codexAppServer,
       codexTransportRegistry,
       devServerProcesses: input.devServerProcesses ?? createDevServerProcessAdapter({ processEnv }),
@@ -192,7 +196,8 @@ const makeNodeHostDefaultPorts = (
               ),
             ),
         }),
-      generatedImageFiles: input.generatedImageFiles ?? createGeneratedImageFileAdapter(),
+      generatedImageFiles:
+        input.generatedImageFiles ?? createGeneratedImageFileAdapter(imageWorkers),
       localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
       openInTools: input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
       processEnv,
@@ -209,8 +214,9 @@ const makeNodeHostDefaultPorts = (
 
 const makeNodeHostDefaultPortContext = (
   input: CreateNodeHostDefaultPortsInput,
+  imageWorkers: GeneratedImageWorkers,
 ): Effect.Effect<Context.Context<NodeHostDefaultPortServices>> =>
-  makeNodeHostDefaultPorts(input).pipe(
+  makeNodeHostDefaultPorts(input, imageWorkers).pipe(
     Effect.map((ports) =>
       Context.empty().pipe(
         Context.add(NodeHostDefaultPortsTag, ports),
@@ -233,8 +239,9 @@ const makeNodeHostDefaultPortContext = (
 
 const createNodeHostDefaultPortsLayer = (
   input: CreateNodeHostDefaultPortsInput,
+  imageWorkers: GeneratedImageWorkers,
 ): Layer.Layer<NodeHostDefaultPortServices> =>
-  Layer.effectContext(makeNodeHostDefaultPortContext(input));
+  Layer.effectContext(makeNodeHostDefaultPortContext(input, imageWorkers));
 
 const createNodeHostDefaultPortsEffect: Effect.Effect<
   NodeHostDefaultPorts,
@@ -246,7 +253,10 @@ const createNodeHostDefaultPortsEffect: Effect.Effect<
 
 export const createNodeHostDefaultPorts = (
   input: CreateNodeHostDefaultPortsInput,
+  imageWorkers: GeneratedImageWorkers,
 ): NodeHostDefaultPorts =>
   Effect.runSync(
-    createNodeHostDefaultPortsEffect.pipe(Effect.provide(createNodeHostDefaultPortsLayer(input))),
+    createNodeHostDefaultPortsEffect.pipe(
+      Effect.provide(createNodeHostDefaultPortsLayer(input, imageWorkers)),
+    ),
   );

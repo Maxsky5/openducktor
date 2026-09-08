@@ -78,8 +78,11 @@ export const decodeGeneratedImage = async (
   return result.bytes;
 };
 
-export const prepareCodexImageGenerations: CodexImageGenerationPreparer = async (images) => {
-  const result = await runImageWorker({ kind: "history", images });
+export const prepareCodexImageGenerations: CodexImageGenerationPreparer = async (
+  images,
+  signal,
+) => {
+  const result = await runImageWorker({ kind: "history", images }, signal);
   if (result.kind !== "history")
     throw new Error("Image history preparation returned an invalid result. Reload this session.");
   return result.parts;

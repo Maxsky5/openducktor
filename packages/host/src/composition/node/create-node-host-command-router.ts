@@ -102,7 +102,6 @@ export const assembleNodeEffectHostCommandRouter = (
     filesystem,
     git,
     localAttachments,
-    generatedImageFiles,
     openInTools,
     processEnv,
     runtimeDistribution,
@@ -209,6 +208,7 @@ export const assembleNodeEffectHostCommandRouter = (
     codexAppServer: effectiveCodexTransportRegistry,
     liveSessionLifecycle: agentSessionLiveStateService,
     prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
+      prepareImageGenerations: defaultPorts.imageWorkers.prepareHistory,
       liveSessionLifecycle: agentSessionLiveStateService,
       codexAppServer: effectiveCodexAppServer,
       onBackgroundFailure,
@@ -384,6 +384,7 @@ export const assembleNodeEffectHostCommandRouter = (
           runShutdownSteps(
             [
               { label: "pull request sync loop", run: stopPullRequestSyncLoop },
+              { label: "image workers", run: () => defaultPorts.imageWorkers.shutdown },
               createStopTerminalsStep(terminalService),
               createStopDevServersStep(devServerService, lifecycleLogger),
               createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
@@ -469,7 +470,7 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createLocalAttachmentCommandHandlers(localAttachmentService),
       ...createNodeImageCommandHandlers(
         liveSessionAdapterRegistry,
-        generatedImageFiles,
+        defaultPorts.generatedImageFiles,
         runtimeDefinitionsService,
       ),
       ...createOpenInToolsCommandHandlers(openInToolsService),

@@ -6,12 +6,14 @@ import {
   LOCAL_ATTACHMENT_BYTE_LIMIT,
 } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
-import { prepareGeneratedImagePayload } from "./generated-image-worker-client";
+import type { GeneratedImageWorkers } from "./generated-image-worker-client";
 import { invalidImage } from "./generated-image-decode";
 import { type HostError, HostOperationError } from "../../effect/host-errors";
 import type { GeneratedImageFilePort } from "../../ports/generated-image-file-port";
 
-export const createGeneratedImageFileAdapter = (): GeneratedImageFilePort => ({
+export const createGeneratedImageFileAdapter = (
+  workers: GeneratedImageWorkers,
+): GeneratedImageFilePort => ({
   read: (source, itemId) =>
     Effect.gen(function* () {
       if (source.representation === "inline") {
@@ -19,14 +21,21 @@ export const createGeneratedImageFileAdapter = (): GeneratedImageFilePort => ({
           return yield* Effect.fail(
             invalidImage(itemId, "output exceeds the 32 MiB preview limit."),
           );
-        return yield* prepareGeneratedImagePayload({
-          kind: "inline",
-          base64: source.base64,
+        return yield* workers.preparePayload(
+          Effect.succeed({
+            kind: "inline",
+            base64: source.base64,
+            itemId,
+          }),
           itemId,
-        });
+        );
       }
-      const bytes = yield* readSavedImage(source.path, itemId);
-      return yield* prepareGeneratedImagePayload({ kind: "file", bytes, itemId });
+      return yield* workers.preparePayload(
+        readSavedImage(source.path, itemId).pipe(
+          Effect.map((bytes) => ({ kind: "file" as const, bytes, itemId })),
+        ),
+        itemId,
+      );
     }),
 });
 
@@ -40,7 +49,10 @@ const imageReadError =
     });
 
 /** Read one open file handle so path changes cannot swap the file after the size check. */
-const readSavedImage = (path: string, itemId: string): Effect.Effect<Buffer, HostError> => {
+const readSavedImage = (
+  path: string,
+  itemId: string,
+): Effect.Effect<Buffer<ArrayBuffer>, HostError> => {
   if (!isAbsolute(path) || path.includes("\0"))
     return Effect.fail(invalidImage(itemId, "the runtime returned an invalid saved-file path."));
   return Effect.uninterruptibleMask((restore) =>

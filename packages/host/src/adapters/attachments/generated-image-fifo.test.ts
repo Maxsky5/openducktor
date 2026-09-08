@@ -1,10 +1,22 @@
-import { expect, spyOn, test } from "bun:test";
+import { beforeEach, afterEach, expect, spyOn, test } from "bun:test";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Fiber, Exit, Cause } from "effect";
 import { createGeneratedImageFileAdapter } from "./generated-image-file-adapter";
+import {
+  createGeneratedImageWorkers,
+  type GeneratedImageWorkers,
+} from "./generated-image-worker-client";
+
+let workers: GeneratedImageWorkers;
+beforeEach(async () => {
+  workers = await Effect.runPromise(createGeneratedImageWorkers(() => Effect.void));
+});
+afterEach(async () => {
+  await Effect.runPromise(workers.shutdown);
+});
 
 for (const cancel of [false, true]) {
   test.skipIf(process.platform === "win32")(
@@ -32,7 +44,7 @@ for (const cancel of [false, true]) {
       });
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const fiber = Effect.runFork(
-        createGeneratedImageFileAdapter().read(
+        createGeneratedImageFileAdapter(workers).read(
           { representation: "saved_file", path },
           "fifo-image",
         ),

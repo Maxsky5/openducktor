@@ -128,3 +128,31 @@ for (const failure of [
     }
   });
 }
+
+test("history preparation forwards cancellation to its browser worker", async () => {
+  const stub: ImageWorkerTestDouble = {
+    onmessage: null,
+    onerror: null,
+    onmessageerror: null,
+    postMessage: mock(() => {}),
+    terminate: mock(() => {}),
+  };
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "Worker")!;
+  Object.defineProperty(globalThis, "Worker", {
+    configurable: true,
+    value: class {
+      constructor() {
+        return stub;
+      }
+    },
+  });
+  const controller = new AbortController();
+  try {
+    const pending = prepareCodexImageGenerations([], controller.signal);
+    controller.abort(new Error("history canceled"));
+    await expect(pending).rejects.toThrow("history canceled");
+    expect(stub.terminate).toHaveBeenCalledTimes(1);
+  } finally {
+    Object.defineProperty(globalThis, "Worker", descriptor);
+  }
+});

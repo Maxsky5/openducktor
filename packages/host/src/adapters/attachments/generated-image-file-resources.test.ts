@@ -1,9 +1,21 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { beforeEach, afterEach, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Fiber } from "effect";
 import { createGeneratedImageFileAdapter } from "./generated-image-file-adapter";
+import {
+  createGeneratedImageWorkers,
+  type GeneratedImageWorkers,
+} from "./generated-image-worker-client";
+
+let workers: GeneratedImageWorkers;
+beforeEach(async () => {
+  workers = await Effect.runPromise(createGeneratedImageWorkers(() => Effect.void));
+});
+afterEach(async () => {
+  await Effect.runPromise(workers.shutdown);
+});
 
 const originalOpen = fs.open;
 const directories: string[] = [];
@@ -25,7 +37,10 @@ test("a denied file open returns an actionable error without reading bytes", asy
   try {
     await expect(
       Effect.runPromise(
-        createGeneratedImageFileAdapter().read({ representation: "saved_file", path }, "image"),
+        createGeneratedImageFileAdapter(workers).read(
+          { representation: "saved_file", path },
+          "image",
+        ),
       ),
     ).rejects.toThrow("readable");
     expect(spy.mock.calls.some(([opened]) => opened === path)).toBe(true);
@@ -78,7 +93,7 @@ for (const outcome of ["success", "growth", "failure", "interruption"] as const)
       return handle;
     });
     try {
-      const read = createGeneratedImageFileAdapter().read(
+      const read = createGeneratedImageFileAdapter(workers).read(
         { representation: "saved_file", path },
         "image",
       );

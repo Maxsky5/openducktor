@@ -5,13 +5,25 @@ import {
 } from "@openducktor/contracts";
 import { z } from "zod";
 
-export type GeneratedImageWorkerRequest =
-  | { kind: "history"; images: readonly CodexImageGenerationPreparation[] }
+export type GeneratedImagePayloadRequest =
   | { kind: "inline"; base64: string; itemId: string }
-  | { kind: "file"; bytes: Uint8Array; itemId: string };
+  | { kind: "file"; bytes: Uint8Array<ArrayBuffer>; itemId: string };
+
+export type GeneratedImageWorkerRequest =
+  | GeneratedImagePayloadRequest
+  | { kind: "history-start"; image: CodexImageGenerationPreparation; hasInlineOutput: boolean }
+  | { kind: "history-chunk"; chunk: string }
+  | { kind: "history-end" };
+
+export type GeneratedImageWorkerMessage = { id: number; request: GeneratedImageWorkerRequest };
 
 export const generatedImageWorkerResponseSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("history"), parts: z.array(agentImageGenerationPartSchema) }),
+  z.object({ kind: z.literal("ack") }),
+  z.object({ kind: z.literal("history"), part: agentImageGenerationPartSchema }),
+  z.object({
+    kind: z.literal("inline"),
+    byteLength: agentGeneratedImageReadResultSchema.shape.byteLength,
+  }),
   z.object({
     kind: z.literal("payload"),
     payload: agentGeneratedImageReadResultSchema.pick({
@@ -23,3 +35,7 @@ export const generatedImageWorkerResponseSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("invalid"), message: z.string() }),
 ]);
 export type GeneratedImageWorkerResponse = z.infer<typeof generatedImageWorkerResponseSchema>;
+export const generatedImageWorkerReplySchema = z.object({
+  id: z.number().int().nonnegative(),
+  result: generatedImageWorkerResponseSchema,
+});

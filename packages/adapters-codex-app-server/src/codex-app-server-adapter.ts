@@ -298,8 +298,9 @@ export class CodexAppServerAdapter
 
   resolveGeneratedImageSource(
     input: AgentGeneratedImageReadInput,
+    signal?: AbortSignal,
   ): Promise<AgentGeneratedImageSource> {
-    return this.generatedImages.resolve(input);
+    return this.generatedImages.resolve(input, signal);
   }
 
   settleGeneratedImages(runtimeId: string, sessionRef?: SessionRef): AgentEvent[] {
