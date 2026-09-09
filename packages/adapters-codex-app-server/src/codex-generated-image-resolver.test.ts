@@ -571,3 +571,25 @@ test("two near-limit batches retain bounded sources and release reservations aft
     adapter.releaseRuntime("runtime-live");
   }
 });
+
+test("eight saved-image descriptions use one public-history read", async () => {
+  const items = Array.from({ length: 8 }, (_, index) => ({
+    ...completed(),
+    id: `image-${index}`,
+    result: "",
+    savedPath: `/generated/${index}.png`,
+  }));
+  const harness = createImageHarness(items);
+  await harness.adapter.prepareRuntime("runtime-live");
+  try {
+    const result = await harness.adapter.describeGeneratedImages({
+      ref,
+      images: items.map(({ id }) => ({ itemId: id, turnId: "turn" })),
+    });
+    expect(result.images.map(({ itemId }) => itemId)).toEqual(items.map(({ id }) => id));
+    expect(harness.calls.filter(({ method }) => method === "thread/read")).toHaveLength(1);
+    expect(harness.calls.filter(({ method }) => method === "thread/turns/list")).toHaveLength(1);
+  } finally {
+    harness.adapter.releaseRuntime("runtime-live");
+  }
+});

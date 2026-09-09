@@ -600,3 +600,37 @@ test("an incomplete image explains a confirmed turn failure", () => {
   expect(screen.queryByText("Image generation failed")).toBeNull();
   expect(read).not.toHaveBeenCalled();
 });
+
+test("saved metadata survives scrolling and refreshes after offscreen invalidation", async () => {
+  const { output: _output, ...saved } = part;
+  let revision = "saved-first";
+  const describe = mock(async () => ({ ref, images: [{ ...saved, output: { revision } }] }));
+  const { view, client, read } = harness(undefined, true, saved, describe);
+  try {
+    await loadImage();
+    await act(async () => observers[0]!.show(false));
+    await waitFor(() =>
+      expect(
+        client.getQueryCache().findAll({ queryKey: agentGeneratedImageQueryKeys.all }),
+      ).toHaveLength(0),
+    );
+    expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
+    await act(async () => observers[0]!.show(true));
+    await loadImage(1);
+    expect(describe).toHaveBeenCalledTimes(1);
+    expect(read.mock.calls[1]?.[0].revision).toBe("saved-first");
+    await act(async () => observers[0]!.show(false));
+    revision = "saved-replaced";
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["agent-generated-image-metadata"] });
+    });
+    expect(describe).toHaveBeenCalledTimes(1);
+    await act(async () => observers[0]!.show(true));
+    await loadImage(2);
+    expect(describe).toHaveBeenCalledTimes(2);
+    expect(read.mock.calls[2]?.[0].revision).toBe("saved-replaced");
+  } finally {
+    view.unmount();
+    client.clear();
+  }
+});
