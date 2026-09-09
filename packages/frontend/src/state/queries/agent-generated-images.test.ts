@@ -1,7 +1,8 @@
-import { expect, mock, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
+import * as imageWorkerClient from "@/lib/generated-images/image-worker-client";
 import {
   agentGeneratedImageQueryKeys,
   agentGeneratedImageQueryOptions as queryOptions,
@@ -243,6 +244,9 @@ test("limits pending host reads to two and removes cancelled previews from the q
 
 test("eight preview queries share one batch while two reads run and one bad image stays isolated", async () => {
   const client = new QueryClient();
+  const decode = spyOn(imageWorkerClient, "decodeGeneratedImage").mockImplementation(
+    async ({ byteLength }) => new ArrayBuffer(byteLength),
+  );
   const firstReads = Promise.withResolvers<void>();
   let active = 0;
   let maximum = 0;
@@ -292,6 +296,7 @@ test("eight preview queries share one batch while two reads run and one bad imag
     firstReads.resolve();
     await result;
     client.clear();
+    decode.mockRestore();
   }
 });
 
