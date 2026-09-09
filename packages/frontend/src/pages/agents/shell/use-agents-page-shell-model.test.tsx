@@ -558,6 +558,7 @@ const notificationContextValue: NotificationContextValue = {
   taskStreamSink: {
     onChange: async () => {},
     onSnapshot: async () => {},
+    onSnapshotFailed: () => {},
     onFailure: () => {},
   },
 };

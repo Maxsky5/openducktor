@@ -172,9 +172,18 @@ export const createNotificationTaskObserver = ({
     await Promise.all([...workspaces.values()].map(loadBaseline));
   };
 
+  const failInterruptedBaselines = (): void => {
+    const repoPaths = [...interruptedBaselines];
+    interruptedBaselines.clear();
+    for (const repoPath of repoPaths) {
+      notifyBaselineOutcome({ repoPath, status: "failed" });
+    }
+  };
+
   const sink: TaskStreamNotificationSink = {
     onChange: refreshForChange,
     onSnapshot: refreshAllBaselines,
+    onSnapshotFailed: failInterruptedBaselines,
     onFailure: (cause) => onFailure({ repoPath: "task-stream", source: "task", cause }),
   };
 
