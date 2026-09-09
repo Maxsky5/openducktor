@@ -7,6 +7,7 @@ import type {
   TaskCard,
   TaskEventTaskSnapshot,
 } from "@openducktor/contracts";
+import { isCancelledError } from "@tanstack/react-query";
 import type { TaskStreamNotificationSink } from "@/state/tasks/task-stream-controller";
 import { createTaskOccurrenceProjector } from "./task-occurrence-projector";
 
@@ -45,6 +46,7 @@ export const createNotificationTaskObserver = ({
 }) => {
   const workspaces = new Map<string, NotificationWorkspace>();
   const entries = new Map<string, TaskObserverEntry>();
+  const interruptedBaselines = new Set<string>();
   const baselineLoads = new Map<
     string,
     { workspace: NotificationWorkspace; promise: Promise<void> }
@@ -77,7 +79,18 @@ export const createNotificationTaskObserver = ({
         projector,
         tasks: new Map(tasks.map((task) => [task.id, task])),
       });
+      interruptedBaselines.delete(workspace.repoPath);
     } catch (cause) {
+      if (isCancelledError(cause)) {
+        if (
+          workspaces.get(workspace.repoPath) === workspace &&
+          entries.get(workspace.repoPath)?.label !== workspace.repositoryLabel
+        ) {
+          interruptedBaselines.add(workspace.repoPath);
+        }
+        return;
+      }
+      interruptedBaselines.delete(workspace.repoPath);
       reportFailure(workspace.repoPath, cause);
     }
   };
@@ -143,6 +156,7 @@ export const createNotificationTaskObserver = ({
     hasBaseline: (repoPath: string): boolean =>
       entries.get(repoPath)?.label === workspaces.get(repoPath)?.repositoryLabel &&
       entries.has(repoPath),
+    isBaselineInterrupted: (repoPath: string): boolean => interruptedBaselines.has(repoPath),
     async syncWorkspaces(nextWorkspaces: readonly NotificationWorkspace[]): Promise<void> {
       const nextRepoPaths = new Set(nextWorkspaces.map((workspace) => workspace.repoPath));
       for (const repoPath of workspaces.keys()) {
@@ -150,6 +164,7 @@ export const createNotificationTaskObserver = ({
           workspaces.delete(repoPath);
           entries.delete(repoPath);
           baselineLoads.delete(repoPath);
+          interruptedBaselines.delete(repoPath);
         }
       }
       const baselines: Promise<void>[] = [];

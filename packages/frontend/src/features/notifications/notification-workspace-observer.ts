@@ -84,6 +84,9 @@ export const createNotificationWorkspaceObserver = ({
 
     void observe({ repoPath: workspace.repoPath }, (envelope) => {
       if (observation.cancelled) return;
+      if (observation.pending && taskObserver.hasBaseline(workspace.repoPath)) {
+        observation.flush();
+      }
       if (observation.pending && envelope.type !== "fault" && envelope.type !== "transcript_gap") {
         observation.pending.push(envelope);
         return;
@@ -129,7 +132,7 @@ export const createNotificationWorkspaceObserver = ({
       for (const workspace of workspaces) {
         if (taskObserver.hasBaseline(workspace.repoPath)) {
           observations.get(workspace.repoPath)?.flush();
-        } else {
+        } else if (!taskObserver.isBaselineInterrupted(workspace.repoPath)) {
           stopObservation(workspace.repoPath);
         }
       }

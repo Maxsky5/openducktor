@@ -15,6 +15,7 @@ type AgentSessionLiveSnapshotEnvelope = Extract<AgentSessionLiveEnvelope, { type
 import { QueryClient } from "@tanstack/react-query";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { readCachedAgentSessionAssociation } from "@/state/queries/agent-session-association";
+import { taskQueryKeys } from "@/state/queries/tasks";
 
 const createNotificationTaskObserver = (
   options: Omit<Parameters<typeof createTaskObserver>[0], "resolveSessionAssociation">,
@@ -243,6 +244,72 @@ test.each(["tasks", "sessions"])(
     observer.dispose();
   },
 );
+
+test("keeps startup observation quiet when the task stream cancels its baseline read", async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const firstReadStarted = createDeferred<void>();
+  const firstRead = createDeferred<TaskCard[]>();
+  let readCount = 0;
+  const loadTasks = async (repoPath: string): Promise<TaskCard[]> => {
+    const result = await queryClient.fetchQuery({
+      queryKey: taskQueryKeys.repoData(repoPath),
+      queryFn: async () => {
+        readCount += 1;
+        if (readCount === 1) {
+          firstReadStarted.resolve();
+          return { tasks: await firstRead.promise };
+        }
+        return { tasks: [createTaskCardFixture({ id: "task-1" })] };
+      },
+      staleTime: 0,
+    });
+    return result.tasks;
+  };
+  const onFailure = mock(() => {});
+  const stop = mock(() => {});
+  const published: NotificationOccurrence[] = [];
+  let receive = (_envelope: AgentSessionLiveEnvelope) => {};
+  const taskObserver = createNotificationTaskObserver({
+    loadTasks,
+    loadSessionRecords: loadWorkflowSessionRecords,
+    publish: () => {},
+    onFailure,
+  });
+  const observer = createNotificationWorkspaceObserver({
+    observe: async (_input, listener) => {
+      receive = listener;
+      listener(liveSnapshot(["existing"]));
+      return stop;
+    },
+    taskObserver,
+    publish: (occurrence) => published.push(occurrence),
+    onFailure,
+  });
+
+  const startup = observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+  await firstReadStarted.promise;
+  await queryClient.cancelQueries(
+    { queryKey: taskQueryKeys.repoData("/repo-a"), exact: true },
+    { silent: true },
+  );
+  await startup;
+
+  expect(onFailure).not.toHaveBeenCalled();
+  expect(stop).not.toHaveBeenCalled();
+
+  await taskObserver.sink.onSnapshot();
+  receive(liveUpsert(["existing", "new"]));
+
+  expect(published).toMatchObject([
+    {
+      kind: "agent.permission_requested",
+      task: { id: "task-1" },
+    },
+  ]);
+  firstRead.resolve([]);
+  observer.dispose();
+  expect(stop).toHaveBeenCalledTimes(1);
+});
 
 test("reads new ownership from Query before the queued task notification sink runs", async () => {
   const queryClient = new QueryClient();
