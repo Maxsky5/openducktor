@@ -32,6 +32,7 @@ export type TaskStreamController = {
 export type TaskStreamNotificationSink = {
   onChange(event: ExternalTaskSyncEvent): Promise<void>;
   onSnapshot(): Promise<void>;
+  onSnapshotFailed(cause: unknown): void;
   onFailure(cause: unknown): void;
 };
 
@@ -294,7 +295,14 @@ export const createTaskStreamController = ({
           (frame) => receive(owner, frame),
           (error) => {
             if (!isCurrentOwner(owner)) return;
-            void startRecovery(error, acknowledgedCursor, true).catch(reportDegraded);
+            void startRecovery(error, acknowledgedCursor, true).then((recovered) => {
+              if (!recovered && !stopped) {
+                enqueueNotificationSink(() => {
+                  notificationSink?.onSnapshotFailed(error);
+                  return Promise.resolve();
+                });
+              }
+            }, reportDegraded);
           },
         ),
       );
@@ -408,6 +416,12 @@ export const createTaskStreamController = ({
                   acknowledgementFailed,
                 ))
               ) {
+                if (!stopped && !acknowledgementFailed) {
+                  enqueueNotificationSink(() => {
+                    notificationSink?.onSnapshotFailed(error);
+                    return Promise.resolve();
+                  });
+                }
                 return;
               }
             }

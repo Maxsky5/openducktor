@@ -4,7 +4,7 @@ import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { documentQueryKeys } from "./documents";
 import { createTaskViewSync, type TaskViewSyncPorts } from "./task-view-sync";
-import { taskQueryKeys } from "./tasks";
+import { taskQueryKeys, type RepoTaskData } from "./tasks";
 
 const createDeferred = <T>() => {
   let resolve: (value: T) => void = () => {};
@@ -52,6 +52,33 @@ describe("TaskViewSync races", () => {
       taskList.resolve([createTaskCardFixture({ id: "task-1" })]);
       await Promise.allSettled([snapshot, workspaceLoad]);
     }
+  });
+
+  test("queues a task-retention refresh after a workspace load", async () => {
+    const firstTaskList = createDeferred<TaskCard[]>();
+    const firstTaskListStarted = createDeferred<void>();
+    const tasks = [createTaskCardFixture({ id: "task-1" })];
+    const listTasks = mock(async () => {
+      if (listTasks.mock.calls.length === 1) {
+        firstTaskListStarted.resolve();
+        return firstTaskList.promise;
+      }
+      return tasks;
+    });
+    const { queryClient, sync } = createSync(createPorts({ listTasks }));
+
+    const workspaceLoad = sync.loadWorkspace("/repo", { forceFresh: true });
+    await firstTaskListStarted.promise;
+    const retentionRefresh = sync.refreshAfterTaskRetentionChange("/repo");
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(listTasks).toHaveBeenCalledTimes(1);
+    firstTaskList.resolve(tasks);
+    await Promise.all([workspaceLoad, retentionRefresh]);
+    expect(listTasks).toHaveBeenCalledTimes(2);
+    expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo"))).toEqual({
+      tasks,
+    });
   });
 
   test("runs external document refreshes in event order", async () => {

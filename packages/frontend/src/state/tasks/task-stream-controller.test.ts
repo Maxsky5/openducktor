@@ -76,6 +76,7 @@ const createHarness = ({
   const taskViewSync: TaskViewSync = {
     loadWorkspace: async () => {},
     refreshManually: async () => {},
+    refreshAfterTaskRetentionChange: async () => {},
     refreshAfterLocalMutation: async () => {},
     reconcileExternalEvent: mock(async () => {}),
     reconcileStreamSnapshot: mock(async () => []),
@@ -221,6 +222,7 @@ describe("task stream controller recovery", () => {
         throw notificationFailure;
       }),
       onSnapshot: mock(async () => {}),
+      onSnapshotFailed: mock(() => {}),
       onFailure: mock(() => {}),
     };
     const harness = createHarness({
@@ -256,6 +258,7 @@ describe("task stream controller recovery", () => {
         }
       }),
       onSnapshot: mock(async () => {}),
+      onSnapshotFailed: mock(() => {}),
       onFailure: mock(() => {}),
     };
     const harness = createHarness({ notificationSink });
@@ -281,6 +284,7 @@ describe("task stream controller recovery", () => {
     const notificationSink: TaskStreamNotificationSink = {
       onChange: mock(async () => {}),
       onSnapshot: mock(async () => snapshotNotification.promise),
+      onSnapshotFailed: mock(() => {}),
       onFailure: mock(() => {}),
     };
     const harness = createHarness({ notificationSink });
@@ -437,6 +441,39 @@ describe("task stream controller recovery", () => {
     expect(harness.records[1]?.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  test("reports terminal snapshot failure when the recovery stream ends before a snapshot", async () => {
+    const snapshotFailure = new Error("snapshot failed");
+    const terminalFailure = new Error("recovery stream ended");
+    const notificationSink: TaskStreamNotificationSink = {
+      onChange: mock(async () => {}),
+      onSnapshot: mock(async () => {}),
+      onSnapshotFailed: mock(() => {}),
+      onFailure: mock(() => {}),
+    };
+    const harness = createHarness({
+      notificationSink,
+      taskViewSync: {
+        reconcileStreamSnapshot: async () => {
+          throw snapshotFailure;
+        },
+      },
+    });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "snapshot_required", cursor: cursor(7), reason: "buffer_gap" });
+    await flush();
+
+    expect(harness.records).toHaveLength(2);
+    expect(notificationSink.onSnapshotFailed).not.toHaveBeenCalled();
+
+    harness.failTerminally(1, terminalFailure);
+    await flush();
+
+    expect(harness.records[1]?.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(notificationSink.onSnapshotFailed).toHaveBeenCalledTimes(1);
+    expect(notificationSink.onSnapshotFailed).toHaveBeenCalledWith(terminalFailure);
+  });
+
   test("keeps a terminal recovery acquisition failure in the degraded episode", async () => {
     const terminalFailure = new Error("stream ended");
     const recoveryFailure = new Error("replacement unavailable");
@@ -553,6 +590,67 @@ describe("task stream controller recovery", () => {
     expect(harness.onSnapshotFinished).toHaveBeenCalledWith("/repo", false);
   });
 
+  test("does not report terminal snapshot failure when the recovery snapshot succeeds", async () => {
+    const firstFailure = new Error("first snapshot failed");
+    let snapshotApplications = 0;
+    const notificationSink: TaskStreamNotificationSink = {
+      onChange: mock(async () => {}),
+      onSnapshot: mock(async () => {}),
+      onSnapshotFailed: mock(() => {}),
+      onFailure: mock(() => {}),
+    };
+    const harness = createHarness({
+      notificationSink,
+      taskViewSync: {
+        reconcileStreamSnapshot: async () => {
+          snapshotApplications += 1;
+          if (snapshotApplications === 1) throw firstFailure;
+          return [];
+        },
+      },
+    });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "snapshot_required", cursor: cursor(7), reason: "buffer_gap" });
+    await flush();
+    harness.emit(1, { type: "snapshot_required", cursor: cursor(8), reason: "buffer_gap" });
+    await flush();
+
+    expect(notificationSink.onSnapshot).toHaveBeenCalledTimes(1);
+    expect(notificationSink.onSnapshotFailed).not.toHaveBeenCalled();
+  });
+
+  test("reports terminal snapshot failure once when the recovery snapshot fails", async () => {
+    const firstFailure = new Error("first snapshot failed");
+    const recoveryFailure = new Error("recovery snapshot failed");
+    let snapshotApplications = 0;
+    const notificationSink: TaskStreamNotificationSink = {
+      onChange: mock(async () => {}),
+      onSnapshot: mock(async () => {}),
+      onSnapshotFailed: mock(() => {}),
+      onFailure: mock(() => {}),
+    };
+    const harness = createHarness({
+      notificationSink,
+      taskViewSync: {
+        reconcileStreamSnapshot: async () => {
+          snapshotApplications += 1;
+          throw snapshotApplications === 1 ? firstFailure : recoveryFailure;
+        },
+      },
+    });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "snapshot_required", cursor: cursor(7), reason: "buffer_gap" });
+    await flush();
+    harness.emit(1, { type: "snapshot_required", cursor: cursor(8), reason: "buffer_gap" });
+    await flush();
+
+    expect(notificationSink.onSnapshot).not.toHaveBeenCalled();
+    expect(notificationSink.onSnapshotFailed).toHaveBeenCalledTimes(1);
+    expect(notificationSink.onSnapshotFailed).toHaveBeenCalledWith(recoveryFailure);
+  });
+
   test("concurrent starts share acquisition and stop waits for acquisition and teardown", async () => {
     const acquired = deferred<TaskStreamSubscription>();
     const teardown = deferred<void>();
@@ -568,6 +666,7 @@ describe("task stream controller recovery", () => {
       taskViewSync: {
         loadWorkspace: async () => {},
         refreshManually: async () => {},
+        refreshAfterTaskRetentionChange: async () => {},
         refreshAfterLocalMutation: async () => {},
         reconcileExternalEvent: async () => {},
         reconcileStreamSnapshot: async () => [],

@@ -7,6 +7,7 @@ import type {
   TaskCard,
   TaskEventTaskSnapshot,
 } from "@openducktor/contracts";
+import { isCancelledError } from "@tanstack/react-query";
 import type { TaskStreamNotificationSink } from "@/state/tasks/task-stream-controller";
 import { createTaskOccurrenceProjector } from "./task-occurrence-projector";
 
@@ -27,6 +28,11 @@ type TaskObserverEntry = {
   tasks: Map<string, TaskEventTaskSnapshot>;
 };
 
+type BaselineOutcome = {
+  repoPath: string;
+  status: "failed" | "ready";
+};
+
 export const createNotificationTaskObserver = ({
   loadTasks,
   loadSessionRecords,
@@ -45,6 +51,9 @@ export const createNotificationTaskObserver = ({
 }) => {
   const workspaces = new Map<string, NotificationWorkspace>();
   const entries = new Map<string, TaskObserverEntry>();
+  const interruptedBaselines = new Set<string>();
+  const baselineOutcomeListeners = new Set<(outcome: BaselineOutcome) => void>();
+  const baselineAttempts = new Map<string, object>();
   const baselineLoads = new Map<
     string,
     { workspace: NotificationWorkspace; promise: Promise<void> }
@@ -54,14 +63,23 @@ export const createNotificationTaskObserver = ({
     onFailure({ repoPath, source: "task", cause });
   };
 
+  const notifyBaselineOutcome = (outcome: BaselineOutcome): void => {
+    for (const listener of baselineOutcomeListeners) listener(outcome);
+  };
+
   const loadBaseline = async (workspace: NotificationWorkspace): Promise<void> => {
+    const attempt = {};
+    baselineAttempts.set(workspace.repoPath, attempt);
+    const isCurrentAttempt = (): boolean =>
+      workspaces.get(workspace.repoPath) === workspace &&
+      baselineAttempts.get(workspace.repoPath) === attempt;
     try {
       const tasks = await loadTasks(workspace.repoPath);
       await loadSessionRecords(
         workspace.repoPath,
         tasks.map((task) => task.id),
       );
-      if (workspaces.get(workspace.repoPath) !== workspace) {
+      if (!isCurrentAttempt()) {
         return;
       }
       const previous = entries.get(workspace.repoPath);
@@ -77,8 +95,30 @@ export const createNotificationTaskObserver = ({
         projector,
         tasks: new Map(tasks.map((task) => [task.id, task])),
       });
+      interruptedBaselines.delete(workspace.repoPath);
+      notifyBaselineOutcome({ repoPath: workspace.repoPath, status: "ready" });
     } catch (cause) {
+      if (isCancelledError(cause)) {
+        if (
+          isCurrentAttempt() &&
+          entries.get(workspace.repoPath)?.label !== workspace.repositoryLabel
+        ) {
+          interruptedBaselines.add(workspace.repoPath);
+        }
+        return;
+      }
+      if (!isCurrentAttempt()) {
+        return;
+      }
+      const recoveryFailed = interruptedBaselines.delete(workspace.repoPath);
       reportFailure(workspace.repoPath, cause);
+      if (recoveryFailed) {
+        notifyBaselineOutcome({ repoPath: workspace.repoPath, status: "failed" });
+      }
+    } finally {
+      if (baselineAttempts.get(workspace.repoPath) === attempt) {
+        baselineAttempts.delete(workspace.repoPath);
+      }
     }
   };
 
@@ -89,10 +129,17 @@ export const createNotificationTaskObserver = ({
     if (!workspace) {
       return;
     }
-    const entry = entries.get(event.repoPath);
+    let entry = entries.get(event.repoPath);
     if (!entry || entry.label !== workspace.repositoryLabel) {
-      await loadBaseline(workspace);
-      return;
+      const pending = baselineLoads.get(event.repoPath);
+      if (pending?.workspace !== workspace) {
+        await loadBaseline(workspace);
+        return;
+      }
+      await pending.promise;
+      if (workspaces.get(event.repoPath) !== workspace) return;
+      entry = entries.get(event.repoPath);
+      if (!entry || entry.label !== workspace.repositoryLabel) return;
     }
     if (!entry.tasks.has(event.taskId)) {
       entry.tasks.set(event.taskId, event.taskSnapshot);
@@ -132,9 +179,18 @@ export const createNotificationTaskObserver = ({
     await Promise.all([...workspaces.values()].map(loadBaseline));
   };
 
+  const failInterruptedBaselines = (): void => {
+    const repoPaths = [...interruptedBaselines];
+    interruptedBaselines.clear();
+    for (const repoPath of repoPaths) {
+      notifyBaselineOutcome({ repoPath, status: "failed" });
+    }
+  };
+
   const sink: TaskStreamNotificationSink = {
     onChange: refreshForChange,
     onSnapshot: refreshAllBaselines,
+    onSnapshotFailed: failInterruptedBaselines,
     onFailure: (cause) => onFailure({ repoPath: "task-stream", source: "task", cause }),
   };
 
@@ -143,13 +199,20 @@ export const createNotificationTaskObserver = ({
     hasBaseline: (repoPath: string): boolean =>
       entries.get(repoPath)?.label === workspaces.get(repoPath)?.repositoryLabel &&
       entries.has(repoPath),
+    isBaselineInterrupted: (repoPath: string): boolean => interruptedBaselines.has(repoPath),
+    subscribeBaselineOutcome(listener: (outcome: BaselineOutcome) => void): () => void {
+      baselineOutcomeListeners.add(listener);
+      return () => baselineOutcomeListeners.delete(listener);
+    },
     async syncWorkspaces(nextWorkspaces: readonly NotificationWorkspace[]): Promise<void> {
       const nextRepoPaths = new Set(nextWorkspaces.map((workspace) => workspace.repoPath));
       for (const repoPath of workspaces.keys()) {
         if (!nextRepoPaths.has(repoPath)) {
           workspaces.delete(repoPath);
           entries.delete(repoPath);
+          baselineAttempts.delete(repoPath);
           baselineLoads.delete(repoPath);
+          interruptedBaselines.delete(repoPath);
         }
       }
       const baselines: Promise<void>[] = [];

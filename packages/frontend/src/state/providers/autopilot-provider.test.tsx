@@ -86,6 +86,7 @@ const createNotificationContext = (
   taskStreamSink: {
     onChange: async () => {},
     onSnapshot: async () => {},
+    onSnapshotFailed: () => {},
     onFailure: () => {},
   },
   ...overrides,

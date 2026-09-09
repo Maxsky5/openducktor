@@ -43,7 +43,8 @@ import { hostBridge } from "@/lib/host-client";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { loadAgentSessionListsFromQuery } from "@/state/queries/agent-sessions";
 import { readCachedAgentSessionAssociation } from "@/state/queries/agent-session-association";
-import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";
+import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
+import { type RepoTaskData, taskQueryKeys } from "@/state/queries/tasks";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import {
@@ -151,8 +152,14 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
     () =>
       createNotificationTaskObserver({
         loadTasks: async (repoPath) => {
-          const options = unfilteredRepoTaskDataQueryOptions(repoPath);
-          return (await queryClient.fetchQuery({ ...options, staleTime: 0 })).tasks;
+          await getProductionTaskViewSync(queryClient).loadWorkspace(repoPath, {
+            forceFresh: true,
+          });
+          const taskData = queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(repoPath));
+          if (!taskData) {
+            throw new Error("Task notification data is unavailable. Reload to reconnect.");
+          }
+          return taskData.tasks;
         },
         loadSessionRecords: (repoPath, taskIds) =>
           loadAgentSessionListsFromQuery(queryClient, repoPath, taskIds),

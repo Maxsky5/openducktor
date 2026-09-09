@@ -49,6 +49,7 @@ const lifecycleArgs = {
 const taskViewSync: TaskViewSync = {
   loadWorkspace: async () => {},
   refreshManually: async () => {},
+  refreshAfterTaskRetentionChange: async () => {},
   refreshAfterLocalMutation: async () => {},
   reconcileExternalEvent: async () => {},
   reconcileStreamSnapshot: async () => [],

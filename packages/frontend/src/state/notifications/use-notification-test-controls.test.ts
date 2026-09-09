@@ -77,6 +77,7 @@ test.each([
       taskStreamSink: {
         onChange: async () => {},
         onSnapshot: async () => {},
+        onSnapshotFailed: () => {},
         onFailure: () => {},
       },
     };
