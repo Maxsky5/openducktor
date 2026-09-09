@@ -1,5 +1,5 @@
 import { agentGeneratedImageReadResultSchema } from "@openducktor/contracts";
-import type { CodexImageGenerationPreparer } from "@openducktor/adapters-codex-app-server";
+export { prepareCodexImageGenerations } from "./image-history-worker-client";
 import {
   imageWorkerResponseSchema,
   type ImageWorkerRequest,
@@ -76,14 +76,4 @@ export const decodeGeneratedImage = async (
   if (result.bytes.byteLength !== data.byteLength)
     throw new Error("Image decoding returned an invalid byte count. Reload this session.");
   return result.bytes;
-};
-
-export const prepareCodexImageGenerations: CodexImageGenerationPreparer = async (
-  images,
-  signal,
-) => {
-  const result = await runImageWorker({ kind: "history", images }, signal);
-  if (result.kind !== "history")
-    throw new Error("Image history preparation returned an invalid result. Reload this session.");
-  return result.parts;
 };

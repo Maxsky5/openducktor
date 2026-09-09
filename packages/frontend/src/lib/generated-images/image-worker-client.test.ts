@@ -148,7 +148,24 @@ test("history preparation forwards cancellation to its browser worker", async ()
   });
   const controller = new AbortController();
   try {
-    const pending = prepareCodexImageGenerations([], controller.signal);
+    const pending = prepareCodexImageGenerations(
+      [
+        {
+          item: {
+            type: "imageGeneration",
+            id: "image",
+            status: "completed",
+            result: "bytes",
+            revisedPrompt: null,
+            transparentBackground: null,
+            failure: null,
+          },
+          context: {},
+        },
+      ],
+      controller.signal,
+    );
+    await Promise.resolve();
     controller.abort(new Error("history canceled"));
     await expect(pending).rejects.toThrow("history canceled");
     expect(stub.terminate).toHaveBeenCalledTimes(1);

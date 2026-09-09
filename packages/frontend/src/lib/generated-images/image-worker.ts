@@ -1,4 +1,3 @@
-import { codexImageGenerationPart } from "@openducktor/adapters-codex-app-server";
 import {
   LOCAL_ATTACHMENT_BYTE_LIMIT,
   LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT,
@@ -8,36 +7,29 @@ import type { ImageWorkerRequest, ImageWorkerResponse } from "./image-worker-pro
 self.onmessage = ({ data }: MessageEvent<ImageWorkerRequest>) => {
   try {
     let response: ImageWorkerResponse;
-    if (data.kind === "history") {
-      response = {
-        kind: "history",
-        parts: data.images.map(({ item, context }) => codexImageGenerationPart(item, context)),
-      };
-    } else {
-      if (
-        data.mime !== "image/png" ||
-        !Number.isInteger(data.byteLength) ||
-        data.byteLength <= 0 ||
-        data.byteLength > LOCAL_ATTACHMENT_BYTE_LIMIT ||
-        data.base64.length > LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT
-      )
-        throw new Error(
-          "The generated image response has invalid content. Check the runtime output.",
-        );
-      let decoded: string;
-      try {
-        decoded = atob(data.base64);
-      } catch {
-        throw new Error("The generated image data cannot be decoded. Check the runtime output.");
-      }
-      if (decoded.length !== data.byteLength)
-        throw new Error(
-          "The generated image response has invalid content. Check the runtime output.",
-        );
-      const bytes = new Uint8Array(decoded.length);
-      for (let index = 0; index < decoded.length; index++) bytes[index] = decoded.charCodeAt(index);
-      response = { kind: "decode", bytes: bytes.buffer };
+    if (
+      data.mime !== "image/png" ||
+      !Number.isInteger(data.byteLength) ||
+      data.byteLength <= 0 ||
+      data.byteLength > LOCAL_ATTACHMENT_BYTE_LIMIT ||
+      data.base64.length > LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT
+    )
+      throw new Error(
+        "The generated image response has invalid content. Check the runtime output.",
+      );
+    let decoded: string;
+    try {
+      decoded = atob(data.base64);
+    } catch {
+      throw new Error("The generated image data cannot be decoded. Check the runtime output.");
     }
+    if (decoded.length !== data.byteLength)
+      throw new Error(
+        "The generated image response has invalid content. Check the runtime output.",
+      );
+    const bytes = new Uint8Array(decoded.length);
+    for (let index = 0; index < decoded.length; index++) bytes[index] = decoded.charCodeAt(index);
+    response = { kind: "decode", bytes: bytes.buffer };
     self.postMessage(response, { transfer: response.kind === "decode" ? [response.bytes] : [] });
   } catch (cause) {
     self.postMessage({

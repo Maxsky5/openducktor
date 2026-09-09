@@ -32,7 +32,7 @@ export type {
   CodexTurnStartParams,
 } from "./types";
 
-export { codexImageGenerationPart } from "./codex-image-generation";
+export { codexImageGenerationPart, createCodexInlineImageRevision } from "./codex-image-generation";
 export type {
   CodexImageGenerationPreparation,
   CodexImageGenerationPreparer,

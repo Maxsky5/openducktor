@@ -18,6 +18,22 @@ export type CodexImageGenerationContext = {
   turnStatus?: CodexAppServerTurn["status"];
 };
 
+export const createCodexInlineImageRevision = () => {
+  const hash = sha256.create().update(utf8ToBytes("inline\0"));
+  return {
+    update: (bytes: Uint8Array): void => {
+      hash.update(bytes);
+    },
+    digest: (): string => bytesToHex(hash.digest()),
+  };
+};
+
+const inlineImageRevision = (result: string): string => {
+  const revision = createCodexInlineImageRevision();
+  revision.update(utf8ToBytes(result));
+  return revision.digest();
+};
+
 export const codexImageGenerationPart = (
   item: CodexImageGenerationItem,
   context: CodexImageGenerationContext = {},
@@ -41,15 +57,7 @@ export const codexImageGenerationPart = (
       (item.savedPath === undefined && item.result.length > 0)
     ) {
       part.output = {
-        revision:
-          preparedRevision ??
-          bytesToHex(
-            sha256
-              .create()
-              .update(utf8ToBytes("inline\0"))
-              .update(utf8ToBytes(item.result))
-              .digest(),
-          ),
+        revision: preparedRevision ?? inlineImageRevision(item.result),
       };
     }
     return part;
