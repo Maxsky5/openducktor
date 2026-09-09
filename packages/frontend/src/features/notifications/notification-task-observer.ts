@@ -100,7 +100,7 @@ export const createNotificationTaskObserver = ({
     } catch (cause) {
       if (isCancelledError(cause)) {
         if (
-          workspaces.get(workspace.repoPath) === workspace &&
+          isCurrentAttempt() &&
           entries.get(workspace.repoPath)?.label !== workspace.repositoryLabel
         ) {
           interruptedBaselines.add(workspace.repoPath);

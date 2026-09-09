@@ -295,7 +295,14 @@ export const createTaskStreamController = ({
           (frame) => receive(owner, frame),
           (error) => {
             if (!isCurrentOwner(owner)) return;
-            void startRecovery(error, acknowledgedCursor, true).catch(reportDegraded);
+            void startRecovery(error, acknowledgedCursor, true).then((recovered) => {
+              if (!recovered && !stopped) {
+                enqueueNotificationSink(() => {
+                  notificationSink?.onSnapshotFailed(error);
+                  return Promise.resolve();
+                });
+              }
+            }, reportDegraded);
           },
         ),
       );

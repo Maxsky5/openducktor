@@ -611,6 +611,55 @@ test("keeps a newer recovery observation when an older baseline fails", async ()
   }
 });
 
+test("ignores a stale cancelled baseline after the current attempt fails", async () => {
+  const staleBaseline = createDeferred<TaskCard[]>();
+  const staleBaselineStarted = createDeferred<void>();
+  const currentBaseline = createDeferred<TaskCard[]>();
+  const currentBaselineStarted = createDeferred<void>();
+  const currentFailure = new Error("current baseline failed");
+  let readCount = 0;
+  const onFailure = mock(() => {});
+  const taskObserver = createNotificationTaskObserver({
+    loadTasks: async () => {
+      readCount += 1;
+      if (readCount === 1) throw new CancelledError();
+      if (readCount === 2) {
+        staleBaselineStarted.resolve();
+        return staleBaseline.promise;
+      }
+      currentBaselineStarted.resolve();
+      return currentBaseline.promise;
+    },
+    loadSessionRecords: loadWorkflowSessionRecords,
+    publish: () => {},
+    onFailure,
+  });
+  const workspaces = [{ repoPath: "/repo-a", repositoryLabel: "Repo A" }];
+
+  await taskObserver.syncWorkspaces(workspaces);
+  expect(taskObserver.isBaselineInterrupted("/repo-a")).toBe(true);
+
+  const staleRefresh = taskObserver.sink.onSnapshot();
+  await staleBaselineStarted.promise;
+  const currentRefresh = taskObserver.syncWorkspaces(workspaces);
+  await currentBaselineStarted.promise;
+
+  currentBaseline.reject(currentFailure);
+  await currentRefresh;
+  expect(taskObserver.isBaselineInterrupted("/repo-a")).toBe(false);
+
+  staleBaseline.reject(new CancelledError());
+  await staleRefresh;
+
+  expect(taskObserver.isBaselineInterrupted("/repo-a")).toBe(false);
+  expect(onFailure).toHaveBeenCalledTimes(1);
+  expect(onFailure).toHaveBeenCalledWith({
+    repoPath: "/repo-a",
+    source: "task",
+    cause: currentFailure,
+  });
+});
+
 test("serializes a notification baseline with a manual task refresh", async () => {
   const queryClientHook = renderIsolatedQueryClient();
   const queryClient = queryClientHook.result.current;

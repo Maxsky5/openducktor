@@ -441,6 +441,39 @@ describe("task stream controller recovery", () => {
     expect(harness.records[1]?.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  test("reports terminal snapshot failure when the recovery stream ends before a snapshot", async () => {
+    const snapshotFailure = new Error("snapshot failed");
+    const terminalFailure = new Error("recovery stream ended");
+    const notificationSink: TaskStreamNotificationSink = {
+      onChange: mock(async () => {}),
+      onSnapshot: mock(async () => {}),
+      onSnapshotFailed: mock(() => {}),
+      onFailure: mock(() => {}),
+    };
+    const harness = createHarness({
+      notificationSink,
+      taskViewSync: {
+        reconcileStreamSnapshot: async () => {
+          throw snapshotFailure;
+        },
+      },
+    });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "snapshot_required", cursor: cursor(7), reason: "buffer_gap" });
+    await flush();
+
+    expect(harness.records).toHaveLength(2);
+    expect(notificationSink.onSnapshotFailed).not.toHaveBeenCalled();
+
+    harness.failTerminally(1, terminalFailure);
+    await flush();
+
+    expect(harness.records[1]?.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(notificationSink.onSnapshotFailed).toHaveBeenCalledTimes(1);
+    expect(notificationSink.onSnapshotFailed).toHaveBeenCalledWith(terminalFailure);
+  });
+
   test("keeps a terminal recovery acquisition failure in the degraded episode", async () => {
     const terminalFailure = new Error("stream ended");
     const recoveryFailure = new Error("replacement unavailable");
