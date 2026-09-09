@@ -226,11 +226,14 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
             session: "session-new",
           }),
         );
-        if (fails && !feedbackHandled) {
+        if (fails) {
           expect(toastErrorMock).toHaveBeenCalledTimes(1);
           expect(toastErrorMock).toHaveBeenCalledWith(
-            "Session started, but the kickoff prompt failed to send.",
-            { description: "kickoff failed" },
+            "Session started, but the first message failed.",
+            expect.objectContaining({
+              description: "kickoff failed",
+              action: expect.objectContaining({ label: "Retry message" }),
+            }),
           );
         } else {
           expect(toastErrorMock).not.toHaveBeenCalled();

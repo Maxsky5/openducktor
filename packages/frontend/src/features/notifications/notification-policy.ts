@@ -10,7 +10,7 @@ import { buildNotificationCopy, type NotificationCopy } from "./notification-cop
 import { resolveNotificationCue } from "./notification-sound";
 
 export type NotificationDispatchContext =
-  | { phase: "local"; errorMessage?: string }
+  | { phase: "local"; errorMessage?: string; inAppFeedbackHandled?: boolean }
   | { phase: "external"; appFocused: boolean | undefined };
 
 type InAppNotificationAdapter = {
@@ -128,7 +128,7 @@ export const createNotificationPolicy = ({
     const soundSelected = cue !== null && settings.volumePercent > 0;
     if (context.phase === "local" && !localOccurrences.has(occurrence.occurrenceId)) {
       localOccurrences.add(occurrence.occurrenceId);
-      if (targetIncludesInApp(kindSettings.target)) {
+      if (!context.inAppFeedbackHandled && targetIncludesInApp(kindSettings.target)) {
         const localCopy = context.errorMessage
           ? { ...copy, body: normalizeSessionErrorMessage(context.errorMessage) || copy.body }
           : copy;

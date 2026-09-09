@@ -32,10 +32,6 @@ export type SessionStartLaunchRequest = SessionStartFlowRequest;
 
 export type ResolvedSessionStartDecision = Exclude<NewSessionStartDecision, null>;
 
-type SessionStartModalRunRequest = SessionStartModalOpenRequest & {
-  selectedModel?: AgentModelSelection | null;
-};
-
 type SessionStartContextSession = {
   externalSessionId: string;
   runtimeKind: AgentSessionSummary["runtimeKind"];
@@ -46,6 +42,7 @@ type SessionStartContextSession = {
 
 type BuildSessionStartModalRequestArgs = {
   source: SessionStartModalSource;
+  resolveKickoffPrompt?: SessionStartModalOpenRequest["resolveKickoffPrompt"];
   request: SessionStartFlowRequest;
   requestedRuntimeKind?: RuntimeKind | null;
   selectedModel: AgentModelSelection | null;
@@ -55,6 +52,7 @@ type BuildSessionStartModalRequestArgs = {
 };
 
 type ExecuteSessionStartFromDecisionArgs = {
+  isCurrent?: () => boolean;
   queryClient: QueryClient;
   request: SessionStartFlowRequest;
   decision: ResolvedSessionStartDecision;
@@ -74,7 +72,9 @@ export type RunSessionStartWorkflowInput = Omit<
   | "startAgentSession"
   | "sendAgentMessage"
   | "postStartErrorAttentionId"
->;
+> & {
+  onPostStartMessageFailure?: (result: SessionStartWorkflowResult) => void;
+};
 
 export type RunSessionStartWorkflow = (
   input: RunSessionStartWorkflowInput,
@@ -88,6 +88,7 @@ export type SessionStartNotificationInput = {
   role: SessionStartFlowRequest["role"];
   session?: AgentSessionIdentity;
   errorAttentionId?: string;
+  inAppFeedbackHandled?: boolean;
 };
 
 export type SessionStartNotificationPublisher = {
@@ -177,13 +178,14 @@ const resolveInitialSourceSession = ({
 
 export const buildSessionStartModalRequest = ({
   source,
+  resolveKickoffPrompt,
   request,
   requestedRuntimeKind,
   selectedModel,
   taskSessions,
   preferredSourceSession,
   selectedTask,
-}: BuildSessionStartModalRequestArgs): SessionStartModalRunRequest => {
+}: BuildSessionStartModalRequestArgs): SessionStartModalOpenRequest => {
   const existingSessionOptions = resolveExistingSessionOptions(request, taskSessions);
   const initialSourceSession = resolveInitialSourceSession({
     request,
@@ -193,7 +195,7 @@ export const buildSessionStartModalRequest = ({
   const initialTargetBranch = request.initialTargetBranch ?? selectedTask?.targetBranch ?? null;
   const initialTargetBranchError =
     request.initialTargetBranchError ?? selectedTask?.targetBranchError ?? null;
-  const modalRequest: SessionStartModalRunRequest = {
+  const modalRequest: SessionStartModalOpenRequest = {
     source,
     taskId: request.taskId,
     role: request.role,
@@ -202,6 +204,8 @@ export const buildSessionStartModalRequest = ({
     selectedModel,
     initialTargetBranch,
   };
+
+  if (resolveKickoffPrompt) modalRequest.resolveKickoffPrompt = resolveKickoffPrompt;
 
   if (requestedRuntimeKind) {
     modalRequest.requestedRuntimeKind = requestedRuntimeKind;
@@ -231,6 +235,7 @@ export const buildSessionStartModalRequest = ({
 };
 
 export const executeSessionStartFromDecision = async ({
+  isCurrent,
   queryClient,
   request,
   decision,
@@ -249,6 +254,10 @@ export const executeSessionStartFromDecision = async ({
     startMode: decision.startMode,
     postStartAction: request.postStartAction,
   };
+
+  if (decision.kickoffPrompt !== undefined) {
+    intent.kickoffPrompt = decision.kickoffPrompt;
+  }
 
   if (decision.targetBranch) {
     intent.targetBranch = decision.targetBranch;
@@ -287,6 +296,7 @@ export const executeSessionStartFromDecision = async ({
     startAgentSession,
   };
 
+  if (isCurrent) workflowInput.isCurrent = isCurrent;
   if (persistTaskTargetBranch) {
     workflowInput.persistTaskTargetBranch = persistTaskTargetBranch;
   }
@@ -365,10 +375,15 @@ export const createSessionStartWorkflowRunner = ({
       throw new SessionStartWorkflowError(startError, feedbackHandled);
     }
 
-    const { postStartActionError, ...session } = result;
+    const { postStartActionError } = result;
+    const session = toAgentSessionIdentity(result);
     const notificationWithSession = { ...notificationInput, session };
     try {
       if (postStartActionError) {
+        if (result.retryPostStartMessage && input.onPostStartMessageFailure) {
+          input.onPostStartMessageFailure(result);
+          notificationWithSession.inAppFeedbackHandled = true;
+        }
         if (postStartActionError instanceof AgentMessageSendError) {
           notificationWithSession.errorAttentionId = postStartActionError.errorAttentionId;
         }
@@ -381,7 +396,7 @@ export const createSessionStartWorkflowRunner = ({
           ...result,
           postStartActionError: new SessionStartWorkflowError(
             postStartActionError,
-            feedbackHandled,
+            notificationWithSession.inAppFeedbackHandled === true || feedbackHandled,
           ),
         };
       } else if (input.decision.startMode === "fresh" || input.decision.startMode === "fork") {

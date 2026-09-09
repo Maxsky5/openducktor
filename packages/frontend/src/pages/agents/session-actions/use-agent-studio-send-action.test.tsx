@@ -1,3 +1,4 @@
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
@@ -298,7 +299,7 @@ describe("useAgentStudioSendAction", () => {
     const harness = createHookHarness(useAgentStudioSendAction, initialArgs);
 
     await harness.mount();
-    let sendPromise: Promise<boolean> | undefined;
+    let sendPromise: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       sendPromise = state.onSend(createDraft("hello"));
     });
@@ -318,7 +319,7 @@ describe("useAgentStudioSendAction", () => {
     });
     await harness.waitFor((state) => !state.isSending);
 
-    expect(startSession).toHaveBeenCalledWith({ holdForPostStartMessage: true });
+    expect(startSession).toHaveBeenCalledWith();
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
       { kind: "text", text: "hello" },
     ]);
@@ -338,7 +339,7 @@ describe("useAgentStudioSendAction", () => {
     });
 
     await harness.mount();
-    let firstSend: Promise<boolean> | undefined;
+    let firstSend: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       firstSend = state.onSend(createDraft("first"));
     });
@@ -351,7 +352,7 @@ describe("useAgentStudioSendAction", () => {
     });
     await harness.waitFor((state) => !state.isSending);
 
-    expect(startSession).toHaveBeenCalledWith({ holdForPostStartMessage: true });
+    expect(startSession).toHaveBeenCalledWith();
     expect(sendAgentMessage).toHaveBeenCalledTimes(1);
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
       { kind: "text", text: "first" },
@@ -371,8 +372,8 @@ describe("useAgentStudioSendAction", () => {
     });
 
     await harness.mount();
-    let firstSend: Promise<boolean> | undefined;
-    let secondSend: Promise<boolean> | undefined;
+    let firstSend: Promise<AgentChatSendResult> | undefined;
+    let secondSend: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       firstSend = state.onSend(createDraft("first"));
       secondSend = state.onSend(createDraft("second"));
@@ -412,7 +413,7 @@ describe("useAgentStudioSendAction", () => {
     });
 
     await harness.mount();
-    let firstSend: Promise<boolean> | undefined;
+    let firstSend: Promise<AgentChatSendResult> | undefined;
     await harness.run((state) => {
       firstSend = state.onSend(createDraft("first"));
     });
@@ -477,4 +478,48 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.unmount();
   });
+  test.each(["workspace", "task", "role"] as const)(
+    "cancels staged submission after a %s switch",
+    async (context) => {
+      const staged =
+        createDeferred<Awaited<ReturnType<typeof hostClient.workspaceStageLocalAttachment>>>();
+      const stage = mock(() => staged.promise);
+      hostClient.workspaceStageLocalAttachment = stage;
+      const startSession = mock(async () => sessionWorkflowResult("never"));
+      const sendAgentMessage = mock(async () => {});
+      const args: HookArgs = {
+        ...createBaseArgs(),
+        selectedSessionIdentity: null,
+        startSession,
+        sendAgentMessage,
+      };
+      const harness = createHookHarness(useAgentStudioSendAction, args);
+      let submitted!: Promise<AgentChatSendResult>;
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          submitted = state.onSend(createAttachmentDraft());
+        });
+        await harness.waitFor(() => stage.mock.calls.length === 1);
+        await harness.run(async (state) => {
+          expect(await state.onSend(createAttachmentDraft())).toBe(false);
+        });
+        const nextArgs: HookArgs = { ...args };
+        if (context === "workspace") nextArgs.workspaceId = "workspace-2";
+        if (context === "task") nextArgs.taskId = "task-2";
+        if (context === "role") nextArgs.role = "planner";
+        await harness.update(nextArgs);
+        expect(harness.getLatest().isSending).toBe(false);
+        await harness.run(async () => {
+          staged.resolve({ path: "/tmp/brief.pdf" });
+          expect(await submitted).toBe(false);
+        });
+        expect(stage).toHaveBeenCalledTimes(1);
+        expect(startSession).not.toHaveBeenCalled();
+        expect(sendAgentMessage).not.toHaveBeenCalled();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 });

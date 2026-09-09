@@ -1,3 +1,4 @@
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -40,7 +41,7 @@ export type AgentChatComposerConfig = {
   readOnlyReason: string | null;
   pendingSendItems?: AgentChatComposerModel["pendingSendItems"];
   draftScope: AgentChatDraftScope;
-  onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
+  onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   isSending: boolean;
   isStarting: boolean;
   contextUsage: {
@@ -124,7 +125,7 @@ export function useAgentChatComposerModel({
       readOnlyReason: composer.readOnlyReason,
       busySendBlockedReason: composer.busySendBlockedReason,
       draftScope: composer.draftScope,
-      onSend: async (draft: AgentChatComposerDraft): Promise<boolean> => {
+      onSend: async (draft: AgentChatComposerDraft): Promise<AgentChatSendResult> => {
         scrollToBottomOnSendRef.current?.();
         return composer.onSend(draft);
       },

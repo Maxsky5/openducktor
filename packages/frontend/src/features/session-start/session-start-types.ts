@@ -29,12 +29,14 @@ export type FreshSessionStartDecision = {
   startMode: "fresh";
   selectedModel: AgentModelSelection;
   targetBranch?: GitTargetBranch;
+  kickoffPrompt?: string;
 };
 
 export type ReuseSessionStartDecision = {
   startMode: "reuse";
   sourceSession: AgentSessionIdentity;
   targetBranch?: GitTargetBranch;
+  kickoffPrompt?: string;
 };
 
 export type ForkSessionStartDecision = {
@@ -42,6 +44,7 @@ export type ForkSessionStartDecision = {
   selectedModel: AgentModelSelection;
   sourceSession: AgentSessionIdentity;
   targetBranch?: GitTargetBranch;
+  kickoffPrompt?: string;
 };
 
 export type NewSessionStartDecision =

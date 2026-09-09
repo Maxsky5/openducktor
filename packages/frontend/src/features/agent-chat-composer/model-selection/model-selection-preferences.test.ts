@@ -537,73 +537,18 @@ describe("model-selection-preferences", () => {
       }),
     ).toEqual({
       selectionCatalog: null,
-      selectedModelSelection: null,
-      selectionForNewSession: null,
+      selectedModelSelection: defaultSelection,
+      selectionForNewSession: defaultSelection,
       sessionModelRepairCommand: null,
       isSelectedSessionModelSendable: true,
     });
   });
 
-  test("coerces a new-session draft after its catalog loads", () => {
-    const defaultSelection = {
-      runtimeKind: "opencode" as const,
-      providerId: "anthropic",
-      modelId: "claude-sonnet",
-    };
-
+  test("resolves an unavailable initial default from the catalog", () => {
     expect(
       resolveChatComposerModelSelections({
-        source: {
-          kind: "new_session",
-          composerCatalog: CATALOG,
-          draftSelection: {
-            runtimeKind: "codex",
-            providerId: "openai",
-            modelId: "gpt-5",
-          },
-        },
-        defaultSelection,
-      }).selectionForNewSession,
-    ).toEqual(defaultSelection);
-
-    expect(
-      resolveChatComposerModelSelections({
-        source: {
-          kind: "new_session",
-          composerCatalog: CATALOG,
-          draftSelection: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "missing-variant",
-            profileId: "hidden-subagent",
-          },
-        },
-        defaultSelection,
-      }).selectionForNewSession,
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-    });
-
-    expect(
-      resolveChatComposerModelSelections({
-        source: {
-          kind: "new_session",
-          composerCatalog: CATALOG,
-          draftSelection: {
-            runtimeKind: "codex",
-            providerId: "missing",
-            modelId: "missing",
-          },
-        },
-        defaultSelection: {
-          runtimeKind: "codex",
-          providerId: "missing",
-          modelId: "missing",
-        },
+        source: { kind: "new_session", composerCatalog: CATALOG, draftSelection: null },
+        defaultSelection: { runtimeKind: "codex", providerId: "missing", modelId: "missing" },
       }).selectionForNewSession,
     ).toEqual({
       runtimeKind: "opencode",
@@ -612,6 +557,22 @@ describe("model-selection-preferences", () => {
       variant: "default",
       profileId: "spec-agent",
     });
+  });
+
+  test("keeps explicit unavailable choices for direct-start validation", () => {
+    const selection = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "deleted",
+      variant: "deleted",
+      profileId: "deleted",
+    };
+    expect(
+      resolveChatComposerModelSelections({
+        source: { kind: "new_session", composerCatalog: CATALOG, draftSelection: selection },
+        defaultSelection: null,
+      }).selectionForNewSession,
+    ).toEqual(selection);
   });
 
   test("preserves an unvalidated new-session draft until its catalog loads", () => {

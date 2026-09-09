@@ -1,3 +1,4 @@
+import type { AgentChatSendRecovery } from "./agent-chat-send-result";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type AgentChatComposerDraft,
@@ -16,11 +17,9 @@ type UseAgentChatComposerDraftStateArgs = {
   scope: AgentChatDraftScope;
 };
 
-type SubmittedDraftSnapshot = {
-  key: string;
-  persistence: AgentChatDraftPersistence | null;
+type SubmittedDraftSnapshot = ComposerDraftState & {
   version: number | null;
-  draft: AgentChatComposerDraft;
+  editSequence: number;
 };
 
 type UseAgentChatComposerDraftStateResult = {
@@ -29,23 +28,22 @@ type UseAgentChatComposerDraftStateResult = {
   setDisplayedDraft: (draft: AgentChatComposerDraft) => void;
   createSubmittedDraftSnapshot: (draft: AgentChatComposerDraft) => SubmittedDraftSnapshot;
   clearSubmittedDraft: (snapshot: SubmittedDraftSnapshot) => void;
-  restoreSubmittedDraft: (snapshot: SubmittedDraftSnapshot) => void;
+  restoreSubmittedDraft: (
+    snapshot: SubmittedDraftSnapshot,
+    recovery?: AgentChatSendRecovery,
+  ) => void;
 };
 
-const createInitialDraftState = ({
-  key,
-  persistence,
-}: AgentChatDraftScope): ComposerDraftState => ({
-  key,
-  persistence,
-  draft: persistence?.hydrate() ?? createEmptyComposerDraft(),
-});
-
+/** Keeps failed sends for their own draft scope without replacing newer edits. */
 export function useAgentChatComposerDraftState({
   scope,
 }: UseAgentChatComposerDraftStateArgs): UseAgentChatComposerDraftStateResult {
   const [state, setState] = useState<ComposerDraftState>(() => createInitialDraftState(scope));
   const latestStateRef = useRef(state);
+  const pendingRecoveryRef = useRef(new Map<string, AgentChatComposerDraft>());
+  // Count edits across scopes so a late failure cannot restore text the user has since cleared.
+  const editSequenceRef = useRef(0);
+  const scopeEditsRef = useRef(new Map<string, number>());
   const nextKey = scope.key;
   const nextPersistence = scope.persistence;
 
@@ -59,8 +57,8 @@ export function useAgentChatComposerDraftState({
     const isSamePersistenceTarget = current.persistence?.targetKey === nextPersistence?.targetKey;
     if (isSameDraft && isSamePersistenceTarget) {
       if (current.persistence !== nextPersistence) {
-        // Equivalent wrappers may be recreated every render. Updating state here would loop;
-        // callbacks and lifecycle handlers read this ref until the next state update catches up.
+        // Callers can pass a new wrapper for the same store on each render.
+        // Update the ref alone to avoid a render loop.
         latestStateRef.current = {
           key: current.key,
           persistence: nextPersistence,
@@ -79,8 +77,9 @@ export function useAgentChatComposerDraftState({
       const nextDraft = hasCurrentDraft
         ? current.draft
         : (nextPersistence?.hydrate() ?? current.draft);
-      if (hasCurrentDraft) {
-        nextPersistence?.set(current.draft);
+      if (hasCurrentDraft && nextPersistence) {
+        nextPersistence.set(current.draft);
+        pendingRecoveryRef.current.delete(nextKey);
       }
       setState({
         key: current.key,
@@ -90,7 +89,21 @@ export function useAgentChatComposerDraftState({
       return;
     }
 
-    setState(createInitialDraftState({ key: nextKey, persistence: nextPersistence }));
+    const nextState = createInitialDraftState({ key: nextKey, persistence: nextPersistence });
+    const recovered = pendingRecoveryRef.current.get(nextKey);
+    if (recovered) {
+      if (draftHasMeaningfulContent(nextState.draft)) {
+        pendingRecoveryRef.current.delete(nextKey);
+      } else {
+        nextState.draft = recovered;
+        if (nextPersistence) {
+          nextPersistence.set(recovered);
+          pendingRecoveryRef.current.delete(nextKey);
+        }
+      }
+    }
+    latestStateRef.current = nextState;
+    setState(nextState);
   }, [nextKey, nextPersistence]);
 
   useEffect(() => {
@@ -122,6 +135,9 @@ export function useAgentChatComposerDraftState({
 
   const commitDraft = useCallback((nextDraft: AgentChatComposerDraft): void => {
     const current = latestStateRef.current;
+    editSequenceRef.current += 1;
+    scopeEditsRef.current.set(current.key, editSequenceRef.current);
+    pendingRecoveryRef.current.delete(current.key);
     current.persistence?.set(nextDraft);
     setState({
       key: current.key,
@@ -146,6 +162,7 @@ export function useAgentChatComposerDraftState({
         key: current.key,
         persistence: current.persistence,
         version: current.persistence?.readVersion() ?? null,
+        editSequence: editSequenceRef.current,
         draft,
       };
     },
@@ -153,22 +170,53 @@ export function useAgentChatComposerDraftState({
   );
 
   const clearSubmittedDraft = useCallback((snapshot: SubmittedDraftSnapshot): void => {
-    snapshot.persistence?.clear({ onlyIfVersion: snapshot.version });
-  }, []);
-
-  const restoreSubmittedDraft = useCallback((snapshot: SubmittedDraftSnapshot): void => {
-    const current = latestStateRef.current;
-    if (current.key !== snapshot.key || draftHasMeaningfulContent(current.draft)) {
-      return;
+    pendingRecoveryRef.current.delete(snapshot.key);
+    if (snapshot.persistence?.clear({ onlyIfVersion: snapshot.version })) {
+      snapshot.version = snapshot.persistence.readVersion();
     }
-
-    current.persistence?.set(snapshot.draft);
-    setState({
-      key: current.key,
-      persistence: current.persistence,
-      draft: snapshot.draft,
-    });
   }, []);
+
+  const restoreSubmittedDraft = useCallback(
+    (snapshot: SubmittedDraftSnapshot, recovery?: AgentChatSendRecovery): void => {
+      const current = latestStateRef.current;
+      if (recovery && recovery.originKey === snapshot.key) {
+        if ((scopeEditsRef.current.get(recovery.recoveryKey) ?? 0) > snapshot.editSequence) return;
+        if (current.key === recovery.recoveryKey && draftHasMeaningfulContent(current.draft)) {
+          return;
+        }
+        pendingRecoveryRef.current.set(recovery.recoveryKey, snapshot.draft);
+        if (current.key === recovery.recoveryKey) {
+          if (current.persistence) {
+            current.persistence.set(snapshot.draft);
+            pendingRecoveryRef.current.delete(current.key);
+          }
+          const restored = { ...current, draft: snapshot.draft };
+          latestStateRef.current = restored;
+          setState(restored);
+        }
+        return;
+      }
+      if ((scopeEditsRef.current.get(snapshot.key) ?? 0) > snapshot.editSequence) return;
+      if (current.key === snapshot.key && draftHasMeaningfulContent(current.draft)) return;
+      if (snapshot.persistence) {
+        if (snapshot.persistence.readVersion() !== snapshot.version) return;
+        snapshot.persistence.set(snapshot.draft);
+        if (current.key !== snapshot.key) void snapshot.persistence.flush();
+      } else if (current.key !== snapshot.key) {
+        pendingRecoveryRef.current.set(snapshot.key, snapshot.draft);
+      } else {
+        current.persistence?.set(snapshot.draft);
+      }
+      if (current.key !== snapshot.key) return;
+
+      setState({
+        key: current.key,
+        persistence: current.persistence,
+        draft: snapshot.draft,
+      });
+    },
+    [],
+  );
 
   return useMemo(
     () => ({
@@ -191,3 +239,12 @@ export function useAgentChatComposerDraftState({
     ],
   );
 }
+
+const createInitialDraftState = ({
+  key,
+  persistence,
+}: AgentChatDraftScope): ComposerDraftState => ({
+  key,
+  persistence,
+  draft: persistence?.hydrate() ?? createEmptyComposerDraft(),
+});

@@ -1,6 +1,9 @@
+import { useAgentStudioSendAction } from "@/pages/agents/session-actions/use-agent-studio-send-action";
+import { agentStudioChatDraftScopeKey } from "@/pages/agents/agent-studio-chat-draft";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createRef } from "react";
+import { createRef, useState } from "react";
 import { AgentChatComposer } from "./agent-chat-composer";
 import {
   type AgentChatDraftSessionIdentity,
@@ -861,4 +864,108 @@ describe("AgentChatComposer attachments", () => {
       expect(screen.getAllByTitle("image.png")).toHaveLength(1);
     });
   });
+});
+
+describe("first-message composer recovery", () => {
+  test.each([false, true])(
+    "retries in the created session after navigation (switch task: %s)",
+    async (switchTask) => {
+      const firstSend = createDeferred<void>();
+      const created: AgentSessionIdentity = {
+        runtimeKind: "opencode",
+        externalSessionId: "created",
+        workingDirectory: "/repo/task-1",
+      };
+      let attempts = 0;
+      const send = mock(async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          await firstSend.promise;
+          throw new Error("first send failed");
+        }
+      });
+      const start = mock(async () => ({ ...created, postStartActionError: null }));
+      function RecoveryComposer({ taskId }: { taskId: string }) {
+        const [session, setSession] = useState<AgentSessionIdentity | null>(null);
+        const selected = taskId === "task-1" ? session : null;
+        const sending = useAgentStudioSendAction({
+          workspaceId: "workspace-1",
+          taskId,
+          role: "build",
+          selectedSessionIdentity: selected,
+          selectedSessionModel: null,
+          sessionState: {
+            isWaitingInput: false,
+            canQueueBusyFollowups: false,
+            busySendBlockedReason: null,
+          },
+          isSessionModelCatalogLoading: false,
+          isSelectedSessionModelSendable: true,
+          agentStudioReady: true,
+          canStartNewSession: true,
+          reusablePrompts: [],
+          isStarting: false,
+          selectedModelDescriptor: null,
+          supportsAttachments: false,
+          sendAgentMessage: send,
+          startSession: async () => {
+            const result = await start();
+            setSession(created);
+            return result;
+          },
+        });
+        const key = agentStudioChatDraftScopeKey("workspace-1", {
+          taskId,
+          role: "build",
+          session: selected,
+        });
+        return (
+          <AgentChatComposer
+            model={{
+              ...buildModel(),
+              displayedSessionKey: key,
+              draftScope: { key, persistence: null },
+              onSend: sending.onSend,
+              isSending: sending.isSending,
+            }}
+          />
+        );
+      }
+      const { container, rerender, unmount } = render(<RecoveryComposer taskId="task-1" />);
+      try {
+        typeIntoComposer(container, "retry my first message");
+        fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+        await waitFor(() => expect(send).toHaveBeenCalledTimes(1), { timeout: 300 });
+        expect(start).toHaveBeenCalledTimes(1);
+        if (switchTask) {
+          rerender(<RecoveryComposer taskId="task-2" />);
+          typeIntoComposer(container, "new task draft");
+        }
+        firstSend.resolve();
+        if (switchTask) {
+          await waitFor(
+            () => {
+              const button = screen.getByRole("button", { name: "Send message" });
+              expect(button instanceof HTMLButtonElement && !button.disabled).toBe(true);
+            },
+            { timeout: 300 },
+          );
+          expect(getEditorRoot(container).textContent).toBe("new task draft");
+          rerender(<RecoveryComposer taskId="task-1" />);
+        }
+        await waitFor(
+          () => expect(getEditorRoot(container).textContent).toBe("retry my first message"),
+          { timeout: 300 },
+        );
+        fireEvent.keyDown(getEditorRoot(container), { key: "Enter" });
+        await waitFor(() => expect(send).toHaveBeenCalledTimes(2), { timeout: 300 });
+        expect(start).toHaveBeenCalledTimes(1);
+        expect(send).toHaveBeenLastCalledWith(created, [
+          { kind: "text", text: "retry my first message" },
+        ]);
+      } finally {
+        unmount();
+      }
+    },
+  );
 });

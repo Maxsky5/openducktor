@@ -250,6 +250,51 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   );
 });
 
+function AgentChatComposerAttachments({
+  draft,
+  attachmentErrors,
+  composerAccentColor,
+  hasSlashAttachmentConflict,
+  onRemoveAttachment,
+}: Pick<
+  AgentChatComposerFormViewProps,
+  | "draft"
+  | "attachmentErrors"
+  | "composerAccentColor"
+  | "hasSlashAttachmentConflict"
+  | "onRemoveAttachment"
+>): ReactElement | null {
+  const attachments = draft.attachments ?? [];
+  if (attachments.length === 0) return null;
+  return (
+    <section className="mb-0 border border-input border-b-0 border-l-0 bg-card shadow-md">
+      <div
+        className={composerAccentColor ? "border-l-4" : undefined}
+        style={composerAccentColor ? { borderLeftColor: composerAccentColor } : undefined}
+      >
+        <div className="px-3 pb-3 pt-3">
+          <div className="flex flex-wrap gap-3">
+            {attachments.map((attachment) => (
+              <AgentChatAttachmentChip
+                key={attachment.id}
+                variant="draft"
+                attachment={attachment}
+                error={attachmentErrors[attachment.id] ?? null}
+                onRemove={() => onRemoveAttachment(attachment.id)}
+              />
+            ))}
+          </div>
+          {hasSlashAttachmentConflict ? (
+            <p className="mt-3 text-xs text-destructive">
+              Remove attachments before running a slash command.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function AgentChatComposerFormView({
   model,
   draft,
@@ -323,33 +368,13 @@ function AgentChatComposerFormView({
           event.currentTarget.value = "";
         }}
       />
-      {(draft.attachments ?? []).length > 0 ? (
-        <section className="mb-0 border border-input border-b-0 border-l-0 bg-card shadow-md">
-          <div
-            className={composerAccentColor ? "border-l-4" : undefined}
-            style={composerAccentColor ? { borderLeftColor: composerAccentColor } : undefined}
-          >
-            <div className="px-3 pb-3 pt-3">
-              <div className="flex flex-wrap gap-3">
-                {(draft.attachments ?? []).map((attachment) => (
-                  <AgentChatAttachmentChip
-                    key={attachment.id}
-                    variant="draft"
-                    attachment={attachment}
-                    error={attachmentErrors[attachment.id] ?? null}
-                    onRemove={() => onRemoveAttachment(attachment.id)}
-                  />
-                ))}
-              </div>
-              {hasSlashAttachmentConflict ? (
-                <p className="mt-3 text-xs text-destructive">
-                  Remove attachments before running a slash command.
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </section>
-      ) : null}
+      <AgentChatComposerAttachments
+        draft={draft}
+        attachmentErrors={attachmentErrors}
+        composerAccentColor={composerAccentColor}
+        hasSlashAttachmentConflict={hasSlashAttachmentConflict}
+        onRemoveAttachment={onRemoveAttachment}
+      />
       <div
         className={
           isWaitingInput
@@ -514,6 +539,62 @@ function useAgentChatComposerFocus({
   return scheduleComposerFocus;
 }
 
+const composerPlaceholderFor = (model: AgentChatComposerModel): string => {
+  const {
+    supportsFileSearch,
+    supportsSubagentReferences,
+    supportsSlashCommands,
+    supportsSkillReferences,
+    isReadOnly,
+    readOnlyReason,
+    busySendBlockedReason,
+    isWaitingInput,
+    waitingInputPlaceholder,
+  } = model;
+  let referencePlaceholder: string | null = null;
+  if (supportsFileSearch && supportsSubagentReferences) {
+    referencePlaceholder = "@ for files and subagents";
+  } else if (supportsSubagentReferences) {
+    referencePlaceholder = "@ for subagents";
+  } else if (supportsFileSearch) {
+    referencePlaceholder = "@ for files";
+  }
+  const composerPlaceholderParts = [
+    referencePlaceholder,
+    supportsSlashCommands ? "/ for commands" : null,
+    supportsSkillReferences ? "$ for skills" : null,
+  ].filter((part): part is string => Boolean(part));
+  let composerPlaceholder =
+    composerPlaceholderParts.length > 0 ? composerPlaceholderParts.join("; ") : "Type a message";
+  if (isReadOnly && readOnlyReason) {
+    composerPlaceholder = readOnlyReason;
+  }
+  if (busySendBlockedReason) {
+    composerPlaceholder = busySendBlockedReason;
+  }
+  if (isWaitingInput) {
+    composerPlaceholder =
+      waitingInputPlaceholder ?? "Resolve the pending request above to continue";
+  }
+  return composerPlaceholder;
+};
+
+const composerInputDisabledFor = ({
+  isInteractionEnabled,
+  isReadOnly,
+  isModelSelectionPending,
+  isWaitingInput,
+  busySendBlockedReason,
+}: AgentChatComposerModel): boolean => {
+  return (
+    !isInteractionEnabled ||
+    isReadOnly ||
+    isModelSelectionPending ||
+    isWaitingInput ||
+    Boolean(busySendBlockedReason)
+  );
+};
+
 export function AgentChatComposer({
   model,
   ref,
@@ -525,24 +606,16 @@ export function AgentChatComposer({
     displayedSessionKey,
     isInteractionEnabled,
     isReadOnly,
-    readOnlyReason,
-    busySendBlockedReason,
     pendingSendItems,
     draftScope,
     onSend,
     isSending,
     isStarting,
     isSessionWorking,
-    isWaitingInput,
-    waitingInputPlaceholder,
     isModelSelectionPending,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
     supportsAttachments,
-    supportsSlashCommands,
-    supportsFileSearch,
-    supportsSkillReferences,
-    supportsSubagentReferences,
     accentColor: composerAccentColor,
     composerEditorRef,
     onComposerEditorInput,
@@ -560,16 +633,12 @@ export function AgentChatComposer({
     scope: draftScope,
   });
   const latestDraftRef = useRef<AgentChatComposerDraft>(draft);
+  const latestDraftScopeKeyRef = useRef(draftScope.key);
   const latestSendDisabledRef = useRef(false);
   const latestOnSendRef = useRef(onSend);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const isSubmitting = (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
-  const isComposerInputDisabled =
-    !isInteractionEnabled ||
-    isReadOnly ||
-    isModelSelectionPending ||
-    isWaitingInput ||
-    Boolean(busySendBlockedReason);
+  const isComposerInputDisabled = composerInputDisabledFor(model);
   const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled || isSubmitting;
 
   const handleDraftChange = useCallback(
@@ -652,22 +721,18 @@ export function AgentChatComposer({
   const previousAttachmentLayoutKeyRef = useRef<string | null | undefined>(undefined);
 
   const sendDisabled =
-    (isSending && !isSessionWorking) ||
-    isStarting ||
-    isWaitingInput ||
-    Boolean(busySendBlockedReason) ||
-    isModelSelectionPending ||
-    isReadOnly ||
+    isSubmitting ||
+    isComposerInputDisabled ||
     hasBlockingAttachments ||
     hasSlashAttachmentConflict ||
-    !hasComposerSendContent(draft, pendingSendItems) ||
-    !isInteractionEnabled;
+    !hasComposerSendContent(draft, pendingSendItems);
 
   useLayoutEffect(() => {
+    latestDraftScopeKeyRef.current = draftScope.key;
     latestDraftRef.current = draft;
     latestOnSendRef.current = onSend;
     latestSendDisabledRef.current = sendDisabled;
-  }, [draft, onSend, sendDisabled]);
+  }, [draft, draftScope.key, onSend, sendDisabled]);
 
   useLayoutEffect(() => {
     if (previousAttachmentLayoutKeyRef.current === attachmentLayoutKey) {
@@ -683,9 +748,8 @@ export function AgentChatComposer({
     syncBottomAfterComposerLayoutRef.current?.();
   }, [attachmentLayoutKey, syncBottomAfterComposerLayoutRef]);
 
-  const selectorDisabled =
-    isSelectionCatalogLoading || isSubmitting || !isInteractionEnabled || isReadOnly;
   const modelPickerDisabled = isSubmitting || !isInteractionEnabled || isReadOnly;
+  const selectorDisabled = isSelectionCatalogLoading || modelPickerDisabled;
 
   const scheduleComposerFocus = useAgentChatComposerFocus({
     composerEditorRef,
@@ -705,22 +769,31 @@ export function AgentChatComposer({
     onComposerEditorInput();
     scheduleComposerFocus();
     try {
-      const didSend = await latestOnSendRef.current(submittedDraft);
-      if (!didSend) {
-        restoreSubmittedDraft(submittedSnapshot);
-        onComposerEditorInput();
-        scheduleComposerFocus();
+      const result = await latestOnSendRef.current(submittedDraft);
+      if (result !== true && result !== false) {
+        restoreSubmittedDraft(submittedSnapshot, result);
+        toast.error("Unable to send message", { description: result.error.message });
         return;
       }
-      scheduleComposerFocus();
+      if (!result) {
+        restoreSubmittedDraft(submittedSnapshot);
+        if (latestDraftScopeKeyRef.current === submittedSnapshot.key) {
+          onComposerEditorInput();
+          scheduleComposerFocus();
+        }
+        return;
+      }
+      if (latestDraftScopeKeyRef.current === submittedSnapshot.key) scheduleComposerFocus();
     } catch (error) {
       const description = error instanceof Error ? error.message : String(error);
       toast.error("Unable to send message", {
         description,
       });
       restoreSubmittedDraft(submittedSnapshot);
-      onComposerEditorInput();
-      scheduleComposerFocus();
+      if (latestDraftScopeKeyRef.current === submittedSnapshot.key) {
+        onComposerEditorInput();
+        scheduleComposerFocus();
+      }
     }
   }, [
     clearSubmittedDraft,
@@ -733,31 +806,6 @@ export function AgentChatComposer({
   const submitComposerAction = useCallback((): void => {
     void handleSubmit();
   }, [handleSubmit]);
-  let referencePlaceholder: string | null = null;
-  if (supportsFileSearch && supportsSubagentReferences) {
-    referencePlaceholder = "@ for files and subagents";
-  } else if (supportsSubagentReferences) {
-    referencePlaceholder = "@ for subagents";
-  } else if (supportsFileSearch) {
-    referencePlaceholder = "@ for files";
-  }
-  const composerPlaceholderParts = [
-    referencePlaceholder,
-    supportsSlashCommands ? "/ for commands" : null,
-    supportsSkillReferences ? "$ for skills" : null,
-  ].filter((part): part is string => Boolean(part));
-  let composerPlaceholder =
-    composerPlaceholderParts.length > 0 ? composerPlaceholderParts.join("; ") : "Type a message";
-  if (isReadOnly && readOnlyReason) {
-    composerPlaceholder = readOnlyReason;
-  }
-  if (busySendBlockedReason) {
-    composerPlaceholder = busySendBlockedReason;
-  }
-  if (isWaitingInput) {
-    composerPlaceholder =
-      waitingInputPlaceholder ?? "Resolve the pending request above to continue";
-  }
   return (
     <AgentChatComposerFormView
       model={model}
@@ -766,7 +814,7 @@ export function AgentChatComposer({
       attachmentErrors={attachmentErrors}
       attachmentIntakeDisabled={attachmentIntakeDisabled}
       composerAccentColor={composerAccentColor}
-      composerPlaceholder={composerPlaceholder}
+      composerPlaceholder={composerPlaceholderFor(model)}
       hasSlashAttachmentConflict={hasSlashAttachmentConflict}
       isComposerInputDisabled={isComposerInputDisabled}
       isSubmitting={isSubmitting}

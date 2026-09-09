@@ -55,11 +55,13 @@
   },
   "overrides": {
     "@hono/node-server": "^1.19.11",
+    "@xmldom/xmldom": "^0.8.15",
     "express-rate-limit": "^8.2.2",
     "fast-uri": "^3.1.6",
     "form-data": "^4.0.6",
     "hono": "^4.12.26",
     "ip-address": "^10.5.0",
+    "js-yaml": "^4.3.2",
     "path-to-regexp": "^8.4.0",
     "rollup": "^4.59.0",
     "tmp": "^0.2.7",

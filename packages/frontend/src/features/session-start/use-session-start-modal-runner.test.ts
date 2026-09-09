@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
@@ -8,11 +8,11 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import {
-  assertRuntimeSupportsSelectedStartMode,
   buildSessionStartModalDecision,
   requireSourceSessionRuntimeKind,
   useSessionStartModalRunner,
 } from "./use-session-start-modal-runner";
+import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
 
 enableReactActEnvironment();
 
@@ -418,3 +418,330 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
     ).toThrow("Reusable session is missing a runtime kind.");
   });
 });
+
+test("prompt resolution ignores replaced requests and confirmation holds a synchronous lease", async () => {
+  let resolveOld!: (text: string) => void;
+  const oldPrompt = new Promise<string>((resolve) => {
+    resolveOld = resolve;
+  });
+  let finishStart!: () => void;
+  const startPending = new Promise<void>((resolve) => {
+    finishStart = resolve;
+  });
+  const execute = mock(async () => {
+    await startPending;
+    return "started";
+  });
+  const harness = createHookHarness(
+    useSessionStartModalRunner,
+    {
+      favoriteState: {
+        favorites: [],
+        isLoading: false,
+        readError: null,
+        isMutationPending: false,
+        mutationError: null,
+        canMutate: false,
+        toggleFavorite: () => {},
+        retryRead: () => {},
+        retryMutation: () => {},
+      },
+      repoSettings: null,
+      workspaceRepoPath: "/repo",
+    },
+    {
+      runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        loadRepoRuntimeCatalog: async () => CATALOG,
+      }),
+    },
+  );
+  const request = {
+    source: "agent_studio",
+    taskId: "TASK-1",
+    role: "build",
+    launchActionId: "build_implementation_start",
+    postStartAction: "kickoff",
+    selectedModel: SELECTED_MODEL,
+  } as const;
+  await harness.mount();
+  let oldResult!: Promise<string | undefined>;
+  let currentResult!: Promise<string | undefined>;
+  await harness.run((runner) => {
+    oldResult = runner.runSessionStartRequest(
+      { ...request, resolveKickoffPrompt: () => oldPrompt },
+      execute,
+    );
+  });
+  const oldConfirm = harness.getLatest().sessionStartModal?.onConfirm;
+  await harness.run((runner) => {
+    currentResult = runner.runSessionStartRequest(
+      { ...request, resolveKickoffPrompt: async () => "current prompt" },
+      execute,
+    );
+  });
+  await harness.waitFor(
+    (runner) =>
+      runner.sessionStartModal?.kickoffPrompt === "current prompt" &&
+      !runner.sessionStartModal.isSelectionCatalogLoading,
+  );
+  await harness.run(() => {
+    resolveOld("old prompt");
+  });
+  expect(await oldResult).toBeUndefined();
+  expect(harness.getLatest().sessionStartModal?.kickoffPrompt).toBe("current prompt");
+  const input = {
+    startMode: "fresh",
+    sourceSessionOptionValue: null,
+    runInBackground: false,
+    kickoffPrompt: "edited",
+  } as const;
+  await harness.run((runner) => {
+    oldConfirm?.(input);
+    runner.sessionStartModal?.onConfirm(input);
+    runner.sessionStartModal?.onConfirm(input);
+  });
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(execute).toHaveBeenCalledWith(
+    expect.objectContaining({ decision: expect.objectContaining({ kickoffPrompt: "edited" }) }),
+  );
+  await harness.run(() => {
+    finishStart();
+  });
+  expect(await currentResult).toBe("started");
+  await harness.unmount();
+});
+
+test("ignores out-of-order branch prompt results and blocks unresolved confirmation", async () => {
+  const resolutions: {
+    branch: string | undefined;
+    resolve: (text: string) => void;
+    reject: (cause: Error) => void;
+  }[] = [];
+  const execute = mock(async () => "started");
+  const harness = createHookHarness(
+    useSessionStartModalRunner,
+    {
+      favoriteState: {
+        favorites: [],
+        isLoading: false,
+        readError: null,
+        isMutationPending: false,
+        mutationError: null,
+        canMutate: false,
+        toggleFavorite: () => {},
+        retryRead: () => {},
+        retryMutation: () => {},
+      },
+      repoSettings: null,
+      workspaceRepoPath: "/repo",
+    },
+    {
+      runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        loadRepoRuntimeCatalog: async () => CATALOG,
+      }),
+    },
+  );
+
+  await harness.mount();
+  try {
+    await harness.run((runner) => {
+      void runner.runSessionStartRequest(
+        {
+          source: "agent_studio",
+          taskId: "TASK-1",
+          role: "build",
+          launchActionId: "build_implementation_start",
+          postStartAction: "kickoff",
+          selectedModel: SELECTED_MODEL,
+          resolveKickoffPrompt: (branch) =>
+            new Promise<string>((resolve, reject) =>
+              resolutions.push({ branch: branch?.branch, resolve, reject }),
+            ),
+        },
+        execute,
+      );
+    });
+    await harness.waitFor(() => resolutions.length === 1);
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onSelectTargetBranch?.("refs/heads/one");
+    });
+    await harness.waitFor(() => resolutions.length === 2);
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onSelectTargetBranch?.("refs/heads/two");
+    });
+    await harness.waitFor(() => resolutions.length === 3);
+    expect(resolutions.map((entry) => entry.branch)).toEqual(["main", "one", "two"]);
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onConfirm({
+        startMode: "fresh",
+        sourceSessionOptionValue: null,
+        kickoffPrompt: "unresolved",
+        runInBackground: false,
+      });
+    });
+    expect(execute).not.toHaveBeenCalled();
+    await harness.run(() => {
+      resolutions[2]!.resolve("prompt for two");
+    });
+    await harness.waitFor((runner) => runner.sessionStartModal?.kickoffPrompt === "prompt for two");
+    await harness.run(() => {
+      resolutions[1]!.resolve("stale one");
+      resolutions[0]!.reject(new Error("stale error"));
+    });
+    expect(harness.getLatest().sessionStartModal?.kickoffPrompt).toBe("prompt for two");
+    expect(harness.getLatest().sessionStartModal?.kickoffPromptError).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onSelectTargetBranch?.("refs/heads/one");
+    });
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onSelectTargetBranch?.("refs/heads/two");
+    });
+    expect(resolutions).toHaveLength(5);
+    expect(harness.getLatest().sessionStartModal?.kickoffPrompt).toBeUndefined();
+    expect(harness.getLatest().sessionStartModal?.isKickoffPromptLoading).toBe(true);
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onConfirm({
+        startMode: "fresh",
+        sourceSessionOptionValue: null,
+        kickoffPrompt: "prompt for two",
+        runInBackground: false,
+      });
+    });
+    expect(execute).not.toHaveBeenCalled();
+    await harness.run(() => resolutions[4]!.resolve("refreshed prompt for two"));
+    expect(harness.getLatest().sessionStartModal?.kickoffPrompt).toBe("refreshed prompt for two");
+  } finally {
+    await harness.run((runner) => {
+      runner.sessionStartModal?.onOpenChange(false);
+    });
+    await harness.unmount();
+  }
+});
+
+for (const changedScope of ["task", "workspace", "role"] as const) {
+  test(`confirmation in another ${changedScope} retains its own pending state`, async () => {
+    let finishA!: () => void;
+    let finishB!: () => void;
+    const pendingA = new Promise<void>((resolve) => {
+      finishA = resolve;
+    });
+    const pendingB = new Promise<void>((resolve) => {
+      finishB = resolve;
+    });
+    const executeA = mock(async () => {
+      await pendingA;
+      return "A";
+    });
+    const executeB = mock(async () => {
+      await pendingB;
+      return "B";
+    });
+    const props = {
+      favoriteState: {
+        favorites: [],
+        isLoading: false,
+        readError: null,
+        isMutationPending: false,
+        mutationError: null,
+        canMutate: false,
+        toggleFavorite: () => {},
+        retryRead: () => {},
+        retryMutation: () => {},
+      },
+      repoSettings: null,
+      workspaceRepoPath: "/repo",
+      scopeKey: "/repo:TASK-1:build",
+    };
+    const harness = createHookHarness(useSessionStartModalRunner, props, {
+      runtimeDefinitionsContext: createRuntimeDefinitionsContextValue({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        loadRepoRuntimeCatalog: async () => CATALOG,
+      }),
+    });
+    const request = {
+      source: "agent_studio",
+      taskId: "TASK-1",
+      role: "build",
+      launchActionId: "build_implementation_start",
+      postStartAction: "none",
+      selectedModel: SELECTED_MODEL,
+    } as const;
+    const input = {
+      startMode: "fresh",
+      sourceSessionOptionValue: null,
+      runInBackground: false,
+    } as const;
+    await harness.mount();
+    try {
+      let resultA!: Promise<string | undefined>;
+      let resultB!: Promise<string | undefined>;
+      await harness.run((runner) => {
+        resultA = runner.runSessionStartRequest(request, executeA);
+      });
+      await harness.waitFor((runner) =>
+        Boolean(runner.sessionStartModal && !runner.sessionStartModal.isSelectionCatalogLoading),
+      );
+      await harness.run((runner) => {
+        void runner.sessionStartModal?.onConfirm(input);
+      });
+      expect(executeA).toHaveBeenCalledTimes(1);
+      await harness.update({
+        ...props,
+        workspaceRepoPath: changedScope === "workspace" ? "/other" : "/repo",
+        scopeKey:
+          changedScope === "workspace"
+            ? "/other:TASK-1:build"
+            : changedScope === "task"
+              ? "/repo:TASK-2:build"
+              : "/repo:TASK-1:qa",
+      });
+      expect(await resultA).toBeUndefined();
+      await harness.run((runner) => {
+        resultB = runner.runSessionStartRequest(
+          { ...request, taskId: changedScope === "task" ? "TASK-2" : "TASK-1" },
+          executeB,
+        );
+      });
+      await harness.waitFor((runner) =>
+        Boolean(runner.sessionStartModal && !runner.sessionStartModal.isSelectionCatalogLoading),
+      );
+      expect(harness.getLatest().sessionStartModal?.isStarting).toBe(false);
+      await harness.run((runner) => {
+        void runner.sessionStartModal?.onConfirm(input);
+      });
+      expect(executeB).toHaveBeenCalledTimes(1);
+      await harness.run(() => {
+        finishA();
+      });
+      expect(harness.getLatest().sessionStartModal?.isStarting).toBe(true);
+      await harness.run((runner) => {
+        void runner.sessionStartModal?.onConfirm(input);
+        expect(() => runner.runSessionStartRequest(request, executeB)).toThrow(
+          "A session start is already in progress.",
+        );
+        runner.sessionStartModal?.onOpenChange(false);
+      });
+      expect(harness.getLatest().sessionStartModal?.open).toBe(true);
+      expect(executeB).toHaveBeenCalledTimes(1);
+      await harness.run(() => {
+        finishB();
+      });
+      expect(await resultB).toBe("B");
+      expect(executeA).toHaveBeenCalledTimes(1);
+      expect(executeB).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().sessionStartModal?.open).not.toBe(true);
+    } finally {
+      await harness.run(() => {
+        finishA();
+        finishB();
+      });
+      await harness.unmount();
+    }
+  });
+}

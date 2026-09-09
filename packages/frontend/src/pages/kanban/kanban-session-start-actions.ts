@@ -1,3 +1,4 @@
+import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
 import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { toast } from "sonner";
@@ -11,6 +12,7 @@ import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 
 type StartKanbanSessionFlowInput = {
   request: KanbanSessionStartIntent;
+  isCurrent?: () => boolean;
   decision: ResolvedSessionStartDecision;
   startInBackground: boolean;
   openAgentStudioTabOnBackgroundSessionStart: boolean;
@@ -29,6 +31,7 @@ type StartKanbanSessionFlowInput = {
 
 export const startKanbanSessionFlow = async ({
   request,
+  isCurrent,
   decision,
   startInBackground,
   openAgentStudioTabOnBackgroundSessionStart,
@@ -40,24 +43,22 @@ export const startKanbanSessionFlow = async ({
   setTaskTargetBranch,
   openSessionInAgentStudio,
 }: StartKanbanSessionFlowInput): Promise<AgentSessionIdentity> => {
-  const effectivePostStartAction =
-    startInBackground && request.postStartAction === "none" ? "kickoff" : request.postStartAction;
   const task = tasks.find((entry) => entry.id === request.taskId) ?? null;
   const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
-    request: {
-      ...request,
-      postStartAction: effectivePostStartAction,
-    },
+    request,
     decision,
     task,
     humanRequestChangesTask,
+    onPostStartMessageFailure: showSessionStartMessageRecovery,
   };
+  if (isCurrent) workflowInput.isCurrent = isCurrent;
   if (setTaskTargetBranch) {
     workflowInput.persistTaskTargetBranch = setTaskTargetBranch;
   }
   const workflow = await runSessionStartWorkflow(workflowInput);
   if (
     workflow.postStartActionError &&
+    !workflow.retryPostStartMessage &&
     !isSessionStartFailureFeedbackHandled(workflow.postStartActionError)
   ) {
     toast.error(`Session started, but the first message failed for ${request.taskId}.`, {

@@ -1,3 +1,5 @@
+import { QueryClient } from "@tanstack/react-query";
+import { startSessionWorkflow } from "@/features/session-start/session-start-workflow";
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
@@ -25,6 +27,38 @@ import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.te
 import { acceptedUserMessage } from "./session-actions-send.test-support";
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
+  test("delivers confirmed kickoff whitespace through the real sender to the adapter", async () => {
+    const text = "\n\n  Custom instruction\n{{task.title}}\n ";
+    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+    const sent: Array<Parameters<typeof adapter.sendUserMessage>[0]["parts"]> = [];
+    adapter.sendUserMessage = async (input) => {
+      sent.push(input.parts);
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+    const session = getSession(sessionsRef);
+    await startSessionWorkflow({
+      workspaceId: null,
+      queryClient: new QueryClient(),
+      task: null,
+      intent: {
+        taskId: "task-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        startMode: "fresh",
+        postStartAction: "kickoff",
+        kickoffPrompt: text,
+      },
+      selection: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+      startAgentSession: async () => session,
+      sendAgentMessage: actions.sendAgentMessage,
+    });
+    expect(sent).toEqual([[{ kind: "text", text }]]);
+    await actions.sendAgentMessage(session, [{ kind: "text", text }]);
+    expect(sent).toEqual([[{ kind: "text", text }], [{ kind: "text", text: text.trimStart() }]]);
+  });
+
   test("routes a normalized workflow control without loading runtime policy settings", async () => {
     const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
     const originalSendUserMessage = adapter.sendUserMessage;

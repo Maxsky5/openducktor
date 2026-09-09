@@ -7,6 +7,14 @@ import {
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
 import type { AgentChatDraftPersistence, AgentChatDraftScope } from "./agent-chat-draft-scope";
+import {
+  clearAgentChatDraft,
+  flushAgentChatDraft,
+  hydrateAgentChatDraft,
+  readAgentChatDraftVersion,
+  setAgentChatDraft,
+} from "./agent-chat-draft-store";
+import { toAgentChatDraftStorageKey } from "./agent-chat-draft-storage";
 import { useAgentChatComposerDraftState } from "./use-agent-chat-composer-draft-state";
 
 type HookArgs = Parameters<typeof useAgentChatComposerDraftState>[0];
@@ -443,3 +451,189 @@ describe("useAgentChatComposerDraftState", () => {
     expect(persistence.adapter.flush).toHaveBeenCalledTimes(2);
   });
 });
+
+test("keeps first-message recovery pending for the exact created session", async () => {
+  const harness = await mountHarness({ key: "new", persistence: null });
+  const draft = buildDraft("retry first message");
+  const snapshot = harness.getLatest().createSubmittedDraftSnapshot(draft);
+  await harness.update({ scope: { key: "other-task", persistence: null } });
+  await harness.run((state) =>
+    state.restoreSubmittedDraft(snapshot, {
+      kind: "recover_draft",
+      originKey: "new",
+      recoveryKey: "created",
+      error: new Error("failed"),
+    }),
+  );
+  expect(draftHasMeaningfulContent(harness.getLatest().draft)).toBe(false);
+  await harness.update({ scope: { key: "created", persistence: null } });
+  expect(harness.getLatest().draft).toEqual(draft);
+  await harness.unmount();
+});
+
+test("first-message recovery does not overwrite newer session input", async () => {
+  const persistence = createFakePersistence(buildDraft("newer input"));
+  const harness = await mountHarness({ key: "new", persistence: null });
+  const snapshot = harness.getLatest().createSubmittedDraftSnapshot(buildDraft("old input"));
+  await harness.run((state) =>
+    state.restoreSubmittedDraft(snapshot, {
+      kind: "recover_draft",
+      originKey: "new",
+      recoveryKey: "created",
+      error: new Error("failed"),
+    }),
+  );
+  await harness.update({ scope: { key: "created", persistence: persistence.adapter } });
+  expect(harness.getLatest().draft).toEqual(buildDraft("newer input"));
+  await harness.unmount();
+});
+
+test.each(["current", "pending"] as const)(
+  "stores %s first-message recovery before page hide and remount",
+  async (timing) => {
+    const persistence = createFakePersistence();
+    const scope = { key: "created", persistence: persistence.adapter };
+    const harness = await mountHarness({ key: "new", persistence: null });
+    const draft = buildDraft("retry first message");
+    const snapshot = harness.getLatest().createSubmittedDraftSnapshot(draft);
+    if (timing === "current") await harness.update({ scope });
+    await harness.run((state) => {
+      state.restoreSubmittedDraft(snapshot, {
+        kind: "recover_draft",
+        originKey: "new",
+        recoveryKey: "created",
+        error: new Error("failed"),
+      });
+    });
+    if (timing === "pending") await harness.update({ scope });
+    expect(harness.getLatest().draft).toEqual(draft);
+    expect(persistence.readDraft()).toEqual(draft);
+    window.dispatchEvent(new Event("pagehide"));
+    expect(persistence.adapter.flush).toHaveBeenCalled();
+    await harness.unmount();
+
+    const remounted = await mountHarness(scope);
+    expect(remounted.getLatest().draft).toEqual(draft);
+    await remounted.unmount();
+  },
+);
+
+test.each(["edit", "clear", "resubmit"] as const)(
+  "does not restore an old recovery after %s and navigation",
+  async (action) => {
+    const persistence = createFakePersistence();
+    const scope = { key: "created", persistence: persistence.adapter };
+    const harness = await mountHarness({ key: "new", persistence: null });
+    const draft = buildDraft("old recovery");
+    const snapshot = harness.getLatest().createSubmittedDraftSnapshot(draft);
+    await harness.update({ scope });
+    await harness.run((state) => {
+      state.restoreSubmittedDraft(snapshot, {
+        kind: "recover_draft",
+        originKey: "new",
+        recoveryKey: "created",
+        error: new Error("failed"),
+      });
+    });
+    const expected = action === "edit" ? buildDraft("new input") : createEmptyComposerDraft();
+    await harness.run((state) => {
+      if (action === "resubmit") {
+        state.clearSubmittedDraft(state.createSubmittedDraftSnapshot(state.draft));
+        state.setDisplayedDraft(expected);
+      } else {
+        state.commitDraft(expected);
+      }
+    });
+    await harness.update({ scope: { key: "other", persistence: null } });
+    await harness.update({ scope });
+    if (action === "edit") expect(harness.getLatest().draft).toEqual(expected);
+    else expect(draftHasMeaningfulContent(harness.getLatest().draft)).toBe(false);
+    await harness.unmount();
+  },
+);
+
+test.each(["unchanged", "new input", "cleared", "resubmitted"] as const)(
+  "retains a canceled persisted draft after changing scope: %s",
+  async (laterEdit) => {
+    const first = createFakePersistence();
+    const second = createFakePersistence(buildDraft("other session"));
+    const origin = { key: "persisted-origin", persistence: first.adapter };
+    const destination = { key: "persisted-destination", persistence: second.adapter };
+    const harness = await mountHarness(origin);
+    const submitted = buildDraft("unsent attachment message");
+    await harness.run((state) => state.commitDraft(submitted));
+    const snapshot = harness.getLatest().createSubmittedDraftSnapshot(submitted);
+    await harness.run((state) => {
+      state.clearSubmittedDraft(snapshot);
+      state.setDisplayedDraft(createEmptyComposerDraft());
+    });
+    await harness.update({ scope: destination });
+    if (laterEdit !== "unchanged") {
+      await harness.update({ scope: origin });
+      await harness.run((state) => state.commitDraft(buildDraft("new input")));
+      if (laterEdit === "cleared") {
+        await harness.run((state) => state.commitDraft(createEmptyComposerDraft()));
+      } else if (laterEdit === "resubmitted") {
+        const newer = harness.getLatest().createSubmittedDraftSnapshot(buildDraft("new input"));
+        await harness.run((state) => {
+          state.clearSubmittedDraft(newer);
+          state.setDisplayedDraft(createEmptyComposerDraft());
+        });
+      }
+      await harness.update({ scope: destination });
+    }
+    const expected = laterEdit === "unchanged" ? submitted : first.readDraft();
+    await harness.run((state) => state.restoreSubmittedDraft(snapshot));
+    expect(harness.getLatest().draft).toEqual(buildDraft("other session"));
+    expect(second.readDraft()).toEqual(buildDraft("other session"));
+    expect(first.readDraft()).toEqual(expected);
+    await harness.update({ scope: origin });
+    expect(harness.getLatest().draft).toEqual(expected);
+    await harness.unmount();
+  },
+);
+
+test.each([false, true])(
+  "restores the cleared store version unless another adapter writes: %s",
+  async (newerWrite) => {
+    const identity = {
+      workspaceId: "draft-recovery-test",
+      externalSessionId: crypto.randomUUID(),
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+    };
+    const taskId = "task-recovery";
+    const persistence: AgentChatDraftPersistence = {
+      targetKey: toAgentChatDraftStorageKey(identity),
+      hydrate: () => hydrateAgentChatDraft(identity, taskId),
+      set: (draft) => setAgentChatDraft(identity, taskId, draft),
+      readVersion: () => readAgentChatDraftVersion(identity),
+      clear: (options) => clearAgentChatDraft(identity, options),
+      flush: () => flushAgentChatDraft(identity),
+    };
+    const scope = { key: "persisted-source", persistence };
+    const harness = await mountHarness(scope);
+    try {
+      const submitted = buildDraft("unsent text");
+      await harness.run((state) => state.commitDraft(submitted));
+      const snapshot = harness.getLatest().createSubmittedDraftSnapshot(submitted);
+      await harness.run((state) => {
+        state.clearSubmittedDraft(snapshot);
+        state.setDisplayedDraft(createEmptyComposerDraft());
+      });
+      expect(persistence.readVersion()).toBeNull();
+      await harness.update({ scope: { key: "another-session", persistence: null } });
+      if (newerWrite) setAgentChatDraft(identity, taskId, buildDraft("external edit"));
+      await harness.run((state) => state.restoreSubmittedDraft(snapshot));
+      await persistence.flush();
+      const expected = newerWrite ? buildDraft("external edit") : submitted;
+      expect(persistence.hydrate()).toEqual(expected);
+      expect(draftHasMeaningfulContent(harness.getLatest().draft)).toBe(false);
+      await harness.update({ scope });
+      expect(harness.getLatest().draft).toEqual(expected);
+    } finally {
+      await harness.unmount();
+      clearAgentChatDraft(identity);
+    }
+  },
+);

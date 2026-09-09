@@ -1,3 +1,4 @@
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
@@ -43,7 +44,7 @@ export type AgentStudioChatSessionActionsContext = {
   kickoffLabel: string;
   canStopSession: boolean;
   startLaunchKickoff: () => Promise<void>;
-  onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
+  onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
   loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
 };

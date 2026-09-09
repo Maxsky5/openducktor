@@ -196,6 +196,7 @@ Rules:
 
 - A model choice is the exact `runtimeKind`, `providerId`, and `modelId` tuple.
 - Choose either the selected session or the new-session draft.
+- A canceled send restores the submitted draft through its original persistence adapter. Check the version after the submitted draft was cleared and reject restoration after newer edits. Restore an inactive draft without changing the active composer.
 - A summary can provide identity and selected model. Only loaded session state can provide status, messages, pending input, or context.
 - Use one prompt-input runtime state for commands, skills, and file search.
 - Pass `RuntimeWorkingDirectoryRef` for both session and repository targets.
@@ -224,7 +225,7 @@ Rules:
 - Stop preparation failures before host control succeeds. If later frontend work fails, keep the task session stored by the host.
 - Only the explicit workflow start path can register task ownership. Runtime events cannot attach an unrelated root session.
 - A fresh or forked start holds `starting` until its first message finishes or fails.
-- `RunSessionStartWorkflow` awaits the first message. It reports a send failure in `postStartActionError`.
+- `RunSessionStartWorkflow` awaits the first message. It reports a send failure in `postStartActionError`. Kanban and Agent Studio supply its local recovery callback. The runner invokes that callback before notification delivery, which suppresses the generic in-app toast for that failure and keeps OS and sound policy unchanged.
 - Agent Studio, Kanban, and Autopilot call the same `RunSessionStartWorkflow` command.
 - Sessionless send uses the same start-availability rule as an explicit start.
 - The start modal reads runtime definitions from runtime availability context.

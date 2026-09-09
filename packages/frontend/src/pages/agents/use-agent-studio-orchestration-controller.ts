@@ -287,6 +287,7 @@ export function useAgentStudioOrchestrationController({
 
   const {
     selectionForNewSession,
+    newSessionCatalog,
     selectedModelSelection,
     isSelectedSessionModelSendable,
     selectedModelDescriptor,
@@ -367,6 +368,7 @@ export function useAgentStudioOrchestrationController({
     agentStudioReady,
     isActiveTaskReady: view.isTaskReady,
     selectionForNewSession,
+    newSessionCatalog,
     reusablePrompts,
     repoSettings,
     workspaceRepoPath,

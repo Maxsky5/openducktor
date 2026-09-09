@@ -1,3 +1,4 @@
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type {
   GitBranch,
   GitTargetBranch,
@@ -58,6 +59,7 @@ type UseAgentStudioSessionActionsArgs = {
   agentStudioReady: boolean;
   isActiveTaskReady: boolean;
   selectionForNewSession: AgentModelSelection | null;
+  newSessionCatalog?: AgentModelCatalog | null;
   reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
   workspaceRepoPath: string | null;
@@ -89,7 +91,7 @@ export type UseAgentStudioSessionActionsResult = {
   kickoffLabel: string;
   canStopSession: boolean;
   startLaunchKickoff: () => Promise<void>;
-  onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
+  onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
   handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
@@ -116,6 +118,7 @@ export function useAgentStudioSessionActions({
   agentStudioReady,
   isActiveTaskReady,
   selectionForNewSession,
+  newSessionCatalog,
   reusablePrompts,
   repoSettings,
   workspaceRepoPath,
@@ -159,6 +162,7 @@ export function useAgentStudioSessionActions({
     canStartRole,
     isSessionWorking: sessionState.isSessionWorking,
     selectionForNewSession,
+    newSessionCatalog: newSessionCatalog ?? null,
     repoSettings,
     workspaceId: activeWorkspaceId,
     workspaceRepoPath,
@@ -175,7 +179,7 @@ export function useAgentStudioSessionActions({
     sessionStartModal,
     humanReviewFeedbackModal,
     startSessionRequest,
-    startSession,
+    startSessionForMessage,
     startLaunchKickoff,
     handleCreateSession,
     handleQuickAction,
@@ -197,7 +201,7 @@ export function useAgentStudioSessionActions({
     selectedModelDescriptor,
     supportsAttachments,
     sendAgentMessage,
-    startSession,
+    startSession: startSessionForMessage,
   });
 
   const isSessionWorking = sessionState.isSessionWorking;

@@ -1,3 +1,4 @@
+import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type {
   ChatSettings,
   RuntimeApprovalReplyOutcome,
@@ -30,6 +31,7 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
+import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
 import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
@@ -153,7 +155,7 @@ export type AgentChatComposerModel = {
   busySendBlockedReason: string | null;
   pendingSendItems?: AgentChatPendingSendItems;
   draftScope: AgentChatDraftScope;
-  onSend: (draft: import("./agent-chat-composer-draft").AgentChatComposerDraft) => Promise<boolean>;
+  onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   isSending: boolean;
   isStarting: boolean;
   isSessionWorking: boolean;

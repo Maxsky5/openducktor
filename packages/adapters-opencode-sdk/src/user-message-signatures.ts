@@ -44,7 +44,7 @@ const buildComparableSignature = (input: {
 }): string => {
   const model = input.model;
   return JSON.stringify({
-    visible: input.visible.trim(),
+    visible: input.visible,
     nonTextParts: input.nonTextParts,
     providerId: model?.providerId ?? null,
     modelId: model?.modelId ?? null,
@@ -72,7 +72,7 @@ const buildQueuedRequestSignatureWithAttachmentPathMode = (
   model: AgentModelSelection | undefined,
   attachmentPathMode: AttachmentPathMode,
 ): string => {
-  const normalizedParts = normalizeAgentUserMessageParts(parts);
+  const normalizedParts = normalizeAgentUserMessageParts(parts, { preserveTextWhitespace: true });
   const promptText = buildOpenCodePromptText(normalizedParts);
   const nonTextParts: ComparableNonTextPart[] = [
     ...promptText.fileReferences.map(({ file, sourceText }) => ({

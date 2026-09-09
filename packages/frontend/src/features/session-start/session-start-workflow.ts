@@ -6,17 +6,11 @@ import type {
   AgentUserMessagePart,
 } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
-import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
-import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
 import type { AgentMessageSendOptions, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { StartAgentSession, StartAgentSessionInput } from "@/types/agent-session-start";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
-import { getSessionLaunchAction } from "./session-start-launch-options";
-import {
-  FEEDBACK_MESSAGE_REQUIRED_ERROR,
-  resolveSessionStartKickoffPromptContext,
-} from "./session-start-prompt-context";
-import { kickoffPromptForTemplate } from "./session-start-prompts";
+import { FEEDBACK_MESSAGE_REQUIRED_ERROR } from "./session-start-prompt-context";
+import { resolveSessionStartKickoff } from "./session-start-kickoff";
 
 export type SendAgentMessage = (
   session: AgentSessionIdentity,
@@ -43,14 +37,17 @@ export type SessionStartWorkflowIntent = {
   holdForPostStartMessage?: boolean;
   queueIfBusy?: boolean;
   message?: string;
+  kickoffPrompt?: string;
   beforeStartAction?: SessionStartBeforeAction;
 };
 
 export type SessionStartWorkflowResult = AgentSessionIdentity & {
   postStartActionError: Error | null;
+  retryPostStartMessage?: () => Promise<void>;
 };
 
 type StartSessionWorkflowArgs = {
+  isCurrent?: () => boolean;
   queryClient: QueryClient;
   intent: SessionStartWorkflowIntent;
   selection: AgentModelSelection | null;
@@ -63,20 +60,115 @@ type StartSessionWorkflowArgs = {
   humanRequestChangesTask?: (taskId: string, note?: string) => Promise<void>;
 };
 
-const requirePostStartMessage = async ({
+/** Checks the launch before changing task state, then starts the session and sends its first message. */
+export const startSessionWorkflow = async ({
+  isCurrent,
   queryClient,
   intent,
+  selection,
   task,
   workspaceId,
-}: Pick<StartSessionWorkflowArgs, "queryClient" | "task" | "workspaceId"> & {
-  intent: SessionStartWorkflowIntent;
-}): Promise<string> => {
-  return buildPostStartMessage({
-    queryClient,
+  persistTaskTargetBranch,
+  startAgentSession,
+  sendAgentMessage,
+  postStartErrorAttentionId,
+  humanRequestChangesTask,
+}: StartSessionWorkflowArgs): Promise<SessionStartWorkflowResult> => {
+  const requireCurrentContext = (): void => {
+    if (isCurrent && !isCurrent())
+      throw new Error("Session start canceled because the selected context changed.");
+  };
+  requireCurrentContext();
+  if (intent.startMode !== "reuse") requireSelectedModel(selection, intent.startMode);
+  if (intent.startMode !== "fresh") requireSourceSession(intent.sourceSession, intent.startMode);
+  const beforeStartActionArgs: Parameters<typeof runBeforeStartAction>[0] = {
     intent,
-    task,
-    workspaceId,
+    persistTaskTargetBranch,
+  };
+
+  if (humanRequestChangesTask) {
+    beforeStartActionArgs.humanRequestChangesTask = humanRequestChangesTask;
+  }
+
+  const postStartMessageSender =
+    intent.postStartAction === "none" ? null : requirePostStartMessageSender(sendAgentMessage);
+  const postStartMessage =
+    intent.postStartAction === "none"
+      ? null
+      : await buildPostStartMessage({
+          queryClient,
+          intent,
+          task,
+          workspaceId,
+        });
+
+  requireCurrentContext();
+  await runBeforeStartAction(beforeStartActionArgs);
+
+  const session = await startSessionFromIntent({
+    intent,
+    selection,
+    startAgentSession,
+    holdForPostStartMessage: postStartMessage !== null || intent.holdForPostStartMessage === true,
   });
+
+  if (intent.postStartAction === "none") {
+    return {
+      ...session,
+      postStartActionError: null,
+    };
+  }
+
+  if (!postStartMessageSender) {
+    throw new Error("Post-start messaging is unavailable.");
+  }
+  if (postStartMessage === null) {
+    throw new Error("Post-start message is unavailable.");
+  }
+
+  const runPostStartAction = async (): Promise<Error | null> => {
+    try {
+      const parts: AgentUserMessagePart[] = [
+        {
+          kind: "text",
+          text: postStartMessage,
+        },
+      ];
+      const sendOptions: AgentMessageSendOptions = {};
+      if (intent.postStartAction === "kickoff" && intent.kickoffPrompt !== undefined) {
+        sendOptions.preserveTextWhitespace = true;
+      }
+      if (postStartErrorAttentionId) {
+        sendOptions.errorAttentionId = postStartErrorAttentionId;
+      }
+      if (Object.keys(sendOptions).length > 0) {
+        await postStartMessageSender(session, parts, sendOptions);
+      } else {
+        await postStartMessageSender(session, parts);
+      }
+      return null;
+    } catch (error) {
+      return toError(error);
+    }
+  };
+
+  const postStartActionError = await runPostStartAction();
+  if (!postStartActionError) return { ...session, postStartActionError: null };
+  let retryPending = false;
+  return {
+    ...session,
+    postStartActionError,
+    retryPostStartMessage: async () => {
+      if (retryPending) return;
+      retryPending = true;
+      try {
+        const failure = await runPostStartAction();
+        if (failure) throw failure;
+      } finally {
+        retryPending = false;
+      }
+    },
+  };
 };
 
 const requirePostStartMessageSender = (
@@ -181,49 +273,7 @@ const buildPostStartMessage = async ({
     return message;
   }
 
-  const launchAction = getSessionLaunchAction(intent.launchActionId);
-  const kickoffTemplateId = launchAction.kickoffTemplateId;
-  if (!kickoffTemplateId) {
-    throw new Error(`Launch action "${intent.launchActionId}" does not define a kickoff prompt.`);
-  }
-  const promptOverrides = workspaceId
-    ? await loadEffectivePromptOverrides(workspaceId, queryClient)
-    : undefined;
-  const taskTargetBranch = intent.targetBranch ?? task?.targetBranch;
-  const promptContextInput: Parameters<typeof resolveSessionStartKickoffPromptContext>[0] = {
-    templateId: kickoffTemplateId,
-    loadRepoDefaultTargetBranch: async () => {
-      if (!workspaceId) {
-        return null;
-      }
-      return (await loadRepoConfigFromQuery(queryClient, workspaceId)).defaultTargetBranch;
-    },
-  };
-
-  if (intent.message !== undefined) {
-    promptContextInput.message = intent.message;
-  }
-
-  if (taskTargetBranch) {
-    promptContextInput.taskTargetBranch = taskTargetBranch;
-  }
-
-  const promptContext = await resolveSessionStartKickoffPromptContext(promptContextInput);
-
-  return kickoffPromptForTemplate(intent.role, kickoffTemplateId, intent.taskId, {
-    overrides: promptOverrides ?? {},
-    ...promptContext,
-    task:
-      task === null
-        ? {}
-        : {
-            title: task.title,
-            issueType: task.issueType,
-            status: task.status,
-            qaRequired: task.aiReviewEnabled,
-            description: task.description,
-          },
-  });
+  return resolveSessionStartKickoff({ queryClient, intent, task, workspaceId });
 };
 
 const runBeforeStartAction = async ({
@@ -252,89 +302,4 @@ const runBeforeStartAction = async ({
   if (intent.targetBranch && persistTaskTargetBranch) {
     await persistTaskTargetBranch(intent.taskId, intent.targetBranch);
   }
-};
-
-export const startSessionWorkflow = async ({
-  queryClient,
-  intent,
-  selection,
-  task,
-  workspaceId,
-  persistTaskTargetBranch,
-  startAgentSession,
-  sendAgentMessage,
-  postStartErrorAttentionId,
-  humanRequestChangesTask,
-}: StartSessionWorkflowArgs): Promise<SessionStartWorkflowResult> => {
-  const beforeStartActionArgs: Parameters<typeof runBeforeStartAction>[0] = {
-    intent,
-    persistTaskTargetBranch,
-  };
-
-  if (humanRequestChangesTask) {
-    beforeStartActionArgs.humanRequestChangesTask = humanRequestChangesTask;
-  }
-
-  await runBeforeStartAction(beforeStartActionArgs);
-
-  const postStartMessageSender =
-    intent.postStartAction === "none" ? null : requirePostStartMessageSender(sendAgentMessage);
-  const postStartMessage =
-    intent.postStartAction === "none"
-      ? null
-      : await requirePostStartMessage({
-          queryClient,
-          intent,
-          task,
-          workspaceId,
-        });
-
-  const session = await startSessionFromIntent({
-    intent,
-    selection,
-    startAgentSession,
-    holdForPostStartMessage: postStartMessage !== null || intent.holdForPostStartMessage === true,
-  });
-
-  if (intent.postStartAction === "none") {
-    return {
-      ...session,
-      postStartActionError: null,
-    };
-  }
-
-  if (!postStartMessageSender) {
-    throw new Error("Post-start messaging is unavailable.");
-  }
-  if (postStartMessage === null) {
-    throw new Error("Post-start message is unavailable.");
-  }
-
-  const confirmedPostStartMessageSender = postStartMessageSender;
-  const confirmedPostStartMessage = postStartMessage;
-  const runPostStartAction = async (): Promise<Error | null> => {
-    try {
-      const parts: AgentUserMessagePart[] = [
-        {
-          kind: "text",
-          text: confirmedPostStartMessage,
-        },
-      ];
-      if (postStartErrorAttentionId) {
-        await confirmedPostStartMessageSender(session, parts, {
-          errorAttentionId: postStartErrorAttentionId,
-        });
-      } else {
-        await confirmedPostStartMessageSender(session, parts);
-      }
-      return null;
-    } catch (error) {
-      return toError(error);
-    }
-  };
-
-  return {
-    ...session,
-    postStartActionError: await runPostStartAction(),
-  };
 };

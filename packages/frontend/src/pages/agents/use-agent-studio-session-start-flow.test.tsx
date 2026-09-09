@@ -428,7 +428,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     host.taskWorktreeGet = originalBuildContinuationTargetGet;
   });
 
-  test("startSession starts a fresh session even when another session is active", async () => {
+  test("startSessionRequest starts a fresh session even when another session is active", async () => {
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const loadedSession = createSession({
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
@@ -446,7 +446,12 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.mount();
     let startPromise: Promise<SessionStartWorkflowResult | undefined> | undefined;
     await harness.run(async (state) => {
-      startPromise = state.startSession();
+      startPromise = state.startSessionRequest({
+        taskId: "task-1",
+        role: "spec",
+        launchActionId: "spec_initial",
+        postStartAction: "none",
+      });
     });
     await confirmSessionStartModal({
       harness,
@@ -489,7 +494,12 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     let startPromise: Promise<SessionStartWorkflowResult | undefined> | undefined;
     await harness.run((state) => {
-      startPromise = state.startSession();
+      startPromise = state.startSessionRequest({
+        taskId: "task-1",
+        role: "spec",
+        launchActionId: "spec_initial",
+        postStartAction: "none",
+      });
     });
     await confirmSessionStartModal({
       harness,
@@ -510,7 +520,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("startSession uses the internal modal flow when no external request hook is provided", async () => {
+  test("startSessionRequest uses the internal modal flow when no external request hook is provided", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const harness = createInternalModalHookHarness({
@@ -529,7 +539,12 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     let startPromise: Promise<SessionStartWorkflowResult | undefined> | undefined;
     await harness.run((state) => {
-      startPromise = state.startSession();
+      startPromise = state.startSessionRequest({
+        taskId: "task-1",
+        role: "planner",
+        launchActionId: "planner_initial",
+        postStartAction: "none",
+      });
     });
     expect(harness.getLatest().isStarting).toBe(false);
     await confirmSessionStartModal({

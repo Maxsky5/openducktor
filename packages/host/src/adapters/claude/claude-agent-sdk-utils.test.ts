@@ -25,6 +25,19 @@ const fileReference = {
 };
 
 describe("encodeClaudePromptText", () => {
+  test("preserves confirmed text whitespace through native message encoding", async () => {
+    const text = "\n  Custom instruction\n{{task.title}}\n ";
+    const parts = [{ kind: "text" as const, text }];
+    expect(encodeClaudePromptText(parts)).toBe(text);
+    expect((await toClaudeMessageFromParts(parts)).message.content).toEqual([
+      { type: "text", text },
+    ]);
+    const encoded = encodeClaudePromptTextWithSourceRanges([
+      ...parts,
+      { kind: "file_reference", file: fileReference },
+    ]);
+    expect(encoded.sourceTextByPartIndex[1]?.start).toBe(text.length);
+  });
   test("encodes SDK-native slash commands and file references as Claude prompt text", () => {
     expect(
       encodeClaudePromptText([
@@ -180,7 +193,7 @@ describe("toClaudeMessageFromParts", () => {
 
       await expect(
         toClaudeMessageFromParts([
-          { kind: "text", text: "Inspect this" },
+          { kind: "text", text: "\n  Inspect this\n " },
           {
             kind: "attachment",
             attachment: {
@@ -191,7 +204,7 @@ describe("toClaudeMessageFromParts", () => {
               path: imagePath,
             },
           },
-          { kind: "text", text: " please" },
+          { kind: "text", text: "\n please\n " },
         ]),
       ).resolves.toEqual({
         type: "user",
@@ -199,7 +212,7 @@ describe("toClaudeMessageFromParts", () => {
         message: {
           role: "user",
           content: [
-            { type: "text", text: "Inspect this" },
+            { type: "text", text: "\n  Inspect this\n " },
             {
               type: "image",
               source: {
@@ -208,7 +221,7 @@ describe("toClaudeMessageFromParts", () => {
                 data: Buffer.from("png-bytes").toString("base64"),
               },
             },
-            { type: "text", text: "please" },
+            { type: "text", text: "\n please\n " },
           ],
         },
       });

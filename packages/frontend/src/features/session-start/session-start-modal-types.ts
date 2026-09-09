@@ -9,6 +9,8 @@ export type SessionStartModalSource = "agent_studio" | "kanban";
 
 export type SessionStartModalIntent = {
   source: SessionStartModalSource;
+  requestId?: string;
+  resolveKickoffPrompt?: (targetBranch?: GitTargetBranch) => Promise<string>;
   taskId: string;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;

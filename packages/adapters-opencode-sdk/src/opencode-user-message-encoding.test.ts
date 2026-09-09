@@ -34,6 +34,32 @@ const SUBAGENT = {
 };
 
 describe("opencode-user-message-encoding", () => {
+  test("preserves text boundaries and reference offsets", () => {
+    const text = "\n  Custom instruction\n{{task.title}}\n ";
+    expect(buildOpenCodePromptText([{ kind: "text", text }]).text).toBe(text);
+    const encoded = buildOpenCodePromptText([
+      { kind: "text", text },
+      { kind: "file_reference", file: FIRST_FILE },
+    ]);
+    expect(encoded.text).toBe(`${text}@src/a.ts`);
+    expect(encoded.fileReferences[0]?.sourceText.start).toBe(text.length);
+    const signature = JSON.parse(
+      buildQueuedRequestSignature([
+        { kind: "text", text },
+        { kind: "file_reference", file: FIRST_FILE },
+      ]),
+    );
+    expect(signature.visible).toBe(encoded.text);
+    expect(signature.nonTextParts[0].sourceText.start).toBe(text.length);
+  });
+  test.each(["  hello", "hello  ", "\nhello\n"])(
+    "keeps boundary whitespace distinct in queued signatures: %j",
+    (text) => {
+      expect(buildQueuedRequestSignature([{ kind: "text", text }])).not.toBe(
+        buildQueuedRequestSignature([{ kind: "text", text: "hello" }]),
+      );
+    },
+  );
   test("rejects skill references explicitly", () => {
     expect(() =>
       buildOpenCodeVisibleText([

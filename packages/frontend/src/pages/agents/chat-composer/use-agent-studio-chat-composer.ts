@@ -76,6 +76,7 @@ type UseAgentStudioChatComposerArgs = {
 
 type AgentStudioChatComposerState = {
   selectionForNewSession: AgentModelSelection | null;
+  newSessionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
   isSelectedSessionModelSendable: boolean;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
@@ -206,12 +207,13 @@ export function useAgentStudioChatComposer({
       }),
     [availableRuntimeDefinitions, repoSettings, role],
   );
-  const { draftSelection, applyDraftSelection } = useDraftModelSelectionState({
-    contextKey: workspaceRepoPath,
-    defaultSelection: roleDefaultSelection,
-    isDefaultSelectionReady: repoSettings !== null,
-    selectionKey: role,
-  });
+  const { draftSelection, explicitDraftSelection, applyDraftSelection } =
+    useDraftModelSelectionState({
+      contextKey: workspaceRepoPath,
+      defaultSelection: roleDefaultSelection,
+      isDefaultSelectionReady: repoSettings !== null,
+      selectionKey: role,
+    });
   const selectedRuntimeKind = useMemo(
     () =>
       resolveChatComposerSelectedRuntimeKind({
@@ -425,7 +427,7 @@ export function useAgentStudioChatComposer({
       : {
           kind: "new_session",
           composerCatalog,
-          draftSelection,
+          draftSelection: explicitDraftSelection,
         };
 
     return resolveChatComposerModelSelections({
@@ -435,6 +437,7 @@ export function useAgentStudioChatComposer({
   }, [
     composerCatalog,
     draftSelection,
+    explicitDraftSelection,
     roleDefaultSelection,
     selectedSessionIdentity,
     selectedSessionModel,
@@ -536,6 +539,8 @@ export function useAgentStudioChatComposer({
   };
 
   return {
+    newSessionCatalog:
+      isRepoRuntimeReady && !selectedComposerResource?.error ? composerCatalog : null,
     selectionForNewSession,
     selectedModelSelection,
     isSelectedSessionModelSendable,
