@@ -6,7 +6,7 @@ import {
   type AgentGeneratedImageReadResult,
   type AgentImageGenerationPart,
 } from "@openducktor/contracts";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, notifyManager } from "@tanstack/react-query";
 import { mergeAgentImageGeneration } from "@openducktor/core";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
@@ -18,6 +18,7 @@ import {
   type RuntimeDefinitionsContextValue,
 } from "@/state/app-state-contexts";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
+import * as imageWorkerClient from "@/lib/generated-images/image-worker-client";
 import { agentGeneratedImageQueryKeys } from "@/state/queries/agent-generated-images";
 import { AgentChatImageGeneration } from "./agent-chat-image-generation";
 import { AgentChatImageSessionContext } from "./agent-chat-image-session-context";
@@ -48,6 +49,9 @@ const payload = (input: AgentGeneratedImageReadInput): AgentGeneratedImageReadRe
   byteLength: atob(png).length,
 });
 const images: HTMLImageElement[] = [];
+const imageWaiters = new Map<number, (image: HTMLImageElement) => void>();
+const queryClients = new Set<QueryClient>();
+let decodeImage: ReturnType<typeof spyOn<typeof imageWorkerClient, "decodeGeneratedImage">>;
 const originalImage = globalThis.Image;
 let createUrl: ReturnType<typeof spyOn<typeof URL, "createObjectURL">>;
 let revokeUrl: ReturnType<typeof spyOn<typeof URL, "revokeObjectURL">>;
@@ -97,6 +101,15 @@ class PreviewIntersectionObserver implements IntersectionObserver {
   }
 }
 beforeEach(() => {
+  notifyManager.setNotifyFunction((notify) => {
+    act(notify);
+  });
+  decodeImage = spyOn(imageWorkerClient, "decodeGeneratedImage").mockImplementation(
+    async (_data, signal) => {
+      signal.throwIfAborted();
+      return Uint8Array.from(atob(png), (character) => character.charCodeAt(0)).buffer;
+    },
+  );
   images.length = 0;
   initiallyVisible = true;
   observers.length = 0;
@@ -104,14 +117,23 @@ beforeEach(() => {
   globalThis.Image = class extends originalImage {
     constructor() {
       super();
+      const index = images.length;
       images.push(this);
+      imageWaiters.get(index)?.(this);
+      imageWaiters.delete(index);
     }
   };
   let next = 0;
   createUrl = spyOn(URL, "createObjectURL").mockImplementation(() => `blob:image-${++next}`);
   revokeUrl = spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
 });
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all([...queryClients].map((client) => client.cancelQueries()));
+  for (const client of queryClients) client.clear();
+  queryClients.clear();
+  imageWaiters.clear();
+  notifyManager.setNotifyFunction((notify) => notify());
+  decodeImage.mockRestore();
   globalThis.Image = originalImage;
   globalThis.IntersectionObserver = originalObserver;
   createUrl.mockRestore();
@@ -182,6 +204,7 @@ const harness = (
   describe?: AgentOperationsContextValue["describeGeneratedImages"],
 ) => {
   const client = new QueryClient();
+  queryClients.add(client);
   const runtimeDefinitions = definitions(supported);
   const actions = operations(read);
   if (describe) actions.describeGeneratedImages = describe;
@@ -202,9 +225,14 @@ const harness = (
   const view = render(content(ref, initialPart), { wrapper: Wrapper });
   return { client, read, view, content };
 };
+const waitForImage = (index = 0): Promise<HTMLImageElement> => {
+  const image = images[index];
+  return image
+    ? Promise.resolve(image)
+    : new Promise((resolve) => imageWaiters.set(index, resolve));
+};
 const loadImage = async (index = 0) => {
-  await waitFor(() => expect(images.length).toBeGreaterThan(index));
-  const image = images[index]!;
+  const image = await waitForImage(index);
   Object.defineProperties(image, { naturalWidth: { value: 200 }, naturalHeight: { value: 100 } });
   await act(async () => {
     image.onload?.(new Event("load"));
@@ -213,7 +241,8 @@ const loadImage = async (index = 0) => {
 
 test("waits for PNG decode then shares one URL between thumbnail and accessible dialog", async () => {
   const { view, client } = harness();
-  await waitFor(() => expect(images).toHaveLength(1));
+  await waitForImage();
+  expect(images).toHaveLength(1);
   expect(screen.queryByRole("button", { name: "Open generated image preview" })).toBeNull();
   await loadImage();
   const trigger = screen.getByRole("button", { name: "Open generated image preview" });
@@ -268,7 +297,8 @@ test("reveals the full prompt on request and keeps the preview header short", as
 
 test("truncated PNGs stay completed with a visible preview error", async () => {
   harness();
-  await waitFor(() => expect(images).toHaveLength(1));
+  await waitForImage();
+  expect(images).toHaveLength(1);
   await act(async () => {
     images[0]!.onerror?.(new Event("error"));
   });
@@ -302,7 +332,8 @@ for (const field of ["externalSessionId", "repoPath"] as const) {
 
 test("switching during decode revokes the old URL and ignores a captured stale callback", async () => {
   const { view, content } = harness();
-  await waitFor(() => expect(images).toHaveLength(1));
+  await waitForImage();
+  expect(images).toHaveLength(1);
   const staleLoad = images[0]!.onload!;
   view.rerender(content({ ...ref, externalSessionId: "other" }));
   expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
@@ -316,7 +347,8 @@ test("switching during decode revokes the old URL and ignores a captured stale c
 
 test("a changed output revision replaces the preview and ignores the previous decode", async () => {
   const { view, content, read } = harness();
-  await waitFor(() => expect(images).toHaveLength(1));
+  await waitForImage();
+  expect(images).toHaveLength(1);
   const staleLoad = images[0]!.onload!;
   view.rerender(content(ref, { ...part, output: { revision: "new-output" } }));
   expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
