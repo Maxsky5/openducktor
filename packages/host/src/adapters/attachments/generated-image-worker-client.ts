@@ -194,11 +194,18 @@ export const createGeneratedImageWorkers = (
       );
 
     // This Promise callback is the Codex adapter boundary. Preserve its caller's cancellation.
-    const prepareHistory: CodexImageGenerationPreparer = async (images, signal) => {
+    const prepareHistory: CodexImageGenerationPreparer = async (
+      images,
+      signal,
+      purpose = "history",
+    ) => {
       const exit = await Effect.runPromiseExit(
         Effect.forEach(
           images,
-          (image) => run(image.item.id, (channel) => prepareHistoryImage(channel, image)),
+          (image) =>
+            purpose === "history" && image.item.savedPath !== undefined
+              ? Effect.succeed(codexImageGenerationPart(image.item, image.context))
+              : run(image.item.id, (channel) => prepareHistoryImage(channel, image)),
           { concurrency: 1 },
         ),
         signal ? { signal } : undefined,

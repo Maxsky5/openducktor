@@ -101,4 +101,5 @@ export type CodexImageGenerationPreparation = {
 export type CodexImageGenerationPreparer = (
   images: readonly CodexImageGenerationPreparation[],
   signal?: AbortSignal,
+  purpose?: "history" | "preview",
 ) => Promise<AgentImageGenerationPart[]>;

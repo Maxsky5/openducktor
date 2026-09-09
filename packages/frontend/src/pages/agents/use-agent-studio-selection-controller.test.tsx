@@ -196,6 +196,9 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
     current: createRepoRuntimeHealthContextValue(contextOverrides.repoRuntimeHealthContext),
   };
   const agentOperationsValue = (): AgentOperationsContextValue => ({
+    describeGeneratedImages: async () => {
+      throw new Error("Unexpected image metadata read");
+    },
     beginGeneratedImageBatch: async () => {
       throw new Error("Unexpected beginGeneratedImageBatch");
     },

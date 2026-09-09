@@ -342,6 +342,9 @@ const createWorkspacePresenceValue = (): WorkspacePresenceContextValue => ({
 });
 
 const createAgentOperationsValue = (): AgentOperationsContextValue => ({
+  describeGeneratedImages: async () => {
+    throw new Error("Unexpected image metadata read");
+  },
   beginGeneratedImageBatch: async () => {
     throw new Error("Unexpected beginGeneratedImageBatch");
   },

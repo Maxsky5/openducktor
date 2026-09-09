@@ -3,6 +3,7 @@ import {
   LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT,
   LOCAL_ATTACHMENT_BYTE_LIMIT,
   type AgentGeneratedImageBatch,
+  type AgentGeneratedImageBatchResult,
   type AgentGeneratedImageBatchInput,
   type AgentGeneratedImageDescribeInput,
   type AgentGeneratedImageDescribeResult,
@@ -20,6 +21,8 @@ import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexAppServerClient, CodexThreadHistoryReadResponse } from "./types";
 
 const MAX_RUNTIME_IMAGE_BATCHES = 2;
+// Reserve 96 MiB per batch, including active reads, using two bytes per string character.
+const IMAGE_BATCH_RETAINED_BYTE_LIMIT = 96 * 1024 * 1024;
 const IMAGE_BATCH_LIFETIME_MS = 120_000;
 type ImageIdentity = AgentGeneratedImageDescribeInput["images"][number];
 type BatchItem = {
@@ -31,12 +34,15 @@ type ImageBatch = {
   items: Map<string, BatchItem>;
   cancellation: AbortController;
   deadline: number;
+  activeReads: number;
+  released: boolean;
   timer: ReturnType<typeof setTimeout>;
 };
 type ImageRuntime = {
   reads: Map<string, Promise<CodexThreadHistoryReadResponse | undefined>>;
   cancellation: AbortController;
   batches: Map<string, ImageBatch>;
+  reservations: Set<ImageBatch>;
 };
 type ImageReadOwner = {
   runtimeId: string;
@@ -60,6 +66,7 @@ export class CodexGeneratedImageResolver {
         reads: new Map(),
         cancellation: new AbortController(),
         batches: new Map(),
+        reservations: new Set(),
       });
   }
 
@@ -83,7 +90,7 @@ export class CodexGeneratedImageResolver {
   async beginBatch(
     input: AgentGeneratedImageBatchInput,
     signal?: AbortSignal,
-  ): Promise<AgentGeneratedImageBatch> {
+  ): Promise<AgentGeneratedImageBatchResult> {
     const owner = await this.resolveOwner(input.ref, signal);
     if (
       input.images.length === 0 ||
@@ -91,24 +98,29 @@ export class CodexGeneratedImageResolver {
       new Set(input.images.map(imageKey)).size !== input.images.length
     )
       throw new Error("An image batch must contain one to eight distinct images.");
-    if (owner.runtime.batches.size >= MAX_RUNTIME_IMAGE_BATCHES)
+    if (owner.runtime.reservations.size >= MAX_RUNTIME_IMAGE_BATCHES)
       throw new Error(
         "The runtime already has two image preview batches. Close a preview before opening another batch.",
       );
     const batchId = crypto.randomUUID();
     const batch: ImageBatch = {
       ref: { ...input.ref },
+      activeReads: 1,
+      released: false,
       items: new Map(),
       cancellation: new AbortController(),
       deadline: Date.now() + IMAGE_BATCH_LIFETIME_MS,
       timer: setTimeout(() => releaseBatch(owner.runtime, batchId), IMAGE_BATCH_LIFETIME_MS),
     };
     owner.runtime.batches.set(batchId, batch);
+    owner.runtime.reservations.add(batch);
     try {
       const response = await this.readHistory(owner, input.ref);
       this.assertCurrent(owner);
       if (owner.runtime.batches.get(batchId) !== batch)
         throw new Error("The image preview batch expired. Reopen the preview.");
+      let retainedBytes = 0;
+      const admittedImages: AgentGeneratedImageBatchInput["images"] = [];
       for (const identity of input.images) {
         let result: BatchItem["result"];
         try {
@@ -117,12 +129,18 @@ export class CodexGeneratedImageResolver {
           if (!(error instanceof Error)) throw error;
           result = { error };
         }
+        const bytes = "preparation" in result ? result.preparation.item.result.length * 2 : 0;
+        if (retainedBytes + bytes > IMAGE_BATCH_RETAINED_BYTE_LIMIT) continue;
+        retainedBytes += bytes;
+        admittedImages.push(identity);
         batch.items.set(imageKey(identity), { revision: identity.revision, result });
       }
-      return { ref: batch.ref, batchId };
+      return { ref: batch.ref, batchId, admittedImages };
     } catch (error) {
       releaseBatch(owner.runtime, batchId);
       throw error;
+    } finally {
+      finishBatchRead(owner.runtime, batch);
     }
   }
 
@@ -151,48 +169,55 @@ export class CodexGeneratedImageResolver {
   ): Promise<AgentGeneratedImageSource> {
     const owner = await this.resolveOwner(input.ref, signal);
     let preparation: CodexImageGenerationPreparation;
-    if (input.batchId !== undefined) {
-      const batch = owner.runtime.batches.get(input.batchId);
-      if (!batch || !sameRef(batch.ref, input.ref) || Date.now() >= batch.deadline) {
-        if (batch && sameRef(batch.ref, input.ref)) releaseBatch(owner.runtime, input.batchId);
-        throw unavailable(
-          input.itemId,
-          "the preview batch expired or belongs to another session. Reopen the preview.",
-        );
+    let activeBatch: ImageBatch | undefined;
+    try {
+      if (input.batchId !== undefined) {
+        const batch = owner.runtime.batches.get(input.batchId);
+        if (!batch || !sameRef(batch.ref, input.ref) || Date.now() >= batch.deadline) {
+          if (batch && sameRef(batch.ref, input.ref)) releaseBatch(owner.runtime, input.batchId);
+          throw unavailable(
+            input.itemId,
+            "the preview batch expired or belongs to another session. Reopen the preview.",
+          );
+        }
+        const selected = batch.items.get(imageKey(input));
+        if (!selected || selected.revision !== input.revision)
+          throw unavailable(
+            input.itemId,
+            "the preview batch does not contain this output revision. Reopen the preview.",
+          );
+        activeBatch = batch;
+        batch.activeReads++;
+        batch.items.delete(imageKey(input));
+        owner.signal = AbortSignal.any([owner.signal, batch.cancellation.signal]);
+        if ("error" in selected.result) throw selected.result.error;
+        preparation = selected.result.preparation;
+      } else {
+        preparation = selectImage(await this.readHistory(owner, input.ref), input);
       }
-      const selected = batch.items.get(imageKey(input));
-      if (!selected || selected.revision !== input.revision)
+      this.assertCurrent(owner);
+      const { item } = preparation;
+      if (item.status !== "completed")
+        throw unavailable(input.itemId, "generation has no completed result.");
+      // The host verifies the requested digest against the bytes from its open file handle.
+      if (item.savedPath !== undefined)
+        return { representation: "saved_file", path: item.savedPath, revision: input.revision };
+      const [part] = await this.prepare([{ item, context: {} }], owner.signal);
+      this.assertCurrent(owner);
+      if (!part?.output)
         throw unavailable(
           input.itemId,
-          "the preview batch does not contain this output revision. Reopen the preview.",
+          "the runtime returned no saved file or inline image. Check the runtime response.",
         );
-      batch.items.delete(imageKey(input));
-      owner.signal = AbortSignal.any([owner.signal, batch.cancellation.signal]);
-      if ("error" in selected.result) throw selected.result.error;
-      preparation = selected.result.preparation;
-    } else {
-      preparation = selectImage(await this.readHistory(owner, input.ref), input);
+      if (part.output.revision !== input.revision)
+        throw unavailable(
+          input.itemId,
+          "the generated output changed. Reload the session history before opening the preview.",
+        );
+      return { representation: "inline", base64: item.result };
+    } finally {
+      if (activeBatch) finishBatchRead(owner.runtime, activeBatch);
     }
-    this.assertCurrent(owner);
-    const { item } = preparation;
-    if (item.status !== "completed")
-      throw unavailable(input.itemId, "generation has no completed result.");
-    // The host verifies the requested digest against the bytes from its open file handle.
-    if (item.savedPath !== undefined)
-      return { representation: "saved_file", path: item.savedPath, revision: input.revision };
-    const [part] = await this.prepare([{ item, context: {} }], owner.signal);
-    this.assertCurrent(owner);
-    if (!part?.output)
-      throw unavailable(
-        input.itemId,
-        "the runtime returned no saved file or inline image. Check the runtime response.",
-      );
-    if (part.output.revision !== input.revision)
-      throw unavailable(
-        input.itemId,
-        "the generated output changed. Reload the session history before opening the preview.",
-      );
-    return { representation: "inline", base64: item.result };
   }
 
   private async resolveOwner(
@@ -257,7 +282,7 @@ export class CodexGeneratedImageResolver {
 
   private async prepare(images: readonly CodexImageGenerationPreparation[], signal: AbortSignal) {
     const parts = this.prepareImages
-      ? await this.prepareImages(images, signal)
+      ? await this.prepareImages(images, signal, "preview")
       : images.map(({ item, context }) => codexImageGenerationPart(item, context));
     signal.throwIfAborted();
     if (
@@ -287,7 +312,13 @@ const releaseBatch = (runtime: ImageRuntime, batchId: string): void => {
   clearTimeout(batch.timer);
   batch.cancellation.abort(new Error("The image preview batch was released. Reopen the preview."));
   batch.items.clear();
+  batch.released = true;
   runtime.batches.delete(batchId);
+  if (batch.activeReads === 0) runtime.reservations.delete(batch);
+};
+const finishBatchRead = (runtime: ImageRuntime, batch: ImageBatch): void => {
+  batch.activeReads--;
+  if (batch.released && batch.activeReads === 0) runtime.reservations.delete(batch);
 };
 const selectImage = (
   response: CodexThreadHistoryReadResponse,

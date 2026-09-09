@@ -1,8 +1,9 @@
-import { expect, mock, test } from "bun:test";
+import { afterEach, expect, mock, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   codexImageGenerationPart,
   type CodexImageGenerationPreparation,
+  type CodexImageGenerationPreparer,
 } from "@openducktor/adapters-codex-app-server";
 import { LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT } from "@openducktor/contracts";
 import { prepareCodexImageGenerations } from "./image-history-worker-client";
@@ -27,10 +28,27 @@ const image = (result: string, id = "image"): CodexImageGenerationPreparation =>
 const digest = (result: string) =>
   createHash("sha256").update("inline\0").update(result).digest("hex");
 
-test("real history worker hashes an oversized inline result without changing its completed outcome", async () => {
-  const source = image("A".repeat(LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT + 1));
+const pendingJobs = new Map<ReturnType<CodexImageGenerationPreparer>, AbortController>();
+const prepareHistory: CodexImageGenerationPreparer = (images, signal) => {
+  const cancellation = new AbortController();
+  const pending = prepareCodexImageGenerations(
+    images,
+    signal ? AbortSignal.any([signal, cancellation.signal]) : cancellation.signal,
+  );
+  pendingJobs.set(pending, cancellation);
+  return pending;
+};
+const cleanupJobs = async () => {
+  for (const cancellation of pendingJobs.values()) cancellation.abort();
+  await Promise.allSettled(pendingJobs.keys());
+  pendingJobs.clear();
+};
+afterEach(cleanupJobs);
+
+test("real history worker hashes multiple inline chunks without changing their completed outcome", async () => {
+  const source = image("A".repeat(IMAGE_HISTORY_CHUNK_BYTES + 1));
   const expected = digest(source.item.result);
-  const parts = await prepareCodexImageGenerations([source]);
+  const parts = await prepareHistory([source]);
   expect(parts).toMatchObject([{ status: "completed", output: { revision: expected } }]);
 });
 
@@ -57,7 +75,7 @@ test("real history worker preserves Unicode across chunks and keeps native item 
       context: { turnStatus: "interrupted" as const },
     },
   ];
-  expect(await prepareCodexImageGenerations(sources)).toEqual(
+  expect(await prepareHistory(sources)).toEqual(
     sources.map(({ item, context }) => codexImageGenerationPart(item, context)),
   );
 });
@@ -91,6 +109,7 @@ const withWorkers = async (work: (workers: HeldWorker[]) => Promise<void>) => {
   try {
     await work(workers);
   } finally {
+    await cleanupJobs();
     Object.defineProperty(globalThis, "Worker", descriptor);
   }
 };
@@ -100,7 +119,7 @@ test("many large images transfer one bounded chunk per acknowledgment without cl
     const sources = Array.from({ length: 8 }, (_, index) =>
       image("界".repeat(IMAGE_HISTORY_CHUNK_BYTES), String(index)),
     );
-    const pending = prepareCodexImageGenerations(sources);
+    const pending = prepareHistory(sources);
     await Promise.resolve();
     const worker = workers[0]!;
     let count = 0;
@@ -152,7 +171,7 @@ for (const failure of [
   test(`${failure} stops history chunks and ignores a late acknowledgment`, async () => {
     await withWorkers(async (workers) => {
       const controller = new AbortController();
-      const pending = prepareCodexImageGenerations(
+      const pending = prepareHistory(
         [image("A".repeat(IMAGE_HISTORY_CHUNK_BYTES * 2))],
         controller.signal,
       );
@@ -192,10 +211,9 @@ test("history admits two workers, removes cancelled waiters, and releases failed
   await withWorkers(async (workers) => {
     const controllers = Array.from({ length: 4 }, () => new AbortController());
     const pending = controllers.map(({ signal }) =>
-      prepareCodexImageGenerations(
-        [image("A".repeat(IMAGE_HISTORY_CHUNK_BYTES * 2))],
-        signal,
-      ).catch((error: Error) => error),
+      prepareHistory([image("A".repeat(IMAGE_HISTORY_CHUNK_BYTES * 2))], signal).catch(
+        (error: Error) => error,
+      ),
     );
     await Promise.resolve();
     expect(workers).toHaveLength(2);
@@ -216,5 +234,57 @@ test("history admits two workers, removes cancelled waiters, and releases failed
     const results = await Promise.all(pending);
     expect(results[2]).toEqual(new Error("queued cancellation"));
     expect(workers.every((worker) => worker.terminate.mock.calls.length === 1)).toBe(true);
+  });
+});
+
+test("oversized inline history crosses the transport without a whole-result message", async () => {
+  await withWorkers(async (workers) => {
+    const source = image("A".repeat(LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT + 1));
+    const pending = prepareHistory([source]);
+    await Promise.resolve();
+    const worker = workers[0]!;
+    let transferred = 0;
+    for (let index = 0; index < worker.requests.length; index++) {
+      const request = worker.requests[index]!;
+      if (request.kind === "start") expect(request.image.item.result).toBe("");
+      if (request.kind === "chunk") {
+        expect(request.bytes.byteLength).toBeLessThanOrEqual(IMAGE_HISTORY_CHUNK_BYTES);
+        transferred += request.bytes.byteLength;
+      }
+      worker.reply(
+        request.kind === "end"
+          ? {
+              id: request.id,
+              kind: "part",
+              part: codexImageGenerationPart(
+                { ...source.item, result: "" },
+                source.context,
+                "prepared-revision",
+              ),
+            }
+          : { id: request.id, kind: "ack" },
+      );
+      await Promise.resolve();
+    }
+    expect(transferred).toBe(source.item.result.length);
+    expect(await pending).toMatchObject([
+      { status: "completed", output: { revision: "prepared-revision" } },
+    ]);
+  });
+});
+
+test("test cleanup releases a stalled worker even when an assertion fails", async () => {
+  await expect(
+    withWorkers(async () => {
+      void prepareHistory([image("stalled")]).catch(() => {});
+      await Promise.resolve();
+      throw new Error("assertion failed");
+    }),
+  ).rejects.toThrow("assertion failed");
+  await withWorkers(async (workers) => {
+    void prepareHistory([image("first")]).catch(() => {});
+    void prepareHistory([image("second")]).catch(() => {});
+    await Promise.resolve();
+    expect(workers).toHaveLength(2);
   });
 });

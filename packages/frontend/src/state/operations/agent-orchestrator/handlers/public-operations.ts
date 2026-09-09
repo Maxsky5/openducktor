@@ -51,6 +51,7 @@ type CreatePublicOperationsArgs = {
     AgentEnginePort,
     | "loadSessionTodos"
     | "loadSessionHistory"
+    | "describeGeneratedImages"
     | "readGeneratedImage"
     | "beginGeneratedImageBatch"
     | "releaseGeneratedImageBatch"
@@ -77,6 +78,7 @@ export const createOrchestratorPublicOperations = ({
   loadAgentSessionHistory,
   loadAgentSessionContext,
 }: CreatePublicOperationsArgs): AgentOperationsContextValue => ({
+  describeGeneratedImages: (input) => agentEngine.describeGeneratedImages(input),
   beginGeneratedImageBatch: (input) => agentEngine.beginGeneratedImageBatch(input),
   releaseGeneratedImageBatch: (input) => agentEngine.releaseGeneratedImageBatch(input),
   readGeneratedImage: (input) => agentEngine.readGeneratedImage(input),

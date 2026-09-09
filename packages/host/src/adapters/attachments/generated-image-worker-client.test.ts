@@ -64,14 +64,7 @@ test("history chunks preserve revisions, Unicode boundaries, and native outcomes
   });
   try {
     expect(await workers.prepareHistory(images)).toEqual(
-      images.map(({ item, context }) =>
-        item.savedPath
-          ? expect.objectContaining({
-              ...codexImageGenerationPart(item, context),
-              previewUnavailableReason: expect.stringContaining("readable"),
-            })
-          : codexImageGenerationPart(item, context),
-      ),
+      images.map(({ item, context }) => codexImageGenerationPart(item, context)),
     );
     expect(lengths.length).toBeGreaterThan(2);
     expect(Math.max(...lengths)).toBeLessThanOrEqual(1024 * 1024);

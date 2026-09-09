@@ -5,6 +5,11 @@ import {
 } from "@openducktor/contracts";
 import type { AgentGeneratedImageReadPort } from "@openducktor/core";
 
+type BatchReader = Pick<
+  AgentGeneratedImageReadPort,
+  "beginGeneratedImageBatch" | "releaseGeneratedImageBatch" | "readGeneratedImage"
+>;
+
 type Job = {
   input: AgentGeneratedImageReadInput;
   signal: AbortSignal;
@@ -19,7 +24,7 @@ const queues = new WeakMap<
 >();
 
 export const batchImagePreview = (
-  reader: AgentGeneratedImageReadPort,
+  reader: BatchReader,
   input: AgentGeneratedImageReadInput,
   signal: AbortSignal,
   work: Job["work"],
@@ -57,7 +62,7 @@ export const batchImagePreview = (
   return result;
 };
 
-const drain = async (reader: AgentGeneratedImageReadPort, queue: Queue): Promise<void> => {
+const drain = async (reader: BatchReader, queue: Queue): Promise<void> => {
   while (queue.jobs.length > 0) {
     const jobs: Job[] = [];
     const identities = new Set<string>();
@@ -87,6 +92,7 @@ const drain = async (reader: AgentGeneratedImageReadPort, queue: Queue): Promise
         }),
       });
       let results: PromiseSettledResult<Blob>[];
+      let admitted: Job[] = [];
       try {
         if (
           batch.ref.repoPath !== first.input.ref.repoPath ||
@@ -95,17 +101,35 @@ const drain = async (reader: AgentGeneratedImageReadPort, queue: Queue): Promise
           batch.ref.externalSessionId !== first.input.ref.externalSessionId
         )
           throw new Error("The preview batch belongs to another session. Reopen the session.");
+        const keys = new Set(
+          batch.admittedImages.map((image) =>
+            JSON.stringify([image.turnId ?? null, image.itemId, image.revision]),
+          ),
+        );
+        admitted = jobs.filter(({ input }) =>
+          keys.has(JSON.stringify([input.turnId ?? null, input.itemId, input.revision])),
+        );
+        if (
+          admitted.length === 0 ||
+          admitted.length !== batch.admittedImages.length ||
+          keys.size !== batch.admittedImages.length
+        )
+          throw new Error(
+            "The preview batch returned invalid image admission. Reopen the session.",
+          );
         results = await Promise.allSettled(
-          jobs.map(async (job) => {
+          admitted.map(async (job) => {
             job.signal.throwIfAborted();
             return job.work({ ...job.input, batchId: batch.batchId });
           }),
         );
       } finally {
-        await reader.releaseGeneratedImageBatch(batch);
+        await reader.releaseGeneratedImageBatch({ ref: batch.ref, batchId: batch.batchId });
       }
+      const admittedJobs = new Set(admitted);
+      queue.jobs.unshift(...jobs.filter((job) => !admittedJobs.has(job)));
       results.forEach((result, index) => {
-        const job = jobs[index];
+        const job = admitted[index];
         if (!job) return;
         if (job.signal.aborted) job.reject(job.signal.reason);
         else if (result.status === "fulfilled") job.resolve(result.value);

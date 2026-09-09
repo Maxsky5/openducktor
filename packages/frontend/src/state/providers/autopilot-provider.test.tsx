@@ -94,6 +94,9 @@ const createNotificationContext = (
 const agentOperations: AgentOperationsContextValue = {
   readSessionTodos: async () => [],
   readSessionHistory: async () => [],
+  describeGeneratedImages: async () => {
+    throw new Error("Unexpected image metadata read");
+  },
   beginGeneratedImageBatch: async () => {
     throw new Error("Unexpected beginGeneratedImageBatch");
   },

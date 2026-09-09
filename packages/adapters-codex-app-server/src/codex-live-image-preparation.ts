@@ -1,5 +1,8 @@
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
-import type { CodexImageGenerationPreparer } from "./codex-image-generation";
+import {
+  codexImageGenerationPart,
+  type CodexImageGenerationPreparer,
+} from "./codex-image-generation";
 import type { CodexRuntimeNotification } from "./codex-runtime-event-schema";
 
 /** Own worker cancellation without making the synchronous mapper pipeline asynchronous. */
@@ -27,6 +30,10 @@ export class CodexLiveImagePreparation {
     )
       return undefined;
     const { item, turnId, threadId } = notification.params;
+    const context = { turnId, liveStart: notification.method === "item/started" };
+    const nativePart = codexImageGenerationPart({ ...item, result: "" }, context);
+    if (item.status !== "completed" || (item.result.length === 0 && item.savedPath === undefined))
+      return nativePart;
     const cancellation = new AbortController();
     this.pending.set(cancellation, { runtimeId, threadId, ownerThreadId });
     try {
@@ -34,7 +41,7 @@ export class CodexLiveImagePreparation {
         [
           {
             item,
-            context: { turnId, liveStart: notification.method === "item/started" },
+            context,
           },
         ],
         cancellation.signal,
@@ -48,7 +55,13 @@ export class CodexLiveImagePreparation {
       return part;
     } catch (error) {
       if (cancellation.signal.aborted) return null;
-      throw error;
+      return {
+        ...nativePart,
+        previewUnavailableReason:
+          error instanceof Error && error.message
+            ? `${error.message} Reopen the preview.`
+            : "Image preview preparation failed. Reopen the preview.",
+      };
     } finally {
       this.pending.delete(cancellation);
     }

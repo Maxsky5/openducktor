@@ -14,7 +14,7 @@ const agentGeneratedImageQueryOptions = (
 ) =>
   queryOptions(input, {
     readGeneratedImage: read,
-    beginGeneratedImageBatch: async ({ ref }) => ({ ref, batchId }),
+    beginGeneratedImageBatch: async ({ ref, images }) => ({ ref, batchId, admittedImages: images }),
     releaseGeneratedImageBatch: async () => {},
   });
 
@@ -247,8 +247,9 @@ test("eight preview queries share one batch while two reads run and one bad imag
   let active = 0;
   let maximum = 0;
   const began = mock(
-    async ({ ref }: import("@openducktor/contracts").AgentGeneratedImageBatchInput) => ({
+    async ({ ref, images }: import("@openducktor/contracts").AgentGeneratedImageBatchInput) => ({
       ref,
+      admittedImages: images,
       batchId,
     }),
   );
@@ -297,8 +298,9 @@ test("eight preview queries share one batch while two reads run and one bad imag
 test("new work at batch completion and concurrent revisions both reach a fresh batch", async () => {
   const client = new QueryClient();
   const begin = mock(
-    async ({ ref }: import("@openducktor/contracts").AgentGeneratedImageBatchInput) => ({
+    async ({ ref, images }: import("@openducktor/contracts").AgentGeneratedImageBatchInput) => ({
       ref,
+      admittedImages: images,
       batchId,
     }),
   );
@@ -318,6 +320,44 @@ test("new work at batch completion and concurrent revisions both reach a fresh b
     expect(begin.mock.calls.flatMap(([request]) => request.images)).toHaveLength(3);
     for (const [request] of begin.mock.calls)
       expect(new Set(request.images.map(({ itemId }) => itemId)).size).toBe(request.images.length);
+  } finally {
+    client.clear();
+  }
+});
+
+test("partial batch admission queues excess images until release", async () => {
+  const client = new QueryClient();
+  const events: string[] = [];
+  const begin = mock(
+    async ({ ref, images }: import("@openducktor/contracts").AgentGeneratedImageBatchInput) => {
+      events.push(`begin:${images[0]!.itemId}`);
+      return { ref, batchId, admittedImages: images.slice(0, 1) };
+    },
+  );
+  const read = mock(async (request: AgentGeneratedImageReadInput) => {
+    events.push(`read:${request.itemId}`);
+    return payload(request);
+  });
+  const reader = {
+    beginGeneratedImageBatch: begin,
+    releaseGeneratedImageBatch: async () => {
+      events.push("release");
+    },
+    readGeneratedImage: read,
+  };
+  try {
+    const pending = Array.from({ length: 4 }, (_, index) =>
+      client.fetchQuery(queryOptions({ ...input, itemId: `partial-${index}` }, reader)),
+    );
+    expect((await Promise.all(pending)).every((blob) => blob instanceof Blob)).toBe(true);
+    expect(read).toHaveBeenCalledTimes(4);
+    expect(events).toEqual(
+      Array.from({ length: 4 }, (_, index) => [
+        `begin:partial-${index}`,
+        `read:partial-${index}`,
+        "release",
+      ]).flat(),
+    );
   } finally {
     client.clear();
   }

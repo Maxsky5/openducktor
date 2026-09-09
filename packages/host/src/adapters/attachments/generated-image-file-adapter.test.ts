@@ -328,7 +328,7 @@ test("saved file revisions follow bytes and reject replacement between metadata 
       context: { turnId: "turn" },
     },
   ];
-  const [first] = await workers.prepareHistory(preparation);
+  const [first] = await workers.prepareHistory(preparation, undefined, "preview");
   expect(first?.status).toBe("completed");
   expect(first?.output?.revision).toBe(
     createHash("sha256").update("saved_file\0").update(png).digest("hex"),
@@ -344,7 +344,7 @@ test("saved file revisions follow bytes and reject replacement between metadata 
       ),
     ),
   ).rejects.toThrow("changed");
-  const [second] = await workers.prepareHistory(preparation);
+  const [second] = await workers.prepareHistory(preparation, undefined, "preview");
   expect(second?.output?.revision).not.toBe(first?.output?.revision);
   const payload = await Effect.runPromise(
     reader.read(
@@ -354,10 +354,42 @@ test("saved file revisions follow bytes and reject replacement between metadata 
   );
   expect(payload.base64).toBe(changed.toString("base64"));
   await rm(path);
-  const [missing] = await workers.prepareHistory(preparation);
+  const [missing] = await workers.prepareHistory(preparation, undefined, "preview");
   expect(missing).toMatchObject({
     status: "completed",
     previewUnavailableReason: expect.stringContaining("readable"),
   });
   expect(missing?.output).toBeUndefined();
+});
+
+test("saved file history metadata does not open files", async () => {
+  const openFile = spyOn(fs, "open");
+  try {
+    const parts = await workers.prepareHistory(
+      Array.from({ length: 80 }, (_, index) => ({
+        item: {
+          type: "imageGeneration" as const,
+          id: `saved-${index}`,
+          status: "completed",
+          result: "ignored",
+          revisedPrompt: null,
+          failure: null,
+          savedPath: "/missing/image.png",
+        },
+        context: { turnId: "turn" },
+      })),
+    );
+    expect(openFile).not.toHaveBeenCalled();
+    expect(parts).toHaveLength(80);
+    expect(
+      parts.every(
+        (part) =>
+          part.status === "completed" &&
+          part.output === undefined &&
+          part.previewUnavailableReason === undefined,
+      ),
+    ).toBe(true);
+  } finally {
+    openFile.mockRestore();
+  }
 });

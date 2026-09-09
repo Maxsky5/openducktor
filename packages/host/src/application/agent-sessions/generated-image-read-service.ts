@@ -1,5 +1,6 @@
 import type {
   AgentGeneratedImageBatch,
+  AgentGeneratedImageBatchResult,
   AgentGeneratedImageBatchInput,
   AgentGeneratedImageDescribeInput,
   AgentGeneratedImageDescribeResult,
@@ -19,7 +20,7 @@ import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-
 export type GeneratedImageReadService = {
   beginBatch(
     input: AgentGeneratedImageBatchInput,
-  ): Effect.Effect<AgentGeneratedImageBatch, HostError>;
+  ): Effect.Effect<AgentGeneratedImageBatchResult, HostError>;
   releaseBatch(input: AgentGeneratedImageBatch): Effect.Effect<void, HostError>;
   describe(
     input: AgentGeneratedImageDescribeInput,

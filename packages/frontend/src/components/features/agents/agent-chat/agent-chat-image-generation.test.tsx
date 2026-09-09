@@ -153,8 +153,12 @@ const operations = (
   readGeneratedImage: AgentOperationsContextValue["readGeneratedImage"],
 ): AgentOperationsContextValue => ({
   readGeneratedImage,
-  beginGeneratedImageBatch: async ({ ref }) => ({
+  describeGeneratedImages: async () => {
+    throw new Error("Unexpected image metadata read");
+  },
+  beginGeneratedImageBatch: async ({ ref, images }) => ({
     ref,
+    admittedImages: images,
     batchId: "00000000-0000-4000-8000-000000000000",
   }),
   releaseGeneratedImageBatch: async () => {},
@@ -175,10 +179,12 @@ const harness = (
   read = mock(async (input: AgentGeneratedImageReadInput) => payload(input)),
   supported = true,
   initialPart = part,
+  describe?: AgentOperationsContextValue["describeGeneratedImages"],
 ) => {
   const client = new QueryClient();
   const runtimeDefinitions = definitions(supported);
   const actions = operations(read);
+  if (describe) actions.describeGeneratedImages = describe;
   const Wrapper = ({ children }: PropsWithChildren) => (
     <QueryClientProvider client={client}>
       <RuntimeDefinitionsContext.Provider value={runtimeDefinitions}>
@@ -334,7 +340,7 @@ test("unsupported runtime and completed output without a source never read bytes
   expect(first.read).not.toHaveBeenCalled();
   expect(screen.getByText("This runtime does not support image previews.")).toBeTruthy();
   first.view.unmount();
-  const { output: _output, ...withoutOutput } = part;
+  const { output: _output, savedPath: _savedPath, ...withoutOutput } = part;
   const second = harness(undefined, true, withoutOutput);
   expect(second.read).not.toHaveBeenCalled();
   expect(screen.getByText(/runtime did not report image output/)).toBeTruthy();
@@ -519,6 +525,31 @@ test("an open dialog retains its preview until it closes outside the viewport", 
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
+  } finally {
+    view.unmount();
+    client.clear();
+  }
+});
+
+test("saved file metadata waits for visibility and refreshes its content revision", async () => {
+  initiallyVisible = false;
+  const { output: _output, ...saved } = part;
+  let revision = "saved-first";
+  const describe = mock(async () => ({ ref, images: [{ ...saved, output: { revision } }] }));
+  const { view, client, read } = harness(undefined, true, saved, describe);
+  try {
+    expect(describe).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+    await act(async () => observers[0]?.show(true));
+    await loadImage();
+    expect(describe).toHaveBeenCalledTimes(1);
+    expect(read.mock.calls[0]?.[0].revision).toBe("saved-first");
+    revision = "saved-replaced";
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["agent-generated-image-metadata"] });
+    });
+    await loadImage(1);
+    expect(read.mock.calls[1]?.[0].revision).toBe("saved-replaced");
   } finally {
     view.unmount();
     client.clear();

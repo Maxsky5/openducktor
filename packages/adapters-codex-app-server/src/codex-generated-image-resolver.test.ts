@@ -521,3 +521,53 @@ test("releasing a session during batch history discards the late result", async 
     harness.adapter.releaseRuntime("runtime-live");
   }
 });
+
+test("two near-limit batches retain bounded sources and release reservations after active work stops", async () => {
+  const large = "AAAA".repeat(Math.floor((32 * 1024 * 1024) / 3));
+  const items = Array.from({ length: 8 }, (_, index) => ({
+    ...completed(),
+    id: `large-${index}`,
+    result: large,
+  }));
+  const started = createDeferred<void>();
+  const finish = createDeferred<void>();
+  const prepare: CodexImageGenerationPreparer = async (images) => {
+    started.resolve();
+    await finish.promise;
+    return images.map(({ item, context }) => ({
+      ...codexImageGenerationPart({ ...item, result: "" }, context),
+      output: { revision: "digest" },
+    }));
+  };
+  const { adapter } = createImageHarness(items, "/repo", ref.externalSessionId, prepare);
+  await adapter.prepareRuntime("runtime-live");
+  const images = items.map(({ id }) => ({ itemId: id, turnId: "turn", revision: "digest" }));
+  let pending: Promise<unknown> | undefined;
+  try {
+    const first = await adapter.beginGeneratedImageBatch({ ref, images });
+    const second = await adapter.beginGeneratedImageBatch({ ref, images });
+    expect(first.admittedImages).toEqual(images.slice(0, 1));
+    expect(second.admittedImages).toEqual(images.slice(0, 1));
+    const retainedBytes =
+      (first.admittedImages.length + second.admittedImages.length) * large.length * 2;
+    expect(retainedBytes).toBeLessThanOrEqual(192 * 1024 * 1024);
+    pending = adapter
+      .resolveGeneratedImageSource({ ...first, ...images[0]! })
+      .catch((error) => error);
+    await started.promise;
+    adapter.releaseGeneratedImageBatch(first);
+    await expect(adapter.beginGeneratedImageBatch({ ref, images })).rejects.toThrow(
+      "two image preview batches",
+    );
+    finish.resolve();
+    expect(await pending).toBeInstanceOf(Error);
+    const next = await adapter.beginGeneratedImageBatch({ ref, images: images.slice(1) });
+    expect(next.admittedImages).toEqual(images.slice(1, 2));
+    adapter.releaseGeneratedImageBatch(next);
+    adapter.releaseGeneratedImageBatch(second);
+  } finally {
+    finish.resolve();
+    await pending;
+    adapter.releaseRuntime("runtime-live");
+  }
+});

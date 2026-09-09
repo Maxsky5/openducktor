@@ -40,6 +40,9 @@ describe("useSelectedSessionContextLoad", () => {
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
     const operations: AgentOperationsContextValue = {
+      describeGeneratedImages: async () => {
+        throw new Error("Unexpected image metadata read");
+      },
       beginGeneratedImageBatch: async () => {
         throw new Error("Unexpected beginGeneratedImageBatch");
       },
@@ -93,6 +96,9 @@ describe("useSelectedSessionContextLoad", () => {
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
     const operations: AgentOperationsContextValue = {
+      describeGeneratedImages: async () => {
+        throw new Error("Unexpected image metadata read");
+      },
       beginGeneratedImageBatch: async () => {
         throw new Error("Unexpected beginGeneratedImageBatch");
       },
@@ -143,6 +149,9 @@ describe("useSelectedSessionContextLoad", () => {
       async (_target: AgentSessionContextLoadTarget) => undefined,
     );
     const operations: AgentOperationsContextValue = {
+      describeGeneratedImages: async () => {
+        throw new Error("Unexpected image metadata read");
+      },
       beginGeneratedImageBatch: async () => {
         throw new Error("Unexpected beginGeneratedImageBatch");
       },
@@ -195,6 +204,9 @@ describe("useSelectedSessionContextLoad", () => {
     async (hasModel) => {
       const loadAgentSessionContext = mock(async () => undefined);
       const operations: AgentOperationsContextValue = {
+        describeGeneratedImages: async () => {
+          throw new Error("Unexpected image metadata read");
+        },
         beginGeneratedImageBatch: async () => {
           throw new Error("Unexpected beginGeneratedImageBatch");
         },
@@ -247,6 +259,9 @@ describe("useSelectedSessionContextLoad", () => {
       throw new Error("thread resume failed");
     });
     const operations: AgentOperationsContextValue = {
+      describeGeneratedImages: async () => {
+        throw new Error("Unexpected image metadata read");
+      },
       beginGeneratedImageBatch: async () => {
         throw new Error("Unexpected beginGeneratedImageBatch");
       },

@@ -1,3 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
+import {
+  generatedImageMetadataQueryOptions,
+  type GeneratedImageMetadataInput,
+} from "@/state/queries/agent-generated-image-metadata";
 import type { AgentImageGenerationPart, AgentSessionLiveRef } from "@openducktor/contracts";
 import {
   ChevronDown,
@@ -180,6 +185,17 @@ function CompletedImage({
     return (
       <p className="text-sm text-muted-foreground">This runtime does not support image previews.</p>
     );
+  if (!part.output && part.savedPath !== undefined && !part.previewUnavailableReason) {
+    const input: GeneratedImageMetadataInput = { ref: sessionRef, itemId: part.itemId };
+    if (part.turnId !== undefined) input.turnId = part.turnId;
+    return (
+      <GeneratedImagePreview
+        key={JSON.stringify(input)}
+        input={input}
+        alt={part.revisedPrompt || "Generated image"}
+      />
+    );
+  }
   if (!part.output)
     return (
       <p className="text-sm text-muted-foreground">
@@ -240,7 +256,7 @@ function GeneratedImagePreview({
   input,
   alt,
 }: {
-  input: AgentGeneratedImageQueryInput;
+  input: GeneratedImageMetadataInput & { revision?: string };
   alt: string;
 }): ReactElement {
   const container = useRef<HTMLDivElement>(null);
@@ -264,11 +280,56 @@ function GeneratedImagePreview({
   return (
     <div ref={container} style={{ minHeight: height }}>
       {visible || open ? (
-        <LoadedImagePreview input={input} alt={alt} open={open} onOpenChange={setOpen} />
+        input.revision === undefined ? (
+          <SavedImagePreview input={input} alt={alt} open={open} onOpenChange={setOpen} />
+        ) : (
+          <LoadedImagePreview
+            input={{ ...input, revision: input.revision }}
+            alt={alt}
+            open={open}
+            onOpenChange={setOpen}
+          />
+        )
       ) : (
         <Skeleton className="h-40 w-full" aria-label="Generated image preview" />
       )}
     </div>
+  );
+}
+
+function SavedImagePreview({
+  input,
+  alt,
+  open,
+  onOpenChange,
+}: {
+  input: GeneratedImageMetadataInput;
+  alt: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}): ReactElement {
+  const operations = useAgentOperationsContext();
+  const metadata = useQuery(generatedImageMetadataQueryOptions(input, operations));
+  if (metadata.error)
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        {metadata.error.message}
+      </p>
+    );
+  if (!metadata.data || metadata.isFetching)
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Loading image preview…
+      </p>
+    );
+  return (
+    <LoadedImagePreview
+      key={metadata.data.revision}
+      input={{ ...input, revision: metadata.data.revision }}
+      alt={alt}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
   );
 }
 

@@ -1,7 +1,10 @@
 import type {
+  AgentGeneratedImageDescribeInput,
+  AgentGeneratedImageDescribeResult,
   AgentGeneratedImageReadInput,
   AgentGeneratedImageReadResult,
   AgentGeneratedImageBatch,
+  AgentGeneratedImageBatchResult,
   AgentGeneratedImageBatchInput,
   AgentSessionAssociation,
   AgentSessionControlForkInput,
@@ -309,8 +312,13 @@ export interface AgentWorkspaceInspectionPort {
 }
 
 export interface AgentGeneratedImageReadPort {
+  describeGeneratedImages(
+    input: AgentGeneratedImageDescribeInput,
+  ): Promise<AgentGeneratedImageDescribeResult>;
   readGeneratedImage(input: AgentGeneratedImageReadInput): Promise<AgentGeneratedImageReadResult>;
-  beginGeneratedImageBatch(input: AgentGeneratedImageBatchInput): Promise<AgentGeneratedImageBatch>;
+  beginGeneratedImageBatch(
+    input: AgentGeneratedImageBatchInput,
+  ): Promise<AgentGeneratedImageBatchResult>;
   releaseGeneratedImageBatch(input: AgentGeneratedImageBatch): Promise<void>;
 }
 

@@ -116,6 +116,13 @@ export const agentGeneratedImageBatchSchema = z
   .strict();
 export type AgentGeneratedImageBatch = z.infer<typeof agentGeneratedImageBatchSchema>;
 
+export const agentGeneratedImageBatchResultSchema = agentGeneratedImageBatchSchema
+  .extend({
+    admittedImages: agentGeneratedImageBatchInputSchema.shape.images,
+  })
+  .strict();
+export type AgentGeneratedImageBatchResult = z.infer<typeof agentGeneratedImageBatchResultSchema>;
+
 export const agentGeneratedImageDescribeInputSchema = z
   .object({
     ref: agentSessionLiveRefSchema,

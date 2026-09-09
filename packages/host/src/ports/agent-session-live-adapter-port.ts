@@ -2,6 +2,7 @@ import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentGeneratedImageSource } from "@openducktor/core";
 import type {
   AgentGeneratedImageBatch,
+  AgentGeneratedImageBatchResult,
   AgentGeneratedImageBatchInput,
   AgentGeneratedImageDescribeInput,
   AgentGeneratedImageDescribeResult,
@@ -82,7 +83,7 @@ export type AgentSessionLiveAdapterScope = Pick<AgentSessionLiveRef, "repoPath" 
 type AgentSessionLiveAdapterBase = {
   readonly beginGeneratedImageBatch: (
     input: AgentGeneratedImageBatchInput,
-  ) => Effect.Effect<AgentGeneratedImageBatch, HostError>;
+  ) => Effect.Effect<AgentGeneratedImageBatchResult, HostError>;
   readonly releaseGeneratedImageBatch: (
     input: AgentGeneratedImageBatch,
   ) => Effect.Effect<void, HostError>;

@@ -1,4 +1,3 @@
-import { createHostImagePreparer } from "./codex-host-image-preparer";
 import { prepareCodexImageGenerations } from "@/lib/generated-images/image-worker-client";
 import type {
   CodexJsonRpcRequest,
@@ -57,7 +56,7 @@ export const createCodexAppServerRuntimeAdapter = ({
       repoRuntimeResolver: createHostRepoRuntimeResolver(hostClient),
       transportFactory: createCodexHostTransportFactory(hostClient),
       logSessionPolicy: logCodexSessionPolicy,
-      prepareImageGenerations: createHostImagePreparer(hostClient, prepareCodexImageGenerations),
+      prepareImageGenerations: prepareCodexImageGenerations,
     },
     (input) => hostClient.agentSessionLiveLoadDiff(input),
   );

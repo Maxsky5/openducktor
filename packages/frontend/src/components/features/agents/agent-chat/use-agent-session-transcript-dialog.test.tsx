@@ -148,6 +148,9 @@ describe("AgentSessionTranscriptDialogHost", () => {
         },
       });
       const operations: AgentOperationsContextValue = {
+        describeGeneratedImages: async () => {
+          throw new Error("Unexpected image metadata read");
+        },
         beginGeneratedImageBatch: async () => {
           throw new Error("Unexpected beginGeneratedImageBatch");
         },
@@ -275,6 +278,9 @@ describe("AgentSessionTranscriptDialogHost", () => {
     });
     let historyAttempts = 0;
     const operations: AgentOperationsContextValue = {
+      describeGeneratedImages: async () => {
+        throw new Error("Unexpected image metadata read");
+      },
       beginGeneratedImageBatch: async () => {
         throw new Error("Unexpected beginGeneratedImageBatch");
       },

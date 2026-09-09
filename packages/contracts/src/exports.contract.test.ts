@@ -12,6 +12,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "AGENT_GENERATED_IMAGE_BATCH_LIMIT",
   "agentGeneratedImageBatchInputSchema",
   "agentGeneratedImageBatchSchema",
+  "agentGeneratedImageBatchResultSchema",
   "agentGeneratedImageDescribeInputSchema",
   "agentGeneratedImageDescribeResultSchema",
   "agentGeneratedImageIdentitySchema",

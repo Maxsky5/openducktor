@@ -3,6 +3,7 @@ import {
   type AgentGeneratedImageBatchInput,
   type AgentGeneratedImageDescribeInput,
   agentGeneratedImageBatchSchema,
+  agentGeneratedImageBatchResultSchema,
   agentGeneratedImageBatchInputSchema,
   agentGeneratedImageDescribeInputSchema,
   agentGeneratedImageDescribeResultSchema,
@@ -67,7 +68,7 @@ export class HostAgentSessionLiveClient {
     return this.invokeFn(
       "agent_session_begin_generated_image_batch",
       agentGeneratedImageBatchInputSchema.parse(input),
-      agentGeneratedImageBatchSchema,
+      agentGeneratedImageBatchResultSchema,
     );
   }
 

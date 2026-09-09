@@ -128,14 +128,14 @@ for (const release of ["session", "runtime"] as const) {
   });
 }
 
-for (const failure of ["worker", "identity"] as const) {
-  test(`live image ${failure} failure is reported without synchronous preparation`, async () => {
+for (const failure of ["worker", "identity", "capacity", "deadline", "protocol"] as const) {
+  test(`live image ${failure} failure preserves completion without failing the session`, async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const events: AgentEvent[] = [];
     const { adapter } = createHarness({
       subscribeEvents,
       prepareImageGenerations: async () => {
-        if (failure === "worker") throw new Error("Image worker failed");
+        if (failure !== "identity") throw new Error(`Image worker ${failure} failure`);
         return [];
       },
     });
@@ -146,14 +146,21 @@ for (const failure of ["worker", "identity"] as const) {
     try {
       emitNotification(imageNotification());
       await flushCodexAdapterWork();
-      expect(events.filter((event) => event.type === "assistant_part")).toEqual([]);
-      expect(events.filter((event) => event.type === "session_error")).toMatchObject([
+      expect(events.filter((event) => event.type === "assistant_part")).toMatchObject([
         {
-          message: expect.stringContaining(
-            failure === "worker" ? "Image worker failed" : "wrong item",
-          ),
+          part: {
+            itemId: "image",
+            turnId: "turn",
+            status: "completed",
+            previewUnavailableReason: expect.stringContaining(
+              failure === "identity" ? "wrong item" : failure,
+            ),
+          },
         },
       ]);
+      expect(events.filter((event) => event.type === "session_error")).toEqual([]);
+      const completed = events.find((event) => event.type === "assistant_part");
+      expect(completed?.type === "assistant_part" && completed.part).not.toHaveProperty("output");
     } finally {
       unsubscribe();
       adapter.releaseRuntime("runtime-live");
