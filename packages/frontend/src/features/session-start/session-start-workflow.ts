@@ -273,13 +273,7 @@ const buildPostStartMessage = async ({
     return message;
   }
 
-  // Resolving the default also checks feedback and branch inputs, even with custom text.
-  const baseline = await resolveSessionStartKickoff({ queryClient, intent, task, workspaceId });
-  if (intent.kickoffPrompt !== undefined) {
-    if (!intent.kickoffPrompt.trim()) throw new Error("Kickoff prompt must not be blank.");
-    return intent.kickoffPrompt;
-  }
-  return baseline;
+  return resolveSessionStartKickoff({ queryClient, intent, task, workspaceId });
 };
 
 const runBeforeStartAction = async ({

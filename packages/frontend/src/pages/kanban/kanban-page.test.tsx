@@ -1208,12 +1208,14 @@ describe("KanbanPage session start modal flow", () => {
       variant: "default",
     });
 
+    await waitFor(() => {
+      expect(renderer.getSessionStartModalModel()?.kickoffPromptError).toBe(
+        'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token".',
+      );
+    });
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(sendAgentMessageMock).not.toHaveBeenCalled();
     expect(renderer.getLocation()).toBe("/");
-    expect(renderer.getSessionStartModalModel()?.kickoffPromptError).toBe(
-      'Prompt template "kickoff.build_implementation_start" uses unsupported placeholder "unsupported.token".',
-    );
     expect(publishSessionErrorMock).not.toHaveBeenCalled();
     expect(toastErrorMock).not.toHaveBeenCalled();
 

@@ -2017,6 +2017,43 @@ describe("direct prepared submission", () => {
     }
   });
 
+  test.each([
+    ["spec", "spec_initial"],
+    ["planner", "planner_initial"],
+    ["qa", "qa_review"],
+  ] as const)("starts %s without unrelated repository settings", async (role, launchActionId) => {
+    const start = mock(async () => sessionIdentity("direct"));
+    const send = mock(async () => {});
+    const persist = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role,
+      launchActionId,
+      selectedTask: createTask({
+        status: "ai_review",
+        agentWorkflows: {
+          ...createTask().agentWorkflows,
+          qa: { required: true, canSkip: false, available: true, completed: false },
+        },
+      }),
+      repoSettings: null,
+      setTaskTargetBranch: persist,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      sendAgentMessage: send,
+    });
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        expect(await state.onSend(createComposerDraft("draft"))).toBe(true);
+      });
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(persist).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("rejects an invalid target branch for a prepared Builder", async () => {
     const start = mock(async () => sessionIdentity("never"));
     const send = mock(async () => {});
@@ -2033,6 +2070,31 @@ describe("direct prepared submission", () => {
       await harness.run(async (state) => {
         await expect(state.onSend(createComposerDraft("draft"))).rejects.toThrow(
           "Invalid task target branch",
+        );
+      });
+      expect(start).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("rejects missing repository settings for a prepared Builder", async () => {
+    const start = mock(async () => sessionIdentity("never"));
+    const send = mock(async () => {});
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "build",
+      launchActionId: "build_implementation_start",
+      repoSettings: null,
+      runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
+      sendAgentMessage: send,
+    });
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        await expect(state.onSend(createComposerDraft("draft"))).rejects.toThrow(
+          "Repository settings are unavailable",
         );
       });
       expect(start).not.toHaveBeenCalled();

@@ -441,7 +441,7 @@ const compact = (value: string | undefined): string => {
   return trimmed && trimmed.length > 0 ? trimmed : "(none)";
 };
 
-const resolvePullRequestTarget = (targetBranch: GitTargetBranch | undefined): string => {
+export const resolvePullRequestTarget = (targetBranch: GitTargetBranch | undefined): string => {
   const branch = targetBranch?.branch.trim();
   if (!branch) {
     throw new Error(

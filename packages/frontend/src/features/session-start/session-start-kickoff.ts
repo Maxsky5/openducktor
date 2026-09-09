@@ -16,7 +16,7 @@ export const resolveSessionStartKickoff = async ({
   queryClient: QueryClient;
   intent: Pick<
     SessionStartWorkflowIntent,
-    "taskId" | "role" | "launchActionId" | "message" | "targetBranch"
+    "taskId" | "role" | "launchActionId" | "message" | "targetBranch" | "kickoffPrompt"
   >;
   task: TaskCard | null;
   workspaceId: string | null;
@@ -26,9 +26,9 @@ export const resolveSessionStartKickoff = async ({
   if (!kickoffTemplateId) {
     throw new Error(`Launch action "${intent.launchActionId}" does not define a kickoff prompt.`);
   }
-  const promptOverrides = workspaceId
-    ? await loadEffectivePromptOverrides(workspaceId, queryClient)
-    : undefined;
+  if (intent.kickoffPrompt !== undefined && !intent.kickoffPrompt.trim()) {
+    throw new Error("Kickoff prompt must not be blank.");
+  }
   const taskTargetBranch = intent.targetBranch ?? task?.targetBranch;
   const promptContextInput: Parameters<typeof resolveSessionStartKickoffPromptContext>[0] = {
     templateId: kickoffTemplateId,
@@ -49,6 +49,11 @@ export const resolveSessionStartKickoff = async ({
   }
 
   const promptContext = await resolveSessionStartKickoffPromptContext(promptContextInput);
+  if (intent.kickoffPrompt !== undefined) return intent.kickoffPrompt;
+
+  const promptOverrides = workspaceId
+    ? await loadEffectivePromptOverrides(workspaceId, queryClient)
+    : undefined;
 
   return kickoffPromptForTemplate(intent.role, kickoffTemplateId, intent.taskId, {
     overrides: promptOverrides ?? {},

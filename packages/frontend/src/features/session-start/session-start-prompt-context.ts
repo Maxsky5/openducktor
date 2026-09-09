@@ -1,5 +1,9 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
-import type { AgentKickoffTemplateId, BuildAgentKickoffPromptInput } from "@openducktor/core";
+import {
+  type AgentKickoffTemplateId,
+  type BuildAgentKickoffPromptInput,
+  resolvePullRequestTarget,
+} from "@openducktor/core";
 import { effectiveTaskTargetBranch } from "@/lib/target-branch";
 
 export const FEEDBACK_MESSAGE_REQUIRED_ERROR = "Feedback message is required before sending.";
@@ -40,9 +44,11 @@ const resolvePullRequestPrompt: KickoffPromptContextResolver = async ({
   loadRepoDefaultTargetBranch,
 }) => {
   const repoDefaultTargetBranch = taskTargetBranch ? null : await loadRepoDefaultTargetBranch();
+  const targetBranch = effectiveTaskTargetBranch(taskTargetBranch, repoDefaultTargetBranch);
+  resolvePullRequestTarget(targetBranch);
   return {
     git: {
-      targetBranch: effectiveTaskTargetBranch(taskTargetBranch, repoDefaultTargetBranch),
+      targetBranch,
     },
   };
 };

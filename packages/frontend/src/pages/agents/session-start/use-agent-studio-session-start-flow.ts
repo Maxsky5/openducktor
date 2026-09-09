@@ -346,10 +346,10 @@ export function useAgentStudioSessionStartFlow({
       taskId,
       launchActionId,
     });
-    if (!repoSettings)
-      throw new Error("Repository settings are unavailable. Reload before starting a session.");
     const decision: ResolvedSessionStartDecision = { startMode: "fresh", selectedModel };
     if (supportsTaskTargetBranchSelection(role, launchActionId)) {
+      if (!repoSettings)
+        throw new Error("Repository settings are unavailable. Reload before starting a session.");
       const branchError = taskTargetBranchValidationError(selectedTask?.targetBranchError);
       if (branchError) throw new Error(branchError);
       decision.targetBranch = effectiveTaskTargetBranch(

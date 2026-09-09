@@ -44,7 +44,7 @@ const buildComparableSignature = (input: {
 }): string => {
   const model = input.model;
   return JSON.stringify({
-    visible: input.visible.trim(),
+    visible: input.visible,
     nonTextParts: input.nonTextParts,
     providerId: model?.providerId ?? null,
     modelId: model?.modelId ?? null,

@@ -1251,6 +1251,36 @@ describe("event-stream", () => {
     ]);
   });
 
+  test.each(["  Ship it", "Ship it  "])(
+    "matches the correct queued send when only boundary whitespace differs: %j",
+    async (text) => {
+      const other = {
+        messageId: "msg-other",
+        signature: buildQueuedRequestSignature([{ kind: "text", text: "Ship it" }]),
+      };
+      const { emitted, sessionRecord } = await runEventStreamWithSession(
+        [
+          makeUserMessageUpdatedEvent({
+            messageId: "msg-200",
+            text,
+            createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
+          }),
+        ],
+        (session) => {
+          session.activeAssistantMessageId = "msg-100";
+          session.pendingQueuedUserMessages.push(other, {
+            messageId: "msg-200",
+            signature: buildQueuedRequestSignature([{ kind: "text", text }]),
+          });
+        },
+      );
+      expect(sessionRecord.pendingQueuedUserMessages).toEqual([other]);
+      expect(emitted.filter((event) => event.type === "user_message")).toEqual([
+        expect.objectContaining({ messageId: "msg-200", message: text, state: "queued" }),
+      ]);
+    },
+  );
+
   test("preserves queued local attachment preview paths when the runtime echoes a non-file attachment url", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [

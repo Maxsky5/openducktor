@@ -49,8 +49,17 @@ describe("opencode-user-message-encoding", () => {
         { kind: "file_reference", file: FIRST_FILE },
       ]),
     );
+    expect(signature.visible).toBe(encoded.text);
     expect(signature.nonTextParts[0].sourceText.start).toBe(text.length);
   });
+  test.each(["  hello", "hello  ", "\nhello\n"])(
+    "keeps boundary whitespace distinct in queued signatures: %j",
+    (text) => {
+      expect(buildQueuedRequestSignature([{ kind: "text", text }])).not.toBe(
+        buildQueuedRequestSignature([{ kind: "text", text: "hello" }]),
+      );
+    },
+  );
   test("rejects skill references explicitly", () => {
     expect(() =>
       buildOpenCodeVisibleText([

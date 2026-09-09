@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { RepoConfig } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
@@ -7,7 +7,7 @@ import {
   createSettingsSnapshotFixture,
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { startSessionWorkflow } from "./session-start-workflow";
+import { startSessionWorkflow, type SessionStartWorkflowIntent } from "./session-start-workflow";
 
 type SendAgentMessage = NonNullable<Parameters<typeof startSessionWorkflow>[0]["sendAgentMessage"]>;
 
@@ -40,6 +40,59 @@ const sessionIdentity = (
   runtimeKind,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
+
+test.each([true, false])(
+  "default prompt read failure with confirmed text: %s",
+  async (confirmed) => {
+    const queryClient = new QueryClient();
+    const reads = spyOn(queryClient, "fetchQuery").mockRejectedValue(
+      new Error("Prompt settings unavailable"),
+    );
+    const start = mock(async () => sessionIdentity("confirmed"));
+    const send = createSendAgentMessageMock();
+    const mutate = mock(async () => {});
+    const kickoffFields: Pick<SessionStartWorkflowIntent, "kickoffPrompt"> = {};
+    if (confirmed) kickoffFields.kickoffPrompt = "  confirmed\n{{literal}}\n";
+    try {
+      const result = startSessionWorkflow({
+        queryClient,
+        workspaceId: "workspace-1",
+        task: null,
+        intent: {
+          taskId: "TASK-1",
+          role: "build",
+          launchActionId: "build_implementation_start",
+          startMode: "fresh",
+          postStartAction: "kickoff",
+          targetBranch: { branch: "main" },
+          ...kickoffFields,
+        },
+        selection: BUILD_SELECTION,
+        startAgentSession: start,
+        sendAgentMessage: send,
+        persistTaskTargetBranch: mutate,
+      });
+      if (confirmed) {
+        await result;
+        expect(reads).not.toHaveBeenCalled();
+        expect(start).toHaveBeenCalledTimes(1);
+        expect(send).toHaveBeenCalledWith(
+          sessionIdentity("confirmed"),
+          [{ kind: "text", text: "  confirmed\n{{literal}}\n" }],
+          { preserveTextWhitespace: true },
+        );
+      } else {
+        await expect(result).rejects.toThrow("Prompt settings unavailable");
+        expect(start).not.toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+        expect(mutate).not.toHaveBeenCalled();
+      }
+    } finally {
+      reads.mockRestore();
+      queryClient.clear();
+    }
+  },
+);
 
 test.each(["feedback", "branch"] as const)(
   "finishes the captured launch after context changes during the %s mutation",
@@ -268,74 +321,144 @@ describe("session-start-workflow", () => {
     expect(sentText).not.toContain("origin/main");
   });
 
-  test("uses the repository default target for a forked pull request kickoff", async () => {
-    const queryClient = new QueryClient();
-    const repoConfig = {
-      workspaceId: "workspace-pr",
-      workspaceName: "PR workspace",
-      repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
-      branchPrefix: "odt",
-      defaultTargetBranch: {
-        remote: "upstream",
-        branch: "develop",
-      },
-      git: {},
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentStudioState: { openTaskIds: [] },
-      agentDefaults: {},
-    } satisfies RepoConfig;
-    queryClient.setQueryData(workspaceQueryKeys.repoConfig("workspace-pr"), repoConfig);
-    queryClient.setQueryData(
-      workspaceQueryKeys.settingsSnapshot(),
-      createSettingsSnapshotFixture({
-        workspaces: {
-          "workspace-pr": repoConfig,
+  test.each([undefined, " confirmed PR instruction "])(
+    "uses the repository default target for a forked pull request kickoff (%s)",
+    async (kickoffPrompt) => {
+      const queryClient = new QueryClient();
+      const repoConfig = {
+        workspaceId: "workspace-pr",
+        workspaceName: "PR workspace",
+        repoPath: "/repo",
+        defaultRuntimeKind: "opencode",
+        branchPrefix: "odt",
+        defaultTargetBranch: {
+          remote: "upstream",
+          branch: "develop",
         },
-      }),
-    );
-    const sendAgentMessage = createSendAgentMessageMock();
-    const startAgentSession = mock(async () => sessionIdentity("session-pr-fork"));
-    const sourceSession = sessionIdentity("builder-session-fork");
+        git: {},
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentStudioState: { openTaskIds: [] },
+        agentDefaults: {},
+      } satisfies RepoConfig;
+      queryClient.setQueryData(workspaceQueryKeys.repoConfig("workspace-pr"), repoConfig);
+      queryClient.setQueryData(
+        workspaceQueryKeys.settingsSnapshot(),
+        createSettingsSnapshotFixture({
+          workspaces: {
+            "workspace-pr": repoConfig,
+          },
+        }),
+      );
+      const sendAgentMessage = createSendAgentMessageMock();
+      const startAgentSession = mock(async () => sessionIdentity("session-pr-fork"));
+      const sourceSession = sessionIdentity("builder-session-fork");
 
-    await startSessionWorkflow({
-      workspaceId: "workspace-pr",
-      queryClient,
-      intent: {
+      const kickoffFields: Pick<SessionStartWorkflowIntent, "kickoffPrompt"> = {};
+      if (kickoffPrompt !== undefined) kickoffFields.kickoffPrompt = kickoffPrompt;
+      await startSessionWorkflow({
+        workspaceId: "workspace-pr",
+        queryClient,
+        intent: {
+          taskId: "TASK-FORK",
+          role: "build",
+          launchActionId: "build_pull_request_generation",
+          startMode: "fork",
+          sourceSession,
+          postStartAction: "kickoff",
+          ...kickoffFields,
+        },
+        selection: BUILD_SELECTION,
+        task: createTaskCardFixture({
+          id: "TASK-FORK",
+          title: "Fork for pull request",
+        }),
+        startAgentSession,
+        sendAgentMessage,
+      });
+
+      expect(startAgentSession).toHaveBeenCalledWith({
         taskId: "TASK-FORK",
         role: "build",
-        launchActionId: "build_pull_request_generation",
         startMode: "fork",
+        selectedModel: BUILD_SELECTION,
         sourceSession,
-        postStartAction: "kickoff",
-      },
-      selection: BUILD_SELECTION,
-      task: createTaskCardFixture({
-        id: "TASK-FORK",
-        title: "Fork for pull request",
-      }),
-      startAgentSession,
-      sendAgentMessage,
-    });
+        holdForPostStartMessage: true,
+      });
+      expect(sendAgentMessage.mock.calls[0]?.[1]).toEqual([
+        expect.objectContaining({
+          kind: "text",
+          text: kickoffPrompt ?? expect.stringContaining("Pull request base:\ndevelop"),
+        }),
+      ]);
+    },
+  );
 
-    expect(startAgentSession).toHaveBeenCalledWith({
-      taskId: "TASK-FORK",
-      role: "build",
-      startMode: "fork",
-      selectedModel: BUILD_SELECTION,
-      sourceSession,
-      holdForPostStartMessage: true,
-    });
-    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-pr-fork"), [
-      expect.objectContaining({
-        kind: "text",
-        text: expect.stringContaining("Pull request base:\ndevelop"),
-      }),
-    ]);
-  });
+  test.each(["@{upstream}"])(
+    "rejects invalid repository default PR target %s with confirmed text",
+    async (branch) => {
+      const queryClient = new QueryClient();
+      const repoConfig = {
+        workspaceId: "workspace-pr",
+        workspaceName: "PR workspace",
+        repoPath: "/repo",
+        defaultRuntimeKind: "opencode",
+        branchPrefix: "odt",
+        defaultTargetBranch: {
+          remote: "upstream",
+          branch,
+        },
+        git: {},
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentStudioState: { openTaskIds: [] },
+        agentDefaults: {},
+      } satisfies RepoConfig;
+      queryClient.setQueryData(workspaceQueryKeys.repoConfig("workspace-pr"), repoConfig);
+      queryClient.setQueryData(
+        workspaceQueryKeys.settingsSnapshot(),
+        createSettingsSnapshotFixture({
+          workspaces: {
+            "workspace-pr": repoConfig,
+          },
+        }),
+      );
+      const sendAgentMessage = createSendAgentMessageMock();
+      const startAgentSession = mock(async () => sessionIdentity("session-pr-fork"));
+      const sourceSession = sessionIdentity("builder-session-fork");
+
+      const mutate = mock(async () => undefined);
+      await expect(
+        startSessionWorkflow({
+          workspaceId: "workspace-pr",
+          queryClient,
+          intent: {
+            taskId: "TASK-FORK",
+            role: "build",
+            launchActionId: "build_pull_request_generation",
+            startMode: "fork",
+            sourceSession,
+            postStartAction: "kickoff",
+            kickoffPrompt: "confirmed PR instruction",
+            beforeStartAction: { action: "human_request_changes", note: "review" },
+          },
+          selection: BUILD_SELECTION,
+          task: createTaskCardFixture({ id: "TASK-FORK" }),
+          startAgentSession,
+          sendAgentMessage,
+          humanRequestChangesTask: mutate,
+          persistTaskTargetBranch: mutate,
+        }),
+      ).rejects.toThrow("requires an explicit target branch");
+      expect(startAgentSession).not.toHaveBeenCalled();
+      expect(sendAgentMessage).not.toHaveBeenCalled();
+      expect(mutate).not.toHaveBeenCalled();
+    },
+  );
 
   test("rejects upstream-relative targets before creating a pull request session", async () => {
     const sendAgentMessage = createSendAgentMessageMock();
