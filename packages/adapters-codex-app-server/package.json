@@ -14,6 +14,6 @@
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   }
 }

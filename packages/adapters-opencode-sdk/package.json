@@ -11,11 +11,11 @@
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "^1.18.25",
+    "@opencode-ai/sdk": "^1.18.29",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
     "undici": "^8.10.0",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   }
 }
