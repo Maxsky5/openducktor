@@ -21,7 +21,7 @@ export type LocalMutationImpact =
   | { kind: "remove-documents"; taskIds: string[] };
 
 export type TaskViewSync = {
-  loadWorkspace: (repoPath: string) => Promise<void>;
+  loadWorkspace: (repoPath: string, options?: { forceFresh?: boolean }) => Promise<void>;
   refreshManually: (repoPath: string) => Promise<void>;
   refreshAfterLocalMutation: (repoPath: string, impact: LocalMutationImpact) => Promise<void>;
   reconcileExternalEvent: (
@@ -215,10 +215,10 @@ export const createTaskViewSync = ({
     });
 
   return {
-    loadWorkspace: (repoPath) =>
+    loadWorkspace: (repoPath, options) =>
       runForRepo(repoPath, async () => {
         const state = queryClient.getQueryState(taskQueryKeys.repoData(repoPath));
-        if (state?.status !== "success") {
+        if (options?.forceFresh || state?.status !== "success") {
           await fetchTasks(repoPath);
         }
       }),

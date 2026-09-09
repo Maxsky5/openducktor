@@ -6,21 +6,26 @@ import type {
   NotificationOccurrence,
   TaskCard,
 } from "@openducktor/contracts";
+import { CancelledError, useQueryClient } from "@tanstack/react-query";
+import { renderHook } from "@testing-library/react";
+import { createTaskViewSync } from "@/state/queries/task-view-sync";
+import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { readCachedAgentSessionAssociation } from "@/state/queries/agent-session-association";
+import { taskQueryKeys, type RepoTaskData } from "@/state/queries/tasks";
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createDeferred, createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { createNotificationTaskObserver as createTaskObserver } from "./notification-task-observer";
 import { createNotificationWorkspaceObserver } from "./notification-workspace-observer";
 
 type AgentSessionLiveSnapshotEnvelope = Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>;
 
-import { QueryClient } from "@tanstack/react-query";
-import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { readCachedAgentSessionAssociation } from "@/state/queries/agent-session-association";
-import { taskQueryKeys } from "@/state/queries/tasks";
+const renderIsolatedQueryClient = () =>
+  renderHook(() => useQueryClient(), { wrapper: IsolatedQueryWrapper });
 
 const createNotificationTaskObserver = (
   options: Omit<Parameters<typeof createTaskObserver>[0], "resolveSessionAssociation">,
+  queryClient = renderIsolatedQueryClient().result.current,
 ) => {
-  const queryClient = new QueryClient();
   return createTaskObserver({
     ...options,
     resolveSessionAssociation: (ref) => readCachedAgentSessionAssociation(queryClient, ref),
@@ -246,7 +251,8 @@ test.each(["tasks", "sessions"])(
 );
 
 test("publishes a buffered request after effect replay and cancelled startup recovery", async () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClientHook = renderIsolatedQueryClient();
+  const queryClient = queryClientHook.result.current;
   const firstReadStarted = createDeferred<void>();
   const firstRead = createDeferred<TaskCard[]>();
   let readCount = 0;
@@ -269,12 +275,15 @@ test("publishes a buffered request after effect replay and cancelled startup rec
   const stop = mock(() => {});
   const published: NotificationOccurrence[] = [];
   let receive = (_envelope: AgentSessionLiveEnvelope) => {};
-  const taskObserver = createNotificationTaskObserver({
-    loadTasks,
-    loadSessionRecords: loadWorkflowSessionRecords,
-    publish: () => {},
-    onFailure,
-  });
+  const taskObserver = createNotificationTaskObserver(
+    {
+      loadTasks,
+      loadSessionRecords: loadWorkflowSessionRecords,
+      publish: () => {},
+      onFailure,
+    },
+    queryClient,
+  );
   const observer = createNotificationWorkspaceObserver({
     observe: async (_input, listener) => {
       receive = listener;
@@ -286,38 +295,176 @@ test("publishes a buffered request after effect replay and cancelled startup rec
     onFailure,
   });
 
-  await observer.syncWorkspaces([]);
-  observer.dispose();
+  try {
+    await observer.syncWorkspaces([]);
+    observer.dispose();
 
-  const startup = observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
-  await firstReadStarted.promise;
-  await queryClient.cancelQueries(
-    { queryKey: taskQueryKeys.repoData("/repo-a"), exact: true },
-    { silent: true },
-  );
-  await startup;
+    const startup = observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+    await firstReadStarted.promise;
+    await queryClient.cancelQueries(
+      { queryKey: taskQueryKeys.repoData("/repo-a"), exact: true },
+      { silent: true },
+    );
+    await startup;
 
-  expect(onFailure).not.toHaveBeenCalled();
-  expect(stop).not.toHaveBeenCalled();
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(stop).not.toHaveBeenCalled();
 
-  receive(liveUpsert(["existing", "new"]));
-  expect(published).toEqual([]);
+    receive(liveUpsert(["existing", "new"]));
+    expect(published).toEqual([]);
 
-  await taskObserver.sink.onSnapshot();
+    await taskObserver.sink.onSnapshot();
 
-  expect(published).toMatchObject([
-    {
-      kind: "agent.permission_requested",
-      task: { id: "task-1" },
-    },
-  ]);
-  firstRead.resolve([]);
-  observer.dispose();
+    expect(published).toMatchObject([
+      {
+        kind: "agent.permission_requested",
+        task: { id: "task-1" },
+      },
+    ]);
+  } finally {
+    firstRead.resolve([]);
+    observer.dispose();
+    queryClientHook.unmount();
+  }
   expect(stop).toHaveBeenCalledTimes(1);
 });
 
+test("stops a cancelled startup observation when baseline recovery fails", async () => {
+  const queryClientHook = renderIsolatedQueryClient();
+  const queryClient = queryClientHook.result.current;
+  let readCount = 0;
+  const recoveryError = new Error("sessions unavailable");
+  const onFailure = mock(() => {});
+  const stop = mock(() => {});
+  const published: NotificationOccurrence[] = [];
+  let receive = (_envelope: AgentSessionLiveEnvelope) => {};
+  const taskObserver = createNotificationTaskObserver(
+    {
+      loadTasks: async () => {
+        readCount += 1;
+        if (readCount === 1) throw new CancelledError();
+        if (readCount === 2) throw recoveryError;
+        return [createTaskCardFixture({ id: "task-1" })];
+      },
+      loadSessionRecords: loadWorkflowSessionRecords,
+      publish: () => {},
+      onFailure,
+    },
+    queryClient,
+  );
+  const observer = createNotificationWorkspaceObserver({
+    observe: async (_input, listener) => {
+      receive = listener;
+      listener(liveSnapshot(["existing"]));
+      return stop;
+    },
+    taskObserver,
+    publish: (occurrence) => published.push(occurrence),
+    onFailure,
+  });
+
+  try {
+    await observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+    receive(liveUpsert(["existing", "new"]));
+
+    await taskObserver.sink.onSnapshot();
+
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    expect(onFailure).toHaveBeenCalledWith({
+      repoPath: "/repo-a",
+      source: "task",
+      cause: recoveryError,
+    });
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(published).toEqual([]);
+
+    await taskObserver.sink.onSnapshot();
+    expect(published).toEqual([]);
+  } finally {
+    observer.dispose();
+    queryClientHook.unmount();
+  }
+});
+
+test("serializes a notification baseline with a manual task refresh", async () => {
+  const queryClientHook = renderIsolatedQueryClient();
+  const queryClient = queryClientHook.result.current;
+  const firstReadStarted = createDeferred<void>();
+  const firstRead = createDeferred<TaskCard[]>();
+  const tasks = [createTaskCardFixture({ id: "task-1" })];
+  let readCount = 0;
+  const taskViewSync = createTaskViewSync({
+    queryClient,
+    ports: {
+      listTasks: async () => {
+        readCount += 1;
+        if (readCount === 1) {
+          firstReadStarted.resolve();
+          return await firstRead.promise;
+        }
+        return tasks;
+      },
+      loadFreshDocument: async () => {
+        throw new Error("Unexpected document read.");
+      },
+    },
+  });
+  const onFailure = mock(() => {});
+  const published: NotificationOccurrence[] = [];
+  let receive = (_envelope: AgentSessionLiveEnvelope) => {};
+  const taskObserver = createNotificationTaskObserver(
+    {
+      loadTasks: async (repoPath) => {
+        await taskViewSync.loadWorkspace(repoPath, { forceFresh: true });
+        const taskData = queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(repoPath));
+        if (!taskData) throw new Error("Task notification data is unavailable.");
+        return taskData.tasks;
+      },
+      loadSessionRecords: loadWorkflowSessionRecords,
+      publish: () => {},
+      onFailure,
+    },
+    queryClient,
+  );
+  const observer = createNotificationWorkspaceObserver({
+    observe: async (_input, listener) => {
+      receive = listener;
+      listener(liveSnapshot(["existing"]));
+      return () => {};
+    },
+    taskObserver,
+    publish: (occurrence) => published.push(occurrence),
+    onFailure,
+  });
+
+  try {
+    const startup = observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+    await firstReadStarted.promise;
+    const manualRefresh = taskViewSync.refreshManually("/repo-a");
+    await flush();
+    expect(readCount).toBe(1);
+
+    firstRead.resolve(tasks);
+    await Promise.all([startup, manualRefresh]);
+
+    receive(liveUpsert(["existing", "new"]));
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(published).toMatchObject([
+      {
+        kind: "agent.permission_requested",
+        task: { id: "task-1" },
+      },
+    ]);
+  } finally {
+    firstRead.resolve(tasks);
+    observer.dispose();
+    queryClientHook.unmount();
+  }
+});
+
 test("reads new ownership from Query before the queued task notification sink runs", async () => {
-  const queryClient = new QueryClient();
+  const queryClientHook = renderIsolatedQueryClient();
+  const queryClient = queryClientHook.result.current;
   const published: NotificationOccurrence[] = [];
   const taskObserver = createTaskObserver({
     loadTasks: async () => [createTaskCardFixture({ id: "task-1" })],
@@ -336,15 +483,19 @@ test("reads new ownership from Query before the queued task notification sink ru
     publish: (occurrence) => published.push(occurrence),
     onFailure: () => {},
   });
-  await observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo" }]);
-  queryClient.setQueryData(agentSessionQueryKeys.list("/repo-a", "task-1"), [
-    workflowSessionRecord,
-  ]);
-  listener(liveSnapshot(["existing"]));
-  expect(published).toEqual([]);
-  listener(liveUpsert(["existing", "new"]));
-  expect(published.map((item) => item.kind)).toEqual(["agent.permission_requested"]);
-  observer.dispose();
+  try {
+    await observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo" }]);
+    queryClient.setQueryData(agentSessionQueryKeys.list("/repo-a", "task-1"), [
+      workflowSessionRecord,
+    ]);
+    listener(liveSnapshot(["existing"]));
+    expect(published).toEqual([]);
+    listener(liveUpsert(["existing", "new"]));
+    expect(published.map((item) => item.kind)).toEqual(["agent.permission_requested"]);
+  } finally {
+    observer.dispose();
+    queryClientHook.unmount();
+  }
 });
 
 describe("all-workspace notification observation", () => {

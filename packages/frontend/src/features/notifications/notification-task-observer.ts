@@ -28,6 +28,11 @@ type TaskObserverEntry = {
   tasks: Map<string, TaskEventTaskSnapshot>;
 };
 
+type BaselineOutcome = {
+  repoPath: string;
+  status: "failed" | "ready";
+};
+
 export const createNotificationTaskObserver = ({
   loadTasks,
   loadSessionRecords,
@@ -47,7 +52,7 @@ export const createNotificationTaskObserver = ({
   const workspaces = new Map<string, NotificationWorkspace>();
   const entries = new Map<string, TaskObserverEntry>();
   const interruptedBaselines = new Set<string>();
-  const baselineReadyListeners = new Set<(repoPath: string) => void>();
+  const baselineOutcomeListeners = new Set<(outcome: BaselineOutcome) => void>();
   const baselineLoads = new Map<
     string,
     { workspace: NotificationWorkspace; promise: Promise<void> }
@@ -55,6 +60,10 @@ export const createNotificationTaskObserver = ({
 
   const reportFailure = (repoPath: string, cause: unknown): void => {
     onFailure({ repoPath, source: "task", cause });
+  };
+
+  const notifyBaselineOutcome = (outcome: BaselineOutcome): void => {
+    for (const listener of baselineOutcomeListeners) listener(outcome);
   };
 
   const loadBaseline = async (workspace: NotificationWorkspace): Promise<void> => {
@@ -81,7 +90,7 @@ export const createNotificationTaskObserver = ({
         tasks: new Map(tasks.map((task) => [task.id, task])),
       });
       interruptedBaselines.delete(workspace.repoPath);
-      for (const listener of baselineReadyListeners) listener(workspace.repoPath);
+      notifyBaselineOutcome({ repoPath: workspace.repoPath, status: "ready" });
     } catch (cause) {
       if (isCancelledError(cause)) {
         if (
@@ -92,8 +101,14 @@ export const createNotificationTaskObserver = ({
         }
         return;
       }
-      interruptedBaselines.delete(workspace.repoPath);
+      if (workspaces.get(workspace.repoPath) !== workspace) {
+        return;
+      }
+      const recoveryFailed = interruptedBaselines.delete(workspace.repoPath);
       reportFailure(workspace.repoPath, cause);
+      if (recoveryFailed) {
+        notifyBaselineOutcome({ repoPath: workspace.repoPath, status: "failed" });
+      }
     }
   };
 
@@ -159,9 +174,9 @@ export const createNotificationTaskObserver = ({
       entries.get(repoPath)?.label === workspaces.get(repoPath)?.repositoryLabel &&
       entries.has(repoPath),
     isBaselineInterrupted: (repoPath: string): boolean => interruptedBaselines.has(repoPath),
-    subscribeBaselineReady(listener: (repoPath: string) => void): () => void {
-      baselineReadyListeners.add(listener);
-      return () => baselineReadyListeners.delete(listener);
+    subscribeBaselineOutcome(listener: (outcome: BaselineOutcome) => void): () => void {
+      baselineOutcomeListeners.add(listener);
+      return () => baselineOutcomeListeners.delete(listener);
     },
     async syncWorkspaces(nextWorkspaces: readonly NotificationWorkspace[]): Promise<void> {
       const nextRepoPaths = new Set(nextWorkspaces.map((workspace) => workspace.repoPath));
