@@ -97,6 +97,8 @@ Files: `events/session-transcript-events.ts`, `events/session-event-types.ts`, `
 
 Owns transcript event routing, per-session batching, todo event forwarding, active-turn anchors, and duration.
 
+`support/image-generation-messages.ts` owns image message projection. `support/image-generation-settlement.ts` applies image lifecycle outcomes.
+
 Rules:
 
 - Live activity, pending input, context, and removal arrive as live-state messages. Only `agent-session-live-projection.ts` applies them.

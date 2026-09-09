@@ -142,6 +142,7 @@ A prompt cannot mix a slash command and attachments because a slash command uses
 | `optionalSurfaces.supportsDiff` | Runtime provides session or workspace diff |
 | `optionalSurfaces.supportsFileStatus` | Runtime provides file status |
 | `optionalSurfaces.supportsMcpStatus` | Runtime provides MCP connection state |
+| `optionalSurfaces.supportsImageGeneration` | OpenDucktor can display native generated images |
 | `optionalSurfaces.supportsSubagents` | OpenDucktor can observe native subagent work |
 | `optionalSurfaces.supportedSubagentExecutionModes` | Supports `foreground` or `background` subagents |
 
@@ -164,7 +165,7 @@ A prompt cannot mix a slash command and attachments because a slash command uses
 | Policy | Capability keys |
 |---|---|
 | Required | ODT workflow tools, read-only auto-reject, start modes, and prompt parts |
-| Optional | Queued messages, history, approvals, questions, attachments, slash commands, file search, skill and subagent references, profiles, variants, todos, diff, file status, MCP status, and subagents |
+| Optional | Queued messages, history, approvals, questions, attachments, slash commands, file search, skill and subagent references, profiles, variants, todos, diff, file status, MCP status, generated images, and subagents |
 
 Capability classes record why a gate exists.
 
@@ -244,6 +245,7 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 | Feature | Rule |
 |---|---|
 | Todos | Live events and history build the same todo list and tool name. |
+| Generated images | Map native items to `image_generation` in live events and history. Keep generation outcome separate from preview availability. |
 | Subagents | Parent and child keep the description, mode, ID, transcript, pending input, and final state. |
 | Queued messages | One user-message ID keeps queued state live and in history. |
 | Compaction | Map requested, started, completed, and failed states without showing synthetic control messages. |

@@ -1,3 +1,4 @@
+import { imageGenerationMapper } from "./image-generation";
 import { registerCodexEventMapper, type RegisteredCodexEventMapper } from "../codex-event-mapper";
 import type { CodexSubagentLinkState } from "../codex-subagent-link-state";
 import { compactionMapper, deltaMapper, lifecycleMapper, tokenUsageMapper } from "./lifecycle";
@@ -28,6 +29,7 @@ export const createCodexEventMappers = (
     todoMapper,
     userMessageMapper,
     assistantMessageMapper,
+    imageGenerationMapper,
     reasoningMapper,
     planMapper,
     commandToolMapper,

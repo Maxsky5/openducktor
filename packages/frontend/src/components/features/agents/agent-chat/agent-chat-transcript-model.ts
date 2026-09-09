@@ -71,8 +71,9 @@ const updateAggregateMetadataForMessage = ({
 }): void => {
   if (
     !metadata.hasAttachmentMessages &&
-    message.meta?.kind === "user" &&
-    message.meta.parts?.some((part) => part.kind === "attachment")
+    (message.meta?.kind === "image_generation" ||
+      (message.meta?.kind === "user" &&
+        message.meta.parts?.some((part) => part.kind === "attachment")))
   ) {
     metadata.hasAttachmentMessages = true;
   }

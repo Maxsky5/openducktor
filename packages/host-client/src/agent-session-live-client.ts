@@ -1,4 +1,20 @@
 import {
+  type AgentGeneratedImageBatch,
+  type AgentGeneratedImageBatchInput,
+  type AgentGeneratedImageDescribeInput,
+  agentGeneratedImageBatchSchema,
+  agentGeneratedImageBatchResultSchema,
+  agentGeneratedImageBatchInputSchema,
+  agentGeneratedImageDescribeInputSchema,
+  agentGeneratedImageDescribeResultSchema,
+} from "@openducktor/contracts";
+import {
+  type AgentGeneratedImageReadInput,
+  type AgentGeneratedImageReadResult,
+  agentGeneratedImageReadInputSchema,
+  agentGeneratedImageReadResultSchema,
+} from "@openducktor/contracts";
+import {
   type AcceptedAgentUserMessage,
   type AgentRepositorySessionStartInput,
   type AgentSessionContextUsage,
@@ -47,6 +63,30 @@ import { arrayResultSchema, voidResultSchema } from "./invoke-utils";
 
 export class HostAgentSessionLiveClient {
   constructor(private readonly invokeFn: InvokeFn) {}
+
+  async agentSessionBeginGeneratedImageBatch(input: AgentGeneratedImageBatchInput) {
+    return this.invokeFn(
+      "agent_session_begin_generated_image_batch",
+      agentGeneratedImageBatchInputSchema.parse(input),
+      agentGeneratedImageBatchResultSchema,
+    );
+  }
+
+  async agentSessionReleaseGeneratedImageBatch(input: AgentGeneratedImageBatch) {
+    return this.invokeFn(
+      "agent_session_release_generated_image_batch",
+      agentGeneratedImageBatchSchema.parse(input),
+      voidResultSchema,
+    );
+  }
+
+  async agentSessionDescribeGeneratedImages(input: AgentGeneratedImageDescribeInput) {
+    return this.invokeFn(
+      "agent_session_describe_generated_images",
+      agentGeneratedImageDescribeInputSchema.parse(input),
+      agentGeneratedImageDescribeResultSchema,
+    );
+  }
 
   async agentSessionControlStart(
     input: AgentRepositorySessionStartInput,
@@ -147,6 +187,16 @@ export class HostAgentSessionLiveClient {
       "agent_session_live_read",
       agentSessionLiveReadInputSchema.parse(input),
       agentSessionLiveReadResultSchema,
+    );
+  }
+
+  async agentSessionReadGeneratedImage(
+    input: AgentGeneratedImageReadInput,
+  ): Promise<AgentGeneratedImageReadResult> {
+    return this.invokeFn(
+      "agent_session_read_generated_image",
+      agentGeneratedImageReadInputSchema.parse(input),
+      agentGeneratedImageReadResultSchema,
     );
   }
 

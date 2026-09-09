@@ -31,3 +31,9 @@ export type {
   CodexThreadStartResult,
   CodexTurnStartParams,
 } from "./types";
+
+export { codexImageGenerationPart, createCodexInlineImageRevision } from "./codex-image-generation";
+export type {
+  CodexImageGenerationPreparation,
+  CodexImageGenerationPreparer,
+} from "./codex-image-generation";

@@ -51,6 +51,10 @@ const fakeAdapter = (input: {
     : {};
   const adapter = {
     supportsSessionControl: false,
+    beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
+    releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
+    describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
+    resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
     binding: { runtimeId: input.runtimeId, runtimeKind, repoPath: "/repo" },
     ...refreshSnapshots,
     listSnapshots: () =>
@@ -1001,6 +1005,34 @@ describe("createAgentSessionLiveStateService", () => {
     );
 
     expect(releaseCalled).toBe(true);
+    expect(events.at(-1)).toMatchObject({ type: "session_removed", ref: snapshot.ref });
+    await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
+  });
+
+  test("reports transcript settlement failure while still releasing runtime resources", async () => {
+    const { events, service } = createHarness();
+    const snapshot = liveSnapshot("session-1");
+    let released = false;
+    const adapter: AgentSessionLiveAdapterPort = {
+      ...fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [snapshot] }),
+      settleRuntimeTranscript: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "test.settle-transcript",
+            message: "image settlement failed",
+          }),
+        ),
+      releaseRuntime: () =>
+        Effect.sync(() => {
+          released = true;
+          return [snapshot.ref];
+        }),
+    };
+    await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+    await expect(Effect.runPromise(service.releaseRuntime("runtime-1"))).rejects.toThrow(
+      "image settlement failed",
+    );
+    expect(released).toBe(true);
     expect(events.at(-1)).toMatchObject({ type: "session_removed", ref: snapshot.ref });
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });

@@ -73,6 +73,7 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
       kind: "session",
       session,
       target: session,
+      repoPath: "/repo",
       displayedSessionKey: agentSessionIdentityKey(session),
       shouldResetWindow: false,
       notice: null,
@@ -147,6 +148,18 @@ describe("AgentSessionTranscriptDialogHost", () => {
         },
       });
       const operations: AgentOperationsContextValue = {
+        describeGeneratedImages: async () => {
+          throw new Error("Unexpected image metadata read");
+        },
+        beginGeneratedImageBatch: async () => {
+          throw new Error("Unexpected beginGeneratedImageBatch");
+        },
+        releaseGeneratedImageBatch: async () => {
+          throw new Error("Unexpected releaseGeneratedImageBatch");
+        },
+        readGeneratedImage: async () => {
+          throw new Error("Unexpected generated image read");
+        },
         readSessionTodos: async () => [],
         readSessionHistory: async () => [],
         loadAgentSessionHistory: async () => null,
@@ -265,6 +278,18 @@ describe("AgentSessionTranscriptDialogHost", () => {
     });
     let historyAttempts = 0;
     const operations: AgentOperationsContextValue = {
+      describeGeneratedImages: async () => {
+        throw new Error("Unexpected image metadata read");
+      },
+      beginGeneratedImageBatch: async () => {
+        throw new Error("Unexpected beginGeneratedImageBatch");
+      },
+      releaseGeneratedImageBatch: async () => {
+        throw new Error("Unexpected releaseGeneratedImageBatch");
+      },
+      readGeneratedImage: async () => {
+        throw new Error("Unexpected generated image read");
+      },
       readSessionTodos: async () => [],
       readSessionHistory: async () => {
         historyAttempts += 1;
@@ -563,6 +588,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
             kind: "session",
             session: plannerSession,
             target: plannerTranscriptTarget,
+            repoPath: "/repo",
             displayedSessionKey: agentSessionIdentityKey(plannerSession),
             shouldResetWindow: false,
             notice: null,

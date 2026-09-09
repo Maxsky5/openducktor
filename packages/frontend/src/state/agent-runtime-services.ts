@@ -1,3 +1,5 @@
+import { appQueryClient } from "@/lib/query-client";
+import { generatedImageMetadataSessionKey } from "@/state/queries/agent-generated-image-metadata";
 import type {
   AgentRepositorySessionStartInput,
   RuntimeInstanceSummary,
@@ -89,6 +91,10 @@ const createAgentEngine = (
   runtimeKinds: RuntimeKind[],
 ): AgentEnginePort => {
   return {
+    describeGeneratedImages: (input) => host.agentSessionDescribeGeneratedImages(input),
+    beginGeneratedImageBatch: (input) => host.agentSessionBeginGeneratedImageBatch(input),
+    releaseGeneratedImageBatch: (input) => host.agentSessionReleaseGeneratedImageBatch(input),
+    readGeneratedImage: (input) => host.agentSessionReadGeneratedImage(input),
     startSession: (input) => {
       if (input.sessionScope.kind === "workflow") {
         return Promise.reject(
@@ -118,7 +124,14 @@ const createAgentEngine = (
     listAvailableSkills: (input) => getAdapter(input.runtimeKind).listAvailableSkills(input),
     listAvailableSubagents: (input) => getAdapter(input.runtimeKind).listAvailableSubagents(input),
     searchFiles: (input) => getAdapter(input.runtimeKind).searchFiles(input),
-    loadSessionHistory: (input) => getAdapter(input.runtimeKind).loadSessionHistory(input),
+    loadSessionHistory: async (input) => {
+      const history = await getAdapter(input.runtimeKind).loadSessionHistory(input);
+      const filters = { queryKey: generatedImageMetadataSessionKey(input) };
+      void appQueryClient
+        .cancelQueries(filters)
+        .then(() => appQueryClient.invalidateQueries(filters));
+      return history;
+    },
     loadSessionTodos: (input) => getAdapter(input.runtimeKind).loadSessionTodos(input),
     updateSessionModel: (input) => host.agentSessionControlUpdateModel(input),
     sendUserMessage: (input) =>

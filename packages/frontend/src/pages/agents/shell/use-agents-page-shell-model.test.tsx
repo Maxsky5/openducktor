@@ -273,6 +273,18 @@ const sessionIdentity = (externalSessionId: string) => ({
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
 let agentOperations: AgentOperationsContextValue = {
+  describeGeneratedImages: async () => {
+    throw new Error("Unexpected image metadata read");
+  },
+  beginGeneratedImageBatch: async () => {
+    throw new Error("Unexpected beginGeneratedImageBatch");
+  },
+  releaseGeneratedImageBatch: async () => {
+    throw new Error("Unexpected releaseGeneratedImageBatch");
+  },
+  readGeneratedImage: async () => {
+    throw new Error("Unexpected generated image read");
+  },
   readSessionTodos: mock(async () => []),
   readSessionHistory: mock(async () => []),
   loadAgentSessionHistory: mock(async () => null),
@@ -708,6 +720,18 @@ beforeEach(async () => {
     isLoadingRepoSettings: false,
   };
   agentOperations = {
+    describeGeneratedImages: async () => {
+      throw new Error("Unexpected image metadata read");
+    },
+    beginGeneratedImageBatch: async () => {
+      throw new Error("Unexpected beginGeneratedImageBatch");
+    },
+    releaseGeneratedImageBatch: async () => {
+      throw new Error("Unexpected releaseGeneratedImageBatch");
+    },
+    readGeneratedImage: async () => {
+      throw new Error("Unexpected generated image read");
+    },
     readSessionTodos: mock(async () => []),
     readSessionHistory: mock(async () => []),
     loadAgentSessionHistory: mock(async () => null),

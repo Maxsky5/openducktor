@@ -1,3 +1,4 @@
+import { recordImageGenerationEnd } from "../support/image-generation-settlement";
 import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
 import { z } from "zod";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -60,12 +61,14 @@ export const settleSessionToIdle = (
     }
 
     shouldClear = shouldClearTurnFromCurrentState(current);
-    const messages = settleDanglingTodoToolMessages(current, timestamp);
+    const imageSettled = recordImageGenerationEnd(current, timestamp, "turn_ended");
+    const messages = settleDanglingTodoToolMessages(imageSettled, timestamp);
     const status = current.status === "error" ? "error" : "idle";
     const shouldClearPendingUserMessage =
       status === "idle" && current.pendingUserMessageStartedAt !== undefined;
     const shouldClearRuntimeStatusMessage = current.runtimeStatusMessage !== null;
     const didChange =
+      imageSettled !== current ||
       messages !== current.messages ||
       current.status !== status ||
       shouldClearPendingUserMessage ||
@@ -75,7 +78,7 @@ export const settleSessionToIdle = (
     }
 
     return {
-      ...current,
+      ...imageSettled,
       messages,
       status,
       runtimeStatusMessage: null,

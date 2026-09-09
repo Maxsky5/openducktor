@@ -1,4 +1,5 @@
 import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
+import { recordImageGenerationEnd } from "../support/image-generation-settlement";
 import type {
   AgentChatMessage,
   AgentChatMessageMeta,
@@ -342,7 +343,8 @@ export const handleSessionError = (
   const userStopAborted =
     Boolean(sessionBeforeUpdate?.stopRequestedAt) &&
     isStopAbortSessionErrorMessage(sessionErrorMessage);
-  context.store.updateSession(context.session.identity, (current) => {
+  context.store.updateSession(context.session.identity, (previous) => {
+    const current = recordImageGenerationEnd(previous, event.timestamp, "runtime_failure");
     return {
       ...current,
       pendingUserMessageStartedAt: undefined,
@@ -382,23 +384,26 @@ export const handleTurnError = (
   event: Extract<SessionEvent, { type: "turn_error" }>,
 ): void => {
   const message = normalizeSessionErrorMessage(event.message);
-  context.store.updateSession(context.session.identity, (current) => ({
-    ...current,
-    pendingUserMessageStartedAt: undefined,
-    runtimeStatusMessage: null,
-    messages: appendSessionMessage(
-      {
-        externalSessionId: current.externalSessionId,
-        messages: removeRunningSessionCompactionNotices(
-          settleTerminalMessages(current, event.timestamp, {
-            outcome: "error",
-            errorMessage: message,
-          }),
-        ),
-      },
-      buildSessionErrorNoticeMessage(event.timestamp, message, event.messageId),
-    ),
-  }));
+  context.store.updateSession(context.session.identity, (previous) => {
+    const current = recordImageGenerationEnd(previous, event.timestamp, "runtime_failure");
+    return {
+      ...current,
+      pendingUserMessageStartedAt: undefined,
+      runtimeStatusMessage: null,
+      messages: appendSessionMessage(
+        {
+          externalSessionId: current.externalSessionId,
+          messages: removeRunningSessionCompactionNotices(
+            settleTerminalMessages(current, event.timestamp, {
+              outcome: "error",
+              errorMessage: message,
+            }),
+          ),
+        },
+        buildSessionErrorNoticeMessage(event.timestamp, message, event.messageId),
+      ),
+    };
+  });
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
 };
@@ -417,7 +422,8 @@ export const handleSessionFinished = (
   context: SessionLifecycleEventContext,
   event: Extract<SessionEvent, { type: "session_finished" }>,
 ): void => {
-  context.store.updateSession(context.session.identity, (current) => {
+  context.store.updateSession(context.session.identity, (previous) => {
+    const current = recordImageGenerationEnd(previous, event.timestamp, "turn_ended");
     const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
     let terminalStatus: AgentSessionState["status"] = appendUserStoppedNotice ? "stopped" : "idle";
     if (current.status === "error") {

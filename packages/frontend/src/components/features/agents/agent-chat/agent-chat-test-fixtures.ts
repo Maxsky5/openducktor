@@ -136,6 +136,7 @@ export const buildSessionTranscript = (
   kind: "session",
   session,
   target: overrides.target === undefined ? session : overrides.target,
+  repoPath: "/repo",
   displayedSessionKey:
     overrides.displayedSessionKey === undefined
       ? agentSessionIdentityKey(session)
@@ -157,6 +158,7 @@ export const buildEmptyTranscript = (
   kind: "empty",
   session: null,
   target: overrides.target ?? null,
+  repoPath: "/repo",
   displayedSessionKey: overrides.displayedSessionKey ?? null,
   shouldResetWindow: overrides.shouldResetWindow ?? false,
   notice: overrides.notice ?? null,

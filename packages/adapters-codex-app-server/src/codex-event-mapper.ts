@@ -1,5 +1,9 @@
 import type { CodexMappingContext, CodexMappingResult } from "./codex-canonical-events";
-import type { CodexAppServerThreadItem, CodexAppServerTurn } from "@openducktor/contracts";
+import type {
+  AgentImageGenerationPart,
+  CodexAppServerThreadItem,
+  CodexAppServerTurn,
+} from "@openducktor/contracts";
 import type { CodexNotificationRecord, CodexServerRequestRecord } from "./types";
 
 export type CodexTimedThreadItem = CodexAppServerThreadItem & {
@@ -10,8 +14,16 @@ export type CodexTimedThreadItem = CodexAppServerThreadItem & {
 export type CodexLiveInput =
   | { kind: "notification"; notification: CodexNotificationRecord }
   | { kind: "server_request"; request: CodexServerRequestRecord }
-  | { kind: "item_started"; item: CodexTimedThreadItem }
-  | { kind: "item_completed"; item: CodexTimedThreadItem };
+  | {
+      kind: "item_started";
+      item: CodexTimedThreadItem;
+      preparedImageGeneration?: AgentImageGenerationPart | undefined;
+    }
+  | {
+      kind: "item_completed";
+      item: CodexTimedThreadItem;
+      preparedImageGeneration?: AgentImageGenerationPart | undefined;
+    };
 
 export type CodexThreadItemInput = {
   item: CodexTimedThreadItem;
@@ -19,6 +31,7 @@ export type CodexThreadItemInput = {
   index: number;
   timestamp?: string;
   isFinalAgentMessage?: boolean;
+  preparedImageGeneration?: AgentImageGenerationPart;
 };
 
 export interface CodexEventMapper<State = undefined> {

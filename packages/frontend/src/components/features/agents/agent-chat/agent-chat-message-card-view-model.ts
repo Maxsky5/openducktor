@@ -123,7 +123,8 @@ export const buildAgentChatMessageCardViewModel = ({
   const timeLabel = message.timestampIsApproximate ? "" : formatTime(message.timestamp);
   const meta = message.meta;
   const isReasoningMessage = meta?.kind === "reasoning";
-  const isAssistantMessage = message.role === "assistant";
+  const isImageGenerationMessage = meta?.kind === "image_generation";
+  const isAssistantMessage = message.role === "assistant" && !isImageGenerationMessage;
   const isUserMessage = message.role === "user";
   const isQueuedUserMessage = isUserMessage && meta?.kind === "user" && meta.state === "queued";
   const isToolMessage = meta?.kind === "tool";
@@ -134,7 +135,11 @@ export const buildAgentChatMessageCardViewModel = ({
   const isSystemPromptMessage =
     message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX);
   const isRichCardMessage =
-    isToolMessage || isSubagentMessage || isSessionNoticeMessage || isSystemPromptMessage;
+    isToolMessage ||
+    isSubagentMessage ||
+    isSessionNoticeMessage ||
+    isSystemPromptMessage ||
+    isImageGenerationMessage;
   const assistantRole = assistantRoleFromMessage(message);
   const assistantMeta = meta?.kind === "assistant" ? meta : null;
   const userMeta = meta?.kind === "user" ? meta : null;
@@ -148,6 +153,7 @@ export const buildAgentChatMessageCardViewModel = ({
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
     : "";
   const showSharedHeader =
+    !isImageGenerationMessage &&
     !isUserMessage &&
     !isToolMessage &&
     !isReasoningMessage &&

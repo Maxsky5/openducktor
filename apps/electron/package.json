@@ -12,7 +12,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "bun run scripts/build.ts",
-    "build:main": "bun build --target=node --external electron --external node-pty --splitting --outdir dist --entry-naming 'main.[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts",
+    "build:main": "bun build --target=node --external electron --external node-pty --splitting --outdir dist --entry-naming '[name].[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts src/main/generated-image-worker.ts",
     "build:preload": "bun build --target=node --format=cjs --external electron --outfile dist/preload.cjs src/preload/preload.ts",
     "build:renderer": "vite build --outDir dist/renderer --emptyOutDir",
     "builder": "electron-builder",

@@ -42,8 +42,8 @@ export function parseChatFileLink(href: string): ChatFileDestination {
   if (path.startsWith("//") || path.startsWith("\\\\"))
     return invalid("Network file paths are not supported.");
   const hasDrive = /^[a-z]:[/\\]/i.test(path);
-  const normalized = hasDrive ? path.replaceAll("\\", "/") : path;
-  if (!normalized || normalized.endsWith("/") || /(?:^|\/)\.{1,2}$/.test(normalized))
+  const slashPath = hasDrive ? path.replaceAll("\\", "/") : path;
+  if (!slashPath || slashPath.endsWith("/") || /(?:^|\/)\.{1,2}$/.test(slashPath))
     return invalid("The destination must name a file.");
   return { kind: "path", path, absolute: path.startsWith("/") || hasDrive };
 }

@@ -249,6 +249,7 @@ export const runtimeOptionalSurfaceCapabilitiesSchema = z
     supportsDiff: z.boolean(),
     supportsFileStatus: z.boolean(),
     supportsMcpStatus: z.boolean(),
+    supportsImageGeneration: z.boolean(),
     supportsSubagents: z.boolean(),
     supportedSubagentExecutionModes: runtimeSupportedSubagentExecutionModesSchema,
   })
@@ -557,6 +558,7 @@ export const runtimeCapabilityKeyValues = [
   "optionalSurfaces.supportsDiff",
   "optionalSurfaces.supportsFileStatus",
   "optionalSurfaces.supportsMcpStatus",
+  "optionalSurfaces.supportsImageGeneration",
   "optionalSurfaces.supportsSubagents",
   "optionalSurfaces.supportedSubagentExecutionModes",
 ] as const;
@@ -588,6 +590,7 @@ export const optionalRuntimeCapabilityKeys = [
   "optionalSurfaces.supportsDiff",
   "optionalSurfaces.supportsFileStatus",
   "optionalSurfaces.supportsMcpStatus",
+  "optionalSurfaces.supportsImageGeneration",
   "optionalSurfaces.supportsSubagents",
   "optionalSurfaces.supportedSubagentExecutionModes",
 ] as const satisfies readonly RuntimeCapabilityKey[];
@@ -645,6 +648,7 @@ export const runtimeCapabilityClasses = {
   "optionalSurfaces.supportsDiff": "optional_enhancement",
   "optionalSurfaces.supportsFileStatus": "optional_enhancement",
   "optionalSurfaces.supportsMcpStatus": "optional_enhancement",
+  "optionalSurfaces.supportsImageGeneration": "optional_enhancement",
   "optionalSurfaces.supportsSubagents": "optional_enhancement",
   "optionalSurfaces.supportedSubagentExecutionModes": "optional_enhancement",
 } as const satisfies Record<RuntimeCapabilityKey, RuntimeCapabilityClass>;

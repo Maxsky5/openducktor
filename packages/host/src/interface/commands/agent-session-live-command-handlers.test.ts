@@ -52,6 +52,10 @@ const createHarness = async (
   const starts: AgentSessionControlStartInput[] = [];
   const adapter: AgentSessionRuntimeAdapterPort = {
     supportsSessionControl: true,
+    beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
+    releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
+    describeGeneratedImages: () => Effect.dieMessage("Unexpected describeGeneratedImages"),
+    resolveGeneratedImageSource: () => Effect.dieMessage("Unexpected generated image read"),
     binding: { runtimeId: "runtime-1", runtimeKind: "opencode", repoPath: "/repo" },
     listSnapshots: () => Effect.succeed(snapshots),
     readSnapshot: (ref) => {

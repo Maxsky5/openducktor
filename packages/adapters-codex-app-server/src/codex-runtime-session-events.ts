@@ -1,5 +1,11 @@
 import {
+  CodexImageGenerationState,
+  type CodexImageGenerationEnd,
+} from "./codex-image-generation-state";
+import { CodexLiveImagePreparation } from "./codex-live-image-preparation";
+import {
   agentSessionTranscriptEventSchema,
+  type AgentImageGenerationPart,
   type AgentSessionLiveRef,
   type AgentSessionTranscriptEvent,
   type CodexAppServerRequestId,
@@ -11,6 +17,7 @@ import type {
   AgentModelSelection,
   AgentSessionTodoItem,
   AgentUserMessagePart,
+  SessionRef,
 } from "@openducktor/core";
 import { agentSessionStatusFromActivity, withAgentSessionRef } from "@openducktor/core";
 import { codexServerRequestKey } from "./codex-app-server-approvals";
@@ -60,6 +67,7 @@ import type {
 } from "./types";
 
 type CodexRuntimeSessionEventsDepsBase = {
+  prepareImageGenerations?: CodexAppServerAdapterOptions["prepareImageGenerations"];
   respondServerRequest: CodexAppServerAdapterOptions["respondServerRequest"];
   onLiveSessionMutation?: (mutation: CodexRuntimeLiveSessionMutation) => void | Promise<void>;
   onCatalogInvalidated?: CodexAppServerAdapterOptions["onCatalogInvalidated"];
@@ -151,6 +159,8 @@ const routedSession = (
 });
 
 export class CodexRuntimeSessionEvents {
+  private readonly liveImages: CodexLiveImagePreparation;
+  private readonly imageGenerations = new CodexImageGenerationState();
   private readonly handledStreamRequestKeysByRuntimeId = new Map<
     string,
     Map<string, Set<string>>
@@ -174,6 +184,7 @@ export class CodexRuntimeSessionEvents {
   private readonly contextUsage: CodexContextUsageTracker;
 
   constructor(private readonly deps: CodexRuntimeSessionEventsDeps) {
+    this.liveImages = new CodexLiveImagePreparation(deps.prepareImageGenerations);
     this.eventMapperPipeline = createCodexEventMapperPipeline(
       createCodexEventMappers(deps.subagents),
     );
@@ -223,6 +234,8 @@ export class CodexRuntimeSessionEvents {
   }
 
   clearRuntime(runtimeId: string): void {
+    this.liveImages.cancel(runtimeId);
+    this.imageGenerations.clearRuntime(runtimeId);
     this.runtimeEventGenerationByRuntimeId.delete(runtimeId);
     this.runtimeEventProcessingByRuntimeId.delete(runtimeId);
     try {
@@ -394,6 +407,8 @@ export class CodexRuntimeSessionEvents {
   }
 
   clearSession(externalSessionId: string, runtimeId?: string): void {
+    this.liveImages.cancel(runtimeId, externalSessionId);
+    this.imageGenerations.clearSession(externalSessionId, runtimeId);
     const routedDescendantThreadIds =
       runtimeId === undefined
         ? []
@@ -407,6 +422,8 @@ export class CodexRuntimeSessionEvents {
     if (runtimeId !== undefined) {
       this.clearStartedItemTimestampsForSession(runtimeId, externalSessionId);
       for (const threadId of routedDescendantThreadIds) {
+        this.liveImages.cancel(runtimeId, threadId);
+        this.imageGenerations.clearSession(threadId, runtimeId);
         this.clearStartedItemTimestampsForSession(runtimeId, threadId);
       }
     }
@@ -736,7 +753,7 @@ export class CodexRuntimeSessionEvents {
       return;
     }
     if (owner) {
-      this.emitSessionErrorForSession(owner.targetSession, cause);
+      this.emitRuntimeSessionFailure(owner.targetSession, cause);
     }
   }
 
@@ -813,12 +830,7 @@ export class CodexRuntimeSessionEvents {
       if (session.runtimeId !== runtimeId) {
         continue;
       }
-      this.emitSessionEventForSession(session, {
-        type: "session_error",
-        externalSessionId: session.threadId,
-        timestamp: new Date().toISOString(),
-        message,
-      });
+      this.emitRuntimeSessionFailure(session, message);
     }
   }
 
@@ -830,9 +842,24 @@ export class CodexRuntimeSessionEvents {
       throw new Error(event.message);
     }
     if (event.kind === "notification") {
-      await this.handlePendingNotifications(owner.targetSession, [
-        { ...event.message, receivedAt: event.receivedAt },
-      ]);
+      const generation = this.runtimeEventGenerationByRuntimeId.get(event.runtimeId);
+      const preparedImage = await this.liveImages.prepare(
+        event.runtimeId,
+        owner.retainedSession.threadId,
+        event.message,
+      );
+      if (
+        preparedImage === null ||
+        this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation ||
+        this.resolveRuntimeStreamEventSessionOwner(owner.targetSession.threadId, event.runtimeId)
+          ?.retainedSession !== owner.retainedSession
+      )
+        return;
+      await this.handlePendingNotifications(
+        owner.targetSession,
+        [{ ...event.message, receivedAt: event.receivedAt }],
+        preparedImage,
+      );
       return;
     }
     await this.processServerRequestsForSession(owner.retainedSession, [
@@ -923,8 +950,14 @@ export class CodexRuntimeSessionEvents {
   private async handlePendingNotifications(
     session: CodexSessionState,
     notifications: CodexNotificationRecord[],
+    preparedImageGeneration?: AgentImageGenerationPart,
   ): Promise<void> {
-    await handleCodexPendingNotifications(this.streamingContext(session), session, notifications);
+    await handleCodexPendingNotifications(
+      this.streamingContext(session),
+      session,
+      notifications,
+      preparedImageGeneration,
+    );
   }
 
   private streamingContext(scopedSession?: CodexSessionState): CodexStreamingContext {
@@ -936,6 +969,16 @@ export class CodexRuntimeSessionEvents {
       modelByTurnKey: this.modelByTurnKey,
       latestTodosBySessionId: this.latestTodosBySessionId,
       eventMapperPipeline: this.eventMapperPipeline,
+      startImageGenerationTurn: (session, turnId, timestamp) => {
+        this.imageGenerations.startTurn(session.runtimeId, session.threadId, turnId, timestamp);
+        this.emitSessionEventForSession(session, {
+          type: "image_generation_turn_started",
+          externalSessionId: session.threadId,
+          timestamp,
+          turnId,
+        });
+      },
+      settleImageGenerations: (session, end) => this.settleImageGenerations(session, end),
       recordStartedItemTimestamp: (runtimeId, threadId, itemId, startedAtMs) =>
         this.recordStartedItemTimestamp(runtimeId, threadId, itemId, startedAtMs),
       takeStartedItemTimestamp: (runtimeId, threadId, itemId) =>
@@ -1044,9 +1087,9 @@ export class CodexRuntimeSessionEvents {
         this.deps.flushQueuedUserMessagesLater(activeTurn),
       emitSessionEvent: (externalSessionId, event) =>
         this.emitSessionEvent(externalSessionId, event),
-      emitRetainedSessionEvent: (session, event) => {
+      emitRetainedSessionFailure: (session, message) => {
         if (this.deps.sessions.get(session.threadId) === session) {
-          this.emitSessionEventForSession(session, event);
+          this.emitRuntimeSessionFailure(session, message);
         }
       },
       emitRoutedRequestEvent: (eventTargetSession, event) =>
@@ -1085,10 +1128,12 @@ export class CodexRuntimeSessionEvents {
     if (!session) {
       return;
     }
-    this.emitSessionErrorForSession(session, cause);
+    this.emitRuntimeSessionFailure(session, cause);
   }
 
-  private emitSessionErrorForSession(session: CodexSessionState, cause: unknown): void {
+  private emitRuntimeSessionFailure(session: CodexSessionState, cause: unknown): void {
+    // Runtime/request failures affect the session. Streaming settles turn failures by turn ID.
+    this.settleImageGenerations(session, { scope: "session", reason: "runtime_failure" });
     this.emitSessionEventForSession(session, {
       type: "session_error",
       externalSessionId: session.threadId,
@@ -1111,15 +1156,109 @@ export class CodexRuntimeSessionEvents {
     this.emitSessionEventForSession(session, event);
   }
 
+  prepareImageHistory(runtimeId: string, threadId: string) {
+    return this.imageGenerations.prepareHistory(runtimeId, threadId);
+  }
+
+  /** Routed children can receive images without a local session. Resolve their owner before removing routes. */
+  settleGeneratedImages(runtimeId: string, sessionRef?: SessionRef): AgentEvent[] {
+    const root = sessionRef
+      ? this.resolveRuntimeStreamEventSessionOwner(sessionRef.externalSessionId, runtimeId)
+          ?.targetSession
+      : undefined;
+    if (
+      sessionRef &&
+      (!root ||
+        root.repoPath !== sessionRef.repoPath ||
+        root.workingDirectory !== sessionRef.workingDirectory)
+    )
+      return [];
+    const roots = root ? [root] : [...this.deps.sessions.values()];
+    const targets = new Map<string, CodexSessionState>();
+    for (const session of roots) {
+      if (session.runtimeId !== runtimeId) continue;
+      targets.set(session.threadId, session);
+      const descendants = this.deps.subagents.descendantRoutesForParent(
+        session.threadId,
+        runtimeId,
+        (route) => {
+          const child = this.deps.sessions.get(route.childExternalSessionId);
+          return (
+            !child || (child.runtimeId === runtimeId && child.contextOwnerThreadId !== undefined)
+          );
+        },
+      );
+      for (const route of descendants) {
+        const child = this.resolveRuntimeStreamEventSessionOwner(
+          route.childExternalSessionId,
+          runtimeId,
+        )?.targetSession;
+        if (
+          child &&
+          child.repoPath === session.repoPath &&
+          child.workingDirectory === session.workingDirectory
+        )
+          targets.set(child.threadId, child);
+      }
+    }
+    return [...targets.values()].flatMap((session) =>
+      this.settleImageGenerations(session, {
+        scope: "session",
+        reason: sessionRef ? "turn_ended" : "runtime_failure",
+      }),
+    );
+  }
+
+  settleImageGenerations(session: CodexSessionState, end: CodexImageGenerationEnd): AgentEvent[] {
+    const timestamp = end.timestamp ?? new Date().toISOString();
+    const parts = this.imageGenerations.settle(session.runtimeId, session.threadId, end, timestamp);
+    if (parts === null) return [];
+    const settlement: AgentEvent = {
+      type: "image_generation_settled",
+      externalSessionId: session.threadId,
+      timestamp,
+      reason: end.reason,
+    };
+    if (end.scope === "turn") settlement.turnId = end.turnId;
+    const events = [this.publishSessionEvent(session, settlement)];
+    for (const part of parts) {
+      const event: AgentEvent = {
+        type: "assistant_part",
+        externalSessionId: session.threadId,
+        timestamp,
+        part,
+      };
+      events.push(this.publishSessionEvent(session, event));
+    }
+    return events;
+  }
+
   private emitSessionEventForSession(session: CodexSessionState, event: AgentEvent): void {
+    const imageEvent =
+      event.type === "assistant_part" && event.part.kind === "image_generation"
+        ? {
+            ...event,
+            part: this.imageGenerations.upsert(
+              session.runtimeId,
+              session.threadId,
+              event.part,
+              event.timestamp,
+            ),
+          }
+        : event;
+    this.publishSessionEvent(session, imageEvent);
+  }
+
+  private publishSessionEvent(session: CodexSessionState, event: AgentEvent): AgentEvent {
     const sessionRef = codexSessionRef(session);
-    const normalizedEvent = withAgentSessionRef(sessionRef, event);
-    this.deps.sessionEvents.emit(sessionRef, normalizedEvent);
-    if (isAgentSessionTranscriptEventType(normalizedEvent.type)) {
+    const sessionEvent = withAgentSessionRef(sessionRef, event);
+    this.deps.sessionEvents.emit(sessionRef, sessionEvent);
+    if (isAgentSessionTranscriptEventType(sessionEvent.type)) {
       this.activeMutationByRuntimeId
         .get(session.runtimeId)
-        ?.transcriptEvents.push(agentSessionTranscriptEventSchema.parse(normalizedEvent));
+        ?.transcriptEvents.push(agentSessionTranscriptEventSchema.parse(sessionEvent));
     }
+    return sessionEvent;
   }
 
   private markSnapshotChanged(runtimeId: string, threadId: string): void {

@@ -1,3 +1,4 @@
+import type { createGeneratedImageCommandHandlers } from "../commands/generated-image-command-handlers";
 import type { Effect } from "effect";
 import type { createAgentSessionLiveCommandHandlers } from "../commands/agent-session-live-command-handlers";
 import type { createClaudeRuntimeCommandHandlers } from "../commands/claude-runtime-command-handlers";
@@ -22,7 +23,8 @@ import type { createWorkspaceFilesCommandHandlers } from "../commands/workspace-
 import type { createWorkspaceSettingsCommandHandlers } from "../commands/workspace-settings-command-handlers";
 import type { HostCommandName } from "../commands/host-command-registry";
 
-type AllHostCommandHandlers = ReturnType<typeof createAgentSessionLiveCommandHandlers> &
+type AllHostCommandHandlers = ReturnType<typeof createGeneratedImageCommandHandlers> &
+  ReturnType<typeof createAgentSessionLiveCommandHandlers> &
   ReturnType<typeof createClaudeRuntimeCommandHandlers> &
   ReturnType<typeof createCodexAppServerCommandHandlers> &
   ReturnType<typeof createDevServerCommandHandlers> &

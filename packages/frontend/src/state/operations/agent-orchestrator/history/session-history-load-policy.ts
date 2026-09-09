@@ -17,6 +17,7 @@ export type SessionHistoryLoadPolicy = {
   applyLoadedHistory(
     session: AgentSessionState,
     history: AgentSessionHistoryMessage[],
+    messagesAtReadStart?: AgentSessionState["messages"],
   ): AgentSessionState;
 };
 

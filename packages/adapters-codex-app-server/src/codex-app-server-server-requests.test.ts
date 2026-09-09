@@ -59,9 +59,12 @@ const createRequestContext = ({
   flushQueuedUserMessagesLater,
   emitSessionEvent: (externalSessionId: string, event: AgentEvent) =>
     events.push({ ...event, emittedExternalSessionId: externalSessionId }),
-  emitRetainedSessionEvent: (session, event) =>
+  emitRetainedSessionFailure: (session, message) =>
     events.push({
-      ...event,
+      type: "session_error",
+      externalSessionId: session.threadId,
+      timestamp: new Date().toISOString(),
+      message,
       emittedExternalSessionId: session.threadId,
     }),
 });
@@ -156,7 +159,7 @@ describe("handleCodexServerRequest", () => {
       respondServerRequest,
       sessions: new Map([[session.threadId, session]]),
     });
-    context.emitRetainedSessionEvent = () => {
+    context.emitRetainedSessionFailure = () => {
       throw new Error("simulated post-response delivery failure");
     };
     const request = mcpToolApprovalRequest({

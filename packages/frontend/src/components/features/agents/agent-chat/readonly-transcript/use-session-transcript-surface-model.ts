@@ -137,6 +137,7 @@ export function useSessionTranscriptSurfaceModel({
   const transcript = useMemo(
     () =>
       resolveAgentChatTranscriptPresentation({
+        repoPath: workspaceRepoPath,
         sessionKey,
         session: sessionHistory.session,
         target,
@@ -144,6 +145,7 @@ export function useSessionTranscriptSurfaceModel({
         notice: chatReadiness.transcriptNotice,
       }),
     [
+      workspaceRepoPath,
       chatReadiness.transcriptNotice,
       sessionHistory.session,
       sessionHistory.transcriptState,

@@ -1,3 +1,8 @@
+import type { AgentImageGenerationPart } from "@openducktor/contracts";
+import type {
+  CodexImageGenerationItem,
+  CodexImageGenerationPreparer,
+} from "./codex-image-generation";
 import {
   AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
   type AgentSessionHistoryMessage,
@@ -33,6 +38,7 @@ type CodexSessionHistoryInput = {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
   runtime: CodexSessionHistoryRuntime;
+  prepareImageGenerations?: CodexImageGenerationPreparer | undefined;
   threadInventory: Pick<CodexThreadInventoryReader, "readThreadHistory" | "readThreadTurnIds">;
 };
 
@@ -87,6 +93,7 @@ const projectCodexThreadReadToHistory = ({
   eventMapperPipeline,
   runtimeId,
   forkBoundary,
+  preparedImages,
 }: {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
@@ -94,6 +101,7 @@ const projectCodexThreadReadToHistory = ({
   eventMapperPipeline: ReturnType<typeof createCodexEventMapperPipeline>;
   runtimeId: string;
   forkBoundary: CodexForkBoundary | null;
+  preparedImages: ReadonlyMap<CodexImageGenerationItem, AgentImageGenerationPart> | undefined;
 }): AgentSessionHistoryMessage[] => {
   const forkBoundaryProjection = forkBoundary
     ? {
@@ -108,6 +116,7 @@ const projectCodexThreadReadToHistory = ({
         {
           item,
           turnIndex,
+          turn,
           timestamp,
           timestampIsApproximate,
           isFinalAgentMessage,
@@ -123,8 +132,15 @@ const projectCodexThreadReadToHistory = ({
         const turnModel = model;
         const threadItemInput: CodexThreadItemInput = {
           item,
+          turn,
           index,
         };
+        if (item.type === "imageGeneration" && preparedImages) {
+          const prepared = preparedImages.get(item);
+          if (!prepared)
+            throw new Error("Image history preparation returned no result. Reload this session.");
+          threadItemInput.preparedImageGeneration = prepared;
+        }
         if (timestamp) {
           threadItemInput.timestamp = timestamp;
         }
@@ -135,6 +151,7 @@ const projectCodexThreadReadToHistory = ({
           source: "thread_read",
           runtimeId,
           threadId: itemOwnerThreadId,
+          turnId: turn.id,
         };
         if (timestamp) {
           mappingContext.timestamp = timestamp;
@@ -188,6 +205,7 @@ export const loadCodexSessionHistory = async ({
   session,
   runtime,
   threadInventory,
+  prepareImageGenerations,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
   const { client, runtimeId } = runtime;
   const response = await threadInventory.readThreadHistory(client, {
@@ -208,6 +226,41 @@ export const loadCodexSessionHistory = async ({
     : Promise.resolve(null);
   const parentTurnIds = await parentTurnIdsPromise;
   const forkBoundary = parentTurnIds ? resolveCodexForkBoundary(response, parentTurnIds) : null;
+  let preparedImages: Map<CodexImageGenerationItem, AgentImageGenerationPart> | undefined;
+  if (prepareImageGenerations) {
+    const images = codexTurnItemsFromThreadRead(response).flatMap(({ item, turn }) =>
+      item.type === "imageGeneration"
+        ? [
+            {
+              item,
+              context: {
+                turnId: turn.id,
+                turnStatus: turn.status,
+                ref: {
+                  repoPath: input.repoPath,
+                  workingDirectory: input.workingDirectory,
+                  externalSessionId: input.externalSessionId,
+                  runtimeKind: "codex" as const,
+                },
+              },
+            },
+          ]
+        : [],
+    );
+    const parts = images.length > 0 ? await prepareImageGenerations(images) : [];
+    if (parts.length !== images.length)
+      throw new Error(
+        "Image history preparation returned incomplete results. Reload this session.",
+      );
+    preparedImages = new Map(
+      images.map(({ item, context }, index) => {
+        const part = parts[index];
+        if (!part || part.itemId !== item.id || part.turnId !== context.turnId)
+          throw new Error("Image history preparation returned another image. Reload this session.");
+        return [item, part];
+      }),
+    );
+  }
   return projectCodexThreadReadToHistory({
     input,
     session,
@@ -215,5 +268,6 @@ export const loadCodexSessionHistory = async ({
     eventMapperPipeline: createCodexEventMapperPipeline(),
     runtimeId,
     forkBoundary,
+    preparedImages,
   });
 };

@@ -2,6 +2,7 @@ import { CLAUDE_RUNTIME_HOST_COMMAND_NAMES } from "./claude-runtime-command-cont
 import { z } from "zod";
 
 export const HOST_COMMAND_NAMES = [
+  "agent_session_begin_generated_image_batch",
   "agent_session_control_fork",
   "agent_session_control_release",
   "agent_session_control_resume",
@@ -10,6 +11,7 @@ export const HOST_COMMAND_NAMES = [
   "agent_session_control_stop",
   "agent_session_control_update_model",
   "agent_session_delete",
+  "agent_session_describe_generated_images",
   "agent_session_live_list",
   "agent_session_live_load_context",
   "agent_session_live_load_diff",
@@ -17,6 +19,8 @@ export const HOST_COMMAND_NAMES = [
   "agent_session_live_refresh",
   "agent_session_live_reply_approval",
   "agent_session_live_reply_question",
+  "agent_session_read_generated_image",
+  "agent_session_release_generated_image_batch",
   "agent_session_stop",
   "agent_session_workflow_start",
   "agent_sessions_list",

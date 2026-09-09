@@ -12,6 +12,7 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
       transcript: {
         kind: "empty",
         target: null,
+        repoPath: "/repo",
         displayedSessionKey: null,
         notice: null,
         session: null,

@@ -72,6 +72,7 @@ export type AgentChatTranscriptNotice = {
 };
 
 type AgentChatTranscriptPresentationBase = {
+  repoPath: string | null;
   target: AgentSessionTranscriptTarget | null;
   displayedSessionKey: string | null;
   notice: AgentChatTranscriptNotice | null;

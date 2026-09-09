@@ -1,0 +1,333 @@
+import { expect, test } from "bun:test";
+import type { AgentEvent } from "@openducktor/core";
+import type { AgentImageGenerationPart } from "@openducktor/contracts";
+import {
+  codexSessionRuntimeRef,
+  codexStartSessionInput,
+  codexTurnFixture,
+  createHarness,
+  createRuntimeStreamSubscription,
+  flushCodexAdapterWork,
+} from "./codex-app-server-adapter.test-harness";
+
+test("external turns ignore stale idle cutoffs and publish the original settlement timestamp", async () => {
+  const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+  const { adapter } = createHarness({ subscribeEvents });
+  await adapter.startSession(codexStartSessionInput());
+  const ref = codexSessionRuntimeRef();
+  const events: AgentEvent[] = [];
+  const unsubscribe = await adapter.subscribeEvents(ref, (event) => events.push(event));
+  const start = "2026-09-06T10:00:02.000Z";
+  const end = "2026-09-06T10:00:03.000Z";
+  const idle = {
+    method: "thread/status/changed",
+    params: { threadId: ref.externalSessionId, status: { type: "idle" } },
+  };
+  try {
+    emitNotification(
+      {
+        method: "turn/started",
+        params: {
+          threadId: ref.externalSessionId,
+          turn: codexTurnFixture({ id: "external", status: "inProgress", items: [] }),
+        },
+      },
+      start,
+    );
+    emitNotification(
+      {
+        method: "item/started",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId: "external",
+          startedAtMs: Date.parse(start),
+          item: {
+            type: "imageGeneration",
+            id: "image",
+            status: "in_progress",
+            result: "",
+            revisedPrompt: null,
+            failure: null,
+          },
+        },
+      },
+      start,
+    );
+    emitNotification(idle, "2026-09-06T10:00:01.000Z");
+    await flushCodexAdapterWork();
+    expect(events.filter((event) => event.type === "session_error")).toEqual([]);
+    expect(events.filter((event) => event.type === "image_generation_settled")).toEqual([]);
+    expect(events.filter((event) => event.type === "assistant_part").at(-1)).toMatchObject({
+      part: { status: "running" },
+    });
+    emitNotification(idle, end);
+    await flushCodexAdapterWork();
+    expect(events.filter((event) => event.type === "image_generation_settled")).toMatchObject([
+      { timestamp: end },
+    ]);
+    expect(events.filter((event) => event.type === "assistant_part").at(-1)).toMatchObject({
+      timestamp: end,
+      part: { status: "incomplete" },
+    });
+    events.length = 0;
+    emitNotification(idle, end);
+    emitNotification(idle, "2026-09-06T10:00:01.000Z");
+    await flushCodexAdapterWork();
+    expect(
+      events.filter(
+        (event) => event.type === "image_generation_settled" || event.type === "assistant_part",
+      ),
+    ).toEqual([]);
+  } finally {
+    unsubscribe();
+    adapter.releaseRuntime("runtime-live");
+  }
+});
+
+test("failed completion corrects provisional idle before later idle replay", async () => {
+  const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+  const { adapter } = createHarness({ subscribeEvents });
+  await adapter.startSession(codexStartSessionInput());
+  const ref = codexSessionRuntimeRef();
+  const parts: AgentImageGenerationPart[] = [];
+  const unsubscribe = await adapter.subscribeEvents(ref, (event) => {
+    if (event.type === "assistant_part" && event.part.kind === "image_generation")
+      parts.push(event.part);
+  });
+  try {
+    emitNotification({
+      method: "turn/started",
+      params: {
+        threadId: ref.externalSessionId,
+        turn: codexTurnFixture({ id: "turn", status: "inProgress", items: [] }),
+      },
+    });
+    emitNotification({
+      method: "item/started",
+      params: {
+        threadId: ref.externalSessionId,
+        turnId: "turn",
+        startedAtMs: 0,
+        item: {
+          type: "imageGeneration",
+          id: "image",
+          status: "in_progress",
+          result: "",
+          revisedPrompt: null,
+          transparentBackground: null,
+          failure: null,
+        },
+      },
+    });
+    const idle = {
+      method: "thread/status/changed",
+      params: { threadId: ref.externalSessionId, status: { type: "idle" } },
+    };
+    emitNotification(idle);
+    await flushCodexAdapterWork();
+    expect(parts.at(-1)).toMatchObject({ status: "incomplete", incompleteReason: "turn_ended" });
+    emitNotification({
+      method: "turn/completed",
+      params: {
+        threadId: ref.externalSessionId,
+        turn: codexTurnFixture({ id: "turn", status: "failed", items: [] }),
+      },
+    });
+    await flushCodexAdapterWork();
+    expect(parts.at(-1)).toMatchObject({
+      status: "incomplete",
+      incompleteReason: "runtime_failure",
+    });
+    emitNotification(idle);
+    await flushCodexAdapterWork();
+    expect(parts.at(-1)).toMatchObject({
+      status: "incomplete",
+      incompleteReason: "runtime_failure",
+    });
+  } finally {
+    unsubscribe();
+    adapter.releaseRuntime("runtime-live");
+  }
+});
+
+test("ordered live image events retain terminal output through replay and turn completion", async () => {
+  const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+  const mutations: AgentImageGenerationPart[] = [];
+  const { adapter } = createHarness({
+    subscribeEvents,
+    onLiveSessionMutation: (mutation) => {
+      for (const event of mutation.transcriptEvents)
+        if (event.type === "assistant_part" && event.part.kind === "image_generation")
+          mutations.push(event.part);
+    },
+  });
+  await adapter.startSession(codexStartSessionInput());
+  const ref = codexSessionRuntimeRef();
+  const events: AgentEvent[] = [];
+  const unsubscribe = await adapter.subscribeEvents(ref, (event) => events.push(event));
+  const image = {
+    type: "imageGeneration",
+    id: "image",
+    status: "in_progress",
+    result: "",
+    revisedPrompt: null,
+    transparentBackground: null,
+    failure: null,
+  };
+  const started = {
+    method: "item/started",
+    params: { threadId: ref.externalSessionId, turnId: "turn", startedAtMs: 0, item: image },
+  };
+  try {
+    emitNotification(started);
+    emitNotification({
+      method: "item/completed",
+      params: {
+        ...started.params,
+        completedAtMs: 1,
+        item: { ...image, status: "completed", result: "private-bytes" },
+      },
+    });
+    emitNotification(started);
+    emitNotification({
+      method: "turn/completed",
+      params: {
+        threadId: ref.externalSessionId,
+        turn: codexTurnFixture({ id: "turn", items: [], status: "completed" }),
+      },
+    });
+    await flushCodexAdapterWork();
+    expect(events.filter((event) => event.type === "session_error")).toEqual([]);
+    expect(mutations.map((part) => part.status)).toEqual(["running", "completed", "completed"]);
+    expect(mutations.every((part) => part.turnId === "turn")).toBe(true);
+    expect(JSON.stringify(events)).not.toContain("private-bytes");
+  } finally {
+    unsubscribe();
+    adapter.releaseRuntime("runtime-live");
+  }
+});
+
+for (const outcome of ["interrupted", "failed", "completed", "stop"] as const) {
+  test(`unfinished image settles on ${outcome}`, async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter } = createHarness({ subscribeEvents });
+    await adapter.startSession(codexStartSessionInput());
+    const ref = codexSessionRuntimeRef();
+    const parts: AgentImageGenerationPart[] = [];
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(ref, (event) => {
+      events.push(event);
+      if (event.type === "assistant_part" && event.part.kind === "image_generation")
+        parts.push(event.part);
+    });
+    try {
+      emitNotification({
+        method: "item/started",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId: "turn",
+          startedAtMs: 0,
+          item: {
+            type: "imageGeneration",
+            id: "image",
+            status: "in_progress",
+            result: "",
+            revisedPrompt: null,
+            transparentBackground: null,
+            failure: null,
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+      if (outcome === "stop") {
+        events.length = 0;
+        const settled = adapter.settleGeneratedImages("runtime-live", ref);
+        expect(settled).toHaveLength(2);
+        expect(events).toEqual(settled);
+        for (const [index, event] of settled.entries()) expect(events[index]).toBe(event);
+        expect(settled[0]).toMatchObject({
+          type: "image_generation_settled",
+          reason: "turn_ended",
+        });
+        expect(settled[1]).toMatchObject({
+          type: "assistant_part",
+          sessionRef: {
+            repoPath: ref.repoPath,
+            runtimeKind: ref.runtimeKind,
+            workingDirectory: ref.workingDirectory,
+            externalSessionId: ref.externalSessionId,
+          },
+          part: { status: "incomplete" },
+        });
+        expect(adapter.settleGeneratedImages("runtime-live", ref)).toMatchObject([
+          { type: "image_generation_settled" },
+        ]);
+        await adapter.stopSession(ref);
+      } else
+        emitNotification({
+          method: "turn/completed",
+          params: {
+            threadId: ref.externalSessionId,
+            turn: codexTurnFixture({ id: "turn", items: [], status: outcome }),
+          },
+        });
+      await flushCodexAdapterWork();
+      expect(parts.at(-1)?.status).toBe(outcome === "interrupted" ? "interrupted" : "incomplete");
+    } finally {
+      unsubscribe();
+      adapter.releaseRuntime("runtime-live");
+    }
+  });
+}
+
+test("a failed live turn replaces an unknown image reason only in its own turn", async () => {
+  const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+  const { adapter } = createHarness({ subscribeEvents });
+  await adapter.startSession(codexStartSessionInput());
+  const ref = codexSessionRuntimeRef();
+  const parts: AgentImageGenerationPart[] = [];
+  const unsubscribe = await adapter.subscribeEvents(ref, (event) => {
+    if (event.type === "assistant_part" && event.part.kind === "image_generation")
+      parts.push(event.part);
+  });
+  try {
+    for (const turnId of ["turn", "other-turn"]) {
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId,
+          completedAtMs: 1,
+          item: {
+            type: "imageGeneration",
+            id: `image-${turnId}`,
+            status: "future_status",
+            result: "",
+            revisedPrompt: null,
+            transparentBackground: null,
+            failure: null,
+          },
+        },
+      });
+    }
+    await flushCodexAdapterWork();
+    expect(parts.map((part) => part.incompleteReason)).toEqual([
+      "unknown_status",
+      "unknown_status",
+    ]);
+    emitNotification({
+      method: "turn/completed",
+      params: {
+        threadId: ref.externalSessionId,
+        turn: codexTurnFixture({ id: "turn", items: [], status: "failed" }),
+      },
+    });
+    await flushCodexAdapterWork();
+    expect(parts.slice(2)).toMatchObject([
+      { turnId: "turn", status: "incomplete", incompleteReason: "runtime_failure" },
+    ]);
+  } finally {
+    unsubscribe();
+    adapter.releaseRuntime("runtime-live");
+  }
+});

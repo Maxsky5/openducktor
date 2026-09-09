@@ -79,6 +79,7 @@ export type CodexTurnTiming = {
 export type CodexThreadReadItem = {
   item: CodexTimedThreadItem;
   turnIndex: number;
+  turn: CodexAppServerTurn;
   turnId: string | null;
   timestamp: string | null;
   timestampIsApproximate?: true;
@@ -206,6 +207,7 @@ export const codexTurnItemsFromThreadRead = (
       const threadReadItem: CodexThreadReadItem = {
         item,
         turnIndex,
+        turn,
         turnId,
         timestamp,
         isFinalAgentMessage: itemIsFinalAgentMessage,

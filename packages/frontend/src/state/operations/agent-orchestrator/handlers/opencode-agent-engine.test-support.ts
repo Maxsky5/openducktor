@@ -133,6 +133,18 @@ const bindPolicyInput = <Input extends { runtimeKind: string }>(input: Input) =>
 export const createOpenCodeAgentEngineTestAdapter = (
   adapter: OpencodeSdkAdapter,
 ): AgentEnginePort => ({
+  describeGeneratedImages: async () => {
+    throw new Error("Unexpected image metadata read");
+  },
+  beginGeneratedImageBatch: async () => {
+    throw new Error("Unexpected beginGeneratedImageBatch");
+  },
+  releaseGeneratedImageBatch: async () => {
+    throw new Error("Unexpected releaseGeneratedImageBatch");
+  },
+  readGeneratedImage: async () => {
+    throw new Error("OpenCode does not support generated image previews.");
+  },
   listRuntimeDefinitions: () => adapter.listRuntimeDefinitions(),
   listAvailableModels: (input) => adapter.listAvailableModels(validateOpenCodeInput(input)),
   listAvailableSlashCommands: (input) =>

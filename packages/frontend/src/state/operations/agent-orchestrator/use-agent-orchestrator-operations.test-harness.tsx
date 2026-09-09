@@ -1,3 +1,4 @@
+import { createOpenCodeAgentEngineTestAdapter } from "./handlers/opencode-agent-engine.test-support";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionLiveEnvelope,
@@ -248,7 +249,7 @@ export const createHookHarness = (args: {
     runtimeHealthByRuntime: args.runtimeHealthByRuntime ?? {
       opencode: createRepoRuntimeHealthFixture(),
     },
-    agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
+    agentEngine: args.agentEngine ?? createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter()),
     dependencies,
   };
   const runtimeDefinitionsContextValue = createRuntimeDefinitionsContextValue();

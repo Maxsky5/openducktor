@@ -12,7 +12,10 @@ import type { TaskDocumentState } from "@/components/features/task-details/use-t
 import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { AgentSessionReadModelStateContext } from "@/state/app-state-contexts";
+import {
+  ActiveWorkspaceContext,
+  AgentSessionReadModelStateContext,
+} from "@/state/app-state-contexts";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import {
   type AgentSessionFixtureOverrides,
@@ -363,7 +366,11 @@ const createHookHarness = (initialProps: HookArgs) =>
             getSessionFault: () => null,
           },
         },
-        children,
+        createElement(
+          ActiveWorkspaceContext.Provider,
+          { value: { activeWorkspace: null, setActiveWorkspace: () => {} } },
+          children,
+        ),
       ),
   });
 

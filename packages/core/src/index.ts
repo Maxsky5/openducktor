@@ -1,3 +1,5 @@
+export * from "./services/agent-image-generation";
+export * from "./services/agent-image-generation-lifecycle";
 export * from "./ports/agent-engine";
 export * from "./services/agent-file-references";
 export * from "./services/agent-session-ref-key";

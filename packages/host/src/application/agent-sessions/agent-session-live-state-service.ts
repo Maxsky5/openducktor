@@ -391,6 +391,15 @@ export const createAgentSessionLiveStateService = ({
               return validated.map((snapshot) => snapshot.ref);
             }),
           );
+          const settlementExit = yield* Effect.exit(
+            Effect.gen(function* () {
+              if (!adapter.settleRuntimeTranscript) return;
+              const events = yield* adapter.settleRuntimeTranscript();
+              yield* publishChanges(
+                events.map((event) => ({ type: "transcript_event" as const, event })),
+              );
+            }),
+          );
           const releaseExit = yield* Effect.exit(adapter.releaseRuntime());
           const releasedRefsExit = Exit.isSuccess(releaseExit)
             ? yield* Effect.exit(
@@ -426,6 +435,8 @@ export const createAgentSessionLiveStateService = ({
             : null;
 
           const failures: string[] = [];
+          if (Exit.isFailure(settlementExit))
+            failures.push(`transcript settlement: ${Cause.pretty(settlementExit.cause)}`);
           if (Exit.isFailure(snapshotExit)) {
             failures.push(`live snapshots: ${Cause.pretty(snapshotExit.cause)}`);
           }

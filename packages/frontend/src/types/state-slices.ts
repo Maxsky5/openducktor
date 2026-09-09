@@ -195,6 +195,10 @@ export type AgentSessionHistoryLoadContextValue = {
 };
 
 export type AgentOperationsContextValue = {
+  describeGeneratedImages: import("@openducktor/core").AgentEnginePort["describeGeneratedImages"];
+  beginGeneratedImageBatch: import("@openducktor/core").AgentEnginePort["beginGeneratedImageBatch"];
+  releaseGeneratedImageBatch: import("@openducktor/core").AgentEnginePort["releaseGeneratedImageBatch"];
+  readGeneratedImage: import("@openducktor/core").AgentEnginePort["readGeneratedImage"];
   readSessionTodos: (session: PolicyBoundSessionRef) => Promise<AgentSessionTodoItem[]>;
   readSessionHistory: (
     session: LoadAgentSessionHistoryInput,

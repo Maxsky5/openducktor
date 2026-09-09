@@ -1,3 +1,4 @@
+import { upsertImageGenerationMessage } from "../support/image-generation-messages";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { toAssistantMessageMeta } from "../support/assistant-meta";
 import { toReasoningMessageId, toTextMessageId } from "../support/chat-message-ids";
@@ -301,6 +302,13 @@ export const handleAssistantPart = (
   event: SessionPartEvent,
 ): void => {
   const part = event.part;
+  if (part.kind === "image_generation") {
+    context.store.updateSession(context.session.identity, (current) => ({
+      ...current,
+      messages: upsertImageGenerationMessage(current, part, event.timestamp),
+    }));
+    return;
+  }
   const recordsTurnActivity = part.kind !== "step" && shouldRecordPartAsTurnActivity(context, part);
   if (recordsTurnActivity) {
     const activityTimestamp =

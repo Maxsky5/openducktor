@@ -19,7 +19,7 @@ import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
-import { useAgentSessionReadModelState } from "@/state/app-state-provider";
+import { useActiveWorkspace, useAgentSessionReadModelState } from "@/state/app-state-provider";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
   type AgentStudioChatDraftScope,
@@ -120,6 +120,7 @@ export function useAgentStudioChatModel({
   runtimeDefinitions,
   composer,
 }: UseAgentStudioChatModelArgs): AgentChatModel {
+  const repoPath = useActiveWorkspace()?.repoPath ?? null;
   const { loadAgentSessionHistory } = sessionActions;
   const subagentPendingApprovalCountBySessionKey =
     selectedSession.pendingInput.subagentPendingApprovalCountBySessionKey;
@@ -298,6 +299,7 @@ export function useAgentStudioChatModel({
   const transcript = useMemo(
     () =>
       resolveAgentChatTranscriptPresentation({
+        repoPath,
         sessionKey: selectedSessionKey,
         session: transcriptSession,
         target: transcriptTarget,
@@ -305,6 +307,7 @@ export function useAgentStudioChatModel({
         notice: chatReadiness.transcriptNotice,
       }),
     [
+      repoPath,
       chatReadiness.transcriptNotice,
       selectedSessionKey,
       selectedSessionTranscriptState,

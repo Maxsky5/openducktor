@@ -1,3 +1,4 @@
+import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
@@ -62,7 +63,7 @@ export const createSessionDependenciesFixture = (
 export const createRuntimeDependenciesFixture = (
   overrides: Partial<RuntimeDependencies> = {},
 ): RuntimeDependencies => ({
-  adapter: new OpencodeSdkAdapter(),
+  adapter: createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter()),
   canonicalizePath: async (path) => path,
   startWorkflowSession: async () => {
     throw new Error("should not start workflow session");

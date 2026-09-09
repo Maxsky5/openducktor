@@ -64,6 +64,7 @@ describe("useAgentChatSurfaceModel", () => {
       kind: "session" as const,
       session,
       target: transcriptTarget,
+      repoPath: "/repo",
       displayedSessionKey: "standalone-session",
       shouldResetWindow: false as const,
       notice: null,

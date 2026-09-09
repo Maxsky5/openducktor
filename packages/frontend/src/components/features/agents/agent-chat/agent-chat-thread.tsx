@@ -1,6 +1,15 @@
+import { AgentChatImageSessionContext } from "./agent-chat-image-session-context";
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { memo, type ReactElement, type RefObject, useCallback, useEffect, useRef } from "react";
+import {
+  memo,
+  type ReactElement,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentChatThreadModel } from "./agent-chat.types";
@@ -313,6 +322,21 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     syncBottomAfterComposerLayoutRef,
   } = model;
   const { session, target: transcriptTarget } = transcript;
+  const imageRuntimeKind = session?.runtimeKind;
+  const imageWorkingDirectory = session?.workingDirectory;
+  const imageExternalSessionId = session?.externalSessionId;
+  const imageSessionRef = useMemo(
+    () =>
+      transcript.repoPath && imageRuntimeKind && imageWorkingDirectory && imageExternalSessionId
+        ? {
+            repoPath: transcript.repoPath,
+            runtimeKind: imageRuntimeKind,
+            workingDirectory: imageWorkingDirectory,
+            externalSessionId: imageExternalSessionId,
+          }
+        : null,
+    [transcript.repoPath, imageRuntimeKind, imageWorkingDirectory, imageExternalSessionId],
+  );
   const {
     messagesContentRef,
     renderedTurns,
@@ -402,53 +426,55 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   }, [hasBottomStack, syncBottomAfterComposerLayoutRef]);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      <AgentChatTranscript
-        emptyState={transcriptEmptyState}
-        modelCatalog={modelCatalog}
-        isStarting={isStarting}
-        isSending={isSending}
-        isInteractionEnabled={isInteractionEnabled}
-        sessionAgentColors={sessionAgentColors}
-        subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
-        subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-        transcriptTarget={transcriptTarget}
-        runtimePresentation={runtimePresentation}
-        messagesContainerRef={messagesContainerRef}
-        messagesContentRef={messagesContentRef}
-        renderedTurns={renderedTurns}
-        resolveRowRef={resolveRowRef}
-        transcriptNotice={renderedTranscriptNotice}
-      />
+    <AgentChatImageSessionContext.Provider value={imageSessionRef}>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <AgentChatTranscript
+          emptyState={transcriptEmptyState}
+          modelCatalog={modelCatalog}
+          isStarting={isStarting}
+          isSending={isSending}
+          isInteractionEnabled={isInteractionEnabled}
+          sessionAgentColors={sessionAgentColors}
+          subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
+          subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
+          transcriptTarget={transcriptTarget}
+          runtimePresentation={runtimePresentation}
+          messagesContainerRef={messagesContainerRef}
+          messagesContentRef={messagesContentRef}
+          renderedTurns={renderedTurns}
+          resolveRowRef={resolveRowRef}
+          transcriptNotice={renderedTranscriptNotice}
+        />
 
-      {hasBottomStack && session ? (
-        <div ref={bottomStackRef}>
-          <AgentChatBottomStack
-            externalSessionId={session.externalSessionId}
-            pendingQuestions={pendingQuestionRequests}
-            pendingApprovals={pendingApprovalRequests}
-            todos={todos}
-            canSubmitQuestionAnswers={canSubmitQuestionAnswers}
-            isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
-            onSubmitQuestionAnswers={onSubmitQuestionAnswers}
-            canReplyToApprovals={canReplyToApprovals}
-            runtimeSupportedApprovalReplyOutcomes={
-              runtimePresentation.supportedApprovalReplyOutcomes
-            }
-            isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
-            approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
-            onReplyApproval={onReplyApproval}
-            sessionAuxiliaryError={sessionAuxiliaryError}
-            runtimeStatusMessage={runtimeStatusMessage}
-            todoPanelCollapsed={todoPanelCollapsed}
-            isSessionWorking={isSessionWorking}
-            sessionAccentColor={sessionAccentColor}
-            onToggleTodoPanel={onToggleTodoPanel}
-          />
-        </div>
-      ) : null}
-      {session ? <ScrollToTopButton visible={!isNearTop} onClick={scrollToTop} /> : null}
-      {session ? <ScrollToBottomButton visible={!isNearBottom} onClick={scrollToBottom} /> : null}
-    </div>
+        {hasBottomStack && session ? (
+          <div ref={bottomStackRef}>
+            <AgentChatBottomStack
+              externalSessionId={session.externalSessionId}
+              pendingQuestions={pendingQuestionRequests}
+              pendingApprovals={pendingApprovalRequests}
+              todos={todos}
+              canSubmitQuestionAnswers={canSubmitQuestionAnswers}
+              isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
+              onSubmitQuestionAnswers={onSubmitQuestionAnswers}
+              canReplyToApprovals={canReplyToApprovals}
+              runtimeSupportedApprovalReplyOutcomes={
+                runtimePresentation.supportedApprovalReplyOutcomes
+              }
+              isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
+              approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
+              onReplyApproval={onReplyApproval}
+              sessionAuxiliaryError={sessionAuxiliaryError}
+              runtimeStatusMessage={runtimeStatusMessage}
+              todoPanelCollapsed={todoPanelCollapsed}
+              isSessionWorking={isSessionWorking}
+              sessionAccentColor={sessionAccentColor}
+              onToggleTodoPanel={onToggleTodoPanel}
+            />
+          </div>
+        ) : null}
+        {session ? <ScrollToTopButton visible={!isNearTop} onClick={scrollToTop} /> : null}
+        {session ? <ScrollToBottomButton visible={!isNearBottom} onClick={scrollToBottom} /> : null}
+      </div>
+    </AgentChatImageSessionContext.Provider>
   );
 }

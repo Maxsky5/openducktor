@@ -1,6 +1,7 @@
 import type {
   CodexAppServerAdapter,
   CodexAppServerAdapterOptions,
+  CodexImageGenerationPreparer,
 } from "@openducktor/adapters-codex-app-server";
 import type {
   AgentSessionScope,
@@ -21,6 +22,11 @@ import type {
 
 export type CodexSessionController = Pick<
   CodexAppServerAdapter,
+  | "resolveGeneratedImageSource"
+  | "beginGeneratedImageBatch"
+  | "releaseGeneratedImageBatch"
+  | "describeGeneratedImages"
+  | "settleGeneratedImages"
   | "prepareRuntime"
   | "listLiveSessionSnapshots"
   | "loadLiveSessionContextUsage"
@@ -48,6 +54,7 @@ export type CodexLiveSessionAdapterPreparer = (
 ) => Effect.Effect<PreparedCodexLiveSessionAdapter, HostError>;
 
 export type CreateCodexLiveSessionAdapterPreparerInput = {
+  readonly prepareImageGenerations: CodexImageGenerationPreparer;
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation">;
   readonly codexAppServer: CodexAppServerPort;
   readonly onBackgroundFailure: (

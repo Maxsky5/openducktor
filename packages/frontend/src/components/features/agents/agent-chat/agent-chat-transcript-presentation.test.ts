@@ -28,6 +28,7 @@ describe("resolveAgentChatTranscriptPresentation", () => {
     };
 
     const presentation = resolveAgentChatTranscriptPresentation({
+      repoPath: "/repo",
       sessionKey: agentSessionIdentityKey(session),
       session,
       target,
@@ -54,6 +55,7 @@ describe("resolveAgentChatTranscriptPresentation", () => {
     };
 
     const presentation = resolveAgentChatTranscriptPresentation({
+      repoPath: "/repo",
       sessionKey: agentSessionIdentityKey(session),
       session,
       target: session,
@@ -62,6 +64,7 @@ describe("resolveAgentChatTranscriptPresentation", () => {
     });
 
     expect(presentation).toEqual({
+      repoPath: "/repo",
       kind: "empty",
       session: null,
       target: session,
@@ -76,6 +79,7 @@ describe("resolveAgentChatTranscriptPresentation", () => {
 
     expect(
       resolveAgentChatTranscriptPresentation({
+        repoPath: "/repo",
         sessionKey: agentSessionIdentityKey(session),
         session,
         target: session,
@@ -99,6 +103,7 @@ describe("resolveAgentChatTranscriptPresentation", () => {
     ({ state, shouldResetWindow }) => {
       expect(
         resolveAgentChatTranscriptPresentation({
+          repoPath: "/repo",
           sessionKey: null,
           session: null,
           target: null,
@@ -106,6 +111,7 @@ describe("resolveAgentChatTranscriptPresentation", () => {
           notice: null,
         }),
       ).toEqual({
+        repoPath: "/repo",
         kind: "empty",
         session: null,
         target: null,

@@ -97,6 +97,7 @@
       "supportsDiff": true,
       "supportsFileStatus": true,
       "supportsMcpStatus": true,
+      "supportsImageGeneration": false,
       "supportsSubagents": true,
       "supportedSubagentExecutionModes": ["foreground", "background"]
     }

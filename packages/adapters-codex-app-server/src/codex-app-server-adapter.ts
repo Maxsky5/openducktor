@@ -1,3 +1,11 @@
+import type {
+  AgentGeneratedImageBatch,
+  AgentGeneratedImageBatchInput,
+  AgentGeneratedImageDescribeInput,
+} from "@openducktor/contracts";
+import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
+import type { AgentGeneratedImageSource } from "@openducktor/core";
+import { CodexGeneratedImageResolver } from "./codex-generated-image-resolver";
 import {
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
@@ -191,16 +199,23 @@ export class CodexAppServerAdapter
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
   private readonly models = new CodexModels();
   private readonly threadInventory = new CodexThreadInventoryReader();
+  private readonly generatedImages: CodexGeneratedImageResolver;
   private readonly subagents = new CodexSubagentLinkState();
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.runtimeClients = new CodexRuntimeClientResolver(options);
+    this.generatedImages = new CodexGeneratedImageResolver(
+      this.runtimeClients,
+      this.threadInventory,
+      options.prepareImageGenerations,
+    );
     const onLiveSessionMutation = options.onLiveSessionMutation;
     const onCatalogInvalidated = options.onCatalogInvalidated;
     const runtimeEventsDepsBase: Omit<
       ConstructorParameters<typeof CodexRuntimeSessionEvents>[0],
       "subscribeEvents" | "onRuntimeEventQueueFailure"
     > = {
+      prepareImageGenerations: options.prepareImageGenerations,
       respondServerRequest: options.respondServerRequest,
       sessions: {
         get: (externalSessionId: string) => this.localSessions.get(externalSessionId),
@@ -284,12 +299,40 @@ export class CodexAppServerAdapter
     }
     this.requireServerRequestResponder(runtimeId);
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+    this.generatedImages.prepareRuntime(runtimeId);
+  }
+
+  resolveGeneratedImageSource(
+    input: AgentGeneratedImageReadInput,
+    signal?: AbortSignal,
+  ): Promise<AgentGeneratedImageSource> {
+    return this.generatedImages.resolve(input, signal);
+  }
+
+  beginGeneratedImageBatch(input: AgentGeneratedImageBatchInput, signal?: AbortSignal) {
+    return this.generatedImages.beginBatch(input, signal);
+  }
+
+  releaseGeneratedImageBatch(input: AgentGeneratedImageBatch): void {
+    this.generatedImages.releaseImageBatch(input);
+  }
+
+  describeGeneratedImages(input: AgentGeneratedImageDescribeInput, signal?: AbortSignal) {
+    return this.generatedImages.describe(input, signal);
+  }
+
+  settleGeneratedImages(runtimeId: string, sessionRef?: SessionRef): AgentEvent[] {
+    return this.runtimeEvents.settleGeneratedImages(runtimeId, sessionRef);
   }
 
   releaseRuntime(runtimeId: string): void {
+    this.generatedImages.releaseRuntime(runtimeId);
     releaseCodexRuntimeState(runtimeId, {
       cancelContextUsage: () => this.contextUsageLoader.cancelRuntime(runtimeId),
-      releaseSessions: () => this.localSessions.releaseRuntime(runtimeId),
+      releaseSessions: () => {
+        this.settleGeneratedImages(runtimeId);
+        this.localSessions.releaseRuntime(runtimeId);
+      },
       clearPendingInput: () => this.pendingInput.clearRuntime(runtimeId),
       clearSubagents: () => this.subagents.clearRuntime(runtimeId),
       clearRuntimeEvents: () => this.runtimeEvents.clearRuntime(runtimeId),
@@ -577,12 +620,29 @@ export class CodexAppServerAdapter
           runtimeId: session.runtimeId,
         }
       : await this.runtimeClients.resolve(input, "load Codex session history");
-    return loadCodexSessionHistory({
+    const mergeImage = this.options.subscribeEvents
+      ? this.runtimeEvents.prepareImageHistory(runtime.runtimeId, input.externalSessionId)
+      : undefined;
+    const history = await loadCodexSessionHistory({
       input,
       session,
       runtime,
       threadInventory: this.threadInventory,
+      prepareImageGenerations: this.options.prepareImageGenerations,
     });
+    if (!mergeImage) return history;
+    return history.map((message) =>
+      message.role === "assistant"
+        ? {
+            ...message,
+            parts: message.parts.map((part) =>
+              part.kind === "image_generation"
+                ? mergeImage(part, message.timestampIsApproximate ? undefined : message.timestamp)
+                : part,
+            ),
+          }
+        : message,
+    );
   }
 
   async loadSessionContextUsage(
@@ -797,6 +857,7 @@ export class CodexAppServerAdapter
     if (session) {
       this.releaseSessionTree(session);
     } else {
+      this.generatedImages.releaseSession(input);
       this.contextUsageLoader.cancelSession(input);
     }
   }
@@ -1158,6 +1219,7 @@ export class CodexAppServerAdapter
   }
 
   private releaseSessionTree(session: CodexSessionState): void {
+    this.settleGeneratedImages(session.runtimeId, codexSessionRef(session));
     const descendants = this.subagents.descendantRoutesForParent(
       session.threadId,
       session.runtimeId,
@@ -1169,7 +1231,13 @@ export class CodexAppServerAdapter
         );
       },
     );
+    this.generatedImages.releaseSession({ ...codexSessionRef(session), runtimeKind: "codex" });
     for (const route of descendants.toReversed()) {
+      this.generatedImages.releaseSession({
+        ...codexSessionRef(session),
+        runtimeKind: "codex",
+        externalSessionId: route.childExternalSessionId,
+      });
       this.contextUsageLoader.cancelSession({
         ...codexSessionRef(session),
         externalSessionId: route.childExternalSessionId,

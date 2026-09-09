@@ -1,3 +1,5 @@
+import { settleImageGenerationMessages } from "./image-generation-settlement";
+import { createImageGenerationMessage } from "./image-generation-messages";
 import type {
   AgentModelSelection,
   AgentRole,
@@ -77,6 +79,11 @@ const historyPartToChatMessage = (
   part: SessionHistoryPart,
 ): AgentChatMessage | null => {
   switch (part.kind) {
+    case "image_generation":
+      return inheritTimestampAccuracy(
+        createImageGenerationMessage(part, message.timestamp),
+        message,
+      );
     case "reasoning": {
       if (part.text.trim().length === 0) {
         return null;
@@ -412,6 +419,7 @@ export const historyToChatMessages = (
 export const applyLoadedSessionHistory = (
   session: AgentSessionState,
   history: AgentSessionHistoryMessage[],
+  messagesAtReadStart?: AgentSessionState["messages"],
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, {
     role: session.sessionAssociation.kind === "workflow" ? session.sessionAssociation.role : null,
@@ -422,6 +430,14 @@ export const applyLoadedSessionHistory = (
     ...session,
     historyLoadState: "loaded",
     historyLoadFailure: null,
-    messages: mergeHistoryMessages(session.externalSessionId, loadedMessages, session.messages),
+    messages: settleImageGenerationMessages({
+      ...session,
+      messages: mergeHistoryMessages(
+        session.externalSessionId,
+        loadedMessages,
+        session.messages,
+        messagesAtReadStart,
+      ),
+    }),
   };
 };

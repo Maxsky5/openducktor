@@ -20,6 +20,9 @@ describe("agent session transcript event contract", () => {
   test("validates every existing normalized event variant", () => {
     const events = [
       { ...base, type: "session_started", message: "Started" },
+      { ...base, type: "image_generation_turn_started", turnId: "turn" },
+      { ...base, type: "image_generation_settled", turnId: "turn", reason: "interrupted" },
+      { ...base, type: "image_generation_settled", reason: "runtime_failure" },
       { ...base, type: "assistant_delta", channel: "text", delta: "hello" },
       { ...base, type: "assistant_message", messageId: "m1", message: "hello" },
       { ...base, type: "session_context_updated", totalTokens: 12 },
@@ -120,6 +123,9 @@ describe("agent session transcript event contract", () => {
   test("keeps lifecycle details on the ordered session stream", () => {
     const lifecycleEvents = [
       { ...base, type: "session_started", message: "Started" },
+      { ...base, type: "image_generation_turn_started", turnId: "turn" },
+      { ...base, type: "image_generation_settled", turnId: "turn", reason: "interrupted" },
+      { ...base, type: "image_generation_settled", reason: "runtime_failure" },
       {
         ...base,
         type: "session_status",

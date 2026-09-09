@@ -47,7 +47,15 @@ type SessionActions = {
 };
 
 type CreatePublicOperationsArgs = {
-  agentEngine: Pick<AgentEnginePort, "loadSessionTodos" | "loadSessionHistory">;
+  agentEngine: Pick<
+    AgentEnginePort,
+    | "loadSessionTodos"
+    | "loadSessionHistory"
+    | "describeGeneratedImages"
+    | "readGeneratedImage"
+    | "beginGeneratedImageBatch"
+    | "releaseGeneratedImageBatch"
+  >;
   sessionActions: SessionActions;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<AgentSessionState | null>;
   loadAgentSessionContext: (session: AgentSessionContextLoadTarget) => Promise<void>;
@@ -70,6 +78,10 @@ export const createOrchestratorPublicOperations = ({
   loadAgentSessionHistory,
   loadAgentSessionContext,
 }: CreatePublicOperationsArgs): AgentOperationsContextValue => ({
+  describeGeneratedImages: (input) => agentEngine.describeGeneratedImages(input),
+  beginGeneratedImageBatch: (input) => agentEngine.beginGeneratedImageBatch(input),
+  releaseGeneratedImageBatch: (input) => agentEngine.releaseGeneratedImageBatch(input),
+  readGeneratedImage: (input) => agentEngine.readGeneratedImage(input),
   readSessionTodos: (session: PolicyBoundSessionRef): Promise<AgentSessionTodoItem[]> =>
     agentEngine.loadSessionTodos(session),
   readSessionHistory: (

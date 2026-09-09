@@ -1,3 +1,4 @@
+import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
@@ -207,6 +208,7 @@ export const assembleNodeEffectHostCommandRouter = (
     codexAppServer: effectiveCodexTransportRegistry,
     liveSessionLifecycle: agentSessionLiveStateService,
     prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
+      prepareImageGenerations: defaultPorts.imageWorkers.prepareHistory,
       liveSessionLifecycle: agentSessionLiveStateService,
       codexAppServer: effectiveCodexAppServer,
       onBackgroundFailure,
@@ -382,6 +384,7 @@ export const assembleNodeEffectHostCommandRouter = (
           runShutdownSteps(
             [
               { label: "pull request sync loop", run: stopPullRequestSyncLoop },
+              { label: "image workers", run: () => defaultPorts.imageWorkers.shutdown },
               createStopTerminalsStep(terminalService),
               createStopDevServersStep(devServerService, lifecycleLogger),
               createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
@@ -465,6 +468,11 @@ export const assembleNodeEffectHostCommandRouter = (
         service: gitProviderService,
       }),
       ...createLocalAttachmentCommandHandlers(localAttachmentService),
+      ...createNodeImageCommandHandlers(
+        liveSessionAdapterRegistry,
+        defaultPorts.generatedImageFiles,
+        runtimeDefinitionsService,
+      ),
       ...createOpenInToolsCommandHandlers(openInToolsService),
       ...createPullRequestReviewCommandHandlers(pullRequestReviewService),
       ...createRuntimeDefinitionsCommandHandlers(runtimeDefinitionsService),
