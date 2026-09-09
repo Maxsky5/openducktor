@@ -53,6 +53,7 @@ export const createNotificationTaskObserver = ({
   const entries = new Map<string, TaskObserverEntry>();
   const interruptedBaselines = new Set<string>();
   const baselineOutcomeListeners = new Set<(outcome: BaselineOutcome) => void>();
+  const baselineAttempts = new Map<string, object>();
   const baselineLoads = new Map<
     string,
     { workspace: NotificationWorkspace; promise: Promise<void> }
@@ -67,13 +68,18 @@ export const createNotificationTaskObserver = ({
   };
 
   const loadBaseline = async (workspace: NotificationWorkspace): Promise<void> => {
+    const attempt = {};
+    baselineAttempts.set(workspace.repoPath, attempt);
+    const isCurrentAttempt = (): boolean =>
+      workspaces.get(workspace.repoPath) === workspace &&
+      baselineAttempts.get(workspace.repoPath) === attempt;
     try {
       const tasks = await loadTasks(workspace.repoPath);
       await loadSessionRecords(
         workspace.repoPath,
         tasks.map((task) => task.id),
       );
-      if (workspaces.get(workspace.repoPath) !== workspace) {
+      if (!isCurrentAttempt()) {
         return;
       }
       const previous = entries.get(workspace.repoPath);
@@ -101,13 +107,17 @@ export const createNotificationTaskObserver = ({
         }
         return;
       }
-      if (workspaces.get(workspace.repoPath) !== workspace) {
+      if (!isCurrentAttempt()) {
         return;
       }
       const recoveryFailed = interruptedBaselines.delete(workspace.repoPath);
       reportFailure(workspace.repoPath, cause);
       if (recoveryFailed) {
         notifyBaselineOutcome({ repoPath: workspace.repoPath, status: "failed" });
+      }
+    } finally {
+      if (baselineAttempts.get(workspace.repoPath) === attempt) {
+        baselineAttempts.delete(workspace.repoPath);
       }
     }
   };
@@ -184,6 +194,7 @@ export const createNotificationTaskObserver = ({
         if (!nextRepoPaths.has(repoPath)) {
           workspaces.delete(repoPath);
           entries.delete(repoPath);
+          baselineAttempts.delete(repoPath);
           baselineLoads.delete(repoPath);
           interruptedBaselines.delete(repoPath);
         }

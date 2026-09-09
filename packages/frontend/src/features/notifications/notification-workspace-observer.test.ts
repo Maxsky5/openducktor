@@ -386,6 +386,75 @@ test("stops a cancelled startup observation when baseline recovery fails", async
   }
 });
 
+test("keeps a newer recovery observation when an older baseline fails", async () => {
+  const olderRecovery = createDeferred<TaskCard[]>();
+  const olderRecoveryStarted = createDeferred<void>();
+  const newerRecovery = createDeferred<TaskCard[]>();
+  const newerRecoveryStarted = createDeferred<void>();
+  const staleFailure = new Error("stale recovery failed");
+  const tasks = [createTaskCardFixture({ id: "task-1" })];
+  let readCount = 0;
+  const taskFailure = mock(() => {});
+  const taskObserver = createNotificationTaskObserver({
+    loadTasks: async () => {
+      readCount += 1;
+      if (readCount === 1) throw new CancelledError();
+      if (readCount === 2) {
+        olderRecoveryStarted.resolve();
+        return olderRecovery.promise;
+      }
+      newerRecoveryStarted.resolve();
+      return newerRecovery.promise;
+    },
+    loadSessionRecords: loadWorkflowSessionRecords,
+    publish: () => {},
+    onFailure: taskFailure,
+  });
+  const stop = mock(() => {});
+  const onFailure = mock(() => {});
+  const published: NotificationOccurrence[] = [];
+  let receive = (_envelope: AgentSessionLiveEnvelope) => {};
+  const observer = createNotificationWorkspaceObserver({
+    observe: async (_input, listener) => {
+      receive = listener;
+      listener(liveSnapshot(["existing"]));
+      return stop;
+    },
+    taskObserver,
+    publish: (occurrence) => published.push(occurrence),
+    onFailure,
+  });
+  const workspaces = [{ repoPath: "/repo-a", repositoryLabel: "Repo A" }];
+
+  try {
+    await observer.syncWorkspaces(workspaces);
+    const staleRefresh = taskObserver.sink.onSnapshot();
+    await olderRecoveryStarted.promise;
+    const currentRefresh = observer.syncWorkspaces(workspaces);
+    await newerRecoveryStarted.promise;
+
+    olderRecovery.reject(staleFailure);
+    await staleRefresh;
+    expect(stop).not.toHaveBeenCalled();
+    expect(taskFailure).not.toHaveBeenCalled();
+    expect(onFailure).not.toHaveBeenCalled();
+
+    newerRecovery.resolve(tasks);
+    await currentRefresh;
+    receive(liveUpsert(["existing", "new"]));
+    expect(published).toMatchObject([
+      {
+        kind: "agent.permission_requested",
+        task: { id: "task-1" },
+      },
+    ]);
+  } finally {
+    olderRecovery.resolve(tasks);
+    newerRecovery.resolve(tasks);
+    observer.dispose();
+  }
+});
+
 test("serializes a notification baseline with a manual task refresh", async () => {
   const queryClientHook = renderIsolatedQueryClient();
   const queryClient = queryClientHook.result.current;
