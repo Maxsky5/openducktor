@@ -76,6 +76,7 @@ const createHarness = ({
   const taskViewSync: TaskViewSync = {
     loadWorkspace: async () => {},
     refreshManually: async () => {},
+    refreshAfterTaskRetentionChange: async () => {},
     refreshAfterLocalMutation: async () => {},
     reconcileExternalEvent: mock(async () => {}),
     reconcileStreamSnapshot: mock(async () => []),
@@ -568,6 +569,7 @@ describe("task stream controller recovery", () => {
       taskViewSync: {
         loadWorkspace: async () => {},
         refreshManually: async () => {},
+        refreshAfterTaskRetentionChange: async () => {},
         refreshAfterLocalMutation: async () => {},
         reconcileExternalEvent: async () => {},
         reconcileStreamSnapshot: async () => [],

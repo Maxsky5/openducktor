@@ -23,6 +23,7 @@ export type LocalMutationImpact =
 export type TaskViewSync = {
   loadWorkspace: (repoPath: string, options?: { forceFresh?: boolean }) => Promise<void>;
   refreshManually: (repoPath: string) => Promise<void>;
+  refreshAfterTaskRetentionChange: (activeRepoPath: string | null) => Promise<void>;
   refreshAfterLocalMutation: (repoPath: string, impact: LocalMutationImpact) => Promise<void>;
   reconcileExternalEvent: (
     event: ExternalTaskSyncEvent,
@@ -226,6 +227,33 @@ export const createTaskViewSync = ({
       refreshActive(repoPath, {
         impact: { kind: "task-list-only" },
       }),
+    refreshAfterTaskRetentionChange: async (activeRepoPath) => {
+      const taskQueries = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: taskQueryKeys.all, exact: false });
+      const repos = new Set<string>([
+        ...(activeRepoPath ? [activeRepoPath] : []),
+        ...taskQueries.flatMap((query) => {
+          const repoPathResult = z.string().safeParse(query.queryKey[2]);
+          return repoPathResult.success ? [repoPathResult.data] : [];
+        }),
+      ]);
+      await Promise.all(
+        [...repos].map((repoPath) =>
+          runForRepo(repoPath, async () => {
+            await cancelRepoTaskQueries(repoPath);
+            await invalidateRepoTaskQueries(queryClient, repoPath);
+            if (repoPath === activeRepoPath) {
+              try {
+                await fetchTasks(repoPath);
+              } catch {
+                // TanStack Query keeps the failure for the task-loading error path to report.
+              }
+            }
+          }),
+        ),
+      );
+    },
     refreshAfterLocalMutation: (repoPath, impact) => refreshActive(repoPath, { impact }),
     reconcileExternalEvent: async (event, activeRepoPath) => {
       const { taskIds, removedTaskIds } = toEventChanges(event);

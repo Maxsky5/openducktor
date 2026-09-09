@@ -15,7 +15,7 @@ import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
-import { repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
+import { getProductionTaskViewSync } from "../../queries/task-view-sync";
 import {
   loadRepoConfigFromQuery,
   loadSettingsSnapshotFromQuery,
@@ -189,21 +189,9 @@ export function useRepoSettingsOperations({
         previousSnapshot !== undefined &&
         previousSnapshot.kanban.doneVisibleDays !== normalizedSnapshot.kanban.doneVisibleDays;
       if (retentionChanged) {
-        await queryClient.cancelQueries({ queryKey: taskQueryKeys.all }, { silent: true });
-        await queryClient.invalidateQueries({
-          queryKey: taskQueryKeys.all,
-          refetchType: "none",
-        });
-        if (savedActiveWorkspace) {
-          try {
-            await queryClient.fetchQuery({
-              ...repoTaskDataQueryOptions(savedActiveWorkspace.repoPath),
-              staleTime: 0,
-            });
-          } catch {
-            // TanStack Query keeps the failure for the task-loading error path to report.
-          }
-        }
+        await getProductionTaskViewSync(queryClient).refreshAfterTaskRetentionChange(
+          savedActiveWorkspace?.repoPath ?? null,
+        );
       }
       void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
       await queryClient.invalidateQueries({
