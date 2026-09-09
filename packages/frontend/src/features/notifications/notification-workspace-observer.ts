@@ -29,10 +29,14 @@ export const createNotificationWorkspaceObserver = ({
   onFailure(failure: NotificationProducerFailure): void;
 }) => {
   const observations = new Map<string, Observation>();
-  const unsubscribeBaselineReady = taskObserver.subscribeBaselineReady((repoPath) => {
-    observations.get(repoPath)?.flush();
-  });
+  let unsubscribeBaselineReady: (() => void) | null = null;
   let syncVersion = 0;
+
+  const ensureBaselineReadySubscription = (): void => {
+    unsubscribeBaselineReady ??= taskObserver.subscribeBaselineReady((repoPath) => {
+      observations.get(repoPath)?.flush();
+    });
+  };
 
   const stopObservation = (repoPath: string): void => {
     const observation = observations.get(repoPath);
@@ -110,6 +114,7 @@ export const createNotificationWorkspaceObserver = ({
 
   return {
     async syncWorkspaces(workspaces: readonly NotificationWorkspace[]): Promise<void> {
+      ensureBaselineReadySubscription();
       const version = ++syncVersion;
       const nextRepoPaths = new Set(workspaces.map((workspace) => workspace.repoPath));
       for (const repoPath of observations.keys()) {
@@ -138,7 +143,8 @@ export const createNotificationWorkspaceObserver = ({
       }
     },
     dispose(): void {
-      unsubscribeBaselineReady();
+      unsubscribeBaselineReady?.();
+      unsubscribeBaselineReady = null;
       syncVersion += 1;
       for (const repoPath of observations.keys()) {
         stopObservation(repoPath);

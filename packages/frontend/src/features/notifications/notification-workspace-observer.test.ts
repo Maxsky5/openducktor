@@ -245,7 +245,7 @@ test.each(["tasks", "sessions"])(
   },
 );
 
-test("publishes a buffered request when the task stream recovers a cancelled startup baseline", async () => {
+test("publishes a buffered request after effect replay and cancelled startup recovery", async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const firstReadStarted = createDeferred<void>();
   const firstRead = createDeferred<TaskCard[]>();
@@ -285,6 +285,9 @@ test("publishes a buffered request when the task stream recovers a cancelled sta
     publish: (occurrence) => published.push(occurrence),
     onFailure,
   });
+
+  await observer.syncWorkspaces([]);
+  observer.dispose();
 
   const startup = observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
   await firstReadStarted.promise;
