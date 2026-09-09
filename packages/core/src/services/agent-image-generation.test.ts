@@ -200,3 +200,13 @@ test("authoritative history clears absent media fields and can later restore the
   // A current history read also owns the file path when the revision is unchanged.
   expect(mergeAgentImageGeneration(saved, inline, "history", saved)).toEqual(inline);
 });
+
+for (const incompleteReason of ["unknown_status", "incomplete_history", "turn_ended"] as const) {
+  test(`runtime failure replaces ${incompleteReason} once`, () => {
+    const provisional = { ...part("incomplete"), incompleteReason };
+    const settled = settleAgentImageGeneration(provisional, "runtime_failure");
+    expect(settled).toEqual({ ...provisional, incompleteReason: "runtime_failure" });
+    expect(settleAgentImageGeneration(settled, "runtime_failure")).toBe(settled);
+    expect(settleAgentImageGeneration(settled, "turn_ended")).toBe(settled);
+  });
+}

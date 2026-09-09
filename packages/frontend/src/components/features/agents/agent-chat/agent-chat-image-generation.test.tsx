@@ -587,3 +587,16 @@ test("saved file metadata waits for visibility and refreshes its content revisio
     client.clear();
   }
 });
+
+test("an incomplete image explains a confirmed turn failure", () => {
+  const { read } = harness(undefined, true, {
+    ...part,
+    status: "incomplete",
+    incompleteReason: "runtime_failure",
+  });
+  expect(
+    screen.getByText("The turn failed before the runtime confirmed an image result."),
+  ).toBeTruthy();
+  expect(screen.queryByText("Image generation failed")).toBeNull();
+  expect(read).not.toHaveBeenCalled();
+});

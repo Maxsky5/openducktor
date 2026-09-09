@@ -279,3 +279,55 @@ for (const outcome of ["interrupted", "failed", "completed", "stop"] as const) {
     }
   });
 }
+
+test("a failed live turn replaces an unknown image reason only in its own turn", async () => {
+  const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+  const { adapter } = createHarness({ subscribeEvents });
+  await adapter.startSession(codexStartSessionInput());
+  const ref = codexSessionRuntimeRef();
+  const parts: AgentImageGenerationPart[] = [];
+  const unsubscribe = await adapter.subscribeEvents(ref, (event) => {
+    if (event.type === "assistant_part" && event.part.kind === "image_generation")
+      parts.push(event.part);
+  });
+  try {
+    for (const turnId of ["turn", "other-turn"]) {
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId,
+          completedAtMs: 1,
+          item: {
+            type: "imageGeneration",
+            id: `image-${turnId}`,
+            status: "future_status",
+            result: "",
+            revisedPrompt: null,
+            transparentBackground: null,
+            failure: null,
+          },
+        },
+      });
+    }
+    await flushCodexAdapterWork();
+    expect(parts.map((part) => part.incompleteReason)).toEqual([
+      "unknown_status",
+      "unknown_status",
+    ]);
+    emitNotification({
+      method: "turn/completed",
+      params: {
+        threadId: ref.externalSessionId,
+        turn: codexTurnFixture({ id: "turn", items: [], status: "failed" }),
+      },
+    });
+    await flushCodexAdapterWork();
+    expect(parts.slice(2)).toMatchObject([
+      { turnId: "turn", status: "incomplete", incompleteReason: "runtime_failure" },
+    ]);
+  } finally {
+    unsubscribe();
+    adapter.releaseRuntime("runtime-live");
+  }
+});

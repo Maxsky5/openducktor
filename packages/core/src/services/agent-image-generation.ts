@@ -73,7 +73,7 @@ export const settleAgentImageGeneration = (
     !(
       part.status === "incomplete" &&
       (reason === "interrupted" ||
-        (part.incompleteReason === "turn_ended" && reason === "runtime_failure"))
+        (part.incompleteReason !== "runtime_failure" && reason === "runtime_failure"))
     )
   )
     return part;

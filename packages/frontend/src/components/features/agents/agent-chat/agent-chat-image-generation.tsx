@@ -80,7 +80,9 @@ export function AgentChatImageGeneration({
       ) : null}
       {part.status === "incomplete" ? (
         <p className="text-sm text-muted-foreground">
-          The runtime did not confirm an image result. Check the session in the runtime.
+          {part.incompleteReason === "runtime_failure"
+            ? "The turn failed before the runtime confirmed an image result."
+            : "The runtime did not confirm an image result. Check the session in the runtime."}
         </p>
       ) : null}
       <ImageDetails key={JSON.stringify([sessionRef, part.turnId, part.itemId])} part={part} />
