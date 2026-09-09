@@ -245,7 +245,7 @@ test.each(["tasks", "sessions"])(
   },
 );
 
-test("keeps startup observation quiet when the task stream cancels its baseline read", async () => {
+test("publishes a buffered request when the task stream recovers a cancelled startup baseline", async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const firstReadStarted = createDeferred<void>();
   const firstRead = createDeferred<TaskCard[]>();
@@ -297,8 +297,10 @@ test("keeps startup observation quiet when the task stream cancels its baseline 
   expect(onFailure).not.toHaveBeenCalled();
   expect(stop).not.toHaveBeenCalled();
 
-  await taskObserver.sink.onSnapshot();
   receive(liveUpsert(["existing", "new"]));
+  expect(published).toEqual([]);
+
+  await taskObserver.sink.onSnapshot();
 
   expect(published).toMatchObject([
     {

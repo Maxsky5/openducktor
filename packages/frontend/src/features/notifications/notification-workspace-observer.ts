@@ -29,6 +29,9 @@ export const createNotificationWorkspaceObserver = ({
   onFailure(failure: NotificationProducerFailure): void;
 }) => {
   const observations = new Map<string, Observation>();
+  const unsubscribeBaselineReady = taskObserver.subscribeBaselineReady((repoPath) => {
+    observations.get(repoPath)?.flush();
+  });
   let syncVersion = 0;
 
   const stopObservation = (repoPath: string): void => {
@@ -84,9 +87,6 @@ export const createNotificationWorkspaceObserver = ({
 
     void observe({ repoPath: workspace.repoPath }, (envelope) => {
       if (observation.cancelled) return;
-      if (observation.pending && taskObserver.hasBaseline(workspace.repoPath)) {
-        observation.flush();
-      }
       if (observation.pending && envelope.type !== "fault" && envelope.type !== "transcript_gap") {
         observation.pending.push(envelope);
         return;
@@ -138,6 +138,7 @@ export const createNotificationWorkspaceObserver = ({
       }
     },
     dispose(): void {
+      unsubscribeBaselineReady();
       syncVersion += 1;
       for (const repoPath of observations.keys()) {
         stopObservation(repoPath);

@@ -47,6 +47,7 @@ export const createNotificationTaskObserver = ({
   const workspaces = new Map<string, NotificationWorkspace>();
   const entries = new Map<string, TaskObserverEntry>();
   const interruptedBaselines = new Set<string>();
+  const baselineReadyListeners = new Set<(repoPath: string) => void>();
   const baselineLoads = new Map<
     string,
     { workspace: NotificationWorkspace; promise: Promise<void> }
@@ -80,6 +81,7 @@ export const createNotificationTaskObserver = ({
         tasks: new Map(tasks.map((task) => [task.id, task])),
       });
       interruptedBaselines.delete(workspace.repoPath);
+      for (const listener of baselineReadyListeners) listener(workspace.repoPath);
     } catch (cause) {
       if (isCancelledError(cause)) {
         if (
@@ -157,6 +159,10 @@ export const createNotificationTaskObserver = ({
       entries.get(repoPath)?.label === workspaces.get(repoPath)?.repositoryLabel &&
       entries.has(repoPath),
     isBaselineInterrupted: (repoPath: string): boolean => interruptedBaselines.has(repoPath),
+    subscribeBaselineReady(listener: (repoPath: string) => void): () => void {
+      baselineReadyListeners.add(listener);
+      return () => baselineReadyListeners.delete(listener);
+    },
     async syncWorkspaces(nextWorkspaces: readonly NotificationWorkspace[]): Promise<void> {
       const nextRepoPaths = new Set(nextWorkspaces.map((workspace) => workspace.repoPath));
       for (const repoPath of workspaces.keys()) {
