@@ -129,10 +129,17 @@ export const createNotificationTaskObserver = ({
     if (!workspace) {
       return;
     }
-    const entry = entries.get(event.repoPath);
+    let entry = entries.get(event.repoPath);
     if (!entry || entry.label !== workspace.repositoryLabel) {
-      await loadBaseline(workspace);
-      return;
+      const pending = baselineLoads.get(event.repoPath);
+      if (pending?.workspace !== workspace) {
+        await loadBaseline(workspace);
+        return;
+      }
+      await pending.promise;
+      if (workspaces.get(event.repoPath) !== workspace) return;
+      entry = entries.get(event.repoPath);
+      if (!entry || entry.label !== workspace.repositoryLabel) return;
     }
     if (!entry.tasks.has(event.taskId)) {
       entry.tasks.set(event.taskId, event.taskSnapshot);

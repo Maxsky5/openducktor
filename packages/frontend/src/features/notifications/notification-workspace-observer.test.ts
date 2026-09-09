@@ -660,6 +660,68 @@ test("ignores a stale cancelled baseline after the current attempt fails", async
   });
 });
 
+test("joins a startup baseline before applying an external task event", async () => {
+  const existing = createTaskCardFixture({ id: "existing", title: "Existing" });
+  const created = createTaskCardFixture({ id: "created", title: "Created" });
+  const initialSessionReadStarted = createDeferred<void>();
+  const initialSessionRead = createDeferred<Record<string, AgentSessionRecord[]>>();
+  const secondTaskRead = createDeferred<TaskCard[]>();
+  let taskReads = 0;
+  let sessionReads = 0;
+  const loadTasks = mock(async () => {
+    taskReads += 1;
+    return taskReads === 1 ? [existing] : secondTaskRead.promise;
+  });
+  const loadSessionRecords = mock(async () => {
+    sessionReads += 1;
+    if (sessionReads === 1) {
+      initialSessionReadStarted.resolve();
+      return initialSessionRead.promise;
+    }
+    return {};
+  });
+  const taskObserver = createNotificationTaskObserver({
+    loadTasks,
+    loadSessionRecords,
+    publish: () => {},
+    onFailure: () => {},
+  });
+  const stop = mock(() => {});
+  const observer = createNotificationWorkspaceObserver({
+    observe: async () => stop,
+    taskObserver,
+    publish: () => {},
+    onFailure: () => {},
+  });
+  const workspaces = [{ repoPath: "/repo-a", repositoryLabel: "Repo A" }];
+  const startup = observer.syncWorkspaces(workspaces);
+  await initialSessionReadStarted.promise;
+
+  const creation = taskObserver.sink.onChange({
+    kind: "external_task_created",
+    eventId: "create",
+    repoPath: "/repo-a",
+    taskId: created.id,
+    taskSnapshot: { id: created.id, title: created.title, status: created.status },
+    emittedAt: "2026-09-09T00:00:00.000Z",
+  });
+  await flush();
+
+  initialSessionRead.resolve({});
+  await startup;
+  secondTaskRead.resolve([existing, created]);
+  await creation;
+
+  expect(loadTasks).toHaveBeenCalledTimes(1);
+  expect(loadSessionRecords).toHaveBeenLastCalledWith("/repo-a", [created.id]);
+  expect(taskObserver.resolveTask("/repo-a", created.id)).toEqual({
+    id: created.id,
+    title: created.title,
+  });
+  expect(stop).not.toHaveBeenCalled();
+  observer.dispose();
+});
+
 test("serializes a notification baseline with a manual task refresh", async () => {
   const queryClientHook = renderIsolatedQueryClient();
   const queryClient = queryClientHook.result.current;
