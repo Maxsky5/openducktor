@@ -263,7 +263,6 @@ function GeneratedImagePreview({
 }): ReactElement {
   const container = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
-  const [height, setHeight] = useState(160);
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const element = container.current;
@@ -271,7 +270,6 @@ function GeneratedImagePreview({
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry) return;
-        if (!entry.isIntersecting) setHeight(Math.max(160, entry.boundingClientRect.height));
         setVisible(entry.isIntersecting);
       },
       { root: element.closest(".agent-chat-scroll-region"), rootMargin: "200px" },
@@ -280,7 +278,7 @@ function GeneratedImagePreview({
     return () => observer.disconnect();
   }, []);
   return (
-    <div ref={container} style={{ minHeight: height }}>
+    <div ref={container} className="h-80 min-w-0 overflow-y-auto">
       {visible || open ? (
         input.revision === undefined ? (
           <SavedImagePreview input={input} alt={alt} open={open} onOpenChange={setOpen} />
@@ -293,7 +291,7 @@ function GeneratedImagePreview({
           />
         )
       ) : (
-        <Skeleton className="h-40 w-full" aria-label="Generated image preview" />
+        <Skeleton className="h-full w-full" aria-label="Generated image preview" />
       )}
     </div>
   );
@@ -376,15 +374,15 @@ function LoadedImagePreview({
           type="button"
           variant="outline"
           aria-label="Open generated image preview"
-          className="h-auto w-full min-w-0 flex-col gap-0 overflow-hidden rounded-lg bg-muted/40 p-0"
+          className="h-full w-full min-w-0 flex-col gap-0 overflow-hidden rounded-lg bg-muted/40 p-0"
         >
           <img
             src={src}
             alt={alt}
-            className="max-h-80 w-full object-contain"
+            className="min-h-0 w-full flex-1 object-contain"
             onError={onImageError}
           />
-          <span className="flex w-full items-center justify-center gap-2 border-t border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+          <span className="flex w-full shrink-0 items-center justify-center gap-2 border-t border-border bg-card px-3 py-2 text-xs text-muted-foreground">
             <Maximize2 aria-hidden="true" className="size-3.5" />
             View image
           </span>
