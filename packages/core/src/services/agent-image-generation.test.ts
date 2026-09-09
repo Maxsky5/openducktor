@@ -179,3 +179,24 @@ test("late history cannot replace a newer live preview failure or restored outpu
   expect(mergeAgentImageGeneration(missing, available, "history", old)).toEqual(missing);
   expect(mergeAgentImageGeneration(available, missing, "history", old)).toEqual(available);
 });
+
+test("authoritative history clears absent media fields and can later restore them", () => {
+  const empty = part("completed");
+  const saved = { ...empty, output: { revision: "old" }, savedPath: "/old.png" };
+  const inline = { ...empty, output: { revision: "old" } };
+  const unavailable = { ...empty, savedPath: "/old.png", previewUnavailableReason: "Old error" };
+  for (const previous of [saved, inline, unavailable]) {
+    const cleared = mergeAgentImageGeneration(previous, empty, "history", previous);
+    expect(cleared).toEqual(empty);
+    const repeated = mergeAgentImageGeneration(cleared, empty, "history", cleared);
+    expect(repeated).toEqual(empty);
+    const restored = { ...empty, output: { revision: "new" }, savedPath: "/new.png" };
+    expect(mergeAgentImageGeneration(repeated, restored, "history", repeated)).toEqual(restored);
+    expect(mergeAgentImageGeneration(previous, empty, "live")).toEqual(previous);
+    expect(mergeAgentImageGeneration(previous, empty, "history", part("running"))).toEqual(
+      previous,
+    );
+  }
+  // A current history read also owns the file path when the revision is unchanged.
+  expect(mergeAgentImageGeneration(saved, inline, "history", saved)).toEqual(inline);
+});

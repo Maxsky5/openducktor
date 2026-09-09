@@ -7,6 +7,7 @@ import {
   type AgentImageGenerationPart,
 } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { mergeAgentImageGeneration } from "@openducktor/core";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
@@ -337,6 +338,32 @@ test("unsupported runtime and completed output without a source never read bytes
   const second = harness(undefined, true, withoutOutput);
   expect(second.read).not.toHaveBeenCalled();
   expect(screen.getByText(/runtime did not report image output/)).toBeTruthy();
+});
+
+test("history without media removes the preview, releases its URL, and stops obsolete reads", async () => {
+  const { view, content, client, read } = harness();
+  try {
+    await loadImage();
+    expect(read).toHaveBeenCalledTimes(1);
+    const { output: _output, savedPath: _savedPath, ...empty } = part;
+    const cleared = mergeAgentImageGeneration(part, empty, "history", part);
+    view.rerender(content(ref, cleared));
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.queryByText(part.savedPath!)).toBeNull();
+    expect(screen.getByText("Image generated")).toBeTruthy();
+    expect(screen.getByText(/runtime did not report image output/)).toBeTruthy();
+    expect(revokeUrl).toHaveBeenCalledWith("blob:image-1");
+    await waitFor(() =>
+      expect(
+        client.getQueryCache().findAll({ queryKey: agentGeneratedImageQueryKeys.all }),
+      ).toHaveLength(0),
+    );
+    view.rerender(content(ref, mergeAgentImageGeneration(cleared, empty, "history", cleared)));
+    expect(read).toHaveBeenCalledTimes(1);
+  } finally {
+    view.unmount();
+    client.clear();
+  }
 });
 
 for (const status of ["running", "failed", "interrupted", "incomplete"] as const) {

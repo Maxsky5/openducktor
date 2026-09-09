@@ -35,17 +35,27 @@ export const mergeAgentImageGeneration = (
   const { output, failure, incompleteReason, previewUnavailableReason, ...metadata } = current;
   const merged = { ...metadata, ...incoming };
   if (current.status === incoming.status) {
-    if (incoming.output === undefined && output !== undefined && !incoming.previewUnavailableReason)
+    if (
+      source === "live" &&
+      incoming.output === undefined &&
+      output !== undefined &&
+      !incoming.previewUnavailableReason
+    )
       merged.output = output;
-    if (!incoming.output && !incoming.previewUnavailableReason && previewUnavailableReason)
+    if (
+      source === "live" &&
+      !incoming.output &&
+      !incoming.previewUnavailableReason &&
+      previewUnavailableReason
+    )
       merged.previewUnavailableReason = previewUnavailableReason;
     if (incoming.failure === undefined && failure !== undefined) merged.failure = failure;
     if (incoming.incompleteReason === undefined && incompleteReason !== undefined)
       merged.incompleteReason = incompleteReason;
   }
   if (
-    incoming.output &&
-    incoming.output.revision !== current.output?.revision &&
+    (source === "history" ||
+      (incoming.output && incoming.output.revision !== current.output?.revision)) &&
     incoming.savedPath === undefined
   )
     delete merged.savedPath;

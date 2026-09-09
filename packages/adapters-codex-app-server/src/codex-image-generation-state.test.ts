@@ -12,6 +12,24 @@ const part = (itemId: string, turnId = "turn"): AgentImageGenerationPart => ({
   status: "running",
 });
 
+test("history clears absent media while live replays and updates during a read keep their media", () => {
+  const state = new CodexImageGenerationState();
+  const empty: AgentImageGenerationPart = { ...part("image"), status: "completed" };
+  const available = { ...empty, output: { revision: "old" }, savedPath: "/old.png" };
+  const unavailable = { ...empty, previewUnavailableReason: "Old error", savedPath: "/old.png" };
+  for (const previous of [available, unavailable]) {
+    state.prepareHistory("runtime", "thread")(previous);
+    expect(state.upsert("runtime", "thread", empty)).toEqual(previous);
+    expect(state.prepareHistory("runtime", "thread")(empty)).toEqual(empty);
+    expect(state.prepareHistory("runtime", "thread")(empty)).toEqual(empty);
+    const pendingHistory = state.prepareHistory("runtime", "thread");
+    state.upsert("runtime", "thread", previous);
+    expect(pendingHistory(empty)).toEqual(previous);
+  }
+  const restored = { ...available, output: { revision: "new" }, savedPath: "/new.png" };
+  expect(state.prepareHistory("runtime", "thread")(restored)).toEqual(restored);
+});
+
 test("later history refreshes an unchanged terminal image and clears its old file path", () => {
   const state = new CodexImageGenerationState();
   const first: AgentImageGenerationPart = {

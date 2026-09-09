@@ -84,6 +84,52 @@ const createHistoryLoadHarness = (initialSession: AgentSessionState = createSess
 };
 
 describe("session history loader", () => {
+  test("history reloads clear absent image media and can later restore it", async () => {
+    const harness = createHistoryLoadHarness();
+    const empty: AgentImageGenerationPart = {
+      kind: "image_generation",
+      messageId: "image",
+      partId: "image",
+      itemId: "image",
+      turnId: "turn",
+      status: "completed",
+    };
+    const available = { ...empty, output: { revision: "old" }, savedPath: "/old.png" };
+    let image: AgentImageGenerationPart = available;
+    const input = {
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async (): Promise<AgentSessionHistoryMessage[]> => [
+          {
+            messageId: "image",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:01.000Z",
+            text: "",
+            parts: [image],
+          },
+        ],
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    };
+    await loadSessionHistoryIntoStore(input);
+    for (const next of [
+      empty,
+      empty,
+      { ...empty, previewUnavailableReason: "Old error", savedPath: "/old.png" },
+      empty,
+      { ...available, output: { revision: "new" } },
+    ]) {
+      image = next;
+      await reloadSessionHistoryIntoStore(input);
+      expect(sessionMessagesToArray(harness.session).map((message) => message.meta)).toEqual([
+        next,
+      ]);
+    }
+  });
+
   test("repeated history reloads replace image revisions and their file paths", async () => {
     const harness = createHistoryLoadHarness();
     let image: AgentImageGenerationPart = {
