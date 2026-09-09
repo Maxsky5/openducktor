@@ -34,9 +34,9 @@
     "publish:dry-run": "npm publish --dry-run --access public"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.251",
+    "@anthropic-ai/claude-agent-sdk": "0.3.263",
     "undici": "^8.10.2",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@openducktor/build-tools": "workspace:*",
@@ -45,7 +45,7 @@
     "@openducktor/host": "workspace:*",
     "@openducktor/host-client": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.4.1",
     "@vitejs/plugin-react": "^6.1.1",
     "bun-types": "^1.4.2",
     "effect": "^3.22.0",
