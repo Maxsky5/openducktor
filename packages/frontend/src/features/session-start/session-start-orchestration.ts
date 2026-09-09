@@ -72,7 +72,9 @@ export type RunSessionStartWorkflowInput = Omit<
   | "startAgentSession"
   | "sendAgentMessage"
   | "postStartErrorAttentionId"
->;
+> & {
+  onPostStartMessageFailure?: (result: SessionStartWorkflowResult) => void;
+};
 
 export type RunSessionStartWorkflow = (
   input: RunSessionStartWorkflowInput,
@@ -86,6 +88,7 @@ export type SessionStartNotificationInput = {
   role: SessionStartFlowRequest["role"];
   session?: AgentSessionIdentity;
   errorAttentionId?: string;
+  inAppFeedbackHandled?: boolean;
 };
 
 export type SessionStartNotificationPublisher = {
@@ -377,6 +380,10 @@ export const createSessionStartWorkflowRunner = ({
     const notificationWithSession = { ...notificationInput, session };
     try {
       if (postStartActionError) {
+        if (result.retryPostStartMessage && input.onPostStartMessageFailure) {
+          input.onPostStartMessageFailure(result);
+          notificationWithSession.inAppFeedbackHandled = true;
+        }
         if (postStartActionError instanceof AgentMessageSendError) {
           notificationWithSession.errorAttentionId = postStartActionError.errorAttentionId;
         }
@@ -389,7 +396,7 @@ export const createSessionStartWorkflowRunner = ({
           ...result,
           postStartActionError: new SessionStartWorkflowError(
             postStartActionError,
-            feedbackHandled,
+            notificationWithSession.inAppFeedbackHandled === true || feedbackHandled,
           ),
         };
       } else if (input.decision.startMode === "fresh" || input.decision.startMode === "fork") {

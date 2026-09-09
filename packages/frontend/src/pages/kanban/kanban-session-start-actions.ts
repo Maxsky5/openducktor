@@ -49,13 +49,13 @@ export const startKanbanSessionFlow = async ({
     decision,
     task,
     humanRequestChangesTask,
+    onPostStartMessageFailure: showSessionStartMessageRecovery,
   };
   if (isCurrent) workflowInput.isCurrent = isCurrent;
   if (setTaskTargetBranch) {
     workflowInput.persistTaskTargetBranch = setTaskTargetBranch;
   }
   const workflow = await runSessionStartWorkflow(workflowInput);
-  showSessionStartMessageRecovery(workflow);
   if (
     workflow.postStartActionError &&
     !workflow.retryPostStartMessage &&

@@ -1,5 +1,5 @@
-import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
 import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
+import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { getSessionLaunchAction } from "@/features/session-start/session-start-launch-options";
 import { supportsTaskTargetBranchSelection } from "@/features/session-start/constants";
@@ -217,6 +217,7 @@ export function useAgentStudioSessionStartFlow({
             isCurrent: isCurrentContext,
             task: request.taskId === taskId ? selectedTask : null,
             humanRequestChangesTask,
+            onPostStartMessageFailure: showSessionStartMessageRecovery,
           };
 
           if (setTaskTargetBranch) {
@@ -224,7 +225,6 @@ export function useAgentStudioSessionStartFlow({
           }
 
           const workflow = await runSessionStartWorkflow(workflowInput);
-          showSessionStartMessageRecovery(workflow);
           if (
             workflow.postStartActionError &&
             !workflow.retryPostStartMessage &&

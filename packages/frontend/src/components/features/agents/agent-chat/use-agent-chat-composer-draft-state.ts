@@ -171,7 +171,9 @@ export function useAgentChatComposerDraftState({
 
   const clearSubmittedDraft = useCallback((snapshot: SubmittedDraftSnapshot): void => {
     pendingRecoveryRef.current.delete(snapshot.key);
-    snapshot.persistence?.clear({ onlyIfVersion: snapshot.version });
+    if (snapshot.persistence?.clear({ onlyIfVersion: snapshot.version })) {
+      snapshot.version = snapshot.persistence.readVersion();
+    }
   }, []);
 
   const restoreSubmittedDraft = useCallback(
@@ -194,18 +196,19 @@ export function useAgentChatComposerDraftState({
         }
         return;
       }
-      if (
-        current.key !== snapshot.key &&
-        !snapshot.persistence &&
-        (scopeEditsRef.current.get(snapshot.key) ?? 0) <= snapshot.editSequence
-      ) {
+      if ((scopeEditsRef.current.get(snapshot.key) ?? 0) > snapshot.editSequence) return;
+      if (current.key === snapshot.key && draftHasMeaningfulContent(current.draft)) return;
+      if (snapshot.persistence) {
+        if (snapshot.persistence.readVersion() !== snapshot.version) return;
+        snapshot.persistence.set(snapshot.draft);
+        if (current.key !== snapshot.key) void snapshot.persistence.flush();
+      } else if (current.key !== snapshot.key) {
         pendingRecoveryRef.current.set(snapshot.key, snapshot.draft);
+      } else {
+        current.persistence?.set(snapshot.draft);
       }
-      if (current.key !== snapshot.key || draftHasMeaningfulContent(current.draft)) {
-        return;
-      }
+      if (current.key !== snapshot.key) return;
 
-      current.persistence?.set(snapshot.draft);
       setState({
         key: current.key,
         persistence: current.persistence,

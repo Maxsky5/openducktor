@@ -202,6 +202,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
         return await runtime.publishAndWait(
           buildSessionStartErrorOccurrence(resolveWorkspace(input), input, localErrorMessage),
           localErrorMessage,
+          input.inAppFeedbackHandled,
         );
       },
       reportFailure(_cause, input) {
