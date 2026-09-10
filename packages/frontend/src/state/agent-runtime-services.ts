@@ -21,33 +21,6 @@ type AgentRuntimeServices = {
   startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
 };
 
-const toAcceptedAgentUserMessage = (
-  event: Awaited<ReturnType<typeof host.agentSessionControlSend>>,
-): AcceptedAgentUserMessage => {
-  const { model, sessionRef, ...message } = event;
-  const acceptedMessage: AcceptedAgentUserMessage = { ...message };
-  if (sessionRef) {
-    acceptedMessage.sessionRef = sessionRef;
-  }
-  if (model) {
-    const acceptedModel: NonNullable<AcceptedAgentUserMessage["model"]> = {
-      providerId: model.providerId,
-      modelId: model.modelId,
-    };
-    if (model.runtimeKind !== undefined) {
-      acceptedModel.runtimeKind = model.runtimeKind;
-    }
-    if (model.variant !== undefined) {
-      acceptedModel.variant = model.variant;
-    }
-    if (model.profileId !== undefined) {
-      acceptedModel.profileId = model.profileId;
-    }
-    acceptedMessage.model = acceptedModel;
-  }
-  return acceptedMessage;
-};
-
 export const createAgentRuntimeServices = (hostClient: HostClient = host): AgentRuntimeServices => {
   const runtimeDefinitions = Object.values(RUNTIME_DESCRIPTORS_BY_KIND);
   for (const definition of runtimeDefinitions) {
@@ -114,4 +87,31 @@ const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
     loadSessionDiff: (input) => hostClient.agentRuntimeLoadSessionDiff(input),
     loadFileStatus: (input) => hostClient.agentRuntimeFileStatus(input),
   };
+};
+
+const toAcceptedAgentUserMessage = (
+  event: Awaited<ReturnType<typeof host.agentSessionControlSend>>,
+): AcceptedAgentUserMessage => {
+  const { model, sessionRef, ...message } = event;
+  const acceptedMessage: AcceptedAgentUserMessage = { ...message };
+  if (sessionRef) {
+    acceptedMessage.sessionRef = sessionRef;
+  }
+  if (model) {
+    const acceptedModel: NonNullable<AcceptedAgentUserMessage["model"]> = {
+      providerId: model.providerId,
+      modelId: model.modelId,
+    };
+    if (model.runtimeKind !== undefined) {
+      acceptedModel.runtimeKind = model.runtimeKind;
+    }
+    if (model.variant !== undefined) {
+      acceptedModel.variant = model.variant;
+    }
+    if (model.profileId !== undefined) {
+      acceptedModel.profileId = model.profileId;
+    }
+    acceptedMessage.model = acceptedModel;
+  }
+  return acceptedMessage;
 };

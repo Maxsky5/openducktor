@@ -5,6 +5,21 @@ import { agentSessionHistoryQueryKeys } from "./agent-session-history";
 import { agentSessionTodosQueryKeys } from "./agent-session-todos";
 import { runtimeCatalogQueryKeys } from "./runtime-catalog";
 
+export const invalidateRuntimeQueries = async (
+  queryClient: QueryClient,
+  scope: RepoRuntimeRef,
+  state: "ready" | "stopped",
+): Promise<void> => {
+  const filters = {
+    predicate: (query: { queryKey: QueryKey }) => matchesRuntime(query.queryKey, scope),
+  };
+  await queryClient.cancelQueries(filters);
+  await queryClient.invalidateQueries({
+    ...filters,
+    refetchType: state === "ready" ? "active" : "none",
+  });
+};
+
 const matchesRuntime = (key: QueryKey, scope: RepoRuntimeRef): boolean => {
   const repoPath = normalizeWorkingDirectory(scope.repoPath);
   if (key[0] === runtimeCatalogQueryKeys.all[0]) {
@@ -19,19 +34,4 @@ const matchesRuntime = (key: QueryKey, scope: RepoRuntimeRef): boolean => {
     key[1] === repoPath &&
     key[2] === scope.runtimeKind
   );
-};
-
-export const invalidateRuntimeQueries = async (
-  queryClient: QueryClient,
-  scope: RepoRuntimeRef,
-  state: "ready" | "stopped",
-): Promise<void> => {
-  const filters = {
-    predicate: (query: { queryKey: QueryKey }) => matchesRuntime(query.queryKey, scope),
-  };
-  await queryClient.cancelQueries(filters);
-  await queryClient.invalidateQueries({
-    ...filters,
-    refetchType: state === "ready" ? "active" : "none",
-  });
 };

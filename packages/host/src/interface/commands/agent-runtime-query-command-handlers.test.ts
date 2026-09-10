@@ -45,7 +45,6 @@ test("returns normalized catalog data through the shared command", async () => {
 test("rejects a catalog describing the wrong runtime", async () => {
   const handlers = createAgentRuntimeQueryCommandHandlers({
     ...unexpectedRuntimeQueries,
-    // SAFETY: Deliberately malformed native data exercises host response validation.
     listAvailableModels: () =>
       Effect.succeed({
         runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -62,7 +61,7 @@ test("rejects a catalog describing the wrong runtime", async () => {
 test("fails a malformed catalog without affecting other catalog commands", async () => {
   const handlers = createAgentRuntimeQueryCommandHandlers({
     ...unexpectedRuntimeQueries,
-    // SAFETY: Deliberately malformed native data exercises host response validation.
+    // SAFETY: Invalid catalog data tests host response checks.
     listAvailableModels: () =>
       Effect.succeed({ models: [{ id: "broken" }], defaultModelsByProvider: {} } as never),
     listAvailableSkills: () => Effect.succeed({ skills: [] }),

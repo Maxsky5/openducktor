@@ -1,5 +1,8 @@
-import type { AgentSessionScope, RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
-import { agentSessionRefsEqual } from "@openducktor/core";
+import type {
+  RepoRuntimeRef,
+  RuntimeDescriptor,
+  RuntimeInstanceSummary,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
 import type {
@@ -11,6 +14,7 @@ import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { resolveRepoPath } from "./runtime-orchestrator-model";
+import { requireSessionScope, type QueryInput } from "./runtime-query-scope";
 import {
   requireRuntimeWorkingDirectory,
   type RuntimeWorkingDirectoryDependencies,
@@ -25,198 +29,15 @@ export type AgentRuntimeQueryDependencies = RuntimeWorkingDirectoryDependencies 
   worktreeReads: Pick<TaskSessionLifecycleCoordinator, "runWorktreeRead">;
 };
 
-type QueryInput = RepoRuntimeRef & {
-  workingDirectory?: string;
-  externalSessionId?: string;
-  sessionScope?: AgentSessionScope | undefined;
-};
-
 type QueryMethod = keyof AgentRuntimeQueryPort;
-const supportsQuery = (runtime: RuntimeDescriptor, method: QueryMethod): boolean => {
-  const { promptInput, optionalSurfaces, history } = runtime.capabilities;
-  switch (method) {
-    case "listAvailableModels":
-      return true;
-    case "listAvailableSlashCommands":
-      return promptInput.supportsSlashCommands;
-    case "listAvailableSkills":
-      return promptInput.supportsSkillReferences;
-    case "listAvailableSubagents":
-      return promptInput.supportsSubagentReferences;
-    case "searchFiles":
-      return promptInput.supportsFileSearch;
-    case "loadSessionHistory":
-      return history.loadable;
-    case "loadSessionTodos":
-      return optionalSurfaces.supportsTodos;
-    case "loadSessionDiff":
-      return optionalSurfaces.supportsDiff;
-    case "loadFileStatus":
-      return optionalSurfaces.supportsFileStatus;
-  }
-};
 
-const requireSessionScope = (
-  dependencies: AgentRuntimeQueryDependencies,
-  adapter: AgentSessionLiveAdapterPort,
-  input: QueryInput,
-  operation: string,
-) =>
-  Effect.gen(function* () {
-    if (input.externalSessionId === undefined || input.workingDirectory === undefined) return;
-    const ref = {
-      ...input,
-      externalSessionId: input.externalSessionId,
-      workingDirectory: input.workingDirectory,
-    };
-    const snapshot = yield* adapter
-      .readSnapshot(ref)
-      .pipe(
-        Effect.mapError((cause) =>
-          runtimeQueryError(
-            operation,
-            input,
-            "scope_mismatch",
-            "Cannot verify the selected session. Reload the session list.",
-            cause,
-          ),
-        ),
-      );
-    if (snapshot.type === "live" && !agentSessionRefsEqual(snapshot.session.ref, ref)) {
-      return yield* runtimeQueryError(
-        operation,
-        input,
-        "scope_mismatch",
-        "The selected session does not match the requested repository or directory. Select the session again.",
-      );
-    }
-    if (input.sessionScope?.kind !== "workflow") return;
-    const scope = input.sessionScope;
-    const metadata = yield* dependencies.taskReader
-      .getTaskMetadata({ repoPath: input.repoPath, taskId: scope.taskId })
-      .pipe(
-        Effect.mapError((cause) =>
-          runtimeQueryError(
-            operation,
-            input,
-            "scope_mismatch",
-            "Cannot read this task's session ownership records. Reload the task.",
-            cause,
-          ),
-        ),
-      );
-    let owner = snapshot;
-    let ownerRef = ref;
-    const visited = new Set([ref.externalSessionId]);
-    while (true) {
-      const record = metadata.agentSessions.find((entry) =>
-        agentSessionRefsEqual({ ...entry, repoPath: input.repoPath }, ownerRef),
-      );
-      if (record) {
-        if (record.role !== scope.role) {
-          return yield* runtimeQueryError(
-            operation,
-            input,
-            "scope_mismatch",
-            "The selected session belongs to a different workflow role. Select the matching session.",
-          );
-        }
-        return;
-      }
-      // Native lineage proves a relationship. Only the ODT record above proves task ownership.
-      const parentId =
-        owner.type === "live" && owner.session.parentExternalSessionId
-          ? owner.session.parentExternalSessionId
-          : yield* adapter.queries.resolveSessionParent(ownerRef);
-      if (parentId === null) {
-        return yield* runtimeQueryError(
-          operation,
-          input,
-          "scope_mismatch",
-          "This task has no ownership record for the selected session. Select a session recorded for this task.",
-        );
-      }
-      if (visited.has(parentId)) {
-        return yield* runtimeQueryError(
-          operation,
-          input,
-          "scope_mismatch",
-          "The session parent chain is invalid. Reload the session list.",
-        );
-      }
-      visited.add(parentId);
-      ownerRef = { ...ref, externalSessionId: parentId };
-      owner = yield* adapter
-        .readSnapshot(ownerRef)
-        .pipe(
-          Effect.mapError((cause) =>
-            runtimeQueryError(
-              operation,
-              input,
-              "scope_mismatch",
-              "Cannot verify the selected session parent. Reload the session list.",
-              cause,
-            ),
-          ),
-        );
-      if (owner.type === "live" && !agentSessionRefsEqual(owner.session.ref, ownerRef)) {
-        return yield* runtimeQueryError(
-          operation,
-          input,
-          "scope_mismatch",
-          "The session parent belongs to a different directory. Select the matching session.",
-        );
-      }
-    }
-  });
-
+/**
+ * Hold the worktree read guard until the query finishes and the host checks its runtime binding again.
+ * A replaced runtime must not supply data for its replacement.
+ */
 export const createAgentRuntimeQueryService = (
   dependencies: AgentRuntimeQueryDependencies,
 ): AgentRuntimeQueryPort => {
-  const resolveAdapter = (input: RepoRuntimeRef, operation: string) =>
-    Effect.gen(function* () {
-      const runtime = yield* dependencies.runtimeRegistry
-        .findWorkspaceRuntime(input)
-        .pipe(
-          Effect.mapError((cause) =>
-            runtimeQueryError(
-              operation,
-              input,
-              "runtime_unavailable",
-              "Cannot resolve the selected runtime. Start it from the runtime controls.",
-              cause,
-            ),
-          ),
-        );
-      const adapter = yield* dependencies.adapterRegistry
-        .resolveForScope(input)
-        .pipe(
-          Effect.mapError((cause) =>
-            runtimeQueryError(
-              operation,
-              input,
-              "runtime_unavailable",
-              "The selected runtime has no active query adapter. Start it from the runtime controls.",
-              cause,
-            ),
-          ),
-        );
-      if (
-        !runtime ||
-        runtime.runtimeId !== adapter.binding.runtimeId ||
-        runtime.kind !== input.runtimeKind ||
-        runtime.repoPath !== input.repoPath
-      ) {
-        return yield* runtimeQueryError(
-          operation,
-          input,
-          "runtime_unavailable",
-          "The selected runtime changed or stopped. Reload the runtime data.",
-        );
-      }
-      return { runtime, adapter };
-    });
-
   const read = <Input extends QueryInput, Result>(
     method: QueryMethod,
     input: Input,
@@ -265,7 +86,7 @@ export const createAgentRuntimeQueryService = (
               `${runtime.descriptor.label} does not support this read.`,
             );
           }
-          yield* requireSessionScope(dependencies, adapter, request, method);
+          yield* requireSessionScope(dependencies.taskReader, adapter, request, method);
           const result = yield* invoke(adapter.queries, request);
           const current = yield* resolveAdapter(request, method);
           if (current.adapter !== adapter) {
@@ -309,4 +130,82 @@ export const createAgentRuntimeQueryService = (
     loadFileStatus: (input) =>
       read("loadFileStatus", input, (queries, request) => queries.loadFileStatus(request)),
   };
+
+  function resolveAdapter(
+    input: RepoRuntimeRef,
+    operation: string,
+  ): Effect.Effect<
+    {
+      runtime: RuntimeInstanceSummary;
+      adapter: AgentSessionLiveAdapterPort;
+    },
+    RuntimeQueryError
+  > {
+    return Effect.gen(function* () {
+      const runtime = yield* dependencies.runtimeRegistry
+        .findWorkspaceRuntime(input)
+        .pipe(
+          Effect.mapError((cause) =>
+            runtimeQueryError(
+              operation,
+              input,
+              "runtime_unavailable",
+              "Cannot resolve the selected runtime. Start it from the runtime controls.",
+              cause,
+            ),
+          ),
+        );
+      const adapter = yield* dependencies.adapterRegistry
+        .resolveForScope(input)
+        .pipe(
+          Effect.mapError((cause) =>
+            runtimeQueryError(
+              operation,
+              input,
+              "runtime_unavailable",
+              "The selected runtime has no active query adapter. Start it from the runtime controls.",
+              cause,
+            ),
+          ),
+        );
+      if (
+        !runtime ||
+        runtime.runtimeId !== adapter.binding.runtimeId ||
+        runtime.kind !== input.runtimeKind ||
+        runtime.repoPath !== input.repoPath
+      ) {
+        return yield* runtimeQueryError(
+          operation,
+          input,
+          "runtime_unavailable",
+          "The selected runtime changed or stopped. Reload the runtime data.",
+        );
+      }
+      return { runtime, adapter };
+    });
+  }
+};
+
+const supportsQuery = (runtime: RuntimeDescriptor, method: QueryMethod): boolean => {
+  const { promptInput, optionalSurfaces, history } = runtime.capabilities;
+  switch (method) {
+    case "listAvailableModels":
+      return true;
+    case "listAvailableSlashCommands":
+      return promptInput.supportsSlashCommands;
+    case "listAvailableSkills":
+      return promptInput.supportsSkillReferences;
+    case "listAvailableSubagents":
+      return promptInput.supportsSubagentReferences;
+    case "searchFiles":
+      return promptInput.supportsFileSearch;
+    case "loadSessionHistory":
+      return history.loadable;
+    case "loadSessionTodos":
+      return optionalSurfaces.supportsTodos;
+    case "loadSessionDiff":
+      return optionalSurfaces.supportsDiff;
+    case "loadFileStatus":
+      return optionalSurfaces.supportsFileStatus;
+  }
 };

@@ -1,5 +1,6 @@
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type AgentSessionScope,
   type RuntimeDescriptor,
   type RuntimeKind,
 } from "@openducktor/contracts";
@@ -86,6 +87,7 @@ import { replyApproval, replyQuestion } from "./pending-input-ops";
 import { toOpenCodeRequestError } from "./request-errors";
 import {
   type OpencodeRuntimeResolutionInput,
+  type ResolvedOpencodeRuntimeClientInput,
   resolveOpencodeRuntimeClientInput,
 } from "./runtime-connection";
 import { opencodeSessionRef } from "./session-ref";
@@ -530,12 +532,9 @@ export class OpencodeSdkAdapter
     assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session history");
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load session history");
     const session = await this.querySession(input, runtimeClientInput);
-    const matchingSessions = session ? [session] : [];
     const preservedDisplayPartsByMessageId = new Map(
-      matchingSessions.flatMap((session) =>
-        [...session.messageMetadataById.entries()].flatMap(([messageId, metadata]) =>
-          metadata.displayParts ? [[messageId, metadata.displayParts] as const] : [],
-        ),
+      [...(session?.messageMetadataById ?? [])].flatMap(([messageId, metadata]) =>
+        metadata.displayParts ? [[messageId, metadata.displayParts] as const] : [],
       ),
     );
 
@@ -565,57 +564,8 @@ export class OpencodeSdkAdapter
 
   async resolveSessionParent(input: SessionRef): Promise<string | null> {
     const runtime = await this.resolveRuntimeClientInput(input, "read session parent");
-    const response = await this.createClient(runtime).session.get({
-      sessionID: input.externalSessionId,
-      directory: runtime.workingDirectory,
-    });
-    const target = opencodeSessionDetailPayloadSchema.parse(
-      unwrapData(response, "read session parent"),
-    );
-    if (target.id !== input.externalSessionId || target.directory !== runtime.workingDirectory) {
-      throw new AgentRuntimeQueryError(
-        "scope_mismatch",
-        "The native session does not match the selected session and working directory. Select the matching session.",
-      );
-    }
+    const target = await this.readSession(input, runtime, "read session parent");
     return target.parentID || null;
-  }
-
-  private async querySession(
-    input: SessionRef & {
-      sessionScope?: import("@openducktor/contracts").AgentSessionScope | undefined;
-    },
-    runtime: Awaited<ReturnType<OpencodeSdkAdapter["resolveRuntimeClientInput"]>>,
-  ): Promise<SessionRecord | undefined> {
-    const session = this.sessions.get(input.externalSessionId);
-    if (session) {
-      assertAgentRuntimeQuerySession(
-        { ...input, workingDirectory: runtime.workingDirectory },
-        opencodeSessionRef(session),
-        session.summary.sessionAssociation,
-      );
-      if (session.runtimeId !== runtime.runtimeId) {
-        throw new AgentRuntimeQueryError(
-          "runtime_unavailable",
-          "The session belongs to a replaced runtime. Reload the runtime data.",
-        );
-      }
-      return session;
-    }
-    const response = await this.createClient(runtime).session.get({
-      sessionID: input.externalSessionId,
-      directory: runtime.workingDirectory,
-    });
-    const target = opencodeSessionDetailPayloadSchema.parse(
-      unwrapData(response, "read session identity"),
-    );
-    if (target.id !== input.externalSessionId || target.directory !== runtime.workingDirectory) {
-      throw new AgentRuntimeQueryError(
-        "scope_mismatch",
-        "The native session does not match the selected session and working directory. Select the matching session.",
-      );
-    }
-    return undefined;
   }
 
   async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {
@@ -932,5 +882,47 @@ export class OpencodeSdkAdapter
     session.workflowToolSelectionCache = selection;
     session.workflowToolSelectionCachedAt = nowMs;
     return selection;
+  }
+
+  private async querySession(
+    input: SessionRef & { sessionScope?: AgentSessionScope | undefined },
+    runtime: ResolvedOpencodeRuntimeClientInput,
+  ): Promise<SessionRecord | undefined> {
+    const session = this.sessions.get(input.externalSessionId);
+    if (session) {
+      assertAgentRuntimeQuerySession(
+        { ...input, workingDirectory: runtime.workingDirectory },
+        opencodeSessionRef(session),
+        session.summary.sessionAssociation,
+      );
+      if (session.runtimeId !== runtime.runtimeId) {
+        throw new AgentRuntimeQueryError(
+          "runtime_unavailable",
+          "The session belongs to a replaced runtime. Reload the runtime data.",
+        );
+      }
+      return session;
+    }
+    await this.readSession(input, runtime, "read session identity");
+    return undefined;
+  }
+
+  private async readSession(
+    input: SessionRef,
+    runtime: ResolvedOpencodeRuntimeClientInput,
+    operation: string,
+  ): Promise<ParsedOpencodeSession> {
+    const response = await this.createClient(runtime).session.get({
+      sessionID: input.externalSessionId,
+      directory: runtime.workingDirectory,
+    });
+    const target = opencodeSessionDetailPayloadSchema.parse(unwrapData(response, operation));
+    if (target.id !== input.externalSessionId || target.directory !== runtime.workingDirectory) {
+      throw new AgentRuntimeQueryError(
+        "scope_mismatch",
+        "The native session does not match the selected session and working directory. Select the matching session.",
+      );
+    }
+    return target;
   }
 }

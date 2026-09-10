@@ -155,7 +155,7 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     repoStoreDiagnostics: taskStore,
   });
-  const claudeWorkingDirectoryDependencies = {
+  const workingDirectoryDependencies = {
     settingsConfig,
     workspaceSettingsService,
   };
@@ -170,7 +170,7 @@ export const assembleNodeEffectHostCommandRouter = (
     runtimeDistribution,
     settingsConfig,
     toolDiscovery,
-    workingDirectoryDependencies: claudeWorkingDirectoryDependencies,
+    workingDirectoryDependencies,
     resolveMcpBridgeConnection: (repoPath) =>
       resolvedMcpHostBridge
         ? resolvedMcpHostBridge.ensureConnection({ repoPath }).pipe(
@@ -444,7 +444,7 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createAgentSessionLiveCommandHandlers(agentSessionCommandService, localAttachmentService),
       ...createAgentRuntimeQueryCommandHandlers(
         createAgentRuntimeQueryService({
-          ...claudeWorkingDirectoryDependencies,
+          ...workingDirectoryDependencies,
           adapterRegistry: liveSessionAdapterRegistry,
           runtimeRegistry: effectiveRuntimeRegistry,
           gitPort: git,

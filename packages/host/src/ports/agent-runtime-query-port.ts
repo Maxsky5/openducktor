@@ -1,3 +1,4 @@
+import type { AgentSessionLiveRef } from "@openducktor/contracts";
 import type {
   AgentCatalogPort,
   AgentSessionHistoryPort,
@@ -19,6 +20,6 @@ export type AgentRuntimeQueryPort = {
 
 export type AgentRuntimeQueryAdapterPort = AgentRuntimeQueryPort & {
   readonly resolveSessionParent: (
-    input: import("@openducktor/contracts").AgentSessionLiveRef,
+    input: AgentSessionLiveRef,
   ) => Effect.Effect<string | null, RuntimeQueryError>;
 };
