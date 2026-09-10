@@ -99,17 +99,63 @@ describe("buildAgentSystemPrompt", () => {
       "The user owns product decisions",
       "Research facts from the repo and available sources yourself",
       "Ask small rounds of independent questions",
-      "Use the question or user-input tool for clarification questions and confirmation requests whenever it is available",
+      "Use the question or user-input tool for clarification questions whenever it is available",
       "If no such tool is available, ask a concise question in chat and wait for the answer",
       "Do not call odt_set_spec while required product decisions still await an answer",
       "Wait for answers before deciding dependent questions",
       "Revisit consequences after each answer",
       "Skip questions already answered by the task, prior decisions, or repo facts",
-      "Get confirmation of new or changed product decisions before saving",
-      "If the task is already fully specified, proceed without a confirmation round",
+      "Treat the user's answers as settled decisions",
     ]);
     expect(prompt).not.toContain("Ask one focused question only");
   });
+
+  test.each(["spec", "planner"] as const)(
+    "%s saves ready documents without an extra approval round",
+    (role) => {
+      const prompt = buildAgentSystemPrompt({ role, task: taskContext });
+
+      expectPromptToContainAll(prompt, [
+        "in the same turn",
+        "Do not ask for permission to save",
+        "If the user explicitly requests a draft review before saving, show the complete Markdown draft and wait for that review",
+        "After the tool succeeds",
+        "Saving the document with your allowed ODT tool is part of this role",
+      ]);
+      expect(prompt).not.toContain(
+        "Get confirmation of new or changed product decisions before saving",
+      );
+      expect(prompt).not.toContain("confirmation requests whenever");
+    },
+  );
+
+  test("spec saves settled or delegated decisions and keeps acceptance criteria readable", () => {
+    const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
+
+    expectPromptToContainAll(prompt, [
+      "all required product decisions are answered or explicitly delegated",
+      "State any delegated assumptions in the spec",
+      "Group the goal, scope and non-goals, required behavior, constraints, and acceptance criteria under descriptive headings",
+      "Number acceptance criteria and give each item one observable outcome",
+    ]);
+  });
+
+  test.each(["spec", "planner", "qa"] as const)(
+    "%s receives shared Markdown rules for persisted artifacts",
+    (role) => {
+      const prompt = buildAgentSystemPrompt({ role, task: taskContext });
+
+      expectPromptToContainAll(prompt, [
+        "Artifact format:",
+        "Start with a # title and use ## headings",
+        "Separate headings, paragraphs, lists, and tables with blank lines",
+        "Keep each paragraph to one idea and at most three short sentences",
+        "one requirement, decision, or finding per item",
+        "Use tables only for compact comparisons or mappings",
+        "Check the complete Markdown for structure and readability before calling the artifact tool",
+      ]);
+    },
+  );
 
   test("shared artifact rules stay general while Builder owns execution choices", () => {
     const result = buildAgentSystemPromptBundle({ role: "build", task: taskContext });
@@ -133,6 +179,9 @@ describe("buildAgentSystemPrompt", () => {
       "Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of the plan",
       "odt_set_plan",
       "read-only mode",
+      "Resolve design choices within the agreed scope yourself",
+      "Do not call odt_set_plan while a required decision or conflict remains unresolved",
+      "Group architecture, module responsibilities, interfaces and contracts, and risks under descriptive headings",
     ]);
     expect(prompt).not.toContain("execution waves");
     expect(prompt).not.toContain("ordered execution plan");
@@ -188,22 +237,22 @@ describe("buildAgentSystemPrompt", () => {
       {
         type: "override_base_version_mismatch",
         templateId: "system.role.spec.base",
-        builtinVersion: 5,
+        builtinVersion: 6,
         overrideBaseVersion: 999,
       },
     ]);
   });
 
   test.each([
-    ["system.shared.workflow_guards", 5, 6, "build"],
+    ["system.shared.workflow_guards", 6, 7, "build"],
     ["system.shared.tool_protocol", 6, 7, "build"],
     ["system.shared.task_context", 3, 4, "build"],
-    ["system.role.spec.base", 4, 5, "spec"],
-    ["system.role.planner.base", 5, 6, "planner"],
+    ["system.role.spec.base", 5, 6, "spec"],
+    ["system.role.planner.base", 6, 7, "planner"],
     ["system.role.build.base", 3, 4, "build"],
     ["system.role.qa.base", 3, 4, "qa"],
-    ["kickoff.spec_initial", 2, 3, "spec"],
-    ["kickoff.planner_initial", 2, 3, "planner"],
+    ["kickoff.spec_initial", 3, 4, "spec"],
+    ["kickoff.planner_initial", 3, 4, "planner"],
     ["kickoff.build_implementation_start", 2, 3, "build"],
     ["kickoff.build_after_qa_rejected", 2, 3, "build"],
     ["kickoff.build_after_human_request_changes", 3, 4, "build"],
@@ -363,7 +412,9 @@ describe("kickoff and permission prompts", () => {
       "observable acceptance criteria",
       "Ask about unresolved product decisions with the question or user-input tool whenever available",
       "If no such tool is available, ask in chat and wait for the answer",
-      "Follow the Spec role interview and confirmation rules",
+      "Once required decisions are answered or delegated, persist the spec with odt_set_spec in the same turn",
+      "Do not ask for permission to save",
+      "Use the role's artifact format rules",
       "Leave implementation and verification procedures to later roles",
       "odt_set_spec",
     ]);
@@ -371,6 +422,9 @@ describe("kickoff and permission prompts", () => {
       "architecture, interfaces, contracts",
       "Leave implementation details, work order, and verification methods to Builder",
       "odt_set_plan",
+      "Once required decisions are resolved, persist the plan with odt_set_plan in the same turn",
+      "Do not ask for permission to save",
+      "Use the role's artifact format rules",
     ]);
     expectPromptToContainAll(qaPrompt, [
       "required outcomes and design contracts",
