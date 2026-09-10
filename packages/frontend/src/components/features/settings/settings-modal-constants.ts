@@ -98,7 +98,7 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS = {
     "Shared ODT tool permissions, task lock, artifact reads, and clarification rules.",
   "system.shared.task_context": "Task snapshot and access rules for current workflow documents.",
   "system.role.spec.base":
-    "Resolves product decisions with the user and defines scope, constraints, and observable acceptance criteria.",
+    "Resolves product decisions with the user and defines scope, required behavior, and constraints.",
   "system.role.planner.base":
     "Defines architecture, module responsibilities, interfaces, and contracts. Leaves implementation order and verification to Builder.",
   "system.role.build.base":

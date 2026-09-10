@@ -82,7 +82,7 @@ describe("buildAgentSystemPrompt", () => {
     const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
 
     expectPromptToContainAll(prompt, [
-      "Leave implementation design to Planner",
+      "Planner owns the technical solution",
       "Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of the spec",
       "saving the canonical spec with odt_set_spec",
       "read-only mode",
@@ -128,7 +128,7 @@ describe("buildAgentSystemPrompt", () => {
     },
   );
 
-  test("spec defines a document contract with observable acceptance criteria", () => {
+  test("spec keeps observable outcomes in the requirements without a second checklist", () => {
     const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
 
     expectPromptToContainAll(prompt, [
@@ -137,9 +137,26 @@ describe("buildAgentSystemPrompt", () => {
       "## Scope",
       "## Requirements",
       "descriptive ### subheadings",
-      "## Acceptance criteria",
-      "numbered list of observable conditions for completion",
       "the relevant conditions, and the expected result",
+      "Keep observable outcomes and limits beside the requirement they qualify",
+      "Do not add a separate acceptance-criteria section or completion checklist",
+    ]);
+    expect(prompt).not.toContain("## Acceptance criteria");
+    expect(prompt).not.toContain("requirements and acceptance criteria cover the agreed scope");
+  });
+
+  test("spec separates product behavior from design while preserving fixed scope and external contracts", () => {
+    const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
+
+    expectPromptToContainAll(prompt, [
+      "Describe behavior as users or external systems experience it",
+      "Planner owns the technical solution: architecture, file changes, internal APIs, library choices, configuration keys, and code-level identifiers",
+      "only when the task or user explicitly makes it part of the required outcome or scope",
+      "or when it defines an external contract the change must preserve",
+      "State its source and required effect",
+      "Leave repository coding conventions and internal design rules to Planner and Builder",
+      "state the visible label and click behavior",
+      "Planner chooses the locale key and string accessor",
     ]);
   });
 
@@ -187,12 +204,15 @@ describe("buildAgentSystemPrompt", () => {
       "## Approach",
       "## Design",
       "## Requirement coverage",
+      "Cover the full spec, including its scope and constraints",
+      "Use the spec's requirement names as references",
       "## Risks and constraints",
       "state ownership, and failure behavior",
     ]);
     expect(prompt).not.toContain("execution waves");
     expect(prompt).not.toContain("ordered execution plan");
     expect(prompt).not.toContain("Include verification strategy");
+    expect(prompt).not.toContain("or acceptance criteria as references");
   });
 
   test("builder owns execution and verification within the approved design", () => {

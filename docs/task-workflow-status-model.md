@@ -63,14 +63,18 @@ Store agent-written output as task documents, not user task fields. SQLite store
 
 | Role | Owns |
 |---|---|
-| Spec | Interview about product decisions, then user problem, scope, required behavior, constraints, and observable acceptance criteria. |
+| Spec | Interview about product decisions, then user problem, scope, required behavior, and constraints. |
 | Planner | Technical design, module responsibilities, architecture boundaries, interfaces, and data and state contracts. |
 | Builder | Implementation details, work order, tests, and verification within the required outcomes and design contracts. |
 | QA | Independent review of outcomes, contracts, correctness, and maintainability, with checks based on risk. |
 
 Spec researches facts and uses the conversation to resolve product decisions. The user's answers settle those decisions. Spec records delegated assumptions and asks follow-up questions when an answer exposes a new choice that affects the result. A fully specified task can go straight to writing.
 
-Spec and Planner own the work through saving the canonical document. A ready spec covers the agreed scope with requirements and acceptance criteria. A ready plan connects required outcomes to defined interfaces and integration points. Required decisions must be resolved before saving. Each role then saves in the same turn. Later revisions update the saved document. Completion depends on a successful tool call.
+Spec describes behavior as users or external systems experience it. Planner owns the technical solution. A technical detail belongs in the spec only when the task or user explicitly fixes it as part of the required outcome or scope, or when it defines an external contract the change must preserve. State its source and required effect. Leave repository coding conventions and internal design rules to Planner and Builder.
+
+Keep observable outcomes and limits beside the requirements they qualify. Do not add a separate acceptance-criteria section or completion checklist. Planner covers the full spec, including its scope and constraints. Builder and QA work from the full requirements and design contracts.
+
+Spec and Planner own the work through saving the canonical document. A ready spec covers the agreed scope with requirements whose outcomes are clear. A ready plan connects required outcomes to defined interfaces and integration points. Required decisions must be resolved before saving. Each role then saves in the same turn. Later revisions update the saved document. Completion depends on a successful tool call.
 
 All roles follow the shared `Artifact format` rules in the built-in workflow prompt. These rules apply regardless of document type. Spec and Planner prompts define the content of each document section. The format follows the content: headings name topics, paragraphs explain reasoning, lists separate rules, and tables compare entries with common fields. There is no sentence or paragraph count limit.
 
