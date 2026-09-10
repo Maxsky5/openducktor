@@ -1,26 +1,26 @@
-import { HostOperationError } from "../../effect/host-errors";
 import { AgentRuntimeQueryError, type AgentSessionQueryParentPort } from "@openducktor/core";
 import { Effect } from "effect";
 import { ZodError } from "zod";
+import { HostOperationError } from "../../effect/host-errors";
+import type {
+  AgentRuntimeQueryAdapterPort,
+  NativeAgentRuntimeQueries,
+} from "../../ports/agent-runtime-query-port";
+import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import {
   RuntimeQueryError,
   runtimeQueryError,
   type RuntimeQueryIdentity,
 } from "../../ports/runtime-query-error";
-import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
-import type {
-  AgentRuntimeQueryAdapterPort,
-  NativeAgentRuntimeQueries,
-} from "../../ports/agent-runtime-query-port";
 
 export const createRuntimeQueryAdapter = (
   native: NativeAgentRuntimeQueries & AgentSessionQueryParentPort,
 ): AgentRuntimeQueryAdapterPort => {
-  const read = <Input extends RuntimeQueryIdentity, Result>(
+  const read = <Result>(
     operation: string,
-    input: Input,
+    input: RuntimeQueryIdentity,
     run: () => Promise<Result>,
-  ) =>
+  ): Effect.Effect<Result, RuntimeQueryError> =>
     Effect.tryPromise({ try: run, catch: (cause) => toRuntimeQueryError(operation, input, cause) });
   return {
     resolveSessionParent: (input) =>
@@ -70,13 +70,20 @@ export const toRuntimeQueryError = (
       cause,
     });
   }
+  if (cause instanceof ZodError) {
+    return runtimeQueryError(
+      operation,
+      input,
+      "invalid_runtime_response",
+      "The runtime returned invalid query data. Check the host runtime logs and update the runtime.",
+      cause,
+    );
+  }
   return runtimeQueryError(
     operation,
     input,
-    cause instanceof ZodError ? "invalid_runtime_response" : "request_failed",
-    cause instanceof ZodError
-      ? "The runtime returned invalid query data. Check the host runtime logs and update the runtime."
-      : "The runtime query failed. Check the host runtime logs and retry this read.",
+    "request_failed",
+    "The runtime query failed. Check the host runtime logs and retry this read.",
     cause,
   );
 };

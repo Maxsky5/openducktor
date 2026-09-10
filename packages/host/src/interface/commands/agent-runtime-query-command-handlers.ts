@@ -6,12 +6,12 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
+import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
 import {
   runtimeQueryError,
   type RuntimeQueryError,
   type RuntimeQueryIdentity,
 } from "../../ports/runtime-query-error";
-import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import type { HostCommandArgs } from "./command-inputs";
 
@@ -69,8 +69,8 @@ const createQueryHandler =
     contract: AgentRuntimeQueryCommandContract<Input, Result>,
     invoke: (input: Input) => Effect.Effect<Result, RuntimeQueryError>,
     validateIdentity?: (input: Input, result: Result) => boolean,
-  ) =>
-  (args: HostCommandArgs) =>
+  ): ((args: HostCommandArgs) => Effect.Effect<Result, RuntimeQueryError>) =>
+  (args) =>
     Effect.gen(function* () {
       const identityResult = identitySchema.safeParse(args?.input);
       const identity: RuntimeQueryIdentity = identityResult.success ? identityResult.data : {};
