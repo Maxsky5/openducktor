@@ -1,5 +1,4 @@
 import { agentGeneratedImageReadResultSchema } from "@openducktor/contracts";
-export { prepareCodexImageGenerations } from "./image-history-worker-client";
 import {
   imageWorkerResponseSchema,
   type ImageWorkerRequest,

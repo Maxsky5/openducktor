@@ -1,3 +1,4 @@
+import { unexpectedNativeRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { describe, expect, test } from "bun:test";
 import type {
   CodexAppServerAdapter,
@@ -128,10 +129,12 @@ const liveSnapshot = (): AgentSessionLiveSnapshot => ({
 
 const codexAppServer = {
   request: () => Effect.dieMessage("Unexpected request"),
+  listThreadTurns: () => Effect.dieMessage("Unexpected listThreadTurns"),
   listLoadedThreads: () => Effect.dieMessage("Unexpected listLoadedThreads"),
   listThreads: () => Effect.dieMessage("Unexpected listThreads"),
   respond: () => Effect.dieMessage("Unexpected respond"),
-} satisfies CodexAppServerPort;
+} satisfies CodexAppServerPort &
+  import("../../ports/codex-session-history-port").CodexSessionHistoryPort;
 
 const createLifecycle = (changes: AgentSessionLiveAdapterChange[]) =>
   ({
@@ -197,6 +200,7 @@ const createControllerHarness = ({
     createController: (nextOptions: CodexAppServerAdapterOptions) => {
       options = nextOptions;
       return {
+        ...unexpectedNativeRuntimeQueries,
         beginGeneratedImageBatch: async () => {
           throw new Error("Unexpected beginGeneratedImageBatch");
         },
@@ -509,7 +513,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         }
         return Effect.succeed(codexResult("turn/interrupt", {}));
       },
-    } satisfies CodexAppServerPort;
+    } satisfies CodexAppServerPort &
+      import("../../ports/codex-session-history-port").CodexSessionHistoryPort;
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({

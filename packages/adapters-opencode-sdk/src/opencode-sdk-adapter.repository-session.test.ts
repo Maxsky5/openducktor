@@ -7,6 +7,23 @@ const repositoryScope = { kind: "repository" } as const;
 const runtimePolicy = { kind: "opencode" } as const;
 
 describe("OpencodeSdkAdapter repository sessions", () => {
+  test("validates a cold child's native identity before returning its parent", async () => {
+    const mock = makeMockClient({ sessionId: "child" });
+    const get = mock.client.session.get;
+    mock.client.session.get = async (...args) => {
+      const result = await get(...args);
+      return { ...result, data: { ...result.data!, parentID: "root" } };
+    };
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    await expect(adapter.resolveSessionParent(sessionRef("child"))).resolves.toBe("root");
+    expect(mock.session.getCalls).toEqual([{ sessionID: "child", directory: "/repo" }]);
+    await expect(adapter.resolveSessionParent(sessionRef("different"))).rejects.toMatchObject({
+      code: "scope_mismatch",
+    });
+    expect(mock.session.createCalls).toEqual([]);
+    expect(mock.session.updateCalls).toEqual([]);
+    expect(mock.session.promptCalls).toEqual([]);
+  });
   test("connects the trusted MCP and applies its full catalog across the repository lifecycle", async () => {
     const mock = makeMockClient({
       sessionId: "repository-session",
@@ -101,7 +118,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       task: true,
       subtask: false,
     });
-    expect(mock.mcp.statusCalls.length).toBeGreaterThanOrEqual(5);
+    expect(mock.mcp.statusCalls).toHaveLength(4);
     expect(mock.mcp.statusCalls).toEqual(
       expect.arrayContaining([expect.objectContaining({ directory: "/repo" })]),
     );
@@ -137,55 +154,37 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribe();
   });
 
-  test("applies repository policy before history binds a retained unbound session", async () => {
+  test("rejects scoped History reads of a retained unbound session without mutation", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     const unsubscribe = await adapter.subscribeEvents(
       sessionRuntimeRef("session-opencode-1", { sessionScope: undefined }),
       () => {},
     );
-
-    await adapter.loadSessionHistory({
-      ...sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
-      limit: 600,
-    });
-
-    expect(mock.session.updateCalls).toContainEqual(
-      expect.objectContaining({
-        sessionID: "session-opencode-1",
-        title: "Repository session",
-        permission: expect.arrayContaining([
-          { permission: "odt_create_task", pattern: "*", action: "ask" },
-          { permission: "odt_search_tasks", pattern: "*", action: "ask" },
-        ]),
-      }),
-    );
+    await expect(
+      adapter.loadSessionHistory(
+        sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
+      ),
+    ).rejects.toMatchObject({ code: "scope_mismatch" });
+    expect(mock.session.updateCalls).toHaveLength(0);
+    expect(mock.session.todoCalls).toHaveLength(0);
     unsubscribe();
   });
 
-  test("applies repository policy before reading todos from a retained unbound session", async () => {
+  test("rejects scoped Todos reads of a retained unbound session without mutation", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     const unsubscribe = await adapter.subscribeEvents(
       sessionRuntimeRef("session-opencode-1", { sessionScope: undefined }),
       () => {},
     );
-
-    await adapter.loadSessionTodos(
-      sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
-    );
-
-    expect(mock.session.updateCalls).toContainEqual(
-      expect.objectContaining({
-        sessionID: "session-opencode-1",
-        title: "Repository session",
-        permission: expect.arrayContaining([
-          { permission: "odt_create_task", pattern: "*", action: "ask" },
-          { permission: "odt_search_tasks", pattern: "*", action: "ask" },
-        ]),
-      }),
-    );
-    expect(mock.session.todoCalls).toHaveLength(1);
+    await expect(
+      adapter.loadSessionTodos(
+        sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
+      ),
+    ).rejects.toMatchObject({ code: "scope_mismatch" });
+    expect(mock.session.updateCalls).toHaveLength(0);
+    expect(mock.session.todoCalls).toHaveLength(0);
     unsubscribe();
   });
 
@@ -254,9 +253,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       adapter.loadSessionTodos(
         sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
       ),
-    ).rejects.toThrow(
-      "registered workflow scope for task 'task-1' and role 'build' does not match the requested repository scope",
-    );
+    ).rejects.toThrow("does not belong to the requested scope");
 
     expect(mock.session.todoCalls).toHaveLength(0);
     unsubscribeWorkflow();
@@ -456,7 +453,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
           sessionScope: workflowAgentSessionScope("task-2", "spec"),
         }),
       ),
-    ).rejects.toThrow("requested workflow scope for task 'task-2' and role 'spec'");
+    ).rejects.toThrow("does not belong to the requested scope");
     expect(mock.session.promptAsyncCalls).toHaveLength(promptCount);
   });
 
@@ -483,7 +480,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
           model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
         }),
       ),
-    ).rejects.toThrow("registered session belongs");
+    ).rejects.toThrow("The registered session belongs to another repository");
     expect(mock.mcp.statusCalls).toHaveLength(mcpStatusCallCount);
     expect(mock.session.messagesCalls).toHaveLength(0);
 

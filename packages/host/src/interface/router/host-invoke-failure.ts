@@ -1,4 +1,5 @@
 import type { HostInvokeFailure } from "@openducktor/contracts";
+import { RuntimeQueryError } from "../../ports/runtime-query-error";
 import { WorkspaceTextFileWriteError } from "../../application/filesystem/workspace-text-file-service";
 import {
   TerminalServiceError,
@@ -8,6 +9,9 @@ import { TaskAssetError, taskAssetErrorToFailure } from "../../effect/task-asset
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 
 export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | undefined => {
+  if (cause instanceof RuntimeQueryError) {
+    return { kind: "runtime_query", runtimeQueryFailure: cause.failure };
+  }
   if (cause instanceof WorkspaceTextFileWriteError) {
     return {
       kind: "workspace_text_file_write",

@@ -1,3 +1,5 @@
+import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
+import { AgentRuntimeQueryError, assertAgentRuntimeQuerySession } from "@openducktor/core";
 import type {
   AgentGeneratedImageBatch,
   AgentGeneratedImageBatchInput,
@@ -609,17 +611,8 @@ export class CodexAppServerAdapter
     input: LoadAgentSessionHistoryInput,
   ): Promise<AgentSessionHistoryMessage[]> {
     assertCodexRuntimePolicyBinding(input, "load Codex session history");
-    const session = await this.policyBoundSession(
-      input,
-      { lookup: "load history for", context: "load session history" },
-      false,
-    );
-    const runtime = session
-      ? {
-          client: this.runtimeClients.clientForRuntime(session.runtimeId),
-          runtimeId: session.runtimeId,
-        }
-      : await this.runtimeClients.resolve(input, "load Codex session history");
+    const runtime = await this.runtimeClients.resolve(input, "load Codex session history");
+    const session = this.querySession(input, runtime.runtimeId);
     const mergeImage = this.options.subscribeEvents
       ? this.runtimeEvents.prepareImageHistory(runtime.runtimeId, input.externalSessionId)
       : undefined;
@@ -716,39 +709,77 @@ export class CodexAppServerAdapter
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
     assertCodexRuntimePolicyBinding(input, "load Codex session todos");
-    const session = await this.policyBoundSession(
+    const { client, runtimeId } = await this.runtimeClients.resolve(
       input,
-      { lookup: "load todos for", context: "load Codex session todos" },
-      false,
+      "load Codex session todos",
     );
+    const session = this.querySession(input, runtimeId);
     const liveTodos = this.runtimeEvents.latestTodos(input.externalSessionId);
-    if (liveTodos) {
-      return liveTodos;
-    }
-    const { client, runtimeId } = session
-      ? {
-          client: this.runtimeClients.clientForRuntime(session.runtimeId),
-          runtimeId: session.runtimeId,
-        }
-      : await this.runtimeClients.resolve(input, "load Codex session todos");
-    const isThreadReadable = await this.threadInventory.ensureThreadReadable(
-      client,
-      runtimeId,
-      input,
-      codexTransportPolicy(
-        requireCodexRuntimePolicy(input.runtimePolicy, "load Codex session todos"),
-      ),
-    );
-    if (!isThreadReadable) {
-      return [];
-    }
-    const response = await this.threadInventory.readThreadWithTurns(
-      client,
-      input.externalSessionId,
-    );
+    if (liveTodos !== undefined) return liveTodos;
+    const response = await this.threadInventory.readThreadHistory(client, {
+      externalSessionId: input.externalSessionId,
+      workingDirectory: input.workingDirectory,
+      allowUnmaterialized: session !== undefined,
+    });
     const todos = codexTodosFromThreadRead(response);
-    this.runtimeEvents.rememberTodos(input.externalSessionId, todos);
-    return todos;
+    // Event-owned todos win if a live update arrived during the history read.
+    return this.runtimeEvents.latestTodos(input.externalSessionId) ?? todos;
+  }
+
+  async resolveSessionParent(input: SessionRef): Promise<string | null> {
+    const { client } = await this.runtimeClients.resolve(input, "read session parent");
+    const { thread } = await client.threadRead({
+      threadId: input.externalSessionId,
+      includeTurns: false,
+    });
+    if (thread.id !== input.externalSessionId || thread.cwd !== input.workingDirectory) {
+      throw new AgentRuntimeQueryError(
+        "scope_mismatch",
+        "The native session does not match the selected session and working directory. Select the matching session.",
+      );
+    }
+    const sourceParent = codexSubAgentSourceMetadata(thread.source)?.parentThreadId;
+    if (sourceParent && thread.parentThreadId && sourceParent !== thread.parentThreadId) {
+      throw new AgentRuntimeQueryError(
+        "invalid_runtime_response",
+        "The native session has conflicting parent identities. Check the host runtime logs.",
+      );
+    }
+    return thread.parentThreadId ?? sourceParent ?? null;
+  }
+
+  private querySession(
+    input: SessionRef & {
+      sessionScope?: import("@openducktor/contracts").AgentSessionScope | undefined;
+    },
+    runtimeId: string,
+  ): CodexSessionState | undefined {
+    const session = this.localSessions.get(input.externalSessionId);
+    if (session && session.runtimeId !== runtimeId) {
+      throw new AgentRuntimeQueryError(
+        "runtime_unavailable",
+        "The session belongs to a replaced runtime. Reload the runtime data.",
+      );
+    }
+    const owner = findRetainedSessionOwner({
+      sessions: this.localSessions,
+      subagents: this.subagents,
+      runtimeId,
+      threadId: input.externalSessionId,
+    });
+    if (owner) {
+      assertAgentRuntimeQuerySession(
+        input,
+        {
+          repoPath: owner.retainedSession.repoPath,
+          runtimeKind: "codex",
+          workingDirectory: owner.retainedSession.workingDirectory,
+          externalSessionId: input.externalSessionId,
+        },
+        owner.retainedSession.summary.sessionAssociation,
+      );
+    }
+    return session;
   }
 
   async updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void> {
@@ -1305,10 +1336,26 @@ export class CodexAppServerAdapter
   async loadSessionDiff(
     input: LoadAgentSessionDiffInput,
   ): Promise<import("@openducktor/contracts").FileDiff[]> {
-    const session = this.localSessions.get(input.externalSessionId);
-    const runtimeId = session
-      ? session.runtimeId
-      : (await this.runtimeClients.resolve(input, "load Codex session diff")).runtimeId;
+    const { client, runtimeId } = await this.runtimeClients.resolve(
+      input,
+      "load Codex session diff",
+    );
+    const session = this.querySession(input, runtimeId);
+    if (!session) {
+      const response = await client.threadRead({
+        threadId: input.externalSessionId,
+        includeTurns: false,
+      });
+      if (
+        response.thread.id !== input.externalSessionId ||
+        response.thread.cwd !== input.workingDirectory
+      ) {
+        throw new AgentRuntimeQueryError(
+          "scope_mismatch",
+          "The native session does not match the selected session and working directory. Select the matching session.",
+        );
+      }
+    }
     const diff = this.runtimeEvents.sessionDiff(
       runtimeId,
       input.externalSessionId,

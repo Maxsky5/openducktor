@@ -1,3 +1,4 @@
+import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import {
   unsupportedGeneratedImageSource,
   unsupportedGeneratedImageOperations,
@@ -264,6 +265,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        queries: createRuntimeQueryAdapter(prepared.queries),
         ...unsupportedGeneratedImageOperations,
         resolveGeneratedImageSource: unsupportedGeneratedImageSource,
         supportsSessionControl: true,

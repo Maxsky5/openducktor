@@ -7,7 +7,7 @@ export {
 
 import { HostAgentSessionLiveClient } from "./agent-session-live-client";
 import { HostAgentClient } from "./build-runtime-client";
-import { HostClaudeRuntimeClient } from "./claude-runtime-client";
+import { HostAgentRuntimeQueryClient } from "./agent-runtime-query-client";
 import { HostFilesystemClient } from "./filesystem-client";
 import { HostGitClient } from "./git-client";
 import type { InvokeFn } from "./invoke-utils";
@@ -37,7 +37,7 @@ type HostClientApi = PublicMethods<HostWorkspaceClient> &
   PublicMethods<HostTerminalClient> &
   PublicMethods<HostAgentClient> &
   PublicMethods<HostAgentSessionLiveClient> &
-  PublicMethods<HostClaudeRuntimeClient> &
+  PublicMethods<HostAgentRuntimeQueryClient> &
   PublicMethods<HostGitClient>;
 
 export type HostClient = HostClientApi & PlannerTools;
@@ -52,7 +52,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const terminalClient = new HostTerminalClient(invokeFn);
   const agentClient = new HostAgentClient(invokeFn, metadataCache);
   const agentSessionLiveClient = new HostAgentSessionLiveClient(invokeFn);
-  const claudeRuntimeClient = new HostClaudeRuntimeClient(invokeFn);
+  const agentRuntimeQueryClient = new HostAgentRuntimeQueryClient(invokeFn);
   const gitClient = new HostGitClient(invokeFn);
   const hostClient = {
     workspaceList: workspaceClient.workspaceList.bind(workspaceClient),
@@ -136,7 +136,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     runtimeRequire: agentClient.runtimeRequire.bind(agentClient),
     repoRuntimeHealth: agentClient.repoRuntimeHealth.bind(agentClient),
     repoRuntimeHealthStatus: agentClient.repoRuntimeHealthStatus.bind(agentClient),
-    codexAppServerRequest: agentClient.codexAppServerRequest.bind(agentClient),
     buildStart: agentClient.buildStart.bind(agentClient),
     devServerGetState: agentClient.devServerGetState.bind(agentClient),
     devServerStart: agentClient.devServerStart.bind(agentClient),
@@ -192,21 +191,24 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentSessionLiveClient.agentSessionLiveReplyApproval.bind(agentSessionLiveClient),
     agentSessionLiveReplyQuestion:
       agentSessionLiveClient.agentSessionLiveReplyQuestion.bind(agentSessionLiveClient),
-    claudeRuntimeFileStatus: claudeRuntimeClient.claudeRuntimeFileStatus.bind(claudeRuntimeClient),
-    claudeRuntimeListModels: claudeRuntimeClient.claudeRuntimeListModels.bind(claudeRuntimeClient),
-    claudeRuntimeListSkills: claudeRuntimeClient.claudeRuntimeListSkills.bind(claudeRuntimeClient),
-    claudeRuntimeListSlashCommands:
-      claudeRuntimeClient.claudeRuntimeListSlashCommands.bind(claudeRuntimeClient),
-    claudeRuntimeListSubagents:
-      claudeRuntimeClient.claudeRuntimeListSubagents.bind(claudeRuntimeClient),
-    claudeRuntimeLoadSessionDiff:
-      claudeRuntimeClient.claudeRuntimeLoadSessionDiff.bind(claudeRuntimeClient),
-    claudeRuntimeLoadSessionHistory:
-      claudeRuntimeClient.claudeRuntimeLoadSessionHistory.bind(claudeRuntimeClient),
-    claudeRuntimeLoadSessionTodos:
-      claudeRuntimeClient.claudeRuntimeLoadSessionTodos.bind(claudeRuntimeClient),
-    claudeRuntimeSearchFiles:
-      claudeRuntimeClient.claudeRuntimeSearchFiles.bind(claudeRuntimeClient),
+    agentRuntimeFileStatus:
+      agentRuntimeQueryClient.agentRuntimeFileStatus.bind(agentRuntimeQueryClient),
+    agentRuntimeListModels:
+      agentRuntimeQueryClient.agentRuntimeListModels.bind(agentRuntimeQueryClient),
+    agentRuntimeListSkills:
+      agentRuntimeQueryClient.agentRuntimeListSkills.bind(agentRuntimeQueryClient),
+    agentRuntimeListSlashCommands:
+      agentRuntimeQueryClient.agentRuntimeListSlashCommands.bind(agentRuntimeQueryClient),
+    agentRuntimeListSubagents:
+      agentRuntimeQueryClient.agentRuntimeListSubagents.bind(agentRuntimeQueryClient),
+    agentRuntimeLoadSessionDiff:
+      agentRuntimeQueryClient.agentRuntimeLoadSessionDiff.bind(agentRuntimeQueryClient),
+    agentRuntimeLoadSessionHistory:
+      agentRuntimeQueryClient.agentRuntimeLoadSessionHistory.bind(agentRuntimeQueryClient),
+    agentRuntimeLoadSessionTodos:
+      agentRuntimeQueryClient.agentRuntimeLoadSessionTodos.bind(agentRuntimeQueryClient),
+    agentRuntimeSearchFiles:
+      agentRuntimeQueryClient.agentRuntimeSearchFiles.bind(agentRuntimeQueryClient),
     gitCanonicalizePath: gitClient.gitCanonicalizePath.bind(gitClient),
     gitGetBranches: gitClient.gitGetBranches.bind(gitClient),
     gitGetCurrentBranch: gitClient.gitGetCurrentBranch.bind(gitClient),

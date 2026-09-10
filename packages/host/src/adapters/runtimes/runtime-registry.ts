@@ -24,6 +24,10 @@ import {
   stopRuntimeSession,
 } from "./runtime-session-operations";
 export type CreateRuntimeRegistryInput = {
+  onRuntimeChanged?: (
+    runtime: RuntimeInstanceSummary,
+    state: "ready" | "stopped",
+  ) => Effect.Effect<void, HostOperationError>;
   runtimes?: RuntimeInstanceSummary[];
   workspaceStarter?: RuntimeWorkspaceStarterPort;
   sessionOperations?: RuntimeSessionOperationsByKind;
@@ -46,6 +50,7 @@ export const createRuntimeRegistry = ({
   sessionOperations = createRuntimeSessionOperations(),
   hasActiveRuntimeSessions,
   resolveRuntimeExecutablePath,
+  onRuntimeChanged,
 }: CreateRuntimeRegistryInput = {}): RuntimeRegistryPort => {
   const store = createRuntimeRegistryStore(runtimes);
   const handles = new Map<string, RuntimeWorkspaceHandle>();
@@ -90,6 +95,7 @@ export const createRuntimeRegistry = ({
         handles.delete(runtimeId);
       }
       store.remove(runtimeId);
+      if (onRuntimeChanged) yield* onRuntimeChanged(runtime, "stopped");
       return runtime;
     });
   const cancelStartingRuntimes = () => {
@@ -201,6 +207,7 @@ export const createRuntimeRegistry = ({
       });
       store.upsert(parsed);
       handles.set(parsed.runtimeId, handle);
+      if (onRuntimeChanged) yield* onRuntimeChanged(parsed, "ready");
       return parsed;
     });
   const registry: RuntimeRegistryPort = {

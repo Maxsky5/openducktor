@@ -1,6 +1,8 @@
 export * from "./services/agent-image-generation";
 export * from "./services/agent-image-generation-lifecycle";
 export * from "./ports/agent-engine";
+export * from "./ports/agent-runtime-query-error";
+export * from "./services/agent-runtime-query-session";
 export * from "./services/agent-file-references";
 export * from "./services/agent-session-ref-key";
 export * from "./services/agent-session-runtime-snapshot";
@@ -19,3 +21,5 @@ export * from "./services/renderable-file-diffs";
 export * from "./services/runtime-connections";
 export * from "./types/agent-orchestrator";
 export * from "./types/planner";
+
+export type { AgentSessionQueryParentPort } from "./ports/agent-session-query-parent";

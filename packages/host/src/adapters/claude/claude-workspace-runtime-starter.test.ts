@@ -1,3 +1,4 @@
+import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Cause, Chunk, Effect, Exit } from "effect";
@@ -91,6 +92,7 @@ const createLiveSessionDependencies = ({
   const calls = { discarded: 0, forwarded: 0, registered: 0, released: 0 };
   let remainingReleaseFailures = releaseFailures;
   const adapter: AgentSessionLiveAdapterPort = {
+    queries: unexpectedRuntimeQueries,
     supportsSessionControl: false,
     beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
     releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),

@@ -1,3 +1,4 @@
+import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { describe, expect, test } from "bun:test";
 import type {
   AgentRepositorySessionStartInput,
@@ -51,6 +52,7 @@ const createHarness = async (
   const diffLoads: unknown[] = [];
   const starts: AgentSessionControlStartInput[] = [];
   const adapter: AgentSessionRuntimeAdapterPort = {
+    queries: unexpectedRuntimeQueries,
     supportsSessionControl: true,
     beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
     releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),

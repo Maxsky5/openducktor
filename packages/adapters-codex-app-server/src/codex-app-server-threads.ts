@@ -139,7 +139,7 @@ const codexThreadSnapshot = (thread: CodexAppServerThread): CodexThreadSnapshot 
   };
 };
 
-const codexSubAgentSourceMetadata = (
+export const codexSubAgentSourceMetadata = (
   source: CodexAppServerSessionSource | null | undefined,
 ): CodexSubAgentSourceMetadata | null => {
   const subAgentSource = codexSubAgentSource(source);

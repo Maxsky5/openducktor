@@ -1,11 +1,12 @@
 import {
+  getSessionInfo,
   importSessionToStore,
   type SessionKey,
   type SessionMessage,
   type SessionStore,
   type SessionStoreEntry,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { LoadAgentSessionHistoryInput } from "@openducktor/core";
+import { AgentRuntimeQueryError, type LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { z } from "zod";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
@@ -273,6 +274,19 @@ export const loadClaudeHistoryProjectionInput = async (
   input: LoadAgentSessionHistoryInput,
 ): Promise<ClaudeHistoryProjectionInput> => {
   const target = parseClaudeTranscriptTarget(input.externalSessionId);
+  const session = await getSessionInfo(target.sessionId, { dir: input.workingDirectory });
+  if (!session || session.sessionId !== target.sessionId) {
+    throw new AgentRuntimeQueryError(
+      "request_failed",
+      "The selected Claude session is unavailable. Check its history on the host.",
+    );
+  }
+  if (session.cwd !== input.workingDirectory) {
+    throw new AgentRuntimeQueryError(
+      "scope_mismatch",
+      "The Claude session belongs to another working directory. Select the matching session.",
+    );
+  }
   const { entriesBySubpath, store } = createClaudeHistoryImportStore(target);
   try {
     await importSessionToStore(target.sessionId, store, {
@@ -293,8 +307,15 @@ export const loadClaudeHistoryProjectionInput = async (
       },
     });
   }
+  const entries = entriesBySubpath.get(target.subpath);
+  if (!entries && target.subpath) {
+    throw new AgentRuntimeQueryError(
+      "request_failed",
+      "The selected Claude transcript is unavailable. Check its history on the host.",
+    );
+  }
   return {
-    messages: filterClaudeHistoryMessages(entriesBySubpath.get(target.subpath) ?? []),
+    messages: filterClaudeHistoryMessages(entries ?? []),
     subagentAgentIdsByToolUseId: readSubagentAgentIdsByToolUseId(entriesBySubpath, target.subpath),
   };
 };

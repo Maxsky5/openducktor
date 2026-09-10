@@ -44,7 +44,7 @@ describe("diff-ops", () => {
     });
 
     await expect(
-      loadSessionDiff("http://127.0.0.1:12345", "session-1", "message-1"),
+      loadSessionDiff("http://127.0.0.1:12345", "session-1", "/repo", "message-1"),
     ).resolves.toEqual([
       {
         file: "src/main.ts",
@@ -55,7 +55,7 @@ describe("diff-ops", () => {
       },
     ]);
     expect(requestedUrls).toEqual([
-      "http://127.0.0.1:12345/session/session-1/diff?messageID=message-1",
+      "http://127.0.0.1:12345/session/session-1/diff?directory=%2Frepo&messageID=message-1",
     ]);
   });
 
@@ -70,7 +70,7 @@ describe("diff-ops", () => {
       ]),
     );
 
-    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).rejects.toThrow(
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1", "/repo")).rejects.toThrow(
       "OpenCode request failed: load session diff: unexpected OpenCode diff entry at index 0: missing patch fields",
     );
   });
@@ -87,7 +87,7 @@ describe("diff-ops", () => {
       ]),
     );
 
-    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1", "/repo")).resolves.toEqual([
       {
         file: "src/main.ts",
         type: "modified",
@@ -111,7 +111,7 @@ describe("diff-ops", () => {
       ]),
     );
 
-    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1", "/repo")).resolves.toEqual([
       {
         file: "src/main.ts",
         type: "modified",
@@ -136,7 +136,7 @@ describe("diff-ops", () => {
       ]),
     );
 
-    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1", "/repo")).resolves.toEqual([
       {
         file: "src/LandingPage.test.tsx",
         type: "added",
@@ -160,7 +160,7 @@ describe("diff-ops", () => {
       ]),
     );
 
-    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).rejects.toThrow(
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1", "/repo")).rejects.toThrow(
       "OpenCode request failed: load session diff",
     );
   });
@@ -168,7 +168,7 @@ describe("diff-ops", () => {
   test("loadSessionDiff rejects HTTP failures with status context", async () => {
     installFetch(() => new Response(null, { status: 503, statusText: "Service Unavailable" }));
 
-    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).rejects.toThrow(
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1", "/repo")).rejects.toThrow(
       "OpenCode request failed: load session diff (503 Service Unavailable)",
     );
   });
@@ -183,17 +183,17 @@ describe("diff-ops", () => {
       ]);
     });
 
-    await expect(loadFileStatus("http://127.0.0.1:12345")).resolves.toEqual([
+    await expect(loadFileStatus("http://127.0.0.1:12345", "/repo")).resolves.toEqual([
       { path: "src/main.ts", status: "modified", staged: false },
       { path: "src/new.ts", status: "added", staged: false },
     ]);
-    expect(requestedUrls).toEqual(["http://127.0.0.1:12345/file/status"]);
+    expect(requestedUrls).toEqual(["http://127.0.0.1:12345/file/status?directory=%2Frepo"]);
   });
 
   test("loadFileStatus rejects malformed payloads", async () => {
     installFetch(() => jsonResponse({ items: [] }));
 
-    await expect(loadFileStatus("http://127.0.0.1:12345")).rejects.toThrow(
+    await expect(loadFileStatus("http://127.0.0.1:12345", "/repo")).rejects.toThrow(
       "OpenCode request failed: load file status",
     );
   });
@@ -203,7 +203,7 @@ describe("diff-ops", () => {
       throw new Error("socket closed");
     });
 
-    await expect(loadFileStatus("http://127.0.0.1:12345")).rejects.toThrow(
+    await expect(loadFileStatus("http://127.0.0.1:12345", "/repo")).rejects.toThrow(
       "OpenCode request failed: load file status: socket closed",
     );
   });

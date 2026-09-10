@@ -30,12 +30,14 @@ const openCodeFileStatusPayloadSchema = openCodeFileStatusSchema.array();
 export const loadSessionDiff = async (
   runtimeEndpoint: string,
   externalSessionId: string,
+  workingDirectory: string,
   runtimeHistoryAnchor?: string,
 ): Promise<FileDiff[]> => {
   const url = new URL(
     `/session/${externalSessionId}/diff`,
     normalizeRuntimeEndpoint(runtimeEndpoint),
   );
+  url.searchParams.set("directory", workingDirectory);
   if (runtimeHistoryAnchor) {
     url.searchParams.set("messageID", runtimeHistoryAnchor);
   }
@@ -57,8 +59,12 @@ export const loadSessionDiff = async (
  * Loads file status from the OpenCode SDK API.
  * Endpoint: GET /file/status
  */
-export const loadFileStatus = async (runtimeEndpoint: string): Promise<FileStatus[]> => {
+export const loadFileStatus = async (
+  runtimeEndpoint: string,
+  workingDirectory: string,
+): Promise<FileStatus[]> => {
   const url = new URL("/file/status", normalizeRuntimeEndpoint(runtimeEndpoint));
+  url.searchParams.set("directory", workingDirectory);
 
   try {
     const body = await fetchJson("load file status", url, 10_000, openCodeFileStatusPayloadSchema);

@@ -22,6 +22,24 @@ const historyMessageFixture: AgentSessionHistoryMessage = {
 };
 
 describe("agent session history queries", () => {
+  test("deduplicates equal reads while separating result-shaping inputs", async () => {
+    const client = new QueryClient();
+    const result = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const reader = mock(() => result.promise);
+    const inputs: LoadAgentSessionHistoryInput[] = [
+      sessionRefFixture,
+      { ...sessionRefFixture, limit: 5 },
+      { ...sessionRefFixture, systemPrompt: "Read only" },
+      { ...sessionRefFixture, sessionScope: { kind: "repository" } },
+    ];
+    const reads = inputs.flatMap((input) => [
+      client.fetchQuery(sessionHistoryQueryOptions(input, reader)),
+      client.fetchQuery(sessionHistoryQueryOptions({ ...input }, reader)),
+    ]);
+    expect(reader).toHaveBeenCalledTimes(inputs.length);
+    result.resolve([historyMessageFixture]);
+    await Promise.all(reads);
+  });
   test("keys session history by the concrete runtime session identity", () => {
     expect(agentSessionHistoryQueryKeys.history(sessionRefFixture)).toEqual([
       "agent-session-history",
@@ -29,6 +47,14 @@ describe("agent session history queries", () => {
       "opencode",
       "/repo/worktree",
       "session-1",
+      {
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: undefined,
+        limit: undefined,
+        systemPromptContext: undefined,
+        systemPrompt: undefined,
+        model: undefined,
+      },
     ]);
   });
 

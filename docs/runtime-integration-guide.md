@@ -49,6 +49,18 @@ Create and subscribe the live-session adapter before the runtime can send events
 
 Before you map a feature, inspect official SDK types, protocol docs, or runtime source. Check startup, config, auth, models, sessions, activity, history, tools, approvals, questions, context, catalogs, and optional features. Keep a capability off when the public runtime contract lacks the needed data.
 
+## Runtime queries
+
+Electron and remote browsers use the same nine `agent_runtime_*` commands through `HostClient`. The query contracts accept repository, runtime kind, working directory, and session identity. They do not accept runtime endpoints, routes, or instance IDs. OpenCode keeps its loopback listener on the host machine.
+
+Each live-session adapter registration provides an `AgentRuntimeQueryAdapterPort`. The host query service resolves the current runtime and registration for every read, checks directory and session ownership, and rejects results that overlap runtime replacement. Reads use the worktree lifecycle guard. They do not start or resume a runtime or repeat repository setup.
+
+Native query adapters reuse the controller that owns live events and retained message metadata. Reads must not bind scope, change policy or prompt context, admit a session, or drain events. Cold child reads use the host-only `resolveSessionParent` method to trace native parent links to an existing OpenDucktor task session record. Native links alone do not grant task ownership.
+
+Codex reads stored todos through `thread/read` and `thread/turns/list` without `thread/resume`. Newer event-owned todos take precedence. History uses the host image worker, and diff reads use the existing controller state and history anchor.
+
+The `runtime_query` failure carries a stable code, request identity, and an actionable error. It preserves available history diagnostics without exposing native connection data. The live stream emits `runtime_changed` after registration or removal so the frontend cancels and invalidates affected query reads. History cache keys include display context and limits; todo events cancel older reads before updating the cache.
+
 ## Capability contract
 
 Each enabled `RuntimeDescriptor.capabilities` field needs a working adapter path and matching UI.

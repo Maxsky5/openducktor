@@ -1,3 +1,4 @@
+import { unexpectedRuntimeQueries } from "./runtime-query-test-doubles";
 import { Effect } from "effect";
 import type { DevServerService } from "../application/dev-servers/dev-server-service";
 import type { WorkspaceSettingsService } from "../application/workspaces/workspace-settings-service";
@@ -22,6 +23,7 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
   binding: AgentSessionLiveAdapterBinding,
   overrides: Overrides,
 ): AgentSessionRuntimeAdapterPort => ({
+  queries: unexpectedRuntimeQueries,
   supportsSessionControl: true,
   beginGeneratedImageBatch: unexpectedEffectCall("session adapter", "beginGeneratedImageBatch"),
   releaseGeneratedImageBatch: unexpectedEffectCall("session adapter", "releaseGeneratedImageBatch"),

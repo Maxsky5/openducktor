@@ -1,4 +1,5 @@
 import { Effect, Exit } from "effect";
+import type { RuntimeQueryError } from "../../ports/runtime-query-error";
 import type { FilesystemListDirectoryError } from "../../application/filesystem/filesystem-service";
 import { WorkspaceTextFileWriteError } from "../../application/filesystem/workspace-text-file-service";
 import type { TerminalServiceError } from "../../application/terminals/terminal-service-error";
@@ -26,6 +27,7 @@ export type HostCommandResult<Command extends HostCommandName = HostCommandName>
   HostCommandResultMap[Command];
 export type { HostCommandArgs } from "../commands/command-inputs";
 export type HostCommandHandlerError =
+  | RuntimeQueryError
   | CodexSessionHistoryError
   | DevServerProcessStartExitError
   | FilesystemListDirectoryError

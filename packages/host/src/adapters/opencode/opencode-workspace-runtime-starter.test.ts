@@ -1,3 +1,4 @@
+import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -86,6 +87,7 @@ const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeSt
       prepareLiveSessionAdapter ??
       ((runtime) => {
         const adapter: AgentSessionLiveAdapterPort = {
+          queries: unexpectedRuntimeQueries,
           supportsSessionControl: false,
           beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
           releaseGeneratedImageBatch: () =>
@@ -292,6 +294,7 @@ if (exitAfterMs !== null) {
 };
 
 const createLiveAdapter = (runtime: RuntimeInstanceSummary): AgentSessionLiveAdapterPort => ({
+  queries: unexpectedRuntimeQueries,
   supportsSessionControl: false,
   beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
   releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),

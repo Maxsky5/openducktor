@@ -139,6 +139,13 @@ export type AgentSessionLiveScope = z.infer<typeof agentSessionLiveScopeSchema>;
 export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
   z
     .object({
+      type: z.literal("runtime_changed"),
+      scope: agentSessionLiveScopeSchema.pick({ repoPath: true, runtimeKind: true }),
+      state: z.enum(["ready", "stopped"]),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("snapshot"),
       repoPath: nonEmptyStringSchema,
       sessions: z.array(agentSessionLiveSnapshotSchema),

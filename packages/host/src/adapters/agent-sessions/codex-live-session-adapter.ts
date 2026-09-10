@@ -1,9 +1,10 @@
+import { createCodexRuntimeTransport } from "./codex-runtime-transport";
+import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import { createCodexImageOperations } from "./codex-image-operations";
 import { createCodexImageSettlement } from "./codex-live-session-images";
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
-  type CodexJsonRpcRequest,
   type CodexLiveSessionMutation,
 } from "@openducktor/adapters-codex-app-server";
 import {
@@ -130,10 +131,7 @@ export const createCodexLiveSessionAdapterPreparer =
             repoRuntimeResolver: {
               requireRepoRuntime: async () => runtime,
             },
-            transportFactory: (runtimeId) => ({
-              request: (request: CodexJsonRpcRequest) =>
-                Effect.runPromise(codexAppServer.request({ runtimeId, ...request })),
-            }),
+            transportFactory: (runtimeId) => createCodexRuntimeTransport(codexAppServer, runtimeId),
             subscribeEvents: (runtimeId, listener) => eventHub.subscribe(runtimeId, listener),
             respondServerRequest: (runtimeId, requestId, result, error) => {
               const response: CodexAppServerRespondInput = { runtimeId, requestId };
@@ -277,6 +275,7 @@ export const createCodexLiveSessionAdapterPreparer =
           });
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        queries: createRuntimeQueryAdapter(controller),
         ...createCodexImageOperations(controller, sessionError),
         supportsSessionControl: true,
         binding: {

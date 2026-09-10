@@ -46,6 +46,8 @@ export const updateSessionTodosQueryData = (
   session: SessionRef,
   updater: SessionTodosUpdater,
 ): void => {
+  // Cancellation is synchronous; the promise only waits for settled request handlers.
+  void queryClient.cancelQueries({ queryKey: agentSessionTodosQueryKeys.identity(session) });
   const unscopedQueryKey = agentSessionTodosQueryKeys.todos(session);
   const hasUnscopedQuery = queryClient.getQueryState(unscopedQueryKey) !== undefined;
   queryClient.setQueriesData<AgentSessionTodoItem[]>(

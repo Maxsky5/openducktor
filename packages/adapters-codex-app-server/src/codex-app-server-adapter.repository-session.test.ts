@@ -67,9 +67,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         sessionScope: { kind: "repository" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
-    ).rejects.toThrow(
-      "registered workflow scope for task 'task-1' and role 'build' does not match the requested repository scope",
-    );
+    ).rejects.toThrow("does not belong to the requested scope");
     expect(transports.get("runtime-live")?.calls).toHaveLength(callCount ?? 0);
   });
 
@@ -181,7 +179,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         ...codexSessionRuntimeRef(started.externalSessionId),
         workingDirectory: "/other",
       }),
-    ).rejects.toThrow("registered session belongs to repo '/repo' and working directory '/repo'");
+    ).rejects.toThrow("The registered session belongs to another repository");
     expect(transport.calls).toEqual([]);
   });
 
@@ -226,7 +224,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
           sessionScope: { kind: "workflow", taskId: "task-2", role: "spec" },
         }),
       ),
-    ).rejects.toThrow("requested workflow scope for task 'task-2' and role 'spec'");
+    ).rejects.toThrow("does not belong to the requested scope");
     await expect(
       adapter.loadSessionContextUsage(
         codexSessionRuntimeRef(started.externalSessionId, {
@@ -410,9 +408,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
           runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
         }),
       ),
-    ).rejects.toThrow(
-      "runtime 'runtime-wrong-route' is missing required route contract 'stdio' for repo '/repo' while attempting to load Codex session history",
-    );
+    ).rejects.toThrow("missing required route contract 'stdio'");
     expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
     expect(transportFactory).toHaveBeenCalledTimes(0);
   });

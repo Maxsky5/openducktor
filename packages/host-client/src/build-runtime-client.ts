@@ -4,10 +4,6 @@ import {
   type BuildSessionBootstrap,
   buildSessionBootstrapSchema,
   type DevServerGroupState,
-  type CodexAppServerClientRequest,
-  type CodexAppServerClientRequestMap,
-  type CodexAppServerRequestMethod,
-  codexAppServerRequestResultSchemaFor,
   devServerGroupStateSchema,
   type FailureKind,
   type PullRequest,
@@ -46,11 +42,6 @@ import {
 import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, booleanResultSchema, okResultSchema } from "./invoke-utils";
 import type { TaskMetadataCache } from "./task-metadata-cache";
-
-type CodexAppServerClientRequestFor<Method extends CodexAppServerRequestMethod> = Extract<
-  CodexAppServerClientRequest,
-  { method: Method }
->;
 
 type RuntimeEnsureFailureKind = FailureKind;
 
@@ -251,19 +242,6 @@ const repoRuntimeHealthStatus = async (
     { repoPath, runtimeKind },
     repoRuntimeHealthCheckSchema,
   );
-};
-
-const codexAppServerRequest = async <Method extends CodexAppServerRequestMethod>(
-  invokeFn: InvokeFn,
-  runtimeId: string,
-  request: CodexAppServerClientRequestFor<Method>,
-): Promise<CodexAppServerClientRequestMap[Method]["result"]> => {
-  const result = await invokeFn(
-    "codex_app_server_request",
-    { runtimeId, method: request.method, params: request.params },
-    codexAppServerRequestResultSchemaFor(request.method),
-  );
-  return result;
 };
 
 const buildStart = async (
@@ -516,13 +494,6 @@ export class HostAgentClient {
     runtimeKind: RuntimeKind,
   ): Promise<RepoRuntimeHealthCheck> {
     return repoRuntimeHealthStatus(this.invokeFn, repoPath, runtimeKind);
-  }
-
-  async codexAppServerRequest<Method extends CodexAppServerRequestMethod>(
-    runtimeId: string,
-    request: CodexAppServerClientRequestFor<Method>,
-  ): Promise<CodexAppServerClientRequestMap[Method]["result"]> {
-    return codexAppServerRequest(this.invokeFn, runtimeId, request);
   }
 
   async buildStart(

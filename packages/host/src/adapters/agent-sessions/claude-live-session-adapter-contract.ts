@@ -1,7 +1,7 @@
 import type { RuntimeInstanceSummary } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
-import type { ClaudeWorkspaceWorkingDirectoryDependencies } from "../../application/runtimes/claude-workspace-runtime";
+import type { RuntimeWorkingDirectoryDependencies } from "../../application/runtimes/runtime-working-directory";
 import type { HostError } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import type {
@@ -36,6 +36,16 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation">;
   readonly service: Pick<
     ClaudeAgentSdkService,
+    | "resolveSessionParent"
+    | "listAvailableModels"
+    | "listAvailableSlashCommands"
+    | "listAvailableSkills"
+    | "listAvailableSubagents"
+    | "searchFiles"
+    | "loadSessionHistory"
+    | "loadSessionTodos"
+    | "loadSessionDiff"
+    | "loadFileStatus"
     | "forkSession"
     | "loadSessionContextUsage"
     | "prepareApprovalReply"
@@ -51,5 +61,5 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
   readonly sessionStore: {
     get(externalSessionId: string): ClaudeSessionContext | undefined;
   };
-  readonly workingDirectoryDependencies: ClaudeWorkspaceWorkingDirectoryDependencies;
+  readonly workingDirectoryDependencies: RuntimeWorkingDirectoryDependencies;
 };

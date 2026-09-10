@@ -70,6 +70,35 @@ const paginatedThreadListResponse = (threads: ThreadListFixture[]) => ({
 });
 
 describe("CodexAppServerAdapter history loading", () => {
+  test("validates cold child ancestry with a passive targeted read", async () => {
+    const requests: CodexJsonRpcRequest[] = [];
+    const adapter = createAdapterWithTransport({
+      request: async (request) => {
+        requests.push(request);
+        return {
+          thread: codexThreadFixture({
+            id: "child",
+            cwd: "/repo",
+            status: { type: "idle" },
+            parentThreadId: "root",
+          }),
+        };
+      },
+    });
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "child",
+    };
+    await expect(adapter.resolveSessionParent(ref)).resolves.toBe("root");
+    expect(requests).toEqual([
+      { method: "thread/read", params: { threadId: "child", includeTurns: false } },
+    ]);
+    await expect(
+      adapter.resolveSessionParent({ ...ref, workingDirectory: "/other" }),
+    ).rejects.toMatchObject({ code: "scope_mismatch" });
+  });
   test("keeps a hydrated subagent at its exact thread item position", async () => {
     const thread = {
       id: "parent-thread",
@@ -1176,7 +1205,7 @@ describe("CodexAppServerAdapter history loading", () => {
     );
   });
 
-  test("returns empty history when Codex has no stored thread", async () => {
+  test("rejects history when Codex has no stored thread", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
       async request(request: CodexJsonRpcRequest) {
@@ -1204,7 +1233,7 @@ describe("CodexAppServerAdapter history loading", () => {
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
-    ).resolves.toEqual([]);
+    ).rejects.toThrow();
 
     expect(calls).toEqual([
       { method: "thread/read", params: { threadId: "missing-thread", includeTurns: false } },
@@ -1358,7 +1387,7 @@ describe("CodexAppServerAdapter history loading", () => {
       expect.objectContaining({ content: "Load transcript once", status: "completed" }),
       expect.objectContaining({ content: "Reuse todos", status: "in_progress" }),
     ]);
-    expect(calls.filter((call) => call.method === "thread/read")).toHaveLength(2);
+    expect(calls.map((call) => call.method)).toEqual(["thread/read", "thread/turns/list"]);
   });
 
   test("rejects Codex todo policy mismatches before returning cached todos", async () => {

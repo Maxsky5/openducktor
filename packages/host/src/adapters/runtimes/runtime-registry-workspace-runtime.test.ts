@@ -33,6 +33,44 @@ const createCodexRuntime = (
   });
 
 describe("createRuntimeRegistry workspace runtime lookup", () => {
+  test("publishes lifecycle changes after the runtime lookup changes", async () => {
+    const changes: Array<{ state: string; runtimeId: string | null }> = [];
+    let alive = true;
+    let starts = 0;
+    const registry = createRuntimeRegistry({
+      workspaceStarter: {
+        startWorkspaceRuntime: () =>
+          Effect.sync(() => ({
+            runtime: createRuntime({ runtimeId: `runtime-${++starts}` }),
+            configuredExecutablePath: "/bin/opencode",
+            isAlive: () => alive,
+            stop: () => Effect.void,
+          })),
+      },
+      onRuntimeChanged: (runtime, state) =>
+        Effect.gen(function* () {
+          const current = yield* registry
+            .findWorkspaceRuntime({ repoPath: runtime.repoPath, runtimeKind: runtime.kind })
+            .pipe(Effect.orDie);
+          changes.push({ state, runtimeId: current?.runtimeId ?? null });
+        }),
+    });
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+      descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+    };
+    await Effect.runPromise(registry.ensureWorkspaceRuntime(input));
+    await Effect.runPromise(registry.ensureWorkspaceRuntime(input));
+    alive = false;
+    await Effect.runPromise(registry.ensureWorkspaceRuntime(input));
+    expect(changes).toEqual([
+      { state: "ready", runtimeId: "runtime-1" },
+      { state: "stopped", runtimeId: null },
+      { state: "ready", runtimeId: "runtime-2" },
+    ]);
+  });
   test("finds the live workspace runtime by repository and kind", async () => {
     const workspaceRuntime = createRuntime({
       runtimeId: "workspace-opencode",

@@ -111,6 +111,7 @@ export type {
 } from "./ports/agent-session-live-adapter-port";
 export type { CodexAppServerPort } from "./ports/codex-app-server-port";
 export { CodexSessionHistoryError } from "./ports/codex-session-history-error";
+export { RuntimeQueryError } from "./ports/runtime-query-error";
 export type { DevServerProcessPort } from "./ports/dev-server-process-port";
 export type { FilesystemPort } from "./ports/filesystem-port";
 export type { GitPort } from "./ports/git-port";

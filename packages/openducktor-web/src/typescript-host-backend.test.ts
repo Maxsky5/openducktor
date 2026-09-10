@@ -2,7 +2,7 @@ import { liveSessionStreamEventName } from "./host-event-stream-name";
 import { describe, expect, mock, test } from "bun:test";
 import { TERMINAL_PROTOCOL_SUBPROTOCOL, type HostEventEnvelope } from "@openducktor/contracts";
 import {
-  CodexSessionHistoryError,
+  RuntimeQueryError,
   createLocalAttachmentAdapter,
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
@@ -795,56 +795,48 @@ describe("TypeScript web host backend", () => {
     });
   });
 
-  test("preserves structured session history failures in invoke error responses", async () => {
+  test("preserves runtime query identity and history diagnostics in web invoke failures", async () => {
+    const failure = {
+      code: "invalid_runtime_response" as const,
+      operation: "load session history",
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "thread-1",
+      summary: "Could not load session history.",
+      detail: "Check the host runtime logs.",
+      sessionHistoryFailure: {
+        code: "invalid_runtime_response" as const,
+        summary: "Codex returned invalid conversation history.",
+        detail: "A history item has an invalid shape.",
+        diagnosticId: "diagnostic-1",
+        method: "thread/turns/list" as const,
+        pageCursor: null,
+      },
+    };
     const hostCommandRouter = createTestHostCommandRouter(() =>
-      Effect.fail(
-        new CodexSessionHistoryError({
-          message: "Codex thread/turns/list response data[0] must be an object",
-          runtimeId: "runtime-1",
-          threadId: "thread-1",
-          failure: {
-            code: "invalid_runtime_response",
-            summary: "Codex returned invalid conversation history.",
-            detail: "Codex thread/turns/list response data[0] must be an object",
-            diagnosticId: "diagnostic-1",
-            method: "thread/turns/list",
-            pageCursor: null,
-          },
-        }),
-      ),
+      Effect.fail(new RuntimeQueryError({ message: failure.detail, failure })),
     );
-
     const response = await handleTestRequest(
-      new Request("http://127.0.0.1/invoke/codex_app_server_request", {
+      new Request("http://127.0.0.1/invoke/agent_runtime_load_session_history", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-openducktor-app-token": APP_TOKEN,
-        },
+        headers: { "content-type": "application/json", "x-openducktor-app-token": APP_TOKEN },
         body: JSON.stringify({
-          runtimeId: "runtime-1",
-          method: "thread/turns/list",
-          params: { threadId: "thread-1" },
+          input: {
+            repoPath: "/repo",
+            runtimeKind: "codex",
+            workingDirectory: "/repo/worktree",
+            externalSessionId: "thread-1",
+          },
         }),
       }),
       { hostCommandRouter },
     );
-
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
-      error: "Codex thread/turns/list response data[0] must be an object",
-      message: "Codex thread/turns/list response data[0] must be an object",
-      failure: {
-        kind: "session_history",
-        sessionHistoryFailure: {
-          code: "invalid_runtime_response",
-          summary: "Codex returned invalid conversation history.",
-          detail: "Codex thread/turns/list response data[0] must be an object",
-          diagnosticId: "diagnostic-1",
-          method: "thread/turns/list",
-          pageCursor: null,
-        },
-      },
+      error: failure.detail,
+      message: failure.detail,
+      failure: { kind: "runtime_query", runtimeQueryFailure: failure },
     });
   });
 

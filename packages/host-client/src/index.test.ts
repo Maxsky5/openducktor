@@ -333,7 +333,6 @@ describe("HostClient", () => {
       "taskWorktreeGet",
       "runtimeStop",
       "runtimeEnsure",
-      "codexAppServerRequest",
       "buildStart",
       "buildBlocked",
       "buildResumed",
@@ -2156,82 +2155,6 @@ describe("HostClient", () => {
         args: { repoPath: "/repo", taskIds: ["task-1", "task-2"], operation: "delete" },
       },
     ]);
-  });
-
-  test("codex app-server requests use the expected IPC route", async () => {
-    const modelListResponse = {
-      data: [
-        {
-          additionalSpeedTiers: [],
-          availabilityNux: null,
-          defaultServiceTier: null,
-          defaultReasoningEffort: "medium",
-          description: "GPT-5 model",
-          hidden: false,
-          id: "gpt-5",
-          model: "gpt-5",
-          displayName: "GPT-5",
-          modelSpecialty: null,
-          multiAgentVersion: null,
-          serviceTiers: [],
-          supportedReasoningEfforts: [
-            { reasoningEffort: "medium", description: "Balanced reasoning" },
-          ],
-          supportsPersonality: true,
-          inputModalities: ["text", "image"],
-          isDefault: true,
-          upgrade: null,
-          upgradeInfo: null,
-        },
-      ],
-      nextCursor: null,
-    };
-    const { client, calls } = createClient((command) => {
-      if (command === "codex_app_server_request") {
-        return modelListResponse;
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    await expect(
-      client.codexAppServerRequest("runtime-1", {
-        method: "model/list",
-        params: { cursor: null, limit: null, includeHidden: null },
-      }),
-    ).resolves.toEqual(modelListResponse);
-    expect(calls).toEqual([
-      {
-        command: "codex_app_server_request",
-        args: {
-          runtimeId: "runtime-1",
-          method: "model/list",
-          params: { cursor: null, limit: null, includeHidden: null },
-        },
-      },
-    ]);
-  });
-
-  test("preserves Codex history pages across the IPC boundary", async () => {
-    const historyPage = { data: [], nextCursor: null, backwardsCursor: null };
-    const { client } = createClient((command) => {
-      if (command === "codex_app_server_request") {
-        return historyPage;
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    await expect(
-      client.codexAppServerRequest("runtime-1", {
-        method: "thread/turns/list",
-        params: {
-          threadId: "thread-1",
-          cursor: null,
-          limit: 100,
-          sortDirection: "asc",
-          itemsView: "full",
-        },
-      }),
-    ).resolves.toEqual(historyPage);
   });
 
   test("runtime and session ack commands reject malformed host payloads", async () => {

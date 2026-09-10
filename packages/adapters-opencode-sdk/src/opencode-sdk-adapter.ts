@@ -39,6 +39,8 @@ import type {
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
 import {
+  AgentRuntimeQueryError,
+  assertAgentRuntimeQuerySession,
   agentSessionRefsEqual,
   assertAgentRuntimePolicyBinding,
   classifySystemSlashCommandInvocation,
@@ -66,7 +68,6 @@ import { sendUserMessage, usesPromptAsyncTransport } from "./message-execution";
 import { loadSessionHistory, loadSessionTodos } from "./message-ops";
 import { createOpenCodeMessageId } from "./opencode-message-id";
 import {
-  adoptPreparedOpencodeSessionPolicy,
   applyRuntimeContextToSession,
   applySessionPolicy,
   requireOpencodeSessionPolicyRuntime,
@@ -528,43 +529,8 @@ export class OpencodeSdkAdapter
   ): Promise<AgentSessionHistoryMessage[]> {
     assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session history");
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load session history");
-    const matchingSessions = [...this.sessions.values()].filter(
-      (session) =>
-        session.externalSessionId === input.externalSessionId &&
-        session.runtimeId === runtimeClientInput.runtimeId,
-    );
-    for (const session of matchingSessions) {
-      const registeredSessionRef = opencodeSessionRef(session);
-      if (!agentSessionRefsEqual(registeredSessionRef, input)) {
-        throw new Error(
-          `Cannot load OpenCode session history for '${input.externalSessionId}' from repo '${input.repoPath}' and working directory '${input.workingDirectory}' because the registered session belongs to repo '${registeredSessionRef.repoPath}' and working directory '${registeredSessionRef.workingDirectory}'.`,
-        );
-      }
-    }
-    if (input.sessionScope) {
-      const policy = resolveOpencodeSessionPolicy(
-        input.sessionScope,
-        this.getRuntimeDefinition(),
-        "load OpenCode session history",
-      );
-      await requireOpencodeSessionPolicyRuntime({
-        client: this.createClient(runtimeClientInput),
-        policy,
-        workingDirectory: input.workingDirectory,
-      });
-      for (const session of matchingSessions) {
-        await adoptPreparedOpencodeSessionPolicy({
-          action: "load session history",
-          policy,
-          request: input,
-          session,
-        });
-      }
-    } else {
-      for (const session of matchingSessions) {
-        applyRuntimeContextToSession(session, input, "load session history");
-      }
-    }
+    const session = await this.querySession(input, runtimeClientInput);
+    const matchingSessions = session ? [session] : [];
     const preservedDisplayPartsByMessageId = new Map(
       matchingSessions.flatMap((session) =>
         [...session.messageMetadataById.entries()].flatMap(([messageId, metadata]) =>
@@ -589,13 +555,67 @@ export class OpencodeSdkAdapter
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
     assertOpenCodeRuntimePolicyBinding(input, "load OpenCode session todos");
-    if (this.sessions.has(input.externalSessionId)) {
-      await this.policyBoundSessionState(input, "load todos for");
-    }
+    const runtime = await this.resolveRuntimeClientInput(input, "load session todos");
+    await this.querySession(input, runtime);
     return loadSessionTodos(this.createClient, {
-      ...(await this.resolveRuntimeClientInput(input, "load session todos")),
+      ...runtime,
       externalSessionId: input.externalSessionId,
     });
+  }
+
+  async resolveSessionParent(input: SessionRef): Promise<string | null> {
+    const runtime = await this.resolveRuntimeClientInput(input, "read session parent");
+    const response = await this.createClient(runtime).session.get({
+      sessionID: input.externalSessionId,
+      directory: runtime.workingDirectory,
+    });
+    const target = opencodeSessionDetailPayloadSchema.parse(
+      unwrapData(response, "read session parent"),
+    );
+    if (target.id !== input.externalSessionId || target.directory !== runtime.workingDirectory) {
+      throw new AgentRuntimeQueryError(
+        "scope_mismatch",
+        "The native session does not match the selected session and working directory. Select the matching session.",
+      );
+    }
+    return target.parentID || null;
+  }
+
+  private async querySession(
+    input: SessionRef & {
+      sessionScope?: import("@openducktor/contracts").AgentSessionScope | undefined;
+    },
+    runtime: Awaited<ReturnType<OpencodeSdkAdapter["resolveRuntimeClientInput"]>>,
+  ): Promise<SessionRecord | undefined> {
+    const session = this.sessions.get(input.externalSessionId);
+    if (session) {
+      assertAgentRuntimeQuerySession(
+        { ...input, workingDirectory: runtime.workingDirectory },
+        opencodeSessionRef(session),
+        session.summary.sessionAssociation,
+      );
+      if (session.runtimeId !== runtime.runtimeId) {
+        throw new AgentRuntimeQueryError(
+          "runtime_unavailable",
+          "The session belongs to a replaced runtime. Reload the runtime data.",
+        );
+      }
+      return session;
+    }
+    const response = await this.createClient(runtime).session.get({
+      sessionID: input.externalSessionId,
+      directory: runtime.workingDirectory,
+    });
+    const target = opencodeSessionDetailPayloadSchema.parse(
+      unwrapData(response, "read session identity"),
+    );
+    if (target.id !== input.externalSessionId || target.directory !== runtime.workingDirectory) {
+      throw new AgentRuntimeQueryError(
+        "scope_mismatch",
+        "The native session does not match the selected session and working directory. Select the matching session.",
+      );
+    }
+    return undefined;
   }
 
   async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {
@@ -803,9 +823,12 @@ export class OpencodeSdkAdapter
   async loadSessionDiff(
     input: LoadAgentSessionDiffInput,
   ): Promise<import("@openducktor/contracts").FileDiff[]> {
+    const runtime = await this.resolveRuntimeClientInput(input, "load session diff");
+    await this.querySession(input, runtime);
     return loadSessionDiffOp(
-      (await this.resolveRuntimeClientInput(input, "load session diff")).runtimeEndpoint,
+      runtime.runtimeEndpoint,
       input.externalSessionId,
+      input.workingDirectory,
       input.runtimeHistoryAnchor,
     );
   }
@@ -815,6 +838,7 @@ export class OpencodeSdkAdapter
   ): Promise<import("@openducktor/contracts").FileStatus[]> {
     return loadFileStatusOp(
       (await this.resolveRuntimeClientInput(input, "load file status")).runtimeEndpoint,
+      input.workingDirectory,
     );
   }
 

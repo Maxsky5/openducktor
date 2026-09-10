@@ -20,6 +20,12 @@ export const agentSessionHistoryQueryKeys = {
     runtimeKind,
     workingDirectory,
     externalSessionId,
+    sessionScope,
+    limit,
+    systemPromptContext,
+    systemPrompt,
+    model,
+    runtimePolicy,
   }: LoadAgentSessionHistoryInput) =>
     [
       ...agentSessionHistoryQueryKeys.all,
@@ -27,6 +33,7 @@ export const agentSessionHistoryQueryKeys = {
       runtimeKind,
       normalizeWorkingDirectory(workingDirectory),
       externalSessionId,
+      { sessionScope, limit, systemPromptContext, systemPrompt, model, runtimePolicy },
     ] as const,
 };
 

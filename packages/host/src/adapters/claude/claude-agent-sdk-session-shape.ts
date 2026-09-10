@@ -172,7 +172,7 @@ export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRu
 
 export const assertClaudeSessionRef = (
   session: ClaudeSession,
-  ref: SessionRef & { sessionScope?: ClaudeSessionInput["sessionScope"] },
+  ref: SessionRef & { sessionScope?: ClaudeSessionInput["sessionScope"] | undefined },
   action: string,
 ): void => {
   const expected = claudeSessionRef(session);
