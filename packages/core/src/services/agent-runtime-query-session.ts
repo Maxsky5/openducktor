@@ -7,7 +7,10 @@ import { AgentRuntimeQueryError } from "../ports/agent-runtime-query-error";
 import { agentSessionRefsEqual } from "./agent-session-ref-key";
 import { agentSessionScopesEqual } from "./agent-session-scope";
 
-/** Validate a retained read target without adopting its scope or changing session context. */
+/**
+ * Reject conflicting retained identity or scope without changing session context.
+ * Unbound discovery has no scope claim. The host must verify requested workflow ownership.
+ */
 export const assertAgentRuntimeQuerySession = (
   requested: AgentSessionLiveRef & { sessionScope?: AgentSessionScope | undefined },
   retained: AgentSessionLiveRef,
@@ -21,8 +24,8 @@ export const assertAgentRuntimeQuerySession = (
   }
   if (
     requested.sessionScope &&
-    (association.kind === "unbound" ||
-      !agentSessionScopesEqual(requested.sessionScope, association))
+    association.kind !== "unbound" &&
+    !agentSessionScopesEqual(requested.sessionScope, association)
   ) {
     throw new AgentRuntimeQueryError(
       "scope_mismatch",

@@ -283,6 +283,33 @@ test("accepts retained child ancestry backed by an ODT root record", async () =>
   expect(h.calls).toHaveLength(1);
 });
 
+test("rejects retained child ancestry without an ODT ownership record", async () => {
+  const h = await harness();
+  h.setSnapshots([
+    {
+      ref: { ...historyRef, externalSessionId: "child" },
+      parentExternalSessionId: "unowned-root",
+      activity: "idle",
+      title: "Child",
+      startedAt: h.runtime.startedAt,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage: null,
+    },
+  ]);
+  const failure = await Effect.runPromise(
+    Effect.flip(
+      h.service.loadSessionHistory({
+        ...historyRef,
+        externalSessionId: "child",
+        sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+      }),
+    ),
+  );
+  expect(failure.failure.code).toBe("scope_mismatch");
+  expect(h.calls).toHaveLength(0);
+});
+
 test("reports unsupported operations without invoking the native query", async () => {
   const h = await harness("claude");
   expect(

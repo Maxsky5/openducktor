@@ -154,7 +154,7 @@ describe("OpencodeSdkAdapter repository sessions", () => {
     unsubscribe();
   });
 
-  test("rejects scoped History reads of a retained unbound session without mutation", async () => {
+  test("reads scoped history of a retained unbound session without mutation", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     const unsubscribe = await adapter.subscribeEvents(
@@ -165,13 +165,13 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       adapter.loadSessionHistory(
         sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
       ),
-    ).rejects.toMatchObject({ code: "scope_mismatch" });
+    ).resolves.toEqual([]);
     expect(mock.session.updateCalls).toHaveLength(0);
     expect(mock.session.todoCalls).toHaveLength(0);
     unsubscribe();
   });
 
-  test("rejects scoped Todos reads of a retained unbound session without mutation", async () => {
+  test("reads scoped todos of a retained unbound session without mutation", async () => {
     const mock = makeMockClient();
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
     const unsubscribe = await adapter.subscribeEvents(
@@ -182,9 +182,9 @@ describe("OpencodeSdkAdapter repository sessions", () => {
       adapter.loadSessionTodos(
         sessionRuntimeRef("session-opencode-1", { sessionScope: repositoryScope }),
       ),
-    ).rejects.toMatchObject({ code: "scope_mismatch" });
+    ).resolves.toEqual([]);
     expect(mock.session.updateCalls).toHaveLength(0);
-    expect(mock.session.todoCalls).toHaveLength(0);
+    expect(mock.session.todoCalls).toHaveLength(1);
     unsubscribe();
   });
 

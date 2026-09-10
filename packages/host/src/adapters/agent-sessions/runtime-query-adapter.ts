@@ -19,7 +19,10 @@ export const toRuntimeQueryError = (
   cause: unknown,
 ): RuntimeQueryError => {
   if (cause instanceof RuntimeQueryError) return cause;
-  if (cause instanceof HostOperationError && cause.cause instanceof AgentRuntimeQueryError)
+  if (
+    cause instanceof HostOperationError &&
+    (cause.cause instanceof AgentRuntimeQueryError || cause.cause instanceof ZodError)
+  )
     return toRuntimeQueryError(operation, input, cause.cause);
   if (cause instanceof AgentRuntimeQueryError)
     return runtimeQueryError(operation, input, cause.code, cause.message, cause);

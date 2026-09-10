@@ -57,6 +57,8 @@ Each live-session adapter registration provides an `AgentRuntimeQueryAdapterPort
 
 Native query adapters reuse the controller that owns live events and retained message metadata. Reads must not bind scope, change policy or prompt context, admit a session, or drain events. Cold child reads use the host-only `resolveSessionParent` method to trace native parent links to an existing OpenDucktor task session record. Native links alone do not grant task ownership.
 
+An unbound discovery record has no scope claim. The host can read a restored session or child after it verifies workflow ownership against a task session record. The read leaves discovery unbound and still rejects conflicts with a retained identity or bound scope.
+
 Codex reads stored todos through `thread/read` and `thread/turns/list` without `thread/resume`. Newer event-owned todos take precedence. History uses the host image worker, and diff reads use the existing controller state and history anchor.
 
 The `runtime_query` failure carries a stable code, request identity, and an actionable error. It preserves available history diagnostics without exposing native connection data. The live stream emits `runtime_changed` after registration or removal so the frontend cancels and invalidates affected query reads. History cache keys include display context and limits; todo events cancel older reads before updating the cache.

@@ -391,6 +391,69 @@ const resumeOpenDucktorSession = async (
 };
 
 describe("OpenCode session runtime connection", () => {
+  test("reads scoped restored roots and children without binding or changing live state", async () => {
+    const harness = createLiveClientHarness({
+      externalSessionIds: ["session-1", "child-session"],
+      parentSessionIdsBySessionId: { "child-session": "session-1" },
+    });
+    const todoCalls: string[] = [];
+    let updateCalls = 0;
+    const update = harness.client.session.update;
+    harness.client.session.update = async (...args) => {
+      updateCalls += 1;
+      return update(...args);
+    };
+    harness.client.session.todo = async ({ sessionID }) => {
+      todoCalls.push(sessionID);
+      return { data: [], error: undefined };
+    };
+    const prepared = await createPrepareRuntime(harness)(runtimeInput);
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    await prepared.startForwarding((signal) => {
+      signals.push(signal);
+    });
+    try {
+      const before = await prepared.connection.readSessionSources();
+      const input = {
+        repoPath: "/repo",
+        runtimeKind: "opencode" as const,
+        workingDirectory: "/repo",
+        runtimePolicy: { kind: "opencode" as const },
+        sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+      };
+      for (const externalSessionId of ["session-1", "child-session"]) {
+        await expect(
+          prepared.queries.loadSessionHistory({ ...input, externalSessionId }),
+        ).resolves.toEqual([]);
+        await expect(
+          prepared.queries.loadSessionTodos({ ...input, externalSessionId }),
+        ).resolves.toEqual([]);
+      }
+      expect(await prepared.connection.readSessionSources()).toEqual(before);
+      expect(harness.promptCalls).toEqual([]);
+      expect(updateCalls).toBe(0);
+      expect(harness.permissionReplyCalls).toEqual([]);
+      expect(harness.questionReplyCalls).toEqual([]);
+      expect(signals).toEqual([]);
+      expect(todoCalls).toEqual(["session-1", "child-session"]);
+      await prepared.connection.resumeSession({ ...input, externalSessionId: "session-1" });
+      await expect(
+        prepared.queries.loadSessionHistory({ ...input, externalSessionId: "child-session" }),
+      ).resolves.toEqual([]);
+      await expect(
+        prepared.queries.loadSessionTodos({ ...input, externalSessionId: "child-session" }),
+      ).resolves.toEqual([]);
+      await expect(
+        prepared.queries.loadSessionHistory({
+          ...input,
+          externalSessionId: "session-1",
+          sessionScope: { ...input.sessionScope, taskId: "other-task" },
+        }),
+      ).rejects.toMatchObject({ code: "scope_mismatch" });
+    } finally {
+      await prepared.release();
+    }
+  });
   test("prepares event transport without enumerating runtime sessions", async () => {
     const harness = createLiveClientHarness();
 
