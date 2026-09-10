@@ -70,9 +70,9 @@ Store agent-written output as task documents, not user task fields. SQLite store
 
 Spec researches facts and uses the conversation to resolve product decisions. The user's answers settle those decisions. Spec records delegated assumptions and asks follow-up questions when an answer exposes a new choice that affects the result. A fully specified task can go straight to writing.
 
-Spec and Planner own the work through saving the canonical document. A ready spec covers the agreed scope with requirements and acceptance criteria. A ready plan connects required outcomes to defined interfaces and integration points. Required decisions must be resolved before saving. Each role then saves in the same turn, unless the user explicitly requested a draft review first. Completion depends on a successful tool call.
+Spec and Planner own the work through saving the canonical document. A ready spec covers the agreed scope with requirements and acceptance criteria. A ready plan connects required outcomes to defined interfaces and integration points. Required decisions must be resolved before saving. Each role then saves in the same turn. Later revisions update the saved document. Completion depends on a successful tool call.
 
-Specs, plans, and QA reports follow the shared `Artifact format` rules in the built-in workflow prompt. Spec and Planner prompts define the content of each document section. The format follows the content: headings name topics, paragraphs explain reasoning, lists separate rules, and tables compare entries with common fields. There is no sentence or paragraph count limit.
+All roles follow the shared `Artifact format` rules in the built-in workflow prompt. These rules apply regardless of document type. Spec and Planner prompts define the content of each document section. The format follows the content: headings name topics, paragraphs explain reasoning, lists separate rules, and tables compare entries with common fields. There is no sentence or paragraph count limit.
 
 System prompts own role responsibilities, decision policy, document structure, and completion. Kickoffs request the artifact for the current task. Keep general workflow instructions in the system prompt so kickoffs do not become a second policy source.
 

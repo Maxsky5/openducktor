@@ -117,7 +117,6 @@ describe("buildAgentSystemPrompt", () => {
       expectPromptToContainAll(prompt, [
         "Saving the document is part of your assignment",
         "in the same turn",
-        "If the user explicitly requests a draft review before saving, show the complete Markdown draft and wait for that review",
         "After the tool succeeds",
         "If saving fails, report the failure",
       ]);
@@ -125,6 +124,7 @@ describe("buildAgentSystemPrompt", () => {
         "Get confirmation of new or changed product decisions before saving",
       );
       expect(prompt).not.toContain("confirmation requests whenever");
+      expect(prompt).not.toContain("draft review before saving");
     },
   );
 
@@ -143,13 +143,14 @@ describe("buildAgentSystemPrompt", () => {
     ]);
   });
 
-  test.each(["spec", "planner", "qa"] as const)(
+  test.each(["spec", "planner", "build", "qa"] as const)(
     "%s receives shared Markdown rules for persisted artifacts",
     (role) => {
       const prompt = buildAgentSystemPrompt({ role, task: taskContext });
 
       expectPromptToContainAll(prompt, [
         "Artifact format:",
+        "Write for someone who has not followed the conversation",
         "Use a # title, ## topic headings",
         "Leave blank lines between Markdown blocks",
         "Use paragraphs to explain context and reasoning",

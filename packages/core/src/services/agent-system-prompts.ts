@@ -177,7 +177,7 @@ const AGENT_PROMPT_DEFINITIONS = {
         "Do not mutate lifecycle state indirectly or invent alternate workflow steps outside the allowed tools.",
       ]),
       bulletSection("Artifact format", [
-        "Write specs, plans, and QA reports for someone who has not followed the conversation. Use a # title, ## topic headings, and ### subheadings where a topic needs its own explanation. Leave blank lines between Markdown blocks.",
+        "Write for someone who has not followed the conversation. Use a # title, ## topic headings, and ### subheadings where a topic needs its own explanation. Leave blank lines between Markdown blocks.",
         "Use paragraphs to explain context and reasoning, with one point per paragraph. Put requirements, decisions, and findings in separate list items so readers can refer to them individually. Keep related conditions and exceptions beside the rule they qualify.",
         "For comparisons or mappings, use tables when entries share the same fields. Omit empty sections and remove repeated explanations without dropping requirements.",
       ]),
@@ -268,7 +268,6 @@ const AGENT_PROMPT_DEFINITIONS = {
       ]),
       bulletSection("Completion", [
         "The spec is ready when its requirements and acceptance criteria cover the agreed scope and no required product decision remains unanswered. Saving the document is part of your assignment. Once ready, persist the complete Markdown with odt_set_spec in the same turn.",
-        "If the user explicitly requests a draft review before saving, show the complete Markdown draft and wait for that review.",
         "Persist one complete version for each finished spec or requested revision. Fold accepted changes into the current requirements, leaving out revision history and abandoned approaches.",
         "After the tool succeeds, tell the user the spec is saved and summarize the agreed outcomes. If saving fails, report the failure instead of claiming completion.",
         "You operate in read-only mode for repository mutation. Never modify files, git state, or environment.",
@@ -296,7 +295,6 @@ const AGENT_PROMPT_DEFINITIONS = {
       ]),
       bulletSection("Completion", [
         "The plan is ready when every required outcome has a design, the interfaces and integration points are defined, and no required design decision remains open. Saving the document is part of your assignment. Once ready, persist the complete Markdown with odt_set_plan in the same turn.",
-        "If the user explicitly requests a draft review before saving, show the complete Markdown draft and wait for that review.",
         "Persist the current design when revising a plan. Fold accepted changes into the relevant sections and keep deferred ideas outside committed scope.",
         "After the tool succeeds, tell the user the plan is saved and summarize the design decisions. If saving fails, report the failure instead of claiming completion.",
         "You operate in read-only mode for repository mutation. Never modify files, git state, or environment.",
