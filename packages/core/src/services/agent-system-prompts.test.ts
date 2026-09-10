@@ -82,10 +82,9 @@ describe("buildAgentSystemPrompt", () => {
     const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
 
     expectPromptToContainAll(prompt, [
-      "observable acceptance criteria",
       "Leave implementation design to Planner",
       "Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of the spec",
-      "odt_set_spec exactly once",
+      "saving the canonical spec with odt_set_spec",
       "read-only mode",
     ]);
     expect(prompt).not.toContain("[NEEDS CLARIFICATION]");
@@ -101,7 +100,7 @@ describe("buildAgentSystemPrompt", () => {
       "Ask small rounds of independent questions",
       "Use the question or user-input tool for clarification questions whenever it is available",
       "If no such tool is available, ask a concise question in chat and wait for the answer",
-      "Do not call odt_set_spec while required product decisions still await an answer",
+      "no required product decision remains unanswered",
       "Wait for answers before deciding dependent questions",
       "Revisit consequences after each answer",
       "Skip questions already answered by the task, prior decisions, or repo facts",
@@ -116,11 +115,11 @@ describe("buildAgentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt({ role, task: taskContext });
 
       expectPromptToContainAll(prompt, [
+        "Saving the document is part of your assignment",
         "in the same turn",
-        "Do not ask for permission to save",
         "If the user explicitly requests a draft review before saving, show the complete Markdown draft and wait for that review",
         "After the tool succeeds",
-        "Saving the document with your allowed ODT tool is part of this role",
+        "If saving fails, report the failure",
       ]);
       expect(prompt).not.toContain(
         "Get confirmation of new or changed product decisions before saving",
@@ -129,14 +128,18 @@ describe("buildAgentSystemPrompt", () => {
     },
   );
 
-  test("spec saves settled or delegated decisions and keeps acceptance criteria readable", () => {
+  test("spec defines a document contract with observable acceptance criteria", () => {
     const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
 
     expectPromptToContainAll(prompt, [
-      "all required product decisions are answered or explicitly delegated",
-      "State any delegated assumptions in the spec",
-      "Group the goal, scope and non-goals, required behavior, constraints, and acceptance criteria under descriptive headings",
-      "Number acceptance criteria and give each item one observable outcome",
+      "When the user delegates a choice, make it and record the assumption",
+      "## Problem and outcome",
+      "## Scope",
+      "## Requirements",
+      "descriptive ### subheadings",
+      "## Acceptance criteria",
+      "numbered list of observable conditions for completion",
+      "the relevant conditions, and the expected result",
     ]);
   });
 
@@ -147,12 +150,12 @@ describe("buildAgentSystemPrompt", () => {
 
       expectPromptToContainAll(prompt, [
         "Artifact format:",
-        "Start with a # title and use ## headings",
-        "Separate headings, paragraphs, lists, and tables with blank lines",
-        "Keep each paragraph to one idea and at most three short sentences",
-        "one requirement, decision, or finding per item",
-        "Use tables only for compact comparisons or mappings",
-        "Check the complete Markdown for structure and readability before calling the artifact tool",
+        "Use a # title, ## topic headings",
+        "Leave blank lines between Markdown blocks",
+        "Use paragraphs to explain context and reasoning",
+        "requirements, decisions, and findings in separate list items",
+        "conditions and exceptions beside the rule they qualify",
+        "use tables when entries share the same fields",
       ]);
     },
   );
@@ -173,15 +176,18 @@ describe("buildAgentSystemPrompt", () => {
     const prompt = buildAgentSystemPrompt({ role: "planner", task: taskContext });
 
     expectPromptToContainAll(prompt, [
-      "module responsibilities, architecture boundaries, interfaces, data and state contracts",
-      "Distinguish required design decisions from suggestions",
+      "required design decisions separate from suggestions",
       "Builder owns implementation details, work order, and verification methods",
       "Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of the plan",
       "odt_set_plan",
       "read-only mode",
-      "Resolve design choices within the agreed scope yourself",
-      "Do not call odt_set_plan while a required decision or conflict remains unresolved",
-      "Group architecture, module responsibilities, interfaces and contracts, and risks under descriptive headings",
+      "Make technical decisions within the agreed scope",
+      "no required design decision remains open",
+      "## Approach",
+      "## Design",
+      "## Requirement coverage",
+      "## Risks and constraints",
+      "state ownership, and failure behavior",
     ]);
     expect(prompt).not.toContain("execution waves");
     expect(prompt).not.toContain("ordered execution plan");
@@ -385,21 +391,23 @@ describe("kickoff and permission prompts", () => {
     ]);
   });
 
-  test("spec, planner, and qa kickoffs reinforce role-specific posture", () => {
-    const specPrompt = buildAgentKickoffPrompt({
-      role: "spec",
-      templateId: "kickoff.spec_initial",
-      task: {
-        taskId: "task-1",
-      },
-    });
-    const plannerPrompt = buildAgentKickoffPrompt({
-      role: "planner",
-      templateId: "kickoff.planner_initial",
-      task: {
-        taskId: "task-1",
-      },
-    });
+  test.each([
+    ["spec", "kickoff.spec_initial", "specification", "odt_set_spec"],
+    ["planner", "kickoff.planner_initial", "technical design", "odt_set_plan"],
+  ] as const)(
+    "%s kickoff requests the artifact and leaves policy to the system prompt",
+    (role, templateId, artifact, tool) => {
+      const prompt = buildAgentKickoffPrompt({ role, templateId, task: { taskId: "task-1" } });
+
+      expectPromptToContainAll(prompt, [artifact, tool, "taskId task-1"]);
+      expect(prompt).not.toMatch(
+        /permission|confirmation|conflicts|question tool|artifact format/i,
+      );
+      expect(prompt).not.toContain("{{task.id}}");
+    },
+  );
+
+  test("qa kickoff requests a review and verdict", () => {
     const qaPrompt = buildAgentKickoffPrompt({
       role: "qa",
       templateId: "kickoff.qa_review",
@@ -408,24 +416,6 @@ describe("kickoff and permission prompts", () => {
       },
     });
 
-    expectPromptToContainAll(specPrompt, [
-      "observable acceptance criteria",
-      "Ask about unresolved product decisions with the question or user-input tool whenever available",
-      "If no such tool is available, ask in chat and wait for the answer",
-      "Once required decisions are answered or delegated, persist the spec with odt_set_spec in the same turn",
-      "Do not ask for permission to save",
-      "Use the role's artifact format rules",
-      "Leave implementation and verification procedures to later roles",
-      "odt_set_spec",
-    ]);
-    expectPromptToContainAll(plannerPrompt, [
-      "architecture, interfaces, contracts",
-      "Leave implementation details, work order, and verification methods to Builder",
-      "odt_set_plan",
-      "Once required decisions are resolved, persist the plan with odt_set_plan in the same turn",
-      "Do not ask for permission to save",
-      "Use the role's artifact format rules",
-    ]);
     expectPromptToContainAll(qaPrompt, [
       "required outcomes and design contracts",
       "Choose checks based on risk",
@@ -601,8 +591,12 @@ describe("kickoff and permission prompts", () => {
       },
     });
 
-    expect(prompt).toContain(
-      "Inspect the approved spec, repo guidance, and relevant code before planning.",
+    expect(prompt).toBe(
+      buildAgentKickoffPrompt({
+        role: "planner",
+        templateId: "kickoff.planner_initial",
+        task: { taskId: "task-2" },
+      }),
     );
     expect(prompt).not.toContain("Disabled custom kickoff");
   });
