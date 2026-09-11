@@ -1,6 +1,7 @@
 import type {
   GitBranch,
   GitCurrentBranch,
+  IncompleteWorkspaceRemoval,
   WorkspacePathResolution,
   WorkspaceRecord,
 } from "@openducktor/contracts";
@@ -36,6 +37,7 @@ export type WorkspaceOperationsHostClient = WorkspaceBranchOperationsHostClient 
 export type UseWorkspaceOperationsResult = {
   workspaces: WorkspaceRecord[];
   closedWorkspaces: WorkspaceRecord[];
+  incompleteRemovals: IncompleteWorkspaceRemoval[];
   onboardingCompleted: boolean;
   hasLoadedWorkspaceList: boolean;
   isLoadingWorkspaces: boolean;

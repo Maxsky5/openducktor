@@ -1,4 +1,4 @@
-import type { WorkspaceRecord } from "@openducktor/contracts";
+import type { IncompleteWorkspaceRemoval, WorkspaceRecord } from "@openducktor/contracts";
 import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -198,6 +198,102 @@ export function WorkspaceRemoveDialog({
             onClick={() => void confirm()}
           >
             {submitting ? "Removing..." : "Remove workspace"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function WorkspaceRemovalRecoveryDialog({
+  removal,
+  onOpenChange,
+}: {
+  removal: IncompleteWorkspaceRemoval;
+  onOpenChange: (open: boolean) => void;
+}): ReactElement {
+  const { removeWorkspace } = useWorkspaceState();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const confirm = async (): Promise<void> => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await removeWorkspace({
+        workspaceId: removal.workspace.workspaceId,
+        expectedRepoPath: removal.workspace.repoPath,
+        removeTaskWorktrees: removal.removeTaskWorktrees,
+      });
+      onOpenChange(false);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen);
+      }}
+    >
+      <DialogContent
+        {...(submitting ? { closeButton: null } : {})}
+        onEscapeKeyDown={(event) => {
+          if (submitting) event.preventDefault();
+        }}
+        onPointerDownOutside={(event) => {
+          if (submitting) event.preventDefault();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Workspace removal did not finish</DialogTitle>
+          <DialogDescription>
+            {removal.workspace.workspaceName}
+            <span className="block truncate font-mono text-xs">{removal.workspace.repoPath}</span>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground">
+          <p>
+            OpenDucktor stopped during removal. The workspace stays frozen until removal finishes.
+            Data already deleted cannot be restored.
+          </p>
+          <p>
+            Phase: {removal.phase}. Removed task worktrees: {removal.removedWorktrees.length}.
+            {removal.removeTaskWorktrees
+              ? " Task worktrees are included in this removal."
+              : " Task worktrees are kept."}
+          </p>
+          {removal.lastFailure ? (
+            <p className="text-destructive" role="alert">
+              {removal.lastFailure}
+            </p>
+          ) : null}
+        </DialogBody>
+        {error ? (
+          <p className="mt-3 text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={submitting}
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={submitting}
+            onClick={() => void confirm()}
+          >
+            {submitting ? "Removing..." : "Retry removal"}
           </Button>
         </DialogFooter>
       </DialogContent>

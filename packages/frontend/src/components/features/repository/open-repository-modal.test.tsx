@@ -30,6 +30,7 @@ const createWorkspaceStateValue = (
   activeBranch: null,
   isSwitchingWorkspace: false,
   closedWorkspaces: [],
+  incompleteRemovals: [],
   closeWorkspace: async () => {},
   removeWorkspace: async () => {},
   reopenWorkspace: async () => {},
@@ -119,6 +120,7 @@ describe("OpenRepositoryModal", () => {
         <WorkspaceStateContext.Provider
           value={createWorkspaceStateValue({
             closedWorkspaces: [closedWorkspace],
+            incompleteRemovals: [],
             addWorkspace,
           })}
         >
@@ -175,6 +177,7 @@ describe("OpenRepositoryModal", () => {
         <WorkspaceStateContext.Provider
           value={createWorkspaceStateValue({
             closedWorkspaces: [closedWorkspace],
+            incompleteRemovals: [],
             reopenWorkspace,
           })}
         >
@@ -216,6 +219,7 @@ describe("OpenRepositoryModal", () => {
         <WorkspaceStateContext.Provider
           value={createWorkspaceStateValue({
             closedWorkspaces: [closedWorkspace],
+            incompleteRemovals: [],
             resolveWorkspacePath: async () => ({ kind: "closed", workspace: closedWorkspace }),
             reopenWorkspace,
           })}
@@ -236,6 +240,46 @@ describe("OpenRepositoryModal", () => {
       });
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
+    unmount();
+  });
+
+  test("keeps the folder picker open when the path has an incomplete removal", async () => {
+    const { unmount } = render(
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider
+          value={createWorkspaceStateValue({
+            resolveWorkspacePath: async () => ({
+              kind: "removing",
+              removal: {
+                workspace: {
+                  workspaceId: "existing",
+                  workspaceName: "Existing",
+                  repoPath: "/repo",
+                  isActive: false,
+                  hasConfig: true,
+                  configuredWorktreeBasePath: null,
+                  defaultWorktreeBasePath: "/worktrees",
+                  effectiveWorktreeBasePath: "/worktrees",
+                },
+                operationId: "op-1",
+                phase: "attachments",
+                removeTaskWorktrees: true,
+                removedWorktrees: [],
+                lastFailure: null,
+              },
+            }),
+          })}
+        >
+          <SeedFilesystemDirectory />
+          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
+
+    expect(await screen.findByText(/Workspace removal is incomplete/)).toBeTruthy();
     unmount();
   });
 

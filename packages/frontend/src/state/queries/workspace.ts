@@ -182,3 +182,23 @@ export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Prom
     type: "inactive",
   });
 };
+
+const serializedQueryKeyContainsIdentity = (
+  serializedQueryKey: string,
+  identity: string,
+): boolean => serializedQueryKey.includes(JSON.stringify(identity));
+
+export const evictWorkspaceQueries = (
+  queryClient: QueryClient,
+  identity: { repoPath: string; workspaceId: string },
+): void => {
+  const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean => {
+    const serializedQueryKey = JSON.stringify(query.queryKey);
+    return (
+      serializedQueryKeyContainsIdentity(serializedQueryKey, identity.workspaceId) ||
+      serializedQueryKeyContainsIdentity(serializedQueryKey, identity.repoPath)
+    );
+  };
+  void queryClient.cancelQueries({ predicate: matchesRemovedWorkspace }, { revert: false });
+  queryClient.removeQueries({ predicate: matchesRemovedWorkspace });
+};

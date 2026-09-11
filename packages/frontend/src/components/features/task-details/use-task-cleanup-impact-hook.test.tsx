@@ -14,6 +14,7 @@ import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
 const createWorkspaceState = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
   closedWorkspaces: [],
+  incompleteRemovals: [],
   closeWorkspace: async () => {},
   removeWorkspace: async () => {},
   reopenWorkspace: async () => {},

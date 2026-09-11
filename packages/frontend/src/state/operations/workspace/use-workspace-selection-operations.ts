@@ -1,4 +1,5 @@
 import type {
+  IncompleteWorkspaceRemoval,
   WorkspaceCatalog,
   WorkspacePathResolution,
   WorkspaceRecord,
@@ -9,6 +10,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
+  evictWorkspaceQueries,
   loadWorkspaceListFromQuery,
   markWorkspaceCachesChanged,
   workspaceCatalogQueryOptions,
@@ -34,6 +36,7 @@ type UseWorkspaceSelectionOperationsArgs = {
 type UseWorkspaceSelectionOperationsResult = {
   workspaces: WorkspaceRecord[];
   closedWorkspaces: WorkspaceRecord[];
+  incompleteRemovals: IncompleteWorkspaceRemoval[];
   onboardingCompleted: boolean;
   hasLoadedWorkspaceList: boolean;
   isLoadingWorkspaces: boolean;
@@ -127,6 +130,7 @@ export function useWorkspaceSelectionOperations({
   const workspaceCatalogQuery = useQuery(workspaceCatalogQueryOptions(hostClient));
   const workspaces = workspaceListQuery.data ?? [];
   const closedWorkspaces = workspaceCatalogQuery.data?.closedWorkspaces ?? [];
+  const incompleteRemovals = workspaceCatalogQuery.data?.incompleteRemovals ?? [];
   const onboardingCompleted = workspaceCatalogQuery.data?.onboardingCompleted ?? false;
   const workspaceLoadError = workspaceListQuery.error
     ? new Error(errorMessage(workspaceListQuery.error), { cause: workspaceListQuery.error })
@@ -425,6 +429,10 @@ export function useWorkspaceSelectionOperations({
       try {
         const result = await hostClient.workspaceRemove(input);
         applyLifecycleCatalog(result.catalog);
+        evictWorkspaceQueries(queryClient, {
+          repoPath: input.expectedRepoPath,
+          workspaceId: input.workspaceId,
+        });
         await refreshWorkspaceCachesAfterMutation();
         toast.success("Workspace removed", {
           description:
@@ -436,7 +444,7 @@ export function useWorkspaceSelectionOperations({
         setIsSwitchingWorkspace(false);
       }
     },
-    [applyLifecycleCatalog, hostClient, refreshWorkspaceCachesAfterMutation],
+    [applyLifecycleCatalog, hostClient, queryClient, refreshWorkspaceCachesAfterMutation],
   );
 
   const reopenWorkspace = useCallback(
@@ -467,6 +475,7 @@ export function useWorkspaceSelectionOperations({
   return {
     workspaces,
     closedWorkspaces,
+    incompleteRemovals,
     onboardingCompleted,
     hasLoadedWorkspaceList: workspaceListQuery.data !== undefined,
     isLoadingWorkspaces: workspaceListQuery.isPending,

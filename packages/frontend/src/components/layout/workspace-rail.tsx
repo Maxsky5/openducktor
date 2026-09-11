@@ -18,8 +18,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { WorkspaceRecord } from "@openducktor/contracts";
-import { PanelLeftClose, Plus, Trash2 } from "lucide-react";
+import type { IncompleteWorkspaceRemoval, WorkspaceRecord } from "@openducktor/contracts";
+import { PanelLeftClose, Plus, Trash2, TriangleAlert } from "lucide-react";
 import {
   type CSSProperties,
   type ReactElement,
@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import {
   WorkspaceCloseDialog,
+  WorkspaceRemovalRecoveryDialog,
   WorkspaceRemoveDialog,
 } from "../features/repository/workspace-lifecycle-dialogs";
 
@@ -255,12 +256,18 @@ export function WorkspaceRail({
 }: {
   onOpenRepositoryModal: () => void;
 }): ReactElement {
-  const { workspaces, selectWorkspace, reorderWorkspaces, isSwitchingWorkspace } =
-    useWorkspaceState();
-  const [lifecycleRequest, setLifecycleRequest] = useState<{
-    action: "close" | "remove";
-    workspace: WorkspaceRecord;
-  } | null>(null);
+  const {
+    workspaces,
+    incompleteRemovals,
+    selectWorkspace,
+    reorderWorkspaces,
+    isSwitchingWorkspace,
+  } = useWorkspaceState();
+  const [lifecycleRequest, setLifecycleRequest] = useState<
+    | { action: "close" | "remove"; workspace: WorkspaceRecord }
+    | { action: "recovery"; removal: IncompleteWorkspaceRemoval }
+    | null
+  >(null);
   const workspaceIds = useMemo(
     () => workspaces.map((workspace) => workspace.workspaceId),
     [workspaces],
@@ -384,6 +391,21 @@ export function WorkspaceRail({
             </DndContext>
           ) : null}
 
+          {incompleteRemovals.map((removal) => (
+            <Button
+              key={removal.workspace.workspaceId}
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-10 text-destructive hover:text-destructive"
+              aria-label={`Finish removing ${removal.workspace.workspaceName}`}
+              title={`Finish removing ${removal.workspace.workspaceName}`}
+              onClick={() => setLifecycleRequest({ action: "recovery", removal })}
+            >
+              <TriangleAlert className="size-5" />
+            </Button>
+          ))}
+
           <Button
             type="button"
             size="icon"
@@ -408,6 +430,14 @@ export function WorkspaceRail({
       {lifecycleRequest?.action === "remove" ? (
         <WorkspaceRemoveDialog
           workspace={lifecycleRequest.workspace}
+          onOpenChange={(open) => {
+            if (!open) setLifecycleRequest(null);
+          }}
+        />
+      ) : null}
+      {lifecycleRequest?.action === "recovery" ? (
+        <WorkspaceRemovalRecoveryDialog
+          removal={lifecycleRequest.removal}
           onOpenChange={(open) => {
             if (!open) setLifecycleRequest(null);
           }}

@@ -477,6 +477,7 @@ const syncAgentSessionsStore = (): void => {
 const workspaceStateValue = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
   closedWorkspaces: [],
+  incompleteRemovals: [],
   closeWorkspace: async () => {},
   removeWorkspace: async () => {},
   reopenWorkspace: async () => {},
