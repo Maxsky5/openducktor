@@ -28,6 +28,7 @@ const scriptState = (
   scriptId,
   name: scriptId,
   command: `run ${scriptId}`,
+  startedCommand: identity === null ? null : `run ${scriptId}`,
   status: identity === null ? "stopped" : "running",
   runIdentity: identity,
   pid: identity === null ? null : 1,

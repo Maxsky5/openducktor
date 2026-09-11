@@ -38,6 +38,7 @@ const scriptStateFromConfig = (script: RepoConfig["devServers"][number]): DevSer
   scriptId: script.id,
   name: script.name,
   command: script.command,
+  startedCommand: null,
   status: "stopped",
   runIdentity: null,
   pid: null,
@@ -46,9 +47,6 @@ const scriptStateFromConfig = (script: RepoConfig["devServers"][number]): DevSer
   lastError: null,
   bufferedTerminalChunks: [],
 });
-
-const resolveScriptCommand = (script: DevServerScriptState, configuredCommand: string): string =>
-  script.runIdentity === null ? configuredCommand : script.command;
 
 export const scriptHasLiveProcess = (script: DevServerScriptState): boolean => script.pid !== null;
 
@@ -82,7 +80,7 @@ export const syncGroupState = (
 
     return {
       ...existingScript,
-      command: resolveScriptCommand(existingScript, script.command),
+      command: script.command,
       name: script.name,
     };
   });

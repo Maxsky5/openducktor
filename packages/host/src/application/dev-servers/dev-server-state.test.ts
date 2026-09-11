@@ -55,12 +55,13 @@ describe("dev-server state helpers", () => {
     expect(runtime.terminalRunGeneration).toBe(2);
   });
 
-  test("keeps the command captured by a run when the configured command changes", () => {
+  test("keeps the started command when the configured command changes", () => {
     const runtime = createRuntime();
     const firstScript = runtime.state.scripts[0];
     if (!firstScript) {
       throw new Error("Expected configured web script.");
     }
+    firstScript.startedCommand = "bun run dev";
     startTerminalRun(runtime, firstScript, "host-1");
 
     syncGroupState(
@@ -74,12 +75,13 @@ describe("dev-server state helpers", () => {
     );
 
     expect(runtime.state.scripts[0]).toMatchObject({
-      command: "bun run dev",
+      command: "bun run dev:next",
       name: "Web next",
+      startedCommand: "bun run dev",
     });
   });
 
-  test("follows the configured command for scripts without a run", () => {
+  test("leaves the started command unset for scripts without a run", () => {
     const runtime = createRuntime();
 
     syncGroupState(
@@ -95,6 +97,7 @@ describe("dev-server state helpers", () => {
     expect(runtime.state.scripts[0]).toMatchObject({
       command: "bun run dev:next",
       name: "Web next",
+      startedCommand: null,
     });
   });
 

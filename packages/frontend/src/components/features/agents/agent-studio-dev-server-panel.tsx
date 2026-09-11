@@ -371,7 +371,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-[var(--dev-server-terminal-subtle)]">$</span>
                     <span className="font-mono text-[var(--dev-server-terminal-foreground)]">
-                      {selectedScriptContent.command}
+                      {selectedScriptContent.startedCommand ?? selectedScriptContent.command}
                     </span>
                   </div>
                 </div>

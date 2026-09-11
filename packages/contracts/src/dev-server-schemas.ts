@@ -35,6 +35,7 @@ export const devServerScriptStateSchema = z
     scriptId: z.string().min(1),
     name: z.string().min(1),
     command: z.string().min(1),
+    startedCommand: z.string().min(1).nullable().default(null),
     status: devServerScriptStatusSchema,
     runIdentity: devServerRunIdentitySchema.nullable(),
     pid: z.number().int().positive().nullable(),

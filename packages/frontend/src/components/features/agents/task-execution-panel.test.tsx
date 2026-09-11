@@ -222,6 +222,7 @@ const selectedScript: DevServerScriptState = {
   scriptId: "frontend",
   name: "Frontend",
   command: "bun run dev",
+  startedCommand: "bun run dev",
   status: "running",
   runIdentity: {
     runId: "frontend:1",

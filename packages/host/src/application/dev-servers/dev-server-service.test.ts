@@ -180,6 +180,7 @@ describe("createDevServerService", () => {
           scriptId: "web",
           name: "Web",
           command: "bun run dev",
+          startedCommand: null,
           status: "stopped",
           pid: null,
           startedAt: null,
@@ -230,6 +231,7 @@ describe("createDevServerService", () => {
           scriptId: "web",
           status: "running",
           pid: 400,
+          startedCommand: "bun run dev",
           bufferedTerminalChunks: [
             {
               data: "Starting `bun run dev`\r\n",
@@ -393,7 +395,14 @@ describe("createDevServerService", () => {
     await expect(
       Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toMatchObject({
-      scripts: [{ scriptId: "web", command: "bun run dev", status: "running" }],
+      scripts: [
+        {
+          scriptId: "web",
+          command: "bun run dev:next",
+          startedCommand: "bun run dev",
+          status: "running",
+        },
+      ],
     });
 
     await Effect.runPromise(service.restart({ repoPath: "/repo", taskId: "task-1" }));
@@ -402,7 +411,41 @@ describe("createDevServerService", () => {
     await expect(
       Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toMatchObject({
-      scripts: [{ scriptId: "web", command: "bun run dev:next", status: "running" }],
+      scripts: [
+        {
+          scriptId: "web",
+          command: "bun run dev:next",
+          startedCommand: "bun run dev:next",
+          status: "running",
+        },
+      ],
+    });
+  });
+  test("keeps the failed run's command when repository settings change", async () => {
+    const { processPort, starts } = createProcessPort();
+    const config = repoConfig();
+    const service = createDevServerService({
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+      workspaceSettingsService: createWorkspaceSettingsService(config),
+    });
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    config.devServers = [{ id: "web", name: "Web", command: "bun run dev:next" }];
+    starts[0]?.onExit({ pid: 400, exitCode: 7, signal: null, error: null });
+
+    await expect(
+      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toMatchObject({
+      scripts: [
+        {
+          scriptId: "web",
+          command: "bun run dev:next",
+          startedCommand: "bun run dev",
+          status: "failed",
+          exitCode: 7,
+        },
+      ],
     });
   });
   test("requires a task worktree before starting scripts", async () => {

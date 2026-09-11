@@ -36,6 +36,7 @@ const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerSc
     scriptId: "frontend",
     name: "Frontend",
     command: "bun run dev",
+    startedCommand: null,
     status: "stopped",
     runIdentity,
     pid: null,
