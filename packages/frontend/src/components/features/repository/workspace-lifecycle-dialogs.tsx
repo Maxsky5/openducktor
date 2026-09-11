@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
+import { WorkspaceIdentityCard } from "./workspace-identity";
 
 const removalPhaseLabel = {
   attachments: "task attachments",
@@ -34,14 +35,20 @@ type NoticeTone = keyof typeof noticeToneClassNames;
 
 function LifecycleNotice({
   tone,
+  className,
   children,
 }: {
   tone: NoticeTone;
+  className?: string;
   children: ReactNode;
 }): ReactElement {
   return (
     <div
-      className={cn("space-y-2 rounded-lg border px-3 py-2 text-sm", noticeToneClassNames[tone])}
+      className={cn(
+        "space-y-2 rounded-lg border px-3 py-2 text-sm",
+        noticeToneClassNames[tone],
+        className,
+      )}
     >
       {children}
     </div>
@@ -76,8 +83,8 @@ const useLifecycleSubmit = (run: () => Promise<void>, onSuccess: () => void): Li
 
 type LifecycleDialogProps = {
   title: string;
+  description: ReactNode;
   icon: LucideIcon;
-  workspace: WorkspaceRecord;
   actionLabel: string;
   pendingActionLabel: string;
   destructive?: boolean;
@@ -90,8 +97,8 @@ type LifecycleDialogProps = {
 
 function LifecycleDialog({
   title,
+  description,
   icon: ActionIcon,
-  workspace,
   actionLabel,
   pendingActionLabel,
   destructive = false,
@@ -120,10 +127,7 @@ function LifecycleDialog({
       >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
-            {workspace.workspaceName}
-            <span className="mt-0.5 block truncate font-mono text-xs">{workspace.repoPath}</span>
-          </DialogDescription>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <DialogBody className="py-4">
@@ -181,8 +185,8 @@ export function WorkspaceCloseDialog({
   return (
     <LifecycleDialog
       title="Close workspace"
+      description="Hide this workspace from OpenDucktor? Nothing is deleted."
       icon={EyeOff}
-      workspace={workspace}
       actionLabel="Close workspace"
       pendingActionLabel="Closing..."
       submitting={submit.submitting}
@@ -190,13 +194,14 @@ export function WorkspaceCloseDialog({
       onCancel={() => onOpenChange(false)}
       onConfirm={() => void submit.confirm()}
     >
-      <LifecycleNotice tone="info">
-        <p className="font-medium">The workspace disappears from the workspace rail.</p>
+      <WorkspaceIdentityCard workspace={workspace} />
+      <LifecycleNotice tone="info" className="mt-3">
+        <p className="font-medium">The workspace is hidden until you reopen it.</p>
         <p>
           Nothing is deleted. Settings, tasks, sessions, attachments, repository files, branches,
           and task worktrees stay on disk.
         </p>
-        <p>Reopen it later from Open a Repository.</p>
+        <p>You can reopen it from Open a Repository.</p>
       </LifecycleNotice>
     </LifecycleDialog>
   );
@@ -221,8 +226,8 @@ export function WorkspaceRemoveDialog({
   return (
     <LifecycleDialog
       title="Remove workspace"
+      description="Remove this workspace and everything in it? This cannot be undone."
       icon={Trash2}
-      workspace={workspace}
       actionLabel="Remove workspace"
       pendingActionLabel="Removing..."
       destructive
@@ -231,7 +236,8 @@ export function WorkspaceRemoveDialog({
       onCancel={() => onOpenChange(false)}
       onConfirm={() => void submit.confirm()}
     >
-      <LifecycleNotice tone="destructive">
+      <WorkspaceIdentityCard workspace={workspace} />
+      <LifecycleNotice tone="destructive" className="mt-3">
         <p className="font-medium">This action permanently removes the workspace.</p>
         <p>The following items are deleted and cannot be recovered:</p>
         <ul className="list-disc space-y-1 pl-4">
@@ -286,8 +292,8 @@ export function WorkspaceRemovalRecoveryDialog({
   return (
     <LifecycleDialog
       title="Workspace removal did not finish"
+      description="Removal must finish before you can use this workspace again."
       icon={RotateCcw}
-      workspace={removal.workspace}
       actionLabel="Retry removal"
       pendingActionLabel="Removing..."
       destructive
@@ -296,7 +302,8 @@ export function WorkspaceRemovalRecoveryDialog({
       onCancel={() => onOpenChange(false)}
       onConfirm={() => void submit.confirm()}
     >
-      <LifecycleNotice tone="warning">
+      <WorkspaceIdentityCard workspace={removal.workspace} />
+      <LifecycleNotice tone="warning" className="mt-3">
         <p className="font-medium">
           OpenDucktor stopped during removal. The workspace stays frozen until removal finishes.
         </p>

@@ -27,7 +27,6 @@ import {
   type RefCallback,
   useEffect,
   useMemo,
-  useReducer,
   useRef,
   useState,
 } from "react";
@@ -40,18 +39,14 @@ import {
 } from "@/components/ui/context-menu";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
-import {
-  deriveWorkspaceInitials,
-  noColorTileClasses,
-  tileColorFaceStyle,
-  tileLabelSizeClass,
-} from "@/lib/workspace-tile-appearance";
+import { noColorTileClasses, tileColorFaceStyle } from "@/lib/workspace-tile-appearance";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import {
   WorkspaceCloseDialog,
   WorkspaceRemovalRecoveryDialog,
   WorkspaceRemoveDialog,
 } from "../features/repository/workspace-lifecycle-dialogs";
+import { WorkspaceAvatar } from "../features/repository/workspace-identity";
 
 const DRAG_DISTANCE_PX = 6;
 
@@ -62,34 +57,6 @@ const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void
     frameRef.current = null;
   }
 };
-
-function WorkspaceRailAvatar({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
-  const [failedIconDataUrl, markIconDataUrlFailed] = useReducer(
-    (_current: string | null, next: string) => next,
-    null,
-  );
-  const iconDataUrl = workspace.iconDataUrl ?? null;
-
-  if (iconDataUrl && failedIconDataUrl !== iconDataUrl) {
-    return (
-      <img
-        src={iconDataUrl}
-        alt=""
-        aria-hidden="true"
-        className="size-6 rounded-md object-cover"
-        onError={() => {
-          markIconDataUrlFailed(iconDataUrl);
-        }}
-      />
-    );
-  }
-
-  const label = workspace.abbreviation ?? deriveWorkspaceInitials(workspace.workspaceName);
-
-  return (
-    <span className={cn("font-semibold leading-none", tileLabelSizeClass(label))}>{label}</span>
-  );
-}
 
 type WorkspaceRailButtonShellProps = {
   workspace: WorkspaceRecord;
@@ -179,7 +146,7 @@ function WorkspaceRailButtonShell({
           onSelectWorkspace?.(workspace.workspaceId);
         }}
       >
-        <WorkspaceRailAvatar workspace={workspace} />
+        <WorkspaceAvatar workspace={workspace} />
       </Button>
     </div>
   );
