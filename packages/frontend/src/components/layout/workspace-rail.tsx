@@ -19,7 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { IncompleteWorkspaceRemoval, WorkspaceRecord } from "@openducktor/contracts";
-import { PanelLeftClose, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { EyeOff, Plus, Trash2, TriangleAlert } from "lucide-react";
 import {
   type CSSProperties,
   type ReactElement,
@@ -239,7 +239,7 @@ function SortableWorkspaceRailButton({
       </ContextMenuTrigger>
       <ContextMenuContent className="w-52">
         <ContextMenuItem onSelect={() => onRequestCloseWorkspace(workspace)}>
-          <PanelLeftClose />
+          <EyeOff />
           Close workspace
         </ContextMenuItem>
         <ContextMenuItem variant="destructive" onSelect={() => onRequestRemoveWorkspace(workspace)}>
