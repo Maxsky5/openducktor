@@ -61,7 +61,7 @@ export const ComputerUseToolMessage = ({
         {images.length > 0 ? (
           <button
             type="button"
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
+            className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
