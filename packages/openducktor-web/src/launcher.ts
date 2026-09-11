@@ -1,5 +1,6 @@
 import type { ServerOptions as ViteServerOptions } from "vite";
 import { randomUUID } from "node:crypto";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
 import type { McpBridgeDiscoveryMode } from "@openducktor/host";
@@ -318,12 +319,19 @@ const cleanupStartedFrontendServerEffect = (
   });
 
 export const viteServerOptions = (options: LauncherOptions): ViteServerOptions => {
+  const allowedPaths = [options.packageRoot, path.join(options.packageRoot, "../frontend/src")];
+  if (options.workspaceMode) {
+    const dependenciesRoot = path.join(options.workspaceRoot, "node_modules");
+    allowedPaths.push(
+      existsSync(dependenciesRoot) ? realpathSync(dependenciesRoot) : dependenciesRoot,
+    );
+  }
   const serverOptions: ViteServerOptions = {
     host: options.host?.trim() || LOCALHOST,
     port: options.frontendPort,
     strictPort: true,
     fs: {
-      allow: [options.packageRoot, path.join(options.packageRoot, "../frontend/src")],
+      allow: allowedPaths,
     },
   };
   const externalUrl = options.externalUrl?.trim();

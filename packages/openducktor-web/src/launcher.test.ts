@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -455,6 +456,56 @@ describe("launcher internals", () => {
         workspaceMode: false,
       }).fs?.allow,
     ).toEqual(["/web-package", path.join("/web-package", "../frontend/src")]);
+  });
+
+  test("allows the workspace node_modules path in Vite fs.allow when dependencies are not installed", async () => {
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "odt-vite-allow-missing-"));
+    try {
+      expect(
+        viteServerOptions({
+          backendPort: 14327,
+          developmentInstanceId: "browser-test",
+          frontendPort: 1420,
+          packageRoot: "/repo/packages/openducktor-web",
+          workspaceMode: true,
+          workspaceRoot,
+        }).fs?.allow,
+      ).toEqual([
+        "/repo/packages/openducktor-web",
+        path.join("/repo/packages/openducktor-web", "../frontend/src"),
+        path.join(workspaceRoot, "node_modules"),
+      ]);
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("resolves a symlinked workspace node_modules to the real dependency store", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "odt-vite-allow-"));
+    try {
+      const store = path.join(root, "store");
+      const workspaceRoot = path.join(root, "worktree");
+      await mkdir(store, { recursive: true });
+      await mkdir(workspaceRoot, { recursive: true });
+      await symlink(store, path.join(workspaceRoot, "node_modules"), "dir");
+
+      expect(
+        viteServerOptions({
+          backendPort: 14327,
+          developmentInstanceId: "browser-test",
+          frontendPort: 1420,
+          packageRoot: "/repo/packages/openducktor-web",
+          workspaceMode: true,
+          workspaceRoot,
+        }).fs?.allow,
+      ).toEqual([
+        "/repo/packages/openducktor-web",
+        path.join("/repo/packages/openducktor-web", "../frontend/src"),
+        realpathSync(store),
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("does not restrict Vite hosts for IP external URLs", () => {
