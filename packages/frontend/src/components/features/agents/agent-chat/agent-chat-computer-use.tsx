@@ -1,5 +1,5 @@
 import type { AgentToolImage } from "@openducktor/contracts";
-import { LoaderCircle, Monitor } from "lucide-react";
+import { ChevronDown, LoaderCircle, Monitor } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
@@ -21,6 +21,8 @@ type ComputerUseToolMessageProps = {
 
 const isActiveComputerUse = (meta: ToolMeta): boolean =>
   meta.status === "pending" || meta.status === "running";
+
+const FAILED_SUMMARY = "Computer action failed.";
 
 const ComputerUseScreenshot = ({
   image,
@@ -91,7 +93,7 @@ export const ComputerUseToolMessage = ({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const isFailed = meta.status === "error";
   const actionTitle = computerUseActionTitle(meta);
-  const failureSummary = isFailed ? computerUseFailureSummary(meta.error) : "";
+  const failureSummary = isFailed ? computerUseFailureSummary(meta.error) || FAILED_SUMMARY : "";
   const durationMs = getToolDuration(meta, messageTimestamp);
   const code = computerUseCode(meta);
   const images = meta.images ?? [];
@@ -125,9 +127,20 @@ export const ComputerUseToolMessage = ({
           {durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
           {timeLabel ? <span>{timeLabel}</span> : null}
         </span>
+        {hasDetails ? (
+          <ChevronDown
+            aria-hidden="true"
+            className={cn(
+              "size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
+              detailsOpen && "rotate-180",
+            )}
+          />
+        ) : null}
       </div>
       {failureSummary.length > 0 ? (
-        <p className="mt-1 pl-6 text-xs text-destructive-surface-foreground">{failureSummary}</p>
+        <p className="mt-1 line-clamp-2 pl-6 text-xs text-destructive-surface-foreground">
+          {failureSummary}
+        </p>
       ) : null}
     </div>
   );

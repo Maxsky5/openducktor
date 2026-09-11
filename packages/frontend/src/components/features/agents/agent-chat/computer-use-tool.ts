@@ -1,33 +1,12 @@
-import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import { type CodexTruncatedResult, readCodexTruncatedResult } from "./codex-truncated-result";
 import { hasNonEmptyText } from "./tool-lifecycle";
 
 const COMPUTER_USE_RESET_TOOL = "js_reset";
 const SCRIPT_ERROR_PREFIX = /^Script error:\s*/;
 const FAILURE_SUMMARY_MAX_LENGTH = 200;
-const CODEX_TRUNCATED_RESULT_PREFIX = '{"content":[{"type":"text","text":"';
-const CODEX_TRUNCATION_MARKER = /…\d+ chars truncated…/;
 const TRUNCATED_FAILURE_SUMMARY = "Computer action failed. Codex truncated its diagnostics.";
 const READABLE_LINE_PATTERN = /[\p{L}\p{N}]/u;
-const jsonStringSchema = z.string();
-
-const decodeJsonStringFragment = (fragment: string): string => {
-  try {
-    return jsonStringSchema.parse(JSON.parse(`"${fragment}"`));
-  } catch {
-    return fragment;
-  }
-};
-
-const readTruncatedResultHead = (text: string): string => {
-  const fragment = text.slice(CODEX_TRUNCATED_RESULT_PREFIX.length);
-  const lineEnd = fragment.search(/\\[nr]|…/);
-  const head = lineEnd === -1 ? fragment : fragment.slice(0, lineEnd);
-  return decodeJsonStringFragment(head);
-};
-
-const isTruncatedResultPreview = (text: string): boolean =>
-  text.startsWith(CODEX_TRUNCATED_RESULT_PREFIX) && CODEX_TRUNCATION_MARKER.test(text);
 
 const firstFailureLine = (text: string): string | null => {
   const firstLine = text
@@ -43,8 +22,11 @@ const boundFailureLine = (line: string): string =>
     ? `${line.slice(0, FAILURE_SUMMARY_MAX_LENGTH - 1)}…`
     : line;
 
-const recoveredTruncatedFailureLine = (text: string): string | null => {
-  const line = firstFailureLine(readTruncatedResultHead(text));
+const recoveredTruncatedFailureLine = (truncated: CodexTruncatedResult): string | null => {
+  if (truncated.kind !== "truncated" || truncated.head === null) {
+    return null;
+  }
+  const line = firstFailureLine(truncated.head);
   return line !== null && READABLE_LINE_PATTERN.test(line) ? line : null;
 };
 
@@ -68,8 +50,9 @@ export const computerUseFailureSummary = (errorText: string | undefined): string
     return "";
   }
   const text = errorText.trim();
-  if (isTruncatedResultPreview(text)) {
-    const recovered = recoveredTruncatedFailureLine(text);
+  const truncated = readCodexTruncatedResult(text);
+  if (truncated.kind === "truncated") {
+    const recovered = recoveredTruncatedFailureLine(truncated);
     return recovered ? boundFailureLine(recovered) : TRUNCATED_FAILURE_SUMMARY;
   }
   const firstLine = firstFailureLine(text);

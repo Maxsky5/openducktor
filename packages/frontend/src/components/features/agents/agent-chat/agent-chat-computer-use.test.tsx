@@ -99,6 +99,41 @@ describe("ComputerUseToolMessage", () => {
     }
   });
 
+  test("shows a generic failure message when the error text is empty", () => {
+    const view = render(
+      <ComputerUseToolMessage {...baseProps} meta={toolMeta({ status: "error" })} />,
+    );
+    try {
+      expect(view.getByText("Computer action failed.")).toBeDefined();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("shows an expansion cue only while the call has details", () => {
+    const view = render(
+      <ComputerUseToolMessage {...baseProps} meta={toolMeta({ input: { code: "1 + 1" } })} />,
+    );
+    try {
+      const summary = view.container.querySelector("summary");
+      if (!summary) throw new Error("Expected computer use summary.");
+      const chevron = summary.querySelector(".lucide-chevron-down");
+      expect(chevron).not.toBeNull();
+      expect(chevron?.getAttribute("class")).not.toContain("rotate-180");
+      const details = view.container.querySelector("details");
+      if (!details) throw new Error("Expected computer use details.");
+      toggle(details, true);
+      expect(chevron?.getAttribute("class")).toContain("rotate-180");
+      view.rerender(
+        <ComputerUseToolMessage {...baseProps} meta={toolMeta({ input: { title: "Click" } })} />,
+      );
+      expect(view.container.querySelector("summary")).toBeNull();
+      expect(view.container.querySelector(".lucide-chevron-down")).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("renders JavaScript code and output without the raw input object", () => {
     const code = "await tab.click('#submit')";
     const view = render(
