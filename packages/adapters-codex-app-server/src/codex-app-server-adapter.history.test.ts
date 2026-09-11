@@ -633,7 +633,10 @@ describe("CodexAppServerAdapter history loading", () => {
   });
 
   test("keeps supplied prompt context after loading session context without changing live state", async () => {
-    const { adapter, transports, respondServerRequest } = createHarness();
+    const transport = new RecordingTransport("runtime-live", false);
+    const { adapter, respondServerRequest } = createHarness({
+      transportFactory: () => transport,
+    });
     const ref = codexSessionRef("thread-idle");
     const input = {
       ...ref,
@@ -661,7 +664,7 @@ describe("CodexAppServerAdapter history loading", () => {
       expect(snapshotsBefore.map((snapshot) => snapshot.ref.externalSessionId)).toEqual([
         ref.externalSessionId,
       ]);
-      const callsBefore = transports.get("runtime-live")?.calls.length;
+      const callsBefore = transport.calls.length;
       const historyAfter = await adapter.loadSessionHistory(input);
       expect(historyAfter.filter((message) => message.role === "system")).toEqual(
         systemMessagesBefore,
@@ -675,12 +678,7 @@ describe("CodexAppServerAdapter history loading", () => {
       });
       expect(historyWithBlankPrompt.filter((message) => message.role === "system")).toEqual([]);
       expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual(snapshotsBefore);
-      expect(
-        transports
-          .get("runtime-live")
-          ?.calls.slice(callsBefore)
-          .map((call) => call.method),
-      ).toEqual([
+      expect(transport.calls.slice(callsBefore).map((call) => call.method)).toEqual([
         "thread/read",
         "thread/turns/list",
         "thread/read",
