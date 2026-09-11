@@ -357,14 +357,14 @@ const AGENT_PROMPT_DEFINITIONS = {
     purpose: "kickoff",
     builtinVersion: 4,
     template:
-      "Develop the specification for this task and save it with odt_set_spec. Use taskId {{task.id}} for every odt_* tool call.",
+      "Write the specification for this task and save it with odt_set_spec. Use taskId {{task.id}} for every odt_* tool call.",
   },
   "kickoff.planner_initial": {
     id: "kickoff.planner_initial",
     purpose: "kickoff",
     builtinVersion: 4,
     template:
-      "Develop the technical design for this task and save it with odt_set_plan. Use taskId {{task.id}} for every odt_* tool call.",
+      "Write the implementation plan for this task and save it with odt_set_plan. Use taskId {{task.id}} for every odt_* tool call.",
   },
   "kickoff.build_implementation_start": {
     id: "kickoff.build_implementation_start",

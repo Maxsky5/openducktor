@@ -414,13 +414,17 @@ describe("kickoff and permission prompts", () => {
 
   test.each([
     ["spec", "kickoff.spec_initial", "specification", "odt_set_spec"],
-    ["planner", "kickoff.planner_initial", "technical design", "odt_set_plan"],
+    ["planner", "kickoff.planner_initial", "implementation plan", "odt_set_plan"],
   ] as const)(
     "%s kickoff requests the artifact and leaves policy to the system prompt",
     (role, templateId, artifact, tool) => {
       const prompt = buildAgentKickoffPrompt({ role, templateId, task: { taskId: "task-1" } });
 
-      expectPromptToContainAll(prompt, [artifact, tool, "taskId task-1"]);
+      expectPromptToContainAll(prompt, [
+        `Write the ${artifact}`,
+        `save it with ${tool}`,
+        "taskId task-1",
+      ]);
       expect(prompt).not.toMatch(
         /permission|confirmation|conflicts|question tool|artifact format/i,
       );
