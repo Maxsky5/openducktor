@@ -3,7 +3,6 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { ComputerUseToolMessage } from "./agent-chat-computer-use";
-import { codexTruncatedResultPreview } from "./computer-use-tool.test-fixtures";
 
 enableReactActEnvironment();
 
@@ -35,7 +34,10 @@ describe("ComputerUseToolMessage", () => {
       <ComputerUseToolMessage
         {...baseProps}
         meta={toolMeta({
-          input: { code: "await tab.click()", title: "Inspect   the task plan editor" },
+          computerUse: {
+            action: "Inspect the task plan editor",
+            code: "await tab.click()",
+          },
           output: "done",
           startedAtMs: 1_000,
           endedAtMs: 2_500,
@@ -54,10 +56,17 @@ describe("ComputerUseToolMessage", () => {
     }
   });
 
-  test("shows a short failure message and keeps the full error in the details", () => {
+  test("shows the failure summary and keeps the full error in the details", () => {
     const manual = "Script error: boom\n\nComputer Use API manual line 1\nline 2";
     const view = render(
-      <ComputerUseToolMessage {...baseProps} meta={toolMeta({ status: "error", error: manual })} />,
+      <ComputerUseToolMessage
+        {...baseProps}
+        meta={toolMeta({
+          status: "error",
+          error: manual,
+          computerUse: { action: "Click the button", failureSummary: "boom" },
+        })}
+      />,
     );
     try {
       expect(view.getByText("boom")).toBeDefined();
@@ -73,14 +82,19 @@ describe("ComputerUseToolMessage", () => {
     }
   });
 
-  test("keeps an oversized Codex-truncated failure out of the collapsed summary", () => {
-    const preview = codexTruncatedResultPreview(
-      `Script error: TypeError: element not found\n\nComputer Use API manual\n${"step: inspect the app state\n".repeat(30_000)}`,
-    );
+  test("keeps an oversized failure out of the collapsed summary", () => {
+    const manual = `Computer Use API manual ${"step ".repeat(100_000)}`;
     const view = render(
       <ComputerUseToolMessage
         {...baseProps}
-        meta={toolMeta({ status: "error", error: preview })}
+        meta={toolMeta({
+          status: "error",
+          error: manual,
+          computerUse: {
+            action: "Click the button",
+            failureSummary: "TypeError: element not found",
+          },
+        })}
       />,
     );
     try {
@@ -93,15 +107,18 @@ describe("ComputerUseToolMessage", () => {
       expect(collapsedText.length).toBeLessThan(1_000);
       toggle(details, true);
       const errorBlock = view.getByText("Error").closest("div");
-      expect(errorBlock?.querySelector("pre")?.textContent).toBe(preview);
+      expect(errorBlock?.querySelector("pre")?.textContent).toBe(manual);
     } finally {
       view.unmount();
     }
   });
 
-  test("shows a generic failure message when the error text is empty", () => {
+  test("shows a generic failure message without a failure summary", () => {
     const view = render(
-      <ComputerUseToolMessage {...baseProps} meta={toolMeta({ status: "error" })} />,
+      <ComputerUseToolMessage
+        {...baseProps}
+        meta={toolMeta({ status: "error", computerUse: { action: "Click the button" } })}
+      />,
     );
     try {
       expect(view.getByText("Computer action failed.")).toBeDefined();
@@ -112,7 +129,10 @@ describe("ComputerUseToolMessage", () => {
 
   test("shows an expansion cue only while the call has details", () => {
     const view = render(
-      <ComputerUseToolMessage {...baseProps} meta={toolMeta({ input: { code: "1 + 1" } })} />,
+      <ComputerUseToolMessage
+        {...baseProps}
+        meta={toolMeta({ computerUse: { action: "Click", code: "1 + 1" } })}
+      />,
     );
     try {
       const summary = view.container.querySelector("summary");
@@ -125,7 +145,10 @@ describe("ComputerUseToolMessage", () => {
       toggle(details, true);
       expect(chevron?.getAttribute("class")).toContain("rotate-180");
       view.rerender(
-        <ComputerUseToolMessage {...baseProps} meta={toolMeta({ input: { title: "Click" } })} />,
+        <ComputerUseToolMessage
+          {...baseProps}
+          meta={toolMeta({ computerUse: { action: "Click" } })}
+        />,
       );
       expect(view.container.querySelector("summary")).toBeNull();
       expect(view.container.querySelector(".lucide-chevron-down")).toBeNull();
@@ -142,6 +165,7 @@ describe("ComputerUseToolMessage", () => {
         meta={toolMeta({
           input: { code, title: "Submit the form" },
           output: "clicked",
+          computerUse: { action: "Submit the form", code },
         })}
       />,
     );
@@ -165,8 +189,8 @@ describe("ComputerUseToolMessage", () => {
         {...baseProps}
         meta={toolMeta({
           tool: "cua_repl.js_reset",
-          input: { code: "await tab.click()" },
           output: "setup complete",
+          computerUse: { action: "Reset computer session" },
         })}
       />,
     );
@@ -187,10 +211,13 @@ describe("ComputerUseToolMessage", () => {
       <ComputerUseToolMessage
         {...baseProps}
         meta={toolMeta({
-          images: [
-            { mimeType: "image/png", dataBase64: "AAAA" },
-            { mimeType: "image/jpeg", dataBase64: "BBBB" },
-          ],
+          computerUse: {
+            action: "Capture the page",
+            images: [
+              { mimeType: "image/png", dataBase64: "AAAA" },
+              { mimeType: "image/jpeg", dataBase64: "BBBB" },
+            ],
+          },
         })}
       />,
     );
@@ -215,7 +242,10 @@ describe("ComputerUseToolMessage", () => {
 
   test("renders no details disclosure without expandable content", () => {
     const view = render(
-      <ComputerUseToolMessage {...baseProps} meta={toolMeta({ input: { title: "Click" } })} />,
+      <ComputerUseToolMessage
+        {...baseProps}
+        meta={toolMeta({ computerUse: { action: "Click" } })}
+      />,
     );
     try {
       expect(view.container.querySelector("details")).toBeNull();

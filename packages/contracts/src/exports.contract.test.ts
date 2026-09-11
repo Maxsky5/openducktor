@@ -7,6 +7,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS",
   "acceptedAgentUserMessageSchema",
   "agentAttachmentReferenceSchema",
+  "agentComputerUseSchema",
   "agentDescriptorSchema",
   "agentFileDiffsSchema",
   "AGENT_GENERATED_IMAGE_BATCH_LIMIT",

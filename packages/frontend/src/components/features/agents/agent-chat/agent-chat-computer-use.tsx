@@ -3,12 +3,6 @@ import { ChevronDown, LoaderCircle, Monitor } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import {
-  computerUseActionTitle,
-  computerUseCode,
-  computerUseFailureSummary,
-  hasComputerUseDetails,
-} from "./computer-use-tool";
 import { formatAgentDuration } from "./format-agent-duration";
 import { getToolDuration } from "./tool-duration";
 import { hasNonEmptyText, isToolMessageFailure } from "./tool-lifecycle";
@@ -26,14 +20,16 @@ export const ComputerUseToolMessage = ({
 }: ComputerUseToolMessageProps): ReactElement => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const isFailed = isToolMessageFailure(meta);
-  const actionTitle = computerUseActionTitle(meta);
-  const failureSummary = isFailed ? computerUseFailureSummary(meta.error) || FAILED_SUMMARY : "";
+  const action = meta.computerUse;
+  const actionTitle = action?.action ?? DEFAULT_ACTION_TITLE;
+  const failureSummary = isFailed ? (action?.failureSummary ?? FAILED_SUMMARY) : "";
   const durationMs = getToolDuration(meta, messageTimestamp);
-  const code = computerUseCode(meta);
-  const images = meta.images ?? [];
-  const hasDetails = hasComputerUseDetails(meta);
+  const code = action?.code ?? "";
+  const images = action?.images ?? [];
   const errorText = hasNonEmptyText(meta.error) ? meta.error : "";
   const outputText = hasNonEmptyText(meta.output) ? meta.output : "";
+  const hasDetails =
+    code.length > 0 || errorText.length > 0 || outputText.length > 0 || images.length > 0;
 
   const summary = (
     <div className="min-w-0">
@@ -129,6 +125,8 @@ export const ComputerUseToolMessage = ({
     </div>
   );
 };
+
+const DEFAULT_ACTION_TITLE = "Computer action";
 
 const FAILED_SUMMARY = "Computer action failed.";
 

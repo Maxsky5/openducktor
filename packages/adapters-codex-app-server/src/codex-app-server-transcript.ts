@@ -10,6 +10,7 @@ import {
   stringifyJsonValue,
 } from "./codex-app-server-shared";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
+import { codexComputerUse } from "./codex-computer-use";
 import {
   CodexFileDiffParseError,
   codexApplyPatchFileDiffs,
@@ -706,7 +707,6 @@ const codexMcpToolCallStreamParts = (
   const output = isComputerUse
     ? codexToolResultText(value.result)
     : codexToolResultDisplayText(value.result);
-  const images = isComputerUse ? codexToolResultImages(value.result) : [];
   const resolvedError = isComputerUse && status === "error" && !error ? output : error;
   const toolInvocation: NormalizedCodexToolInvocation = {
     messageId,
@@ -716,12 +716,21 @@ const codexMcpToolCallStreamParts = (
     status,
     output: resolvedError ? null : output,
     error: resolvedError,
-    images,
     ...codexToolTimingFields(value, timingOptions),
     metadata: {
       server,
     },
   };
+
+  if (isComputerUse) {
+    toolInvocation.computerUse = codexComputerUse({
+      tool,
+      input: args,
+      images: codexToolResultImages(value.result),
+      failed: status === "error",
+      failureText: resolvedError,
+    });
+  }
 
   if (args) {
     toolInvocation.input = args;

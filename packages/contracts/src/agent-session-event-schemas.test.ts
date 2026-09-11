@@ -87,7 +87,7 @@ describe("agent session transcript event contract", () => {
     }
   });
 
-  test("accepts computer use tool parts with result images", () => {
+  test("accepts computer use tool parts with a normalized action", () => {
     const event = {
       ...base,
       type: "assistant_part",
@@ -100,7 +100,12 @@ describe("agent session transcript event contract", () => {
         toolType: "computer_use",
         status: "completed",
         input: { code: "await tab.click()", title: "Click" },
-        images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
+        computerUse: {
+          action: "Click the button",
+          code: "await tab.click()",
+          failureSummary: "boom",
+          images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
+        },
       },
     } as const;
 
@@ -108,7 +113,19 @@ describe("agent session transcript event contract", () => {
     expect(
       agentRuntimeEventSchema.safeParse({
         ...event,
-        part: { ...event.part, images: [{ mimeType: "", dataBase64: "AAAA" }] },
+        part: {
+          ...event.part,
+          computerUse: {
+            ...event.part.computerUse,
+            images: [{ mimeType: "", dataBase64: "AAAA" }],
+          },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...event,
+        part: { ...event.part, computerUse: { code: "1 + 1" } },
       }).success,
     ).toBe(false);
   });

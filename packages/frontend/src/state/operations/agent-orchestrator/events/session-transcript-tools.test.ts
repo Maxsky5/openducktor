@@ -245,7 +245,11 @@ describe("agent-orchestrator session transcript events", () => {
       throw new Error("Expected session event handler to be registered");
     }
 
-    const images = [{ mimeType: "image/png", dataBase64: "AAAA" }];
+    const computerUse = {
+      action: "Click the button",
+      code: "await tab.click()",
+      images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
+    };
 
     handleEvent({
       type: "assistant_part",
@@ -259,8 +263,7 @@ describe("agent-orchestrator session transcript events", () => {
         tool: "cua_repl.js",
         toolType: "computer_use" as const,
         status: "completed",
-        input: { code: "await tab.click()", title: "Click the button" },
-        images,
+        computerUse,
       },
     });
 
@@ -287,7 +290,7 @@ describe("agent-orchestrator session transcript events", () => {
       throw new Error("Expected computer use tool message");
     }
     expect(message.meta.status).toBe("error");
-    expect(message.meta.images).toEqual(images);
+    expect(message.meta.computerUse).toEqual(computerUse);
   });
 
   test("does not revive an idle session from a terminal tool update", async () => {

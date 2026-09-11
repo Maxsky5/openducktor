@@ -67,7 +67,7 @@ describe("MessageBody streamed markdown", () => {
         tool: "cua_repl.js",
         toolType: "computer_use",
         status: "completed",
-        input: { code: "await tab.click()", title: "Inspect the editor" },
+        computerUse: { action: "Inspect the editor", code: "await tab.click()" },
         output: "clicked",
       },
     };

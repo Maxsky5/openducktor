@@ -54,8 +54,12 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
     ]);
   });
 
-  test("maps computer use screenshots from hydrated tool parts", () => {
-    const images = [{ mimeType: "image/png", dataBase64: "AAAA" }];
+  test("maps the computer use action from hydrated tool parts", () => {
+    const computerUse = {
+      action: "Click the button",
+      code: "await tab.click()",
+      images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
+    };
     const messages = historyToChatMessages(
       [
         {
@@ -72,8 +76,7 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
               tool: "cua_repl.js",
               toolType: "computer_use",
               status: "completed",
-              input: { code: "await tab.click()", title: "Click the button" },
-              images,
+              computerUse,
             },
           ],
         },
@@ -87,7 +90,7 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
         meta: expect.objectContaining({
           kind: "tool",
           toolType: "computer_use",
-          images,
+          computerUse,
         }),
       }),
     ]);

@@ -114,8 +114,8 @@ const composeToolMessageMeta = (
   if (part.fileChanges) {
     meta.fileChanges = part.fileChanges;
   }
-  if (part.images) {
-    meta.images = part.images;
+  if (part.computerUse) {
+    meta.computerUse = part.computerUse;
   }
   if (part.metadata) {
     meta.metadata = part.metadata;
@@ -201,8 +201,8 @@ const composeToolPartSessionUpdate = ({
   if (part.fileChanges === undefined && existingToolMeta?.fileChanges !== undefined) {
     resolvedPart.fileChanges = existingToolMeta.fileChanges;
   }
-  if (part.images === undefined && existingToolMeta?.images !== undefined) {
-    resolvedPart.images = existingToolMeta.images;
+  if (part.computerUse === undefined && existingToolMeta?.computerUse !== undefined) {
+    resolvedPart.computerUse = existingToolMeta.computerUse;
   }
   if (part.startedAtMs === undefined && existingToolMeta?.startedAtMs !== undefined) {
     resolvedPart.startedAtMs = existingToolMeta.startedAtMs;

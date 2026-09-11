@@ -223,7 +223,7 @@ export const codexNamespacedToolName = (namespace: string | null, tool: string):
   return namespace ? `${namespace}.${tool}` : tool;
 };
 
-const codexToolLeafName = (toolName: string): string => {
+export const codexToolLeafName = (toolName: string): string => {
   const segments = toolName.split(".").filter((segment) => segment.length > 0);
   return segments.at(-1) ?? toolName;
 };

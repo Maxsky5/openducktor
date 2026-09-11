@@ -142,8 +142,8 @@ const historyPartToChatMessage = (
       if (part.fileChanges) {
         meta.fileChanges = part.fileChanges;
       }
-      if (part.images) {
-        meta.images = part.images;
+      if (part.computerUse) {
+        meta.computerUse = part.computerUse;
       }
       if (part.metadata) {
         meta.metadata = part.metadata;

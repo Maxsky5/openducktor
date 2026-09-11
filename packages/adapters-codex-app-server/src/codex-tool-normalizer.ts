@@ -16,7 +16,7 @@ import {
   readPathFromCommand,
   searchInputFromCommand,
 } from "./codex-app-server-shared";
-import type { AgentToolImage, CodexAppServerJsonValue } from "@openducktor/contracts";
+import type { AgentComputerUse, CodexAppServerJsonValue } from "@openducktor/contracts";
 import type { CodexToolTimingFields } from "./codex-tool-timing";
 
 /**
@@ -89,7 +89,7 @@ export type NormalizedCodexToolInvocation = CodexToolTimingFields & {
   output?: string | null;
   error?: string | null;
   fileDiffs?: FileDiff[];
-  images?: AgentToolImage[];
+  computerUse?: AgentComputerUse;
   metadata?: CodexToolInvocationMetadata;
 };
 
@@ -369,7 +369,7 @@ export const normalizeCodexToolInvocation = ({
   output,
   error,
   fileDiffs,
-  images,
+  computerUse,
   title,
   displayLabel,
   preview,
@@ -420,8 +420,8 @@ export const normalizeCodexToolInvocation = ({
   if (fileDiffs && fileDiffs.length > 0) {
     normalizedTool.fileDiffs = fileDiffs;
   }
-  if (images && images.length > 0) {
-    normalizedTool.images = images;
+  if (computerUse) {
+    normalizedTool.computerUse = computerUse;
   }
   if (namespace) {
     metadataFields.namespace = namespace;

@@ -166,11 +166,15 @@ describe("Codex tool normalization", () => {
           title: "Inspect the task plan editor",
         },
         output: "Script completed",
+        computerUse: {
+          action: "Inspect the task plan editor",
+          code: "await nodeRepl.emitImage(await tab.screenshot())",
+        },
       }),
     );
   });
 
-  test("maps cua_repl js_reset calls to the computer use tool type", () => {
+  test("normalizes js_reset calls to the reset action without code", () => {
     const part = toStreamPart(
       {
         type: "mcpToolCall",
@@ -178,7 +182,7 @@ describe("Codex tool normalization", () => {
         server: "cua_repl",
         tool: "js_reset",
         status: "completed",
-        arguments: {},
+        arguments: { code: "await tab.click()" },
         result: {
           content: [{ type: "text", text: "setup complete" }],
           structuredContent: null,
@@ -193,6 +197,7 @@ describe("Codex tool normalization", () => {
         tool: "cua_repl.js_reset",
         toolType: "computer_use",
         output: "setup complete",
+        computerUse: { action: "Reset computer session" },
       }),
     );
   });
@@ -225,10 +230,14 @@ describe("Codex tool normalization", () => {
     expect(part).toEqual(
       expect.objectContaining({
         toolType: "computer_use",
-        images: [
-          { mimeType: "image/png", dataBase64: "AAAA" },
-          { mimeType: "image/jpeg", dataBase64: "BBBB" },
-        ],
+        computerUse: {
+          action: "Computer action",
+          code: "await nodeRepl.emitImage(await tab.screenshot())",
+          images: [
+            { mimeType: "image/png", dataBase64: "AAAA" },
+            { mimeType: "image/jpeg", dataBase64: "BBBB" },
+          ],
+        },
         output: "Script completed\nSecond line",
       }),
     );
@@ -255,7 +264,11 @@ describe("Codex tool normalization", () => {
     expect(part).toEqual(
       expect.objectContaining({
         toolType: "computer_use",
-        images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
+        computerUse: {
+          action: "Computer action",
+          code: "await nodeRepl.emitImage(await tab.screenshot())",
+          images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
+        },
       }),
     );
     expect(part).not.toHaveProperty("output");
@@ -285,6 +298,11 @@ describe("Codex tool normalization", () => {
         toolType: "computer_use",
         status: "error",
         error: manual,
+        computerUse: {
+          action: "Computer action",
+          code: "throw new Error('boom')",
+          failureSummary: "boom",
+        },
       }),
     );
     expect(part).not.toHaveProperty("output");
@@ -318,9 +336,93 @@ describe("Codex tool normalization", () => {
         toolType: "computer_use",
         status: "error",
         error: preview,
+        computerUse: {
+          action: "Computer action",
+          code: "throw new Error('boom')",
+          failureSummary: "boom",
+        },
       }),
     );
     expect(part).not.toHaveProperty("output");
+  });
+
+  test("recovers the failure line when the preview keys serialize in another order", () => {
+    const preview = `{"content":[{"text":"Script error: boom\\n\\nManual…510000 chars truncated…tail","type":"text"}],"structured_content":null,"is_error":true}`;
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-6",
+        server: "cua_repl",
+        tool: "js",
+        status: "failed",
+        arguments: { code: "throw new Error('boom')" },
+        result: {
+          content: [{ type: "text", text: preview }],
+          structuredContent: null,
+          _meta: null,
+        },
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        computerUse: expect.objectContaining({ failureSummary: "boom" }),
+      }),
+    );
+  });
+
+  test("states the truncation when the preview has no readable failure line", () => {
+    const preview = `{"content":[{"text":"\\\\…500000 chars truncated…tail","type":"text"}],"structured_content":null,"is_error":true}`;
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-7",
+        server: "cua_repl",
+        tool: "js",
+        status: "failed",
+        arguments: { code: "throw new Error('boom')" },
+        result: {
+          content: [{ type: "text", text: preview }],
+          structuredContent: null,
+          _meta: null,
+        },
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        computerUse: expect.objectContaining({
+          failureSummary: "Computer action failed. Codex truncated its diagnostics.",
+        }),
+      }),
+    );
+  });
+
+  test("uses the MCP error message as the failure summary", () => {
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-8",
+        server: "cua_repl",
+        tool: "js",
+        status: "failed",
+        arguments: { code: "await tab.click()" },
+        error: { message: "MCP error -32000: connection closed" },
+        result: null,
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        error: "MCP error -32000: connection closed",
+        computerUse: expect.objectContaining({
+          failureSummary: "MCP error -32000: connection closed",
+        }),
+      }),
+    );
   });
 
   test("keeps other MCP servers on the generic tool presentation", () => {
@@ -347,7 +449,7 @@ describe("Codex tool normalization", () => {
         toolType: "generic",
       }),
     );
-    expect(part).not.toHaveProperty("images");
+    expect(part).not.toHaveProperty("computerUse");
   });
 
   test("uses structured dynamic tool errors instead of raw JSON output", () => {

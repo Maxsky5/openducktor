@@ -132,6 +132,16 @@ export const agentToolImageSchema = z
   .strict();
 export type AgentToolImage = z.infer<typeof agentToolImageSchema>;
 
+export const agentComputerUseSchema = z
+  .object({
+    action: z.string().min(1),
+    code: z.string().min(1).optional(),
+    failureSummary: z.string().min(1).optional(),
+    images: z.array(agentToolImageSchema).optional(),
+  })
+  .strict();
+export type AgentComputerUse = z.infer<typeof agentComputerUseSchema>;
+
 const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
   agentImageGenerationPartSchema,
   z
@@ -171,7 +181,7 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
       fileDiffs: z.array(fileDiffSchema.strict()).optional(),
       fileContent: z.array(fileContentSchema.strict()).optional(),
       fileChanges: z.array(fileDiffSchema.strict()).optional(),
-      images: z.array(agentToolImageSchema).optional(),
+      computerUse: agentComputerUseSchema.optional(),
       metadata: agentToolDataSchema.optional(),
       startedAtMs: finiteNonNegativeNumberSchema.optional(),
       endedAtMs: finiteNonNegativeNumberSchema.optional(),
