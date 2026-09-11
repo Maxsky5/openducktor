@@ -27,7 +27,6 @@ import {
   type RefCallback,
   useEffect,
   useMemo,
-  useReducer,
   useRef,
   useState,
 } from "react";
@@ -46,29 +45,9 @@ import {
   WorkspaceRemovalRecoveryDialog,
   WorkspaceRemoveDialog,
 } from "../features/repository/workspace-lifecycle-dialogs";
+import { WorkspaceAvatar } from "../features/repository/workspace-identity";
 
 const DRAG_DISTANCE_PX = 6;
-
-const deriveWorkspaceInitials = (workspaceName: string): string => {
-  const trimmedName = workspaceName.trim();
-  if (!trimmedName) {
-    return "?";
-  }
-
-  const segments = trimmedName.split(/[^A-Za-z0-9]+/).reduce<string[]>((nextSegments, segment) => {
-    const trimmedSegment = segment.trim();
-    if (trimmedSegment.length > 0) {
-      nextSegments.push(trimmedSegment);
-    }
-    return nextSegments;
-  }, []);
-
-  if (segments.length >= 2) {
-    return `${segments[0]?.[0] ?? ""}${segments[1]?.[0] ?? ""}`.toUpperCase();
-  }
-
-  return trimmedName.slice(0, 2).toUpperCase();
-};
 
 const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
   const pendingFrame = frameRef.current;
@@ -77,34 +56,6 @@ const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void
     frameRef.current = null;
   }
 };
-
-function WorkspaceRailAvatar({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
-  const [failedIconDataUrl, markIconDataUrlFailed] = useReducer(
-    (_current: string | null, next: string) => next,
-    null,
-  );
-  const iconDataUrl = workspace.iconDataUrl ?? null;
-
-  if (iconDataUrl && failedIconDataUrl !== iconDataUrl) {
-    return (
-      <img
-        src={iconDataUrl}
-        alt=""
-        aria-hidden="true"
-        className="size-6 rounded-md object-cover"
-        onError={() => {
-          markIconDataUrlFailed(iconDataUrl);
-        }}
-      />
-    );
-  }
-
-  return (
-    <span className="text-xs font-semibold uppercase">
-      {deriveWorkspaceInitials(workspace.workspaceName)}
-    </span>
-  );
-}
 
 type WorkspaceRailButtonShellProps = {
   workspace: WorkspaceRecord;
@@ -181,7 +132,7 @@ function WorkspaceRailButtonShell({
           onSelectWorkspace?.(workspace.workspaceId);
         }}
       >
-        <WorkspaceRailAvatar workspace={workspace} />
+        <WorkspaceAvatar workspace={workspace} />
       </Button>
     </div>
   );

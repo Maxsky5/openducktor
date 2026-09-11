@@ -75,7 +75,7 @@ describe("workspace lifecycle dialogs", () => {
 
     expect(screen.getByText("Alpha Repo")).toBeTruthy();
     expect(screen.getByText("/projects/alpha")).toBeTruthy();
-    expect(screen.getByText(/The workspace disappears from the workspace rail./)).toBeTruthy();
+    expect(screen.getByText(/The workspace is hidden until you reopen it./)).toBeTruthy();
     expect(document.querySelector(".lucide-eye-off")).not.toBe(null);
 
     fireEvent.click(screen.getByRole("button", { name: "Close workspace" }));
