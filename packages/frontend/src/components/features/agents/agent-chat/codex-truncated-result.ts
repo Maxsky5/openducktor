@@ -14,20 +14,13 @@ export const readCodexTruncatedResult = (text: string): CodexTruncatedResult => 
     return { kind: "not_truncated" };
   }
   const fragment = text.slice(TRUNCATED_RESULT_PREFIX.length);
-  const headEnd = firstMatchIndex(fragment, [ESCAPED_LINE_BREAK_PATTERN, TRUNCATION_MARKER]);
-  const head = headEnd === -1 ? fragment : fragment.slice(0, headEnd);
+  const head = cutAtFirstMatch(fragment, [ESCAPED_LINE_BREAK_PATTERN, TRUNCATION_MARKER]);
   return { kind: "truncated", head: decodeJsonStringFragment(head) };
 };
 
-const firstMatchIndex = (text: string, patterns: RegExp[]): number => {
-  let earliest = -1;
-  for (const pattern of patterns) {
-    const index = text.search(pattern);
-    if (index >= 0 && (earliest === -1 || index < earliest)) {
-      earliest = index;
-    }
-  }
-  return earliest;
+const cutAtFirstMatch = (text: string, patterns: RegExp[]): string => {
+  const indexes = patterns.map((pattern) => text.search(pattern)).filter((index) => index >= 0);
+  return text.slice(0, Math.min(...indexes, text.length));
 };
 
 const decodeJsonStringFragment = (fragment: string): string | null => {

@@ -135,6 +135,17 @@ const FAILED_SUMMARY = "Computer action failed.";
 const isActiveComputerUse = (meta: ToolMeta): boolean =>
   meta.status === "pending" || meta.status === "running";
 
+const SECTION_APPEARANCE = {
+  default: {
+    frameClassName: "border-border bg-muted/50",
+    textClassName: "text-foreground",
+  },
+  error: {
+    frameClassName: "border-destructive-border bg-destructive-surface",
+    textClassName: "text-destructive-surface-foreground",
+  },
+} as const;
+
 const ComputerUseSection = ({
   label,
   children,
@@ -143,33 +154,19 @@ const ComputerUseSection = ({
   label: string;
   children: string;
   tone?: "default" | "error";
-}): ReactElement => (
-  <div
-    className={cn(
-      "rounded border",
-      tone === "error"
-        ? "border-destructive-border bg-destructive-surface"
-        : "border-border bg-muted/50",
-    )}
-  >
-    <p
-      className={cn(
-        "px-2 py-1 text-xs font-medium",
-        tone === "error" ? "text-destructive-surface-foreground" : "text-foreground",
-      )}
-    >
-      {label}
-    </p>
-    <pre
-      className={cn(
-        "overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px]",
-        tone === "error" ? "text-destructive-surface-foreground" : "text-foreground",
-      )}
-    >
-      {children}
-    </pre>
-  </div>
-);
+}): ReactElement => {
+  const { frameClassName, textClassName } = SECTION_APPEARANCE[tone];
+  return (
+    <div className={cn("rounded border", frameClassName)}>
+      <p className={cn("px-2 py-1 text-xs font-medium", textClassName)}>{label}</p>
+      <pre
+        className={cn("overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px]", textClassName)}
+      >
+        {children}
+      </pre>
+    </div>
+  );
+};
 
 const ComputerUseScreenshot = ({
   image,

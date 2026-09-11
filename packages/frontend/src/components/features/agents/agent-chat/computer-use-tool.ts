@@ -13,7 +13,7 @@ export const computerUseActionTitle = (meta: ToolMeta): string => {
   if (hasNonEmptyText(rawTitle)) {
     return rawTitle.trim().replace(/\s+/g, " ");
   }
-  return toolLeafName(meta.tool) === RESET_TOOL ? "Reset computer session" : "Computer action";
+  return isResetTool(meta.tool) ? "Reset computer session" : "Computer action";
 };
 
 export const computerUseFailureSummary = (errorText: string | undefined): string => {
@@ -22,18 +22,18 @@ export const computerUseFailureSummary = (errorText: string | undefined): string
   }
   const text = errorText.trim();
   const truncated = readCodexTruncatedResult(text);
-  if (truncated.kind === "truncated") {
-    const line = truncated.head === null ? null : firstFailureLine(truncated.head);
-    return line !== null && READABLE_LINE_PATTERN.test(line)
-      ? boundFailureLine(line)
-      : TRUNCATED_FAILURE_SUMMARY;
+  if (truncated.kind === "not_truncated") {
+    return boundFailureLine(firstFailureLine(text));
   }
-  const firstLine = firstFailureLine(text);
-  return firstLine ? boundFailureLine(firstLine) : "";
+  const line = firstFailureLine(truncated.head ?? "");
+  if (line.length === 0 || !READABLE_LINE_PATTERN.test(line)) {
+    return TRUNCATED_FAILURE_SUMMARY;
+  }
+  return boundFailureLine(line);
 };
 
 export const computerUseCode = (meta: ToolMeta): string => {
-  if (toolLeafName(meta.tool) === RESET_TOOL) {
+  if (isResetTool(meta.tool)) {
     return "";
   }
   const code = meta.input?.code;
@@ -49,18 +49,20 @@ export const hasComputerUseDetails = (meta: ToolMeta): boolean => {
   );
 };
 
+const isResetTool = (tool: string): boolean => toolLeafName(tool) === RESET_TOOL;
+
 const toolLeafName = (tool: string): string => {
   const segments = tool.split(/[./]/).filter((segment) => segment.length > 0);
   return segments.at(-1) ?? tool;
 };
 
-const firstFailureLine = (text: string): string | null => {
+const firstFailureLine = (text: string): string => {
   const firstLine = text
     .replace(SCRIPT_ERROR_PREFIX, "")
     .split("\n")
     .map((line) => line.trim())
     .find((line) => line.length > 0);
-  return firstLine ?? null;
+  return firstLine ?? "";
 };
 
 const boundFailureLine = (line: string): string =>
