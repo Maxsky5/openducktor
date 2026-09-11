@@ -7,8 +7,11 @@ import {
   DEFAULT_KANBAN_SETTINGS,
   DEFAULT_NOTIFICATION_SETTINGS,
   GITHUB_PROVIDER_DESCRIPTOR,
+  type RepoGitConfig,
   repositoryGitProviderContextSchema,
   type RepositoryGitProviderContext,
+  settingsRepoConfigSchema,
+  type SettingsRepoConfig,
   type SettingsSnapshot,
   type TaskCard,
   type TaskStoreCheck,
@@ -144,14 +147,24 @@ const BASE_REPO_RUNTIME_MCP_FIXTURE: NonNullable<RepoRuntimeHealthCheck["mcp"]> 
   failureKind: null,
 };
 
+export const createGitProviderConfigFixture = ({
+  owner = "example",
+  name = "repo",
+  enabled = true,
+}: {
+  owner?: string;
+  name?: string;
+  enabled?: boolean;
+} = {}): NonNullable<RepoGitConfig["provider"]> => ({
+  id: "github",
+  enabled,
+  autoDetected: false,
+  repository: { host: "github.com", owner, name },
+});
+
 const BASE_GIT_PROVIDER_CONTEXT_FIXTURE = {
   descriptor: GITHUB_PROVIDER_DESCRIPTOR,
-  config: {
-    id: "github",
-    enabled: true,
-    autoDetected: false,
-    repository: { host: "github.com", owner: "example", name: "repo" },
-  },
+  config: createGitProviderConfigFixture(),
   health: {
     providerId: "github",
     enabled: true,
@@ -254,6 +267,19 @@ export const createSettingsSnapshotFixture = (
 
   return structuredClone(merged);
 };
+
+export const createRepoSettingsConfigFixture = (
+  workspaceId: string,
+  repoPath: string,
+  provider?: RepoGitConfig["provider"],
+): SettingsRepoConfig =>
+  settingsRepoConfigSchema.parse({
+    workspaceId,
+    workspaceName: workspaceId,
+    repoPath,
+    defaultRuntimeKind: "opencode",
+    git: provider === undefined ? {} : { provider },
+  });
 
 export const createDeferred = <T>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;

@@ -1,9 +1,4 @@
-import type { RepoGitConfig, SettingsSnapshot } from "@openducktor/contracts";
-
-type RepositoryProviderConfigSnapshot = {
-  repoPath: string;
-  git: RepoGitConfig;
-};
+import type { SettingsSnapshot } from "@openducktor/contracts";
 
 export type SettingsSnapshotChanges = {
   workspacesChanged: boolean;
@@ -16,8 +11,8 @@ const isSameJsonValue = <Value>(left: Value, right: Value): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
 
 const changedGitProviderRepoPaths = (
-  previous: Record<string, RepositoryProviderConfigSnapshot> | undefined,
-  next: Record<string, RepositoryProviderConfigSnapshot>,
+  previous: SettingsSnapshot["workspaces"] | undefined,
+  next: SettingsSnapshot["workspaces"],
 ): string[] => {
   if (previous === undefined) {
     return Object.values(next).map((workspace) => workspace.repoPath);

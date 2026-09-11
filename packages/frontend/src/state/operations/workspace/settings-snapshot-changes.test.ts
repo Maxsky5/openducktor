@@ -1,35 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import {
-  DEFAULT_AGENT_RUNTIMES,
-  type RepoGitConfig,
-  type SettingsRepoConfig,
-  settingsRepoConfigSchema,
-} from "@openducktor/contracts";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+  createGitProviderConfigFixture,
+  createRepoSettingsConfigFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { diffSettingsSnapshots } from "./settings-snapshot-changes";
 
-const githubProvider = (name: string): NonNullable<RepoGitConfig["provider"]> => ({
-  id: "github",
-  enabled: true,
-  repository: { host: "github.com", owner: "Maxsky5", name },
-  autoDetected: false,
-});
-
-const createRepoConfig = (
-  workspaceId: string,
-  repoPath: string,
-  provider?: RepoGitConfig["provider"],
-): SettingsRepoConfig =>
-  settingsRepoConfigSchema.parse({
-    workspaceId,
-    workspaceName: workspaceId,
-    repoPath,
-    defaultRuntimeKind: "opencode",
-    git: provider === undefined ? {} : { provider },
-  });
-
 const createSnapshot = (
-  workspaces: Record<string, SettingsRepoConfig>,
+  workspaces: Record<string, ReturnType<typeof createRepoSettingsConfigFixture>>,
   overrides: Parameters<typeof createSettingsSnapshotFixture>[0] = {},
 ) => createSettingsSnapshotFixture({ workspaces, ...overrides });
 
@@ -38,8 +17,8 @@ describe("diffSettingsSnapshots", () => {
     const changes = diffSettingsSnapshots(
       undefined,
       createSnapshot({
-        "repo-a": createRepoConfig("repo-a", "/repo-a"),
-        "repo-b": createRepoConfig("repo-b", "/repo-b"),
+        "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a"),
+        "repo-b": createRepoSettingsConfigFixture("repo-b", "/repo-b"),
       }),
     );
 
@@ -53,8 +32,12 @@ describe("diffSettingsSnapshots", () => {
 
   test("reports no changes for identical snapshots", () => {
     const workspaces = {
-      "repo-a": createRepoConfig("repo-a", "/repo-a"),
-      "repo-b": createRepoConfig("repo-b", "/repo-b", githubProvider("repo-b")),
+      "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a"),
+      "repo-b": createRepoSettingsConfigFixture(
+        "repo-b",
+        "/repo-b",
+        createGitProviderConfigFixture({ name: "repo-b" }),
+      ),
     };
 
     expect(diffSettingsSnapshots(createSnapshot(workspaces), createSnapshot(workspaces))).toEqual({
@@ -68,12 +51,20 @@ describe("diffSettingsSnapshots", () => {
   test("reports only the repository whose git provider config changed", () => {
     const changes = diffSettingsSnapshots(
       createSnapshot({
-        "repo-a": createRepoConfig("repo-a", "/repo-a"),
-        "repo-b": createRepoConfig("repo-b", "/repo-b", githubProvider("repo-b")),
+        "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a"),
+        "repo-b": createRepoSettingsConfigFixture(
+          "repo-b",
+          "/repo-b",
+          createGitProviderConfigFixture({ name: "repo-b" }),
+        ),
       }),
       createSnapshot({
-        "repo-a": createRepoConfig("repo-a", "/repo-a"),
-        "repo-b": createRepoConfig("repo-b", "/repo-b", githubProvider("renamed")),
+        "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a"),
+        "repo-b": createRepoSettingsConfigFixture(
+          "repo-b",
+          "/repo-b",
+          createGitProviderConfigFixture({ name: "renamed" }),
+        ),
       }),
     );
 
@@ -81,10 +72,61 @@ describe("diffSettingsSnapshots", () => {
     expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-b"]);
   });
 
+  test("reports a workspace change that does not touch the git provider", () => {
+    const changes = diffSettingsSnapshots(
+      createSnapshot({ "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") }),
+      createSnapshot({
+        "repo-a": {
+          ...createRepoSettingsConfigFixture("repo-a", "/repo-a"),
+          hooks: { preStart: ["bun run setup"], postComplete: [] },
+        },
+      }),
+    );
+
+    expect(changes.workspacesChanged).toBe(true);
+    expect(changes.changedGitProviderRepoPaths).toEqual([]);
+  });
+
+  test("reports a repository whose provider was removed", () => {
+    const changes = diffSettingsSnapshots(
+      createSnapshot({
+        "repo-a": createRepoSettingsConfigFixture(
+          "repo-a",
+          "/repo-a",
+          createGitProviderConfigFixture(),
+        ),
+      }),
+      createSnapshot({ "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") }),
+    );
+
+    expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-a"]);
+  });
+
+  test("reports a repository whose provider was disabled", () => {
+    const changes = diffSettingsSnapshots(
+      createSnapshot({
+        "repo-a": createRepoSettingsConfigFixture(
+          "repo-a",
+          "/repo-a",
+          createGitProviderConfigFixture(),
+        ),
+      }),
+      createSnapshot({
+        "repo-a": createRepoSettingsConfigFixture(
+          "repo-a",
+          "/repo-a",
+          createGitProviderConfigFixture({ enabled: false }),
+        ),
+      }),
+    );
+
+    expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-a"]);
+  });
+
   test("reports the new path when a repository path changes", () => {
     const changes = diffSettingsSnapshots(
-      createSnapshot({ "repo-a": createRepoConfig("repo-a", "/repo-a") }),
-      createSnapshot({ "repo-a": createRepoConfig("repo-a", "/repo-moved") }),
+      createSnapshot({ "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") }),
+      createSnapshot({ "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-moved") }),
     );
 
     expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-moved"]);
@@ -93,7 +135,7 @@ describe("diffSettingsSnapshots", () => {
   test("reports a repository added after the previous snapshot", () => {
     const changes = diffSettingsSnapshots(
       createSnapshot({}),
-      createSnapshot({ "repo-a": createRepoConfig("repo-a", "/repo-a") }),
+      createSnapshot({ "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") }),
     );
 
     expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-a"]);
@@ -110,5 +152,18 @@ describe("diffSettingsSnapshots", () => {
     expect(changes.agentRuntimesChanged).toBe(true);
     expect(changes.kanbanDoneVisibleDaysChanged).toBe(true);
     expect(changes.changedGitProviderRepoPaths).toEqual([]);
+  });
+
+  test("reports a defaults-only agent runtime change", () => {
+    const nextRuntimes = structuredClone(DEFAULT_AGENT_RUNTIMES);
+    nextRuntimes.codex.defaults.commandNetworkAccess =
+      !nextRuntimes.codex.defaults.commandNetworkAccess;
+    const changes = diffSettingsSnapshots(
+      createSnapshot({}),
+      createSnapshot({}, { agentRuntimes: nextRuntimes }),
+    );
+
+    expect(changes.agentRuntimesChanged).toBe(true);
+    expect(changes.workspacesChanged).toBe(false);
   });
 });

@@ -91,8 +91,6 @@ Do not depend on a background refetch for correct state.
 
 For example, a settings save updates the settings cache. A repository settings save invalidates repository config. A task mutation invalidates task data and runs.
 
-A settings save invalidates only the caches whose source data changed. It invalidates repository config for workspace changes, runtime checks for agent runtime changes, and Git provider context for the repositories whose provider config or path changed. A task retention change refreshes task views.
-
 ## Data that does not belong in Query
 
 Keep these values outside TanStack Query:
