@@ -91,6 +91,7 @@ export const createGitPortTestDouble = <Overrides extends Partial<GitPort>>(
   listChangedFiles: unexpectedEffectCall("Git port", "listChangedFiles"),
   listFiles: unexpectedEffectCall("Git port", "listFiles"),
   listRemotes: unexpectedEffectCall("Git port", "listRemotes"),
+  listWorktrees: unexpectedEffectCall("Git port", "listWorktrees"),
   mergeBranch: unexpectedEffectCall("Git port", "mergeBranch"),
   pullBranch: unexpectedEffectCall("Git port", "pullBranch"),
   pushBranch: unexpectedEffectCall("Git port", "pushBranch"),
@@ -140,6 +141,10 @@ export const createWorkspaceSettingsServiceTestDouble = <
     "deleteCustomAgentRole",
   ),
   addWorkspace: unexpectedEffectCall("workspace settings service", "addWorkspace"),
+  beginWorkspaceRemoval: unexpectedEffectCall(
+    "workspace settings service",
+    "beginWorkspaceRemoval",
+  ),
   closeWorkspace: unexpectedEffectCall("workspace settings service", "closeWorkspace"),
   getRepoConfig: unexpectedEffectCall("workspace settings service", "getRepoConfig"),
   getRepoConfigByRepoPath: unexpectedEffectCall(
@@ -149,6 +154,10 @@ export const createWorkspaceSettingsServiceTestDouble = <
   getSettingsSnapshot: unexpectedEffectCall("workspace settings service", "getSettingsSnapshot"),
   getWorkspaceCatalog: unexpectedEffectCall("workspace settings service", "getWorkspaceCatalog"),
   listWorkspaces: unexpectedEffectCall("workspace settings service", "listWorkspaces"),
+  recordWorkspaceRemovalProgress: unexpectedEffectCall(
+    "workspace settings service",
+    "recordWorkspaceRemovalProgress",
+  ),
   removeWorkspaceRegistration: unexpectedEffectCall(
     "workspace settings service",
     "removeWorkspaceRegistration",

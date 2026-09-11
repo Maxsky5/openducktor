@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
@@ -72,6 +72,7 @@ describe("WorkspaceRail", () => {
       },
       isSwitchingWorkspace: false,
       closedWorkspaces: [],
+      incompleteRemovals: [],
       closeWorkspace: async () => {},
       removeWorkspace: async () => {},
       reopenWorkspace: async () => {},
@@ -155,6 +156,45 @@ describe("WorkspaceRail", () => {
     );
     expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("style")).toContain(
       "background-color: #f43f5e",
+    );
+  });
+
+  test("retries an incomplete removal from the rail recovery entry", async () => {
+    const removeWorkspace = mock(
+      async (_input: {
+        workspaceId: string;
+        expectedRepoPath: string;
+        removeTaskWorktrees: boolean;
+      }): Promise<void> => {},
+    );
+    workspaceState.incompleteRemovals = [
+      {
+        workspace: workspaceRecord("stuck", {
+          workspaceName: "Stuck Repo",
+          repoPath: "/stuck",
+        }),
+        operationId: "op-1",
+        phase: "attachments",
+        removeTaskWorktrees: true,
+        removedWorktrees: ["/managed/stuck/task-1"],
+        lastFailure: "disk failure",
+      },
+    ];
+    workspaceState.removeWorkspace = removeWorkspace;
+
+    renderRail();
+
+    fireEvent.click(screen.getByRole("button", { name: "Finish removing Stuck Repo" }));
+    expect(await screen.findByText("Workspace removal did not finish")).toBeTruthy();
+    expect(screen.getByText("disk failure")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry removal" }));
+
+    await waitFor(() =>
+      expect(removeWorkspace).toHaveBeenCalledWith({
+        workspaceId: "stuck",
+        expectedRepoPath: "/stuck",
+        removeTaskWorktrees: true,
+      }),
     );
   });
 

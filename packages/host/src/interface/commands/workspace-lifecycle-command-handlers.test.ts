@@ -13,6 +13,7 @@ import { createWorkspaceLifecycleCommandHandlers } from "./workspace-lifecycle-c
 const catalog: WorkspaceCatalog = {
   openWorkspaces: [],
   closedWorkspaces: [],
+  incompleteRemovals: [],
   onboardingCompleted: true,
 };
 
@@ -29,11 +30,14 @@ describe("createWorkspaceLifecycleCommandHandlers", () => {
         return Effect.succeed({ kind: "new" });
       },
     });
-    const lifecycleService: Pick<WorkspaceLifecycleService, "closeWorkspace" | "removeWorkspace"> =
-      {
-        closeWorkspace: () => Effect.succeed(catalog),
-        removeWorkspace: () => Effect.succeed({ catalog, result: { removedWorktrees: [] } }),
-      };
+    const lifecycleService: Pick<
+      WorkspaceLifecycleService,
+      "closeWorkspace" | "reopenWorkspace" | "removeWorkspace"
+    > = {
+      closeWorkspace: () => Effect.succeed(catalog),
+      reopenWorkspace: () => Effect.succeed(catalog),
+      removeWorkspace: () => Effect.succeed({ catalog, result: { removedWorktrees: [] } }),
+    };
     const router = createRouter({
       handlers: createWorkspaceLifecycleCommandHandlers(settingsService, lifecycleService),
     });
@@ -48,20 +52,21 @@ describe("createWorkspaceLifecycleCommandHandlers", () => {
   test("routes close and reopen with the expected repository target", async () => {
     const closeInputs: Array<{ workspaceId: string; expectedRepoPath: string }> = [];
     const reopenInputs: Array<{ workspaceId: string; expectedRepoPath: string }> = [];
-    const settingsService = createWorkspaceSettingsServiceTestDouble({
-      reopenWorkspace: (workspaceId, expectedRepoPath) => {
-        reopenInputs.push({ workspaceId, expectedRepoPath });
+    const settingsService = createWorkspaceSettingsServiceTestDouble({});
+    const lifecycleService: Pick<
+      WorkspaceLifecycleService,
+      "closeWorkspace" | "reopenWorkspace" | "removeWorkspace"
+    > = {
+      closeWorkspace: (input) => {
+        closeInputs.push(input);
         return Effect.succeed(catalog);
       },
-    });
-    const lifecycleService: Pick<WorkspaceLifecycleService, "closeWorkspace" | "removeWorkspace"> =
-      {
-        closeWorkspace: (input) => {
-          closeInputs.push(input);
-          return Effect.succeed(catalog);
-        },
-        removeWorkspace: () => Effect.succeed({ catalog, result: { removedWorktrees: [] } }),
-      };
+      reopenWorkspace: (input) => {
+        reopenInputs.push(input);
+        return Effect.succeed(catalog);
+      },
+      removeWorkspace: () => Effect.succeed({ catalog, result: { removedWorktrees: [] } }),
+    };
     const router = createRouter({
       handlers: createWorkspaceLifecycleCommandHandlers(settingsService, lifecycleService),
     });
@@ -89,14 +94,17 @@ describe("createWorkspaceLifecycleCommandHandlers", () => {
       removeTaskWorktrees: boolean;
     }> = [];
     const settingsService = createWorkspaceSettingsServiceTestDouble({});
-    const lifecycleService: Pick<WorkspaceLifecycleService, "closeWorkspace" | "removeWorkspace"> =
-      {
-        closeWorkspace: () => Effect.succeed(catalog),
-        removeWorkspace: (input) => {
-          removeInputs.push(input);
-          return Effect.succeed({ catalog, result: { removedWorktrees: ["/worktrees/task-1"] } });
-        },
-      };
+    const lifecycleService: Pick<
+      WorkspaceLifecycleService,
+      "closeWorkspace" | "reopenWorkspace" | "removeWorkspace"
+    > = {
+      closeWorkspace: () => Effect.succeed(catalog),
+      reopenWorkspace: () => Effect.succeed(catalog),
+      removeWorkspace: (input) => {
+        removeInputs.push(input);
+        return Effect.succeed({ catalog, result: { removedWorktrees: ["/worktrees/task-1"] } });
+      },
+    };
     const router = createRouter({
       handlers: createWorkspaceLifecycleCommandHandlers(settingsService, lifecycleService),
     });

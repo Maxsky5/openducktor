@@ -27,6 +27,7 @@ import { AutopilotProvider } from "./autopilot-provider";
 const createWorkspaceState = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
   closedWorkspaces: [],
+  incompleteRemovals: [],
   closeWorkspace: async () => {},
   removeWorkspace: async () => {},
   reopenWorkspace: async () => {},

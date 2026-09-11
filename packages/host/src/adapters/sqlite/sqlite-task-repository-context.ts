@@ -1,7 +1,11 @@
 import { Deferred, Effect } from "effect";
 import path from "node:path";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
-import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import {
@@ -50,6 +54,11 @@ export type SqliteTaskRepositoryContextManager = {
 
 type CreateSqliteTaskRepositoryContextManagerInput = {
   configDir?: string;
+  assertWorkspaceAdmitted?: (input: {
+    operation: string;
+    repoPath: string;
+    workspaceId: string;
+  }) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
   onBackgroundFailure?: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   openConnection?: OpenSqliteTaskStoreConnection;
   processEnv: NodeJS.ProcessEnv;
@@ -130,6 +139,7 @@ const createAdmissionGate = (): AdmissionGate => {
 
 export const createSqliteTaskRepositoryContextManager = ({
   configDir,
+  assertWorkspaceAdmitted,
   onBackgroundFailure = (failure) => Effect.logError(failure.message),
   openConnection = openSqliteTaskStoreConnection,
   processEnv,
@@ -162,6 +172,13 @@ export const createSqliteTaskRepositoryContextManager = ({
     admission.withLease(() =>
       Effect.gen(function* () {
         const storage = yield* resolveStorage(repoPath);
+        if (assertWorkspaceAdmitted) {
+          yield* assertWorkspaceAdmitted({
+            operation,
+            repoPath: storage.repoPath,
+            workspaceId: storage.workspaceId,
+          });
+        }
         const slot = getSlot(storage.databasePath);
         return yield* slot
           .run((session) => use({ ...storage, session }))

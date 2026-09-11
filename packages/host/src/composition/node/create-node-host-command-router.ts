@@ -38,6 +38,7 @@ import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/w
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
+import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
@@ -122,9 +123,14 @@ export const assembleNodeEffectHostCommandRouter = (
   } = defaultPorts;
   const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
+  const workspaceAdmissionService = createWorkspaceAdmissionService({
+    workspaceSettingsService,
+  });
   const assets = createNodeTaskAssetServices({
     configDir,
+    assertWorkspaceAdmitted: workspaceAdmissionService.assertTaskStoreAccess,
     configuredTaskStore,
+    isWorkspaceBlocked: workspaceAdmissionService.isWorkspaceBlocked,
     onBackgroundFailure,
     processEnv,
     workspaceSettingsService,
@@ -258,6 +264,7 @@ export const assembleNodeEffectHostCommandRouter = (
     }),
   );
   const devServerServiceInput: Parameters<typeof createDevServerService>[0] = {
+    assertProcessStart: workspaceAdmissionService.assertProcessStart,
     processPort: devServerProcesses,
     taskWorktreeService,
     workspaceSettingsService,
@@ -272,9 +279,13 @@ export const assembleNodeEffectHostCommandRouter = (
       devServerService,
       terminalService,
     }),
+    admission: workspaceAdmissionService,
     gitPort: git,
     settingsConfig,
-    storage: { removeWorkspaceData: assets.removeWorkspaceData },
+    storage: {
+      removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
+      removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
+    },
     taskStore,
     workspaceSettingsService,
     worktreeFiles,
@@ -359,7 +370,10 @@ export const assembleNodeEffectHostCommandRouter = (
     terminalService,
   });
   const router = createEffectHostCommandRouter({
-    initialize: hostRouterLifecycle.initialize,
+    initialize: () =>
+      workspaceAdmissionService
+        .initialize()
+        .pipe(Effect.zipRight(hostRouterLifecycle.initialize())),
     dispose: hostRouterLifecycle.dispose,
     handlers: {
       ...createAgentSessionLiveCommandHandlers(agentSessionCommandService, localAttachmentService),

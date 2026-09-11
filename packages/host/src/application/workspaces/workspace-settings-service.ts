@@ -109,6 +109,14 @@ const createUnserializedWorkspaceSettingsService = (
           }),
         );
       }
+      if (repoConfig.removal) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Workspace removal is incomplete for ${workspaceId}. Retry removal from the workspace rail before using it.`,
+            field: "workspaceId",
+          }),
+        );
+      }
 
       config.activeWorkspace = workspaceId;
       touchRecentWorkspace(config, workspaceId);

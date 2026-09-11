@@ -34,6 +34,7 @@ describe("app-state-context-values", () => {
     const value = buildWorkspaceStateValue({
       isSwitchingWorkspace: false,
       closedWorkspaces: [],
+      incompleteRemovals: [],
       closeWorkspace: async () => {},
       removeWorkspace: async () => {},
       reopenWorkspace: async () => {},
