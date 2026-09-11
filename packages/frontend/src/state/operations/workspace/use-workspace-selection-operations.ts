@@ -1,4 +1,8 @@
-import type { WorkspaceRecord } from "@openducktor/contracts";
+import type {
+  WorkspaceCatalog,
+  WorkspacePathResolution,
+  WorkspaceRecord,
+} from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -7,7 +11,9 @@ import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types
 import {
   loadWorkspaceListFromQuery,
   markWorkspaceCachesChanged,
+  workspaceCatalogQueryOptions,
   workspaceListQueryOptions,
+  writeWorkspaceCatalogToQuery,
   writeWorkspaceListToQuery,
 } from "../../queries/workspace";
 import {
@@ -27,6 +33,8 @@ type UseWorkspaceSelectionOperationsArgs = {
 
 type UseWorkspaceSelectionOperationsResult = {
   workspaces: WorkspaceRecord[];
+  closedWorkspaces: WorkspaceRecord[];
+  onboardingCompleted: boolean;
   hasLoadedWorkspaceList: boolean;
   isLoadingWorkspaces: boolean;
   workspaceLoadError: Error | null;
@@ -34,6 +42,14 @@ type UseWorkspaceSelectionOperationsResult = {
   refreshWorkspaces: () => Promise<void>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
+  closeWorkspace: (input: { workspaceId: string; expectedRepoPath: string }) => Promise<void>;
+  removeWorkspace: (input: {
+    workspaceId: string;
+    expectedRepoPath: string;
+    removeTaskWorktrees: boolean;
+  }) => Promise<void>;
+  reopenWorkspace: (input: { workspaceId: string; expectedRepoPath: string }) => Promise<void>;
+  resolveWorkspacePath: (repoPath: string) => Promise<WorkspacePathResolution>;
   reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   applyWorkspaceRecords: (records: WorkspaceRecord[]) => void;
   applyWorkspaceRecord: (record: WorkspaceRecord) => void;
@@ -108,7 +124,10 @@ export function useWorkspaceSelectionOperations({
   const workspaceReorderVersionRef = useRef(0);
   const activeWorkspaceRef = useRef(activeWorkspace);
   const workspaceListQuery = useQuery(workspaceListQueryOptions(hostClient));
+  const workspaceCatalogQuery = useQuery(workspaceCatalogQueryOptions(hostClient));
   const workspaces = workspaceListQuery.data ?? [];
+  const closedWorkspaces = workspaceCatalogQuery.data?.closedWorkspaces ?? [];
+  const onboardingCompleted = workspaceCatalogQuery.data?.onboardingCompleted ?? false;
   const workspaceLoadError = workspaceListQuery.error
     ? new Error(errorMessage(workspaceListQuery.error), { cause: workspaceListQuery.error })
     : null;
@@ -221,6 +240,19 @@ export function useWorkspaceSelectionOperations({
       }
     },
     [clearStateForWorkspaceTransition, setActiveWorkspace, writeWorkspaceRecords],
+  );
+
+  const applyLifecycleCatalog = useCallback(
+    (catalog: WorkspaceCatalog): void => {
+      writeWorkspaceCatalogToQuery(queryClient, catalog);
+      writeWorkspaceRecords(catalog.openWorkspaces);
+      const selected = catalog.openWorkspaces.find((workspace) => workspace.isActive) ?? null;
+      if (selected?.repoPath !== activeWorkspaceRef.current?.repoPath) {
+        clearStateForWorkspaceTransition(selected);
+      }
+      setActiveWorkspace(selected);
+    },
+    [clearStateForWorkspaceTransition, queryClient, setActiveWorkspace, writeWorkspaceRecords],
   );
 
   useLayoutEffect(() => {
@@ -362,8 +394,80 @@ export function useWorkspaceSelectionOperations({
     ],
   );
 
+  const closeWorkspace = useCallback(
+    async (input: { workspaceId: string; expectedRepoPath: string }): Promise<void> => {
+      workspaceSwitchVersionRef.current += 1;
+      workspaceReorderVersionRef.current += 1;
+      setIsSwitchingWorkspace(true);
+      try {
+        const catalog = await hostClient.workspaceClose(input.workspaceId, input.expectedRepoPath);
+        applyLifecycleCatalog(catalog);
+        await refreshWorkspaceCachesAfterMutation();
+        toast.success("Workspace closed", {
+          description: "Reopen it from Open a Repository when you need it again.",
+        });
+      } finally {
+        setIsSwitchingWorkspace(false);
+      }
+    },
+    [applyLifecycleCatalog, hostClient, refreshWorkspaceCachesAfterMutation],
+  );
+
+  const removeWorkspace = useCallback(
+    async (input: {
+      workspaceId: string;
+      expectedRepoPath: string;
+      removeTaskWorktrees: boolean;
+    }): Promise<void> => {
+      workspaceSwitchVersionRef.current += 1;
+      workspaceReorderVersionRef.current += 1;
+      setIsSwitchingWorkspace(true);
+      try {
+        const result = await hostClient.workspaceRemove(input);
+        applyLifecycleCatalog(result.catalog);
+        await refreshWorkspaceCachesAfterMutation();
+        toast.success("Workspace removed", {
+          description:
+            result.removedWorktrees.length > 0
+              ? `Removed ${result.removedWorktrees.length} task worktree(s). The repository and its branches remain.`
+              : "The repository and its branches remain.",
+        });
+      } finally {
+        setIsSwitchingWorkspace(false);
+      }
+    },
+    [applyLifecycleCatalog, hostClient, refreshWorkspaceCachesAfterMutation],
+  );
+
+  const reopenWorkspace = useCallback(
+    async (input: { workspaceId: string; expectedRepoPath: string }): Promise<void> => {
+      workspaceSwitchVersionRef.current += 1;
+      workspaceReorderVersionRef.current += 1;
+      setIsSwitchingWorkspace(true);
+      try {
+        const catalog = await hostClient.workspaceReopen(input.workspaceId, input.expectedRepoPath);
+        applyLifecycleCatalog(catalog);
+        await refreshWorkspaceCachesAfterMutation();
+        toast.success("Workspace reopened", {
+          description: input.expectedRepoPath,
+        });
+      } finally {
+        setIsSwitchingWorkspace(false);
+      }
+    },
+    [applyLifecycleCatalog, hostClient, refreshWorkspaceCachesAfterMutation],
+  );
+
+  const resolveWorkspacePath = useCallback(
+    (repoPath: string): Promise<WorkspacePathResolution> =>
+      hostClient.workspaceResolvePath(repoPath),
+    [hostClient],
+  );
+
   return {
     workspaces,
+    closedWorkspaces,
+    onboardingCompleted,
     hasLoadedWorkspaceList: workspaceListQuery.data !== undefined,
     isLoadingWorkspaces: workspaceListQuery.isPending,
     workspaceLoadError,
@@ -371,6 +475,10 @@ export function useWorkspaceSelectionOperations({
     refreshWorkspaces,
     addWorkspace,
     selectWorkspace,
+    closeWorkspace,
+    removeWorkspace,
+    reopenWorkspace,
+    resolveWorkspacePath,
     reorderWorkspaces,
     applyWorkspaceRecords,
     applyWorkspaceRecord,

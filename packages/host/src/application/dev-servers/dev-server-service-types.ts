@@ -34,8 +34,15 @@ export type DevServerTaskInput = {
   taskId: string;
 };
 
+export type DevServerWorkspaceActivity = {
+  activeTaskIds: string[];
+};
+
 export type DevServerService = {
   getState(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
+  inspectWorkspaceActivity(input: {
+    repoPath: string;
+  }): Effect.Effect<DevServerWorkspaceActivity, DevServerServiceError>;
   restart(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
   start(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
   stop(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;

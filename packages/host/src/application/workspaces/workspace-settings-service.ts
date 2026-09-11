@@ -1,9 +1,7 @@
 import {
-  type AgentModelFavorite,
   agentModelFavoritesSchema,
   globalConfigSchema,
   globalGitConfigSchema,
-  isSameAgentModelFavorite,
   repoConfigSchema,
   settingsSnapshotSaveInputSchema,
   themeSchema,
@@ -12,12 +10,18 @@ import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { buildAgentStudioStateUpdate } from "./workspace-agent-studio-state";
+import { createWorkspaceLifecycleSettingsMethods } from "./workspace-lifecycle-settings";
+import {
+  areAgentModelFavoritesEqual,
+  withSerializedConfigWrites,
+} from "./workspace-settings-serializer";
 import {
   buildMergedRepoConfig,
   ensureRepoPathAvailable,
   findRepoConfigByRepoPath,
   loadGlobalConfig,
   normalizeSnapshotWorkspaces,
+  openWorkspaceRecordsInEffectiveOrder,
   requireConfiguredWorkspace,
   saveAndReturnWorkspaceRecord,
   toSettingsSnapshot,
@@ -29,47 +33,15 @@ import {
 
 export type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 
-const areAgentModelFavoritesEqual = (
-  left: readonly AgentModelFavorite[],
-  right: readonly AgentModelFavorite[],
-): boolean =>
-  left.length === right.length &&
-  left.every((favorite, index) => isSameAgentModelFavorite(favorite, right[index] ?? null));
-
-const withSerializedConfigWrites = (
-  service: WorkspaceSettingsService,
-): WorkspaceSettingsService => {
-  const semaphore = Effect.unsafeMakeSemaphore(1);
-  const serialize = semaphore.withPermits(1);
-
-  return {
-    ...service,
-    addWorkspace: (input) => serialize(service.addWorkspace(input)),
-    selectWorkspace: (workspaceId) => serialize(service.selectWorkspace(workspaceId)),
-    reorderWorkspaces: (workspaceOrder) => serialize(service.reorderWorkspaces(workspaceOrder)),
-    replaceAgentStudioState: (workspaceId, state) =>
-      serialize(service.replaceAgentStudioState(workspaceId, state)),
-    updateRepoConfig: (workspaceId, update) =>
-      serialize(service.updateRepoConfig(workspaceId, update)),
-    saveRepoSettings: (workspaceId, settings) =>
-      serialize(service.saveRepoSettings(workspaceId, settings)),
-    updateRepoHooks: (workspaceId, hooks) => serialize(service.updateRepoHooks(workspaceId, hooks)),
-    saveSettingsSnapshot: (snapshot) => serialize(service.saveSettingsSnapshot(snapshot)),
-    updateAgentModelFavorites: (favorites) =>
-      serialize(service.updateAgentModelFavorites(favorites)),
-    setTheme: (theme) => serialize(service.setTheme(theme)),
-    updateGlobalGitConfig: (git) => serialize(service.updateGlobalGitConfig(git)),
-  };
-};
-
 const createUnserializedWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
 ): WorkspaceSettingsService => ({
+  ...createWorkspaceLifecycleSettingsMethods(settingsConfig),
   listWorkspaces() {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
       return yield* Effect.try({
-        try: () => workspaceRecordsInEffectiveOrder(settingsConfig, config),
+        try: () => openWorkspaceRecordsInEffectiveOrder(settingsConfig, config),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -108,6 +80,7 @@ const createUnserializedWorkspaceSettingsService = (
       config.workspaces[repoConfig.workspaceId] = repoConfig;
       config.workspaceOrder = [...config.workspaceOrder, repoConfig.workspaceId];
       config.activeWorkspace = repoConfig.workspaceId;
+      config.onboardingCompleted = true;
       touchRecentWorkspace(config, repoConfig.workspaceId);
 
       return yield* saveAndReturnWorkspaceRecord(settingsConfig, config, repoConfig.workspaceId);
@@ -116,10 +89,19 @@ const createUnserializedWorkspaceSettingsService = (
   selectWorkspace(workspaceId) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
-      if (!config.workspaces[workspaceId]) {
+      const repoConfig = config.workspaces[workspaceId];
+      if (!repoConfig) {
         return yield* Effect.fail(
           new HostValidationError({
             message: `Workspace not found in config: ${workspaceId}`,
+            field: "workspaceId",
+          }),
+        );
+      }
+      if (repoConfig.closed) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Workspace is closed: ${workspaceId}. Reopen it before selecting it.`,
             field: "workspaceId",
           }),
         );
@@ -133,21 +115,25 @@ const createUnserializedWorkspaceSettingsService = (
   reorderWorkspaces(workspaceOrder) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
-      if (workspaceOrder.length !== Object.keys(config.workspaces).length) {
+      const openWorkspaceIds = openWorkspaceRecordsInEffectiveOrder(settingsConfig, config).map(
+        (record) => record.workspaceId,
+      );
+      if (workspaceOrder.length !== openWorkspaceIds.length) {
         return yield* Effect.fail(
           new HostValidationError({
-            message: `Workspace reorder must include exactly ${Object.keys(config.workspaces).length} configured workspaces.`,
+            message: `Workspace reorder must include exactly ${openWorkspaceIds.length} open workspaces.`,
             field: "workspaceOrder",
           }),
         );
       }
 
+      const openWorkspaceIdSet = new Set(openWorkspaceIds);
       const seenWorkspaceIds = new Set<string>();
       for (const workspaceId of workspaceOrder) {
-        if (!config.workspaces[workspaceId]) {
+        if (!openWorkspaceIdSet.has(workspaceId)) {
           return yield* Effect.fail(
             new HostValidationError({
-              message: `Workspace reorder included unknown workspace id: ${workspaceId}`,
+              message: `Workspace reorder included unknown or closed workspace id: ${workspaceId}`,
               field: "workspaceOrder",
             }),
           );
@@ -163,7 +149,17 @@ const createUnserializedWorkspaceSettingsService = (
         seenWorkspaceIds.add(workspaceId);
       }
 
-      config.workspaceOrder = workspaceOrder;
+      let openIndex = 0;
+      config.workspaceOrder = workspaceRecordsInEffectiveOrder(settingsConfig, config).map(
+        (record) => {
+          if (!openWorkspaceIdSet.has(record.workspaceId)) {
+            return record.workspaceId;
+          }
+          const nextWorkspaceId = workspaceOrder[openIndex];
+          openIndex += 1;
+          return nextWorkspaceId ?? record.workspaceId;
+        },
+      );
       const parsed = yield* Effect.try({
         try: () => globalConfigSchema.parse(config),
         catch: (cause) =>
@@ -174,7 +170,7 @@ const createUnserializedWorkspaceSettingsService = (
       });
       yield* settingsConfig.writeConfig(parsed);
       return yield* Effect.try({
-        try: () => workspaceRecordsInEffectiveOrder(settingsConfig, config),
+        try: () => openWorkspaceRecordsInEffectiveOrder(settingsConfig, config),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -382,7 +378,7 @@ const createUnserializedWorkspaceSettingsService = (
 
       yield* settingsConfig.writeConfig(nextConfig);
       return yield* Effect.try({
-        try: () => workspaceRecordsInEffectiveOrder(settingsConfig, nextConfig),
+        try: () => openWorkspaceRecordsInEffectiveOrder(settingsConfig, nextConfig),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),

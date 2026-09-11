@@ -5,6 +5,7 @@ import {
   type TerminalSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import type {
   TerminalGrid,
   TerminalPtyLaunchPlan,
@@ -38,6 +39,11 @@ import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler"
 import { createTerminalTitleTracker } from "./terminal-title-tracker";
 
 export type { TerminalSessionAttachInput } from "./terminal-session-output";
+
+export type TerminalWorkspaceActivity = {
+  activeTerminalIds: string[];
+  unknownTerminalIds: string[];
+};
 
 export const createTerminalSessionEngine = ({
   now,
@@ -86,6 +92,36 @@ export const createTerminalSessionEngine = ({
           terminalContextKey(session.summary.context) === terminalContextKey(context),
       ).length;
     },
+    inspectWorkspaceActivity: (
+      repoPath: string,
+    ): Effect.Effect<TerminalWorkspaceActivity, TerminalServiceError> =>
+      Effect.gen(function* () {
+        pruneExited();
+        const normalizedRepoPath = normalizePathForComparison(repoPath);
+        const activeTerminalIds: string[] = [];
+        const unknownTerminalIds: string[] = [];
+        for (const session of sessions.values()) {
+          const context = session.summary.context;
+          if (!isLiveTerminal(session) || !("taskId" in context)) {
+            continue;
+          }
+          if (normalizePathForComparison(context.repoPath) !== normalizedRepoPath) {
+            continue;
+          }
+          const handle = session.resources.handle;
+          if (!handle) {
+            unknownTerminalIds.push(session.summary.terminalId);
+            continue;
+          }
+          const hasChildProcesses = yield* handle
+            .hasChildProcesses()
+            .pipe(Effect.mapError((cause) => terminalOperationFailure(cause, "list")));
+          if (hasChildProcesses) {
+            activeTerminalIds.push(session.summary.terminalId);
+          }
+        }
+        return { activeTerminalIds, unknownTerminalIds };
+      }),
     start: (
       summary: TerminalSummary,
       plan: TerminalPtyLaunchPlan,

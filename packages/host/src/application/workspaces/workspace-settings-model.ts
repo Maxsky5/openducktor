@@ -13,6 +13,8 @@ import {
   type SettingsSnapshotSaveInput,
   settingsSnapshotSchema,
   type Theme,
+  type WorkspaceCatalog,
+  type WorkspacePathResolution,
   type WorkspaceRecord,
   type WorkspaceRepoConfigInput,
   type WorkspaceRepoHooksInput,
@@ -42,8 +44,24 @@ export type WorkspaceSettingsError =
 
 export type WorkspaceSettingsService = {
   listWorkspaces(): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
+  getWorkspaceCatalog(): Effect.Effect<WorkspaceCatalog, WorkspaceSettingsError>;
   addWorkspace(input: WorkspaceAddInput): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
   selectWorkspace(workspaceId: string): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
+  closeWorkspace(
+    workspaceId: string,
+    expectedRepoPath: string,
+  ): Effect.Effect<WorkspaceCatalog, WorkspaceSettingsError>;
+  reopenWorkspace(
+    workspaceId: string,
+    expectedRepoPath: string,
+  ): Effect.Effect<WorkspaceCatalog, WorkspaceSettingsError>;
+  resolveWorkspacePath(
+    repoPath: string,
+  ): Effect.Effect<WorkspacePathResolution, WorkspaceSettingsError>;
+  removeWorkspaceRegistration(
+    workspaceId: string,
+    expectedRepoPath: string,
+  ): Effect.Effect<WorkspaceCatalog, WorkspaceSettingsError>;
   reorderWorkspaces(
     workspaceOrder: string[],
   ): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
@@ -192,6 +210,44 @@ export const workspaceRecordsInEffectiveOrder = (
     }
     return workspaceRecordFromRepo(settingsConfig, config, workspaceId, repo);
   });
+const isClosedWorkspace = (config: LoadedGlobalConfig, workspaceId: string): boolean =>
+  config.workspaces[workspaceId]?.closed === true;
+export const openWorkspaceRecordsInEffectiveOrder = (
+  settingsConfig: SettingsConfigPort,
+  config: LoadedGlobalConfig,
+): WorkspaceRecord[] =>
+  workspaceRecordsInEffectiveOrder(settingsConfig, config).filter(
+    (record) => !isClosedWorkspace(config, record.workspaceId),
+  );
+export const buildWorkspaceCatalog = (
+  settingsConfig: SettingsConfigPort,
+  config: LoadedGlobalConfig,
+): WorkspaceCatalog => {
+  const records = workspaceRecordsInEffectiveOrder(settingsConfig, config);
+  return {
+    openWorkspaces: records.filter((record) => !isClosedWorkspace(config, record.workspaceId)),
+    closedWorkspaces: records.filter((record) => isClosedWorkspace(config, record.workspaceId)),
+    onboardingCompleted: config.onboardingCompleted,
+  };
+};
+export const firstOpenWorkspaceId = (
+  config: LoadedGlobalConfig,
+  excludedWorkspaceId?: string,
+): string | undefined =>
+  sortedWorkspaceIds(config).find(
+    (workspaceId) =>
+      workspaceId !== excludedWorkspaceId &&
+      config.workspaces[workspaceId] &&
+      !isClosedWorkspace(config, workspaceId),
+  );
+export const workspacePathResolution = (
+  settingsConfig: SettingsConfigPort,
+  config: LoadedGlobalConfig,
+  repoConfig: RepoConfig,
+): WorkspacePathResolution => ({
+  kind: repoConfig.closed ? "closed" : "open",
+  workspace: workspaceRecordFromRepo(settingsConfig, config, repoConfig.workspaceId, repoConfig),
+});
 export const toSettingsSnapshot = (config: LoadedGlobalConfig): SettingsSnapshot =>
   settingsSnapshotSchema.parse({
     theme: config.theme,
@@ -206,10 +262,12 @@ export const toSettingsSnapshot = (config: LoadedGlobalConfig): SettingsSnapshot
     notifications: config.notifications,
     agentRuntimes: config.agentRuntimes,
     agentModelFavorites: config.agentModelFavorites,
-    workspaces: config.workspaces,
+    workspaces: Object.fromEntries(
+      Object.entries(config.workspaces).filter(([, repoConfig]) => !repoConfig.closed),
+    ),
     globalPromptOverrides: config.globalPromptOverrides,
   });
-const validateGitRepoPath = (settingsConfig: SettingsConfigPort, repoPath: string) =>
+export const validateGitRepoPath = (settingsConfig: SettingsConfigPort, repoPath: string) =>
   Effect.gen(function* () {
     if (!(yield* settingsConfig.pathExists(repoPath))) {
       return yield* Effect.fail(
@@ -410,6 +468,7 @@ export const normalizeSnapshotWorkspaces = (
         ...repoConfig,
         workspaceId,
         agentStudioState: existingRepoConfig.agentStudioState,
+        closed: existingRepoConfig.closed,
       });
       const conflictingWorkspaceId = Object.entries(nextWorkspaces).find(
         ([, workspace]) => workspace.repoPath === normalizedRepoConfig.repoPath,

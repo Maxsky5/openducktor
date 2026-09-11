@@ -53,6 +53,7 @@ export const createDevServerServiceTestDouble = <Overrides extends Partial<DevSe
   overrides: Overrides,
 ): DevServerService => ({
   getState: unexpectedEffectCall("dev server service", "getState"),
+  inspectWorkspaceActivity: unexpectedEffectCall("dev server service", "inspectWorkspaceActivity"),
   restart: unexpectedEffectCall("dev server service", "restart"),
   start: unexpectedEffectCall("dev server service", "start"),
   stop: unexpectedEffectCall("dev server service", "stop"),
@@ -120,18 +121,26 @@ export const createWorkspaceSettingsServiceTestDouble = <
   overrides: Overrides,
 ): WorkspaceSettingsService => ({
   addWorkspace: unexpectedEffectCall("workspace settings service", "addWorkspace"),
+  closeWorkspace: unexpectedEffectCall("workspace settings service", "closeWorkspace"),
   getRepoConfig: unexpectedEffectCall("workspace settings service", "getRepoConfig"),
   getRepoConfigByRepoPath: unexpectedEffectCall(
     "workspace settings service",
     "getRepoConfigByRepoPath",
   ),
   getSettingsSnapshot: unexpectedEffectCall("workspace settings service", "getSettingsSnapshot"),
+  getWorkspaceCatalog: unexpectedEffectCall("workspace settings service", "getWorkspaceCatalog"),
   listWorkspaces: unexpectedEffectCall("workspace settings service", "listWorkspaces"),
+  removeWorkspaceRegistration: unexpectedEffectCall(
+    "workspace settings service",
+    "removeWorkspaceRegistration",
+  ),
+  reopenWorkspace: unexpectedEffectCall("workspace settings service", "reopenWorkspace"),
   reorderWorkspaces: unexpectedEffectCall("workspace settings service", "reorderWorkspaces"),
   replaceAgentStudioState: unexpectedEffectCall(
     "workspace settings service",
     "replaceAgentStudioState",
   ),
+  resolveWorkspacePath: unexpectedEffectCall("workspace settings service", "resolveWorkspacePath"),
   saveRepoSettings: unexpectedEffectCall("workspace settings service", "saveRepoSettings"),
   saveSettingsSnapshot: unexpectedEffectCall("workspace settings service", "saveSettingsSnapshot"),
   selectWorkspace: unexpectedEffectCall("workspace settings service", "selectWorkspace"),

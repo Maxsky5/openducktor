@@ -69,6 +69,11 @@ describe("WorkspaceRail", () => {
         throw new Error("saveAgentModelFavorites is not used in this test");
       },
       isSwitchingWorkspace: false,
+      closedWorkspaces: [],
+      closeWorkspace: async () => {},
+      removeWorkspace: async () => {},
+      reopenWorkspace: async () => {},
+      resolveWorkspacePath: async () => ({ kind: "new" }),
     };
     selectWorkspaceMock.mockClear();
     reorderWorkspacesMock.mockClear();

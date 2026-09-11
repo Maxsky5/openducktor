@@ -166,6 +166,11 @@ const createWorkspaceState = (
   overrides: Partial<WorkspaceStateContextValue> = {},
 ): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
+  closedWorkspaces: [],
+  closeWorkspace: async () => {},
+  removeWorkspace: async () => {},
+  reopenWorkspace: async () => {},
+  resolveWorkspacePath: async () => ({ kind: "new" }),
   isLoadingBranches: false,
   isSwitchingBranch: false,
   branchSyncDegraded: false,
@@ -306,6 +311,8 @@ function AppShellTestEnvironment({
                 retryWorkspaces: async () => {},
                 ...options.workspacePresence,
                 hasWorkspaces,
+                onboardingCompleted:
+                  options.workspacePresence?.onboardingCompleted ?? hasWorkspaces,
               }}
             >
               <WorkspaceStateContext.Provider
@@ -466,6 +473,7 @@ describe("AppShell", () => {
     renderAppShellForTest({
       workspacePresence: {
         hasWorkspaces: false,
+        onboardingCompleted: false,
         hasLoadedWorkspaceList: false,
         workspaceLoadError: new Error("Workspace list unavailable"),
       },
@@ -484,6 +492,7 @@ describe("AppShell", () => {
     renderAppShellForTest({
       workspacePresence: {
         hasWorkspaces: false,
+        onboardingCompleted: false,
         hasLoadedWorkspaceList: false,
         workspaceLoadError: new Error("Workspace list unavailable"),
         retryWorkspaces,
@@ -514,6 +523,7 @@ describe("AppShell", () => {
       initialEntry: "/onboarding",
       workspacePresence: {
         hasWorkspaces: false,
+        onboardingCompleted: false,
         workspaceLoadError: new Error("Workspace refresh unavailable"),
       },
     });

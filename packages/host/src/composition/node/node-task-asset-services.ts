@@ -1,4 +1,6 @@
 import { Effect } from "effect";
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import { createNodeTaskAssetFilePort } from "../../adapters/node/filesystem-task-asset-file-port";
 import { createSqliteTaskAssetRegistry } from "../../adapters/sqlite/sqlite-task-asset-registry";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
@@ -14,8 +16,9 @@ import {
   type TaskAssetStagingService,
 } from "../../application/task-assets/task-asset-staging-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
+import type { TaskAssetError } from "../../effect/task-asset-error";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
-import type { HostOperationErrorAggregate } from "../../effect/host-errors";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { HostShutdownStep } from "../host-lifecycle";
 
@@ -25,6 +28,9 @@ export type NodeTaskAssetServices = {
   taskAssetStagingService: TaskAssetStagingService;
   taskStoreConnectionShutdownStep: HostShutdownStep;
   taskStore: TaskStorePort;
+  removeWorkspaceData: (
+    workspaceId: string,
+  ) => Effect.Effect<void, TaskAssetError | HostOperationErrorAggregate>;
 };
 
 export const createNodeTaskAssetServices = ({
@@ -96,5 +102,20 @@ export const createNodeTaskAssetServices = ({
       persistence: configuredTaskStore ? null : registry,
       resolveWorkspaceIdForRepoPath,
     }),
+    removeWorkspaceData: (workspaceId) =>
+      Effect.gen(function* () {
+        yield* filePort.removeWorkspaceData({ workspaceId });
+        yield* contextManager.closeWorkspace(workspaceId);
+        const taskStoreRoot = path.join(resolveOpenDucktorBaseDir(processEnv), "task-stores");
+        yield* Effect.tryPromise({
+          try: () => rm(path.join(taskStoreRoot, workspaceId), { force: true, recursive: true }),
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "workspace.removeTaskStoreDirectory",
+              message: `Failed to remove the task store directory for workspace ${workspaceId}.`,
+              cause,
+            }),
+        });
+      }),
   };
 };

@@ -1,5 +1,5 @@
-import { CheckCircle2, Sparkles } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import { Sparkles } from "lucide-react";
+import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,20 +25,25 @@ export function OpenRepositoryModal({
   canClose,
   onOpenChange,
 }: OpenRepositoryModalProps): ReactElement {
-  const { activeWorkspace, workspaces, addWorkspace, selectWorkspace, isSwitchingWorkspace } =
-    useWorkspaceState();
+  const {
+    workspaces,
+    closedWorkspaces,
+    addWorkspace,
+    reopenWorkspace,
+    resolveWorkspacePath,
+    isSwitchingWorkspace,
+  } = useWorkspaceState();
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
-  const sortedRecent = useMemo(
-    () => workspaces.toSorted((left, right) => Number(right.isActive) - Number(left.isActive)),
-    [workspaces],
-  );
   const interactionLocked = isSwitchingWorkspace || isCreatingWorkspace;
 
-  const selectRecentWorkspace = async (workspaceId: string): Promise<void> => {
+  const reopenClosedWorkspace = async (
+    workspaceId: string,
+    expectedRepoPath: string,
+  ): Promise<void> => {
     setSelectionError(null);
     try {
-      if (activeWorkspace?.workspaceId !== workspaceId) await selectWorkspace(workspaceId);
+      await reopenWorkspace({ workspaceId, expectedRepoPath });
       onOpenChange(false);
     } catch (cause) {
       setSelectionError(errorMessage(cause));
@@ -76,35 +81,41 @@ export function OpenRepositoryModal({
           <WorkspaceCreationForm
             workspaces={workspaces}
             addWorkspace={addWorkspace}
+            resolveRepoPath={resolveWorkspacePath}
+            onReopenClosedWorkspace={async (workspace) => {
+              await reopenWorkspace({
+                workspaceId: workspace.workspaceId,
+                expectedRepoPath: workspace.repoPath,
+              });
+            }}
             disabled={interactionLocked}
             onSubmittingChange={setIsCreatingWorkspace}
             onSuccess={() => onOpenChange(false)}
           />
 
-          <section className="flex flex-col gap-2" aria-labelledby="recent-workspaces-title">
-            <h3 id="recent-workspaces-title" className="text-sm font-semibold text-foreground">
-              Recent Workspaces
+          <section className="flex flex-col gap-2" aria-labelledby="closed-workspaces-title">
+            <h3 id="closed-workspaces-title" className="text-sm font-semibold text-foreground">
+              Closed workspaces
             </h3>
-            {sortedRecent.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No repositories configured yet.</p>
+            {closedWorkspaces.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No closed workspaces</p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
-                {sortedRecent.map((workspace) => (
+                {closedWorkspaces.map((workspace) => (
                   <Button
                     key={workspace.workspaceId}
                     type="button"
                     variant="outline"
-                    className="h-auto justify-between gap-3 overflow-hidden px-3 py-2 text-left"
+                    className="h-auto flex-col items-start gap-1 overflow-hidden px-3 py-2 text-left"
                     disabled={interactionLocked}
-                    onClick={() => void selectRecentWorkspace(workspace.workspaceId)}
+                    onClick={() =>
+                      void reopenClosedWorkspace(workspace.workspaceId, workspace.repoPath)
+                    }
                   >
                     <span className="truncate">{workspace.workspaceName}</span>
-                    {workspace.isActive ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                        <CheckCircle2 />
-                        Active
-                      </span>
-                    ) : null}
+                    <span className="w-full truncate text-xs text-muted-foreground">
+                      {workspace.repoPath}
+                    </span>
                   </Button>
                 ))}
               </div>

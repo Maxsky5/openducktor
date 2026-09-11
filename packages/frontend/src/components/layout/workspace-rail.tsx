@@ -19,7 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { Plus } from "lucide-react";
+import { PanelLeftClose, Plus, Trash2 } from "lucide-react";
 import {
   type CSSProperties,
   type ReactElement,
@@ -32,8 +32,19 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
+import {
+  WorkspaceCloseDialog,
+  WorkspaceRemoveDialog,
+} from "../features/repository/workspace-lifecycle-dialogs";
 
 const DRAG_DISTANCE_PX = 6;
 
@@ -181,12 +192,16 @@ function SortableWorkspaceRailButton({
   shouldSuppressSelection,
   isSwitchingWorkspace,
   onSelectWorkspace,
+  onRequestCloseWorkspace,
+  onRequestRemoveWorkspace,
 }: {
   workspace: WorkspaceRecord;
   isActiveDrag: boolean;
   shouldSuppressSelection: boolean;
   isSwitchingWorkspace: boolean;
   onSelectWorkspace: (workspaceId: string) => void;
+  onRequestCloseWorkspace: (workspace: WorkspaceRecord) => void;
+  onRequestRemoveWorkspace: (workspace: WorkspaceRecord) => void;
 }): ReactElement {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workspace.workspaceId,
@@ -198,21 +213,40 @@ function SortableWorkspaceRailButton({
   });
 
   return (
-    <WorkspaceRailButtonShell
-      workspace={workspace}
-      shellRef={setNodeRef}
-      dragListeners={isSwitchingWorkspace ? undefined : listeners}
-      dragState={{
-        isSource: (isDragging || isActiveDrag) && !isSwitchingWorkspace,
-        shouldSuppressSelection,
-      }}
-      interactionState={{ isSwitchingWorkspace }}
-      onSelectWorkspace={onSelectWorkspace}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-      }}
-    />
+    <ContextMenu>
+      <ContextMenuTrigger
+        className="block"
+        onContextMenu={() => {
+          getShellBridge().claimContextMenu?.();
+        }}
+      >
+        <WorkspaceRailButtonShell
+          workspace={workspace}
+          shellRef={setNodeRef}
+          dragListeners={isSwitchingWorkspace ? undefined : listeners}
+          dragState={{
+            isSource: (isDragging || isActiveDrag) && !isSwitchingWorkspace,
+            shouldSuppressSelection,
+          }}
+          interactionState={{ isSwitchingWorkspace }}
+          onSelectWorkspace={onSelectWorkspace}
+          style={{
+            transform: CSS.Transform.toString(transform),
+            transition,
+          }}
+        />
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-52">
+        <ContextMenuItem onSelect={() => onRequestCloseWorkspace(workspace)}>
+          <PanelLeftClose />
+          Close workspace
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" onSelect={() => onRequestRemoveWorkspace(workspace)}>
+          <Trash2 />
+          Remove workspace
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -223,6 +257,10 @@ export function WorkspaceRail({
 }): ReactElement {
   const { workspaces, selectWorkspace, reorderWorkspaces, isSwitchingWorkspace } =
     useWorkspaceState();
+  const [lifecycleRequest, setLifecycleRequest] = useState<{
+    action: "close" | "remove";
+    workspace: WorkspaceRecord;
+  } | null>(null);
   const workspaceIds = useMemo(
     () => workspaces.map((workspace) => workspace.workspaceId),
     [workspaces],
@@ -286,71 +324,95 @@ export function WorkspaceRail({
   };
 
   return (
-    <aside className="workspace-rail flex h-full w-14 shrink-0 flex-col border-r border-border bg-background">
-      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
-        {workspaces.length > 0 ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            measuring={{
-              droppable: {
-                strategy: MeasuringStrategy.Always,
-              },
-            }}
-            modifiers={[restrictToVerticalAxis]}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <SortableContext items={workspaceIds} strategy={verticalListSortingStrategy}>
-              <div className="flex flex-col gap-2">
-                {workspaces.map((workspace) => (
-                  <SortableWorkspaceRailButton
-                    key={workspace.workspaceId}
-                    workspace={workspace}
-                    isActiveDrag={activeWorkspaceId === workspace.workspaceId}
-                    shouldSuppressSelection={
-                      suppressedSelectionWorkspaceIdRef.current === workspace.workspaceId
-                    }
-                    isSwitchingWorkspace={isSwitchingWorkspace}
-                    onSelectWorkspace={(workspaceId) => {
-                      void selectWorkspace(workspaceId);
-                    }}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-
-            <DragOverlay
-              dropAnimation={{
-                duration: 220,
-                easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+    <>
+      <aside className="workspace-rail flex h-full w-14 shrink-0 flex-col border-r border-border bg-background">
+        <div className="hide-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+          {workspaces.length > 0 ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              measuring={{
+                droppable: {
+                  strategy: MeasuringStrategy.Always,
+                },
               }}
-              zIndex={40}
+              modifiers={[restrictToVerticalAxis]}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragCancel={handleDragCancel}
             >
-              {activeDragWorkspace ? (
-                <WorkspaceRailButtonShell
-                  workspace={activeDragWorkspace}
-                  dragState={{ isOverlay: true }}
-                  interactionState={{ isSwitchingWorkspace }}
-                />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        ) : null}
+              <SortableContext items={workspaceIds} strategy={verticalListSortingStrategy}>
+                <div className="flex flex-col gap-2">
+                  {workspaces.map((workspace) => (
+                    <SortableWorkspaceRailButton
+                      key={workspace.workspaceId}
+                      workspace={workspace}
+                      isActiveDrag={activeWorkspaceId === workspace.workspaceId}
+                      shouldSuppressSelection={
+                        suppressedSelectionWorkspaceIdRef.current === workspace.workspaceId
+                      }
+                      isSwitchingWorkspace={isSwitchingWorkspace}
+                      onSelectWorkspace={(workspaceId) => {
+                        void selectWorkspace(workspaceId);
+                      }}
+                      onRequestCloseWorkspace={(workspace) =>
+                        setLifecycleRequest({ action: "close", workspace })
+                      }
+                      onRequestRemoveWorkspace={(workspace) =>
+                        setLifecycleRequest({ action: "remove", workspace })
+                      }
+                    />
+                  ))}
+                </div>
+              </SortableContext>
 
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-10"
-          aria-label="Open repository"
-          title="Open repository"
-          onClick={onOpenRepositoryModal}
-        >
-          <Plus className="size-5" />
-        </Button>
-      </div>
-    </aside>
+              <DragOverlay
+                dropAnimation={{
+                  duration: 220,
+                  easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+                }}
+                zIndex={40}
+              >
+                {activeDragWorkspace ? (
+                  <WorkspaceRailButtonShell
+                    workspace={activeDragWorkspace}
+                    dragState={{ isOverlay: true }}
+                    interactionState={{ isSwitchingWorkspace }}
+                  />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          ) : null}
+
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-10"
+            aria-label="Open repository"
+            title="Open repository"
+            onClick={onOpenRepositoryModal}
+          >
+            <Plus className="size-5" />
+          </Button>
+        </div>
+      </aside>
+      {lifecycleRequest?.action === "close" ? (
+        <WorkspaceCloseDialog
+          workspace={lifecycleRequest.workspace}
+          onOpenChange={(open) => {
+            if (!open) setLifecycleRequest(null);
+          }}
+        />
+      ) : null}
+      {lifecycleRequest?.action === "remove" ? (
+        <WorkspaceRemoveDialog
+          workspace={lifecycleRequest.workspace}
+          onOpenChange={(open) => {
+            if (!open) setLifecycleRequest(null);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

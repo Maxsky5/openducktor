@@ -476,6 +476,11 @@ const syncAgentSessionsStore = (): void => {
 
 const workspaceStateValue = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
+  closedWorkspaces: [],
+  closeWorkspace: async () => {},
+  removeWorkspace: async () => {},
+  reopenWorkspace: async () => {},
+  resolveWorkspacePath: async () => ({ kind: "new" }),
   isLoadingBranches: false,
   isSwitchingBranch: false,
   branchSyncDegraded: false,
