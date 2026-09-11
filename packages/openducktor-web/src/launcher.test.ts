@@ -458,21 +458,26 @@ describe("launcher internals", () => {
     ).toEqual(["/web-package", path.join("/web-package", "../frontend/src")]);
   });
 
-  test("allows workspace node_modules in Vite fs.allow so dependency assets load in workspace mode", () => {
-    expect(
-      viteServerOptions({
-        backendPort: 14327,
-        developmentInstanceId: "browser-test",
-        frontendPort: 1420,
-        packageRoot: "/repo/packages/openducktor-web",
-        workspaceMode: true,
-        workspaceRoot: "/repo",
-      }).fs?.allow,
-    ).toEqual([
-      "/repo/packages/openducktor-web",
-      path.join("/repo/packages/openducktor-web", "../frontend/src"),
-      "/repo/node_modules",
-    ]);
+  test("allows the workspace node_modules path in Vite fs.allow when dependencies are not installed", async () => {
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "odt-vite-allow-missing-"));
+    try {
+      expect(
+        viteServerOptions({
+          backendPort: 14327,
+          developmentInstanceId: "browser-test",
+          frontendPort: 1420,
+          packageRoot: "/repo/packages/openducktor-web",
+          workspaceMode: true,
+          workspaceRoot,
+        }).fs?.allow,
+      ).toEqual([
+        "/repo/packages/openducktor-web",
+        path.join("/repo/packages/openducktor-web", "../frontend/src"),
+        path.join(workspaceRoot, "node_modules"),
+      ]);
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   test("resolves a symlinked workspace node_modules to the real dependency store", async () => {
