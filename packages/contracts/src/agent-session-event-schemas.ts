@@ -136,7 +136,6 @@ export const agentComputerUseSchema = z
   .object({
     action: z.string().min(1),
     code: z.string().min(1).optional(),
-    failureSummary: z.string().min(1).optional(),
     images: z.array(agentToolImageSchema).optional(),
   })
   .strict();

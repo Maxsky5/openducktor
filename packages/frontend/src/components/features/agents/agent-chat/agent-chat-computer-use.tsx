@@ -1,6 +1,13 @@
 import type { AgentToolImage } from "@openducktor/contracts";
-import { ChevronDown, Monitor } from "lucide-react";
+import { ChevronDown, ImageIcon, MousePointerClick } from "lucide-react";
 import { type ReactElement, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { ToolMessageTiming } from "./agent-chat-message-card-tool-presenters";
@@ -19,22 +26,21 @@ export const ComputerUseToolMessage = ({
   timeLabel,
 }: ComputerUseToolMessageProps): ReactElement => {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const isFailed = isToolMessageFailure(meta);
   const action = meta.computerUse;
   const actionTitle = action?.action ?? DEFAULT_ACTION_TITLE;
-  const failureSummary = isFailed ? (action?.failureSummary ?? FAILED_SUMMARY) : "";
   const durationMs = getToolDuration(meta, messageTimestamp);
   const code = action?.code ?? "";
   const images = action?.images ?? [];
   const errorText = hasNonEmptyText(meta.error) ? meta.error : "";
   const outputText = hasNonEmptyText(meta.output) ? meta.output : "";
-  const hasDetails =
-    code.length > 0 || errorText.length > 0 || outputText.length > 0 || images.length > 0;
+  const hasDetails = code.length > 0 || errorText.length > 0 || outputText.length > 0;
 
   const summary = (
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
-        <Monitor
+        <MousePointerClick
           aria-hidden="true"
           className={cn(
             "size-4 shrink-0",
@@ -52,6 +58,20 @@ export const ComputerUseToolMessage = ({
         >
           {actionTitle}
         </p>
+        {images.length > 0 ? (
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setPreviewOpen(true);
+            }}
+          >
+            <ImageIcon aria-hidden="true" className="size-3" />
+            {images.length > 1 ? `Screenshots (${images.length})` : "Screenshot"}
+          </button>
+        ) : null}
         <ToolMessageTiming
           showSpinner={isToolMessageActive(meta)}
           durationMs={durationMs}
@@ -68,11 +88,6 @@ export const ComputerUseToolMessage = ({
           />
         ) : null}
       </div>
-      {failureSummary.length > 0 ? (
-        <p className="mt-1 line-clamp-2 pl-6 text-xs text-destructive-surface-foreground">
-          {failureSummary}
-        </p>
-      ) : null}
     </div>
   );
 
@@ -106,30 +121,24 @@ export const ComputerUseToolMessage = ({
               {outputText.length > 0 ? (
                 <ComputerUseSection label="Output">{outputText}</ComputerUseSection>
               ) : null}
-              {images.length > 0 ? (
-                <div className="space-y-2">
-                  {images.map((image, index) => (
-                    <ComputerUseScreenshot
-                      key={`${index}:${image.mimeType}`}
-                      image={image}
-                      index={index}
-                    />
-                  ))}
-                </div>
-              ) : null}
             </div>
           ) : null}
         </details>
       ) : (
         summary
       )}
+      {images.length > 0 ? (
+        <ComputerUseScreenshotDialog
+          images={images}
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+        />
+      ) : null}
     </div>
   );
 };
 
 const DEFAULT_ACTION_TITLE = "Computer action";
-
-const FAILED_SUMMARY = "Computer action failed.";
 
 const SECTION_APPEARANCE = {
   default: {
@@ -163,6 +172,34 @@ const ComputerUseSection = ({
     </div>
   );
 };
+
+const ComputerUseScreenshotDialog = ({
+  images,
+  open,
+  onOpenChange,
+}: {
+  images: AgentToolImage[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}): ReactElement => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="my-0 max-w-[min(96vw,72rem)] gap-4 border-border bg-background">
+      <DialogHeader>
+        <DialogTitle>
+          {images.length > 1 ? "Computer Use screenshots" : "Computer Use screenshot"}
+        </DialogTitle>
+        <DialogDescription>
+          Preview of the screenshots from this computer use call.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="max-h-[75vh] space-y-2 overflow-y-auto rounded-md border border-border bg-muted/40 p-2">
+        {images.map((image, index) => (
+          <ComputerUseScreenshot key={`${index}:${image.mimeType}`} image={image} index={index} />
+        ))}
+      </div>
+    </DialogContent>
+  </Dialog>
+);
 
 const ComputerUseScreenshot = ({
   image,

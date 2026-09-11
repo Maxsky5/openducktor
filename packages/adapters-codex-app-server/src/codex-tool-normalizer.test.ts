@@ -301,7 +301,6 @@ describe("Codex tool normalization", () => {
         computerUse: {
           action: "Computer action",
           code: "throw new Error('boom')",
-          failureSummary: "boom",
         },
       }),
     );
@@ -339,117 +338,10 @@ describe("Codex tool normalization", () => {
         computerUse: {
           action: "Computer action",
           code: "throw new Error('boom')",
-          failureSummary: "boom",
         },
       }),
     );
     expect(part).not.toHaveProperty("output");
-  });
-
-  test("recovers the failure line when the preview keys serialize in another order", () => {
-    const preview = `{"content":[{"text":"Script error: boom\\n\\nManual…510000 chars truncated…tail","type":"text"}],"structuredContent":null,"isError":true}`;
-    const part = toStreamPart(
-      {
-        type: "mcpToolCall",
-        id: "cua-6",
-        server: "cua_repl",
-        tool: "js",
-        status: "failed",
-        arguments: { code: "throw new Error('boom')" },
-        result: {
-          content: [{ type: "text", text: preview }],
-          structuredContent: null,
-          _meta: null,
-        },
-      },
-      "message-live",
-    )[0];
-
-    expect(part).toEqual(
-      expect.objectContaining({
-        computerUse: expect.objectContaining({ failureSummary: "boom" }),
-      }),
-    );
-  });
-
-  test("states the truncation when the preview has no readable failure line", () => {
-    const preview = `{"content":[{"text":"\\\\…500000 chars truncated…tail","type":"text"}],"structuredContent":null,"isError":true}`;
-    const part = toStreamPart(
-      {
-        type: "mcpToolCall",
-        id: "cua-7",
-        server: "cua_repl",
-        tool: "js",
-        status: "failed",
-        arguments: { code: "throw new Error('boom')" },
-        result: {
-          content: [{ type: "text", text: preview }],
-          structuredContent: null,
-          _meta: null,
-        },
-      },
-      "message-live",
-    )[0];
-
-    expect(part).toEqual(
-      expect.objectContaining({
-        computerUse: expect.objectContaining({
-          failureSummary: "Computer action failed. Codex truncated its diagnostics.",
-        }),
-      }),
-    );
-  });
-
-  test("recovers the failure line when the preview omits the error flag", () => {
-    const preview = `{"content":[{"type":"text","text":"Script error: boom\\n\\nManual…510000 chars truncated…tail"}],"structuredContent":null}`;
-    const part = toStreamPart(
-      {
-        type: "mcpToolCall",
-        id: "cua-9",
-        server: "cua_repl",
-        tool: "js",
-        status: "failed",
-        arguments: { code: "throw new Error('boom')" },
-        result: {
-          content: [{ type: "text", text: preview }],
-          structuredContent: null,
-          _meta: null,
-        },
-      },
-      "message-live",
-    )[0];
-
-    expect(part).toEqual(
-      expect.objectContaining({
-        computerUse: expect.objectContaining({ failureSummary: "boom" }),
-      }),
-    );
-  });
-
-  test("bounds the failure summary line", () => {
-    const longLine = "boom ".repeat(100).trim();
-    const part = toStreamPart(
-      {
-        type: "mcpToolCall",
-        id: "cua-10",
-        server: "cua_repl",
-        tool: "js",
-        status: "failed",
-        arguments: { code: "1 + 1" },
-        result: {
-          content: [{ type: "text", text: longLine }],
-          structuredContent: null,
-          _meta: null,
-        },
-      },
-      "message-live",
-    )[0];
-
-    if (!part || part.kind !== "tool") {
-      throw new Error("Expected a tool part.");
-    }
-    expect(part.computerUse?.failureSummary).toHaveLength(200);
-    expect(part.computerUse?.failureSummary?.endsWith("…")).toBe(true);
   });
 
   test("reads the top-level text on non-text cua_repl blocks", () => {
@@ -483,7 +375,6 @@ describe("Codex tool normalization", () => {
         computerUse: {
           action: "Computer action",
           code: "await nodeRepl.emitImage(await tab.screenshot())",
-          failureSummary: "Script completed",
           images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
         },
       }),
@@ -491,7 +382,7 @@ describe("Codex tool normalization", () => {
     expect(part).not.toHaveProperty("output");
   });
 
-  test("uses the MCP error message as the failure summary", () => {
+  test("uses the MCP error message as the error", () => {
     const part = toStreamPart(
       {
         type: "mcpToolCall",
@@ -509,9 +400,7 @@ describe("Codex tool normalization", () => {
     expect(part).toEqual(
       expect.objectContaining({
         error: "MCP error -32000: connection closed",
-        computerUse: expect.objectContaining({
-          failureSummary: "MCP error -32000: connection closed",
-        }),
+        computerUse: expect.objectContaining({ action: "Computer action" }),
       }),
     );
   });

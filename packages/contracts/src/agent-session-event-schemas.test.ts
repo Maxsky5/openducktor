@@ -103,7 +103,6 @@ describe("agent session transcript event contract", () => {
         computerUse: {
           action: "Click the button",
           code: "await tab.click()",
-          failureSummary: "boom",
           images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
         },
       },

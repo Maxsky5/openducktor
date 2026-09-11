@@ -49,6 +49,7 @@ describe("ComputerUseToolMessage", () => {
       expect(view.getByText("Inspect the task plan editor")).toBeDefined();
       expect(view.getByText("1.5s")).toBeDefined();
       expect(view.getByText("12:00")).toBeDefined();
+      expect(view.container.querySelector(".lucide-mouse-pointer-click")).not.toBeNull();
       expect(view.container.querySelector("pre")).toBeNull();
       expect(view.container.querySelector("img")).toBeNull();
     } finally {
@@ -56,7 +57,7 @@ describe("ComputerUseToolMessage", () => {
     }
   });
 
-  test("shows the failure summary and keeps the full error in the details", () => {
+  test("keeps the failure out of the collapsed summary and shows the full error in the details", () => {
     const manual = "Script error: boom\n\nComputer Use API manual line 1\nline 2";
     const view = render(
       <ComputerUseToolMessage
@@ -64,15 +65,18 @@ describe("ComputerUseToolMessage", () => {
         meta={toolMeta({
           status: "error",
           error: manual,
-          computerUse: { action: "Click the button", failureSummary: "boom" },
+          computerUse: { action: "Click the button" },
         })}
       />,
     );
     try {
-      expect(view.getByText("boom")).toBeDefined();
-      expect(view.queryByText(manual)).toBeNull();
+      const collapsedText = view.container.textContent ?? "";
+      expect(collapsedText).toContain("Click the button");
+      expect(collapsedText).not.toContain("boom");
+      expect(collapsedText).not.toContain("Computer Use API manual");
       const details = view.container.querySelector("details");
       if (!details) throw new Error("Expected computer use details.");
+      expect(details.open).toBe(false);
       toggle(details, true);
       expect(view.getByText("Error")).toBeDefined();
       const errorBlock = view.getByText("Error").closest("div");
@@ -90,10 +94,7 @@ describe("ComputerUseToolMessage", () => {
         meta={toolMeta({
           status: "error",
           error: manual,
-          computerUse: {
-            action: "Click the button",
-            failureSummary: "TypeError: element not found",
-          },
+          computerUse: { action: "Click the button" },
         })}
       />,
     );
@@ -102,7 +103,6 @@ describe("ComputerUseToolMessage", () => {
       if (!details) throw new Error("Expected computer use details.");
       expect(details.open).toBe(false);
       const collapsedText = view.container.textContent ?? "";
-      expect(collapsedText).toContain("TypeError: element not found");
       expect(collapsedText).not.toContain("Computer Use API manual");
       expect(collapsedText.length).toBeLessThan(1_000);
       toggle(details, true);
@@ -113,15 +113,14 @@ describe("ComputerUseToolMessage", () => {
     }
   });
 
-  test("shows a generic failure message without a failure summary", () => {
+  test("marks a failed call with the destructive surface and no inline error", () => {
     const view = render(
-      <ComputerUseToolMessage
-        {...baseProps}
-        meta={toolMeta({ status: "error", computerUse: { action: "Click the button" } })}
-      />,
+      <ComputerUseToolMessage {...baseProps} meta={toolMeta({ status: "error", error: "boom" })} />,
     );
     try {
-      expect(view.getByText("Computer action failed.")).toBeDefined();
+      const card = view.container.firstElementChild;
+      expect(card?.className).toContain("border-destructive-border");
+      expect(view.container.textContent).not.toContain("boom");
     } finally {
       view.unmount();
     }
@@ -206,7 +205,7 @@ describe("ComputerUseToolMessage", () => {
     }
   });
 
-  test("renders screenshots in order and replaces a failed image", () => {
+  test("shows a screenshot chip and opens the preview in order", async () => {
     const view = render(
       <ComputerUseToolMessage
         {...baseProps}
@@ -223,18 +222,38 @@ describe("ComputerUseToolMessage", () => {
     );
     try {
       expect(view.container.querySelector("img")).toBeNull();
-      const details = view.container.querySelector("details");
-      if (!details) throw new Error("Expected computer use details.");
-      toggle(details, true);
-      const images = view.container.querySelectorAll("img");
+      expect(view.queryByRole("dialog")).toBeNull();
+      fireEvent.click(view.getByRole("button", { name: "Screenshots (2)" }));
+      const dialog = await view.findByRole("dialog", { name: "Computer Use screenshots" });
+      const images = dialog.querySelectorAll("img");
       expect(images).toHaveLength(2);
       expect(images[0]?.getAttribute("src")).toBe("data:image/png;base64,AAAA");
       expect(images[1]?.getAttribute("src")).toBe("data:image/jpeg;base64,BBBB");
-      const firstImage = images[0];
-      if (!firstImage) throw new Error("Expected the first screenshot.");
-      fireEvent.error(firstImage);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("shows a single screenshot chip and replaces an unavailable image", async () => {
+    const view = render(
+      <ComputerUseToolMessage
+        {...baseProps}
+        meta={toolMeta({
+          computerUse: {
+            action: "Capture the page",
+            images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
+          },
+        })}
+      />,
+    );
+    try {
+      fireEvent.click(view.getByRole("button", { name: "Screenshot" }));
+      const dialog = await view.findByRole("dialog", { name: "Computer Use screenshot" });
+      const image = dialog.querySelector("img");
+      if (!image) throw new Error("Expected the screenshot.");
+      fireEvent.error(image);
       expect(view.getByText("Screenshot 1 is unavailable.")).toBeDefined();
-      expect(view.container.querySelectorAll("img")).toHaveLength(1);
+      expect(view.queryByRole("img")).toBeNull();
     } finally {
       view.unmount();
     }
