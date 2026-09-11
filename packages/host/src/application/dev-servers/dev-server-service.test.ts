@@ -421,7 +421,7 @@ describe("createDevServerService", () => {
       ],
     });
   });
-  test("keeps the failed run's command when repository settings change", async () => {
+  test("keeps the started command after a failure when repository settings change", async () => {
     const { processPort, starts } = createProcessPort();
     const config = repoConfig();
     const service = createDevServerService({

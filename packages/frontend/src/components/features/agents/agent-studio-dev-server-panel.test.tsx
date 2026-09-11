@@ -353,7 +353,7 @@ describe("AgentStudioDevServerPanel", () => {
   });
 
   test("prefers the started command over the configured command", () => {
-    const driftedScript: DevServerScriptState = {
+    const reconfiguredScript: DevServerScriptState = {
       ...runningScript,
       command: "bun run dev:next",
       startedCommand: "bun run dev",
@@ -363,10 +363,10 @@ describe("AgentStudioDevServerPanel", () => {
         model: baseModel({
           mode: "active",
           isExpanded: true,
-          scripts: [driftedScript],
-          selectedScriptId: driftedScript.scriptId,
-          selectedScript: driftedScript,
-          selectedScriptTerminalBuffer: buildTerminalBuffer(driftedScript),
+          scripts: [reconfiguredScript],
+          selectedScriptId: reconfiguredScript.scriptId,
+          selectedScript: reconfiguredScript,
+          selectedScriptTerminalBuffer: buildTerminalBuffer(reconfiguredScript),
         }),
       }),
     );
