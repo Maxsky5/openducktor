@@ -16,8 +16,14 @@ import { createAgentSessionCommandService as createControlService } from "./agen
 type ControlServiceInput = Parameters<typeof createControlService>[0];
 type TestControlServiceInput = Omit<
   ControlServiceInput,
-  "taskSessionStart" | "tasks" | "repositoryPolicy" | "persistTaskModel" | "runtime"
+  | "assertWorkspaceAdmitsWork"
+  | "taskSessionStart"
+  | "tasks"
+  | "repositoryPolicy"
+  | "persistTaskModel"
+  | "runtime"
 > & {
+  assertWorkspaceAdmitsWork?: ControlServiceInput["assertWorkspaceAdmitsWork"];
   runtime: Omit<
     ControlServiceInput["runtime"],
     "loadContext" | "loadSessionDiff" | "replyApproval" | "replyQuestion"
@@ -34,6 +40,7 @@ const createAgentSessionCommandService = (input: TestControlServiceInput) =>
       complete: () => Effect.dieMessage("unexpected task session completion"),
     },
     ...input,
+    assertWorkspaceAdmitsWork: input.assertWorkspaceAdmitsWork ?? (() => Effect.void),
     runtime: {
       loadContext: () => Effect.dieMessage("unexpected context read"),
       loadSessionDiff: () => Effect.dieMessage("unexpected diff read"),
@@ -217,7 +224,7 @@ describe("createAgentSessionCommandService", () => {
     const prepared: string[] = [];
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
-      assertProcessStart: () =>
+      assertWorkspaceAdmitsWork: () =>
         Effect.fail(
           new HostValidationError({
             message: "Workspace is closed: /repo. Reopen it before using it.",

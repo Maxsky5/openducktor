@@ -138,11 +138,11 @@ describe("workspace admission service", () => {
       catalog({ closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")] }),
     );
 
-    await expect(Effect.runPromise(admission.assertProcessStart("/repos/closed"))).rejects.toThrow(
-      "Workspace is closed: closed-ws",
-    );
     await expect(
-      Effect.runPromise(admission.assertProcessStart("/repos/open")),
+      Effect.runPromise(admission.assertWorkspaceAdmitsWork("/repos/closed")),
+    ).rejects.toThrow("Workspace is closed: closed-ws");
+    await expect(
+      Effect.runPromise(admission.assertWorkspaceAdmitsWork("/repos/open")),
     ).resolves.toBeUndefined();
   });
 
@@ -189,9 +189,9 @@ describe("workspace admission service", () => {
       }),
     );
 
-    await expect(Effect.runPromise(admission.assertProcessStart("/repos/ws"))).rejects.toThrow(
-      "already in progress for ws",
-    );
+    await expect(
+      Effect.runPromise(admission.assertWorkspaceAdmitsWork("/repos/ws")),
+    ).rejects.toThrow("already in progress for ws");
     await expect(
       Effect.runPromise(
         admission.assertTaskStoreAccess({

@@ -33,7 +33,7 @@ export const createNodeTaskSessionServices = ({
   const agentSessionCommandService = {
     ...agentSessionLiveStateService,
     ...createAgentSessionCommandService({
-      assertProcessStart: taskServiceInput.assertProcessStart,
+      assertWorkspaceAdmitsWork: taskServiceInput.assertWorkspaceAdmitsWork,
       canonicalizeRepoPath,
       repositoryPolicy,
       runtime: agentSessionLiveStateService,

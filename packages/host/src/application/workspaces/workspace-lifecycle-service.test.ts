@@ -21,9 +21,9 @@ import {
   createWorktreeFilePortTestDouble,
 } from "../../test-support/service-test-doubles";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
+import type { WorkspaceActivityPort } from "./workspace-activity-inspector";
 import {
   createWorkspaceLifecycleService,
-  type WorkspaceActivityPort,
   type WorkspaceStoragePort,
 } from "./workspace-lifecycle-service";
 
@@ -466,6 +466,25 @@ describe("workspace lifecycle service", () => {
     expect(removeWorkspaceTaskAssets).toHaveBeenCalled();
   });
 
+  test("matches inventory paths after canonicalization", async () => {
+    const service = createService({
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      canonicalizePath: (path) => Effect.succeed(path.replace("/managed/", "/real/managed/")),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/task-1", worktreePath: "/managed/ws/task-1" }]),
+    });
+
+    const { result } = await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    expect(result.removedWorktrees).toEqual(["/real/managed/ws/task-1"]);
+  });
+
   test("removeWorkspace fails before cleanup when a candidate is not a registered worktree", async () => {
     const removeWorkspaceTaskAssets = mock(() => Effect.void);
     const service = createService({
@@ -485,6 +504,38 @@ describe("workspace lifecycle service", () => {
       ),
     ).rejects.toThrow("Cannot establish that");
     expect(removeWorkspaceTaskAssets).not.toHaveBeenCalled();
+  });
+
+  test("removeWorkspace journals an inventory failure", async () => {
+    const progress: Array<{ phase: string; lastFailure: string | null }> = [];
+    const service = createService({
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      listWorktrees: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "test.listWorktrees",
+            message: "git worktree list failed",
+          }),
+        ),
+      recordWorkspaceRemovalProgress: (input) =>
+        Effect.sync(() => {
+          progress.push({ phase: input.phase, lastFailure: input.lastFailure });
+        }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: true,
+        }),
+      ),
+    ).rejects.toThrow("git worktree list failed");
+    expect(progress.at(-1)).toEqual({
+      phase: "worktrees",
+      lastFailure: "git worktree list failed",
+    });
   });
 
   test("removeWorkspace fails on an unclassifiable registered worktree under the managed base", async () => {

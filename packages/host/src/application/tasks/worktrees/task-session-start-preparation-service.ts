@@ -54,7 +54,7 @@ export type TaskSessionStartPreparationService = ReturnType<
 >;
 
 export type TaskSessionStartPreparationDependencies = {
-  assertProcessStart?:
+  assertWorkspaceAdmitsWork?:
     | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
     | undefined;
   gitPort?: GitPort;
@@ -69,7 +69,7 @@ export type TaskSessionStartPreparationDependencies = {
 };
 
 export const createTaskSessionStartPreparationService = ({
-  assertProcessStart,
+  assertWorkspaceAdmitsWork,
   gitPort,
   taskStore,
   settingsConfig,
@@ -86,8 +86,8 @@ export const createTaskSessionStartPreparationService = ({
     ): Effect.Effect<PreparedTaskSessionStart, TaskServiceError> {
       return Effect.gen(function* () {
         const { canonicalRepoPath: canonicalInputRepoPath, runtimeKind, taskId, role } = input;
-        if (assertProcessStart) {
-          yield* assertProcessStart(canonicalInputRepoPath);
+        if (assertWorkspaceAdmitsWork) {
+          yield* assertWorkspaceAdmitsWork(canonicalInputRepoPath);
         }
         const dependencies = yield* requireDependencies(() =>
           requireBuildStartDependencies(

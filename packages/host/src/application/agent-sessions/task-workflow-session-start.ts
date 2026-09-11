@@ -25,16 +25,16 @@ import { storeWorkflowSession, toControlSessionRef } from "./task-workflow-sessi
 
 export const createStartTaskWorkflowSession =
   ({
-    assertProcessStart,
+    assertWorkspaceAdmitsWork,
     canonicalizeRepoPath,
     runtime,
     tasks,
     taskLifecycle,
     taskSessionStart,
   }: {
-    assertProcessStart?:
-      | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
-      | undefined;
+    assertWorkspaceAdmitsWork: (
+      repoPath: string,
+    ) => Effect.Effect<void, HostValidationErrorAggregate>;
     canonicalizeRepoPath: CanonicalizeRepoPath;
     runtime: RuntimeControl;
     tasks: TaskSessions;
@@ -48,8 +48,8 @@ export const createStartTaskWorkflowSession =
       Effect.gen(function* () {
         const scope = input.sessionScope;
         const repoPath = yield* canonicalizeRepoPath(input.repoPath);
-        if (assertProcessStart) {
-          yield* assertProcessStart(repoPath);
+        if (assertWorkspaceAdmitsWork) {
+          yield* assertWorkspaceAdmitsWork(repoPath);
         }
         yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "start session");
         let prepared: PreparedTaskSessionStart | null = null;
