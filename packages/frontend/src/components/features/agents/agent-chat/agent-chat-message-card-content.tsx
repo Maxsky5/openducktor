@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentChatToolCallPresentation } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
+import { ComputerUseToolMessage } from "./agent-chat-computer-use";
 import { AgentChatFileReferenceChip } from "./agent-chat-file-reference-chip";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import {
@@ -708,6 +709,15 @@ export const MessageBody = ({
   }
 
   if (meta?.kind === "tool") {
+    if (meta.toolType === "computer_use") {
+      return (
+        <ComputerUseToolMessage
+          meta={meta}
+          messageTimestamp={message.timestamp}
+          timeLabel={timeLabel}
+        />
+      );
+    }
     if (!toolCallPresentation) {
       throw new Error(`Tool Call presentation is missing for ${meta.tool}.`);
     }

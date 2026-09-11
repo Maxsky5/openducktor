@@ -87,6 +87,32 @@ describe("agent session transcript event contract", () => {
     }
   });
 
+  test("accepts computer use tool parts with result images", () => {
+    const event = {
+      ...base,
+      type: "assistant_part",
+      part: {
+        kind: "tool",
+        messageId: "m1",
+        partId: "p1",
+        callId: "c1",
+        tool: "cua_repl.js",
+        toolType: "computer_use",
+        status: "completed",
+        input: { code: "await tab.click()", title: "Click" },
+        images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
+      },
+    } as const;
+
+    expect(agentRuntimeEventSchema.parse(event)).toEqual(event);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...event,
+        part: { ...event.part, images: [{ mimeType: "", dataBase64: "AAAA" }] },
+      }).success,
+    ).toBe(false);
+  });
+
   test("keeps retained projection state changes out of transcript envelopes", () => {
     const liveProjectionEvents = [
       { ...base, type: "session_context_updated", totalTokens: 12 },

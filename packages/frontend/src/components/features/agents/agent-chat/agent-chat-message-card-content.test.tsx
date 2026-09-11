@@ -54,6 +54,45 @@ const createReasoningMessageBody = (content: string) =>
   });
 
 describe("MessageBody streamed markdown", () => {
+  test("renders the computer use card without a generic tool presentation", () => {
+    const message: AgentChatMessage = {
+      id: "cua-tool",
+      role: "tool",
+      content: "Tool cua_repl.js completed",
+      timestamp: "2026-09-11T12:00:00.000Z",
+      meta: {
+        kind: "tool",
+        partId: "cua-part",
+        callId: "cua-call",
+        tool: "cua_repl.js",
+        toolType: "computer_use",
+        status: "completed",
+        input: { code: "await tab.click()", title: "Inspect the editor" },
+        output: "clicked",
+      },
+    };
+    const rendered = render(
+      createElement(MessageBody, {
+        message,
+        modelCatalog: null,
+        parentSession: null,
+        assistantAccentColor: undefined,
+        isStreamingAssistantMessage: false,
+        timeLabel: "",
+        systemPromptBody: "",
+        sessionWorkingDirectory: null,
+        toolCallPresentation: null,
+      }),
+    );
+
+    try {
+      expect(rendered.getByText("Computer Use")).toBeDefined();
+      expect(rendered.getByText("Inspect the editor")).toBeDefined();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("renders the current streamed markdown without delaying whitespace or syntax", () => {
     const rendered = render(createMessageBody("Streamed"));
 

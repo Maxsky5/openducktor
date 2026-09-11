@@ -134,6 +134,189 @@ describe("Codex tool normalization", () => {
     expect(part).not.toHaveProperty("output");
   });
 
+  test("maps cua_repl MCP calls to the computer use tool type", () => {
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-1",
+        server: "cua_repl",
+        tool: "js",
+        status: "completed",
+        arguments: {
+          code: "await nodeRepl.emitImage(await tab.screenshot())",
+          title: "Inspect the task plan editor",
+        },
+        result: {
+          content: [{ type: "text", text: "Script completed" }],
+          structuredContent: null,
+          _meta: null,
+        },
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "cua_repl.js",
+        toolType: "computer_use",
+        status: "completed",
+        input: {
+          code: "await nodeRepl.emitImage(await tab.screenshot())",
+          title: "Inspect the task plan editor",
+        },
+        output: "Script completed",
+      }),
+    );
+  });
+
+  test("maps cua_repl js_reset calls to the computer use tool type", () => {
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-reset-1",
+        server: "cua_repl",
+        tool: "js_reset",
+        status: "completed",
+        arguments: {},
+        result: {
+          content: [{ type: "text", text: "setup complete" }],
+          structuredContent: null,
+          _meta: null,
+        },
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        tool: "cua_repl.js_reset",
+        toolType: "computer_use",
+        output: "setup complete",
+      }),
+    );
+  });
+
+  test("extracts cua_repl result images in content order", () => {
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-2",
+        server: "cua_repl",
+        tool: "js",
+        status: "completed",
+        arguments: { code: "await nodeRepl.emitImage(await tab.screenshot())" },
+        result: {
+          content: [
+            { type: "text", text: "Script completed" },
+            { type: "image", mimeType: "image/png", data: "AAAA" },
+            { type: "image", mimeType: "image/jpeg", data: "data:image/jpeg;base64,BBBB" },
+            { type: "image", mimeType: "", data: "CCCC" },
+            { type: "image", mimeType: "image/png", data: "" },
+            { type: "text", text: "Second line" },
+          ],
+          structuredContent: null,
+          _meta: null,
+        },
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        toolType: "computer_use",
+        images: [
+          { mimeType: "image/png", dataBase64: "AAAA" },
+          { mimeType: "image/jpeg", dataBase64: "BBBB" },
+        ],
+        output: "Script completed\nSecond line",
+      }),
+    );
+  });
+
+  test("does not fall back to serialized JSON output for cua_repl calls", () => {
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-3",
+        server: "cua_repl",
+        tool: "js",
+        status: "completed",
+        arguments: { code: "await nodeRepl.emitImage(await tab.screenshot())" },
+        result: {
+          content: [{ type: "image", mimeType: "image/png", data: "AAAA" }],
+          structuredContent: null,
+          _meta: null,
+        },
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        toolType: "computer_use",
+        images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
+      }),
+    );
+    expect(part).not.toHaveProperty("output");
+  });
+
+  test("uses failed cua_repl result text as the error and keeps output empty", () => {
+    const manual = "Script error: boom\n\nComputer Use API manual line 1\nline 2";
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-4",
+        server: "cua_repl",
+        tool: "js",
+        status: "failed",
+        arguments: { code: "throw new Error('boom')" },
+        result: {
+          content: [{ type: "text", text: manual }],
+          structuredContent: null,
+          _meta: null,
+        },
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        toolType: "computer_use",
+        status: "error",
+        error: manual,
+      }),
+    );
+    expect(part).not.toHaveProperty("output");
+  });
+
+  test("keeps other MCP servers on the generic tool presentation", () => {
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "node-1",
+        server: "node_repl",
+        tool: "js",
+        status: "completed",
+        arguments: { code: "1 + 1" },
+        result: {
+          content: [{ type: "image", mimeType: "image/png", data: "AAAA" }],
+          structuredContent: null,
+          _meta: null,
+        },
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        tool: "node_repl.js",
+        toolType: "generic",
+      }),
+    );
+    expect(part).not.toHaveProperty("images");
+  });
+
   test("uses structured dynamic tool errors instead of raw JSON output", () => {
     const part = toStreamPart(
       {

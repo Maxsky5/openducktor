@@ -44,6 +44,10 @@ export type CodexToolInvocationMetadata = {
   server?: string;
 };
 
+export const COMPUTER_USE_MCP_SERVER = "cua_repl";
+
+export type CodexToolImages = NonNullable<Extract<AgentStreamPart, { kind: "tool" }>["images"]>;
+
 export type CodexToolQuestion = {
   header: string;
   question: string;
@@ -87,6 +91,7 @@ export type NormalizedCodexToolInvocation = CodexToolTimingFields & {
   output?: string | null;
   error?: string | null;
   fileDiffs?: FileDiff[];
+  images?: CodexToolImages;
   metadata?: CodexToolInvocationMetadata;
 };
 
@@ -168,9 +173,14 @@ const canonicalOdtToolName = (rawToolName: string): string | null => {
 const codexToolType = (
   rawToolName: string,
   input?: Record<string, CodexAppServerJsonValue>,
+  server?: string,
 ): AgentToolType | null => {
   if (isCodexWriteStdinTool(rawToolName)) {
     return null;
+  }
+
+  if (server === COMPUTER_USE_MCP_SERVER) {
+    return "computer_use";
   }
 
   const odtToolName = canonicalOdtToolName(rawToolName);
@@ -361,6 +371,7 @@ export const normalizeCodexToolInvocation = ({
   output,
   error,
   fileDiffs,
+  images,
   title,
   displayLabel,
   preview,
@@ -370,7 +381,7 @@ export const normalizeCodexToolInvocation = ({
   ...ids
 }: NormalizedCodexToolInvocation): import("@openducktor/core").AgentStreamPart | null => {
   const tool = canonicalCodexToolName(rawToolName);
-  const toolType = codexToolType(rawToolName, input);
+  const toolType = codexToolType(rawToolName, input, metadata?.server);
   if (!tool || !toolType) {
     return null;
   }
@@ -410,6 +421,9 @@ export const normalizeCodexToolInvocation = ({
   }
   if (fileDiffs && fileDiffs.length > 0) {
     normalizedTool.fileDiffs = fileDiffs;
+  }
+  if (images && images.length > 0) {
+    normalizedTool.images = images;
   }
   if (namespace) {
     metadataFields.namespace = namespace;

@@ -37,6 +37,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentRuntimeEventSchema",
   "agentRuntimesSchema",
   "agentToolDataSchema",
+  "agentToolImageSchema",
   "agentToolNameSchema",
   "agentToolNameValues",
   "agentWorkflowSessionStartInputSchema",

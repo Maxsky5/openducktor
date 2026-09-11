@@ -26,6 +26,8 @@ import {
 } from "./codex-tool-error-extractor";
 import {
   codexNamespacedToolName,
+  COMPUTER_USE_MCP_SERVER,
+  type CodexToolImages,
   type NormalizedCodexToolInvocation,
   normalizeCodexToolInvocation,
   stableToolTitle,
@@ -440,7 +442,7 @@ const codexObjectInput = (
   return isPlainObject(value) ? value : (parseCodexJsonObjectString(value) ?? undefined);
 };
 
-const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string | null => {
+const codexToolResultContentText = (value: CodexAppServerJsonValue | undefined): string | null => {
   if (value === undefined || value === null) {
     return null;
   }
@@ -470,7 +472,40 @@ const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string
     })
     .filter((entry) => entry.trim().length > 0)
     .join("\n");
-  return text.length > 0 ? text : stringifyJsonValue(value);
+  return text.length > 0 ? text : null;
+};
+
+const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string | null =>
+  codexToolResultContentText(value) ?? stringifyJsonValue(value);
+
+const DATA_URL_PREFIX_PATTERN = /^data:[^,]*,/;
+
+const codexToolResultImageBase64 = (data: string): string | null => {
+  const base64 = data.replace(DATA_URL_PREFIX_PATTERN, "");
+  return base64.length > 0 ? base64 : null;
+};
+
+const codexMcpToolImages = (value: CodexAppServerJsonValue | undefined): CodexToolImages => {
+  if (!isPlainObject(value)) {
+    return [];
+  }
+  const images: CodexToolImages = [];
+  for (const entry of arrayFromCodexJsonValue(value.content)) {
+    if (!isPlainObject(entry) || extractStringField(entry, ["type"]) !== "image") {
+      continue;
+    }
+    const mimeType = extractStringField(entry, ["mimeType"]);
+    const data = extractStringField(entry, ["data"]);
+    if (!mimeType || !data) {
+      continue;
+    }
+    const dataBase64 = codexToolResultImageBase64(data);
+    if (!dataBase64) {
+      continue;
+    }
+    images.push({ mimeType, dataBase64 });
+  }
+  return images;
 };
 
 const webSearchActionInput = (action: CodexAppServerWebSearchAction | null) => {
@@ -670,16 +705,23 @@ const codexMcpToolCallStreamParts = (
   const server = value.server;
   const tool = value.tool;
   const args = codexObjectInput(value.arguments);
+  const isComputerUse = server === COMPUTER_USE_MCP_SERVER;
   const error = codexMcpToolErrorFromResult(value);
-  const output = codexToolResultText(value.result);
+  const status = error ? "error" : statusFromCodexStatus(value.status);
+  const output = isComputerUse
+    ? codexToolResultContentText(value.result)
+    : codexToolResultText(value.result);
+  const images = isComputerUse ? codexMcpToolImages(value.result) : [];
+  const resolvedError = isComputerUse && status === "error" && !error ? output : error;
   const toolInvocation: NormalizedCodexToolInvocation = {
     messageId,
     partId,
     callId: partId,
     rawToolName: codexNamespacedToolName(server, tool),
-    status: error ? "error" : statusFromCodexStatus(value.status),
-    output: error ? null : output,
-    error,
+    status,
+    output: resolvedError ? null : output,
+    error: resolvedError,
+    images,
     ...codexToolTimingFields(value, timingOptions),
     metadata: {
       server,

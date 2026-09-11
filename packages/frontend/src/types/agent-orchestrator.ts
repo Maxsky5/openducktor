@@ -4,6 +4,7 @@ import type {
   AgentSessionLiveLoadContextInput,
   AgentSessionWorkflowScope,
   AgentToolData,
+  AgentToolImage,
   FileContent,
   FileDiff,
   RuntimeKind,
@@ -41,6 +42,7 @@ export type AgentChatMessageMeta =
       error?: string;
       fileDiffs?: FileDiff[];
       fileContent?: FileContent[];
+      images?: AgentToolImage[];
       /** @deprecated Use fileDiffs. Kept only for already-persisted transcript messages. */
       fileChanges?: FileDiff[];
       metadata?: AgentToolData;

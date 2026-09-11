@@ -54,6 +54,45 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
     ]);
   });
 
+  test("maps computer use screenshots from hydrated tool parts", () => {
+    const images = [{ mimeType: "image/png", dataBase64: "AAAA" }];
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "cua-history",
+          role: "assistant",
+          timestamp: "2026-09-11T12:00:00.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "tool",
+              messageId: "cua-history",
+              partId: "cua-part",
+              callId: "cua-call",
+              tool: "cua_repl.js",
+              toolType: "computer_use",
+              status: "completed",
+              input: { code: "await tab.click()", title: "Click the button" },
+              images,
+            },
+          ],
+        },
+      ],
+      { role: "build" },
+    );
+
+    expect(messages).toEqual([
+      expect.objectContaining({
+        id: "tool:cua-history:cua-call",
+        meta: expect.objectContaining({
+          kind: "tool",
+          toolType: "computer_use",
+          images,
+        }),
+      }),
+    ]);
+  });
+
   test("maps compacted session history notices to chat notice messages", () => {
     const messages = historyToChatMessages(
       [

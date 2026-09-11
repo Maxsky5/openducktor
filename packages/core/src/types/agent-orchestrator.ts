@@ -206,6 +206,7 @@ export type AgentToolType =
   | "file_edit"
   | "workflow"
   | "question"
+  | "computer_use"
   | "generic";
 
 export type AgentSessionStatus = ContractsAgentTranscriptSessionStatus;
