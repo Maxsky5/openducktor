@@ -45,46 +45,60 @@ export const MediaPreviewDialog = ({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="max-h-[80vh] space-y-2 overflow-y-auto rounded-md border border-border bg-muted/40 p-2">
-          {media.map((item, index) => {
-            const key = `${item.kind}:${index}`;
-            if (item.kind === "video") {
-              return (
-                <video
-                  key={key}
-                  src={item.src}
-                  aria-label={item.ariaLabel}
-                  className="max-h-[75vh] w-full object-contain"
-                  controls
-                  autoPlay
-                  onError={() => handleMediaError(item)}
-                >
-                  <track kind="captions" />
-                </video>
-              );
-            }
-            if (failedSources.has(item.src)) {
-              return (
-                <p
-                  key={key}
-                  role="alert"
-                  className="rounded border border-border bg-muted/50 px-2 py-2 text-[11px]"
-                >
-                  {item.unavailableLabel ?? "Preview unavailable."}
-                </p>
-              );
-            }
-            return (
-              <img
-                key={key}
-                src={item.src}
-                alt={item.alt}
-                className="max-h-[75vh] w-full rounded border border-border bg-muted/40 object-contain"
-                onError={() => handleMediaError(item)}
-              />
-            );
-          })}
+          {media.map((item) => (
+            <MediaPreviewItemView
+              key={item.src}
+              item={item}
+              failed={failedSources.has(item.src)}
+              onMediaError={handleMediaError}
+            />
+          ))}
         </div>
       </DialogContent>
     </Dialog>
+  );
+};
+
+const MediaPreviewItemView = ({
+  item,
+  failed,
+  onMediaError,
+}: {
+  item: MediaPreviewItem;
+  failed: boolean;
+  onMediaError: (item: MediaPreviewItem) => void;
+}): ReactElement => {
+  if (failed) {
+    return (
+      <p role="alert" className="rounded border border-border bg-muted/50 px-2 py-2 text-[11px]">
+        {item.kind === "image"
+          ? (item.unavailableLabel ?? "Preview unavailable.")
+          : "Preview unavailable."}
+      </p>
+    );
+  }
+  if (item.kind === "video") {
+    return (
+      <video
+        src={item.src}
+        aria-label={item.ariaLabel}
+        className="max-h-[75vh] w-full object-contain"
+        controls
+        autoPlay
+        muted
+        playsInline
+        onError={() => onMediaError(item)}
+      >
+        <track kind="captions" />
+      </video>
+    );
+  }
+  return (
+    <img
+      src={item.src}
+      alt={item.alt}
+      className="max-h-[75vh] w-full rounded border border-border bg-muted/40 object-contain"
+      onError={() => onMediaError(item)}
+    />
   );
 };

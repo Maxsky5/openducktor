@@ -20,6 +20,7 @@ import {
   getToolLifecyclePhase,
   hasNonEmptyInput,
   hasNonEmptyText,
+  isToolMessageActive,
   type QuestionToolDetail,
   questionToolDetails,
 } from "./agent-chat-message-card-model";
@@ -290,7 +291,7 @@ const RegularToolSummary = ({
   hasExpandableDetails,
 }: RegularToolMessageProps & { hasExpandableDetails: boolean }): ReactElement => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
-  const isActive = lifecyclePhase === "queued" || lifecyclePhase === "executing";
+  const isActive = isToolMessageActive(meta);
   const summary = buildToolSummary(meta, messageContent, sessionWorkingDirectory);
   const summaryText =
     summary.length > 0

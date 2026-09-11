@@ -202,6 +202,32 @@ describe("Codex tool normalization", () => {
     );
   });
 
+  test("keeps the title for js_reset calls and still drops the code", () => {
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-reset-2",
+        server: "cua_repl",
+        tool: "js_reset",
+        status: "completed",
+        arguments: { title: "Reset the browser session", code: "await tab.click()" },
+        result: {
+          content: [{ type: "text", text: "setup complete" }],
+          structuredContent: null,
+          _meta: null,
+        },
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        toolType: "computer_use",
+        computerUse: { action: "Reset the browser session" },
+      }),
+    );
+  });
+
   test("extracts cua_repl result images in content order", () => {
     const part = toStreamPart(
       {
@@ -403,6 +429,34 @@ describe("Codex tool normalization", () => {
         computerUse: expect.objectContaining({ action: "Computer action" }),
       }),
     );
+  });
+
+  test("prefers the MCP error message over the failed result text", () => {
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-14",
+        server: "cua_repl",
+        tool: "js",
+        status: "failed",
+        arguments: { code: "await tab.click()" },
+        error: { message: "MCP error -32000: connection closed" },
+        result: {
+          content: [{ type: "text", text: "Computer Use API manual" }],
+          structuredContent: null,
+          _meta: null,
+        },
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        status: "error",
+        error: "MCP error -32000: connection closed",
+      }),
+    );
+    expect(part).not.toHaveProperty("output");
   });
 
   test("keeps other MCP servers on the generic tool presentation", () => {

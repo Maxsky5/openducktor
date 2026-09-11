@@ -1,9 +1,10 @@
+import type { AgentToolImage } from "@openducktor/contracts";
 import { ChevronDown, ImageIcon, MousePointerClick } from "lucide-react";
 import { type ReactElement, useState } from "react";
+import { MediaPreviewDialog, type MediaPreviewItem } from "@/components/ui/media-preview-dialog";
 import { cn } from "@/lib/utils";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { ToolMessageTiming } from "./agent-chat-message-card-tool-presenters";
-import { MediaPreviewDialog, type MediaPreviewItem } from "@/components/ui/media-preview-dialog";
 import { getToolDuration } from "./tool-duration";
 import { hasNonEmptyText, isToolMessageActive, isToolMessageFailure } from "./tool-lifecycle";
 
@@ -22,72 +23,24 @@ export const ComputerUseToolMessage = ({
   const [previewOpen, setPreviewOpen] = useState(false);
   const isFailed = isToolMessageFailure(meta);
   const action = meta.computerUse;
-  const actionTitle = action?.action ?? DEFAULT_ACTION_TITLE;
-  const durationMs = getToolDuration(meta, messageTimestamp);
   const code = action?.code ?? "";
-  const images = action?.images ?? [];
   const errorText = hasNonEmptyText(meta.error) ? meta.error : "";
   const outputText = hasNonEmptyText(meta.output) ? meta.output : "";
   const hasDetails = code.length > 0 || errorText.length > 0 || outputText.length > 0;
-  const previewMedia: MediaPreviewItem[] = images.map((image, index) => ({
-    kind: "image",
-    src: `data:${image.mimeType};base64,${image.dataBase64}`,
-    alt: `Computer Use screenshot ${index + 1}`,
-    unavailableLabel: `Screenshot ${index + 1} is unavailable.`,
-  }));
+  const previewMedia = buildComputerUsePreviewMedia(action?.images ?? []);
 
   const summary = (
-    <div className="min-w-0">
-      <div className="flex min-w-0 items-center gap-2">
-        <MousePointerClick
-          aria-hidden="true"
-          className={cn(
-            "size-4 shrink-0",
-            isFailed ? "text-destructive-accent" : "text-muted-foreground",
-          )}
-        />
-        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Computer Use
-        </span>
-        <p
-          className={cn(
-            "min-w-0 truncate text-sm font-medium",
-            isFailed ? "text-destructive-surface-foreground" : "text-foreground",
-          )}
-        >
-          {actionTitle}
-        </p>
-        {images.length > 0 ? (
-          <button
-            type="button"
-            className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setPreviewOpen(true);
-            }}
-          >
-            <ImageIcon aria-hidden="true" className="size-3" />
-            {images.length > 1 ? `Screenshots (${images.length})` : "Screenshot"}
-          </button>
-        ) : null}
-        <ToolMessageTiming
-          showSpinner={isToolMessageActive(meta)}
-          durationMs={durationMs}
-          timeLabel={timeLabel}
-          className="text-muted-foreground"
-        />
-        {hasDetails ? (
-          <ChevronDown
-            aria-hidden="true"
-            className={cn(
-              "size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
-              detailsOpen && "rotate-180",
-            )}
-          />
-        ) : null}
-      </div>
-    </div>
+    <ComputerUseSummary
+      actionTitle={action?.action ?? DEFAULT_ACTION_TITLE}
+      isFailed={isFailed}
+      isActive={isToolMessageActive(meta)}
+      durationMs={getToolDuration(meta, messageTimestamp)}
+      timeLabel={timeLabel}
+      screenshotCount={previewMedia.length}
+      showDetailsCue={hasDetails}
+      detailsOpen={detailsOpen}
+      onOpenScreenshotPreview={() => setPreviewOpen(true)}
+    />
   );
 
   return (
@@ -108,19 +61,7 @@ export const ComputerUseToolMessage = ({
             {summary}
           </summary>
           {detailsOpen ? (
-            <div className="mt-2 space-y-2">
-              {code.length > 0 ? (
-                <ComputerUseSection label="JavaScript">{code}</ComputerUseSection>
-              ) : null}
-              {errorText.length > 0 ? (
-                <ComputerUseSection label="Error" tone="error">
-                  {errorText}
-                </ComputerUseSection>
-              ) : null}
-              {outputText.length > 0 ? (
-                <ComputerUseSection label="Output">{outputText}</ComputerUseSection>
-              ) : null}
-            </div>
+            <ComputerUseDetails code={code} errorText={errorText} outputText={outputText} />
           ) : null}
         </details>
       ) : (
@@ -140,6 +81,112 @@ export const ComputerUseToolMessage = ({
 };
 
 const DEFAULT_ACTION_TITLE = "Computer action";
+
+type ComputerUseSummaryProps = {
+  actionTitle: string;
+  isFailed: boolean;
+  isActive: boolean;
+  durationMs: number | null;
+  timeLabel: string;
+  screenshotCount: number;
+  showDetailsCue: boolean;
+  detailsOpen: boolean;
+  onOpenScreenshotPreview: () => void;
+};
+
+const ComputerUseSummary = ({
+  actionTitle,
+  isFailed,
+  isActive,
+  durationMs,
+  timeLabel,
+  screenshotCount,
+  showDetailsCue,
+  detailsOpen,
+  onOpenScreenshotPreview,
+}: ComputerUseSummaryProps): ReactElement => (
+  <div className="min-w-0">
+    <div className="flex min-w-0 items-center gap-2">
+      <MousePointerClick
+        aria-hidden="true"
+        className={cn(
+          "size-4 shrink-0",
+          isFailed ? "text-destructive-accent" : "text-muted-foreground",
+        )}
+      />
+      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Computer Use
+      </span>
+      <p
+        className={cn(
+          "min-w-0 truncate text-sm font-medium",
+          isFailed ? "text-destructive-surface-foreground" : "text-foreground",
+        )}
+      >
+        {actionTitle}
+      </p>
+      {screenshotCount > 0 ? (
+        <button
+          type="button"
+          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenScreenshotPreview();
+          }}
+        >
+          <ImageIcon aria-hidden="true" className="size-3" />
+          {screenshotCount > 1 ? `Screenshots (${screenshotCount})` : "Screenshot"}
+        </button>
+      ) : null}
+      <ToolMessageTiming
+        showSpinner={isActive}
+        durationMs={durationMs}
+        timeLabel={timeLabel}
+        className="text-muted-foreground"
+      />
+      {showDetailsCue ? (
+        <ChevronDown
+          aria-hidden="true"
+          className={cn(
+            "size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
+            detailsOpen && "rotate-180",
+          )}
+        />
+      ) : null}
+    </div>
+  </div>
+);
+
+const ComputerUseDetails = ({
+  code,
+  errorText,
+  outputText,
+}: {
+  code: string;
+  errorText: string;
+  outputText: string;
+}): ReactElement => (
+  <div className="mt-2 space-y-2">
+    {code.length > 0 ? <ComputerUseSection label="JavaScript">{code}</ComputerUseSection> : null}
+    {errorText.length > 0 ? (
+      <ComputerUseSection label="Error" tone="error">
+        {errorText}
+      </ComputerUseSection>
+    ) : null}
+    {outputText.length > 0 ? (
+      <ComputerUseSection label="Output">{outputText}</ComputerUseSection>
+    ) : null}
+  </div>
+);
+
+const buildComputerUsePreviewMedia = (images: AgentToolImage[]): MediaPreviewItem[] =>
+  images.map((image, index) => ({
+    kind: "image",
+    src: `data:${image.mimeType};base64,${image.dataBase64}`,
+    alt: `Computer Use screenshot ${index + 1}`,
+    unavailableLabel: `Screenshot ${index + 1} is unavailable.`,
+  }));
 
 const SECTION_APPEARANCE = {
   default: {

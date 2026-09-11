@@ -134,8 +134,8 @@ export type AgentToolImage = z.infer<typeof agentToolImageSchema>;
 
 export const agentComputerUseSchema = z
   .object({
-    action: z.string().min(1),
-    code: z.string().min(1).optional(),
+    action: z.string().trim().min(1),
+    code: z.string().trim().min(1).optional(),
     images: z.array(agentToolImageSchema).optional(),
   })
   .strict();

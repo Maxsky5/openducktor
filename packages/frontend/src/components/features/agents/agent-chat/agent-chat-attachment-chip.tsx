@@ -1,5 +1,13 @@
 import type { AgentAttachmentReference } from "@openducktor/core";
-import { FileAudio2, FileText, Film, Image as ImageIcon, LoaderCircle, X } from "lucide-react";
+import {
+  FileAudio2,
+  FileText,
+  Film,
+  Image as ImageIcon,
+  LoaderCircle,
+  type LucideIcon,
+  X,
+} from "lucide-react";
 import type { ReactElement, SyntheticEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -34,6 +42,19 @@ function AttachmentName({ name }: { name: string }): ReactElement {
     </TooltipProvider>
   );
 }
+
+const buildAttachmentPreviewMedia = (
+  attachment: { kind: AgentAttachmentReference["kind"]; name: string },
+  previewSrc: string | null,
+): MediaPreviewItem[] => {
+  if (previewSrc === null) {
+    return [];
+  }
+  if (attachment.kind === "video") {
+    return [{ kind: "video", src: previewSrc, ariaLabel: `Preview video ${attachment.name}` }];
+  }
+  return [{ kind: "image", src: previewSrc, alt: attachment.name }];
+};
 
 type DraftAttachmentChipProps = {
   variant: "draft";
@@ -72,37 +93,12 @@ export function AgentChatAttachmentChip(
   });
   const removable = variant === "draft";
   const onRemove = draftProps?.onRemove ?? null;
-  const showPreviewImage = showResolvedPreview && attachment.kind === "image";
-  const showPreviewVideo = showResolvedPreview && attachment.kind === "video";
-  const showPreviewLoader = isResolvingPreview;
-
-  const handleThumbnailError = (
-    event: SyntheticEvent<HTMLImageElement | HTMLVideoElement>,
-  ): void => {
-    const failingSrc =
-      event.currentTarget.currentSrc ||
-      event.currentTarget.getAttribute("src") ||
-      resolvedPreviewSrc ||
-      undefined;
-    markPreviewUnavailable(failingSrc);
-  };
 
   const handleDialogPreviewMediaError = (media: MediaPreviewItem): void => {
     markPreviewUnavailable(media.src);
   };
 
-  const previewMedia: MediaPreviewItem[] =
-    resolvedPreviewSrc === null
-      ? []
-      : attachment.kind === "video"
-        ? [
-            {
-              kind: "video",
-              src: resolvedPreviewSrc,
-              ariaLabel: `Preview video ${attachment.name}`,
-            },
-          ]
-        : [{ kind: "image", src: resolvedPreviewSrc, alt: attachment.name }];
+  const previewMedia = buildAttachmentPreviewMedia(attachment, resolvedPreviewSrc);
 
   const handleOpenPreview = (): void => {
     const previewError = requestPreviewOpen();
@@ -145,30 +141,15 @@ export function AgentChatAttachmentChip(
             onClick={handleOpenPreview}
           >
             <div className="flex h-24 max-h-24 items-center justify-center overflow-hidden bg-muted">
-              {showPreviewImage ? (
-                <img
-                  src={resolvedPreviewSrc ?? undefined}
-                  alt={attachment.name}
-                  className="h-full w-full object-cover"
-                  onError={handleThumbnailError}
-                />
-              ) : showPreviewVideo ? (
-                <video
-                  src={resolvedPreviewSrc ?? undefined}
-                  aria-label={`Preview video ${attachment.name}`}
-                  className="h-full w-full object-cover"
-                  muted
-                  playsInline
-                  preload="metadata"
-                  onError={handleThumbnailError}
-                >
-                  <track kind="captions" />
-                </video>
-              ) : showPreviewLoader ? (
-                <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
-              ) : (
-                <Icon className="size-5 text-muted-foreground" />
-              )}
+              <AttachmentThumbnail
+                icon={Icon}
+                kind={attachment.kind}
+                name={attachment.name}
+                resolvedPreviewSrc={resolvedPreviewSrc}
+                showResolvedPreview={showResolvedPreview}
+                isResolvingPreview={isResolvingPreview}
+                onUnavailable={markPreviewUnavailable}
+              />
             </div>
             <div className="flex items-center gap-2 px-3 py-2">
               <Icon className="size-4 shrink-0 text-muted-foreground" />
@@ -202,3 +183,59 @@ export function AgentChatAttachmentChip(
     </>
   );
 }
+
+const AttachmentThumbnail = ({
+  icon: Icon,
+  kind,
+  name,
+  resolvedPreviewSrc,
+  showResolvedPreview,
+  isResolvingPreview,
+  onUnavailable,
+}: {
+  icon: LucideIcon;
+  kind: AgentAttachmentReference["kind"];
+  name: string;
+  resolvedPreviewSrc: string | null;
+  showResolvedPreview: boolean;
+  isResolvingPreview: boolean;
+  onUnavailable: (failingSrc?: string) => void;
+}): ReactElement => {
+  const handleMediaError = (event: SyntheticEvent<HTMLImageElement | HTMLVideoElement>): void => {
+    const failingSrc =
+      event.currentTarget.currentSrc ||
+      event.currentTarget.getAttribute("src") ||
+      resolvedPreviewSrc ||
+      undefined;
+    onUnavailable(failingSrc);
+  };
+  if (showResolvedPreview && kind === "image") {
+    return (
+      <img
+        src={resolvedPreviewSrc ?? undefined}
+        alt={name}
+        className="h-full w-full object-cover"
+        onError={handleMediaError}
+      />
+    );
+  }
+  if (showResolvedPreview && kind === "video") {
+    return (
+      <video
+        src={resolvedPreviewSrc ?? undefined}
+        aria-label={`Preview video ${name}`}
+        className="h-full w-full object-cover"
+        muted
+        playsInline
+        preload="metadata"
+        onError={handleMediaError}
+      >
+        <track kind="captions" />
+      </video>
+    );
+  }
+  if (isResolvingPreview) {
+    return <LoaderCircle className="size-4 animate-spin text-muted-foreground" />;
+  }
+  return <Icon className="size-5 text-muted-foreground" />;
+};

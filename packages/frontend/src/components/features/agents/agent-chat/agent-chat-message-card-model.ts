@@ -14,6 +14,7 @@ export {
   getToolLifecyclePhase,
   hasNonEmptyInput,
   hasNonEmptyText,
+  isToolMessageActive,
   isToolMessageCancelled,
   isToolMessageFailure,
 } from "./tool-lifecycle";

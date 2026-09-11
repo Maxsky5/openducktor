@@ -127,6 +127,30 @@ describe("agent session transcript event contract", () => {
         part: { ...event.part, computerUse: { code: "1 + 1" } },
       }).success,
     ).toBe(false);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...event,
+        part: { ...event.part, computerUse: { ...event.part.computerUse, action: "   " } },
+      }).success,
+    ).toBe(false);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...event,
+        part: { ...event.part, computerUse: { ...event.part.computerUse, staleField: 1 } },
+      }).success,
+    ).toBe(false);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...event,
+        part: {
+          ...event.part,
+          computerUse: {
+            ...event.part.computerUse,
+            images: [{ mimeType: "image/png", dataBase64: "AAAA", staleField: 1 }],
+          },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   test("keeps retained projection state changes out of transcript envelopes", () => {

@@ -30,6 +30,31 @@ describe("MediaPreviewDialog", () => {
       expect(media[0]?.getAttribute("src")).toBe("data:image/png;base64,AAAA");
       expect(media[0]?.getAttribute("alt")).toBe("First screenshot");
       expect(media[1]?.getAttribute("aria-label")).toBe("Preview video clip");
+      const video = media[1];
+      if (!(video instanceof HTMLVideoElement)) {
+        throw new Error("Expected the video element.");
+      }
+      expect(video.muted).toBe(true);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("replaces a failed video with the unavailable label", () => {
+    const view = render(
+      <MediaPreviewDialog
+        {...baseProps}
+        open
+        media={[{ kind: "video", src: "blob:video", ariaLabel: "Preview video clip" }]}
+      />,
+    );
+    try {
+      const dialog = view.getByRole("dialog", { name: "Screenshots" });
+      const video = dialog.querySelector("video");
+      if (!video) throw new Error("Expected the video.");
+      fireEvent.error(video);
+      expect(view.getByText("Preview unavailable.")).toBeDefined();
+      expect(dialog.querySelector("video")).toBeNull();
     } finally {
       view.unmount();
     }
