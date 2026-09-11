@@ -10,11 +10,13 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import {
   buildWorkspaceCatalog,
   firstOpenWorkspaceId,
+  workspacePathResolution,
+} from "./workspace-catalog-model";
+import {
   loadGlobalConfig,
   requireConfiguredWorkspace,
   touchRecentWorkspace,
   validateGitRepoPath,
-  workspacePathResolution,
   type WorkspaceSettingsService,
 } from "./workspace-settings-model";
 

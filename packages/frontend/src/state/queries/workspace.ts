@@ -183,22 +183,16 @@ export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Prom
   });
 };
 
-const serializedQueryKeyContainsIdentity = (
-  serializedQueryKey: string,
-  identity: string,
-): boolean => serializedQueryKey.includes(JSON.stringify(identity));
+const queryKeyHasIdentity = (queryKey: readonly unknown[], identity: string): boolean =>
+  JSON.stringify(queryKey).includes(JSON.stringify(identity));
 
-export const evictWorkspaceQueries = (
+export const dropWorkspaceQueries = (
   queryClient: QueryClient,
   identity: { repoPath: string; workspaceId: string },
 ): void => {
-  const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean => {
-    const serializedQueryKey = JSON.stringify(query.queryKey);
-    return (
-      serializedQueryKeyContainsIdentity(serializedQueryKey, identity.workspaceId) ||
-      serializedQueryKeyContainsIdentity(serializedQueryKey, identity.repoPath)
-    );
-  };
+  const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean =>
+    queryKeyHasIdentity(query.queryKey, identity.workspaceId) ||
+    queryKeyHasIdentity(query.queryKey, identity.repoPath);
   void queryClient.cancelQueries({ predicate: matchesRemovedWorkspace }, { revert: false });
   queryClient.removeQueries({ predicate: matchesRemovedWorkspace });
 };

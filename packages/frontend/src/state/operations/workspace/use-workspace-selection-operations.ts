@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
-  evictWorkspaceQueries,
+  dropWorkspaceQueries,
   loadWorkspaceListFromQuery,
   markWorkspaceCachesChanged,
   workspaceCatalogQueryOptions,
@@ -429,7 +429,7 @@ export function useWorkspaceSelectionOperations({
       try {
         const result = await hostClient.workspaceRemove(input);
         applyLifecycleCatalog(result.catalog);
-        evictWorkspaceQueries(queryClient, {
+        dropWorkspaceQueries(queryClient, {
           repoPath: input.expectedRepoPath,
           workspaceId: input.workspaceId,
         });

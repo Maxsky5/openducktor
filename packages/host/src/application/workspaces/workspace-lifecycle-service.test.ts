@@ -11,6 +11,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { TaskAssetError } from "../../effect/task-asset-error";
 import type { GitPort } from "../../ports/git-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import {
@@ -164,8 +165,8 @@ const createService = ({
     lastFailure: string | null;
   }) => Effect.Effect<void, never>;
   removeWorkspaceRegistration?: () => Effect.Effect<WorkspaceCatalog, never>;
-  removeWorkspaceTaskAssets?: () => Effect.Effect<void, unknown>;
-  removeWorkspaceTaskStore?: () => Effect.Effect<void, unknown>;
+  removeWorkspaceTaskAssets?: WorkspaceStoragePort["removeWorkspaceTaskAssets"];
+  removeWorkspaceTaskStore?: WorkspaceStoragePort["removeWorkspaceTaskStore"];
   taskStore?: TaskStoreDouble;
   listWorktrees?: GitPort["listWorktrees"];
   isRegisteredWorktree?: () => Effect.Effect<boolean, never>;
@@ -511,7 +512,18 @@ describe("workspace lifecycle service", () => {
     const removeWorkspaceRegistration = mock(() => Effect.succeed(catalog()));
     const progress: Array<{ phase: string; lastFailure: string | null }> = [];
     const service = createService({
-      removeWorkspaceTaskAssets: () => Effect.fail(new Error("disk failure")),
+      removeWorkspaceTaskAssets: () =>
+        Effect.fail(
+          new TaskAssetError({
+            operation: "delete",
+            code: "purge",
+            assetIds: [],
+            failedPhase: "remove_workspace_data",
+            durableState: "unknown",
+            retryAllowed: true,
+            message: "disk failure",
+          }),
+        ),
       recordWorkspaceRemovalProgress: (input) =>
         Effect.sync(() => {
           progress.push({ phase: input.phase, lastFailure: input.lastFailure });

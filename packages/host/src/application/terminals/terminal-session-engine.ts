@@ -124,6 +124,8 @@ export const createTerminalSessionEngine = ({
             activeTerminalIds.push(session.summary.terminalId);
             continue;
           }
+          // A shell builtin runs with no child process. Without shell integration
+          // the engine cannot prove the shell is idle, so report unknown.
           unknownTerminalIds.push(session.summary.terminalId);
         }
         return { activeTerminalIds, unknownTerminalIds };

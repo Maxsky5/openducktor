@@ -392,12 +392,3 @@ export const normalizeSnapshotWorkspaces = (
     }
     return nextWorkspaces;
   });
-
-export {
-  buildWorkspaceCatalog,
-  firstOpenWorkspaceId,
-  isIncompleteRemoval,
-  openWorkspaceRecordsInEffectiveOrder,
-  workspacePathResolution,
-  workspaceRecordsInEffectiveOrder,
-} from "./workspace-catalog-model";

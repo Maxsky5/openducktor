@@ -491,7 +491,7 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
-  test("evicts repository-path and workspace-id caches after committed removal", async () => {
+  test("drops repository-path and workspace-id caches after committed removal", async () => {
     workspaceHost.workspaceRemove = mock(async () => ({
       catalog: {
         openWorkspaces: [],

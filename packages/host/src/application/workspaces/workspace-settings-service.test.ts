@@ -818,10 +818,12 @@ describe("createWorkspaceSettingsService", () => {
     expect(catalog.incompleteRemovals).toHaveLength(1);
     expect(catalog.incompleteRemovals[0]).toMatchObject({
       workspace: { workspaceId: "repo-a" },
-      phase: "attachments",
-      removeTaskWorktrees: true,
-      removedWorktrees: ["/managed/repo-a/task-1"],
-      lastFailure: "worktree removal failed",
+      record: {
+        phase: "attachments",
+        removeTaskWorktrees: true,
+        removedWorktrees: ["/managed/repo-a/task-1"],
+        lastFailure: "worktree removal failed",
+      },
     });
     expect(await Effect.runPromise(service.listWorkspaces())).toEqual([]);
   });
@@ -884,8 +886,10 @@ describe("createWorkspaceSettingsService", () => {
       kind: "removing",
       removal: {
         workspace: { workspaceId: "repo-a" },
-        phase: "task_store",
-        removedWorktrees: ["/managed/repo-a/task-1"],
+        record: {
+          phase: "task_store",
+          removedWorktrees: ["/managed/repo-a/task-1"],
+        },
       },
     });
   });

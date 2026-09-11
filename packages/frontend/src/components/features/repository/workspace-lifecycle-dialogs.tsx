@@ -15,6 +15,12 @@ import { Label } from "@/components/ui/label";
 import { errorMessage } from "@/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
 
+const removalPhaseLabel = {
+  attachments: "task attachments",
+  task_store: "the task store",
+  worktrees: "task worktrees",
+} satisfies Record<IncompleteWorkspaceRemoval["record"]["phase"], string>;
+
 type WorkspaceLifecycleDialogProps = {
   workspace: WorkspaceRecord;
   onOpenChange: (open: boolean) => void;
@@ -223,7 +229,7 @@ export function WorkspaceRemovalRecoveryDialog({
       await removeWorkspace({
         workspaceId: removal.workspace.workspaceId,
         expectedRepoPath: removal.workspace.repoPath,
-        removeTaskWorktrees: removal.removeTaskWorktrees,
+        removeTaskWorktrees: removal.record.removeTaskWorktrees,
       });
       onOpenChange(false);
     } catch (cause) {
@@ -262,14 +268,15 @@ export function WorkspaceRemovalRecoveryDialog({
             Data already deleted cannot be restored.
           </p>
           <p>
-            Phase: {removal.phase}. Removed task worktrees: {removal.removedWorktrees.length}.
-            {removal.removeTaskWorktrees
-              ? " Task worktrees are included in this removal."
+            Stopped at: {removalPhaseLabel[removal.record.phase]}. Removed task worktrees:{" "}
+            {removal.record.removedWorktrees.length}.
+            {removal.record.removeTaskWorktrees
+              ? " Task worktrees are part of this removal."
               : " Task worktrees are kept."}
           </p>
-          {removal.lastFailure ? (
+          {removal.record.lastFailure ? (
             <p className="text-destructive" role="alert">
-              {removal.lastFailure}
+              {removal.record.lastFailure}
             </p>
           ) : null}
         </DialogBody>

@@ -85,7 +85,7 @@ export const workspaceRecordsInEffectiveOrder = (
   });
 const isClosedWorkspace = (config: LoadedGlobalConfig, workspaceId: string): boolean =>
   config.workspaces[workspaceId]?.closed === true;
-export const isIncompleteRemoval = (config: LoadedGlobalConfig, workspaceId: string): boolean =>
+const isIncompleteRemoval = (config: LoadedGlobalConfig, workspaceId: string): boolean =>
   config.workspaces[workspaceId]?.removal !== undefined;
 const isBlockedWorkspace = (config: LoadedGlobalConfig, workspaceId: string): boolean =>
   isClosedWorkspace(config, workspaceId) || isIncompleteRemoval(config, workspaceId);
@@ -108,21 +108,9 @@ export const buildWorkspaceCatalog = (
         isClosedWorkspace(config, record.workspaceId) &&
         !isIncompleteRemoval(config, record.workspaceId),
     ),
-    incompleteRemovals: records.flatMap((record) => {
-      const removal = config.workspaces[record.workspaceId]?.removal;
-      if (!removal) {
-        return [];
-      }
-      return [
-        {
-          workspace: record,
-          operationId: removal.operationId,
-          phase: removal.phase,
-          removeTaskWorktrees: removal.removeTaskWorktrees,
-          removedWorktrees: removal.removedWorktrees,
-          lastFailure: removal.lastFailure,
-        },
-      ];
+    incompleteRemovals: records.flatMap((workspace) => {
+      const record = config.workspaces[workspace.workspaceId]?.removal;
+      return record ? [{ workspace, record }] : [];
     }),
     onboardingCompleted: config.onboardingCompleted ?? Object.keys(config.workspaces).length > 0,
   };
@@ -152,11 +140,7 @@ export const workspacePathResolution = (
           repoConfig.workspaceId,
           repoConfig,
         ),
-        operationId: repoConfig.removal.operationId,
-        phase: repoConfig.removal.phase,
-        removeTaskWorktrees: repoConfig.removal.removeTaskWorktrees,
-        removedWorktrees: repoConfig.removal.removedWorktrees,
-        lastFailure: repoConfig.removal.lastFailure,
+        record: repoConfig.removal,
       },
     };
   }
