@@ -40,6 +40,9 @@ describe("createDevServerCommandHandlers", () => {
             }),
         });
       },
+      inspectWorkspaceActivity() {
+        return Effect.dieMessage("unexpected dev server activity inspection");
+      },
       restart(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -121,6 +124,9 @@ describe("createDevServerCommandHandlers", () => {
               cause: cause,
             }),
         });
+      },
+      inspectWorkspaceActivity() {
+        return Effect.dieMessage("unexpected dev server activity inspection");
       },
       restart(input) {
         return Effect.tryPromise({

@@ -1,4 +1,5 @@
 import { Deferred, Effect } from "effect";
+import path from "node:path";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
@@ -37,6 +38,9 @@ export type SqliteTaskRepositoryContextProvider = <A>(
 ) => Effect.Effect<A, TaskStoreError>;
 
 export type SqliteTaskRepositoryContextManager = {
+  readonly closeWorkspace: (
+    workspaceId: string,
+  ) => Effect.Effect<void, HostOperationError<{ failures: HostOperationErrorAggregate[] }>>;
   readonly dispose: () => Effect.Effect<
     void,
     HostOperationError<{ failures: HostOperationErrorAggregate[] }>
@@ -167,6 +171,29 @@ export const createSqliteTaskRepositoryContextManager = ({
       }),
     );
 
+  const closeWorkspace = (workspaceId: string) =>
+    Effect.gen(function* () {
+      const matches = Array.from(slots.entries()).filter(
+        ([databasePath]) => path.basename(path.dirname(databasePath)) === workspaceId,
+      );
+      const failures: HostOperationErrorAggregate[] = [];
+      for (const [databasePath, slot] of matches) {
+        slots.delete(databasePath);
+        const result = yield* Effect.either(slot.shutdown());
+        if (result._tag === "Left") {
+          failures.push(result.left);
+        }
+      }
+      if (failures.length > 0) {
+        return yield* new HostOperationError({
+          operation: "sqliteTaskRepository.closeWorkspace",
+          message: failures.map((failure) => failure.message).join("\n"),
+          cause: failures[0],
+          details: { failures, workspaceId },
+        });
+      }
+    });
+
   const dispose = () =>
     Effect.gen(function* () {
       yield* admission.stop();
@@ -186,5 +213,5 @@ export const createSqliteTaskRepositoryContextManager = ({
       }
     });
 
-  return { dispose, withDatabase };
+  return { closeWorkspace, dispose, withDatabase };
 };

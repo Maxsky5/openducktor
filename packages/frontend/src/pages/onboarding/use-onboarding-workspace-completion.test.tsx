@@ -30,6 +30,11 @@ describe("useOnboardingWorkspaceCompletion", () => {
     queryClient.setQueryData(platformQueryOptions().queryKey, "darwin");
     const workspaceState = {
       isSwitchingWorkspace: false,
+      closedWorkspaces: [],
+      closeWorkspace: async () => {},
+      removeWorkspace: async () => {},
+      reopenWorkspace: async () => {},
+      resolveWorkspacePath: async () => ({ kind: "new" }),
       isLoadingBranches: false,
       isSwitchingBranch: false,
       branchSyncDegraded: false,

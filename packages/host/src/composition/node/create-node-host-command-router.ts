@@ -22,6 +22,10 @@ import { createDevServerService } from "../../application/dev-servers/dev-server
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import { createFilesystemService } from "../../application/filesystem/filesystem-service";
 import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
+import {
+  createWorkspaceActivityInspector,
+  createWorkspaceLifecycleService,
+} from "../../application/workspaces/workspace-lifecycle-service";
 import { createGitService } from "../../application/git/git-service";
 import { createGitProviderService } from "../../application/git/git-provider-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
@@ -30,7 +34,6 @@ import { createRuntimeDefinitionsService } from "../../application/runtimes/runt
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { readSavedRuntimeExecutablePath } from "../../application/runtimes/saved-runtime-executable";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
-import type { TaskSyncLoopHandle } from "../../application/tasks/sync/task-sync-service";
 import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createTerminalService } from "../../application/terminals/terminal-service";
@@ -39,7 +42,6 @@ import { createWorkspaceSettingsService } from "../../application/workspaces/wor
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
-import { HostOperationError } from "../../effect/host-errors";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
 import { createAgentRuntimeQueryCommandHandlers } from "../../interface/commands/agent-runtime-query-command-handlers";
@@ -60,16 +62,9 @@ import { createTaskCommandHandlers } from "../../interface/commands/task-command
 import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
 import { createTerminalCommandHandlers } from "../../interface/commands/terminal-command-handlers";
 import { createWorkspaceFilesCommandHandlers } from "../../interface/commands/workspace-files-command-handlers";
+import { createWorkspaceLifecycleCommandHandlers } from "../../interface/commands/workspace-lifecycle-command-handlers";
 import { createWorkspaceSettingsCommandHandlers } from "../../interface/commands/workspace-settings-command-handlers";
 import { createEffectHostCommandRouter } from "../../interface/router/host-command-router";
-import {
-  createStopDevServersStep,
-  createStopMcpHostBridgeStep,
-  createStopRuntimesStep,
-  createStopTerminalsStep,
-  runShutdownSteps,
-  writeHostLifecycleLog,
-} from "../host-lifecycle";
 import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
 import type {
   CreateNodeHostCommandRouterInput,
@@ -78,6 +73,7 @@ import type {
 import { createNodeHostDefaultPorts } from "./node-host-default-ports";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
+import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createNodeWorkspaceSessionPersistence } from "./node-workspace-session-persistence";
@@ -262,6 +258,19 @@ export const assembleNodeEffectHostCommandRouter = (
     devServerServiceInput.eventBus = eventBus;
   }
   const devServerService = createDevServerService(devServerServiceInput);
+  const workspaceLifecycleService = createWorkspaceLifecycleService({
+    activity: createWorkspaceActivityInspector({
+      agentSessionLiveStateService,
+      devServerService,
+      terminalService,
+    }),
+    gitPort: git,
+    settingsConfig,
+    storage: { removeWorkspaceData: assets.removeWorkspaceData },
+    taskStore,
+    workspaceSettingsService,
+    worktreeFiles,
+  });
   const taskActivityGuard = createRuntimeTaskActivityGuard({
     runtimeRegistry: effectiveRuntimeRegistry,
     sessionService: agentSessionLiveStateService,
@@ -318,7 +327,6 @@ export const assembleNodeEffectHostCommandRouter = (
     taskReader: taskStore,
     logger: lifecycleLogger,
   });
-  let pullRequestSyncLoop: TaskSyncLoopHandle | null = null;
   const workspaceSessionService = createWorkspaceSessionService({
     operationGate: workspaceSessions.operationGate,
     store: assets.workspaceSessionStore,
@@ -330,109 +338,21 @@ export const assembleNodeEffectHostCommandRouter = (
     worktreeFiles,
     systemCommands,
   });
-  let taskAssetStagingSwept = false;
-  const stopPullRequestSyncLoop = () =>
-    Effect.gen(function* () {
-      if (!pullRequestSyncLoop) {
-        yield* writeHostLifecycleLog(
-          lifecycleLogger,
-          "info",
-          "No pull request sync loop is running",
-        );
-        return;
-      }
-      yield* pullRequestSyncLoop.stop();
-      pullRequestSyncLoop = null;
-      yield* writeHostLifecycleLog(lifecycleLogger, "info", "Pull request sync loop stopped");
-    });
+  const hostRouterLifecycle = createNodeHostRouterLifecycle({
+    assets,
+    devServerService,
+    imageWorkers: defaultPorts.imageWorkers,
+    lifecycleLogger,
+    mcpHostBridge: resolvedMcpHostBridge,
+    runtimeRegistry: effectiveRuntimeRegistry,
+    startupSweep,
+    taskAssetStagingService,
+    taskSyncService,
+    terminalService,
+  });
   const router = createEffectHostCommandRouter({
-    initialize: () =>
-      Effect.gen(function* () {
-        if (!taskAssetStagingSwept) {
-          yield* startupSweep();
-          taskAssetStagingSwept = true;
-        }
-        if (resolvedMcpHostBridge) {
-          yield* resolvedMcpHostBridge.ensureExternalDiscoveryReady().pipe(
-            Effect.mapError(
-              (cause) =>
-                new HostOperationError({
-                  operation: "mcp-host-bridge.ensure-external-discovery",
-                  message: cause.message,
-                  cause,
-                }),
-            ),
-          );
-        }
-        if (taskSyncService && pullRequestSyncLoop === null) {
-          pullRequestSyncLoop = yield* taskSyncService.startPullRequestSyncLoop();
-        }
-      }),
-    dispose: () =>
-      Effect.gen(function* () {
-        const loggingFailures: HostOperationError[] = [];
-        const startLogResult = yield* Effect.either(
-          writeHostLifecycleLog(lifecycleLogger, "info", "Shutting down OpenDucktor host services"),
-        );
-        if (startLogResult._tag === "Left") {
-          loggingFailures.push(startLogResult.left);
-        }
-        const shutdownResult = yield* Effect.either(
-          runShutdownSteps(
-            [
-              { label: "pull request sync loop", run: stopPullRequestSyncLoop },
-              { label: "image workers", run: () => defaultPorts.imageWorkers.shutdown },
-              createStopTerminalsStep(terminalService),
-              createStopDevServersStep(devServerService, lifecycleLogger),
-              createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
-              createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
-              assets.taskAssetStagingShutdownStep,
-              assets.taskStoreConnectionShutdownStep,
-            ],
-            lifecycleLogger,
-          ),
-        );
-        if (shutdownResult._tag === "Right") {
-          const completeLogResult = yield* Effect.either(
-            writeHostLifecycleLog(lifecycleLogger, "info", "OpenDucktor host services stopped"),
-          );
-          if (completeLogResult._tag === "Left") {
-            loggingFailures.push(completeLogResult.left);
-          }
-        }
-        if (shutdownResult._tag === "Left" && loggingFailures.length > 0) {
-          return yield* Effect.fail(
-            new HostOperationError({
-              operation: "host.dispose",
-              message: `${shutdownResult.left.message}\nLifecycle logging: ${loggingFailures
-                .map((failure) => failure.message)
-                .join("\n")}`,
-              cause: shutdownResult.left,
-              details: {
-                shutdownFailure: shutdownResult.left,
-                loggingFailures,
-              },
-            }),
-          );
-        }
-        if (shutdownResult._tag === "Left") {
-          return yield* Effect.fail(shutdownResult.left);
-        }
-        const [loggingFailure] = loggingFailures;
-        if (loggingFailures.length === 1 && loggingFailure) {
-          return yield* Effect.fail(loggingFailure);
-        }
-        if (loggingFailures.length > 1) {
-          return yield* Effect.fail(
-            new HostOperationError({
-              operation: "host.dispose",
-              message: loggingFailures.map((failure) => failure.message).join("\n"),
-              cause: loggingFailures[0],
-              details: { loggingFailures },
-            }),
-          );
-        }
-      }),
+    initialize: hostRouterLifecycle.initialize,
+    dispose: hostRouterLifecycle.dispose,
     handlers: {
       ...createAgentSessionLiveCommandHandlers(agentSessionCommandService, localAttachmentService),
       ...createAgentRuntimeQueryCommandHandlers(
@@ -478,6 +398,10 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createWorkspaceSessionCommandHandlers(
         workspaceSessionService,
         workspaceSessions.publishUpdated,
+      ),
+      ...createWorkspaceLifecycleCommandHandlers(
+        workspaceSettingsService,
+        workspaceLifecycleService,
       ),
     },
   });

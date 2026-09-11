@@ -12,6 +12,7 @@ import {
   ELECTRON_APP_UPDATE_GET_STATE_CHANNEL,
   ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
+  ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL,
   ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
@@ -151,6 +152,9 @@ const notifications: OpenDucktorElectronNotificationApi = {
 
 const electronApi: OpenDucktorElectronApi = {
   platform: appPlatformSchema.parse(process.platform),
+  claimContextMenu() {
+    ipcRenderer.send(ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL);
+  },
   invoke: invokeHost,
   subscribe(...subscription) {
     return subscribeElectronHostEvent(ipcRenderer, ...subscription);

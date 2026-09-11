@@ -43,7 +43,7 @@ describe("settings config adapter initialization", () => {
 
       expect(calls).toBe(1);
       expect(configs[0]?.agentRuntimes.opencode.executablePath).toBe("/tools/opencode");
-      expect(JSON.parse(await readFile(configPath, "utf8")).version).toBe(3);
+      expect(JSON.parse(await readFile(configPath, "utf8")).version).toBe(4);
     });
   });
 
@@ -76,7 +76,7 @@ describe("settings config adapter initialization", () => {
 
       const config = await Effect.runPromise(adapter.readConfig());
 
-      expect(config?.version).toBe(3);
+      expect(config?.version).toBe(4);
       expect(config?.agentRuntimes.opencode).toMatchObject({
         enabled: false,
         executablePath: "/tools/opencode",
@@ -115,11 +115,11 @@ describe("settings config adapter initialization", () => {
 
       const retried = await Effect.runPromise(adapter.readConfig());
       expect(calls).toBe(2);
-      expect(retried?.version).toBe(3);
+      expect(retried?.version).toBe(4);
     });
   });
 
-  test("does not rerun initialization for version 3", async () => {
+  test("does not rerun initialization for the current config version", async () => {
     await withTempConfig(async (configPath) => {
       await writeFile(configPath, JSON.stringify(createDefaultGlobalConfig()));
       let calls = 0;
@@ -133,7 +133,7 @@ describe("settings config adapter initialization", () => {
 
       const config = await Effect.runPromise(adapter.readConfig());
 
-      expect(config?.version).toBe(3);
+      expect(config?.version).toBe(4);
       expect(calls).toBe(0);
     });
   });

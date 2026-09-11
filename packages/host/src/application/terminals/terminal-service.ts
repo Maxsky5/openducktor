@@ -26,6 +26,7 @@ import { TerminalServiceError } from "./terminal-service-error";
 import {
   createTerminalSessionEngine,
   type TerminalSessionAttachInput,
+  type TerminalWorkspaceActivity,
 } from "./terminal-session-engine";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 
@@ -39,6 +40,9 @@ export type TerminalService = {
   readonly hostInstanceId: string;
   create(input: TerminalCreateRequest): Effect.Effect<TerminalCreateResponse, TerminalServiceError>;
   list(filter: TerminalListFilter): Effect.Effect<TerminalListResponse, TerminalServiceError>;
+  inspectWorkspaceActivity(
+    repoPath: string,
+  ): Effect.Effect<TerminalWorkspaceActivity, TerminalServiceError>;
   preparePathInput(
     input: TerminalPreparePathInputRequest,
   ): Effect.Effect<TerminalPreparePathInputResponse, TerminalServiceError>;
@@ -166,6 +170,11 @@ export const createTerminalService = ({
                 }
               : filter;
           return { hostInstanceId, terminals: engine.list(canonicalFilter) };
+        }),
+      inspectWorkspaceActivity: (repoPath) =>
+        Effect.gen(function* () {
+          const canonicalRepoPath = yield* canonicalizeRepositoryPath(repoPath, "list");
+          return yield* engine.inspectWorkspaceActivity(canonicalRepoPath);
         }),
       preparePathInput: (rawInput) =>
         Effect.gen(function* () {

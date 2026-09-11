@@ -17,6 +17,30 @@ export const createWorkspaceHostClient = (): WorkspaceOperationsHostClient => ({
   workspaceList: async () => [],
   workspaceAdd: async (input) => workspace(input.repoPath),
   workspaceSelect: async (workspaceId: string) => workspace(`/${workspaceId}`, true),
+  workspaceCatalogGet: async () => ({
+    openWorkspaces: [],
+    closedWorkspaces: [],
+    onboardingCompleted: false,
+  }),
+  workspaceClose: async (_workspaceId: string, repoPath: string) => ({
+    openWorkspaces: [],
+    closedWorkspaces: [workspace(repoPath)],
+    onboardingCompleted: true,
+  }),
+  workspaceReopen: async (_workspaceId: string, repoPath: string) => ({
+    openWorkspaces: [workspace(repoPath, true)],
+    closedWorkspaces: [],
+    onboardingCompleted: true,
+  }),
+  workspaceRemove: async () => ({
+    catalog: {
+      openWorkspaces: [],
+      closedWorkspaces: [],
+      onboardingCompleted: true,
+    },
+    removedWorktrees: [],
+  }),
+  workspaceResolvePath: async () => ({ kind: "new" }),
   workspaceReorder: async (workspaceOrder: string[]) =>
     workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
   gitGetCurrentBranch: async () => {

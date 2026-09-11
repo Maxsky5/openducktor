@@ -3,6 +3,7 @@ import {
   chatSettingsSchema,
   type RepoConfig,
   type SettingsSnapshot,
+  type WorkspaceCatalog,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
@@ -13,6 +14,7 @@ import { host } from "../operations/host";
 type SettingsSnapshotQueryHost = Pick<typeof host, "workspaceGetSettingsSnapshot">;
 type RepoConfigQueryHost = Pick<typeof host, "workspaceGetRepoConfig">;
 type WorkspaceListQueryHost = Pick<typeof host, "workspaceList">;
+type WorkspaceCatalogQueryHost = Pick<typeof host, "workspaceCatalogGet">;
 type WorkspaceRecordUpdate =
   | WorkspaceRecord[]
   | ((current: WorkspaceRecord[] | undefined) => WorkspaceRecord[]);
@@ -27,6 +29,7 @@ export const workspaceQueryKeys = {
   repoConfig: (workspaceId: string) =>
     [...workspaceQueryKeys.all, "repo-config", workspaceId] as const,
   list: () => [...workspaceQueryKeys.all, "list"] as const,
+  catalog: () => [...workspaceQueryKeys.all, "catalog"] as const,
 };
 
 export const toRepoSettingsInput = (config: RepoConfig): RepoSettingsInput => ({
@@ -105,6 +108,13 @@ export const workspaceListQueryOptions = (hostClient: WorkspaceListQueryHost = h
     staleTime: WORKSPACE_LIST_STALE_TIME_MS,
   });
 
+export const workspaceCatalogQueryOptions = (hostClient: WorkspaceCatalogQueryHost = host) =>
+  queryOptions({
+    queryKey: workspaceQueryKeys.catalog(),
+    queryFn: (): Promise<WorkspaceCatalog> => hostClient.workspaceCatalogGet(),
+    staleTime: WORKSPACE_LIST_STALE_TIME_MS,
+  });
+
 export const loadSettingsSnapshotFromQuery = (
   queryClient: QueryClient,
   hostClient?: SettingsSnapshotQueryHost,
@@ -141,9 +151,26 @@ export const writeWorkspaceListToQuery = (
   queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), recordsOrUpdater);
 };
 
+export const writeWorkspaceCatalogToQuery = (
+  queryClient: QueryClient,
+  catalog: WorkspaceCatalog,
+): void => {
+  void queryClient.cancelQueries(
+    {
+      queryKey: workspaceQueryKeys.catalog(),
+      exact: true,
+    },
+    { revert: false },
+  );
+  queryClient.setQueryData<WorkspaceCatalog>(workspaceQueryKeys.catalog(), catalog);
+};
+
 export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Promise<void> => {
   await queryClient.invalidateQueries({
     queryKey: workspaceQueryKeys.list(),
+  });
+  await queryClient.invalidateQueries({
+    queryKey: workspaceQueryKeys.catalog(),
   });
   await queryClient.invalidateQueries({
     queryKey: workspaceQueryKeys.settingsSnapshot(),

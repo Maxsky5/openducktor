@@ -8,7 +8,9 @@ import {
   type LoadedGlobalConfig,
   parsePersistedGlobalConfig,
   parsePersistedGlobalConfigV2,
+  parsePersistedGlobalConfigV3,
   readPersistedGlobalConfigVersion,
+  upgradePersistedGlobalConfigV3,
 } from "../../config/global-config";
 import { resolveOpenDucktorBaseDir, resolveUserPath } from "../../config/openducktor-config-dir";
 import {
@@ -234,9 +236,24 @@ export const createSettingsConfigAdapter = ({
                   path: resolvedConfigPath,
                 }),
         });
-        if (version === 3) {
+        if (version === 4) {
           return yield* Effect.try({
             try: () => parsePersistedGlobalConfig(parsedPayload),
+            catch: (cause) =>
+              cause instanceof HostValidationError
+                ? new HostValidationError({
+                    message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
+                    cause,
+                    details: { path: resolvedConfigPath },
+                  })
+                : toHostOperationError(cause, "settingsConfig.parseConfig", {
+                    path: resolvedConfigPath,
+                  }),
+          });
+        }
+        if (version === 3) {
+          return yield* Effect.try({
+            try: () => upgradePersistedGlobalConfigV3(parsePersistedGlobalConfigV3(parsedPayload)),
             catch: (cause) =>
               cause instanceof HostValidationError
                 ? new HostValidationError({

@@ -31,6 +31,11 @@ describe("app-state-context-values", () => {
     const activeWorkspace = workspace("/repo-a", true);
     const value = buildWorkspaceStateValue({
       isSwitchingWorkspace: false,
+      closedWorkspaces: [],
+      closeWorkspace: async () => {},
+      removeWorkspace: async () => {},
+      reopenWorkspace: async () => {},
+      resolveWorkspacePath: async () => ({ kind: "new" }),
       isLoadingBranches: false,
       isSwitchingBranch: false,
       branchSyncDegraded: false,
