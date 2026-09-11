@@ -136,21 +136,12 @@ export const createOpenCodeLiveSessionState = ({
     usage: OpencodeSessionContextUsage,
   ): AgentSessionLiveAdapterChange[] => {
     const contextUsage = toContextUsage(usage);
-    const matches = [...sessionsByRef.values()].filter(
-      ({ snapshot }) => snapshot.ref.externalSessionId === externalSessionId,
-    );
-    if (matches.length > 1) {
-      throw new HostValidationError({
-        field: "externalSessionId",
-        message: `OpenCode runtime '${runtime.runtimeId}' has multiple live sessions with id '${externalSessionId}'.`,
-        details: { runtimeId: runtime.runtimeId, externalSessionId },
-      });
-    }
-    const session = matches[0];
-    if (!session) {
+    const ref = refsByExternalSessionId.find(externalSessionId);
+    if (!ref) {
       contextUsageBySessionId.set(externalSessionId, contextUsage);
       return [];
     }
+    const session = requireSession(ref);
     if (openCodeLiveSnapshotsEqual(session.snapshot, { ...session.snapshot, contextUsage })) {
       contextUsageBySessionId.set(externalSessionId, contextUsage);
       return [];
