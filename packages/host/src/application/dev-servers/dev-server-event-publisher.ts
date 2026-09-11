@@ -7,7 +7,7 @@ export const createDevServerEventPublisher = (eventBus?: HostEventBusPort) => {
   const publish = (event: DevServerEvent): void =>
     eventBus?.publish(createDevServerEventEnvelope(event));
   const terminalWriter = createDevServerTerminalWriter(publish);
-  const emitSnapshot = (runtime: DevServerGroupRuntime): void =>
+  const publishSnapshot = (runtime: DevServerGroupRuntime): void =>
     publish({ type: "snapshot", state: runtime.state });
-  return { emitSnapshot, publish, terminalWriter };
+  return { publish, publishSnapshot, terminalWriter };
 };

@@ -17,11 +17,7 @@ export type WorkspaceRemovalRecord = z.infer<typeof workspaceRemovalRecordSchema
 
 export const incompleteWorkspaceRemovalSchema = z.object({
   workspace: workspaceRecordSchema,
-  operationId: z.string().min(1),
-  phase: workspaceRemovalPhaseSchema,
-  removeTaskWorktrees: z.boolean(),
-  removedWorktrees: z.array(z.string()),
-  lastFailure: z.string().nullable(),
+  record: workspaceRemovalRecordSchema,
 });
 export type IncompleteWorkspaceRemoval = z.infer<typeof incompleteWorkspaceRemovalSchema>;
 

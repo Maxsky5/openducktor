@@ -35,18 +35,22 @@ const createAdmission = (workspaceCatalog: WorkspaceCatalog) =>
   });
 
 describe("workspace admission service", () => {
-  test("hydrates closed and incomplete removal workspaces", async () => {
+  test("loads closed and incomplete removal workspaces", async () => {
     const admission = createAdmission(
       catalog({
         closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")],
         incompleteRemovals: [
           {
             workspace: workspaceRecord("removing-ws", "/repos/removing"),
-            operationId: "op-1",
-            phase: "task_store",
-            removeTaskWorktrees: true,
-            removedWorktrees: [],
-            lastFailure: null,
+            record: {
+              version: 1,
+              operationId: "op-1",
+              phase: "task_store",
+              removeTaskWorktrees: true,
+              removedWorktrees: [],
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
           },
         ],
       }),
@@ -91,11 +95,15 @@ describe("workspace admission service", () => {
         incompleteRemovals: [
           {
             workspace: workspaceRecord("removing-ws", "/repos/removing"),
-            operationId: "op-1",
-            phase: "attachments",
-            removeTaskWorktrees: false,
-            removedWorktrees: [],
-            lastFailure: null,
+            record: {
+              version: 1,
+              operationId: "op-1",
+              phase: "attachments",
+              removeTaskWorktrees: false,
+              removedWorktrees: [],
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
           },
         ],
       }),
@@ -158,10 +166,7 @@ describe("workspace admission service", () => {
         }),
       ),
     ).rejects.toThrow("already in progress for ws");
-    expect(admission.isWorkspaceReserved("ws")).toBe(true);
-
     admission.releaseReservation("ws");
-    expect(admission.isWorkspaceReserved("ws")).toBe(false);
     await expect(
       Effect.runPromise(
         admission.reserveWorkspace({

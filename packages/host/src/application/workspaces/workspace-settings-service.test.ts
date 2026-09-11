@@ -892,25 +892,6 @@ describe("createWorkspaceSettingsService", () => {
     expect(written?.activeWorkspace).toBe("repo-b");
     expect(catalog.openWorkspaces.map((record) => record.workspaceId)).toEqual(["repo-b"]);
   });
-  test("removing the last workspace keeps inferred onboarding completion", async () => {
-    const config = globalConfig({
-      activeWorkspace: "repo-a",
-      workspaceOrder: ["repo-a"],
-      workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
-    });
-    delete config.onboardingCompleted;
-    const settingsConfig = createFakeSettingsConfig({ config });
-    const service = createWorkspaceSettingsService(settingsConfig);
-
-    const catalog = await Effect.runPromise(
-      service.removeWorkspaceRegistration("repo-a", "/repos/a"),
-    );
-
-    expect(catalog.openWorkspaces).toEqual([]);
-    expect(catalog.onboardingCompleted).toBe(true);
-    expect(settingsConfig.writtenConfigs.at(-1)?.onboardingCompleted).toBe(true);
-    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces).toEqual({});
-  });
   test("addWorkspace marks onboarding completed", async () => {
     const settingsConfig = createFakeSettingsConfig({
       existingPaths: new Set(["/repos/new", "/repos/new/.git"]),
@@ -982,10 +963,12 @@ describe("createWorkspaceSettingsService", () => {
     expect(catalog.incompleteRemovals).toHaveLength(1);
     expect(catalog.incompleteRemovals[0]).toMatchObject({
       workspace: { workspaceId: "repo-a" },
-      phase: "attachments",
-      removeTaskWorktrees: true,
-      removedWorktrees: ["/managed/repo-a/task-1"],
-      lastFailure: "worktree removal failed",
+      record: {
+        phase: "attachments",
+        removeTaskWorktrees: true,
+        removedWorktrees: ["/managed/repo-a/task-1"],
+        lastFailure: "worktree removal failed",
+      },
     });
     expect(await Effect.runPromise(service.listWorkspaces())).toEqual([]);
   });
@@ -1048,8 +1031,10 @@ describe("createWorkspaceSettingsService", () => {
       kind: "removing",
       removal: {
         workspace: { workspaceId: "repo-a" },
-        phase: "task_store",
-        removedWorktrees: ["/managed/repo-a/task-1"],
+        record: {
+          phase: "task_store",
+          removedWorktrees: ["/managed/repo-a/task-1"],
+        },
       },
     });
   });

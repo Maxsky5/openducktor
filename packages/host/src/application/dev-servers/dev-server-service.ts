@@ -63,7 +63,7 @@ export const createDevServerService = ({
 }: CreateDevServerServiceInput): DisposableDevServerService => {
   const hostInstanceId = globalThis.crypto.randomUUID();
   const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
-  const { emitSnapshot, publish, terminalWriter } = createDevServerEventPublisher(eventBus);
+  const { publish, publishSnapshot, terminalWriter } = createDevServerEventPublisher(eventBus);
   const getWorktreePath = (repoPath: string, taskId: string) =>
     Effect.gen(function* () {
       const worktree = taskWorktreeService
@@ -392,7 +392,7 @@ export const createDevServerService = ({
             }),
           );
         }
-        emitSnapshot(runtime);
+        publishSnapshot(runtime);
         let failedScript: FailedDevServerScriptStart | null = null;
         for (const script of repoConfig.devServers) {
           const startResult = yield* Effect.either(startScript(runtime, worktreePath, script));
@@ -411,7 +411,7 @@ export const createDevServerService = ({
             runtime,
             updateScriptState,
           );
-          emitSnapshot(runtime);
+          publishSnapshot(runtime);
           return yield* Effect.fail(
             new HostOperationError({
               operation: "dev_server.start",
@@ -430,7 +430,7 @@ export const createDevServerService = ({
             }),
           );
         }
-        emitSnapshot(runtime);
+        publishSnapshot(runtime);
         if (runtime.state.scripts.some(scriptHasLiveProcess)) {
           return devServerGroupStateSchema.parse(runtime.state);
         }
@@ -448,7 +448,7 @@ export const createDevServerService = ({
         const { repoPath, taskId } = input;
         const { runtime } = yield* resolveRuntime(repoPath, taskId);
         const errors = yield* stopRuntime(runtime);
-        emitSnapshot(runtime);
+        publishSnapshot(runtime);
         if (errors.length > 0) {
           return yield* Effect.fail(
             new HostOperationError({
@@ -475,7 +475,7 @@ export const createDevServerService = ({
             Effect.gen(function* () {
               const runningScripts = listRunningScripts(runtime);
               const stopErrors = yield* stopRuntime(runtime);
-              emitSnapshot(runtime);
+              publishSnapshot(runtime);
               return { runningScripts, stopErrors };
             }),
           { concurrency: "unbounded" },

@@ -125,11 +125,7 @@ export type WorkspaceAddInput = {
 };
 export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
-    const config = (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
-    if (config.onboardingCompleted === undefined) {
-      config.onboardingCompleted = Object.keys(config.workspaces).length > 0;
-    }
-    return config;
+    return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
 const normalizeOptionalNonEmptyString = (value: string | undefined): string | undefined => {
   if (value === undefined) {
@@ -397,12 +393,3 @@ export const normalizeSnapshotWorkspaces = (
     }
     return nextWorkspaces;
   });
-
-export {
-  buildWorkspaceCatalog,
-  firstOpenWorkspaceId,
-  isIncompleteRemoval,
-  openWorkspaceRecordsInEffectiveOrder,
-  workspacePathResolution,
-  workspaceRecordsInEffectiveOrder,
-} from "./workspace-catalog-model";
