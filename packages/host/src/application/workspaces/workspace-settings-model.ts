@@ -113,7 +113,11 @@ export type WorkspaceAddInput = {
 };
 export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
-    return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
+    const config = (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
+    if (config.onboardingCompleted === undefined) {
+      config.onboardingCompleted = Object.keys(config.workspaces).length > 0;
+    }
+    return config;
   });
 const normalizeOptionalNonEmptyString = (value: string | undefined): string | undefined => {
   if (value === undefined) {

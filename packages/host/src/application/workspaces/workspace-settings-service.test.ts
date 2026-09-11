@@ -728,6 +728,25 @@ describe("createWorkspaceSettingsService", () => {
     expect(written?.activeWorkspace).toBe("repo-b");
     expect(catalog.openWorkspaces.map((record) => record.workspaceId)).toEqual(["repo-b"]);
   });
+  test("removing the last workspace keeps inferred onboarding completion", async () => {
+    const config = globalConfig({
+      activeWorkspace: "repo-a",
+      workspaceOrder: ["repo-a"],
+      workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+    });
+    delete config.onboardingCompleted;
+    const settingsConfig = createFakeSettingsConfig({ config });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const catalog = await Effect.runPromise(
+      service.removeWorkspaceRegistration("repo-a", "/repos/a"),
+    );
+
+    expect(catalog.openWorkspaces).toEqual([]);
+    expect(catalog.onboardingCompleted).toBe(true);
+    expect(settingsConfig.writtenConfigs.at(-1)?.onboardingCompleted).toBe(true);
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces).toEqual({});
+  });
   test("addWorkspace marks onboarding completed", async () => {
     const settingsConfig = createFakeSettingsConfig({
       existingPaths: new Set(["/repos/new", "/repos/new/.git"]),
