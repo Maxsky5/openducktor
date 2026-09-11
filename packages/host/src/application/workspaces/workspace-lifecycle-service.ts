@@ -229,44 +229,6 @@ export const createWorkspaceLifecycleService = ({
       }
     });
 
-  const failRemovalPhase = (
-    workspaceId: string,
-    phase: WorkspaceRemovalPhase,
-    removedWorktrees: string[],
-    failedPath: string | undefined,
-    message: string,
-    cause: unknown,
-  ) =>
-    workspaceSettingsService
-      .recordWorkspaceRemovalProgress({
-        workspaceId,
-        phase,
-        removedWorktrees,
-        lastFailure: message,
-      })
-      .pipe(
-        Effect.catchAll((journalError) =>
-          Effect.fail(
-            new HostOperationError({
-              operation: `workspace.removeWorkspace.${phase}`,
-              message: `${message} The removal progress could not be saved: ${journalError.message}`,
-              cause: unwrapUnknownError(journalError),
-              details: { failedPath, phase, removedWorktrees, workspaceId },
-            }),
-          ),
-        ),
-        Effect.zipRight(
-          Effect.fail(
-            new HostOperationError({
-              operation: `workspace.removeWorkspace.${phase}`,
-              message,
-              cause: unwrapUnknownError(cause),
-              details: { failedPath, phase, removedWorktrees, workspaceId },
-            }),
-          ),
-        ),
-      );
-
   const persistProgress = (
     workspaceId: string,
     phase: WorkspaceRemovalPhase,
@@ -278,6 +240,38 @@ export const createWorkspaceLifecycleService = ({
       phase,
       removedWorktrees,
       lastFailure,
+    });
+
+  const failRemovalPhase = (
+    workspaceId: string,
+    phase: WorkspaceRemovalPhase,
+    removedWorktrees: string[],
+    failedPath: string | undefined,
+    message: string,
+    cause: unknown,
+  ) =>
+    Effect.gen(function* () {
+      const journalResult = yield* Effect.either(
+        persistProgress(workspaceId, phase, removedWorktrees, message),
+      );
+      if (journalResult._tag === "Left") {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: `workspace.removeWorkspace.${phase}`,
+            message: `${message} The removal progress could not be saved: ${journalResult.left.message}`,
+            cause: unwrapUnknownError(journalResult.left),
+            details: { failedPath, phase, removedWorktrees, workspaceId },
+          }),
+        );
+      }
+      return yield* Effect.fail(
+        new HostOperationError({
+          operation: `workspace.removeWorkspace.${phase}`,
+          message,
+          cause: unwrapUnknownError(cause),
+          details: { failedPath, phase, removedWorktrees, workspaceId },
+        }),
+      );
     });
 
   const executeRemoval = (

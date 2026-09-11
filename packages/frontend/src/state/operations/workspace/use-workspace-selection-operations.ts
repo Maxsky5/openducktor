@@ -8,7 +8,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
+import type {
+  ActiveWorkspace,
+  WorkspaceLifecycleTarget,
+  WorkspaceRemovalInput,
+  WorkspaceSelectionOperationsInput,
+} from "@/types/state-slices";
 import {
   dropWorkspaceQueries,
   loadWorkspaceListFromQuery,
@@ -398,72 +403,82 @@ export function useWorkspaceSelectionOperations({
     ],
   );
 
-  const closeWorkspace = useCallback(
-    async (input: { workspaceId: string; expectedRepoPath: string }): Promise<void> => {
+  const runLifecycleAction = useCallback(
+    async (
+      run: () => Promise<void>,
+      success: () => { title: string; description: string },
+    ): Promise<void> => {
       workspaceSwitchVersionRef.current += 1;
       workspaceReorderVersionRef.current += 1;
       setIsSwitchingWorkspace(true);
       try {
-        const catalog = await hostClient.workspaceClose(input.workspaceId, input.expectedRepoPath);
-        applyLifecycleCatalog(catalog);
+        await run();
         await refreshWorkspaceCachesAfterMutation();
-        toast.success("Workspace closed", {
-          description: "Reopen it from Open a Repository when you need it again.",
-        });
+        const { title, description } = success();
+        toast.success(title, { description });
       } finally {
         setIsSwitchingWorkspace(false);
       }
     },
-    [applyLifecycleCatalog, hostClient, refreshWorkspaceCachesAfterMutation],
+    [refreshWorkspaceCachesAfterMutation],
+  );
+
+  const closeWorkspace = useCallback(
+    (input: WorkspaceLifecycleTarget): Promise<void> =>
+      runLifecycleAction(
+        async () => {
+          const catalog = await hostClient.workspaceClose(
+            input.workspaceId,
+            input.expectedRepoPath,
+          );
+          applyLifecycleCatalog(catalog);
+        },
+        () => ({
+          title: "Workspace closed",
+          description: "Reopen it from Open a Repository when you need it again.",
+        }),
+      ),
+    [applyLifecycleCatalog, hostClient, runLifecycleAction],
   );
 
   const removeWorkspace = useCallback(
-    async (input: {
-      workspaceId: string;
-      expectedRepoPath: string;
-      removeTaskWorktrees: boolean;
-    }): Promise<void> => {
-      workspaceSwitchVersionRef.current += 1;
-      workspaceReorderVersionRef.current += 1;
-      setIsSwitchingWorkspace(true);
-      try {
-        const result = await hostClient.workspaceRemove(input);
-        applyLifecycleCatalog(result.catalog);
-        dropWorkspaceQueries(queryClient, {
-          repoPath: input.expectedRepoPath,
-          workspaceId: input.workspaceId,
-        });
-        await refreshWorkspaceCachesAfterMutation();
-        toast.success("Workspace removed", {
+    (input: WorkspaceRemovalInput): Promise<void> => {
+      let removedWorktreeCount = 0;
+      return runLifecycleAction(
+        async () => {
+          const result = await hostClient.workspaceRemove(input);
+          removedWorktreeCount = result.removedWorktrees.length;
+          applyLifecycleCatalog(result.catalog);
+          dropWorkspaceQueries(queryClient, {
+            repoPath: input.expectedRepoPath,
+            workspaceId: input.workspaceId,
+          });
+        },
+        () => ({
+          title: "Workspace removed",
           description:
-            result.removedWorktrees.length > 0
-              ? `Removed ${result.removedWorktrees.length} task worktree(s). The repository and its branches remain.`
+            removedWorktreeCount > 0
+              ? `Removed ${removedWorktreeCount} task worktree(s). The repository and its branches remain.`
               : "The repository and its branches remain.",
-        });
-      } finally {
-        setIsSwitchingWorkspace(false);
-      }
+        }),
+      );
     },
-    [applyLifecycleCatalog, hostClient, queryClient, refreshWorkspaceCachesAfterMutation],
+    [applyLifecycleCatalog, hostClient, queryClient, runLifecycleAction],
   );
 
   const reopenWorkspace = useCallback(
-    async (input: { workspaceId: string; expectedRepoPath: string }): Promise<void> => {
-      workspaceSwitchVersionRef.current += 1;
-      workspaceReorderVersionRef.current += 1;
-      setIsSwitchingWorkspace(true);
-      try {
-        const catalog = await hostClient.workspaceReopen(input.workspaceId, input.expectedRepoPath);
-        applyLifecycleCatalog(catalog);
-        await refreshWorkspaceCachesAfterMutation();
-        toast.success("Workspace reopened", {
-          description: input.expectedRepoPath,
-        });
-      } finally {
-        setIsSwitchingWorkspace(false);
-      }
-    },
-    [applyLifecycleCatalog, hostClient, refreshWorkspaceCachesAfterMutation],
+    (input: WorkspaceLifecycleTarget): Promise<void> =>
+      runLifecycleAction(
+        async () => {
+          const catalog = await hostClient.workspaceReopen(
+            input.workspaceId,
+            input.expectedRepoPath,
+          );
+          applyLifecycleCatalog(catalog);
+        },
+        () => ({ title: "Workspace reopened", description: input.expectedRepoPath }),
+      ),
+    [applyLifecycleCatalog, hostClient, runLifecycleAction],
   );
 
   const resolveWorkspacePath = useCallback(

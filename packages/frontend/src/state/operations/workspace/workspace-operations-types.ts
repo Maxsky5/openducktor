@@ -5,7 +5,11 @@ import type {
   WorkspacePathResolution,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
+import type {
+  WorkspaceLifecycleTarget,
+  WorkspaceRemovalInput,
+  WorkspaceSelectionOperationsInput,
+} from "@/types/state-slices";
 import type { host } from "../shared/host";
 
 export type WorkspaceBranchOperationsHostClient = Pick<
@@ -51,13 +55,9 @@ export type UseWorkspaceOperationsResult = {
   refreshWorkspaces: () => Promise<void>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
-  closeWorkspace: (input: { workspaceId: string; expectedRepoPath: string }) => Promise<void>;
-  removeWorkspace: (input: {
-    workspaceId: string;
-    expectedRepoPath: string;
-    removeTaskWorktrees: boolean;
-  }) => Promise<void>;
-  reopenWorkspace: (input: { workspaceId: string; expectedRepoPath: string }) => Promise<void>;
+  closeWorkspace: (input: WorkspaceLifecycleTarget) => Promise<void>;
+  removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
+  reopenWorkspace: (input: WorkspaceLifecycleTarget) => Promise<void>;
   resolveWorkspacePath: (repoPath: string) => Promise<WorkspacePathResolution>;
   reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
