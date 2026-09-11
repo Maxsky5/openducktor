@@ -1,4 +1,4 @@
-import type { WorkspaceRecord } from "@openducktor/contracts";
+import type { WorkspacePathResolution, WorkspaceRecord } from "@openducktor/contracts";
 import { FolderOpen } from "lucide-react";
 import { type ReactElement, type ReactNode, useMemo, useReducer, useRef } from "react";
 import { WorkspaceIdentityFields } from "@/components/features/workspace-identity/workspace-identity-fields";
@@ -94,6 +94,8 @@ type WorkspaceCreationFormProps = {
   disabled?: boolean;
   onSubmittingChange?: (submitting: boolean) => void;
   onSuccess?: () => void;
+  resolveRepoPath?: (repoPath: string) => Promise<WorkspacePathResolution>;
+  onReopenClosedWorkspace?: (workspace: WorkspaceRecord) => Promise<void>;
 };
 
 export type WorkspaceCreationController = {
@@ -109,7 +111,7 @@ export type WorkspaceCreationController = {
   error: string | null;
   openPicker: () => void;
   closePicker: () => void;
-  confirmRepo: (repoPath: string) => void;
+  confirmRepo: (repoPath: string) => Promise<void>;
   updateWorkspaceId: (workspaceId: string) => void;
   updateWorkspaceName: (workspaceName: string) => void;
   updateAbbreviation: (abbreviation: string) => void;
@@ -123,6 +125,8 @@ export function useWorkspaceCreation({
   disabled = false,
   onSubmittingChange,
   onSuccess,
+  resolveRepoPath,
+  onReopenClosedWorkspace,
   initialPickerOpen = false,
 }: WorkspaceCreationFormProps & { initialPickerOpen?: boolean }): WorkspaceCreationController {
   const [state, dispatch] = useReducer(reducer, {
@@ -148,7 +152,17 @@ export function useWorkspaceCreation({
   }
   const busy = disabled || state.submitting;
 
-  const confirmRepo = (repoPath: string): void => {
+  const confirmRepo = async (repoPath: string): Promise<void> => {
+    if (resolveRepoPath) {
+      const resolution = await resolveRepoPath(repoPath);
+      if (resolution.kind === "closed") {
+        if (onReopenClosedWorkspace) {
+          await onReopenClosedWorkspace(resolution.workspace);
+        }
+        onSuccess?.();
+        return;
+      }
+    }
     const workspaceName = deriveWorkspaceNameFromRepoPath(repoPath);
     dispatch({
       type: "repo",

@@ -21,6 +21,11 @@ import { useTaskCreateModalController } from "./use-task-create-modal-controller
 
 const workspaceState = {
   isSwitchingWorkspace: false,
+  closedWorkspaces: [],
+  closeWorkspace: async () => {},
+  removeWorkspace: async () => {},
+  reopenWorkspace: async () => {},
+  resolveWorkspacePath: async () => ({ kind: "new" }),
   isLoadingBranches: false,
   isSwitchingBranch: false,
   branchSyncDegraded: false,

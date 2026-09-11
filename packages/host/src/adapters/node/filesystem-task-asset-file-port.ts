@@ -23,6 +23,7 @@ import {
   createTaskAssetQuarantineFiles,
   type QuarantineManifest,
 } from "./filesystem-task-asset-quarantine";
+import { removeWorkspaceTaskAssetData } from "./filesystem-task-asset-workspace-cleanup";
 
 type QuarantineMove = { from: string; to: string };
 
@@ -129,6 +130,26 @@ export const createNodeTaskAssetFilePort = (
         message: "Failed to write task asset quarantine recovery data.",
         assetIds: manifest.assetIds,
         taskId: manifest.taskId,
+      },
+    );
+
+  const removeWorkspaceData = (workspaceId: string) =>
+    tryPromise(
+      () =>
+        removeWorkspaceTaskAssetData({
+          durableRoot,
+          legacyQuarantineFiles,
+          ownedStagingRoot,
+          ownerState,
+          quarantineFiles,
+          quarantineFilesForRoot,
+          workspaceId,
+        }),
+      {
+        operation: "delete",
+        code: "purge",
+        phase: "remove_workspace_data",
+        message: `Failed to remove task asset data for workspace ${workspaceId}.`,
       },
     );
 
@@ -462,6 +483,9 @@ export const createNodeTaskAssetFilePort = (
           },
         );
       });
+    },
+    removeWorkspaceData(input) {
+      return removeWorkspaceData(input.workspaceId);
     },
   };
 };

@@ -1,5 +1,4 @@
 import {
-  type DevServerEvent,
   type DevServerScriptState,
   devServerGroupStateSchema,
   type RepoConfig,
@@ -29,20 +28,21 @@ import type {
   DisposableDevServerService,
   FailedDevServerScriptStart,
 } from "./dev-server-service-types";
+import { createDevServerEventPublisher } from "./dev-server-event-publisher";
 import {
   buildGroupState,
-  createDevServerEventEnvelope,
   DEV_SERVER_CLICOLOR_FORCE,
   DEV_SERVER_COLORTERM,
   DEV_SERVER_FORCE_COLOR,
   DEV_SERVER_TERM,
   type DevServerGroupRuntime,
+  inspectDevServerWorkspaceActivity,
+  nowIso,
   scriptHasLiveProcess,
   startTerminalRun,
   syncGroupState,
   syncRuntimeTerminalBufferByteCounts,
 } from "./dev-server-state";
-import { createDevServerTerminalWriter } from "./dev-server-terminal-writer";
 
 export type {
   CreateDevServerServiceInput,
@@ -54,7 +54,6 @@ export type {
   StoppedDevServerScript,
 } from "./dev-server-service-types";
 
-const nowIso = (): string => new Date().toISOString();
 export const createDevServerService = ({
   eventBus,
   processPort,
@@ -63,11 +62,7 @@ export const createDevServerService = ({
 }: CreateDevServerServiceInput): DisposableDevServerService => {
   const hostInstanceId = globalThis.crypto.randomUUID();
   const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
-  const publish = (event: DevServerEvent): void =>
-    eventBus?.publish(createDevServerEventEnvelope(event));
-  const terminalWriter = createDevServerTerminalWriter(publish);
-  const emitSnapshot = (runtime: DevServerGroupRuntime): void =>
-    publish({ type: "snapshot", state: runtime.state });
+  const { emitSnapshot, publish, terminalWriter } = createDevServerEventPublisher(eventBus);
   const getWorktreePath = (repoPath: string, taskId: string) =>
     Effect.gen(function* () {
       const worktree = taskWorktreeService
@@ -349,6 +344,9 @@ export const createDevServerService = ({
         const { runtime } = yield* resolveRuntime(repoPath, taskId);
         return devServerGroupStateSchema.parse(runtime.state);
       });
+    },
+    inspectWorkspaceActivity(input) {
+      return Effect.sync(() => inspectDevServerWorkspaceActivity(groups, input.repoPath));
     },
     restart(input) {
       return Effect.gen(function* () {

@@ -29,6 +29,7 @@ import { z } from "zod";
 
 export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
 export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
+export const ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL = "openducktor:context-menu-claimed";
 export const ELECTRON_OPEN_EXTERNAL_URL_CHANNEL = "openducktor:open-external-url";
 export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL = "openducktor:local-attachment-preview-src";
 export const ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL = "openducktor:editor-clipboard:read";
@@ -193,6 +194,7 @@ export type OpenDucktorElectronNotificationApi = {
 
 export type OpenDucktorElectronApi = {
   platform: AppPlatform;
+  claimContextMenu(): void;
   invoke(
     command: HostCommandName,
     args?: ElectronHostInvokeRequest["args"],

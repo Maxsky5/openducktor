@@ -18,6 +18,7 @@ import type {
   TaskStatus,
   TaskStoreCheck,
   TaskUpdatePatch,
+  WorkspacePathResolution,
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type {
@@ -84,11 +85,20 @@ export type WorkspaceStateContextValue = {
   isSwitchingBranch: boolean;
   branchSyncDegraded: boolean;
   workspaces: WorkspaceRecord[];
+  closedWorkspaces: WorkspaceRecord[];
   activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
   activeBranch: GitCurrentBranch | null;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
+  closeWorkspace: (input: { workspaceId: string; expectedRepoPath: string }) => Promise<void>;
+  removeWorkspace: (input: {
+    workspaceId: string;
+    expectedRepoPath: string;
+    removeTaskWorktrees: boolean;
+  }) => Promise<void>;
+  reopenWorkspace: (input: { workspaceId: string; expectedRepoPath: string }) => Promise<void>;
+  resolveWorkspacePath: (repoPath: string) => Promise<WorkspacePathResolution>;
   reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;
@@ -114,6 +124,7 @@ export type WorkspaceBranchStateContextValue = Pick<
 
 export type WorkspacePresenceContextValue = {
   hasWorkspaces: boolean;
+  onboardingCompleted: boolean;
   hasLoadedWorkspaceList: boolean;
   isLoadingWorkspaces: boolean;
   workspaceLoadError: Error | null;
