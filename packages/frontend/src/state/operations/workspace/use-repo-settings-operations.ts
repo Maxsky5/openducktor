@@ -194,7 +194,7 @@ export function useRepoSettingsOperations({
         );
       }
       void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
-      await queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: repositoryGitProviderContextQueryKeys.all,
       });
     },

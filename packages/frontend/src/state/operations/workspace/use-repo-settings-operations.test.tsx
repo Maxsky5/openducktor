@@ -997,7 +997,7 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("waits for provider context refresh after saving settings", async () => {
+  test("refreshes provider context in the background after saving settings", async () => {
     const applyWorkspaceRecords = mock(() => {});
     const applyWorkspaceRecord = mock(() => {});
     const snapshot = createSettingsSnapshot();
@@ -1035,17 +1035,10 @@ describe("use-repo-settings-operations", () => {
       queryClient.setQueryData(runtimeKey, { runtimes: [] });
       queryClient.setQueryData(checksKey, { ok: true });
 
-      let saveFinished = false;
-      const save = harness
-        .getLatest()
-        .saveSettingsSnapshot(snapshot)
-        .then(() => {
-          saveFinished = true;
-        });
+      const save = harness.getLatest().saveSettingsSnapshot(snapshot);
       await providerRefreshStarted.promise;
-      await Promise.resolve();
+      await save;
 
-      expect(saveFinished).toBe(false);
       expect(queryClient.getQueryState(runtimeKey)?.isInvalidated).toBe(false);
       expect(queryClient.getQueryState(checksKey)?.isInvalidated).toBe(true);
       expect(invalidateQueries).not.toHaveBeenCalledWith({ queryKey: runtimeQueryKeys.all });
@@ -1055,9 +1048,6 @@ describe("use-repo-settings-operations", () => {
       expect(invalidateQueries).toHaveBeenCalledWith({
         queryKey: repositoryGitProviderContextQueryKeys.all,
       });
-      providerRefresh.resolve();
-      await save;
-      expect(saveFinished).toBe(true);
     } finally {
       providerRefresh.resolve();
       await harness.unmount();
