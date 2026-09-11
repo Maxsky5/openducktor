@@ -648,7 +648,7 @@ const createFakeWorktreeFiles = (calls: string[] = []): WorktreeFilePort => ({
 });
 const createConfig = (): GlobalConfig =>
   globalConfigSchema.parse({
-    version: 4,
+    version: 3,
     workspaces: {
       repo: {
         workspaceId: "repo",

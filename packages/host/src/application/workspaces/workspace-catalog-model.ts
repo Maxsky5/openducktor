@@ -124,7 +124,7 @@ export const buildWorkspaceCatalog = (
         },
       ];
     }),
-    onboardingCompleted: config.onboardingCompleted,
+    onboardingCompleted: config.onboardingCompleted ?? Object.keys(config.workspaces).length > 0,
   };
 };
 export const firstOpenWorkspaceId = (

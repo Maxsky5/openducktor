@@ -314,7 +314,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "generalSettingsSchema",
   "globalConfigSchema",
   "persistedGlobalConfigV2Schema",
-  "persistedGlobalConfigV3Schema",
   "globalGitConfigSchema",
   "GITHUB_PROVIDER_DESCRIPTOR",
   "GetWorkspacesInputSchema",

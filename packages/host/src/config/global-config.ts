@@ -2,9 +2,7 @@ import {
   type GlobalConfig,
   globalConfigSchema,
   type PersistedGlobalConfigV2,
-  type PersistedGlobalConfigV3,
   persistedGlobalConfigV2Schema,
-  persistedGlobalConfigV3Schema,
 } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../effect/host-errors";
@@ -17,7 +15,7 @@ const isPersistedConfigObject = (value: JSONType | undefined): value is Persiste
 export type LoadedGlobalConfig = GlobalConfig;
 
 export const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
-  globalConfigSchema.parse({ version: 4 });
+  globalConfigSchema.parse({ version: 3 });
 
 const migrateReusablePrompts = (payload: PersistedConfigObject) => {
   const chat = payload.chat;
@@ -82,7 +80,7 @@ const migratePersistedConfig = (payload: PersistedConfigObject) =>
 
 const parseSupportedConfigObject = (
   payload: JSONType,
-  expectedVersion: 2 | 3 | 4,
+  expectedVersion: 2 | 3,
 ): PersistedConfigObject => {
   if (!isPersistedConfigObject(payload)) {
     throw new HostValidationError({ message: "Config file must contain a JSON object." });
@@ -99,20 +97,7 @@ const parseSupportedConfigObject = (
 
 export const parsePersistedGlobalConfig = (payload: JSONType): LoadedGlobalConfig => {
   try {
-    return globalConfigSchema.parse(migratePersistedConfig(parseSupportedConfigObject(payload, 4)));
-  } catch (cause) {
-    throw new HostValidationError({
-      message: cause instanceof Error ? cause.message : String(cause),
-      cause,
-    });
-  }
-};
-
-export const parsePersistedGlobalConfigV3 = (payload: JSONType): PersistedGlobalConfigV3 => {
-  try {
-    return persistedGlobalConfigV3Schema.parse(
-      migratePersistedConfig(parseSupportedConfigObject(payload, 3)),
-    );
+    return globalConfigSchema.parse(migratePersistedConfig(parseSupportedConfigObject(payload, 3)));
   } catch (cause) {
     throw new HostValidationError({
       message: cause instanceof Error ? cause.message : String(cause),
@@ -134,32 +119,23 @@ export const parsePersistedGlobalConfigV2 = (payload: JSONType): PersistedGlobal
   }
 };
 
-export const readPersistedGlobalConfigVersion = (payload: JSONType): 2 | 3 | 4 => {
+export const readPersistedGlobalConfigVersion = (payload: JSONType): 2 | 3 => {
   if (!isPersistedConfigObject(payload)) {
     throw new HostValidationError({ message: "Config file must contain a JSON object." });
   }
   const version = payload.version;
-  if (version === 2 || version === 3 || version === 4) {
+  if (version === 2 || version === 3) {
     return version;
   }
   throw new HostValidationError({
-    message: `Unsupported config version ${String(version)}. Expected 2, 3 or 4.`,
+    message: `Unsupported config version ${String(version)}. Expected 2 or 3.`,
   });
 };
 
 const inferOnboardingCompleted = (config: {
   workspaces: object;
-  onboardingCompleted?: boolean;
-}): boolean => config.onboardingCompleted === true || Object.keys(config.workspaces).length > 0;
-
-export const upgradePersistedGlobalConfigV3 = (
-  config: PersistedGlobalConfigV3,
-): LoadedGlobalConfig =>
-  globalConfigSchema.parse({
-    ...config,
-    version: 4,
-    onboardingCompleted: inferOnboardingCompleted(config),
-  });
+  onboardingCompleted?: boolean | undefined;
+}): boolean => config.onboardingCompleted ?? Object.keys(config.workspaces).length > 0;
 
 export const upgradePersistedGlobalConfigV2 = (
   config: PersistedGlobalConfigV2,
@@ -177,7 +153,7 @@ export const upgradePersistedGlobalConfigV2 = (
 
   return globalConfigSchema.parse({
     ...config,
-    version: 4,
+    version: 3,
     agentRuntimes,
     onboardingCompleted: inferOnboardingCompleted(config),
   });

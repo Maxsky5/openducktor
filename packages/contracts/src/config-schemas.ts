@@ -665,7 +665,7 @@ const globalConfigSharedFields = {
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   workspaceOrder: z.array(workspaceIdSchema).default([]),
   recentWorkspaces: z.array(workspaceIdSchema).default([]),
-  onboardingCompleted: z.boolean().default(false),
+  onboardingCompleted: z.boolean().optional(),
 };
 
 export const persistedGlobalConfigV2Schema = z.object({
@@ -675,15 +675,8 @@ export const persistedGlobalConfigV2Schema = z.object({
 });
 export type PersistedGlobalConfigV2 = z.infer<typeof persistedGlobalConfigV2Schema>;
 
-export const persistedGlobalConfigV3Schema = z.object({
-  version: z.literal(3),
-  ...globalConfigSharedFields,
-  agentRuntimes: agentRuntimesSchema,
-});
-export type PersistedGlobalConfigV3 = z.infer<typeof persistedGlobalConfigV3Schema>;
-
 export const globalConfigSchema = z.object({
-  version: z.literal(4),
+  version: z.literal(3),
   ...globalConfigSharedFields,
   agentRuntimes: agentRuntimesSchema,
 });

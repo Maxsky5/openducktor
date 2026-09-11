@@ -37,7 +37,7 @@ const repoConfig = (workspaceId: string, repoPath: string): RepoConfig => ({
   agentStudioState: { openTaskIds: [] },
 });
 const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
-  version: 4,
+  version: 3,
   onboardingCompleted: false,
   system: {},
   theme: "light",
@@ -948,7 +948,7 @@ describe("createWorkspaceSettingsService", () => {
     expect(records).toHaveLength(1);
     expect(records[0]?.repoPath).toBe("/canonical/repo");
     expect(settingsConfig.writtenConfigs[0]).toMatchObject({
-      version: 4,
+      version: 3,
       system: {},
       activeWorkspace: "repo",
       theme: "light",

@@ -8,7 +8,7 @@ import {
 
 describe("system settings", () => {
   test("defaults older global configs and snapshots to an empty system section", () => {
-    expect(globalConfigSchema.parse({ version: 4 }).system).toEqual({});
+    expect(globalConfigSchema.parse({ version: 3 }).system).toEqual({});
     expect(settingsSnapshotSchema.parse({ theme: "light" }).system).toEqual({});
   });
 

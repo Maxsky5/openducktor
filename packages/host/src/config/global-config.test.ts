@@ -4,41 +4,37 @@ import {
   createDefaultGlobalConfig,
   parsePersistedGlobalConfig,
   parsePersistedGlobalConfigV2,
-  parsePersistedGlobalConfigV3,
   upgradePersistedGlobalConfigV2,
-  upgradePersistedGlobalConfigV3,
 } from "./global-config";
 
 describe("global config", () => {
-  test("creates only current version 4 config", () => {
+  test("creates only current version 3 config", () => {
     const config = createDefaultGlobalConfig();
 
-    expect(config.version).toBe(4);
+    expect(config.version).toBe(3);
+    expect(config.onboardingCompleted).toBeUndefined();
     expect(config.agentRuntimes.opencode).toEqual({ enabled: false, executablePath: "" });
     expect(config.autopilot.alwaysStartQaReviewsFresh).toBe(false);
     expect(config.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
   });
 
   test("parses current and legacy versions through distinct entry points", () => {
-    expect(parsePersistedGlobalConfig({ version: 4 }).autopilot.alwaysStartQaReviewsFresh).toBe(
+    expect(parsePersistedGlobalConfig({ version: 3 }).autopilot.alwaysStartQaReviewsFresh).toBe(
       false,
     );
-    expect(parsePersistedGlobalConfigV3({ version: 3 }).autopilot.alwaysStartQaReviewsFresh).toBe(
-      false,
-    );
+    expect(
+      parsePersistedGlobalConfig({ version: 3, onboardingCompleted: true }).onboardingCompleted,
+    ).toBe(true);
     expect(parsePersistedGlobalConfigV2({ version: 2 }).autopilot.alwaysStartQaReviewsFresh).toBe(
       false,
     );
     expect(() => parsePersistedGlobalConfig({ version: 2 })).toThrow(
-      "Unsupported config version 2. Expected 4.",
-    );
-    expect(() => parsePersistedGlobalConfig({ version: 3 })).toThrow(
-      "Unsupported config version 3. Expected 4.",
+      "Unsupported config version 2. Expected 3.",
     );
   });
 
-  test("upgrades version 3 configs and infers onboarding completion", () => {
-    const legacy = parsePersistedGlobalConfigV3({
+  test("normalizes missing and empty legacy repository Git config", () => {
+    const withoutGit = parsePersistedGlobalConfig({
       version: 3,
       workspaces: {
         repo: {
@@ -49,34 +45,8 @@ describe("global config", () => {
         },
       },
     });
-
-    const upgraded = upgradePersistedGlobalConfigV3(legacy);
-
-    expect(upgraded.version).toBe(4);
-    expect(upgraded.onboardingCompleted).toBe(true);
-    expect(Object.keys(upgraded.workspaces)).toEqual(["repo"]);
-    expect(upgraded.workspaces.repo?.closed).toBeUndefined();
-
-    const emptyUpgraded = upgradePersistedGlobalConfigV3(
-      parsePersistedGlobalConfigV3({ version: 3 }),
-    );
-    expect(emptyUpgraded.onboardingCompleted).toBe(false);
-  });
-
-  test("normalizes missing and empty legacy repository Git config", () => {
-    const withoutGit = parsePersistedGlobalConfig({
-      version: 4,
-      workspaces: {
-        repo: {
-          workspaceId: "repo",
-          workspaceName: "Repo",
-          repoPath: "/repo",
-          defaultRuntimeKind: "opencode",
-        },
-      },
-    });
     const withEmptyLegacyProviders = parsePersistedGlobalConfig({
-      version: 4,
+      version: 3,
       workspaces: {
         repo: {
           workspaceId: "repo",
@@ -94,7 +64,7 @@ describe("global config", () => {
 
   test("migrates one legacy repository Git provider without losing values", () => {
     const config = parsePersistedGlobalConfig({
-      version: 4,
+      version: 3,
       workspaces: {
         repo: {
           workspaceId: "repo",
@@ -165,7 +135,7 @@ describe("global config", () => {
   test("rejects canonical and legacy repository Git config together", () => {
     expect(() =>
       parsePersistedGlobalConfig({
-        version: 4,
+        version: 3,
         workspaces: {
           repo: {
             workspaceId: "repo",
@@ -185,7 +155,7 @@ describe("global config", () => {
   test("rejects legacy repository Git config with more than one provider", () => {
     expect(() =>
       parsePersistedGlobalConfig({
-        version: 4,
+        version: 3,
         workspaces: {
           repo: {
             workspaceId: "repo",
@@ -224,7 +194,7 @@ describe("global config", () => {
       claude: "/tools/claude",
     });
 
-    expect(upgraded.version).toBe(4);
+    expect(upgraded.version).toBe(3);
     expect(upgraded.agentRuntimes.opencode).toMatchObject({
       enabled: false,
       executablePath: "/tools/opencode",
