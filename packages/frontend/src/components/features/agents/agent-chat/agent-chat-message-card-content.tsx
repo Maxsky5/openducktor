@@ -23,10 +23,11 @@ import {
   SYSTEM_PROMPT_PREFIX,
 } from "./agent-chat-message-card-model";
 import type { SubagentMeta, ToolMeta } from "./agent-chat-message-card-model.types";
-import { RegularToolMessage, WorkflowToolMessage } from "./agent-chat-message-card-tool-presenters";
+import { RegularToolMessage } from "./agent-chat-regular-tool-message";
 import { AgentChatSkillReferenceChip } from "./agent-chat-skill-reference-chip";
 import { AgentChatSubagentReferenceChip } from "./agent-chat-subagent-reference-chip";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
+import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
 import { AssistantRoleIcon } from "./agent-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";

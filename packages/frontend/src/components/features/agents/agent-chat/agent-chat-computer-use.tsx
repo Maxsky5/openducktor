@@ -4,7 +4,7 @@ import { type ReactElement, useState } from "react";
 import { MediaPreviewDialog, type MediaPreviewItem } from "@/components/ui/media-preview-dialog";
 import { cn } from "@/lib/utils";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import { ToolMessageTiming } from "./agent-chat-message-card-tool-presenters";
+import { ToolMessageTiming } from "./agent-chat-tool-message-timing";
 import { getToolDuration } from "./tool-duration";
 import { hasNonEmptyText, isToolMessageActive, isToolMessageFailure } from "./tool-lifecycle";
 
