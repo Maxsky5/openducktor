@@ -24,6 +24,7 @@ import {
   workspaceQueryKeys,
 } from "../../queries/workspace";
 import { host } from "../shared/host";
+import { diffSettingsSnapshots } from "./settings-snapshot-changes";
 
 type UseRepoSettingsOperationsArgs = {
   activeWorkspace: WorkspaceRecord | null;
@@ -179,24 +180,28 @@ export function useRepoSettingsOperations({
         ...settingsSnapshotQueryOptions(),
         staleTime: 0,
       });
-      await queryClient.invalidateQueries({
-        queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
-      });
+      const changes = diffSettingsSnapshots(previousSnapshot, normalizedSnapshot);
+      if (changes.workspacesChanged) {
+        await queryClient.invalidateQueries({
+          queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
+        });
+      }
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
       const savedActiveWorkspace = workspaces.find((workspace) => workspace.isActive);
-      const retentionChanged =
-        previousSnapshot !== undefined &&
-        previousSnapshot.kanban.doneVisibleDays !== normalizedSnapshot.kanban.doneVisibleDays;
-      if (retentionChanged) {
+      if (changes.kanbanDoneVisibleDaysChanged) {
         await getProductionTaskViewSync(queryClient).refreshAfterTaskRetentionChange(
           savedActiveWorkspace?.repoPath ?? null,
         );
       }
-      void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
-      await queryClient.invalidateQueries({
-        queryKey: repositoryGitProviderContextQueryKeys.all,
-      });
+      if (changes.agentRuntimesChanged) {
+        void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
+      }
+      for (const repoPath of changes.changedGitProviderRepoPaths) {
+        void queryClient.resetQueries({
+          queryKey: repositoryGitProviderContextQueryKeys.repo(repoPath),
+        });
+      }
     },
     [applyWorkspaceRecords, queryClient, settingsSnapshotQueryKey],
   );

@@ -1,8 +1,10 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   agentPromptTemplateIdValues,
-  type SettingsSnapshotSaveInput,
+  DEFAULT_AGENT_RUNTIMES,
+  type RepositoryGitProviderContext,
   type SettingsSnapshot,
+  type SettingsSnapshotSaveInput,
 } from "@openducktor/contracts";
 import { type QueryClient, QueryObserver, useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
@@ -10,6 +12,9 @@ import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createDeferred,
+  createGitProviderConfigFixture,
+  createGitProviderContextFixture,
+  createRepoSettingsConfigFixture,
   createSettingsSnapshotFixture,
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
@@ -97,6 +102,93 @@ const createWorkspaceRecord = (path = "/repo-a") => ({
 });
 
 const createSettingsSnapshot = (): SettingsSnapshot => createSettingsSnapshotFixture();
+
+const isRepositoryGitProviderContextRepoFilter = (
+  filters: { queryKey?: unknown } | undefined,
+  repoPath: string,
+): boolean =>
+  Array.isArray(filters?.queryKey) &&
+  filters.queryKey[0] === repositoryGitProviderContextQueryKeys.all[0] &&
+  filters.queryKey[1] === repoPath;
+
+const startSettingsSave = async ({
+  previousSnapshot,
+  normalizedSnapshot,
+  gateProviderRefreshRepoPath,
+  seedProviderContextRepoPaths,
+  saveError,
+}: {
+  previousSnapshot: SettingsSnapshot;
+  normalizedSnapshot: SettingsSnapshot;
+  gateProviderRefreshRepoPath?: string;
+  seedProviderContextRepoPaths?: string[];
+  saveError?: Error;
+}) => {
+  const original = {
+    workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+    workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+  };
+  host.workspaceSaveSettingsSnapshot = mock(async () => {
+    if (saveError !== undefined) {
+      throw saveError;
+    }
+    return [createWorkspaceRecord()];
+  });
+  host.workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
+  const applyWorkspaceRecords = mock(() => {});
+  const harness = createHookHarness({
+    activeWorkspace: createWorkspaceRecord(),
+    applyWorkspaceRecords,
+    applyWorkspaceRecord: mock(() => {}),
+  });
+  const providerRefresh = createDeferred<void>();
+  const providerRefreshStarted = createDeferred<void>();
+
+  await harness.mount();
+  const queryClient = harness.getQueryClient();
+  const originalInvalidateQueries = queryClient.invalidateQueries.bind(queryClient);
+  const invalidateQueries = spyOn(queryClient, "invalidateQueries").mockImplementation(
+    async (filters, options) => {
+      await originalInvalidateQueries(filters, options);
+    },
+  );
+  const originalResetQueries = queryClient.resetQueries.bind(queryClient);
+  const resetQueries = spyOn(queryClient, "resetQueries").mockImplementation(
+    async (filters, options) => {
+      if (
+        gateProviderRefreshRepoPath !== undefined &&
+        isRepositoryGitProviderContextRepoFilter(filters, gateProviderRefreshRepoPath)
+      ) {
+        providerRefreshStarted.resolve();
+        await providerRefresh.promise;
+        return;
+      }
+      await originalResetQueries(filters, options);
+    },
+  );
+  queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), previousSnapshot);
+  for (const repoPath of seedProviderContextRepoPaths ?? []) {
+    queryClient.setQueryData(
+      repositoryGitProviderContextQueryKeys.repo(repoPath),
+      createGitProviderContextFixture(),
+    );
+  }
+
+  return {
+    queryClient,
+    invalidateQueries,
+    resetQueries,
+    applyWorkspaceRecords,
+    save: harness.getLatest().saveSettingsSnapshot(normalizedSnapshot),
+    providerRefreshStarted,
+    cleanup: async (): Promise<void> => {
+      providerRefresh.resolve();
+      await harness.unmount();
+      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    },
+  };
+};
 
 const createRepoConfig = (): Awaited<ReturnType<typeof host.workspaceGetRepoConfig>> => ({
   workspaceId: "repo-a",
@@ -997,72 +1089,185 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("waits for provider context refresh after saving settings", async () => {
-    const applyWorkspaceRecords = mock(() => {});
-    const applyWorkspaceRecord = mock(() => {});
-    const snapshot = createSettingsSnapshot();
-    const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
-    const workspaceGetSettingsSnapshot = mock(async () => snapshot);
-    const original = {
-      workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
-      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
-    };
-    host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
-    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
-    const harness = createHookHarness({
-      activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord,
+  test("skips invalidations when the saved settings change nothing watched", async () => {
+    const snapshot = createSettingsSnapshotFixture({
+      workspaces: { "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") },
     });
-    const providerRefresh = createDeferred<void>();
-    const providerRefreshStarted = createDeferred<void>();
+    const run = await startSettingsSave({
+      previousSnapshot: snapshot,
+      normalizedSnapshot: snapshot,
+    });
 
     try {
-      await harness.mount();
-      const queryClient = harness.getQueryClient();
-      const originalInvalidateQueries = queryClient.invalidateQueries.bind(queryClient);
-      const invalidateQueries = spyOn(queryClient, "invalidateQueries").mockImplementation(
-        async (filters, options) => {
-          await originalInvalidateQueries(filters, options);
-          if (filters?.queryKey === repositoryGitProviderContextQueryKeys.all) {
-            providerRefreshStarted.resolve();
-            await providerRefresh.promise;
-          }
-        },
-      );
-      const runtimeKey = runtimeQueryKeys.executable("opencode", "/tools/opencode");
-      const checksKey = checksQueryKeys.runtime();
-      queryClient.setQueryData(runtimeKey, { runtimes: [] });
-      queryClient.setQueryData(checksKey, { ok: true });
+      await run.save;
 
-      let saveFinished = false;
-      const save = harness
-        .getLatest()
-        .saveSettingsSnapshot(snapshot)
-        .then(() => {
-          saveFinished = true;
-        });
-      await providerRefreshStarted.promise;
-      await Promise.resolve();
-
-      expect(saveFinished).toBe(false);
-      expect(queryClient.getQueryState(runtimeKey)?.isInvalidated).toBe(false);
-      expect(queryClient.getQueryState(checksKey)?.isInvalidated).toBe(true);
-      expect(invalidateQueries).not.toHaveBeenCalledWith({ queryKey: runtimeQueryKeys.all });
-      expect(invalidateQueries).toHaveBeenCalledWith({
-        queryKey: checksQueryKeys.all,
-      });
-      expect(invalidateQueries).toHaveBeenCalledWith({
-        queryKey: repositoryGitProviderContextQueryKeys.all,
-      });
-      providerRefresh.resolve();
-      await save;
-      expect(saveFinished).toBe(true);
+      expect(run.invalidateQueries).not.toHaveBeenCalled();
+      expect(run.resetQueries).not.toHaveBeenCalled();
+      expect(run.applyWorkspaceRecords).toHaveBeenCalledTimes(1);
     } finally {
-      providerRefresh.resolve();
-      await harness.unmount();
-      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
-      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      await run.cleanup();
+    }
+  });
+
+  test("invalidates repository config when a non-git workspace setting changed", async () => {
+    const previousSnapshot = createSettingsSnapshotFixture({
+      workspaces: { "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") },
+    });
+    const normalizedSnapshot = createSettingsSnapshotFixture({
+      workspaces: {
+        "repo-a": {
+          ...createRepoSettingsConfigFixture("repo-a", "/repo-a"),
+          hooks: { preStart: ["bun run setup"], postComplete: [] },
+        },
+      },
+    });
+    const run = await startSettingsSave({ previousSnapshot, normalizedSnapshot });
+
+    try {
+      await run.save;
+
+      expect(run.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: [...workspaceQueryKeys.all, "repo-config"],
+      });
+      expect(run.invalidateQueries).not.toHaveBeenCalledWith({ queryKey: checksQueryKeys.all });
+      expect(run.resetQueries).not.toHaveBeenCalled();
+    } finally {
+      await run.cleanup();
+    }
+  });
+
+  test("invalidates only the repository whose git provider config changed", async () => {
+    const previousSnapshot = createSettingsSnapshotFixture({
+      workspaces: {
+        "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a"),
+        "repo-b": createRepoSettingsConfigFixture(
+          "repo-b",
+          "/repo-b",
+          createGitProviderConfigFixture({ name: "repo-b" }),
+        ),
+      },
+    });
+    const normalizedSnapshot = createSettingsSnapshotFixture({
+      workspaces: {
+        "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a"),
+        "repo-b": createRepoSettingsConfigFixture(
+          "repo-b",
+          "/repo-b",
+          createGitProviderConfigFixture({ name: "renamed" }),
+        ),
+      },
+    });
+    const run = await startSettingsSave({
+      previousSnapshot,
+      normalizedSnapshot,
+      seedProviderContextRepoPaths: ["/repo-a", "/repo-b"],
+    });
+
+    try {
+      await run.save;
+
+      expect(run.resetQueries).toHaveBeenCalledWith({
+        queryKey: repositoryGitProviderContextQueryKeys.repo("/repo-b"),
+      });
+      expect(run.resetQueries).not.toHaveBeenCalledWith({
+        queryKey: repositoryGitProviderContextQueryKeys.repo("/repo-a"),
+      });
+      expect(run.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: [...workspaceQueryKeys.all, "repo-config"],
+      });
+      expect(run.invalidateQueries).not.toHaveBeenCalledWith({ queryKey: checksQueryKeys.all });
+      expect(
+        run.queryClient.getQueryData(repositoryGitProviderContextQueryKeys.repo("/repo-b")),
+      ).toBeUndefined();
+      expect(
+        run.queryClient.getQueryData<RepositoryGitProviderContext>(
+          repositoryGitProviderContextQueryKeys.repo("/repo-a"),
+        ),
+      ).toEqual(createGitProviderContextFixture());
+    } finally {
+      await run.cleanup();
+    }
+  });
+
+  test("invalidates runtime checks when the save changes agent runtimes", async () => {
+    const nextRuntimes = structuredClone(DEFAULT_AGENT_RUNTIMES);
+    nextRuntimes.codex.enabled = true;
+    const run = await startSettingsSave({
+      previousSnapshot: createSettingsSnapshot(),
+      normalizedSnapshot: createSettingsSnapshotFixture({ agentRuntimes: nextRuntimes }),
+    });
+
+    try {
+      await run.save;
+
+      expect(run.invalidateQueries).toHaveBeenCalledWith({ queryKey: checksQueryKeys.all });
+      expect(run.invalidateQueries).not.toHaveBeenCalledWith({ queryKey: runtimeQueryKeys.all });
+      expect(run.invalidateQueries).not.toHaveBeenCalledWith({
+        queryKey: [...workspaceQueryKeys.all, "repo-config"],
+      });
+      expect(run.resetQueries).not.toHaveBeenCalled();
+    } finally {
+      await run.cleanup();
+    }
+  });
+
+  test("does not wait for the changed repository provider refresh before resolving", async () => {
+    const previousSnapshot = createSettingsSnapshotFixture({
+      workspaces: {
+        "repo-b": createRepoSettingsConfigFixture(
+          "repo-b",
+          "/repo-b",
+          createGitProviderConfigFixture({ name: "repo-b" }),
+        ),
+      },
+    });
+    const normalizedSnapshot = createSettingsSnapshotFixture({
+      workspaces: {
+        "repo-b": createRepoSettingsConfigFixture(
+          "repo-b",
+          "/repo-b",
+          createGitProviderConfigFixture({ name: "renamed" }),
+        ),
+      },
+    });
+    const run = await startSettingsSave({
+      previousSnapshot,
+      normalizedSnapshot,
+      gateProviderRefreshRepoPath: "/repo-b",
+    });
+
+    try {
+      await run.providerRefreshStarted.promise;
+      await run.save;
+
+      expect(run.resetQueries).toHaveBeenCalledWith({
+        queryKey: repositoryGitProviderContextQueryKeys.repo("/repo-b"),
+      });
+    } finally {
+      await run.cleanup();
+    }
+  });
+
+  test("propagates a host save failure without touching the cache", async () => {
+    const snapshot = createSettingsSnapshotFixture({
+      workspaces: { "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") },
+    });
+    const run = await startSettingsSave({
+      previousSnapshot: snapshot,
+      normalizedSnapshot: snapshot,
+      saveError: new Error("host save failed"),
+    });
+
+    try {
+      await expect(run.save).rejects.toThrow("host save failed");
+
+      expect(
+        run.queryClient.getQueryData<SettingsSnapshot>(workspaceQueryKeys.settingsSnapshot()),
+      ).toBe(snapshot);
+      expect(run.invalidateQueries).not.toHaveBeenCalled();
+      expect(run.resetQueries).not.toHaveBeenCalled();
+    } finally {
+      await run.cleanup();
     }
   });
 
