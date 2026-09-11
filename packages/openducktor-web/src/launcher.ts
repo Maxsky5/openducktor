@@ -318,12 +318,16 @@ const cleanupStartedFrontendServerEffect = (
   });
 
 export const viteServerOptions = (options: LauncherOptions): ViteServerOptions => {
+  const allowedPaths = [options.packageRoot, path.join(options.packageRoot, "../frontend/src")];
+  if (options.workspaceMode) {
+    allowedPaths.push(path.join(options.workspaceRoot, "node_modules"));
+  }
   const serverOptions: ViteServerOptions = {
     host: options.host?.trim() || LOCALHOST,
     port: options.frontendPort,
     strictPort: true,
     fs: {
-      allow: [options.packageRoot, path.join(options.packageRoot, "../frontend/src")],
+      allow: allowedPaths,
     },
   };
   const externalUrl = options.externalUrl?.trim();

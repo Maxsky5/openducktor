@@ -96,7 +96,7 @@ The host CORS allowlist includes the configured frontend origin, its hostname wi
 
 The launcher serves the browser config through `/openducktor-config.json` without authentication. Anyone who can reach the frontend port can read the app token. Restrict access as described in [Serve the runner on another machine](#serve-the-runner-on-another-machine).
 
-Workspace mode serves the frontend with the Vite dev server. The dev server exposes its module graph and `fs.allow` paths, so prefer production mode (`bunx @openducktor/web` without `--workspace`) on a remote machine. The launcher restricts Vite `fs.allow` to the web package and frontend sources, and allows the external URL hostname when it is not an IP address.
+Workspace mode serves the frontend with the Vite dev server. The dev server exposes its module graph and `fs.allow` paths, so prefer production mode (`bunx @openducktor/web` without `--workspace`) on a remote machine. The launcher restricts Vite `fs.allow` to the web package, the frontend sources, and the workspace `node_modules` directory, and allows the external URL hostname when it is not an IP address.
 
 The browser shell requires `VITE_ODT_BROWSER_BACKEND_URL` and `VITE_ODT_BROWSER_AUTH_TOKEN`. It does not use a default URL. The launcher injects both through `/openducktor-config.json`. The host accepts a configured `http` or `https` origin without user info, path, query, or fragment. The port is optional. The web host does not fall back to a desktop runtime route.
 

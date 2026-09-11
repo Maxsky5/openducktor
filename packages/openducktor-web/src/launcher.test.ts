@@ -457,6 +457,23 @@ describe("launcher internals", () => {
     ).toEqual(["/web-package", path.join("/web-package", "../frontend/src")]);
   });
 
+  test("allows workspace node_modules in Vite fs.allow so dependency assets load in workspace mode", () => {
+    expect(
+      viteServerOptions({
+        backendPort: 14327,
+        developmentInstanceId: "browser-test",
+        frontendPort: 1420,
+        packageRoot: "/repo/packages/openducktor-web",
+        workspaceMode: true,
+        workspaceRoot: "/repo",
+      }).fs?.allow,
+    ).toEqual([
+      "/repo/packages/openducktor-web",
+      path.join("/repo/packages/openducktor-web", "../frontend/src"),
+      "/repo/node_modules",
+    ]);
+  });
+
   test("does not restrict Vite hosts for IP external URLs", () => {
     expect(
       viteServerOptions({
