@@ -1,11 +1,11 @@
 import type { AgentToolImage } from "@openducktor/contracts";
-import { ChevronDown, LoaderCircle, Monitor } from "lucide-react";
+import { ChevronDown, Monitor } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import { formatAgentDuration } from "./format-agent-duration";
+import { ToolMessageTiming } from "./agent-chat-message-card-tool-presenters";
 import { getToolDuration } from "./tool-duration";
-import { hasNonEmptyText, isToolMessageFailure } from "./tool-lifecycle";
+import { hasNonEmptyText, isToolMessageActive, isToolMessageFailure } from "./tool-lifecycle";
 
 type ComputerUseToolMessageProps = {
   meta: ToolMeta;
@@ -52,11 +52,12 @@ export const ComputerUseToolMessage = ({
         >
           {actionTitle}
         </p>
-        <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
-          {isActiveComputerUse(meta) ? <LoaderCircle className="size-3 animate-spin" /> : null}
-          {durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
-          {timeLabel ? <span>{timeLabel}</span> : null}
-        </span>
+        <ToolMessageTiming
+          showSpinner={isToolMessageActive(meta)}
+          durationMs={durationMs}
+          timeLabel={timeLabel}
+          className="text-muted-foreground"
+        />
         {hasDetails ? (
           <ChevronDown
             aria-hidden="true"
@@ -129,9 +130,6 @@ export const ComputerUseToolMessage = ({
 const DEFAULT_ACTION_TITLE = "Computer action";
 
 const FAILED_SUMMARY = "Computer action failed.";
-
-const isActiveComputerUse = (meta: ToolMeta): boolean =>
-  meta.status === "pending" || meta.status === "running";
 
 const SECTION_APPEARANCE = {
   default: {

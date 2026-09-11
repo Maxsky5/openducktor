@@ -1,16 +1,13 @@
 import type { AgentModelSelection, AgentStreamPart } from "@openducktor/core";
 import {
-  arrayFromCodexJsonValue,
-  extractStringField,
   isCodexApplyPatchTool,
   isCodexContextualUserMessage,
   parseCodexJsonObjectString,
   isPlainObject,
-  readCodexString,
   stringifyJsonValue,
 } from "./codex-app-server-shared";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
-import { codexComputerUse } from "./codex-computer-use";
+import { codexComputerUseResult } from "./codex-computer-use";
 import {
   CodexFileDiffParseError,
   codexApplyPatchFileDiffs,
@@ -19,6 +16,7 @@ import {
   fileDiffsPatchOutput,
   toFileDiffs,
 } from "./codex-file-diffs";
+import { codexToolResultDisplayText } from "./codex-mcp-result";
 import {
   codexDynamicToolDisplayPayload,
   codexDynamicToolErrorFromItem,
@@ -45,7 +43,6 @@ import {
 import { codexUserInputsFromItem } from "./codex-user-inputs";
 import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
 import {
-  type AgentToolImage,
   type CodexAppServerCommandAction,
   type CodexAppServerThreadItem,
   type CodexAppServerTurn,
@@ -443,67 +440,6 @@ const codexObjectInput = (
   return isPlainObject(value) ? value : (parseCodexJsonObjectString(value) ?? undefined);
 };
 
-const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string | null => {
-  if (value === undefined || value === null) {
-    return null;
-  }
-  const textValue = readCodexString(value);
-  if (textValue !== null) {
-    return textValue;
-  }
-  const content = Array.isArray(value)
-    ? value
-    : isPlainObject(value)
-      ? arrayFromCodexJsonValue(value.content)
-      : [];
-  const text = content
-    .map((entry) => {
-      const entryText = readCodexString(entry);
-      if (entryText !== null) {
-        return entryText;
-      }
-      if (!isPlainObject(entry)) {
-        return "";
-      }
-      const entryType = extractStringField(entry, ["type"]);
-      if (entryType === "inputImage" || entryType === "image") {
-        return "";
-      }
-      return extractStringField(entry, ["text"]) ?? "";
-    })
-    .filter((entry) => entry.trim().length > 0)
-    .join("\n");
-  return text.length > 0 ? text : null;
-};
-
-const codexToolResultDisplayText = (value: CodexAppServerJsonValue | undefined): string | null =>
-  codexToolResultText(value) ?? stringifyJsonValue(value);
-
-const DATA_URL_PREFIX_PATTERN = /^data:[^,]*,/;
-
-const codexToolResultImages = (value: CodexAppServerJsonValue | undefined): AgentToolImage[] => {
-  if (!isPlainObject(value)) {
-    return [];
-  }
-  const images: AgentToolImage[] = [];
-  for (const entry of arrayFromCodexJsonValue(value.content)) {
-    if (!isPlainObject(entry) || extractStringField(entry, ["type"]) !== "image") {
-      continue;
-    }
-    const mimeType = extractStringField(entry, ["mimeType"]);
-    const data = extractStringField(entry, ["data"]);
-    if (!mimeType || !data) {
-      continue;
-    }
-    const dataBase64 = data.replace(DATA_URL_PREFIX_PATTERN, "");
-    if (!dataBase64) {
-      continue;
-    }
-    images.push({ mimeType, dataBase64 });
-  }
-  return images;
-};
-
 const webSearchActionInput = (action: CodexAppServerWebSearchAction | null) => {
   if (!action) {
     return undefined;
@@ -701,35 +637,35 @@ const codexMcpToolCallStreamParts = (
   const server = value.server;
   const tool = value.tool;
   const args = codexObjectInput(value.arguments);
-  const isComputerUse = server === COMPUTER_USE_MCP_SERVER;
   const error = codexMcpToolErrorFromResult(value);
   const status = error ? "error" : statusFromCodexStatus(value.status);
-  const output = isComputerUse
-    ? codexToolResultText(value.result)
-    : codexToolResultDisplayText(value.result);
-  const resolvedError = isComputerUse && status === "error" && !error ? output : error;
   const toolInvocation: NormalizedCodexToolInvocation = {
     messageId,
     partId,
     callId: partId,
     rawToolName: codexNamespacedToolName(server, tool),
     status,
-    output: resolvedError ? null : output,
-    error: resolvedError,
     ...codexToolTimingFields(value, timingOptions),
     metadata: {
       server,
     },
   };
 
-  if (isComputerUse) {
-    toolInvocation.computerUse = codexComputerUse({
+  if (server === COMPUTER_USE_MCP_SERVER) {
+    const computerUseResult = codexComputerUseResult({
       tool,
       input: args,
-      images: codexToolResultImages(value.result),
+      result: value.result,
+      itemError: error,
       failed: status === "error",
-      failureText: resolvedError,
     });
+    toolInvocation.computerUse = computerUseResult.computerUse;
+    toolInvocation.output = computerUseResult.output;
+    toolInvocation.error = computerUseResult.error;
+  } else {
+    const output = codexToolResultDisplayText(value.result);
+    toolInvocation.output = error ? null : output;
+    toolInvocation.error = error;
   }
 
   if (args) {

@@ -5,6 +5,7 @@ import type {
   CodexAppServerJsonValue,
 } from "@openducktor/contracts";
 import { codexToolLeafName, extractStringField } from "./codex-app-server-shared";
+import { codexToolResultImages, codexToolResultText } from "./codex-mcp-result";
 
 const RESET_TOOL = "js_reset";
 const SCRIPT_ERROR_PREFIX = /^Script error:\s*/;
@@ -13,12 +14,46 @@ const FAILED_SUMMARY = "Computer action failed.";
 const TRUNCATED_FAILURE_SUMMARY = "Computer action failed. Codex truncated its diagnostics.";
 const READABLE_LINE_PATTERN = /[\p{L}\p{N}]/u;
 const TRUNCATED_RESULT_PREFIX = '{"content":[';
-const TEXT_VALUE_PREFIX = '"text":"';
 const TRUNCATION_MARKER = /…\d+ chars truncated…/;
-const ESCAPED_LINE_BREAK_PATTERN = /\\[nr]/;
+const TRUNCATED_TEXT_PATTERN = /"text":"((?:\\["\\/bfnrt]|\\u[0-9a-fA-F]{4}|[^"\\])*?)(?=\\[nr]|…)/;
 const jsonStringSchema = z.string();
 
-export const codexComputerUse = ({
+export type CodexComputerUseResult = {
+  computerUse: AgentComputerUse;
+  output: string | null;
+  error: string | null;
+};
+
+export const codexComputerUseResult = ({
+  tool,
+  input,
+  result,
+  itemError,
+  failed,
+}: {
+  tool: string;
+  input: Record<string, CodexAppServerJsonValue> | undefined;
+  result: CodexAppServerJsonValue | undefined;
+  itemError: string | null;
+  failed: boolean;
+}): CodexComputerUseResult => {
+  const output = codexToolResultText(result, { readTextOnMediaBlocks: true });
+  const error = failed && !itemError ? output : itemError;
+  const computerUse = codexComputerUse({
+    tool,
+    input,
+    images: codexToolResultImages(result),
+    failed,
+    failureText: error,
+  });
+  return {
+    computerUse,
+    output: error ? null : output,
+    error,
+  };
+};
+
+const codexComputerUse = ({
   tool,
   input,
   images,
@@ -85,16 +120,12 @@ const isTruncatedResult = (text: string): boolean =>
   text.startsWith(TRUNCATED_RESULT_PREFIX) && TRUNCATION_MARKER.test(text);
 
 const recoveredTruncatedLine = (text: string): string | null => {
-  const valueStart = text.indexOf(TEXT_VALUE_PREFIX);
-  if (valueStart === -1) {
+  const match = TRUNCATED_TEXT_PATTERN.exec(text);
+  const fragment = match?.[1];
+  if (fragment === undefined) {
     return null;
   }
-  const fragment = text.slice(valueStart + TEXT_VALUE_PREFIX.length);
-  const indexes = [
-    fragment.search(ESCAPED_LINE_BREAK_PATTERN),
-    fragment.search(TRUNCATION_MARKER),
-  ].filter((index) => index >= 0);
-  const head = decodeJsonStringFragment(fragment.slice(0, Math.min(...indexes, fragment.length)));
+  const head = decodeJsonStringFragment(fragment);
   if (head === null) {
     return null;
   }

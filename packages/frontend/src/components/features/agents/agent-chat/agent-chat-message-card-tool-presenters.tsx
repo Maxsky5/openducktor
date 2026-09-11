@@ -133,7 +133,7 @@ const ToolInputDetails = ({
   );
 };
 
-const ToolMessageTiming = ({
+export const ToolMessageTiming = ({
   showSpinner,
   durationMs,
   timeLabel,
