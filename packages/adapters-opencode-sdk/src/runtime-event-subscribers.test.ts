@@ -157,6 +157,23 @@ describe("runtime event subscriber index", () => {
     expect(directories).toEqual(["/repo", "/new"]);
   });
 
+  test("defers newly registered recipients until the next event", () => {
+    const recipients = { sessionIds: ["parent", "child"], directory: "/repo" };
+    for (const logging of [false, true]) {
+      const registry = new RuntimeEventSubscribers();
+      registry.set("parent", subscriber("parent"));
+      const delivered: string[] = [];
+      const selected = logging ? registry.values() : registry.forEvent(recipients);
+      for (const entry of selected) {
+        delivered.push(entry.externalSessionId);
+        registry.set("child", subscriber("child"));
+        registry.set("neighbor", subscriber("neighbor"));
+      }
+      expect(delivered).toEqual(["parent"]);
+      expect(ids(registry.forEvent(recipients))).toEqual(["parent", "child", "neighbor"]);
+    }
+  });
+
   test("checks directory relevance after a callback replaces the next subscriber", () => {
     const event = opencodeDirectEventSchema.parse({
       id: "error",

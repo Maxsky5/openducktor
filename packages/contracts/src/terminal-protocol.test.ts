@@ -8,6 +8,7 @@ import {
   TERMINAL_PROTOCOL_MAX_ROWS,
   TERMINAL_PROTOCOL_VERSION,
   terminalClientMessageSchema,
+  terminalServerMessageSchema,
 } from "./terminal-protocol";
 
 const inputMessage = { version: 1 as const, type: "input" as const, terminalId: "terminal-1" };
@@ -47,6 +48,26 @@ describe("terminal protocol", () => {
         rows: TERMINAL_PROTOCOL_MAX_ROWS,
       }),
     ).toThrow();
+  });
+
+  test("compiled output retains the sequence validation message and field path", () => {
+    const result = terminalServerMessageSchema.safeParse({
+      version: 1,
+      type: "output",
+      terminalId: "terminal-1",
+      sequenceStart: 2,
+      sequenceEnd: 2,
+      replay: false,
+    });
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error("Expected output sequence validation to fail.");
+    expect(result.error.issues).toEqual([
+      {
+        code: "custom",
+        message: "sequenceEnd must be greater than sequenceStart",
+        path: ["sequenceEnd"],
+      },
+    ]);
   });
 
   test("rejects malformed discriminants and wrong versions", () => {

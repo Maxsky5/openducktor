@@ -40,7 +40,7 @@ describe("string length compatibility", () => {
     }
   });
 
-  test("keeps trimming, field paths, and JSON-schema limits", () => {
+  test("keeps trimming and field paths", () => {
     const name = withMaxUtf16Length(z.string().trim().min(1), 2);
     const schema = z.object({ name });
     expect(schema.parse({ name: "  😀  " })).toEqual({ name: "😀" });
@@ -48,9 +48,18 @@ describe("string length compatibility", () => {
     expect(result.success).toBe(false);
     if (result.success) throw new Error("over-limit input must fail");
     expect(result.error.issues[0]?.path).toEqual(["name"]);
-    expect(z.toJSONSchema(name)).toMatchObject({ type: "string", minLength: 1, maxLength: 2 });
     expect(name.safeParse(42).success).toBe(false);
     expect(name.safeParse(" ").success).toBe(false);
+  });
+
+  test("requires Zod validation for the UTF-16 limit beyond JSON Schema maxLength", () => {
+    const name = withMaxUtf16Length(z.string(), 2);
+    expect(z.toJSONSchema(name)).toMatchObject({ type: "string", maxLength: 2 });
+    const twoCodePoints = "😀😀";
+    expect(Array.from(twoCodePoints)).toHaveLength(2);
+    expect(twoCodePoints).toHaveLength(4);
+    expect(name.safeParse(twoCodePoints).success).toBe(false);
+    expect(name.parse("😀")).toBe("😀");
   });
 });
 

@@ -77,6 +77,8 @@ Without `--base-path`, the browser reaches the host on the backend port, so the 
 
 Shared frontend code cannot import shell internals. `bun run frontend:boundary-guard` checks this rule.
 
+The `/events` endpoint authenticates the host session and streams the shared event bus for all repositories. Repository names select browser listeners; they do not restrict access. The transport does not support sessions authorized for only one repository.
+
 The `/events` endpoint keeps one SSE connection and one replay cursor for non-task host events. Run and dev-server events use the `message` event name. Live-session events use `agent-session-live:` followed by the JSON-encoded repository path. The browser registers a named listener for each observed repository and validates each delivered envelope. Events for unobserved repositories still cross the connection and advance its cursor, but do not trigger JSON parsing or transcript validation in JavaScript. Replay gap warnings and reconnect refreshes apply to all active observers. Restart the host and reload the browser together when this event framing changes.
 
 ## Access control

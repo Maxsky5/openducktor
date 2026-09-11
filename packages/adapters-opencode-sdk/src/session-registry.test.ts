@@ -322,6 +322,7 @@ const runRuntimeEventTransport = async (
   events: TestGlobalEventPayload[],
   options?: {
     onTransport?: (transport: RuntimeEventTransportRecord) => void;
+    onEmit?: (event: AgentEvent) => void;
     externalSessionIds?: string[];
     logEvent?: OpencodeEventLogger;
   },
@@ -347,6 +348,7 @@ const runRuntimeEventTransport = async (
       now: () => "2026-02-22T12:00:00.000Z",
       emit: (_externalSessionId, event) => {
         emitted.push(event);
+        options?.onEmit?.(event);
       },
     };
     if (options?.logEvent) {
@@ -408,6 +410,46 @@ describe("session registry runtime event transport", () => {
       );
     }
   });
+
+  test.each([false, true])(
+    "keeps directory recipients fixed during delivery with logging=%s",
+    async (logging) => {
+      let subscribers: RuntimeEventTransportRecord["subscribers"] | undefined;
+      const options: NonNullable<Parameters<typeof runRuntimeEventTransport>[1]> = {
+        externalSessionIds: ["external-session-1", "external-session-2", "external-session-3"],
+        onTransport: (transport) => {
+          subscribers = transport.subscribers;
+          subscribers.set("external-session-2", {
+            externalSessionId: "external-session-2",
+            input: { ...makeSessionInput(), workingDirectory: "/other" },
+          });
+        },
+        onEmit: (event) => {
+          if (event.type !== "session_error" || event.externalSessionId !== "external-session-1")
+            return;
+          if (!subscribers) throw new Error("Expected subscribers before event delivery.");
+          subscribers.set("external-session-2", {
+            externalSessionId: "external-session-2",
+            input: makeSessionInput(),
+          });
+          subscribers.delete("external-session-3");
+        },
+      };
+      if (logging) options.logEvent = () => {};
+      const emitted = await runRuntimeEventTransport(
+        [
+          { id: "first-error", type: "session.error", properties: { directory: "/repo" } },
+          { id: "second-error", type: "session.error", properties: { directory: "/repo" } },
+        ],
+        options,
+      );
+      expect(
+        emitted
+          .filter((event) => event.type === "session_error")
+          .map((event) => event.externalSessionId),
+      ).toEqual(["external-session-1", "external-session-1", "external-session-2"]);
+    },
+  );
 
   test("rejects pending message admission when its session is released", async () => {
     const session = makeSessionRecord(makeClientWithEvents([]));

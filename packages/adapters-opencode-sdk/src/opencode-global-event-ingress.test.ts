@@ -76,6 +76,36 @@ describe("type-directed OpenCode ingress", () => {
     }
   });
 
+  test("compiled deltas strip unknown keys and retain the directory", () => {
+    expect(
+      opencodeDirectEventSchema.parse({
+        id: "delta",
+        type: "message.part.delta",
+        extra: true,
+        properties: {
+          sessionID: "s",
+          messageID: "m",
+          partID: "p",
+          field: "text",
+          delta: "hello",
+          directory: "/repo",
+          extra: true,
+        },
+      }),
+    ).toEqual({
+      id: "delta",
+      type: "message.part.delta",
+      properties: {
+        sessionID: "s",
+        messageID: "m",
+        partID: "p",
+        field: "text",
+        delta: "hello",
+        directory: "/repo",
+      },
+    });
+  });
+
   test("validates heartbeat and sync envelopes before normalization", () => {
     expect(
       normalizeOpencodeGlobalEventPayload({

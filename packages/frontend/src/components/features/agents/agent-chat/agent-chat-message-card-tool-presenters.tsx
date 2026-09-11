@@ -133,31 +133,60 @@ const ToolInputDetails = ({
   );
 };
 
-const workflowToolForegroundClassName = ({
-  isFailure,
-  isCancelled,
-  isSuccessfulCompletion,
-  isExecuting,
+const ToolMessageTiming = ({
+  showSpinner,
+  durationMs,
+  timeLabel,
+  className,
 }: {
-  isFailure: boolean;
-  isCancelled: boolean;
-  isSuccessfulCompletion: boolean;
-  isExecuting: boolean;
-}): string => {
-  if (isFailure) {
-    return "text-destructive-surface-foreground";
+  showSpinner: boolean;
+  durationMs: number | null;
+  timeLabel: string;
+  className: string;
+}): ReactElement => (
+  <span className={cn("ml-auto inline-flex shrink-0 items-center gap-2 text-[11px]", className)}>
+    {showSpinner ? <LoaderCircle className="size-3 animate-spin" /> : null}
+    {durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
+    {timeLabel ? <span>{timeLabel}</span> : null}
+  </span>
+);
+
+const WORKFLOW_TOOL_APPEARANCE = {
+  queued: {
+    label: "QUEUED",
+    statusClassName: "border-pending-border bg-pending-surface text-pending-surface-foreground",
+    foregroundClassName: "text-pending-surface-foreground",
+  },
+  executing: {
+    label: "RUNNING",
+    statusClassName: "border-info-border bg-info-surface text-info-surface-foreground",
+    foregroundClassName: "text-info-surface-foreground",
+  },
+  failed: {
+    label: "FAILED",
+    statusClassName:
+      "border-destructive-border bg-destructive-surface text-destructive-surface-foreground",
+    foregroundClassName: "text-destructive-surface-foreground",
+  },
+  cancelled: {
+    label: "CANCELLED",
+    statusClassName:
+      "border-cancelled-border bg-cancelled-surface text-cancelled-surface-foreground",
+    foregroundClassName: "text-cancelled-surface-foreground",
+  },
+  completed: {
+    label: null,
+    statusClassName: "border-pending-border bg-pending-surface text-pending-surface-foreground",
+    foregroundClassName: "text-success-surface-foreground",
+  },
+} satisfies Record<
+  ReturnType<typeof getToolLifecyclePhase>,
+  {
+    label: string | null;
+    statusClassName: string;
+    foregroundClassName: string;
   }
-  if (isCancelled) {
-    return "text-cancelled-surface-foreground";
-  }
-  if (isSuccessfulCompletion) {
-    return "text-success-surface-foreground";
-  }
-  if (isExecuting) {
-    return "text-info-surface-foreground";
-  }
-  return "text-pending-surface-foreground";
-};
+>;
 
 type WorkflowToolMessageProps = {
   meta: ToolMeta;
@@ -179,42 +208,13 @@ export const WorkflowToolMessage = ({
   const hasOutput = hasNonEmptyText(meta.output);
   const hasError = hasNonEmptyText(meta.error);
   const lifecyclePhase = getToolLifecyclePhase(meta);
-  const isActive = lifecyclePhase === "queued" || lifecyclePhase === "executing";
   const isFailure = lifecyclePhase === "failed";
-  const isCancelled = lifecyclePhase === "cancelled";
-  const isSuccessfulCompletion = lifecyclePhase === "completed";
   const isExecuting = lifecyclePhase === "executing";
-  const statusLabel = (() => {
-    if (lifecyclePhase === "queued") {
-      return "QUEUED";
-    }
-    if (lifecyclePhase === "executing") {
-      return "RUNNING";
-    }
-    if (lifecyclePhase === "failed") {
-      return "FAILED";
-    }
-    if (lifecyclePhase === "cancelled") {
-      return "CANCELLED";
-    }
-    return null;
-  })();
-  let statusClassName = "border-pending-border bg-pending-surface text-pending-surface-foreground";
-  if (isExecuting) {
-    statusClassName = "border-info-border bg-info-surface text-info-surface-foreground";
-  } else if (isFailure) {
-    statusClassName =
-      "border-destructive-border bg-destructive-surface text-destructive-surface-foreground";
-  } else if (isCancelled) {
-    statusClassName =
-      "border-cancelled-border bg-cancelled-surface text-cancelled-surface-foreground";
-  }
-  const foregroundClassName = workflowToolForegroundClassName({
-    isFailure,
-    isCancelled,
-    isSuccessfulCompletion,
-    isExecuting,
-  });
+  const {
+    label: statusLabel,
+    statusClassName,
+    foregroundClassName,
+  } = WORKFLOW_TOOL_APPEARANCE[lifecyclePhase];
 
   return (
     <div className="space-y-2">
@@ -231,11 +231,12 @@ export const WorkflowToolMessage = ({
             {statusLabel}
           </span>
         ) : null}
-        <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-current/75 font-normal normal-case">
-          {isExecuting ? <LoaderCircle className="size-3 animate-spin" /> : null}
-          {!isActive && durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
-          {timeLabel ? <span>{timeLabel}</span> : null}
-        </span>
+        <ToolMessageTiming
+          showSpinner={isExecuting}
+          durationMs={durationMs}
+          timeLabel={timeLabel}
+          className="text-current/75 font-normal normal-case"
+        />
       </div>
       {(hasInput || hasOutput || hasError) && (
         <div className="space-y-2">
@@ -279,16 +280,17 @@ type RegularToolMessageProps = {
   displayName: string;
 };
 
-export const RegularToolMessage = ({
+const RegularToolSummary = ({
   meta,
   messageContent,
   messageTimestamp,
   timeLabel,
   sessionWorkingDirectory,
   displayName,
-}: RegularToolMessageProps): ReactElement => {
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  hasExpandableDetails,
+}: RegularToolMessageProps & { hasExpandableDetails: boolean }): ReactElement => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
+  const isActive = lifecyclePhase === "queued" || lifecyclePhase === "executing";
   const summary = buildToolSummary(meta, messageContent, sessionWorkingDirectory);
   const summaryText =
     summary.length > 0
@@ -299,18 +301,7 @@ export const RegularToolMessage = ({
           ? "Tool cancelled"
           : "";
   const durationMs = getToolDuration(meta, messageTimestamp);
-  const hasInput = hasNonEmptyInput(meta.input);
-  const hasOutput = hasNonEmptyText(meta.output);
-  const hasError = hasNonEmptyText(meta.error);
-  const hasExpandableDetails = hasInput || hasOutput || hasError;
-  const isActive = lifecyclePhase === "queued" || lifecyclePhase === "executing";
-  const questionDetails = questionToolDetails(meta);
-  const questionDetailRenderEntries = buildQuestionDetailRenderEntries(
-    meta.callId,
-    questionDetails,
-  );
-
-  const summaryRow = (
+  return (
     <div
       className={cn(
         "flex min-h-6 items-center gap-2 text-xs",
@@ -337,12 +328,45 @@ export const RegularToolMessage = ({
       {summaryText.length > 0 ? (
         <p className="truncate text-muted-foreground">{summaryText}</p>
       ) : null}
-      <span className="ml-auto inline-flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
-        {isActive ? <LoaderCircle className="size-3 animate-spin" /> : null}
-        {!isActive && durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
-        {timeLabel ? <span>{timeLabel}</span> : null}
-      </span>
+      <ToolMessageTiming
+        showSpinner={isActive}
+        durationMs={durationMs}
+        timeLabel={timeLabel}
+        className="text-muted-foreground"
+      />
     </div>
+  );
+};
+
+export const RegularToolMessage = ({
+  meta,
+  messageContent,
+  messageTimestamp,
+  timeLabel,
+  sessionWorkingDirectory,
+  displayName,
+}: RegularToolMessageProps): ReactElement => {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const hasInput = hasNonEmptyInput(meta.input);
+  const hasOutput = hasNonEmptyText(meta.output);
+  const hasError = hasNonEmptyText(meta.error);
+  const hasExpandableDetails = hasInput || hasOutput || hasError;
+  const questionDetails = questionToolDetails(meta);
+  const questionDetailRenderEntries = buildQuestionDetailRenderEntries(
+    meta.callId,
+    questionDetails,
+  );
+
+  const summaryRow = (
+    <RegularToolSummary
+      meta={meta}
+      messageContent={messageContent}
+      messageTimestamp={messageTimestamp}
+      timeLabel={timeLabel}
+      sessionWorkingDirectory={sessionWorkingDirectory}
+      displayName={displayName}
+      hasExpandableDetails={hasExpandableDetails}
+    />
   );
 
   return (

@@ -29,7 +29,7 @@ A replay isolates a cause. A live application check confirms that the optimized 
 | Schema constructors or allocation inside an event loop | Whether an immutable schema can live at module scope; whether a caller rebuilds the same schema | Fewer allocations with the same parsed output and errors |
 | Repeated recursive parsing of large payloads | Where data first crosses a trust boundary; whether a later consumer already receives a validated value | Full validation at the boundary, with no repeated traversal inside that boundary |
 | Session-array scans on every event | Whether lookup cost grows with all sessions; whether an index can use the event identity | Correct lookup after add, replace, remove, reconnect, and disposal |
-| Parsing events that no listener uses | Whether transport delivery can select a channel and repository before parsing the full payload | Unobserved routes do no parsing; observed routes still reject invalid or mismatched envelopes |
+| Parsing events that no listener uses | Whether transport delivery can select a channel and repository before parsing the full payload | Unobserved routes cause no parsing; observed routes still reject invalid or mismatched envelopes |
 | JSON formatting or tree traversal while a UI section is closed | Whether the UI computes hidden content or walks tool input more than once | Closed sections avoid the work; opening them preserves content and interaction |
 
 Check cumulative cost and call count together. A cheap function called for every session on every event can cost more than an expensive function called once. Test event mixes with no relevant events, some relevant events, and all relevant events. Vary session count and payload size independently to expose growth with input size.

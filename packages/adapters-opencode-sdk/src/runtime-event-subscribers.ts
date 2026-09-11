@@ -39,7 +39,11 @@ export class RuntimeEventSubscribers {
   }
 
   *values(): IterableIterator<EventStreamSubscriber> {
-    for (const { subscriber } of this.byId.values()) yield subscriber;
+    const ids = Array.from(this.byId.keys());
+    for (const id of ids) {
+      const entry = this.byId.get(id);
+      if (entry) yield entry.subscriber;
+    }
   }
 
   forDirectory(directory: string): Iterable<EventStreamSubscriber> {
@@ -55,10 +59,12 @@ export class RuntimeEventSubscribers {
   }
 
   private *ordered(ids: Iterable<string>): IterableIterator<EventStreamSubscriber> {
-    const orderedIds = [...new Set(ids)].sort(
-      (left, right) =>
-        (this.byId.get(left)?.order ?? Infinity) - (this.byId.get(right)?.order ?? Infinity),
-    );
+    const orderedIds = [...new Set(ids)]
+      .filter((id) => this.byId.has(id))
+      .sort(
+        (left, right) =>
+          (this.byId.get(left)?.order ?? Infinity) - (this.byId.get(right)?.order ?? Infinity),
+      );
     for (const id of orderedIds) {
       // A preceding recipient can release or replace the next subscription during delivery.
       const entry = this.byId.get(id);

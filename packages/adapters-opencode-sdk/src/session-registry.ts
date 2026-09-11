@@ -224,12 +224,24 @@ const ensureRuntimeEventTransport = (input: {
         event,
         streamRecord.parentExternalSessionIdByChildExternalSessionId,
       );
+      // Logging visits unrelated subscribers too. Fix eligibility before callbacks can move them.
+      const recipientIdsAtDispatch = input.logEvent
+        ? new Set(
+            Array.from(
+              streamRecord.subscribers.forEvent(recipients),
+              (subscriber) => subscriber.externalSessionId,
+            ),
+          )
+        : undefined;
       const subscribers = input.logEvent
         ? streamRecord.subscribers.values()
         : streamRecord.subscribers.forEvent(recipients);
       for (const subscriber of subscribers) {
         try {
-          const relevant = isRelevantSubscriberEvent(subscriber, recipients);
+          const relevant =
+            (recipientIdsAtDispatch === undefined ||
+              recipientIdsAtDispatch.has(subscriber.externalSessionId)) &&
+            isRelevantSubscriberEvent(subscriber, recipients);
           const logInput: Parameters<typeof logStreamEvent>[0] = {
             subscriber,
             event,
