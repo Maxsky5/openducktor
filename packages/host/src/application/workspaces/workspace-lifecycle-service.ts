@@ -75,7 +75,12 @@ type CreateWorkspaceLifecycleServiceInput = {
   activity: WorkspaceActivityPort;
   admission: Pick<
     WorkspaceAdmissionService,
-    "blockWorkspace" | "forgetWorkspace" | "unblockWorkspace" | "withAdministrativeAccess"
+    | "blockWorkspace"
+    | "forgetWorkspace"
+    | "releaseReservation"
+    | "reserveWorkspace"
+    | "unblockWorkspace"
+    | "withAdministrativeAccess"
   >;
   gitPort: Pick<
     GitPort,
@@ -194,8 +199,6 @@ export const createWorkspaceLifecycleService = ({
   workspaceSettingsService,
   worktreeFiles,
 }: CreateWorkspaceLifecycleServiceInput): WorkspaceLifecycleService => {
-  const removalsInFlight = new Set<string>();
-
   const requireTarget = (workspaceId: string, expectedRepoPath: string) =>
     Effect.gen(function* () {
       const repoConfig = yield* workspaceSettingsService.getRepoConfig(workspaceId);
@@ -288,13 +291,18 @@ export const createWorkspaceLifecycleService = ({
       lastFailure,
     });
 
-  const executeRemoval = (input: {
-    workspaceId: string;
-    expectedRepoPath: string;
-    removeTaskWorktrees: boolean;
-  }) =>
+  const executeRemoval = (
+    input: {
+      workspaceId: string;
+      expectedRepoPath: string;
+      removeTaskWorktrees: boolean;
+    },
+    repoConfig: RepoConfig,
+  ) =>
     Effect.gen(function* () {
-      const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
+      if (!repoConfig.removal) {
+        yield* assertNoBlockingActivity(repoConfig.repoPath);
+      }
       const startedRecord = yield* workspaceSettingsService.beginWorkspaceRemoval({
         workspaceId: input.workspaceId,
         expectedRepoPath: input.expectedRepoPath,
@@ -386,6 +394,18 @@ export const createWorkspaceLifecycleService = ({
       return { catalog, result: { removedWorktrees } };
     });
 
+  const runUnderReservation = <A, E, R>(
+    input: {
+      operation: "close" | "reopen" | "remove";
+      repoPath: string;
+      workspaceId: string;
+    },
+    use: () => Effect.Effect<A, E, R>,
+  ) =>
+    Effect.acquireUseRelease(admission.reserveWorkspace(input), use, () =>
+      Effect.sync(() => admission.releaseReservation(input.workspaceId)),
+    );
+
   return {
     closeWorkspace(input) {
       return Effect.gen(function* () {
@@ -393,52 +413,60 @@ export const createWorkspaceLifecycleService = ({
         if (repoConfig.closed) {
           return yield* workspaceSettingsService.getWorkspaceCatalog();
         }
-        yield* assertNoBlockingActivity(repoConfig.repoPath);
-        const catalog = yield* workspaceSettingsService.closeWorkspace(
-          input.workspaceId,
-          input.expectedRepoPath,
+        return yield* runUnderReservation(
+          {
+            operation: "close",
+            repoPath: repoConfig.repoPath,
+            workspaceId: input.workspaceId,
+          },
+          () =>
+            Effect.gen(function* () {
+              yield* assertNoBlockingActivity(repoConfig.repoPath);
+              const catalog = yield* workspaceSettingsService.closeWorkspace(
+                input.workspaceId,
+                input.expectedRepoPath,
+              );
+              admission.blockWorkspace({
+                reason: "closed",
+                repoPath: repoConfig.repoPath,
+                workspaceId: input.workspaceId,
+              });
+              return catalog;
+            }),
         );
-        admission.blockWorkspace({
-          reason: "closed",
-          repoPath: repoConfig.repoPath,
-          workspaceId: input.workspaceId,
-        });
-        return catalog;
       });
     },
     reopenWorkspace(input) {
       return Effect.gen(function* () {
-        const catalog = yield* workspaceSettingsService.reopenWorkspace(
-          input.workspaceId,
-          input.expectedRepoPath,
+        const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
+        return yield* runUnderReservation(
+          {
+            operation: "reopen",
+            repoPath: repoConfig.repoPath,
+            workspaceId: input.workspaceId,
+          },
+          () =>
+            Effect.gen(function* () {
+              const catalog = yield* workspaceSettingsService.reopenWorkspace(
+                input.workspaceId,
+                input.expectedRepoPath,
+              );
+              admission.unblockWorkspace(input.workspaceId);
+              return catalog;
+            }),
         );
-        admission.unblockWorkspace(input.workspaceId);
-        return catalog;
       });
     },
     removeWorkspace(input) {
       return Effect.gen(function* () {
-        if (removalsInFlight.has(input.workspaceId)) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              message: `Workspace removal is already in progress for ${input.workspaceId}. Wait for it to finish and retry.`,
-              field: "workspaceId",
-            }),
-          );
-        }
-
         const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-        if (!repoConfig.removal) {
-          yield* assertNoBlockingActivity(repoConfig.repoPath);
-        }
-
-        return yield* Effect.acquireUseRelease(
-          Effect.sync(() => removalsInFlight.add(input.workspaceId)),
-          () => executeRemoval(input),
-          () =>
-            Effect.sync(() => {
-              removalsInFlight.delete(input.workspaceId);
-            }),
+        return yield* runUnderReservation(
+          {
+            operation: "remove",
+            repoPath: repoConfig.repoPath,
+            workspaceId: input.workspaceId,
+          },
+          () => executeRemoval(input, repoConfig),
         );
       });
     },

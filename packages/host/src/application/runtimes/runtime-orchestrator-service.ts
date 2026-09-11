@@ -49,6 +49,7 @@ type RuntimeOrchestratorLoggingFailureDetails = {
 class RuntimeOrchestratorLoggingError extends HostOperationError<RuntimeOrchestratorLoggingFailureDetails> {}
 
 export const createRuntimeOrchestratorService = ({
+  assertProcessStart,
   gitPort,
   runtimeDefinitionsService,
   runtimeRegistry,
@@ -56,6 +57,7 @@ export const createRuntimeOrchestratorService = ({
   activeMcpProbeRetryDelayMs = ACTIVE_MCP_PROBE_RETRY_DELAY_MS,
   logger,
 }: {
+  assertProcessStart?: (repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>;
   gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository">;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeRegistry: RuntimeRegistryPort;
@@ -180,6 +182,9 @@ export const createRuntimeOrchestratorService = ({
       const { runtimeKind, repoPath } = input;
       const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
       const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
+      if (assertProcessStart) {
+        yield* assertProcessStart(canonicalRepoPath);
+      }
       const statusKey = startupStatusKey(runtimeKind, canonicalRepoPath);
       const startedAt = isoFromMillis(yield* Clock.currentTimeMillis);
       runtimeStartupStatuses.set(

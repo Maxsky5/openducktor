@@ -1,5 +1,6 @@
+import { describe, expect, mock, test } from "bun:test";
 import { Cause, Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   createGitPort,
   createRegistry,
@@ -276,6 +277,27 @@ describe("createRuntimeOrchestratorService", () => {
       role: "workspace",
       workingDirectory: "/canonical/repo",
     });
+  });
+  test("rejects runtime ensure for a blocked workspace before starting a runtime", async () => {
+    const ensureWorkspaceRuntime = mock(() => Effect.dieMessage("unexpected runtime start"));
+    const service = createRuntimeOrchestratorService({
+      assertProcessStart: () =>
+        Effect.fail(
+          new HostValidationError({
+            message: "Workspace is closed: canonical/repo. Reopen it before using it.",
+            field: "workspaceId",
+          }),
+        ),
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([], { ensureWorkspaceRuntime }),
+      taskReader: createTaskStore(),
+    });
+
+    await expect(
+      Effect.runPromise(service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" })),
+    ).rejects.toThrow("Workspace is closed");
+    expect(ensureWorkspaceRuntime).not.toHaveBeenCalled();
   });
   test("delegates workspace runtime reuse to the registry", async () => {
     const runtime = createRuntime();

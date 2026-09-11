@@ -8,7 +8,12 @@ import type {
 } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { type HostError, HostOperationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostOperationError,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type {
   AgentSessionLiveAdapterPort,
   AgentSessionRuntimeAdapterPort,
@@ -77,12 +82,15 @@ const fakeAdapter = (input: {
   return adapter;
 };
 
-const createHarness = () => {
+const createHarness = (
+  assertProcessStart?: (repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>,
+) => {
   const events: AgentSessionLiveEnvelope[] = [];
   const faultLogs: string[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const service = createAgentSessionLiveStateService({
     adapterRegistry,
+    assertProcessStart,
     faultLog: (message) => Effect.sync(() => faultLogs.push(message)),
     publish: (event) => events.push(event),
   });
@@ -100,6 +108,29 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
+  test("rejects a session start for a blocked workspace before resolving an adapter", async () => {
+    const assertProcessStart = (repoPath: string) =>
+      Effect.fail(
+        new HostValidationError({
+          message: `Workspace is closed: ${repoPath}. Reopen it before using it.`,
+          field: "workspaceId",
+        }),
+      );
+    const { service } = createHarness(assertProcessStart);
+
+    const failure = await expectHostFailure(
+      service.startSession({
+        repoPath: "/closed-repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/closed-repo",
+        sessionScope: { kind: "repository" },
+        systemPrompt: "Work.",
+      }),
+    );
+
+    expect(failure.message).toBe("Workspace is closed: /closed-repo. Reopen it before using it.");
+  });
+
   test("publishes the same execution episode to list, read, and refresh consumers", async () => {
     const { events, service } = createHarness();
     const snapshot = liveSnapshot("shared-episode");

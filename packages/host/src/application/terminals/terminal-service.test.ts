@@ -10,6 +10,7 @@ import {
   type TerminalPtyPort,
 } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
+import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
 import { createTerminalService } from "./terminal-service";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 
@@ -100,29 +101,103 @@ const makeService = async (
   pty = makePty(),
   idFactory: () => string = () => "terminal-1",
   filesystemPort: FilesystemPort = filesystem,
+  assertProcessStart?: (repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>,
 ) => {
   const titleSettlement = makeTitleSettlementScheduler();
+  const serviceInput: Parameters<typeof createTerminalService>[0] = {
+    filesystem: filesystemPort,
+    ptyPort: pty.port,
+    resolveLaunchEnvironment: createTerminalLaunchEnvironment({
+      processEnv: { SHELL: "/bin/zsh", PATH: "/usr/bin" },
+      platform: "darwin",
+    }),
+    idFactory,
+    hostInstanceIdFactory: () => "host-1",
+    now: () => new Date("2026-07-12T00:00:00.000Z"),
+    scheduleTitleSettlement: titleSettlement.schedule,
+  };
+  if (assertProcessStart) {
+    serviceInput.assertProcessStart = assertProcessStart;
+  }
   return {
     pty,
     settleTitles: titleSettlement.flush,
-    service: await Effect.runPromise(
-      createTerminalService({
-        filesystem: filesystemPort,
-        ptyPort: pty.port,
-        resolveLaunchEnvironment: createTerminalLaunchEnvironment({
-          processEnv: { SHELL: "/bin/zsh", PATH: "/usr/bin" },
-          platform: "darwin",
-        }),
-        idFactory,
-        hostInstanceIdFactory: () => "host-1",
-        now: () => new Date("2026-07-12T00:00:00.000Z"),
-        scheduleTitleSettlement: titleSettlement.schedule,
-      }),
-    ),
+    service: await Effect.runPromise(createTerminalService(serviceInput)),
   };
 };
 
 describe("TerminalService", () => {
+  test("rejects task terminal creation and input for a blocked workspace", async () => {
+    let blocked = true;
+    const assertProcessStart = (_repoPath: string) =>
+      blocked
+        ? Effect.fail(
+            new HostValidationError({
+              message: "Workspace is closed: ws. Reopen it before using it.",
+              field: "workspaceId",
+            }),
+          )
+        : Effect.void;
+    const { service, pty } = await makeService(makePty(), undefined, undefined, assertProcessStart);
+
+    await expect(
+      Effect.runPromise(
+        service.create({
+          workingDir: "/repo",
+          context: { repoPath: "/repo", taskId: "task-1" },
+        }),
+      ),
+    ).rejects.toThrow("Workspace is closed");
+    expect(pty.operations).not.toContain("write:/repo");
+
+    blocked = false;
+    const created = await Effect.runPromise(
+      service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
+    );
+    blocked = true;
+    await expect(
+      Effect.runPromise(service.write(created.ref.terminalId, new TextEncoder().encode("ls"))),
+    ).rejects.toThrow("Workspace is closed");
+    expect(pty.operations).not.toContain("write:ls");
+  });
+
+  test("reports an idle live terminal as unknown activity", async () => {
+    const idle = await makeService(makePty(true, false));
+    await Effect.runPromise(
+      idle.service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(idle.service.inspectWorkspaceActivity("/repo")),
+    ).resolves.toEqual({
+      activeTerminalIds: [],
+      unknownTerminalIds: ["terminal-1"],
+    });
+  });
+
+  test("reports a terminal with a child process as active activity", async () => {
+    const busy = await makeService(makePty(true, true));
+    await Effect.runPromise(
+      busy.service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(busy.service.inspectWorkspaceActivity("/repo")),
+    ).resolves.toEqual({
+      activeTerminalIds: ["terminal-1"],
+      unknownTerminalIds: [],
+    });
+  });
+
   test("retains PTY failure details for live attachments and attachments after exit", async () => {
     const { service, pty } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));

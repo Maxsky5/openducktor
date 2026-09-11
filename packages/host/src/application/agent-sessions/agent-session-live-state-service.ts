@@ -35,6 +35,7 @@ import {
   HostInvariantError,
   HostOperationError,
   HostValidationError,
+  type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type {
   AgentSessionLiveAdapterChange,
@@ -106,6 +107,9 @@ export type AgentSessionLiveStateService = {
 
 export type CreateAgentSessionLiveStateServiceInput = {
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
+  readonly assertProcessStart?:
+    | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
+    | undefined;
   readonly faultLog: AgentSessionLiveFaultLogger;
   readonly publish: AgentSessionLiveEnvelopePublisher;
   readonly coordinator?: LiveStateCoordinator;
@@ -128,10 +132,21 @@ const parseAdapterOutput = <Schema extends z.ZodType, Input>(
 
 export const createAgentSessionLiveStateService = ({
   adapterRegistry,
+  assertProcessStart,
   faultLog,
   publish,
   coordinator = createLiveStateCoordinator(),
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
+  const assertStartAllowed = (
+    repoPath: string,
+  ): Effect.Effect<void, HostValidationErrorAggregate> =>
+    assertProcessStart ? assertProcessStart(repoPath) : Effect.void;
+  const withStartAdmission =
+    <Input extends { repoPath: string }, Success>(
+      operation: (input: Input) => Effect.Effect<Success, HostError>,
+    ) =>
+    (input: Input): Effect.Effect<Success, HostError> =>
+      assertStartAllowed(input.repoPath).pipe(Effect.zipRight(operation(input)));
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
   const refreshGate = createLiveStateCoordinator();
   const executionEpisodes = createAgentSessionExecutionEpisodes();
@@ -303,30 +318,36 @@ export const createAgentSessionLiveStateService = ({
           ),
         ),
       ),
-    replyApproval: (input) =>
+    replyApproval: withStartAdmission((input) =>
       adapterRegistry
         .resolveForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.replyApproval(input))),
-    replyQuestion: (input) =>
+    ),
+    replyQuestion: withStartAdmission((input) =>
       adapterRegistry
         .resolveForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.replyQuestion(input))),
-    startSession: (input) =>
+    ),
+    startSession: withStartAdmission((input) =>
       adapterRegistry
         .resolveControlForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.startSession(input))),
-    resumeSession: (input) =>
+    ),
+    resumeSession: withStartAdmission((input) =>
       adapterRegistry
         .resolveControlForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.resumeSession(input))),
-    forkSession: (input) =>
+    ),
+    forkSession: withStartAdmission((input) =>
       adapterRegistry
         .resolveControlForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.forkSession(input))),
-    sendUserMessage: (input) =>
+    ),
+    sendUserMessage: withStartAdmission((input) =>
       adapterRegistry
         .resolveControlForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.sendUserMessage(input))),
+    ),
     updateSessionModel: (input) =>
       adapterRegistry
         .resolveControlForScope(input)

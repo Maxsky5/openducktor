@@ -14,6 +14,7 @@ import {
   terminalPreparePathInputRequestSchema,
 } from "@openducktor/contracts";
 import { Effect, type Scope } from "effect";
+import type { HostValidationErrorAggregate } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { TerminalGrid, TerminalPtyPort } from "../../ports/terminal-pty-port";
 import { createTerminalAdmission } from "./terminal-admission";
@@ -66,6 +67,7 @@ export type TerminalService = {
 };
 
 type CreateTerminalServiceInput = {
+  assertProcessStart?: (repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>;
   filesystem: FilesystemPort;
   ptyPort: TerminalPtyPort;
   resolveLaunchEnvironment: TerminalLaunchEnvironmentPort;
@@ -76,6 +78,7 @@ type CreateTerminalServiceInput = {
 };
 
 export const createTerminalService = ({
+  assertProcessStart,
   filesystem,
   ptyPort,
   resolveLaunchEnvironment,
@@ -141,6 +144,20 @@ export const createTerminalService = ({
             (reservation) =>
               Effect.gen(function* () {
                 const context = yield* canonicalizeContext(input.context, "create");
+                if ("taskId" in context && assertProcessStart) {
+                  yield* assertProcessStart(context.repoPath).pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new TerminalServiceError({
+                          code: "invalid_input",
+                          operation: "create",
+                          message: cause.message,
+                          cause,
+                          workingDir: context.repoPath,
+                        }),
+                    ),
+                  );
+                }
                 yield* reservation.bind(context);
                 const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
                 const terminalId = idFactory();
@@ -183,7 +200,26 @@ export const createTerminalService = ({
           return { text };
         }),
       attach: engine.attach,
-      write: engine.write,
+      write: (terminalId, data) =>
+        Effect.gen(function* () {
+          const context = engine.getContext(terminalId);
+          if (context && "taskId" in context && assertProcessStart) {
+            yield* assertProcessStart(context.repoPath).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new TerminalServiceError({
+                    code: "invalid_input",
+                    operation: "write",
+                    message: cause.message,
+                    cause,
+                    terminalId,
+                    workingDir: context.repoPath,
+                  }),
+              ),
+            );
+          }
+          yield* engine.write(terminalId, data);
+        }),
       resize: engine.resize,
       acknowledge: engine.acknowledge,
       detach: engine.detach,
