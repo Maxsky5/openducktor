@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { AgentChatPreviewDialog, type AgentChatPreviewMedia } from "./agent-chat-preview-dialog";
+import { MediaPreviewDialog, type MediaPreviewItem } from "@/components/ui/media-preview-dialog";
 import {
   type AgentChatAttachmentPreviewTarget,
   useAgentChatAttachmentPreview,
@@ -87,11 +87,11 @@ export function AgentChatAttachmentChip(
     markPreviewUnavailable(failingSrc);
   };
 
-  const handleDialogPreviewMediaError = (media: AgentChatPreviewMedia): void => {
+  const handleDialogPreviewMediaError = (media: MediaPreviewItem): void => {
     markPreviewUnavailable(media.src);
   };
 
-  const previewMedia: AgentChatPreviewMedia[] =
+  const previewMedia: MediaPreviewItem[] =
     resolvedPreviewSrc === null
       ? []
       : attachment.kind === "video"
@@ -190,7 +190,7 @@ export function AgentChatAttachmentChip(
       </div>
 
       {previewable && resolvedPreviewSrc && !previewError ? (
-        <AgentChatPreviewDialog
+        <MediaPreviewDialog
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           title={attachment.name}

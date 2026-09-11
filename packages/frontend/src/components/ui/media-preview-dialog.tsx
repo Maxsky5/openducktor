@@ -1,17 +1,11 @@
 import { type ReactElement, type ReactNode, useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./dialog";
 
-export type AgentChatPreviewMedia =
+export type MediaPreviewItem =
   | { kind: "image"; src: string; alt: string; unavailableLabel?: string }
   | { kind: "video"; src: string; ariaLabel: string };
 
-export const AgentChatPreviewDialog = ({
+export const MediaPreviewDialog = ({
   open,
   onOpenChange,
   title,
@@ -24,8 +18,8 @@ export const AgentChatPreviewDialog = ({
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  media: readonly AgentChatPreviewMedia[];
-  onMediaError?: (media: AgentChatPreviewMedia) => void;
+  media: readonly MediaPreviewItem[];
+  onMediaError?: (media: MediaPreviewItem) => void;
   trigger?: ReactNode;
 }): ReactElement => {
   const [failedSources, setFailedSources] = useState<ReadonlySet<string>>(() => new Set());
@@ -34,7 +28,7 @@ export const AgentChatPreviewDialog = ({
     setFailedSources((previous) => (previous.size === 0 ? previous : new Set()));
   }, [open]);
 
-  const handleMediaError = (item: AgentChatPreviewMedia): void => {
+  const handleMediaError = (item: MediaPreviewItem): void => {
     if (onMediaError) {
       onMediaError(item);
       return;

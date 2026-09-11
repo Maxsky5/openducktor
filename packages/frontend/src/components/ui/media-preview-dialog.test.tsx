@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
-import { AgentChatPreviewDialog } from "./agent-chat-preview-dialog";
+import { MediaPreviewDialog } from "./media-preview-dialog";
 
 enableReactActEnvironment();
 
@@ -11,10 +11,10 @@ const baseProps = {
   description: "Preview of the screenshots.",
 };
 
-describe("AgentChatPreviewDialog", () => {
+describe("MediaPreviewDialog", () => {
   test("renders images and videos in order", () => {
     const view = render(
-      <AgentChatPreviewDialog
+      <MediaPreviewDialog
         {...baseProps}
         open
         media={[
@@ -44,13 +44,13 @@ describe("AgentChatPreviewDialog", () => {
         unavailableLabel: "Screenshot 1 is unavailable.",
       },
     ];
-    const view = render(<AgentChatPreviewDialog {...baseProps} open media={media} />);
+    const view = render(<MediaPreviewDialog {...baseProps} open media={media} />);
     try {
       fireEvent.error(view.getByRole("img"));
       expect(view.getByText("Screenshot 1 is unavailable.")).toBeDefined();
       expect(view.queryByRole("img")).toBeNull();
-      view.rerender(<AgentChatPreviewDialog {...baseProps} open={false} media={media} />);
-      view.rerender(<AgentChatPreviewDialog {...baseProps} open media={media} />);
+      view.rerender(<MediaPreviewDialog {...baseProps} open={false} media={media} />);
+      view.rerender(<MediaPreviewDialog {...baseProps} open media={media} />);
       expect(view.getByRole("img")).toBeDefined();
     } finally {
       view.unmount();
@@ -60,7 +60,7 @@ describe("AgentChatPreviewDialog", () => {
   test("reports a media error to the caller without replacing the media", () => {
     const failures: string[] = [];
     const view = render(
-      <AgentChatPreviewDialog
+      <MediaPreviewDialog
         {...baseProps}
         open
         media={[{ kind: "image", src: "data:image/png;base64,AAAA", alt: "First screenshot" }]}

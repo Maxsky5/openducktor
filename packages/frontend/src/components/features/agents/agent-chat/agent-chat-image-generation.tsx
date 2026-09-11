@@ -30,7 +30,7 @@ import {
   type AgentGeneratedImageQueryInput,
 } from "@/state/queries/agent-generated-images";
 import { AgentChatImageSessionContext } from "./agent-chat-image-session-context";
-import { AgentChatPreviewDialog } from "./agent-chat-preview-dialog";
+import { MediaPreviewDialog } from "@/components/ui/media-preview-dialog";
 import { useAgentGeneratedImagePreview } from "./use-agent-generated-image-preview";
 
 export function AgentChatImageGeneration({
@@ -362,7 +362,7 @@ function LoadedImagePreview({
     onOpenChange(false);
   };
   return (
-    <AgentChatPreviewDialog
+    <MediaPreviewDialog
       open={open}
       onOpenChange={onOpenChange}
       title="Generated image"

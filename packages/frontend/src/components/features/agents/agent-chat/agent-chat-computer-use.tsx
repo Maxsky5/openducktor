@@ -3,7 +3,7 @@ import { type ReactElement, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { ToolMessageTiming } from "./agent-chat-message-card-tool-presenters";
-import { AgentChatPreviewDialog, type AgentChatPreviewMedia } from "./agent-chat-preview-dialog";
+import { MediaPreviewDialog, type MediaPreviewItem } from "@/components/ui/media-preview-dialog";
 import { getToolDuration } from "./tool-duration";
 import { hasNonEmptyText, isToolMessageActive, isToolMessageFailure } from "./tool-lifecycle";
 
@@ -29,7 +29,7 @@ export const ComputerUseToolMessage = ({
   const errorText = hasNonEmptyText(meta.error) ? meta.error : "";
   const outputText = hasNonEmptyText(meta.output) ? meta.output : "";
   const hasDetails = code.length > 0 || errorText.length > 0 || outputText.length > 0;
-  const previewMedia: AgentChatPreviewMedia[] = images.map((image, index) => ({
+  const previewMedia: MediaPreviewItem[] = images.map((image, index) => ({
     kind: "image",
     src: `data:${image.mimeType};base64,${image.dataBase64}`,
     alt: `Computer Use screenshot ${index + 1}`,
@@ -127,7 +127,7 @@ export const ComputerUseToolMessage = ({
         summary
       )}
       {previewMedia.length > 0 ? (
-        <AgentChatPreviewDialog
+        <MediaPreviewDialog
           open={previewOpen}
           onOpenChange={setPreviewOpen}
           title={previewMedia.length > 1 ? "Computer Use screenshots" : "Computer Use screenshot"}
