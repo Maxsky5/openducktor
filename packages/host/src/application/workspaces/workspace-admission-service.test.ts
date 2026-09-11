@@ -138,6 +138,93 @@ describe("workspace admission service", () => {
     ).resolves.toBeUndefined();
   });
 
+  test("reserves a workspace and rejects a second reservation", async () => {
+    const admission = createAdmission(catalog());
+
+    await Effect.runPromise(
+      admission.reserveWorkspace({
+        operation: "close",
+        repoPath: "/repos/ws",
+        workspaceId: "ws",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        admission.reserveWorkspace({
+          operation: "remove",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).rejects.toThrow("already in progress for ws");
+    expect(admission.isWorkspaceReserved("ws")).toBe(true);
+
+    admission.releaseReservation("ws");
+    expect(admission.isWorkspaceReserved("ws")).toBe(false);
+    await expect(
+      Effect.runPromise(
+        admission.reserveWorkspace({
+          operation: "remove",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  test("reservations block process starts and gate task store access by operation", async () => {
+    const admission = createAdmission(catalog());
+
+    await Effect.runPromise(
+      admission.reserveWorkspace({
+        operation: "close",
+        repoPath: "/repos/ws",
+        workspaceId: "ws",
+      }),
+    );
+
+    await expect(Effect.runPromise(admission.assertProcessStart("/repos/ws"))).rejects.toThrow(
+      "already in progress for ws",
+    );
+    await expect(
+      Effect.runPromise(
+        admission.assertTaskStoreAccess({
+          operation: "sqliteTaskRepository.listTasks",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      Effect.runPromise(
+        admission.assertTaskStoreAccess({
+          operation: "sqliteTaskRepository.updateTask",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).rejects.toThrow("already in progress for ws");
+
+    admission.releaseReservation("ws");
+    await Effect.runPromise(
+      admission.reserveWorkspace({
+        operation: "remove",
+        repoPath: "/repos/ws",
+        workspaceId: "ws",
+      }),
+    );
+    await expect(
+      Effect.runPromise(
+        admission.assertTaskStoreAccess({
+          operation: "sqliteTaskRepository.listTasks",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).rejects.toThrow("already in progress for ws");
+  });
+
   test("tracks block and unblock changes after initialization", async () => {
     const admission = createAdmission(catalog());
 

@@ -84,6 +84,10 @@ export const createTerminalSessionEngine = ({
       pruneExited();
       return [...sessions.values()].filter(isLiveTerminal).length;
     },
+    getContext: (terminalId: string): TerminalContext | null => {
+      pruneExited();
+      return sessions.get(terminalId)?.summary.context ?? null;
+    },
     countLiveForContext: (context: TerminalContext): number => {
       pruneExited();
       return [...sessions.values()].filter(
@@ -118,7 +122,9 @@ export const createTerminalSessionEngine = ({
             .pipe(Effect.mapError((cause) => terminalOperationFailure(cause, "list")));
           if (hasChildProcesses) {
             activeTerminalIds.push(session.summary.terminalId);
+            continue;
           }
+          unknownTerminalIds.push(session.summary.terminalId);
         }
         return { activeTerminalIds, unknownTerminalIds };
       }),

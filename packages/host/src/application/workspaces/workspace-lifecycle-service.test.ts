@@ -10,7 +10,7 @@ import {
   type WorkspaceRemovalRecord,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import {
@@ -101,10 +101,17 @@ const activityWith = (
 
 const createAdmissionDouble = (): Pick<
   WorkspaceAdmissionService,
-  "blockWorkspace" | "forgetWorkspace" | "unblockWorkspace" | "withAdministrativeAccess"
+  | "blockWorkspace"
+  | "forgetWorkspace"
+  | "releaseReservation"
+  | "reserveWorkspace"
+  | "unblockWorkspace"
+  | "withAdministrativeAccess"
 > => ({
   blockWorkspace: () => {},
   forgetWorkspace: () => {},
+  releaseReservation: () => {},
+  reserveWorkspace: () => Effect.void,
   unblockWorkspace: () => {},
   withAdministrativeAccess: (_workspaceId, effect) => effect,
 });
@@ -591,6 +598,96 @@ describe("workspace lifecycle service", () => {
     ).resolves.toEqual(expected);
     expect(reopenWorkspace).toHaveBeenCalledWith("ws", "/repos/ws");
     expect(unblockWorkspace).toHaveBeenCalledWith("ws");
+  });
+
+  test("reserves the workspace before the activity check and releases after close", async () => {
+    const calls: string[] = [];
+    const service = createService({
+      activity: {
+        inspect: () => {
+          calls.push("inspect");
+          return Effect.succeed([]);
+        },
+      },
+      admission: {
+        ...createAdmissionDouble(),
+        reserveWorkspace: () => {
+          calls.push("reserve");
+          return Effect.void;
+        },
+        releaseReservation: () => {
+          calls.push("release");
+        },
+        blockWorkspace: () => {
+          calls.push("block");
+        },
+      },
+    });
+
+    await Effect.runPromise(
+      service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+    );
+
+    expect(calls).toEqual(["reserve", "inspect", "block", "release"]);
+  });
+
+  test("releases the reservation when the activity check blocks close", async () => {
+    const releaseReservation = mock(() => {});
+    const closeWorkspace = mock(() => Effect.succeed(catalog()));
+    const service = createService({
+      activity: activityWith([{ kind: "terminal", label: "terminal t1 is running a command" }]),
+      admission: { ...createAdmissionDouble(), releaseReservation },
+      closeWorkspace,
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      ),
+    ).rejects.toThrow("terminal t1 is running a command");
+    expect(releaseReservation).toHaveBeenCalledWith("ws");
+    expect(closeWorkspace).not.toHaveBeenCalled();
+  });
+
+  test("releases the reservation after a committed removal", async () => {
+    const releaseReservation = mock(() => {});
+    const service = createService({
+      admission: { ...createAdmissionDouble(), releaseReservation },
+    });
+
+    await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(releaseReservation).toHaveBeenCalledWith("ws");
+  });
+
+  test("rejects close when another operation holds the workspace reservation", async () => {
+    const closeWorkspace = mock(() => Effect.succeed(catalog()));
+    const service = createService({
+      admission: {
+        ...createAdmissionDouble(),
+        reserveWorkspace: () =>
+          Effect.fail(
+            new HostValidationError({
+              message: "A workspace remove operation is already in progress for ws.",
+              field: "workspaceId",
+            }),
+          ),
+      },
+      closeWorkspace,
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      ),
+    ).rejects.toThrow("already in progress for ws");
+    expect(closeWorkspace).not.toHaveBeenCalled();
   });
 
   test("uses the expected repository path to reject a changed target before mutation", async () => {
