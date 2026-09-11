@@ -1,18 +1,17 @@
-import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
-import { z } from "zod";
+import type { AgentToolData } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 
 const TOOL_CANCELLED_PATTERN = /\b(cancel(?:ed|led)|aborted|stopped|interrupted|terminated)\b/i;
 
-const stringValueSchema = z.string();
-const numberOrBooleanValueSchema = z.union([z.number(), z.boolean()]);
 type AgentToolValue = AgentToolData[string];
 
 const isStringValue = (value: AgentToolValue): value is string =>
-  stringValueSchema.safeParse(value).success;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- AgentToolData has already passed boundary validation.
+  typeof value === "string";
 
 const isNumberOrBooleanValue = (value: AgentToolValue): value is number | boolean =>
-  numberOrBooleanValueSchema.safeParse(value).success;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Preserve the finite-number rule without allocating parse errors.
+  (typeof value === "number" && Number.isFinite(value)) || typeof value === "boolean";
 
 const hasMeaningfulInputValue = (value: AgentToolValue): boolean => {
   if (isStringValue(value)) {
@@ -24,11 +23,10 @@ const hasMeaningfulInputValue = (value: AgentToolValue): boolean => {
   if (Array.isArray(value)) {
     return value.some((entry) => hasMeaningfulInputValue(entry));
   }
-  const objectValue = agentToolDataSchema.safeParse(value);
-  if (!objectValue.success) {
+  if (value === null) {
     return false;
   }
-  return Object.values(objectValue.data).some((entry) => hasMeaningfulInputValue(entry));
+  return Object.values(value).some((entry) => hasMeaningfulInputValue(entry));
 };
 
 export const hasNonEmptyInput = (input: AgentToolData | undefined): boolean => {
@@ -36,8 +34,8 @@ export const hasNonEmptyInput = (input: AgentToolData | undefined): boolean => {
 };
 
 export const hasNonEmptyText = (value: AgentToolValue | undefined): value is string => {
-  const result = stringValueSchema.safeParse(value);
-  return result.success && result.data.trim().length > 0;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Tool fields have already passed boundary validation.
+  return typeof value === "string" && value.trim().length > 0;
 };
 
 export const isToolMessageFailure = (meta: ToolMeta): boolean => {

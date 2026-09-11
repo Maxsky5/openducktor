@@ -1,6 +1,5 @@
 import { recordImageGenerationEnd } from "../support/image-generation-settlement";
-import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
-import { z } from "zod";
+import type { AgentToolData } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import type { SessionLifecycleEventContext, SessionPart } from "./session-event-types";
@@ -10,25 +9,26 @@ export const eventTimestampMs = (timestamp: string): number => {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 };
 
-const stringValueSchema = z.string();
-const numberOrBooleanValueSchema = z.union([z.number(), z.boolean()]);
-
 const hasMeaningfulToolInputValue = (value: AgentToolData[string]): boolean => {
-  const stringResult = stringValueSchema.safeParse(value);
-  if (stringResult.success) {
-    return stringResult.data.trim().length > 0;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Transcript tool input has already passed boundary validation.
+  if (typeof value === "string") {
+    return value.trim().length > 0;
   }
-  if (numberOrBooleanValueSchema.safeParse(value).success) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Keep the same finite-number acceptance as the boundary schema.
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Boolean false is meaningful tool input too.
+  if (typeof value === "boolean") {
     return true;
   }
   if (Array.isArray(value)) {
     return value.some((entry) => hasMeaningfulToolInputValue(entry));
   }
-  const objectValue = agentToolDataSchema.safeParse(value);
-  if (!objectValue.success) {
+  if (value === null) {
     return false;
   }
-  return Object.values(objectValue.data).some((entry) => hasMeaningfulToolInputValue(entry));
+  return Object.values(value).some((entry) => hasMeaningfulToolInputValue(entry));
 };
 
 export const hasMeaningfulToolInput = (input: AgentToolData | undefined): boolean => {

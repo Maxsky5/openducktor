@@ -13,6 +13,9 @@ import {
 import type { SessionInput, SessionRecord } from "../types";
 import { z } from "zod";
 
+const eventSessionIdSchema = z.string();
+const partDeltaTextSchema = z.string();
+
 export type PendingPartDelta = {
   field: string;
   delta: string;
@@ -247,7 +250,7 @@ export const applyDeltaToPart = (
 ): ParsedOpencodePart | null => {
   const normalizedField = normalizePartDeltaField(field);
   const existing = Object.getOwnPropertyDescriptor(part, normalizedField)?.value;
-  const existingText = z.string().safeParse(existing);
+  const existingText = partDeltaTextSchema.safeParse(existing);
   if (existing !== undefined && !existingText.success) {
     return null;
   }
@@ -263,7 +266,7 @@ export const readEventSessionId = (event: Event): string | undefined => {
   if (!("sessionID" in properties)) {
     return undefined;
   }
-  const sessionId = z.string().safeParse(properties.sessionID);
+  const sessionId = eventSessionIdSchema.safeParse(properties.sessionID);
   return sessionId.success ? sessionId.data : undefined;
 };
 
@@ -292,8 +295,4 @@ export const readSessionLifecycleEvent = (event: Event): SessionLifecycleEvent |
 
 export const readEventDirectory = (event: Event): string | undefined => {
   return event.properties.directory;
-};
-
-export const isRelevantEvent = (externalSessionId: string, event: Event): boolean => {
-  return readEventSessionId(event) === externalSessionId;
 };

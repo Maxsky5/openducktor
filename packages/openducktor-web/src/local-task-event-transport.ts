@@ -25,6 +25,8 @@ const TASK_STREAM_TOKEN_HEADER = "x-openducktor-task-stream-token";
 const TASK_EVENT_SUBSCRIPTIONS_PATH = "task-events/subscriptions";
 const INITIAL_SSE_READY_TIMEOUT_MS = 10_000;
 
+const taskFrameDataSchema = z.string();
+
 type LocalTaskEventTransportContext = {
   ensureSession: () => Effect.Effect<void, WebError>;
   localHostRequestErrorEffect: (
@@ -209,9 +211,9 @@ export const subscribeLocalTaskEventStreamEffect = (
     };
     const handleFrame = (data: string): void => {
       if (closed) return;
-      let raw: z.output<typeof taskEventStreamFrameSchema>;
+      let raw: unknown;
       try {
-        raw = taskEventStreamFrameSchema.parse(JSON.parse(data));
+        raw = JSON.parse(data);
       } catch (cause) {
         const failure = new WebDependencyError({
           dependency: "task-event-stream",
@@ -251,7 +253,7 @@ export const subscribeLocalTaskEventStreamEffect = (
         );
         return;
       }
-      const data = z.string().safeParse(event.data);
+      const data = taskFrameDataSchema.safeParse(event.data);
       if (!data.success) {
         failSetupOrReportTerminalFailure(
           new WebDependencyError({

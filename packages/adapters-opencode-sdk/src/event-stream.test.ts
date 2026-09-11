@@ -7,11 +7,11 @@ import type {
 } from "@opencode-ai/sdk/v2/client";
 import type { OpenCodeProtocolObject } from "./guards";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
+import { processOpencodeEvent, subscribeGlobalEvents } from "./event-stream";
 import {
   isRelevantSubscriberEvent,
-  processOpencodeEvent,
-  subscribeGlobalEvents,
-} from "./event-stream";
+  resolveOpencodeEventRecipients,
+} from "./opencode-event-recipients";
 import {
   type EventStreamRuntime,
   flushPendingSubagentInputEventsForSession,
@@ -2348,22 +2348,24 @@ describe("event-stream", () => {
       input: makeSessionInput(),
     };
 
-    expect(isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent)).toBe(false);
+    const parentByChild = new Map([["external-child-session", parentSubscriber.externalSessionId]]);
     expect(
-      isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent, {
-        resolveParentExternalSessionId: (externalSessionId) =>
-          externalSessionId === "external-child-session"
-            ? parentSubscriber.externalSessionId
-            : undefined,
-      }),
+      isRelevantSubscriberEvent(
+        parentSubscriber,
+        resolveOpencodeEventRecipients(childPermissionEvent, new Map()),
+      ),
+    ).toBe(false);
+    expect(
+      isRelevantSubscriberEvent(
+        parentSubscriber,
+        resolveOpencodeEventRecipients(childPermissionEvent, parentByChild),
+      ),
     ).toBe(true);
     expect(
-      isRelevantSubscriberEvent(parentSubscriber, childMessageEvent, {
-        resolveParentExternalSessionId: (externalSessionId) =>
-          externalSessionId === "external-child-session"
-            ? parentSubscriber.externalSessionId
-            : undefined,
-      }),
+      isRelevantSubscriberEvent(
+        parentSubscriber,
+        resolveOpencodeEventRecipients(childMessageEvent, parentByChild),
+      ),
     ).toBe(false);
   });
 
@@ -2376,10 +2378,9 @@ describe("event-stream", () => {
       externalSessionId: "external-explicit-parent",
       input: makeSessionInput(),
     };
-    const resolveConfirmedParent = (externalSessionId: string) =>
-      externalSessionId === "external-child-session"
-        ? confirmedParentSubscriber.externalSessionId
-        : undefined;
+    const parentByChild = new Map([
+      ["external-child-session", confirmedParentSubscriber.externalSessionId],
+    ]);
 
     for (const eventType of [
       "permission.asked",
@@ -2396,16 +2397,9 @@ describe("event-stream", () => {
         },
       } satisfies OpenCodeProtocolObject;
 
-      expect(
-        isRelevantSubscriberEvent(confirmedParentSubscriber, event, {
-          resolveParentExternalSessionId: resolveConfirmedParent,
-        }),
-      ).toBe(true);
-      expect(
-        isRelevantSubscriberEvent(explicitParentSubscriber, event, {
-          resolveParentExternalSessionId: resolveConfirmedParent,
-        }),
-      ).toBe(false);
+      const recipients = resolveOpencodeEventRecipients(event, parentByChild);
+      expect(isRelevantSubscriberEvent(confirmedParentSubscriber, recipients)).toBe(true);
+      expect(isRelevantSubscriberEvent(explicitParentSubscriber, recipients)).toBe(false);
     }
   });
 
@@ -2426,8 +2420,9 @@ describe("event-stream", () => {
       input: makeSessionInput(),
     };
 
-    expect(isRelevantSubscriberEvent(parentSubscriber, childSessionCreatedEvent)).toBe(false);
-    expect(isRelevantSubscriberEvent(otherSubscriber, childSessionCreatedEvent)).toBe(false);
+    const recipients = resolveOpencodeEventRecipients(childSessionCreatedEvent, new Map());
+    expect(isRelevantSubscriberEvent(parentSubscriber, recipients)).toBe(false);
+    expect(isRelevantSubscriberEvent(otherSubscriber, recipients)).toBe(false);
   });
 
   test("does not treat lifecycle parent aliases as authoritative", () => {
@@ -2443,7 +2438,12 @@ describe("event-stream", () => {
         parentSubscriber.externalSessionId,
       );
 
-      expect(isRelevantSubscriberEvent(parentSubscriber, lifecycleEvent)).toBe(false);
+      expect(
+        isRelevantSubscriberEvent(
+          parentSubscriber,
+          resolveOpencodeEventRecipients(lifecycleEvent, new Map()),
+        ),
+      ).toBe(false);
     }
   });
 
@@ -2487,7 +2487,12 @@ describe("event-stream", () => {
       properties: { directory: "/repo" },
     });
 
-    expect(isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent)).toBe(false);
+    expect(
+      isRelevantSubscriberEvent(
+        parentSubscriber,
+        resolveOpencodeEventRecipients(childPermissionEvent, new Map()),
+      ),
+    ).toBe(false);
   });
 
   test("applies queued part delta with append semantics", async () => {

@@ -6,6 +6,8 @@ import { resolveLatestDocumentPayload } from "./document-utils";
 
 export const TASK_DOCUMENT_STALE_TIME_MS = 60_000;
 
+const queryKeyStringSchema = z.string();
+
 export type TaskDocument = {
   markdown: string;
   updatedAt: string | null;
@@ -128,7 +130,7 @@ export const removeCachedTaskDocumentQueries = (
     exact: false,
   })) {
     const [scope, _section, cachedRepoPath, cachedTaskId] = query.queryKey;
-    const cachedTaskIdResult = z.string().safeParse(cachedTaskId);
+    const cachedTaskIdResult = queryKeyStringSchema.safeParse(cachedTaskId);
     if (
       scope !== documentQueryKeys.all[0] ||
       cachedRepoPath !== repoPath ||
@@ -156,7 +158,7 @@ export const invalidateCachedTaskDocumentQueries = async (
     exact: false,
     predicate: (query) => {
       const [scope, _section, cachedRepoPath, cachedTaskId] = query.queryKey;
-      const cachedTaskIdResult = z.string().safeParse(cachedTaskId);
+      const cachedTaskIdResult = queryKeyStringSchema.safeParse(cachedTaskId);
       return (
         scope === documentQueryKeys.all[0] &&
         cachedRepoPath === repoPath &&

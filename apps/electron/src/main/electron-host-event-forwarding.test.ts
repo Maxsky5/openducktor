@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
+import { electronHostEventChannel } from "../shared/electron-host-event-channel";
 
 describe("forwardElectronHostEvent", () => {
   test("reports one failed window send and continues forwarding to later windows", () => {
@@ -23,13 +24,12 @@ describe("forwardElectronHostEvent", () => {
           webContents: { isDestroyed: () => false, send: received },
         },
       ],
-      "openducktor:host-event",
       { channel: "openducktor://run-event", payload: { type: "run" } },
       report,
     );
 
     expect(report).toHaveBeenCalledWith({ channel: "openducktor://run-event", cause: failure });
-    expect(received).toHaveBeenCalledWith("openducktor:host-event", {
+    expect(received).toHaveBeenCalledWith(electronHostEventChannel("openducktor://run-event"), {
       channel: "openducktor://run-event",
       payload: { type: "run" },
     });

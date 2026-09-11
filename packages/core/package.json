@@ -13,6 +13,6 @@
   "dependencies": {
     "@openducktor/contracts": "workspace:*",
     "@openducktor/path-support": "workspace:*",
-    "zod": "^4.4.3"
+    "zod": "^4.6.2"
   }
 }

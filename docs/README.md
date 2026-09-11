@@ -32,4 +32,5 @@ Use this index to find the document for your task.
 
 - [MCP runtime security](mcp-runtime-security.md) defines the allowed MCP transport and threat assumptions.
 - [Dependency hygiene](dependency-hygiene.md) defines dependency checks and update rules.
+- [Performance audits](performance-audits.md) explains how to diagnose CPU, memory, and response-time issues and verify fixes in Electron and the browser runner.
 - [Release process](release-process.md) defines desktop, web, MCP, and Homebrew releases.

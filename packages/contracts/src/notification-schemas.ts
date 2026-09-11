@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { withMaxUtf16Length } from "./string-schemas";
 import { agentSessionLiveRefSchema } from "./agent-session-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
 import { agentSessionRecordSchema } from "./session-schemas";
@@ -121,12 +122,12 @@ const notificationRepoTargetFields = {
 
 const notificationTaskTargetFields = {
   ...notificationRepoTargetFields,
-  taskId: z.string().trim().min(1).max(128),
+  taskId: withMaxUtf16Length(z.string().trim().min(1), 128),
 } as const;
 
 const notificationSessionTargetFields = {
   ...notificationRepoTargetFields,
-  taskId: z.string().trim().min(1).max(128).optional(),
+  taskId: withMaxUtf16Length(z.string().trim().min(1), 128).optional(),
 } as const;
 
 export const notificationSessionIdentitySchema = agentSessionRecordSchema
@@ -157,7 +158,7 @@ export const notificationNavigationTargetSchema = z.discriminatedUnion("type", [
     type: z.literal("session_error"),
     ...notificationSessionTargetFields,
     session: notificationSessionIdentitySchema,
-    errorId: z.string().trim().min(1).max(512),
+    errorId: withMaxUtf16Length(z.string().trim().min(1), 512),
   }),
   z.strictObject({
     type: z.literal("kanban_task"),
@@ -167,19 +168,19 @@ export const notificationNavigationTargetSchema = z.discriminatedUnion("type", [
 export type NotificationNavigationTarget = z.infer<typeof notificationNavigationTargetSchema>;
 
 export const notificationOccurrenceSchema = z.strictObject({
-  occurrenceId: z.string().trim().min(1).max(1024),
+  occurrenceId: withMaxUtf16Length(z.string().trim().min(1), 1024),
   kind: notificationKindSchema,
   repoPath: agentSessionLiveRefSchema.shape.repoPath,
-  repositoryLabel: z.string().trim().min(1).max(120),
+  repositoryLabel: withMaxUtf16Length(z.string().trim().min(1), 120),
   task: z
     .strictObject({
-      id: z.string().trim().min(1).max(128),
-      title: z.string().trim().min(1).max(240).optional(),
+      id: withMaxUtf16Length(z.string().trim().min(1), 128),
+      title: withMaxUtf16Length(z.string().trim().min(1), 240).optional(),
     })
     .optional(),
   role: agentRoleSchema.optional(),
-  sessionLabel: z.string().trim().min(1).max(120).optional(),
-  status: z.string().trim().min(1).max(240),
+  sessionLabel: withMaxUtf16Length(z.string().trim().min(1), 120).optional(),
+  status: withMaxUtf16Length(z.string().trim().min(1), 240),
   navigationTarget: notificationNavigationTargetSchema,
 });
 export type NotificationOccurrence = z.infer<typeof notificationOccurrenceSchema>;
@@ -198,15 +199,15 @@ export const notificationOsCapabilitySchema = z.strictObject({
   permission: z.enum(NOTIFICATION_OS_PERMISSION_VALUES),
   canGuaranteeSilent: z.boolean(),
   canOpenSystemSettings: z.boolean(),
-  failureMessage: z.string().trim().min(1).max(500).optional(),
+  failureMessage: withMaxUtf16Length(z.string().trim().min(1), 500).optional(),
 });
 export type NotificationOsCapability = z.infer<typeof notificationOsCapabilitySchema>;
 
 export const notificationOsDeliveryRequestSchema = z.strictObject({
   purpose: z.enum(["notification", "test"]).optional(),
-  occurrenceId: z.string().trim().min(1).max(1024),
-  title: z.string().trim().min(1).max(180),
-  body: z.string().trim().min(1).max(500),
+  occurrenceId: withMaxUtf16Length(z.string().trim().min(1), 1024),
+  title: withMaxUtf16Length(z.string().trim().min(1), 180),
+  body: withMaxUtf16Length(z.string().trim().min(1), 500),
   silent: z.literal(true),
   navigationTarget: notificationNavigationTargetSchema,
 });
@@ -214,9 +215,18 @@ export type NotificationOsDeliveryRequest = z.infer<typeof notificationOsDeliver
 
 export const notificationDeliveryResultSchema = z.discriminatedUnion("status", [
   z.strictObject({ status: z.literal("shown") }),
-  z.strictObject({ status: z.literal("unsupported"), message: z.string().trim().min(1).max(500) }),
-  z.strictObject({ status: z.literal("denied"), message: z.string().trim().min(1).max(500) }),
-  z.strictObject({ status: z.literal("failed"), message: z.string().trim().min(1).max(500) }),
+  z.strictObject({
+    status: z.literal("unsupported"),
+    message: withMaxUtf16Length(z.string().trim().min(1), 500),
+  }),
+  z.strictObject({
+    status: z.literal("denied"),
+    message: withMaxUtf16Length(z.string().trim().min(1), 500),
+  }),
+  z.strictObject({
+    status: z.literal("failed"),
+    message: withMaxUtf16Length(z.string().trim().min(1), 500),
+  }),
 ]);
 export type NotificationDeliveryResult = z.infer<typeof notificationDeliveryResultSchema>;
 

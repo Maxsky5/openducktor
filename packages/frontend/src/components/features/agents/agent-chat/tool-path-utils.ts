@@ -1,6 +1,5 @@
-import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
+import type { AgentToolData } from "@openducktor/contracts";
 import { toDisplayRelativePath } from "@openducktor/path-support";
-import { z } from "zod";
 
 const DISPLAY_PATH_KEYS = new Set([
   "filePath",
@@ -18,11 +17,11 @@ const DISPLAY_PATH_KEYS = new Set([
   "workingDirectory",
 ]);
 
-const stringValueSchema = z.string();
 type AgentToolValue = AgentToolData[string];
 
 const isStringValue = (value: AgentToolValue): value is string =>
-  stringValueSchema.safeParse(value).success;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- AgentToolData has already passed boundary validation.
+  typeof value === "string";
 
 export const relativizeDisplayPath = (filePath: string, workingDirectory?: string | null): string =>
   toDisplayRelativePath(filePath, workingDirectory);
@@ -55,13 +54,13 @@ export const relativizeDisplayPathsInValue = (
   if (Array.isArray(value)) {
     return value.map((entry) => relativizeDisplayPathsInValue(entry, workingDirectory, key));
   }
-  const objectValue = agentToolDataSchema.safeParse(value);
-  if (!objectValue.success) {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Traverse the validated JSON value without parsing its subtree again.
+  if (value === null || typeof value !== "object") {
     return value;
   }
 
   return Object.fromEntries(
-    Object.entries(objectValue.data).map(([entryKey, entryValue]) => [
+    Object.entries(value).map(([entryKey, entryValue]) => [
       entryKey,
       relativizeDisplayPathsInValue(entryValue, workingDirectory, entryKey),
     ]),

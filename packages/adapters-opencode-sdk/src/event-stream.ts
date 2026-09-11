@@ -1,14 +1,6 @@
 import type { GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import {
-  isRelevantEvent,
-  readEventDirectory,
-  readEventParentExternalSessionId,
-  readEventSessionId,
-  readSessionLifecycleEvent,
-} from "./event-stream/shared";
-import {
   normalizeOpencodeGlobalEventPayload,
-  opencodeEventUsesParentSessionRouting,
   type ProjectOpencodeAgentSessionEventInput,
   projectOpencodeAgentSessionEvent,
 } from "./opencode-agent-session-projection";
@@ -39,10 +31,6 @@ type LogEventInput = {
   event: Event;
   relevant: boolean;
   logEvent?: OpencodeEventLogger;
-};
-
-type RelevantSubscriberEventOptions = {
-  resolveParentExternalSessionId?: (childExternalSessionId: string) => string | undefined;
 };
 
 type OpencodeGlobalEvent = GlobalEvent;
@@ -118,22 +106,6 @@ const readGlobalEventFailureScope = (
   return scope;
 };
 
-const normalizeDirectory = (directory: string): string => directory.trim();
-
-const isEventDirectoryScopedToSubscriber = (
-  subscriber: EventStreamSubscriber,
-  event: Event,
-): boolean => {
-  const eventDirectory = readEventDirectory(event);
-  if (!eventDirectory) {
-    return false;
-  }
-
-  return (
-    normalizeDirectory(eventDirectory) === normalizeDirectory(subscriber.input.workingDirectory)
-  );
-};
-
 export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => {
   projectOpencodeAgentSessionEvent(input);
 };
@@ -172,40 +144,4 @@ export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): 
       input.onReady?.();
     }
   }
-};
-
-export const isRelevantSubscriberEvent = (
-  subscriber: EventStreamSubscriber,
-  event: Event,
-  options?: RelevantSubscriberEventOptions,
-): boolean => {
-  if (isRelevantEvent(subscriber.externalSessionId, event)) {
-    return true;
-  }
-
-  const lifecycleEvent = readSessionLifecycleEvent(event);
-  const eventExternalSessionId = lifecycleEvent
-    ? lifecycleEvent.externalSessionId
-    : readEventSessionId(event);
-  if (eventExternalSessionId) {
-    const parentExternalSessionId = lifecycleEvent
-      ? lifecycleEvent.parentExternalSessionId
-      : readEventParentExternalSessionId(event);
-
-    if (parentExternalSessionId) {
-      return parentExternalSessionId === subscriber.externalSessionId;
-    }
-
-    if (
-      opencodeEventUsesParentSessionRouting(event) &&
-      options?.resolveParentExternalSessionId?.(eventExternalSessionId) ===
-        subscriber.externalSessionId
-    ) {
-      return true;
-    }
-
-    return false;
-  }
-
-  return isEventDirectoryScopedToSubscriber(subscriber, event);
 };

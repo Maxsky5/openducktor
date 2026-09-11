@@ -82,9 +82,11 @@ export const createElectronShellBridge = (): ShellBridge => {
     },
     observeAgentSessionLive: async (input, listener) => {
       const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
-      const unsubscribe = electronApi.subscribe(AGENT_SESSION_LIVE_EVENT_CHANNEL, (payload) => {
-        attachment.accept(payload);
-      });
+      const unsubscribe = electronApi.subscribe(
+        AGENT_SESSION_LIVE_EVENT_CHANNEL,
+        attachment.accept,
+        input.repoPath,
+      );
       try {
         await client.agentSessionLiveRefresh(input);
       } catch (cause) {

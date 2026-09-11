@@ -1,5 +1,6 @@
 import type { HostEventChannel } from "@openducktor/contracts";
 import type { ElectronHostEventEnvelope } from "../shared/electron-bridge-contract";
+import { electronHostEventEnvelopeChannel } from "../shared/electron-host-event-channel";
 
 type ElectronHostEventWindow = {
   isDestroyed(): boolean;
@@ -11,10 +12,10 @@ type ElectronHostEventWindow = {
 
 export const forwardElectronHostEvent = (
   windows: readonly ElectronHostEventWindow[],
-  ipcChannel: string,
   envelope: ElectronHostEventEnvelope,
   reportDeliveryFailure: (failure: { channel: HostEventChannel; cause: unknown }) => void,
 ): void => {
+  const ipcChannel = electronHostEventEnvelopeChannel(envelope);
   for (const window of windows) {
     if (window.isDestroyed() || window.webContents.isDestroyed()) {
       continue;

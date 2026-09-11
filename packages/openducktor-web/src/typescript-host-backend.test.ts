@@ -1,3 +1,4 @@
+import { liveSessionStreamEventName } from "./host-event-stream-name";
 import { describe, expect, mock, test } from "bun:test";
 import { TERMINAL_PROTOCOL_SUBPROTOCOL, type HostEventEnvelope } from "@openducktor/contracts";
 import {
@@ -1096,6 +1097,17 @@ describe("TypeScript web host backend", () => {
       for (const event of events) {
         expect(replay).toContain(JSON.stringify(event));
       }
+      expect(replay).toContain(`id: 3\nevent: ${liveSessionStreamEventName("/repo")}\ndata: `);
+      eventBus.publish({
+        channel: "openducktor://agent-session-live-event",
+        payload: {
+          type: "snapshot",
+          repoPath: "/other",
+          sessions: [],
+        },
+      });
+      const next = new TextDecoder().decode((await readImmediateStreamChunk(reader)).value);
+      expect(next).toContain(`id: 4\nevent: ${liveSessionStreamEventName("/other")}\ndata: `);
     } finally {
       await reader.cancel();
     }

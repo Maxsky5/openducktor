@@ -101,6 +101,16 @@ export type ElectronHostInvokeResponseEnvelope = z.output<typeof electronHostInv
 
 export type ElectronHostEventEnvelope = HostEventEnvelope;
 
+export type ElectronHostEventSubscription = {
+  [Channel in HostEventChannel]: Channel extends "openducktor://agent-session-live-event"
+    ? readonly [
+        channel: Channel,
+        listener: (payload: HostEventPayload<Channel>) => void,
+        repoPath: string,
+      ]
+    : readonly [channel: Channel, listener: (payload: HostEventPayload<Channel>) => void];
+}[HostEventChannel];
+
 export type ElectronTerminalEventEnvelope = {
   clientId: string;
   frame: Uint8Array;
@@ -187,10 +197,7 @@ export type OpenDucktorElectronApi = {
     command: HostCommandName,
     args?: ElectronHostInvokeRequest["args"],
   ): Promise<ElectronHostInvokeWireResult>;
-  subscribe<Channel extends HostEventChannel>(
-    channel: Channel,
-    listener: (payload: HostEventPayload<Channel>) => void,
-  ): () => void;
+  subscribe(...subscription: ElectronHostEventSubscription): () => void;
   appUpdates: OpenDucktorElectronAppUpdateApi;
   notifications: OpenDucktorElectronNotificationApi;
   openExternalUrl(url: string): Promise<void>;

@@ -52,7 +52,7 @@
     "oxlint": "^1.80.0",
     "typescript": "^7.0.2",
     "yaml": "^2.9.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.2"
   },
   "overrides": {
     "@hono/node-server": "^1.19.11",

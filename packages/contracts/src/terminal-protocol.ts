@@ -56,24 +56,27 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
       complete: z.boolean(),
     })
     .strict(),
-  protocolBaseSchema
-    .extend({
-      type: z.literal("output"),
-      terminalId: terminalIdSchema,
-      sequenceStart: sequenceSchema,
-      sequenceEnd: sequenceSchema,
-      replay: z.boolean(),
-    })
-    .strict()
-    .superRefine((message, context) => {
-      if (message.sequenceEnd <= message.sequenceStart) {
-        context.addIssue({
-          code: "custom",
-          message: "sequenceEnd must be greater than sequenceStart",
-          path: ["sequenceEnd"],
-        });
-      }
-    }),
+  z.compile(
+    protocolBaseSchema
+      .extend({
+        type: z.literal("output"),
+        terminalId: terminalIdSchema,
+        sequenceStart: sequenceSchema,
+        sequenceEnd: sequenceSchema,
+        replay: z.boolean(),
+      })
+      .strict()
+      .superRefine((message, context) => {
+        if (message.sequenceEnd <= message.sequenceStart) {
+          context.addIssue({
+            code: "custom",
+            message: "sequenceEnd must be greater than sequenceStart",
+            path: ["sequenceEnd"],
+          });
+        }
+      }),
+    { strict: true },
+  ),
   protocolBaseSchema
     .extend({
       type: z.literal("replay_gap"),
@@ -121,13 +124,18 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
 export type TerminalServerMessage = z.infer<typeof terminalServerMessageSchema>;
 export type TerminalProtocolMessage = TerminalClientMessage | TerminalServerMessage;
 
+const terminalProtocolMessageSchema = z.union([
+  terminalClientMessageSchema,
+  terminalServerMessageSchema,
+]);
+
 export const isTerminalClientMessage = (
   message: TerminalProtocolMessage,
 ): message is TerminalClientMessage => terminalClientMessageSchema.safeParse(message).success;
 
 const terminalProtocolHeaderSchema = z
   .object({
-    message: z.union([terminalClientMessageSchema, terminalServerMessageSchema]),
+    message: terminalProtocolMessageSchema,
     payloadLength: z.number().int().nonnegative(),
   })
   .strict();
@@ -157,9 +165,7 @@ export const encodeTerminalProtocolFrame = ({
   message,
   payload,
 }: TerminalProtocolFrame): Uint8Array => {
-  const parsedMessage = z
-    .union([terminalClientMessageSchema, terminalServerMessageSchema])
-    .parse(message);
+  const parsedMessage = terminalProtocolMessageSchema.parse(message);
   assertPayloadContract(parsedMessage, payload.byteLength);
   const headerBytes = new TextEncoder().encode(
     JSON.stringify({ message: parsedMessage, payloadLength: payload.byteLength }),

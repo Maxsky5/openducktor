@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { withMaxUtf16Length } from "./string-schemas";
 import { agentSessionLiveRefSchema } from "./agent-session-schemas";
 import {
   LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT,
@@ -92,7 +93,7 @@ export const agentGeneratedImageReadResultSchema = agentGeneratedImageReadInputS
   .extend({
     mime: z.literal("image/png"),
     byteLength: z.number().int().positive().max(LOCAL_ATTACHMENT_BYTE_LIMIT),
-    base64: z.string().min(1).max(LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT),
+    base64: withMaxUtf16Length(z.string().min(1), LOCAL_ATTACHMENT_BASE64_CHARACTER_LIMIT),
   })
   .strict();
 export type AgentGeneratedImageReadResult = z.infer<typeof agentGeneratedImageReadResultSchema>;

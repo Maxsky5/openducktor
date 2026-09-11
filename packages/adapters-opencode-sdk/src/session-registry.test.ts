@@ -365,6 +365,50 @@ const runRuntimeEventTransport = async (
 };
 
 describe("session registry runtime event transport", () => {
+  test("delivers the same events with logging enabled and disabled", async () => {
+    for (const logging of [false, true]) {
+      const logs: Array<{ externalSessionId: string; relevant: boolean }> = [];
+      const options: NonNullable<Parameters<typeof runRuntimeEventTransport>[1]> = {
+        externalSessionIds: ["external-session-1", "external-session-2"],
+      };
+      if (logging) {
+        options.logEvent = ({ externalSessionId, relevant }) => {
+          logs.push({ externalSessionId, relevant });
+        };
+      }
+      const emitted = await runRuntimeEventTransport(
+        ["external-session-1", "external-session-2"].map((sessionID) => ({
+          id: `status-${sessionID}`,
+          type: "session.status" as const,
+          properties: { sessionID, status: { type: "busy" as const } },
+        })),
+        options,
+      );
+
+      expect(emitted.filter((event) => event.type === "session_status")).toEqual([
+        expect.objectContaining({
+          externalSessionId: "external-session-1",
+          status: { type: "busy", message: null },
+        }),
+        expect.objectContaining({
+          externalSessionId: "external-session-2",
+          status: { type: "busy", message: null },
+        }),
+      ]);
+      expect(emitted.filter((event) => event.type === "session_error")).toEqual([]);
+      expect(logs).toEqual(
+        logging
+          ? [
+              { externalSessionId: "external-session-1", relevant: true },
+              { externalSessionId: "external-session-2", relevant: false },
+              { externalSessionId: "external-session-1", relevant: false },
+              { externalSessionId: "external-session-2", relevant: true },
+            ]
+          : [],
+      );
+    }
+  });
+
   test("rejects pending message admission when its session is released", async () => {
     const session = makeSessionRecord(makeClientWithEvents([]));
     const sessions = new Map<string, SessionRecord>([[session.externalSessionId, session]]);

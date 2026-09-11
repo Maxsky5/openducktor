@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isoTimestampSchema as dateTimeSchema } from "./string-schemas";
 import { gitProviderIdSchema } from "./git-schemas";
 
 export const pullRequestReviewProviderIdSchema = gitProviderIdSchema;
@@ -42,7 +43,6 @@ export type PullRequestReviewCheckConclusion = z.infer<
 
 const urlSchema = z.string().url();
 const nullableUrlSchema = urlSchema.nullable();
-const dateTimeSchema = z.string().datetime({ offset: true });
 const nullableDateTimeSchema = dateTimeSchema.nullable();
 
 export const pullRequestReviewPullRequestSchema = z.object({

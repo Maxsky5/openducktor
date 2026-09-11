@@ -6,6 +6,8 @@ import { resolveLatestDocumentPayload } from "./document-utils";
 import { documentQueryKeys, type TaskDocument, type TaskDocumentSection } from "./documents";
 import { invalidateRepoTaskQueries, taskQueryKeys } from "./tasks";
 
+const queryKeyStringSchema = z.string();
+
 export type TaskViewSyncPorts = {
   listTasks: (repoPath: string) => Promise<TaskCard[]>;
   loadFreshDocument: (
@@ -49,7 +51,7 @@ const cachedDocumentEntries = (queryClient: QueryClient, repoPath: string): Cach
     .findAll({ queryKey: documentQueryKeys.all, exact: false })
     .flatMap<CachedDocumentEntry>((query) => {
       const [scope, section, cachedRepoPath, taskId] = query.queryKey;
-      const taskIdResult = z.string().safeParse(taskId);
+      const taskIdResult = queryKeyStringSchema.safeParse(taskId);
       if (
         scope !== documentQueryKeys.all[0] ||
         cachedRepoPath !== repoPath ||
@@ -234,7 +236,7 @@ export const createTaskViewSync = ({
       const repos = new Set<string>([
         ...(activeRepoPath ? [activeRepoPath] : []),
         ...taskQueries.flatMap((query) => {
-          const repoPathResult = z.string().safeParse(query.queryKey[2]);
+          const repoPathResult = queryKeyStringSchema.safeParse(query.queryKey[2]);
           return repoPathResult.success ? [repoPathResult.data] : [];
         }),
       ]);
@@ -311,11 +313,11 @@ export const createTaskViewSync = ({
       const repos = new Set<string>([
         ...(activeRepoPath ? [activeRepoPath] : []),
         ...taskQueries.flatMap((query) => {
-          const repoPathResult = z.string().safeParse(query.queryKey[2]);
+          const repoPathResult = queryKeyStringSchema.safeParse(query.queryKey[2]);
           return repoPathResult.success ? [repoPathResult.data] : [];
         }),
         ...documentQueries.flatMap((query) => {
-          const repoPathResult = z.string().safeParse(query.queryKey[2]);
+          const repoPathResult = queryKeyStringSchema.safeParse(query.queryKey[2]);
           return repoPathResult.success ? [repoPathResult.data] : [];
         }),
       ]);

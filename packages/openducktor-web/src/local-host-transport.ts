@@ -45,6 +45,7 @@ import {
   readLocalHostErrorPayloadEffect,
   readLocalHostInvokeErrorPayloadEffect,
 } from "./local-host-errors";
+import { hostEventStreamEventName, liveSessionStreamEventName } from "./host-event-stream-name";
 import { subscribeLocalTaskEventStreamEffect } from "./local-task-event-transport";
 
 type BrowserSseControlEvent = ReturnType<typeof browserLiveControlEvent>;
@@ -52,6 +53,7 @@ type BrowserSseEvent = HostEventEnvelope | BrowserSseControlEvent;
 type BrowserSseListener = (event: BrowserSseEvent) => void;
 type BrowserSseListenerRegistration = {
   channel: HostEventChannel;
+  eventName: string;
   listener: BrowserSseListener;
   receivesControlEvents: boolean;
   onReplayGap?: (message: string) => void;
@@ -293,6 +295,7 @@ const subscribeSseChannelEffect = (
   listener: BrowserSseListener,
   receivesControlEvents = false,
   onReplayGap?: (message: string) => void,
+  eventName = "message",
 ): Effect.Effect<BrowserSseSubscription, WebError> =>
   Effect.gen(function* () {
     const baseUrl = (yield* getBrowserBackendUrlEffect()).replace(/\/$/, "");
@@ -320,9 +323,13 @@ const subscribeSseChannelEffect = (
         resolveReady = resolve;
       });
       const handleMessage: EventListener = (event) => {
-        const hostEvent = parseHostEvent(readEventSourceData(event, "message"));
+        const hostEvent = parseHostEvent(readEventSourceData(event, event.type));
+        const expectedName = hostEventStreamEventName(hostEvent);
+        if (event.type !== expectedName) {
+          throw new Error("OpenDucktor host event arrived on the wrong stream event name.");
+        }
         for (const registration of listeners.values()) {
-          if (registration.channel === hostEvent.channel) {
+          if (registration.channel === hostEvent.channel && registration.eventName === event.type) {
             registration.listener(hostEvent);
           }
         }
@@ -415,11 +422,18 @@ const subscribeSseChannelEffect = (
     nextSseListenerId += 1;
     const registration: BrowserSseListenerRegistration = {
       channel: eventChannel,
+      eventName,
       listener,
       receivesControlEvents,
     };
     if (onReplayGap) {
       registration.onReplayGap = onReplayGap;
+    }
+    if (
+      eventName !== "message" &&
+      ![...channel.listeners.values()].some((entry) => entry.eventName === eventName)
+    ) {
+      channel.eventSource.addEventListener(eventName, channel.handleMessage);
     }
     channel.listeners.set(listenerId, registration);
     const activeChannel = channel;
@@ -445,6 +459,12 @@ const subscribeSseChannelEffect = (
           return;
         }
         currentChannel.listeners.delete(listenerId);
+        if (
+          eventName !== "message" &&
+          ![...currentChannel.listeners.values()].some((entry) => entry.eventName === eventName)
+        ) {
+          currentChannel.eventSource.removeEventListener(eventName, currentChannel.handleMessage);
+        }
         closeSseChannelIfUnused(currentChannel);
       },
     };
@@ -469,10 +489,17 @@ const subscribeReadyLocalHostEventsEffect = (
   channel: HostEventChannel,
   listener: BrowserSseListener,
   onReplayGap?: (message: string) => void,
+  eventName = "message",
 ): Effect.Effect<DevServerEventSubscription, WebError> =>
   Effect.gen(function* () {
     yield* ensureLocalHostSessionDedupedEffect();
-    const subscription = yield* subscribeSseChannelEffect(channel, listener, true, onReplayGap);
+    const subscription = yield* subscribeSseChannelEffect(
+      channel,
+      listener,
+      true,
+      onReplayGap,
+      eventName,
+    );
     const readyExit = yield* Effect.exit(
       Effect.tryPromise({
         try: () => {
@@ -585,6 +612,7 @@ export const observeLocalHostAgentSessions = async (
         (message) => {
           listener({ type: "transcript_gap", repoPath: input.repoPath, message });
         },
+        liveSessionStreamEventName(input.repoPath),
       );
       const initialRefreshExit = yield* Effect.exit(
         Effect.tryPromise({

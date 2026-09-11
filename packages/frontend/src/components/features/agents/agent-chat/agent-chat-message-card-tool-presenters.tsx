@@ -8,7 +8,7 @@ import {
   Terminal,
   Wrench,
 } from "lucide-react";
-import type { ReactElement } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import type { AgentToolData } from "@openducktor/contracts";
 import { cn } from "@/lib/utils";
 import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
@@ -95,6 +95,42 @@ const ToolJsonDetails = ({
 
 const formatToolInput = (input: AgentToolData, workingDirectory?: string | null): string => {
   return JSON.stringify(relativizeDisplayPathsInValue(input, workingDirectory), null, 2);
+};
+
+type ToolInputDetailsProps = {
+  input: AgentToolData;
+  workingDirectory?: string | null | undefined;
+  className: string;
+  textClassName: string;
+  visible?: boolean;
+};
+
+const ToolInputDetails = ({
+  input,
+  workingDirectory,
+  className,
+  textClassName,
+  visible = true,
+}: ToolInputDetailsProps): ReactElement => {
+  const [isOpen, setIsOpen] = useState(false);
+  const formatted = useMemo(
+    () => (isOpen && visible ? formatToolInput(input, workingDirectory) : null),
+    [input, workingDirectory, isOpen, visible],
+  );
+  return (
+    <details className={className} onToggle={(event) => setIsOpen(event.currentTarget.open)}>
+      <summary className={cn("cursor-pointer px-2 py-1 text-xs font-medium", textClassName)}>
+        Input
+      </summary>
+      {formatted !== null ? (
+        <pre
+          className={cn("overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px]", textClassName)}
+        >
+          {formatted}
+        </pre>
+      ) : null}
+    </details>
+  );
 };
 
 const workflowToolForegroundClassName = ({
@@ -204,14 +240,12 @@ export const WorkflowToolMessage = ({
       {(hasInput || hasOutput || hasError) && (
         <div className="space-y-2">
           {hasInput && meta.input ? (
-            <details className="rounded border border-current/20 bg-card">
-              <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-current">
-                Input
-              </summary>
-              <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-current">
-                {formatToolInput(meta.input, sessionWorkingDirectory)}
-              </pre>
-            </details>
+            <ToolInputDetails
+              input={meta.input}
+              workingDirectory={sessionWorkingDirectory}
+              className="rounded border border-current/20 bg-card"
+              textClassName="text-current"
+            />
           ) : null}
           {hasOutput && meta.output ? (
             <ToolJsonDetails
@@ -253,6 +287,7 @@ export const RegularToolMessage = ({
   sessionWorkingDirectory,
   displayName,
 }: RegularToolMessageProps): ReactElement => {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const lifecyclePhase = getToolLifecyclePhase(meta);
   const summary = buildToolSummary(meta, messageContent, sessionWorkingDirectory);
   const summaryText =
@@ -313,18 +348,22 @@ export const RegularToolMessage = ({
   return (
     <div className="space-y-1 px-1 py-0.5">
       {hasExpandableDetails ? (
-        <details className="group">
+        <details
+          className="group"
+          onToggle={(event) => {
+            if (event.target === event.currentTarget) setDetailsOpen(event.currentTarget.open);
+          }}
+        >
           <summary className="list-none [&::-webkit-details-marker]:hidden">{summaryRow}</summary>
           <div className="ml-5 mt-1 space-y-2">
             {hasInput && meta.input ? (
-              <details className="rounded border border-border bg-card">
-                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-foreground">
-                  Input
-                </summary>
-                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-foreground">
-                  {formatToolInput(meta.input, sessionWorkingDirectory)}
-                </pre>
-              </details>
+              <ToolInputDetails
+                input={meta.input}
+                workingDirectory={sessionWorkingDirectory}
+                className="rounded border border-border bg-card"
+                textClassName="text-foreground"
+                visible={detailsOpen}
+              />
             ) : null}
             {hasOutput && meta.output ? (
               <details className="rounded border border-border bg-card">

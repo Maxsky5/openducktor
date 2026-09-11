@@ -1,9 +1,8 @@
 import type { AgentToolData } from "@openducktor/contracts";
-import { z } from "zod";
 
-const stringValueSchema = z.string();
 const isStringValue = (value: AgentToolData[string] | undefined): value is string =>
-  stringValueSchema.safeParse(value).success;
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Tool fields have already passed boundary validation.
+  typeof value === "string";
 
 export const readInputString = (
   input: AgentToolData | undefined,

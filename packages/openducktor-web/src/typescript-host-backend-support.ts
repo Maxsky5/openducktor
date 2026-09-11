@@ -3,6 +3,7 @@ import {
   type HostEventEnvelope,
   parseHostEventChannel,
 } from "@openducktor/contracts";
+import { hostEventStreamEventName } from "./host-event-stream-name";
 import type { HostEventBusPort, HostEventListener, HostEventUnsubscribe } from "@openducktor/host";
 import { Cause, Effect } from "effect";
 import {
@@ -23,6 +24,7 @@ import { parseHttpOriginEffect, portOfHttpOrigin } from "./http-origin";
 export type BufferedHostEvent = {
   id: number;
   payload: string;
+  eventName: string;
 };
 export type BufferedHostEventReplay = {
   events: BufferedHostEvent[];
@@ -52,6 +54,7 @@ export class BufferedHostEventStream {
     const event = {
       id: this.nextId,
       payload: JSON.stringify(envelope),
+      eventName: hostEventStreamEventName(envelope),
     };
     this.recent.push(event);
     if (this.recent.length > this.capacity) {

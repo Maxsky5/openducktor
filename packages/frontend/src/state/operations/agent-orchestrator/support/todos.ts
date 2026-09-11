@@ -6,6 +6,10 @@ import {
 import { z } from "zod";
 import { type AgentSessionTodoItem, normalizeAgentSessionTodoList } from "@openducktor/core";
 
+const todoJsonValueSchema = z.json();
+const todoOutputListSchema = agentSessionTodoPayloadListSchema();
+const todoInputListSchema = agentSessionTodoPayloadListSchema({ allowStringEntries: true });
+
 export const parseTodosFromToolOutput = (
   output: string | undefined,
 ): AgentSessionTodoItem[] | null => {
@@ -13,17 +17,13 @@ export const parseTodosFromToolOutput = (
     return null;
   }
   try {
-    const parsed = z.json().parse(JSON.parse(output));
+    const parsed = todoJsonValueSchema.parse(JSON.parse(output));
     if (Array.isArray(parsed)) {
-      return normalizeAgentSessionTodoList(agentSessionTodoPayloadListSchema().parse(parsed));
+      return normalizeAgentSessionTodoList(todoOutputListSchema.parse(parsed));
     }
     const record = agentToolDataSchema.safeParse(parsed);
-    if (record.success) {
-      if (Array.isArray(record.data.todos)) {
-        return normalizeAgentSessionTodoList(
-          agentSessionTodoPayloadListSchema().parse(record.data.todos),
-        );
-      }
+    if (record.success && Array.isArray(record.data.todos)) {
+      return normalizeAgentSessionTodoList(todoOutputListSchema.parse(record.data.todos));
     }
     return null;
   } catch {
@@ -37,18 +37,15 @@ export const parseTodosFromToolInput = (
   if (!input) {
     return null;
   }
-  const rawTodos = Array.isArray(input.todos)
-    ? input.todos
-    : Array.isArray(input.items)
-      ? input.items
-      : null;
-  if (!rawTodos) {
+  let rawTodos = input.todos;
+  if (!Array.isArray(rawTodos)) {
+    rawTodos = input.items;
+  }
+  if (!Array.isArray(rawTodos)) {
     return null;
   }
 
-  const parsed = agentSessionTodoPayloadListSchema({
-    allowStringEntries: true,
-  }).parse(rawTodos);
+  const parsed = todoInputListSchema.parse(rawTodos);
   const normalized = normalizeAgentSessionTodoList(parsed);
 
   return normalized.length > 0 ? normalized : null;

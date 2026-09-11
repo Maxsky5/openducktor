@@ -48,6 +48,7 @@ import {
 } from "./task-command-parsing";
 import {
   commandInputRecordSchema,
+  commandInputStringSchema,
   type CommandInputRecord,
   type HostCommandArgs,
   requireParsedRecord,
@@ -57,8 +58,11 @@ const optionalBooleanSchema = z.union([z.boolean(), z.null(), z.undefined()]);
 const optionalStringSchema = z.union([z.string(), z.null(), z.undefined()]);
 const taskIdsSchema = z.array(z.unknown());
 
+const optionalDescriptionAssetsSchema = taskAssetDescriptionMutationSchema.optional();
+const optionalPlanSubtasksSchema = planSubtaskInputSchema.array().optional();
+
 const readRequiredString = (record: CommandInputRecord, key: string, label: string = key): string =>
-  requireString(z.string().safeParse(record[key]), label);
+  requireString(commandInputStringSchema.safeParse(record[key]), label);
 
 export const parseRepoPathInput = (input: HostCommandArgs, label: string): RepoPathInput => {
   const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
@@ -102,7 +106,7 @@ export const parseListAgentSessionsForTasksInput = (
   }
   const taskIds = parsedTaskIds.data.map((taskId, index) => {
     const field = `taskIds[${index}]`;
-    const parsedTaskId = z.string().safeParse(taskId);
+    const parsedTaskId = commandInputStringSchema.safeParse(taskId);
     if (!parsedTaskId.success) {
       throw new HostValidationError({
         message: `${field} must be a string.`,
@@ -177,7 +181,7 @@ export const parseCreateTaskInput = (input: HostCommandArgs): CreateTaskUseCaseI
     "task_create input",
   );
   const descriptionAssets = parseDescriptionAssets(
-    taskAssetDescriptionMutationSchema.optional().safeParse(record.descriptionAssets),
+    optionalDescriptionAssetsSchema.safeParse(record.descriptionAssets),
   );
   const result: CreateTaskUseCaseInput = {
     repoPath: readRequiredString(record, "repoPath"),
@@ -210,7 +214,7 @@ export const parseUpdateTaskInput = (input: HostCommandArgs): UpdateTaskInput =>
   );
   const patch = parseUpdatePatch(taskUpdatePatchSchema.safeParse(record.patch));
   const descriptionAssets = parseDescriptionAssets(
-    taskAssetDescriptionMutationSchema.optional().safeParse(record.descriptionAssets),
+    optionalDescriptionAssetsSchema.safeParse(record.descriptionAssets),
   );
   if (descriptionAssets && !Object.hasOwn(patch, "description")) {
     throw new HostValidationError({
@@ -250,7 +254,10 @@ export const parseMarkdownDocumentInput = (
   return {
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
-    markdown: parseRequiredMarkdown(z.string().safeParse(record.markdown), markdownLabel),
+    markdown: parseRequiredMarkdown(
+      commandInputStringSchema.safeParse(record.markdown),
+      markdownLabel,
+    ),
   };
 };
 
@@ -262,7 +269,10 @@ export const parseQaOutcomeInput = (
   return {
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
-    markdown: parseRequiredMarkdown(z.string().safeParse(record.reportMarkdown), "QA report"),
+    markdown: parseRequiredMarkdown(
+      commandInputStringSchema.safeParse(record.reportMarkdown),
+      "QA report",
+    ),
   };
 };
 
@@ -276,12 +286,10 @@ export const parseSetPlanInput = (input: HostCommandArgs): SetPlanInput => {
     repoPath: readRequiredString(record, "repoPath"),
     taskId: readRequiredString(record, "taskId"),
     markdown: parseRequiredMarkdown(
-      z.string().safeParse(planInput.markdown),
+      commandInputStringSchema.safeParse(planInput.markdown),
       "implementation plan",
     ),
-    subtasks: parsePlanSubtasks(
-      planSubtaskInputSchema.array().optional().safeParse(planInput.subtasks),
-    ),
+    subtasks: parsePlanSubtasks(optionalPlanSubtasksSchema.safeParse(planInput.subtasks)),
     hasExplicitSubtasks: "subtasks" in planInput,
   };
 };
@@ -303,7 +311,7 @@ export const parseBuildBlockedInput = (input: HostCommandArgs): BuildBlockedInpu
     commandInputRecordSchema.safeParse(input),
     "build_blocked input",
   );
-  const parsedReason = z.string().safeParse(record.reason);
+  const parsedReason = commandInputStringSchema.safeParse(record.reason);
   const reason = parsedReason.success ? parsedReason.data.trim() : "";
   if (!reason) {
     throw new HostValidationError({

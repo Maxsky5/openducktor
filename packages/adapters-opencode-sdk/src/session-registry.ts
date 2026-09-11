@@ -2,7 +2,6 @@ import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import { formatAgentSessionTitle } from "@openducktor/core";
 import {
-  isRelevantSubscriberEvent,
   logStreamEvent,
   type OpencodeGlobalEventFailureScope,
   processOpencodeEvent,
@@ -24,6 +23,11 @@ import type {
   SessionRecord,
 } from "./types";
 import { cancelPendingUserMessageAdmissions } from "./user-message-admission";
+import { RuntimeEventSubscribers } from "./runtime-event-subscribers";
+import {
+  isRelevantSubscriberEvent,
+  resolveOpencodeEventRecipients,
+} from "./opencode-event-recipients";
 
 export const requireSession = (
   sessions: Map<string, SessionRecord>,
@@ -139,9 +143,7 @@ const reportRuntimeEventFailure = (input: {
 
   if (!subscriberId) {
     const directory = input.scope.directory.trim();
-    const directoryMatches = [...input.eventTransport.subscribers.values()].filter(
-      (subscriber) => subscriber.input.workingDirectory.trim() === directory,
-    );
+    const directoryMatches = [...input.eventTransport.subscribers.forDirectory(directory)];
     if (directoryMatches.length === 1 && directoryMatches[0]) {
       subscriberId = directoryMatches[0].externalSessionId;
     }
@@ -218,14 +220,16 @@ const ensureRuntimeEventTransport = (input: {
         return false;
       }
       let projectionFailed = false;
-      for (const subscriber of streamRecord.subscribers.values()) {
+      const recipients = resolveOpencodeEventRecipients(
+        event,
+        streamRecord.parentExternalSessionIdByChildExternalSessionId,
+      );
+      const subscribers = input.logEvent
+        ? streamRecord.subscribers.values()
+        : streamRecord.subscribers.forEvent(recipients);
+      for (const subscriber of subscribers) {
         try {
-          const relevant = isRelevantSubscriberEvent(subscriber, event, {
-            resolveParentExternalSessionId: (childExternalSessionId) =>
-              streamRecord.parentExternalSessionIdByChildExternalSessionId.get(
-                childExternalSessionId,
-              ),
-          });
+          const relevant = isRelevantSubscriberEvent(subscriber, recipients);
           const logInput: Parameters<typeof logStreamEvent>[0] = {
             subscriber,
             event,
@@ -263,7 +267,7 @@ const ensureRuntimeEventTransport = (input: {
     },
     ready,
     streamDone: Promise.resolve(),
-    subscribers: new Map(),
+    subscribers: new RuntimeEventSubscribers(),
     observers: new Set(),
     terminalObservers: new Set(),
     parentExternalSessionIdByChildExternalSessionId: new Map(),

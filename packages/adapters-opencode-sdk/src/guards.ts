@@ -6,6 +6,10 @@ export type OpenCodeProtocolObject = Record<string, OpenCodeProtocolValue>;
 export const opencodeProtocolValueSchema = z.json();
 export const opencodeProtocolObjectSchema = z.record(z.string(), opencodeProtocolValueSchema);
 
+const stringSchema = z.string();
+const finiteNumberSchema = z.number().finite();
+const booleanSchema = z.boolean();
+
 export const asJsonObject = (
   value: OpenCodeProtocolValue | undefined,
 ): OpenCodeProtocolObject | undefined => {
@@ -23,7 +27,7 @@ export const readStringProp = (
   }
 
   for (const key of keys) {
-    const value = z.string().safeParse(record[key]);
+    const value = stringSchema.safeParse(record[key]);
     if (value.success && value.data.length > 0) {
       return value.data;
     }
@@ -41,7 +45,7 @@ export const readNumberProp = (
   }
 
   for (const key of keys) {
-    const value = z.number().finite().safeParse(record[key]);
+    const value = finiteNumberSchema.safeParse(record[key]);
     if (value.success) {
       return value.data;
     }
@@ -59,7 +63,7 @@ export const readBooleanProp = (
   }
 
   for (const key of keys) {
-    const value = z.boolean().safeParse(record[key]);
+    const value = booleanSchema.safeParse(record[key]);
     if (value.success) {
       return value.data;
     }

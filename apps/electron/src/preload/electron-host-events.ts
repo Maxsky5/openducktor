@@ -1,11 +1,10 @@
-import {
-  type HostEventChannel,
-  type HostEventPayload,
-  type HostEventWireEnvelope,
-  hostEventEnvelopeSchema,
-} from "@openducktor/contracts";
+import { type HostEventWireEnvelope, hostEventEnvelopeSchema } from "@openducktor/contracts";
 import type { IpcRendererEvent } from "electron";
-import { ELECTRON_HOST_EVENT_CHANNEL } from "../shared/electron-bridge-contract";
+import type { ElectronHostEventSubscription } from "../shared/electron-bridge-contract";
+import {
+  electronHostEventChannel,
+  electronHostEventEnvelopeChannel,
+} from "../shared/electron-host-event-channel";
 
 export type ElectronHostEventWireEnvelope = HostEventWireEnvelope;
 export type ElectronHostEventListener = (
@@ -17,41 +16,65 @@ type ElectronHostEventIpcRenderer = {
   on(channel: string, listener: ElectronHostEventListener): void;
 };
 
-type ElectronHostEventSubscription = {
-  [Channel in HostEventChannel]: readonly [
-    channel: Channel,
-    listener: (payload: HostEventPayload<Channel>) => void,
-  ];
-}[HostEventChannel];
+type ElectronHostEventRoute = {
+  handleEvent: ElectronHostEventListener;
+  subscriptions: Set<ElectronHostEventSubscription>;
+};
+const routesByRenderer = new WeakMap<
+  ElectronHostEventIpcRenderer,
+  Map<string, ElectronHostEventRoute>
+>();
 
-export function subscribeElectronHostEvent<Channel extends HostEventChannel>(
-  ipcRenderer: ElectronHostEventIpcRenderer,
-  channel: Channel,
-  listener: (payload: HostEventPayload<Channel>) => void,
-): () => void;
 export function subscribeElectronHostEvent(
   ipcRenderer: ElectronHostEventIpcRenderer,
   ...subscription: ElectronHostEventSubscription
 ): () => void {
-  const handleEvent: ElectronHostEventListener = (_event, envelope) => {
-    const parsed = hostEventEnvelopeSchema.safeParse(envelope);
-    if (!parsed.success) {
-      console.error("Received invalid host event from Electron main process.", {
-        issues: parsed.error.issues,
-      });
-      return;
-    }
-    if (parsed.data.channel === "openducktor://run-event") {
-      if (subscription[0] === parsed.data.channel) subscription[1](parsed.data.payload);
-      return;
-    }
-    if (parsed.data.channel === "openducktor://dev-server-event") {
-      if (subscription[0] === parsed.data.channel) subscription[1](parsed.data.payload);
-      return;
-    }
-    if (subscription[0] === parsed.data.channel) subscription[1](parsed.data.payload);
-  };
+  const ipcChannel =
+    subscription[0] === "openducktor://agent-session-live-event"
+      ? electronHostEventChannel(subscription[0], subscription[2])
+      : electronHostEventChannel(subscription[0]);
+  let routes = routesByRenderer.get(ipcRenderer);
+  if (!routes) {
+    routes = new Map();
+    routesByRenderer.set(ipcRenderer, routes);
+  }
+  let route = routes.get(ipcChannel);
+  if (!route) {
+    const subscriptions = new Set<ElectronHostEventSubscription>();
+    const handleEvent: ElectronHostEventListener = (_event, envelope) => {
+      const parsed = hostEventEnvelopeSchema.safeParse(envelope);
+      if (!parsed.success) {
+        console.error("Received invalid host event from Electron main process.", {
+          issues: parsed.error.issues,
+        });
+        return;
+      }
+      const hostEvent = parsed.data;
+      if (electronHostEventEnvelopeChannel(hostEvent) !== ipcChannel) {
+        console.error("Received host event on the wrong Electron IPC channel.");
+        return;
+      }
+      // oxlint-disable-next-line unicorn/no-useless-spread -- preserve EventEmitter dispatch order when callbacks change subscriptions
+      for (const active of [...subscriptions]) {
+        if (hostEvent.channel === "openducktor://run-event") {
+          if (active[0] === hostEvent.channel) active[1](hostEvent.payload);
+        } else if (hostEvent.channel === "openducktor://dev-server-event") {
+          if (active[0] === hostEvent.channel) active[1](hostEvent.payload);
+        } else if (active[0] === hostEvent.channel) {
+          active[1](hostEvent.payload);
+        }
+      }
+    };
+    route = { handleEvent, subscriptions };
+    routes.set(ipcChannel, route);
+    ipcRenderer.on(ipcChannel, handleEvent);
+  }
+  route.subscriptions.add(subscription);
 
-  ipcRenderer.on(ELECTRON_HOST_EVENT_CHANNEL, handleEvent);
-  return () => ipcRenderer.off(ELECTRON_HOST_EVENT_CHANNEL, handleEvent);
+  return () => {
+    if (!route.subscriptions.delete(subscription) || route.subscriptions.size > 0) return;
+    ipcRenderer.off(ipcChannel, route.handleEvent);
+    routes.delete(ipcChannel);
+    if (routes.size === 0) routesByRenderer.delete(ipcRenderer);
+  };
 }

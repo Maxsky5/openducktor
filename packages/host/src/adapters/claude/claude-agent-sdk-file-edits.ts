@@ -9,6 +9,9 @@ import {
 } from "./claude-agent-sdk-ingress-schemas";
 import { readStringProp } from "./claude-agent-sdk-utils";
 
+const stringSchema = z.string();
+const finiteNumberSchema = z.number().finite();
+
 type ClaudeFileEditPayload = {
   fileDiffs?: FileDiff[];
 };
@@ -32,12 +35,12 @@ const readRecordProp = (record: ClaudeProtocolObject, key: string): ClaudeProtoc
 };
 
 const readNumberProp = (record: ClaudeProtocolObject, key: string): number | undefined => {
-  const parsed = z.number().finite().safeParse(record[key]);
+  const parsed = finiteNumberSchema.safeParse(record[key]);
   return parsed.success ? parsed.data : undefined;
 };
 
 const readStringValue = (record: ClaudeProtocolObject, key: string): string | undefined => {
-  const parsed = z.string().safeParse(record[key]);
+  const parsed = stringSchema.safeParse(record[key]);
   return parsed.success ? parsed.data : undefined;
 };
 
@@ -53,7 +56,7 @@ const readStructuredPatchHunk = (value: ClaudeProtocolObject[string]): string | 
   }
   const { oldStart, oldLines, newStart, newLines, lines } = parsed.data;
   const hunkLines = lines.flatMap((line) => {
-    const text = z.string().safeParse(line);
+    const text = stringSchema.safeParse(line);
     return text.success && text.data.length > 0 ? [text.data] : [];
   });
   return [
@@ -124,7 +127,7 @@ const readPatchFromRecord = (
 
   for (const key of ["gitDiff", "structuredPatch", "fileDiff", "filediff"] as const) {
     const nested = record[key];
-    const nestedText = z.string().safeParse(nested);
+    const nestedText = stringSchema.safeParse(nested);
     if (nestedText.success && nestedText.data.trim().length > 0) {
       return nestedText.data;
     }
@@ -234,7 +237,7 @@ const changeTypeFromToolInput = (
     return readStringProp(record, "type")?.toLowerCase() === "create" ? "added" : "modified";
   }
   const oldString = input?.old_string ?? input?.oldString;
-  const parsedOldString = z.string().safeParse(oldString);
+  const parsedOldString = stringSchema.safeParse(oldString);
   return parsedOldString.success && parsedOldString.data.length === 0 ? "added" : "modified";
 };
 

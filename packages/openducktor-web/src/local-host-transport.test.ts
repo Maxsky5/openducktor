@@ -1,3 +1,4 @@
+import { liveSessionStreamEventName } from "./host-event-stream-name";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -406,7 +407,12 @@ describe("local host SSE subscriptions", () => {
     const stopObservingLiveSessions = await liveSessionObservation;
 
     const emitHostEvent = (channel: string, payload: JSONType): void => {
-      FakeEventSource.instances[0]?.emit("message", JSON.stringify({ channel, payload }));
+      FakeEventSource.instances[0]?.emit(
+        channel === "openducktor://agent-session-live-event"
+          ? liveSessionStreamEventName("/repo")
+          : "message",
+        JSON.stringify({ channel, payload }),
+      );
     };
     emitHostEvent("openducktor://run-event", { type: "run" });
     emitHostEvent("openducktor://dev-server-event", {
@@ -453,6 +459,59 @@ describe("local host SSE subscriptions", () => {
 
     stopObservingLiveSessions();
     expect(FakeEventSource.instances[0]?.closed).toBe(true);
+  });
+
+  test("routes named live events only to observed repositories and removes unused listeners", async () => {
+    const { observeLocalHostAgentSessions } = await loadLocalHostTransport();
+    globalThis.fetch = createFetchFixture(mock(async () => new Response("null", { status: 200 })));
+    const first = mock((_event: AgentSessionLiveEnvelope) => {});
+    const duplicate = mock((_event: AgentSessionLiveEnvelope) => {});
+    const second = mock((_event: AgentSessionLiveEnvelope) => {});
+    const firstSetup = observeLocalHostAgentSessions({ repoPath: "/first" }, first);
+    const source = await waitForEventSourceInstance();
+    source.emit("open", "");
+    const stopFirst = await firstSetup;
+    const stopDuplicate = await observeLocalHostAgentSessions({ repoPath: "/first" }, duplicate);
+    const stopSecond = await observeLocalHostAgentSessions({ repoPath: "/second" }, second);
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(() => source.emit(liveSessionStreamEventName("/unobserved"), "not-json")).not.toThrow();
+    const snapshot = { type: "snapshot", repoPath: "/first", sessions: [] };
+    source.emit(
+      liveSessionStreamEventName("/first"),
+      JSON.stringify({
+        channel: "openducktor://agent-session-live-event",
+        payload: snapshot,
+      }),
+    );
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(duplicate).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+    expect(() =>
+      source.emit(
+        liveSessionStreamEventName("/first"),
+        JSON.stringify({
+          channel: "openducktor://agent-session-live-event",
+          payload: { ...snapshot, sessions: "invalid" },
+        }),
+      ),
+    ).toThrow("Invalid OpenDucktor host event envelope");
+    expect(() =>
+      source.emit(
+        liveSessionStreamEventName("/second"),
+        JSON.stringify({
+          channel: "openducktor://agent-session-live-event",
+          payload: snapshot,
+        }),
+      ),
+    ).toThrow("wrong stream event name");
+    stopFirst();
+    expect(source.hasListener(liveSessionStreamEventName("/first"))).toBe(true);
+    stopDuplicate();
+    expect(source.hasListener(liveSessionStreamEventName("/first"))).toBe(false);
+    expect(source.closed).toBe(false);
+    stopSecond();
+    expect(source.hasListener(liveSessionStreamEventName("/second"))).toBe(false);
+    expect(source.closed).toBe(true);
   });
 
   test("resolves dev-server subscriptions on initial open and emits reconnect control payloads afterward", async () => {
@@ -534,7 +593,7 @@ describe("local host SSE subscriptions", () => {
       },
     } satisfies AgentSessionLiveEnvelope;
     eventSource.emit(
-      "message",
+      liveSessionStreamEventName("/repo"),
       JSON.stringify({
         channel: "openducktor://agent-session-live-event",
         payload: transcriptEvent,
@@ -548,7 +607,7 @@ describe("local host SSE subscriptions", () => {
       sessions: [],
     } satisfies AgentSessionLiveEnvelope;
     eventSource.emit(
-      "message",
+      liveSessionStreamEventName("/repo"),
       JSON.stringify({
         channel: "openducktor://agent-session-live-event",
         payload: snapshot,
@@ -584,7 +643,7 @@ describe("local host SSE subscriptions", () => {
       },
     } satisfies AgentSessionLiveEnvelope;
     eventSource.emit(
-      "message",
+      liveSessionStreamEventName("/repo"),
       JSON.stringify({
         channel: "openducktor://agent-session-live-event",
         payload: reconnectTranscriptEvent,
@@ -593,7 +652,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener).toHaveBeenCalledTimes(3);
     const replayedSnapshot = { ...snapshot };
     eventSource.emit(
-      "message",
+      liveSessionStreamEventName("/repo"),
       JSON.stringify({
         channel: "openducktor://agent-session-live-event",
         payload: replayedSnapshot,
@@ -601,7 +660,7 @@ describe("local host SSE subscriptions", () => {
     );
     const refreshedSnapshot = { ...snapshot };
     eventSource.emit(
-      "message",
+      liveSessionStreamEventName("/repo"),
       JSON.stringify({
         channel: "openducktor://agent-session-live-event",
         payload: refreshedSnapshot,
@@ -1041,6 +1100,43 @@ describe("local host SSE subscriptions", () => {
     ]);
   });
 
+  test("rejects and cleans up when a decoded task frame is invalid after opening but before setup returns", async () => {
+    const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
+    const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";
+    const fetchMock = mock(async (url: string | URL | Request) => {
+      if (url.toString().endsWith("/subscriptions")) {
+        return new Response(JSON.stringify({ streamToken: "stream-token", subscriptionId }), {
+          status: 201,
+        });
+      }
+      return new Response(null, { status: 204 });
+    });
+    globalThis.fetch = createFetchFixture(fetchMock);
+    const onTerminalFailure = mock(() => {});
+
+    const setup = subscribeLocalHostTaskStream(
+      { cursor: null },
+      mock(() => {}),
+      onTerminalFailure,
+    );
+    const eventSource = await waitForEventSourceInstance();
+    await waitForEventSourceListener(eventSource, "open");
+    eventSource.emit("open", "");
+    eventSource.emit("task-frame", JSON.stringify({ type: "invalid" }));
+
+    await expect(setup).rejects.toThrow("invalid frame");
+    expect(onTerminalFailure).not.toHaveBeenCalled();
+    expect(eventSource.closed).toBe(true);
+    expect(eventSource.hasListener("task-frame")).toBe(false);
+    expect(eventSource.hasListener("open")).toBe(false);
+    expect(eventSource.hasListener("error")).toBe(false);
+    expect(fetchMock.mock.calls.map(([url]) => url.toString())).toEqual([
+      "http://127.0.0.1:14327/session",
+      "http://127.0.0.1:14327/task-events/subscriptions",
+      `http://127.0.0.1:14327/task-events/subscriptions/${subscriptionId}`,
+    ]);
+  });
+
   test("leaves reconnects to the native EventSource after task stream readiness", async () => {
     const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
     const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";
@@ -1162,6 +1258,56 @@ describe("local host SSE subscriptions", () => {
       expect.objectContaining({
         _tag: "WebDependencyError",
         message: expect.stringContaining("invalid JSON"),
+      }),
+    );
+    await subscription.unsubscribe();
+    eventSource.emit("error", "after unsubscribe");
+    expect(onTerminalFailure).toHaveBeenCalledTimes(1);
+    expect(
+      fetchMock.mock.calls.filter(([url]) => url.toString().endsWith(subscriptionId)),
+    ).toHaveLength(1);
+  });
+
+  test("reports invalid decoded task frames once and suppresses terminal reports after unsubscribe", async () => {
+    const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();
+    const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";
+    const fetchMock = mock(async (url: string | URL | Request) => {
+      if (url.toString().endsWith("/subscriptions")) {
+        return new Response(JSON.stringify({ streamToken: "stream-token", subscriptionId }), {
+          status: 201,
+        });
+      }
+      return new Response(null, { status: 204 });
+    });
+    globalThis.fetch = createFetchFixture(fetchMock);
+    const onTerminalFailure = mock(() => {});
+
+    const setup = subscribeLocalHostTaskStream(
+      { cursor: null },
+      mock(() => {}),
+      onTerminalFailure,
+    );
+    const eventSource = await waitForEventSourceInstance();
+    await waitForEventSourceListener(eventSource, "open");
+    eventSource.emit("open", "");
+    eventSource.emit(
+      "task-frame",
+      JSON.stringify({
+        type: "snapshot_required",
+        cursor: { epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea", sequence: 0 },
+        reason: "buffer_gap",
+      }),
+    );
+    const subscription = await setup;
+    eventSource.emit("task-frame", JSON.stringify({ type: "invalid" }));
+    eventSource.emit("task-frame", JSON.stringify({ type: "invalid" }));
+
+    expect(onTerminalFailure).toHaveBeenCalledTimes(1);
+    expect(onTerminalFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _tag: "WebDependencyError",
+        operation: "validate-frame",
+        message: expect.stringContaining("invalid frame"),
       }),
     );
     await subscription.unsubscribe();

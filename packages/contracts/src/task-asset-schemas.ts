@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { withMaxUtf16Length } from "./string-schemas";
 import { workspaceIdSchema } from "./config-schemas";
 
 export const TASK_ASSET_MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -52,7 +53,7 @@ export const taskAssetStageInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     scope: taskAssetScopeSchema,
-    originalName: z.string().trim().min(1).max(255),
+    originalName: withMaxUtf16Length(z.string().trim().min(1), 255),
     declaredMediaType: taskAssetMediaTypeSchema,
     bytesBase64: z
       .base64()
@@ -66,7 +67,7 @@ export const taskAssetStageResultSchema = z
   .object({
     assetId: taskAssetIdSchema,
     scope: taskAssetScopeSchema,
-    originalName: z.string().min(1).max(255),
+    originalName: withMaxUtf16Length(z.string().min(1), 255),
     verifiedMediaType: taskAssetMediaTypeSchema,
     byteSize: z.number().int().nonnegative().max(TASK_ASSET_MAX_FILE_BYTES),
   })

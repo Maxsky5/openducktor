@@ -56,6 +56,25 @@ describe("OpenCode host live-session state", () => {
     ]);
   });
 
+  test("indexes external ids through replacement, ambiguity, removal, and release", () => {
+    const state = createState();
+    expect(state.refForExternalSession("session-1")).toBeNull();
+    state.applyControlSummary(summary());
+    const first = state.refForExternalSession("session-1");
+    if (!first) throw new Error("Expected a live session reference.");
+    state.applyControlSummary({ ...summary(), title: "Updated title" });
+    expect(state.refForExternalSession("session-1")).toEqual(first);
+    state.applyControlSummary({ ...summary(), workingDirectory: "/other" });
+    expect(() => state.refForExternalSession("session-1")).toThrow("ambiguous session id");
+    state.removeSession(first);
+    const remaining = state.refForExternalSession("session-1");
+    expect(remaining?.workingDirectory).toBe("/other");
+    state.release();
+    expect(state.refForExternalSession("session-1")).toBeNull();
+    state.applyControlSummary(summary());
+    expect(state.refForExternalSession("session-1")).toEqual(first);
+  });
+
   test("retains and resolves pending input from runtime events", () => {
     const state = createState();
     state.applyControlSummary(summary());
@@ -143,6 +162,8 @@ describe("OpenCode host live-session state", () => {
       childExternalSessionId: "grandchild",
     });
 
+    expect(state.refForExternalSession("child")?.externalSessionId).toBe("child");
+    expect(state.refForExternalSession("grandchild")?.externalSessionId).toBe("grandchild");
     expect(state.listSnapshots()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ ref: expect.objectContaining({ externalSessionId: "parent" }) }),

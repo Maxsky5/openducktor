@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isoTimestampSchema } from "./string-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { agentUserMessageEventSchema } from "./agent-session-event-schemas";
 import {
@@ -185,7 +186,7 @@ export const agentSessionControlSummarySchema = z
     runtimeKind: runtimeKindSchema,
     workingDirectory: nonEmptyStringSchema,
     title: z.string().optional(),
-    startedAt: z.string().datetime({ offset: true }),
+    startedAt: isoTimestampSchema,
     status: z.enum(["starting", "running", "idle", "error", "stopped"]),
   })
   .strict();
