@@ -123,13 +123,13 @@ describe("diffSettingsSnapshots", () => {
     expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-a"]);
   });
 
-  test("reports the new path when a repository path changes", () => {
+  test("reports both paths when a repository path changes", () => {
     const changes = diffSettingsSnapshots(
       createSnapshot({ "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") }),
       createSnapshot({ "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-moved") }),
     );
 
-    expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-moved"]);
+    expect(changes.changedGitProviderRepoPaths).toEqual(["/repo-moved", "/repo-a"]);
   });
 
   test("reports a repository added after the previous snapshot", () => {

@@ -198,7 +198,7 @@ export function useRepoSettingsOperations({
         void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
       }
       for (const repoPath of changes.changedGitProviderRepoPaths) {
-        void queryClient.invalidateQueries({
+        void queryClient.resetQueries({
           queryKey: repositoryGitProviderContextQueryKeys.repo(repoPath),
         });
       }

@@ -18,18 +18,22 @@ const changedGitProviderRepoPaths = (
     return Object.values(next).map((workspace) => workspace.repoPath);
   }
 
-  const repoPaths: string[] = [];
+  const repoPaths = new Set<string>();
   for (const [workspaceId, nextWorkspace] of Object.entries(next)) {
     const previousWorkspace = previous[workspaceId];
-    if (
-      previousWorkspace === undefined ||
-      previousWorkspace.repoPath !== nextWorkspace.repoPath ||
-      !isSameJsonValue(previousWorkspace.git, nextWorkspace.git)
-    ) {
-      repoPaths.push(nextWorkspace.repoPath);
+    if (previousWorkspace === undefined) {
+      repoPaths.add(nextWorkspace.repoPath);
+      continue;
+    }
+    if (!isSameJsonValue(previousWorkspace.git, nextWorkspace.git)) {
+      repoPaths.add(nextWorkspace.repoPath);
+    }
+    if (previousWorkspace.repoPath !== nextWorkspace.repoPath) {
+      repoPaths.add(nextWorkspace.repoPath);
+      repoPaths.add(previousWorkspace.repoPath);
     }
   }
-  return repoPaths;
+  return [...repoPaths];
 };
 
 export const diffSettingsSnapshots = (

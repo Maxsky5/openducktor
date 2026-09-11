@@ -2,6 +2,7 @@ import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   agentPromptTemplateIdValues,
   DEFAULT_AGENT_RUNTIMES,
+  type RepositoryGitProviderContext,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
 } from "@openducktor/contracts";
@@ -115,17 +116,24 @@ const startSettingsSave = async ({
   normalizedSnapshot,
   gateProviderRefreshRepoPath,
   seedProviderContextRepoPaths,
+  saveError,
 }: {
   previousSnapshot: SettingsSnapshot;
   normalizedSnapshot: SettingsSnapshot;
   gateProviderRefreshRepoPath?: string;
   seedProviderContextRepoPaths?: string[];
+  saveError?: Error;
 }) => {
   const original = {
     workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
     workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
   };
-  host.workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
+  host.workspaceSaveSettingsSnapshot = mock(async () => {
+    if (saveError !== undefined) {
+      throw saveError;
+    }
+    return [createWorkspaceRecord()];
+  });
   host.workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
   const applyWorkspaceRecords = mock(() => {});
   const harness = createHookHarness({
@@ -141,6 +149,12 @@ const startSettingsSave = async ({
   const originalInvalidateQueries = queryClient.invalidateQueries.bind(queryClient);
   const invalidateQueries = spyOn(queryClient, "invalidateQueries").mockImplementation(
     async (filters, options) => {
+      await originalInvalidateQueries(filters, options);
+    },
+  );
+  const originalResetQueries = queryClient.resetQueries.bind(queryClient);
+  const resetQueries = spyOn(queryClient, "resetQueries").mockImplementation(
+    async (filters, options) => {
       if (
         gateProviderRefreshRepoPath !== undefined &&
         isRepositoryGitProviderContextRepoFilter(filters, gateProviderRefreshRepoPath)
@@ -149,7 +163,7 @@ const startSettingsSave = async ({
         await providerRefresh.promise;
         return;
       }
-      await originalInvalidateQueries(filters, options);
+      await originalResetQueries(filters, options);
     },
   );
   queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), previousSnapshot);
@@ -163,6 +177,7 @@ const startSettingsSave = async ({
   return {
     queryClient,
     invalidateQueries,
+    resetQueries,
     applyWorkspaceRecords,
     save: harness.getLatest().saveSettingsSnapshot(normalizedSnapshot),
     providerRefreshStarted,
@@ -1087,6 +1102,7 @@ describe("use-repo-settings-operations", () => {
       await run.save;
 
       expect(run.invalidateQueries).not.toHaveBeenCalled();
+      expect(run.resetQueries).not.toHaveBeenCalled();
       expect(run.applyWorkspaceRecords).toHaveBeenCalledTimes(1);
     } finally {
       await run.cleanup();
@@ -1114,9 +1130,7 @@ describe("use-repo-settings-operations", () => {
         queryKey: [...workspaceQueryKeys.all, "repo-config"],
       });
       expect(run.invalidateQueries).not.toHaveBeenCalledWith({ queryKey: checksQueryKeys.all });
-      expect(run.invalidateQueries).not.toHaveBeenCalledWith({
-        queryKey: repositoryGitProviderContextQueryKeys.all,
-      });
+      expect(run.resetQueries).not.toHaveBeenCalled();
     } finally {
       await run.cleanup();
     }
@@ -1152,27 +1166,24 @@ describe("use-repo-settings-operations", () => {
     try {
       await run.save;
 
-      expect(run.invalidateQueries).toHaveBeenCalledWith({
+      expect(run.resetQueries).toHaveBeenCalledWith({
         queryKey: repositoryGitProviderContextQueryKeys.repo("/repo-b"),
       });
-      expect(run.invalidateQueries).not.toHaveBeenCalledWith({
+      expect(run.resetQueries).not.toHaveBeenCalledWith({
         queryKey: repositoryGitProviderContextQueryKeys.repo("/repo-a"),
-      });
-      expect(run.invalidateQueries).not.toHaveBeenCalledWith({
-        queryKey: repositoryGitProviderContextQueryKeys.all,
       });
       expect(run.invalidateQueries).toHaveBeenCalledWith({
         queryKey: [...workspaceQueryKeys.all, "repo-config"],
       });
       expect(run.invalidateQueries).not.toHaveBeenCalledWith({ queryKey: checksQueryKeys.all });
       expect(
-        run.queryClient.getQueryState(repositoryGitProviderContextQueryKeys.repo("/repo-b"))
-          ?.isInvalidated,
-      ).toBe(true);
+        run.queryClient.getQueryData(repositoryGitProviderContextQueryKeys.repo("/repo-b")),
+      ).toBeUndefined();
       expect(
-        run.queryClient.getQueryState(repositoryGitProviderContextQueryKeys.repo("/repo-a"))
-          ?.isInvalidated,
-      ).toBe(false);
+        run.queryClient.getQueryData<RepositoryGitProviderContext>(
+          repositoryGitProviderContextQueryKeys.repo("/repo-a"),
+        ),
+      ).toEqual(createGitProviderContextFixture());
     } finally {
       await run.cleanup();
     }
@@ -1194,9 +1205,7 @@ describe("use-repo-settings-operations", () => {
       expect(run.invalidateQueries).not.toHaveBeenCalledWith({
         queryKey: [...workspaceQueryKeys.all, "repo-config"],
       });
-      expect(run.invalidateQueries).not.toHaveBeenCalledWith({
-        queryKey: repositoryGitProviderContextQueryKeys.all,
-      });
+      expect(run.resetQueries).not.toHaveBeenCalled();
     } finally {
       await run.cleanup();
     }
@@ -1231,9 +1240,32 @@ describe("use-repo-settings-operations", () => {
       await run.providerRefreshStarted.promise;
       await run.save;
 
-      expect(run.invalidateQueries).toHaveBeenCalledWith({
+      expect(run.resetQueries).toHaveBeenCalledWith({
         queryKey: repositoryGitProviderContextQueryKeys.repo("/repo-b"),
       });
+    } finally {
+      await run.cleanup();
+    }
+  });
+
+  test("propagates a host save failure without touching the cache", async () => {
+    const snapshot = createSettingsSnapshotFixture({
+      workspaces: { "repo-a": createRepoSettingsConfigFixture("repo-a", "/repo-a") },
+    });
+    const run = await startSettingsSave({
+      previousSnapshot: snapshot,
+      normalizedSnapshot: snapshot,
+      saveError: new Error("host save failed"),
+    });
+
+    try {
+      await expect(run.save).rejects.toThrow("host save failed");
+
+      expect(
+        run.queryClient.getQueryData<SettingsSnapshot>(workspaceQueryKeys.settingsSnapshot()),
+      ).toBe(snapshot);
+      expect(run.invalidateQueries).not.toHaveBeenCalled();
+      expect(run.resetQueries).not.toHaveBeenCalled();
     } finally {
       await run.cleanup();
     }
