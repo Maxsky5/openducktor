@@ -11,7 +11,7 @@ import {
 } from "./computer-use-tool";
 import { formatAgentDuration } from "./format-agent-duration";
 import { getToolDuration } from "./tool-duration";
-import { hasNonEmptyText } from "./tool-lifecycle";
+import { hasNonEmptyText, isToolMessageFailure } from "./tool-lifecycle";
 
 type ComputerUseToolMessageProps = {
   meta: ToolMeta;
@@ -25,7 +25,7 @@ export const ComputerUseToolMessage = ({
   timeLabel,
 }: ComputerUseToolMessageProps): ReactElement => {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const isFailed = meta.status === "error";
+  const isFailed = isToolMessageFailure(meta);
   const actionTitle = computerUseActionTitle(meta);
   const failureSummary = isFailed ? computerUseFailureSummary(meta.error) || FAILED_SUMMARY : "";
   const durationMs = getToolDuration(meta, messageTimestamp);
