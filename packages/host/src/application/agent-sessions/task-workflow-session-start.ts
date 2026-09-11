@@ -4,7 +4,11 @@ import type {
   AgentWorkflowSessionStartInput,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { errorMessage, HostOperationError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  HostOperationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import type { TaskServiceError } from "../tasks/task-service";
 import type {
   PreparedTaskSessionStart,
@@ -21,12 +25,16 @@ import { storeWorkflowSession, toControlSessionRef } from "./task-workflow-sessi
 
 export const createStartTaskWorkflowSession =
   ({
+    assertProcessStart,
     canonicalizeRepoPath,
     runtime,
     tasks,
     taskLifecycle,
     taskSessionStart,
   }: {
+    assertProcessStart?:
+      | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
+      | undefined;
     canonicalizeRepoPath: CanonicalizeRepoPath;
     runtime: RuntimeControl;
     tasks: TaskSessions;
@@ -40,6 +48,9 @@ export const createStartTaskWorkflowSession =
       Effect.gen(function* () {
         const scope = input.sessionScope;
         const repoPath = yield* canonicalizeRepoPath(input.repoPath);
+        if (assertProcessStart) {
+          yield* assertProcessStart(repoPath);
+        }
         yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "start session");
         let prepared: PreparedTaskSessionStart | null = null;
         let summary: AgentSessionControlSummary | null = null;

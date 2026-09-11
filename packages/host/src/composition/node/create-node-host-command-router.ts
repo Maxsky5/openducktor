@@ -303,6 +303,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const { taskEventStream, taskService, taskSyncService, agentSessionCommandService } =
     createNodeTaskSessionServices({
       taskServiceInput: {
+        assertProcessStart: workspaceAdmissionService.assertProcessStart,
         devServerService,
         terminalService,
         gitPort: git,
