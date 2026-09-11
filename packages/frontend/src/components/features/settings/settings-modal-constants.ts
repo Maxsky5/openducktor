@@ -98,7 +98,7 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS = {
     "Shared ODT tool permissions, task lock, artifact reads, and clarification rules.",
   "system.shared.task_context": "Task snapshot and access rules for current workflow documents.",
   "system.role.spec.base":
-    "Resolves product decisions with the user and defines scope, constraints, and observable acceptance criteria.",
+    "Resolves product decisions with the user and defines scope, required behavior, and constraints.",
   "system.role.planner.base":
     "Defines architecture, module responsibilities, interfaces, and contracts. Leaves implementation order and verification to Builder.",
   "system.role.build.base":
@@ -106,9 +106,8 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS = {
   "system.role.qa.base":
     "Reviews required outcomes, design contracts, correctness, and maintainability with checks based on risk.",
   "kickoff.spec_initial":
-    "Starts a focused interview about open product decisions before writing the spec.",
-  "kickoff.planner_initial":
-    "Starts technical design with clear contracts and room for Builder judgment.",
+    "Requests a saved specification. Asks questions only for unresolved product decisions.",
+  "kickoff.planner_initial": "Requests a saved implementation plan.",
   "kickoff.build_implementation_start":
     "Starts implementation with control over work order and checks within the approved design.",
   "kickoff.build_after_qa_rejected":
