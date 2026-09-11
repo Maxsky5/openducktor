@@ -459,6 +459,29 @@ describe("Codex tool normalization", () => {
     expect(part).not.toHaveProperty("output");
   });
 
+  test("emits a failure message when a failed call has no error or result text", () => {
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-15",
+        server: "cua_repl",
+        tool: "js",
+        status: "failed",
+        arguments: { code: "await tab.click()" },
+        result: null,
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        status: "error",
+        error: "Computer action failed.",
+      }),
+    );
+    expect(part).not.toHaveProperty("output");
+  });
+
   test("keeps other MCP servers on the generic tool presentation", () => {
     const part = toStreamPart(
       {

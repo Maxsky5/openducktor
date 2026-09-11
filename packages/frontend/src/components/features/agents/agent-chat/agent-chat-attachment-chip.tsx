@@ -44,16 +44,23 @@ function AttachmentName({ name }: { name: string }): ReactElement {
 }
 
 const buildAttachmentPreviewMedia = (
-  attachment: { kind: AgentAttachmentReference["kind"]; name: string },
+  attachment: { id: string; kind: AgentAttachmentReference["kind"]; name: string },
   previewSrc: string | null,
 ): MediaPreviewItem[] => {
   if (previewSrc === null) {
     return [];
   }
   if (attachment.kind === "video") {
-    return [{ kind: "video", src: previewSrc, ariaLabel: `Preview video ${attachment.name}` }];
+    return [
+      {
+        id: attachment.id,
+        kind: "video",
+        src: previewSrc,
+        ariaLabel: `Preview video ${attachment.name}`,
+      },
+    ];
   }
-  return [{ kind: "image", src: previewSrc, alt: attachment.name }];
+  return [{ id: attachment.id, kind: "image", src: previewSrc, alt: attachment.name }];
 };
 
 type DraftAttachmentChipProps = {

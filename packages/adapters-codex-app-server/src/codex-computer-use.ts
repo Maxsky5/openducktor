@@ -3,6 +3,7 @@ import { codexToolLeafName, extractStringField } from "./codex-app-server-shared
 import { codexToolResultImages, codexToolResultText } from "./codex-mcp-result";
 
 const RESET_TOOL = "js_reset";
+const FAILED_WITHOUT_MESSAGE = "Computer action failed.";
 
 export type CodexComputerUseResult = {
   computerUse: AgentComputerUse;
@@ -24,7 +25,7 @@ export const codexComputerUseResult = ({
   failed: boolean;
 }): CodexComputerUseResult => {
   const output = codexToolResultText(result, { readTextOnMediaBlocks: true });
-  const error = failed && !itemError ? output : itemError;
+  const error = failed ? (itemError ?? output ?? FAILED_WITHOUT_MESSAGE) : itemError;
   const computerUse: AgentComputerUse = {
     action: codexActionTitle(tool, input),
   };

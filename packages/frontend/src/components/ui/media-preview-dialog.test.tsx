@@ -18,8 +18,13 @@ describe("MediaPreviewDialog", () => {
         {...baseProps}
         open
         media={[
-          { kind: "image", src: "data:image/png;base64,AAAA", alt: "First screenshot" },
-          { kind: "video", src: "blob:video", ariaLabel: "Preview video clip" },
+          {
+            id: "screenshot-1",
+            kind: "image",
+            src: "data:image/png;base64,AAAA",
+            alt: "First screenshot",
+          },
+          { id: "video-1", kind: "video", src: "blob:video", ariaLabel: "Preview video clip" },
         ]}
       />,
     );
@@ -45,7 +50,9 @@ describe("MediaPreviewDialog", () => {
       <MediaPreviewDialog
         {...baseProps}
         open
-        media={[{ kind: "video", src: "blob:video", ariaLabel: "Preview video clip" }]}
+        media={[
+          { id: "video-1", kind: "video", src: "blob:video", ariaLabel: "Preview video clip" },
+        ]}
       />,
     );
     try {
@@ -63,6 +70,7 @@ describe("MediaPreviewDialog", () => {
   test("replaces a failed image with the unavailable label and restores it on reopen", () => {
     const media = [
       {
+        id: "screenshot-1",
         kind: "image" as const,
         src: "data:image/png;base64,AAAA",
         alt: "First screenshot",
@@ -88,7 +96,14 @@ describe("MediaPreviewDialog", () => {
       <MediaPreviewDialog
         {...baseProps}
         open
-        media={[{ kind: "image", src: "data:image/png;base64,AAAA", alt: "First screenshot" }]}
+        media={[
+          {
+            id: "screenshot-1",
+            kind: "image",
+            src: "data:image/png;base64,AAAA",
+            alt: "First screenshot",
+          },
+        ]}
         onMediaError={(media) => failures.push(media.src)}
       />,
     );
@@ -96,6 +111,35 @@ describe("MediaPreviewDialog", () => {
       fireEvent.error(view.getByRole("img"));
       expect(failures).toEqual(["data:image/png;base64,AAAA"]);
       expect(view.getByRole("img")).toBeDefined();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("renders repeated identical sources once per item", () => {
+    const view = render(
+      <MediaPreviewDialog
+        {...baseProps}
+        open
+        media={[
+          {
+            id: "screenshot-1",
+            kind: "image",
+            src: "data:image/png;base64,AAAA",
+            alt: "First screenshot",
+          },
+          {
+            id: "screenshot-2",
+            kind: "image",
+            src: "data:image/png;base64,AAAA",
+            alt: "Second screenshot",
+          },
+        ]}
+      />,
+    );
+    try {
+      const dialog = view.getByRole("dialog", { name: "Screenshots" });
+      expect(dialog.querySelectorAll("img")).toHaveLength(2);
     } finally {
       view.unmount();
     }

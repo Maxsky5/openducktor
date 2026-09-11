@@ -367,7 +367,7 @@ function LoadedImagePreview({
       onOpenChange={onOpenChange}
       title="Generated image"
       description="Preview of the generated image."
-      media={[{ kind: "image", src, alt }]}
+      media={[{ id: "generated-image", kind: "image", src, alt }]}
       onMediaError={onImageError}
       trigger={
         <DialogTrigger asChild>

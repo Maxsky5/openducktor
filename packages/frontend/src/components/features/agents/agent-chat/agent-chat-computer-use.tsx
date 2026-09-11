@@ -182,6 +182,7 @@ const ComputerUseDetails = ({
 
 const buildComputerUsePreviewMedia = (images: AgentToolImage[]): MediaPreviewItem[] =>
   images.map((image, index) => ({
+    id: `computer-use-screenshot-${index + 1}`,
     kind: "image",
     src: `data:${image.mimeType};base64,${image.dataBase64}`,
     alt: `Computer Use screenshot ${index + 1}`,

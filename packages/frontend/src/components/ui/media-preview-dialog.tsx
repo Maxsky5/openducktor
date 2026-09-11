@@ -2,8 +2,8 @@ import { type ReactElement, type ReactNode, useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./dialog";
 
 export type MediaPreviewItem =
-  | { kind: "image"; src: string; alt: string; unavailableLabel?: string }
-  | { kind: "video"; src: string; ariaLabel: string };
+  | { id: string; kind: "image"; src: string; alt: string; unavailableLabel?: string }
+  | { id: string; kind: "video"; src: string; ariaLabel: string };
 
 export const MediaPreviewDialog = ({
   open,
@@ -47,7 +47,7 @@ export const MediaPreviewDialog = ({
         <div className="max-h-[80vh] space-y-2 overflow-y-auto rounded-md border border-border bg-muted/40 p-2">
           {media.map((item) => (
             <MediaPreviewItemView
-              key={item.src}
+              key={item.id}
               item={item}
               failed={failedSources.has(item.src)}
               onMediaError={handleMediaError}
