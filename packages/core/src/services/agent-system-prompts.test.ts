@@ -204,8 +204,8 @@ describe("buildAgentSystemPrompt", () => {
       "## Approach",
       "## Design",
       "## Requirement coverage",
-      "Cover the full spec, including its scope and constraints",
-      "Use the spec's requirement names as references",
+      "Cover all requirements, including scope and constraints",
+      "Use the spec's requirement names when a spec exists",
       "## Risks and constraints",
       "state ownership, and failure behavior",
     ]);
@@ -214,6 +214,35 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain("Include verification strategy");
     expect(prompt).not.toContain("or acceptance criteria as references");
   });
+
+  test.each(["task", "bug"] as const)(
+    "planner traces %s requirements when no spec exists",
+    (issueType) => {
+      const prompt = buildAgentSystemPrompt({
+        role: "planner",
+        task: {
+          taskId: `${issueType}-no-spec`,
+          title: "Preserve the selection when export fails",
+          issueType,
+          status: "open",
+          qaRequired: true,
+          description: "If an export fails, retain the selection and show the reason.",
+        },
+      });
+
+      expectPromptToContainAll(prompt, [
+        "For a task or bug without a spec, use the task requirements",
+        "Reference the source requirements for the problem and scope",
+        "Cover all requirements, including scope and constraints",
+        "Connect each required outcome to the design that provides it",
+        "Otherwise, use the task requirement wording as references",
+        "description: If an export fails, retain the selection and show the reason.",
+        "odt_set_plan for task/bug allowed from open/",
+      ]);
+      expect(prompt).not.toContain("Reference the spec for the problem and scope");
+      expect(prompt).not.toContain("Use the spec's requirement names as references");
+    },
+  );
 
   test("builder owns execution and verification within the approved design", () => {
     const prompt = buildAgentSystemPrompt({ role: "build", task: taskContext });

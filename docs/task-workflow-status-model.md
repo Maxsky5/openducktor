@@ -63,7 +63,7 @@ Store agent-written output as task documents, not user task fields. SQLite store
 
 | Role | Owns |
 |---|---|
-| Spec | Interview about product decisions, then user problem, scope, required behavior, and constraints. |
+| Spec | User problem, scope, required behavior, observable outcomes, and constraints. Clarifies unresolved product decisions with the user. |
 | Planner | Technical design, module responsibilities, architecture boundaries, interfaces, and data and state contracts. |
 | Builder | Implementation details, work order, tests, and verification within the required outcomes and design contracts. |
 | QA | Independent review of outcomes, contracts, correctness, and maintainability, with checks based on risk. |

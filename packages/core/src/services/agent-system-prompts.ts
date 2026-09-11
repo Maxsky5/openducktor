@@ -293,9 +293,9 @@ const AGENT_PROMPT_DEFINITIONS = {
         "Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of the plan. Describe required behavior and contracts, without prescribing how to prove them.",
       ]),
       bulletSection("Plan document", [
-        "## Approach: Explain the chosen design and why it fits the task and existing codebase. Discuss alternatives only where they explain a meaningful tradeoff. Reference the spec for the problem and scope.",
+        "## Approach: Explain the chosen design and why it fits the task and existing codebase. Discuss alternatives only where they explain a meaningful tradeoff. Reference the source requirements for the problem and scope.",
         "## Design: Group decisions by the modules or boundaries that change. Describe responsibilities, interfaces, inputs and outputs, state ownership, and failure behavior as applicable. Show how the changed parts connect.",
-        "## Requirement coverage: Cover the full spec, including its scope and constraints. Connect each required outcome to the design that provides it. Use the spec's requirement names as references so Builder can find the source of each obligation.",
+        "## Requirement coverage: Cover all requirements, including scope and constraints. Connect each required outcome to the design that provides it. Use the spec's requirement names when a spec exists. Otherwise, use the task requirement wording as references so Builder can find the source of each obligation.",
         "## Risks and constraints: Record compatibility limits and design risks that affect implementation. Include migration, rollout, and dependency constraints when the task needs them. Omit this section when there are none.",
       ]),
       bulletSection("Completion", [

@@ -106,9 +106,8 @@ export const PROMPT_TEMPLATE_DESCRIPTIONS = {
   "system.role.qa.base":
     "Reviews required outcomes, design contracts, correctness, and maintainability with checks based on risk.",
   "kickoff.spec_initial":
-    "Starts a focused interview about open product decisions before writing the spec.",
-  "kickoff.planner_initial":
-    "Starts technical design with clear contracts and room for Builder judgment.",
+    "Requests a saved specification. Asks questions only for unresolved product decisions.",
+  "kickoff.planner_initial": "Requests a saved implementation plan.",
   "kickoff.build_implementation_start":
     "Starts implementation with control over work order and checks within the approved design.",
   "kickoff.build_after_qa_rejected":
