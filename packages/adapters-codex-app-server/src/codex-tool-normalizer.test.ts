@@ -290,6 +290,39 @@ describe("Codex tool normalization", () => {
     expect(part).not.toHaveProperty("output");
   });
 
+  test("keeps the Codex-truncated failed preview as the full error text", () => {
+    const manual = `Script error: boom\n\n${"Computer Use API manual\n".repeat(60_000)}`;
+    const compact = `{"content":[{"type":"text","text":"${JSON.stringify(manual).slice(1, -1)}"},{"type":"image","data":"${"A".repeat(256 * 1024)}","mimeType":"image/png"}],"structured_content":null,"is_error":true}`;
+    const budget = 1_048_576;
+    const half = Math.floor(budget / 2);
+    const preview = `${compact.slice(0, half)}…${compact.length - budget} chars truncated…${compact.slice(-half)}`;
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "cua-5",
+        server: "cua_repl",
+        tool: "js",
+        status: "failed",
+        arguments: { code: "throw new Error('boom')" },
+        result: {
+          content: [{ type: "text", text: preview }],
+          structuredContent: null,
+          _meta: null,
+        },
+      },
+      "message-live",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        toolType: "computer_use",
+        status: "error",
+        error: preview,
+      }),
+    );
+    expect(part).not.toHaveProperty("output");
+  });
+
   test("keeps other MCP servers on the generic tool presentation", () => {
     const part = toStreamPart(
       {

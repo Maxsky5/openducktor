@@ -3,6 +3,7 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { ComputerUseToolMessage } from "./agent-chat-computer-use";
+import { codexTruncatedResultPreview } from "./computer-use-tool.test-fixtures";
 
 enableReactActEnvironment();
 
@@ -67,6 +68,32 @@ describe("ComputerUseToolMessage", () => {
       expect(view.getByText("Error")).toBeDefined();
       const errorBlock = view.getByText("Error").closest("div");
       expect(errorBlock?.querySelector("pre")?.textContent).toBe(manual);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("keeps an oversized Codex-truncated failure out of the collapsed summary", () => {
+    const preview = codexTruncatedResultPreview(
+      `Script error: TypeError: element not found\n\nComputer Use API manual\n${"step: inspect the app state\n".repeat(30_000)}`,
+    );
+    const view = render(
+      <ComputerUseToolMessage
+        {...baseProps}
+        meta={toolMeta({ status: "error", error: preview })}
+      />,
+    );
+    try {
+      const details = view.container.querySelector("details");
+      if (!details) throw new Error("Expected computer use details.");
+      expect(details.open).toBe(false);
+      const collapsedText = view.container.textContent ?? "";
+      expect(collapsedText).toContain("TypeError: element not found");
+      expect(collapsedText).not.toContain("Computer Use API manual");
+      expect(collapsedText.length).toBeLessThan(1_000);
+      toggle(details, true);
+      const errorBlock = view.getByText("Error").closest("div");
+      expect(errorBlock?.querySelector("pre")?.textContent).toBe(preview);
     } finally {
       view.unmount();
     }

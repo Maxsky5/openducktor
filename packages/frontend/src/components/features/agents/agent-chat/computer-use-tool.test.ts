@@ -6,6 +6,10 @@ import {
   computerUseFailureSummary,
   hasComputerUseDetails,
 } from "./computer-use-tool";
+import {
+  CODEX_RESULT_BUDGET_BYTES,
+  codexTruncatedResultPreview,
+} from "./computer-use-tool.test-fixtures";
 
 const toolMeta = (overrides: Partial<ToolMeta>): ToolMeta => ({
   kind: "tool",
@@ -16,6 +20,8 @@ const toolMeta = (overrides: Partial<ToolMeta>): ToolMeta => ({
   status: "completed",
   ...overrides,
 });
+
+const TRUNCATED_FAILURE_FALLBACK = "Computer action failed. Codex truncated its diagnostics.";
 
 describe("computer use tool helpers", () => {
   test("normalizes the action title whitespace", () => {
@@ -44,6 +50,30 @@ describe("computer use tool helpers", () => {
     );
     expect(computerUseFailureSummary(undefined)).toBe("");
     expect(computerUseFailureSummary("Script error:")).toBe("");
+  });
+
+  test("uses the original failure line from a Codex-truncated result", () => {
+    const preview = codexTruncatedResultPreview(
+      `Script error: TypeError: element not found\n\nComputer Use API manual\n${"step: inspect the app state\n".repeat(30_000)}`,
+    );
+
+    expect(preview.length).toBeGreaterThan(CODEX_RESULT_BUDGET_BYTES);
+    const summary = computerUseFailureSummary(preview);
+    expect(summary).toBe("TypeError: element not found");
+    expect(summary).not.toContain("Computer Use API manual");
+  });
+
+  test("states that Codex truncated diagnostics when the preview has no readable line", () => {
+    const preview = `{"content":[{"type":"text","text":"\\\\…510000 chars truncated…tail"}],"structured_content":null,"is_error":true}`;
+
+    expect(computerUseFailureSummary(preview)).toBe(TRUNCATED_FAILURE_FALLBACK);
+  });
+
+  test("bounds a failure line without newlines", () => {
+    const summary = computerUseFailureSummary("boom ".repeat(5_000));
+
+    expect(summary.length).toBeLessThanOrEqual(200);
+    expect(summary.endsWith("…")).toBe(true);
   });
 
   test("returns JavaScript code only for non-reset calls", () => {
