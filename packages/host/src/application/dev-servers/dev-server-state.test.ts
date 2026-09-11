@@ -55,6 +55,49 @@ describe("dev-server state helpers", () => {
     expect(runtime.terminalRunGeneration).toBe(2);
   });
 
+  test("keeps the command captured by a run when the configured command changes", () => {
+    const runtime = createRuntime();
+    const firstScript = runtime.state.scripts[0];
+    if (!firstScript) {
+      throw new Error("Expected configured web script.");
+    }
+    startTerminalRun(runtime, firstScript, "host-1");
+
+    syncGroupState(
+      runtime.state,
+      {
+        ...repoConfig,
+        devServers: [{ id: "web", name: "Web next", command: "bun run dev:next" }],
+      },
+      "task-1",
+      "/worktrees/task-1",
+    );
+
+    expect(runtime.state.scripts[0]).toMatchObject({
+      command: "bun run dev",
+      name: "Web next",
+    });
+  });
+
+  test("follows the configured command for scripts without a run", () => {
+    const runtime = createRuntime();
+
+    syncGroupState(
+      runtime.state,
+      {
+        ...repoConfig,
+        devServers: [{ id: "web", name: "Web next", command: "bun run dev:next" }],
+      },
+      "task-1",
+      "/worktrees/task-1",
+    );
+
+    expect(runtime.state.scripts[0]).toMatchObject({
+      command: "bun run dev:next",
+      name: "Web next",
+    });
+  });
+
   test("does not reuse a run identity after a script is removed and re-added", () => {
     const runtime = createRuntime();
     const firstScript = runtime.state.scripts[0];

@@ -47,6 +47,9 @@ const scriptStateFromConfig = (script: RepoConfig["devServers"][number]): DevSer
   bufferedTerminalChunks: [],
 });
 
+const resolveScriptCommand = (script: DevServerScriptState, configuredCommand: string): string =>
+  script.runIdentity === null ? configuredCommand : script.command;
+
 export const scriptHasLiveProcess = (script: DevServerScriptState): boolean => script.pid !== null;
 
 export const buildGroupState = (
@@ -79,7 +82,7 @@ export const syncGroupState = (
 
     return {
       ...existingScript,
-      command: script.command,
+      command: resolveScriptCommand(existingScript, script.command),
       name: script.name,
     };
   });

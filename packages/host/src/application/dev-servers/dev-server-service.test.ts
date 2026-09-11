@@ -378,6 +378,33 @@ describe("createDevServerService", () => {
       "Dev servers are already running for task task-1. Stop or restart them instead.",
     );
   });
+  test("keeps the started command when repository settings change during the run", async () => {
+    const { processPort, starts } = createProcessPort();
+    const config = repoConfig();
+    const service = createDevServerService({
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+      workspaceSettingsService: createWorkspaceSettingsService(config),
+    });
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    config.devServers = [{ id: "web", name: "Web", command: "bun run dev:next" }];
+
+    await expect(
+      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toMatchObject({
+      scripts: [{ scriptId: "web", command: "bun run dev", status: "running" }],
+    });
+
+    await Effect.runPromise(service.restart({ repoPath: "/repo", taskId: "task-1" }));
+
+    expect(starts.map((start) => start.command)).toEqual(["bun run dev", "bun run dev:next"]);
+    await expect(
+      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toMatchObject({
+      scripts: [{ scriptId: "web", command: "bun run dev:next", status: "running" }],
+    });
+  });
   test("requires a task worktree before starting scripts", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({
