@@ -28,6 +28,7 @@ import {
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
   kanbanSettingsSchema,
   persistedGlobalConfigV2Schema,
+  persistedGlobalConfigV3Schema,
   repoConfigSchema,
   resolveCodexEffectivePolicy,
   resolveHorizontalScrollbarVisibility,
@@ -55,8 +56,21 @@ const expectedDefaultChatSettings = {
 } as const;
 
 describe("config-schemas", () => {
-  test("uses version 3 runtime paths and retains an explicit version 2 migration schema", () => {
-    const current = globalConfigSchema.parse({ version: 3 });
+  test("uses version 4 runtime paths and retains explicit version 3 and version 2 schemas", () => {
+    const current = globalConfigSchema.parse({ version: 4 });
+    const previous = persistedGlobalConfigV3Schema.parse({
+      version: 3,
+      agentRuntimes: {
+        opencode: { enabled: true, executablePath: "/tools/opencode" },
+        codex: {
+          enabled: false,
+          executablePath: "",
+          defaults: { ...DEFAULT_CODEX_RUNTIME_POLICY },
+          roleOverrides: {},
+        },
+        claude: { enabled: true, executablePath: "/tools/claude" },
+      },
+    });
     const legacy = persistedGlobalConfigV2Schema.parse({
       version: 2,
       agentRuntimes: {
@@ -66,13 +80,16 @@ describe("config-schemas", () => {
       },
     });
 
-    expect(current.version).toBe(3);
+    expect(current.version).toBe(4);
+    expect(previous.version).toBe(3);
+    expect(previous.onboardingCompleted).toBe(false);
     expect(current.agentRuntimes.opencode.executablePath).toBe("");
     expect(current.agentRuntimes.codex.executablePath).toBe("");
     expect(current.agentRuntimes.claude.executablePath).toBe("");
     expect(current.autopilot.alwaysStartQaReviewsFresh).toBe(false);
     expect(legacy.agentRuntimes.opencode).toEqual({ enabled: true });
     expect(legacy.autopilot.alwaysStartQaReviewsFresh).toBe(false);
+    expect(globalConfigSchema.safeParse(previous).success).toBe(false);
     expect(globalConfigSchema.safeParse(legacy).success).toBe(false);
   });
 
@@ -129,7 +146,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const globalConfig = globalConfigSchema.parse({
-      version: 3,
+      version: 4,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
@@ -279,7 +296,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const globalConfig = globalConfigSchema.parse({
-      version: 3,
+      version: 4,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
@@ -333,7 +350,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const globalConfig = globalConfigSchema.parse({
-      version: 3,
+      version: 4,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
@@ -638,7 +655,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const parsedGlobalConfig = globalConfigSchema.parse({
-      version: 3,
+      version: 4,
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
@@ -670,7 +687,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const parsedGlobalConfig = globalConfigSchema.parse({
-      version: 3,
+      version: 4,
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
       chat: {
@@ -984,7 +1001,7 @@ describe("config-schemas", () => {
   });
 
   test("defaults notifications for existing configs and settings snapshots", () => {
-    const config = globalConfigSchema.parse({ version: 3 });
+    const config = globalConfigSchema.parse({ version: 4 });
     const snapshot = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },

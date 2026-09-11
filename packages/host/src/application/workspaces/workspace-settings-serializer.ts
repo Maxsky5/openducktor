@@ -25,6 +25,9 @@ export const withSerializedConfigWrites = (
       serialize(service.reopenWorkspace(workspaceId, expectedRepoPath)),
     removeWorkspaceRegistration: (workspaceId, expectedRepoPath) =>
       serialize(service.removeWorkspaceRegistration(workspaceId, expectedRepoPath)),
+    beginWorkspaceRemoval: (input) => serialize(service.beginWorkspaceRemoval(input)),
+    recordWorkspaceRemovalProgress: (input) =>
+      serialize(service.recordWorkspaceRemovalProgress(input)),
     reorderWorkspaces: (workspaceOrder) => serialize(service.reorderWorkspaces(workspaceOrder)),
     replaceAgentStudioState: (workspaceId, state) =>
       serialize(service.replaceAgentStudioState(workspaceId, state)),

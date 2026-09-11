@@ -9,6 +9,7 @@ import {
 } from "./notification-schemas";
 import { repoPromptOverridesSchema } from "./prompt-schemas";
 import { workspaceAgentStudioStateSchema } from "./workspace-agent-studio-state-schemas";
+import { workspaceRemovalRecordSchema } from "./workspace-lifecycle-schemas";
 
 export const DEFAULT_BRANCH_PREFIX = "odt";
 export const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -423,12 +424,14 @@ export const repoConfigSchema = z.object({
   }),
   agentStudioState: workspaceAgentStudioStateSchema,
   closed: z.boolean().optional(),
+  removal: workspaceRemovalRecordSchema.optional(),
 });
 export type RepoConfig = z.infer<typeof repoConfigSchema>;
 
 export const settingsRepoConfigSchema = repoConfigSchema.omit({
   agentStudioState: true,
   closed: true,
+  removal: true,
 });
 export type SettingsRepoConfig = z.infer<typeof settingsRepoConfigSchema>;
 

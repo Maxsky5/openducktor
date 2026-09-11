@@ -12,6 +12,7 @@ import { useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 const createWorkspaceState = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
   closedWorkspaces: [],
+  incompleteRemovals: [],
   closeWorkspace: async () => {},
   removeWorkspace: async () => {},
   reopenWorkspace: async () => {},

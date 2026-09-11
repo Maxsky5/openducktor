@@ -48,6 +48,7 @@ import {
   deleteLocalBranch,
   deleteReference,
   isRegisteredWorktree,
+  listWorktrees,
   removeWorktree,
 } from "../../infrastructure/git/git-worktree";
 import {
@@ -143,6 +144,9 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     },
     isRegisteredWorktree(repoPath, worktreePath) {
       return isRegisteredWorktree(runner, repoPath, worktreePath);
+    },
+    listWorktrees(repoPath) {
+      return listWorktrees(runner, repoPath);
     },
     referenceExists(workingDir, reference) {
       return referenceExists(runner, workingDir, reference);

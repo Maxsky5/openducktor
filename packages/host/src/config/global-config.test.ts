@@ -4,7 +4,9 @@ import {
   createDefaultGlobalConfig,
   parsePersistedGlobalConfig,
   parsePersistedGlobalConfigV2,
+  parsePersistedGlobalConfigV3,
   upgradePersistedGlobalConfigV2,
+  upgradePersistedGlobalConfigV3,
 } from "./global-config";
 
 describe("global config", () => {
@@ -21,12 +23,44 @@ describe("global config", () => {
     expect(parsePersistedGlobalConfig({ version: 4 }).autopilot.alwaysStartQaReviewsFresh).toBe(
       false,
     );
+    expect(parsePersistedGlobalConfigV3({ version: 3 }).autopilot.alwaysStartQaReviewsFresh).toBe(
+      false,
+    );
     expect(parsePersistedGlobalConfigV2({ version: 2 }).autopilot.alwaysStartQaReviewsFresh).toBe(
       false,
     );
     expect(() => parsePersistedGlobalConfig({ version: 2 })).toThrow(
       "Unsupported config version 2. Expected 4.",
     );
+    expect(() => parsePersistedGlobalConfig({ version: 3 })).toThrow(
+      "Unsupported config version 3. Expected 4.",
+    );
+  });
+
+  test("upgrades version 3 configs and infers onboarding completion", () => {
+    const legacy = parsePersistedGlobalConfigV3({
+      version: 3,
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          defaultRuntimeKind: "opencode",
+        },
+      },
+    });
+
+    const upgraded = upgradePersistedGlobalConfigV3(legacy);
+
+    expect(upgraded.version).toBe(4);
+    expect(upgraded.onboardingCompleted).toBe(true);
+    expect(Object.keys(upgraded.workspaces)).toEqual(["repo"]);
+    expect(upgraded.workspaces.repo?.closed).toBeUndefined();
+
+    const emptyUpgraded = upgradePersistedGlobalConfigV3(
+      parsePersistedGlobalConfigV3({ version: 3 }),
+    );
+    expect(emptyUpgraded.onboardingCompleted).toBe(false);
   });
 
   test("normalizes missing and empty legacy repository Git config", () => {

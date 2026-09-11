@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { taskQueryKeys } from "../../queries/tasks";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
 import {
@@ -52,6 +54,7 @@ const normalizeSelectionArgs = ({
 
 const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
   let latest: ReturnType<typeof useWorkspaceSelectionOperations> | null = null;
+  let queryClient: QueryClient | null = null;
   const currentArgs = initialArgs;
 
   const Harness = ({ args }: { args: SelectionHarnessArgs }) => {
@@ -59,6 +62,7 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
       ...normalizeSelectionArgs(args),
       hostClient: workspaceHost,
     });
+    queryClient = useQueryClient();
     return null;
   };
 
@@ -90,6 +94,12 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
       }
 
       return latest;
+    },
+    getQueryClient: (): QueryClient => {
+      if (!queryClient) {
+        throw new Error("Hook not mounted");
+      }
+      return queryClient;
     },
     waitFor: async (
       predicate: (value: ReturnType<typeof useWorkspaceSelectionOperations>) => boolean,
@@ -477,6 +487,47 @@ describe("use-workspace-selection-operations", () => {
       ]);
     } finally {
       reorderDeferred.resolve([workspace("/repo-b"), workspace("/repo-a", true)]);
+      await harness.unmount();
+    }
+  });
+
+  test("evicts repository-path and workspace-id caches after committed removal", async () => {
+    workspaceHost.workspaceRemove = mock(async () => ({
+      catalog: {
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+        onboardingCompleted: true,
+      },
+      removedWorktrees: [],
+    }));
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [{ id: "task-1" }],
+      });
+      queryClient.setQueryData(["workspace", "repo-config", "repo"], { workspaceId: "repo" });
+
+      await harness.run((value) =>
+        value.removeWorkspace({
+          workspaceId: "repo",
+          expectedRepoPath: "/repo",
+          removeTaskWorktrees: false,
+        }),
+      );
+
+      expect(queryClient.getQueryData(taskQueryKeys.repoData("/repo"))).toBeUndefined();
+      expect(queryClient.getQueryData(["workspace", "repo-config", "repo"])).toBeUndefined();
+    } finally {
       await harness.unmount();
     }
   });

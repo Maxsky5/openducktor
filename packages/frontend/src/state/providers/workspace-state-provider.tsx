@@ -22,6 +22,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
   const {
     workspaces,
     closedWorkspaces,
+    incompleteRemovals,
     onboardingCompleted,
     hasLoadedWorkspaceList,
     isLoadingWorkspaces,
@@ -119,6 +120,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
         branchSyncDegraded,
         workspaces,
         closedWorkspaces,
+        incompleteRemovals,
         activeWorkspace: resolvedActiveWorkspace,
         branches,
         activeBranch,
@@ -145,6 +147,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
       addWorkspace,
       branches,
       closedWorkspaces,
+      incompleteRemovals,
       closeWorkspace,
       isLoadingBranches,
       isSwitchingBranch,

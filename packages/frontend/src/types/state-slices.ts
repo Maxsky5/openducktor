@@ -17,6 +17,7 @@ import type {
   TaskCreateInput,
   TaskStatus,
   TaskStoreCheck,
+  IncompleteWorkspaceRemoval,
   TaskUpdatePatch,
   WorkspacePathResolution,
   WorkspaceRecord,
@@ -85,6 +86,7 @@ export type WorkspaceStateContextValue = {
   branchSyncDegraded: boolean;
   workspaces: WorkspaceRecord[];
   closedWorkspaces: WorkspaceRecord[];
+  incompleteRemovals: IncompleteWorkspaceRemoval[];
   activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
   activeBranch: GitCurrentBranch | null;

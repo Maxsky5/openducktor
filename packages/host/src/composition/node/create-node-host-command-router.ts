@@ -38,6 +38,7 @@ import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/w
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
+import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import { HostOperationError } from "../../effect/host-errors";
@@ -122,6 +123,9 @@ export const assembleNodeEffectHostCommandRouter = (
     worktreeFiles,
   });
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
+  const workspaceAdmissionService = createWorkspaceAdmissionService({
+    workspaceSettingsService,
+  });
   const gitProviderService = createGitProviderService({
     resolver: gitProviderResolver,
     workspaceSettingsService,
@@ -130,6 +134,8 @@ export const assembleNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const taskAssetServiceInput: Parameters<typeof createNodeTaskAssetServices>[0] = {
+    assertWorkspaceAdmitted: workspaceAdmissionService.assertTaskStoreAccess,
+    isWorkspaceBlocked: workspaceAdmissionService.isWorkspaceBlocked,
     onBackgroundFailure,
     processEnv,
     workspaceSettingsService,
@@ -261,6 +267,7 @@ export const assembleNodeEffectHostCommandRouter = (
     }),
   );
   const devServerServiceInput: Parameters<typeof createDevServerService>[0] = {
+    assertProcessStart: workspaceAdmissionService.assertProcessStart,
     processPort: devServerProcesses,
     taskWorktreeService,
     workspaceSettingsService,
@@ -275,9 +282,13 @@ export const assembleNodeEffectHostCommandRouter = (
       devServerService,
       terminalService,
     }),
+    admission: workspaceAdmissionService,
     gitPort: git,
     settingsConfig,
-    storage: { removeWorkspaceData: assets.removeWorkspaceData },
+    storage: {
+      removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
+      removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
+    },
     taskStore,
     workspaceSettingsService,
     worktreeFiles,
@@ -350,7 +361,10 @@ export const assembleNodeEffectHostCommandRouter = (
     terminalService,
   });
   const router = createEffectHostCommandRouter({
-    initialize: hostRouterLifecycle.initialize,
+    initialize: () =>
+      workspaceAdmissionService
+        .initialize()
+        .pipe(Effect.zipRight(hostRouterLifecycle.initialize())),
     dispose: hostRouterLifecycle.dispose,
     handlers: {
       ...createAgentSessionLiveCommandHandlers(agentSessionCommandService, localAttachmentService),

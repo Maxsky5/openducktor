@@ -55,7 +55,10 @@ export const createWorkspaceLifecycleCommandHandlers = (
     WorkspaceSettingsService,
     "getWorkspaceCatalog" | "reopenWorkspace" | "resolveWorkspacePath"
   >,
-  lifecycleService: Pick<WorkspaceLifecycleService, "closeWorkspace" | "removeWorkspace">,
+  lifecycleService: Pick<
+    WorkspaceLifecycleService,
+    "closeWorkspace" | "reopenWorkspace" | "removeWorkspace"
+  >,
 ) =>
   ({
     workspace_catalog_get: (args) => {
@@ -73,10 +76,8 @@ export const createWorkspaceLifecycleCommandHandlers = (
     },
     workspace_close: (args) =>
       lifecycleService.closeWorkspace(requireWorkspaceTarget("workspace_close", args)),
-    workspace_reopen: (args) => {
-      const target = requireWorkspaceTarget("workspace_reopen", args);
-      return workspaceSettingsService.reopenWorkspace(target.workspaceId, target.expectedRepoPath);
-    },
+    workspace_reopen: (args) =>
+      lifecycleService.reopenWorkspace(requireWorkspaceTarget("workspace_reopen", args)),
     workspace_remove: (args) => {
       const parsed = workspaceRemoveInputSchema.safeParse(args);
       if (!parsed.success) {

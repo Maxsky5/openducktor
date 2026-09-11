@@ -134,6 +134,9 @@ const createFakeGitPort = ({
     isRegisteredWorktree() {
       return Effect.succeed(false);
     },
+    listWorktrees() {
+      return Effect.dieMessage("unexpected list worktrees");
+    },
     referenceExists() {
       return Effect.succeed(true);
     },

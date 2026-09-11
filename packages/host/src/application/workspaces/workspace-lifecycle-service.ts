@@ -1,4 +1,9 @@
-import type { RepoConfig, WorkspaceCatalog, WorkspaceRemovalResult } from "@openducktor/contracts";
+import type {
+  RepoConfig,
+  WorkspaceCatalog,
+  WorkspaceRemovalPhase,
+  WorkspaceRemovalResult,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import {
@@ -16,7 +21,12 @@ import type { DevServerService } from "../dev-servers/dev-server-service-types";
 import { removeWorktreeAndFilesystemPath } from "../git/worktree-removal";
 import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
 import type { TerminalService } from "../terminals/terminal-service";
+import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
+import {
+  collectWorkspaceTaskWorktreePaths,
+  type WorkspaceWorktreeInventoryError,
+} from "./workspace-worktree-inventory";
 
 export type WorkspaceLifecycleError =
   | GitPortError
@@ -25,7 +35,8 @@ export type WorkspaceLifecycleError =
   | SettingsConfigError
   | TaskStoreError
   | WorktreeFileError
-  | WorkspaceSettingsError;
+  | WorkspaceSettingsError
+  | WorkspaceWorktreeInventoryError;
 
 export type WorkspaceActivityBlocker = {
   kind: "agent-session" | "dev-server" | "terminal";
@@ -37,11 +48,16 @@ export type WorkspaceActivityPort = {
 };
 
 export type WorkspaceStoragePort = {
-  removeWorkspaceData(workspaceId: string): Effect.Effect<void, unknown>;
+  removeWorkspaceTaskAssets(workspaceId: string): Effect.Effect<void, unknown>;
+  removeWorkspaceTaskStore(workspaceId: string): Effect.Effect<void, unknown>;
 };
 
 export type WorkspaceLifecycleService = {
   closeWorkspace(input: {
+    workspaceId: string;
+    expectedRepoPath: string;
+  }): Effect.Effect<WorkspaceCatalog, WorkspaceLifecycleError>;
+  reopenWorkspace(input: {
     workspaceId: string;
     expectedRepoPath: string;
   }): Effect.Effect<WorkspaceCatalog, WorkspaceLifecycleError>;
@@ -57,7 +73,14 @@ export type WorkspaceLifecycleService = {
 
 type CreateWorkspaceLifecycleServiceInput = {
   activity: WorkspaceActivityPort;
-  gitPort: Pick<GitPort, "canonicalizePath" | "isRegisteredWorktree" | "removeWorktree">;
+  admission: Pick<
+    WorkspaceAdmissionService,
+    "blockWorkspace" | "forgetWorkspace" | "unblockWorkspace" | "withAdministrativeAccess"
+  >;
+  gitPort: Pick<
+    GitPort,
+    "canonicalizePath" | "isRegisteredWorktree" | "listWorktrees" | "removeWorktree"
+  >;
   settingsConfig: SettingsConfigPort;
   storage: WorkspaceStoragePort;
   taskStore: Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
@@ -163,6 +186,7 @@ export const createWorkspaceActivityInspector = ({
 
 export const createWorkspaceLifecycleService = ({
   activity,
+  admission,
   gitPort,
   settingsConfig,
   storage,
@@ -170,6 +194,8 @@ export const createWorkspaceLifecycleService = ({
   workspaceSettingsService,
   worktreeFiles,
 }: CreateWorkspaceLifecycleServiceInput): WorkspaceLifecycleService => {
+  const removalsInFlight = new Set<string>();
+
   const requireTarget = (workspaceId: string, expectedRepoPath: string) =>
     Effect.gen(function* () {
       const repoConfig = yield* workspaceSettingsService.getRepoConfig(workspaceId);
@@ -199,123 +225,165 @@ export const createWorkspaceLifecycleService = ({
       }
     });
 
-  const collectTaskWorktreePaths = (repoConfig: RepoConfig) =>
-    Effect.gen(function* () {
-      const { repoPath, workspaceId } = repoConfig;
-      const tasks = yield* taskStore.listTasks({ repoPath });
-      if (tasks.length === 0) {
-        return [];
-      }
-      const taskIds = tasks.map((task) => task.id);
-      const sessionsByTask = yield* taskStore.listAgentSessionsForTasks({ repoPath, taskIds });
-      const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(settingsConfig, repoConfig);
-      const catalog = yield* workspaceSettingsService.getWorkspaceCatalog();
-      const otherWorkspacePaths = new Set(
-        [...catalog.openWorkspaces, ...catalog.closedWorkspaces]
-          .filter((workspace) => workspace.workspaceId !== workspaceId)
-          .map((workspace) => normalizePathForComparison(workspace.repoPath)),
+  const removeWorktree = (repoConfig: RepoConfig, worktreePath: string) =>
+    removeWorktreeAndFilesystemPath(
+      { gitPort, settingsConfig, worktreeFiles },
+      {
+        force: true,
+        managedWorktreeBasePath: managedWorktreeBaseForRepoConfig(settingsConfig, repoConfig),
+        missingOutsideManagedRootPathPolicy: "skip",
+        repoPath: repoConfig.repoPath,
+        worktreePath,
+      },
+    );
+
+  const failRemovalPhase = (
+    workspaceId: string,
+    phase: WorkspaceRemovalPhase,
+    removedWorktrees: string[],
+    failedPath: string | undefined,
+    message: string,
+    cause: unknown,
+  ) =>
+    workspaceSettingsService
+      .recordWorkspaceRemovalProgress({
+        workspaceId,
+        phase,
+        removedWorktrees,
+        lastFailure: message,
+      })
+      .pipe(
+        Effect.catchAll((journalError) =>
+          Effect.fail(
+            new HostOperationError({
+              operation: `workspace.removeWorkspace.${phase}`,
+              message: `${message} The removal progress could not be saved: ${journalError.message}`,
+              cause: unwrapUnknownError(journalError),
+              details: { failedPath, phase, removedWorktrees, workspaceId },
+            }),
+          ),
+        ),
+        Effect.zipRight(
+          Effect.fail(
+            new HostOperationError({
+              operation: `workspace.removeWorkspace.${phase}`,
+              message,
+              cause: unwrapUnknownError(cause),
+              details: { failedPath, phase, removedWorktrees, workspaceId },
+            }),
+          ),
+        ),
       );
 
-      const candidates = new Map<string, { path: string; taskId: string }>();
-      for (const task of tasks) {
-        const canonicalPath = settingsConfig.join(managedWorktreeBasePath, task.id);
-        candidates.set(normalizePathForComparison(canonicalPath), {
-          path: canonicalPath,
-          taskId: task.id,
-        });
-      }
-      for (const record of sessionsByTask) {
-        for (const session of record.agentSessions) {
-          const workingDirectory = session.workingDirectory.trim();
-          if (!workingDirectory) {
-            continue;
-          }
-          candidates.set(normalizePathForComparison(workingDirectory), {
-            path: workingDirectory,
-            taskId: record.taskId,
-          });
-        }
-      }
-
-      const repoPathComparison = normalizePathForComparison(repoPath);
-      const seen = new Set<string>();
-      const worktreePaths: string[] = [];
-      for (const [candidateComparison, candidate] of candidates) {
-        if (
-          candidateComparison === repoPathComparison ||
-          otherWorkspacePaths.has(candidateComparison)
-        ) {
-          continue;
-        }
-        if (!(yield* settingsConfig.pathExists(candidate.path))) {
-          continue;
-        }
-        const canonicalPath = yield* gitPort.canonicalizePath(candidate.path);
-        const canonicalComparison = normalizePathForComparison(canonicalPath);
-        if (
-          canonicalComparison === repoPathComparison ||
-          otherWorkspacePaths.has(canonicalComparison)
-        ) {
-          continue;
-        }
-        if (seen.has(canonicalComparison)) {
-          continue;
-        }
-        if (!(yield* gitPort.isRegisteredWorktree(repoPath, canonicalPath))) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              message: `Cannot establish that ${canonicalPath} is a task worktree of ${repoPath}. Remove it manually, or retry without removing task worktrees.`,
-              field: "worktreePath",
-              details: {
-                repoPath,
-                taskId: candidate.taskId,
-                worktreePath: canonicalPath,
-              },
-            }),
-          );
-        }
-        seen.add(canonicalComparison);
-        worktreePaths.push(canonicalPath);
-      }
-      return worktreePaths;
+  const persistProgress = (
+    workspaceId: string,
+    phase: WorkspaceRemovalPhase,
+    removedWorktrees: string[],
+    lastFailure: string | null,
+  ) =>
+    workspaceSettingsService.recordWorkspaceRemovalProgress({
+      workspaceId,
+      phase,
+      removedWorktrees,
+      lastFailure,
     });
 
-  const removeTaskWorktrees = (repoConfig: RepoConfig, workspaceId: string) =>
+  const executeRemoval = (input: {
+    workspaceId: string;
+    expectedRepoPath: string;
+    removeTaskWorktrees: boolean;
+  }) =>
     Effect.gen(function* () {
-      const worktreePaths = yield* collectTaskWorktreePaths(repoConfig);
-      const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(settingsConfig, repoConfig);
-      const removedWorktrees: string[] = [];
-      for (const worktreePath of worktreePaths) {
-        const result = yield* Effect.either(
-          removeWorktreeAndFilesystemPath(
-            { gitPort, settingsConfig, worktreeFiles },
-            {
-              force: true,
-              managedWorktreeBasePath,
-              missingOutsideManagedRootPathPolicy: "skip",
-              repoPath: repoConfig.repoPath,
-              worktreePath,
-            },
+      const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
+      const startedRecord = yield* workspaceSettingsService.beginWorkspaceRemoval({
+        workspaceId: input.workspaceId,
+        expectedRepoPath: input.expectedRepoPath,
+        removeTaskWorktrees: input.removeTaskWorktrees,
+      });
+      const removeTaskWorktrees = startedRecord.removeTaskWorktrees;
+      admission.blockWorkspace({
+        reason: "removal",
+        repoPath: repoConfig.repoPath,
+        workspaceId: input.workspaceId,
+      });
+
+      const removedWorktrees = [...startedRecord.removedWorktrees];
+      let phase = startedRecord.phase;
+
+      if (phase === "worktrees" && removeTaskWorktrees) {
+        const worktreePaths = yield* admission.withAdministrativeAccess(
+          input.workspaceId,
+          collectWorkspaceTaskWorktreePaths(
+            { gitPort, settingsConfig, taskStore, workspaceSettingsService },
+            repoConfig,
           ),
         );
-        if (result._tag === "Left") {
-          return yield* Effect.fail(
-            new HostOperationError({
-              operation: "workspace.removeTaskWorktree",
-              message: `Removed ${removedWorktrees.length} task worktree(s). Failed to remove ${worktreePath}: ${result.left.message}. The workspace, its task data, and the remaining worktrees stay registered. Fix the failing path and retry removal. Keep local branches and committed history.`,
-              cause: unwrapUnknownError(result.left),
-              details: {
-                failedPath: worktreePath,
-                phase: "worktrees",
-                removedWorktrees,
-                workspaceId,
-              },
-            }),
+        const removedComparisons = new Set(
+          removedWorktrees.map((path) => normalizePathForComparison(path)),
+        );
+        for (const worktreePath of worktreePaths) {
+          if (removedComparisons.has(normalizePathForComparison(worktreePath))) {
+            continue;
+          }
+          const result = yield* Effect.either(removeWorktree(repoConfig, worktreePath));
+          if (result._tag === "Left") {
+            return yield* failRemovalPhase(
+              input.workspaceId,
+              "worktrees",
+              removedWorktrees,
+              worktreePath,
+              `Removed ${removedWorktrees.length} task worktree(s). Failed to remove ${worktreePath}: ${result.left.message}. Retry removal to continue. Local branches and committed history stay.`,
+              result.left,
+            );
+          }
+          removedWorktrees.push(worktreePath);
+          removedComparisons.add(normalizePathForComparison(worktreePath));
+          yield* persistProgress(input.workspaceId, "worktrees", removedWorktrees, null);
+        }
+        phase = "attachments";
+        yield* persistProgress(input.workspaceId, phase, removedWorktrees, null);
+      }
+
+      if (phase === "attachments") {
+        const assetsResult = yield* Effect.either(
+          storage.removeWorkspaceTaskAssets(input.workspaceId),
+        );
+        if (assetsResult._tag === "Left") {
+          return yield* failRemovalPhase(
+            input.workspaceId,
+            "attachments",
+            removedWorktrees,
+            undefined,
+            `Failed to remove workspace task attachments: ${unwrapUnknownError(assetsResult.left).message}. Retry removal to continue.`,
+            assetsResult.left,
           );
         }
-        removedWorktrees.push(worktreePath);
+        phase = "task_store";
+        yield* persistProgress(input.workspaceId, phase, removedWorktrees, null);
       }
-      return removedWorktrees;
+
+      if (phase === "task_store") {
+        const storeResult = yield* Effect.either(
+          storage.removeWorkspaceTaskStore(input.workspaceId),
+        );
+        if (storeResult._tag === "Left") {
+          return yield* failRemovalPhase(
+            input.workspaceId,
+            "task_store",
+            removedWorktrees,
+            undefined,
+            `Failed to remove the workspace task store: ${unwrapUnknownError(storeResult.left).message}. The workspace stays frozen. Retry removal to continue.`,
+            storeResult.left,
+          );
+        }
+      }
+
+      const catalog = yield* workspaceSettingsService.removeWorkspaceRegistration(
+        input.workspaceId,
+        input.expectedRepoPath,
+      );
+      admission.forgetWorkspace(input.workspaceId);
+      return { catalog, result: { removedWorktrees } };
     });
 
   return {
@@ -326,43 +394,52 @@ export const createWorkspaceLifecycleService = ({
           return yield* workspaceSettingsService.getWorkspaceCatalog();
         }
         yield* assertNoBlockingActivity(repoConfig.repoPath);
-        return yield* workspaceSettingsService.closeWorkspace(
+        const catalog = yield* workspaceSettingsService.closeWorkspace(
           input.workspaceId,
           input.expectedRepoPath,
         );
+        admission.blockWorkspace({
+          reason: "closed",
+          repoPath: repoConfig.repoPath,
+          workspaceId: input.workspaceId,
+        });
+        return catalog;
+      });
+    },
+    reopenWorkspace(input) {
+      return Effect.gen(function* () {
+        const catalog = yield* workspaceSettingsService.reopenWorkspace(
+          input.workspaceId,
+          input.expectedRepoPath,
+        );
+        admission.unblockWorkspace(input.workspaceId);
+        return catalog;
       });
     },
     removeWorkspace(input) {
       return Effect.gen(function* () {
-        const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-        yield* assertNoBlockingActivity(repoConfig.repoPath);
-
-        const removedWorktrees = input.removeTaskWorktrees
-          ? yield* removeTaskWorktrees(repoConfig, input.workspaceId)
-          : [];
-
-        const cleanupResult = yield* Effect.either(storage.removeWorkspaceData(input.workspaceId));
-        if (cleanupResult._tag === "Left") {
-          const cause = unwrapUnknownError(cleanupResult.left);
+        if (removalsInFlight.has(input.workspaceId)) {
           return yield* Effect.fail(
-            new HostOperationError({
-              operation: "workspace.removeWorkspaceData",
-              message: `Removed ${removedWorktrees.length} task worktree(s). Failed to remove the workspace task data: ${cause.message}. The workspace registration remains. Fix the failing data and retry removal.`,
-              cause,
-              details: {
-                phase: "workspace_data",
-                removedWorktrees,
-                workspaceId: input.workspaceId,
-              },
+            new HostValidationError({
+              message: `Workspace removal is already in progress for ${input.workspaceId}. Wait for it to finish and retry.`,
+              field: "workspaceId",
             }),
           );
         }
 
-        const catalog = yield* workspaceSettingsService.removeWorkspaceRegistration(
-          input.workspaceId,
-          input.expectedRepoPath,
+        const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
+        if (!repoConfig.removal) {
+          yield* assertNoBlockingActivity(repoConfig.repoPath);
+        }
+
+        return yield* Effect.acquireUseRelease(
+          Effect.sync(() => removalsInFlight.add(input.workspaceId)),
+          () => executeRemoval(input),
+          () =>
+            Effect.sync(() => {
+              removalsInFlight.delete(input.workspaceId);
+            }),
         );
-        return { catalog, result: { removedWorktrees } };
       });
     },
   };

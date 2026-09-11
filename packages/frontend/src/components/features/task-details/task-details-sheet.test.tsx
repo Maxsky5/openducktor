@@ -16,6 +16,7 @@ enableReactActEnvironment();
 const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
   closedWorkspaces: [],
+  incompleteRemovals: [],
   closeWorkspace: async () => {},
   removeWorkspace: async () => {},
   reopenWorkspace: async () => {},

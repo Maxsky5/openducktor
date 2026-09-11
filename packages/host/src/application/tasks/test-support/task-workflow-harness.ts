@@ -441,6 +441,9 @@ const createBuildStartGitPort = ({
         return true;
       });
     },
+    listWorktrees() {
+      return Effect.dieMessage("unexpected list worktrees");
+    },
     referenceExists(workingDir, reference) {
       return Effect.sync(() => {
         calls.push({ type: "referenceExists", workingDir, reference });
@@ -597,6 +600,9 @@ const createDirectMergeGitPort = ({
     },
     isRegisteredWorktree() {
       return Effect.succeed(true);
+    },
+    listWorktrees() {
+      return Effect.dieMessage("unexpected list worktrees");
     },
     referenceExists() {
       return Effect.succeed(true);

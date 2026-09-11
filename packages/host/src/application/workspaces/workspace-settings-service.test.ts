@@ -763,6 +763,113 @@ describe("createWorkspaceSettingsService", () => {
 
     expect(Object.keys(snapshot.workspaces)).toEqual(["repo-a"]);
   });
+  test("begins, records, and exposes an incomplete workspace removal", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const record = await Effect.runPromise(
+      service.beginWorkspaceRemoval({
+        workspaceId: "repo-a",
+        expectedRepoPath: "/repos/a",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    expect(record.phase).toBe("worktrees");
+    expect(record.removeTaskWorktrees).toBe(true);
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal).toEqual(record);
+
+    await Effect.runPromise(
+      service.recordWorkspaceRemovalProgress({
+        workspaceId: "repo-a",
+        phase: "attachments",
+        removedWorktrees: ["/managed/repo-a/task-1"],
+        lastFailure: "worktree removal failed",
+      }),
+    );
+
+    const catalog = await Effect.runPromise(service.getWorkspaceCatalog());
+    expect(catalog.openWorkspaces).toEqual([]);
+    expect(catalog.closedWorkspaces).toEqual([]);
+    expect(catalog.incompleteRemovals).toHaveLength(1);
+    expect(catalog.incompleteRemovals[0]).toMatchObject({
+      workspace: { workspaceId: "repo-a" },
+      phase: "attachments",
+      removeTaskWorktrees: true,
+      removedWorktrees: ["/managed/repo-a/task-1"],
+      lastFailure: "worktree removal failed",
+    });
+    expect(await Effect.runPromise(service.listWorkspaces())).toEqual([]);
+  });
+  test("rejects close, reopen, and select while removal is incomplete", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: {
+          "repo-a": {
+            ...repoConfig("repo-a", "/repos/a"),
+            removal: {
+              version: 1 as const,
+              operationId: "op-1",
+              removeTaskWorktrees: false,
+              phase: "attachments" as const,
+              removedWorktrees: [],
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    await expect(Effect.runPromise(service.closeWorkspace("repo-a", "/repos/a"))).rejects.toThrow(
+      "Workspace removal is incomplete",
+    );
+    await expect(Effect.runPromise(service.reopenWorkspace("repo-a", "/repos/a"))).rejects.toThrow(
+      "Workspace removal is incomplete",
+    );
+    await expect(Effect.runPromise(service.selectWorkspace("repo-a"))).rejects.toThrow(
+      "Workspace removal is incomplete",
+    );
+  });
+  test("resolves a path with an incomplete removal as removing", async () => {
+    const service = createWorkspaceSettingsService(
+      createFakeSettingsConfig({
+        config: globalConfig({
+          workspaceOrder: ["repo-a"],
+          workspaces: {
+            "repo-a": {
+              ...repoConfig("repo-a", "/repos/a"),
+              removal: {
+                version: 1 as const,
+                operationId: "op-1",
+                removeTaskWorktrees: true,
+                phase: "task_store" as const,
+                removedWorktrees: ["/managed/repo-a/task-1"],
+                startedAt: "2026-01-01T00:00:00.000Z",
+                lastFailure: null,
+              },
+            },
+          },
+        }),
+      }),
+    );
+
+    expect(await Effect.runPromise(service.resolveWorkspacePath("/repos/a"))).toMatchObject({
+      kind: "removing",
+      removal: {
+        workspace: { workspaceId: "repo-a" },
+        phase: "task_store",
+        removedWorktrees: ["/managed/repo-a/task-1"],
+      },
+    });
+  });
   test("saves settings snapshots without changing theme and preserves workspace metadata", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({

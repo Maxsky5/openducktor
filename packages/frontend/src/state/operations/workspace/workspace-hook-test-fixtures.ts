@@ -20,22 +20,26 @@ export const createWorkspaceHostClient = (): WorkspaceOperationsHostClient => ({
   workspaceCatalogGet: async () => ({
     openWorkspaces: [],
     closedWorkspaces: [],
+    incompleteRemovals: [],
     onboardingCompleted: false,
   }),
   workspaceClose: async (_workspaceId: string, repoPath: string) => ({
     openWorkspaces: [],
     closedWorkspaces: [workspace(repoPath)],
+    incompleteRemovals: [],
     onboardingCompleted: true,
   }),
   workspaceReopen: async (_workspaceId: string, repoPath: string) => ({
     openWorkspaces: [workspace(repoPath, true)],
     closedWorkspaces: [],
+    incompleteRemovals: [],
     onboardingCompleted: true,
   }),
   workspaceRemove: async () => ({
     catalog: {
       openWorkspaces: [],
       closedWorkspaces: [],
+      incompleteRemovals: [],
       onboardingCompleted: true,
     },
     removedWorktrees: [],

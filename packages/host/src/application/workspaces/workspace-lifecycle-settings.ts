@@ -2,6 +2,7 @@ import {
   globalConfigSchema,
   type RepoConfig,
   type WorkspacePathResolution,
+  type WorkspaceRemovalRecord,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
@@ -24,7 +25,15 @@ type WorkspaceLifecycleSettingsMethods = Pick<
   | "reopenWorkspace"
   | "removeWorkspaceRegistration"
   | "resolveWorkspacePath"
+  | "beginWorkspaceRemoval"
+  | "recordWorkspaceRemovalProgress"
 >;
+
+const incompleteRemovalError = (workspaceId: string): HostValidationError =>
+  new HostValidationError({
+    message: `Workspace removal is incomplete for ${workspaceId}. Retry removal from the workspace rail before using it.`,
+    field: "workspaceId",
+  });
 
 const requireWorkspace = (
   config: Parameters<typeof requireConfiguredWorkspace>[0],
@@ -99,6 +108,9 @@ export const createWorkspaceLifecycleSettingsMethods = (
       const config = yield* loadGlobalConfig(settingsConfig);
       const repoConfig = yield* requireWorkspace(config, workspaceId);
       yield* assertExpectedRepoPath(workspaceId, repoConfig, expectedRepoPath);
+      if (repoConfig.removal) {
+        return yield* Effect.fail(incompleteRemovalError(workspaceId));
+      }
 
       config.workspaces[workspaceId] = { ...repoConfig, closed: true };
       if (config.activeWorkspace === workspaceId) {
@@ -118,6 +130,9 @@ export const createWorkspaceLifecycleSettingsMethods = (
       const config = yield* loadGlobalConfig(settingsConfig);
       const repoConfig = yield* requireWorkspace(config, workspaceId);
       yield* assertExpectedRepoPath(workspaceId, repoConfig, expectedRepoPath);
+      if (repoConfig.removal) {
+        return yield* Effect.fail(incompleteRemovalError(workspaceId));
+      }
 
       const canonicalRepoPath = yield* validateGitRepoPath(settingsConfig, repoConfig.repoPath);
       if (canonicalRepoPath !== repoConfig.repoPath) {
@@ -176,6 +191,54 @@ export const createWorkspaceLifecycleSettingsMethods = (
             cause,
           }),
       });
+    });
+  },
+  beginWorkspaceRemoval(input) {
+    return Effect.gen(function* () {
+      const config = yield* loadGlobalConfig(settingsConfig);
+      const repoConfig = yield* requireWorkspace(config, input.workspaceId);
+      yield* assertExpectedRepoPath(input.workspaceId, repoConfig, input.expectedRepoPath);
+      if (repoConfig.removal) {
+        return repoConfig.removal;
+      }
+
+      const removal: WorkspaceRemovalRecord = {
+        version: 1,
+        operationId: globalThis.crypto.randomUUID(),
+        removeTaskWorktrees: input.removeTaskWorktrees,
+        phase: input.removeTaskWorktrees ? "worktrees" : "attachments",
+        removedWorktrees: [],
+        startedAt: new Date().toISOString(),
+        lastFailure: null,
+      };
+      config.workspaces[input.workspaceId] = { ...repoConfig, removal };
+      yield* writeConfig(settingsConfig, config);
+      return removal;
+    });
+  },
+  recordWorkspaceRemovalProgress(input) {
+    return Effect.gen(function* () {
+      const config = yield* loadGlobalConfig(settingsConfig);
+      const repoConfig = yield* requireWorkspace(config, input.workspaceId);
+      if (!repoConfig.removal) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Workspace removal is not in progress for ${input.workspaceId}.`,
+            field: "workspaceId",
+          }),
+        );
+      }
+
+      config.workspaces[input.workspaceId] = {
+        ...repoConfig,
+        removal: {
+          ...repoConfig.removal,
+          phase: input.phase,
+          removedWorktrees: input.removedWorktrees,
+          lastFailure: input.lastFailure,
+        },
+      };
+      yield* writeConfig(settingsConfig, config);
     });
   },
 });

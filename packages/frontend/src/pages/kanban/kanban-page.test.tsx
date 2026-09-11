@@ -306,6 +306,7 @@ const createWorkspaceStateValue = (
   activeBranch: null,
   isSwitchingWorkspace: false,
   closedWorkspaces: [],
+  incompleteRemovals: [],
   closeWorkspace: async () => {},
   removeWorkspace: async () => {},
   reopenWorkspace: async () => {},
