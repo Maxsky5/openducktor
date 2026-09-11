@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
+import type { TaskAssetError } from "../../effect/task-asset-error";
 import {
   HostOperationError,
   type HostOperationErrorAggregate,
@@ -48,8 +49,8 @@ export type WorkspaceActivityPort = {
 };
 
 export type WorkspaceStoragePort = {
-  removeWorkspaceTaskAssets(workspaceId: string): Effect.Effect<void, unknown>;
-  removeWorkspaceTaskStore(workspaceId: string): Effect.Effect<void, unknown>;
+  removeWorkspaceTaskAssets(workspaceId: string): Effect.Effect<void, TaskAssetError>;
+  removeWorkspaceTaskStore(workspaceId: string): Effect.Effect<void, HostOperationErrorAggregate>;
 };
 
 export type WorkspaceLifecycleService = {
@@ -228,18 +229,6 @@ export const createWorkspaceLifecycleService = ({
       }
     });
 
-  const removeWorktree = (repoConfig: RepoConfig, worktreePath: string) =>
-    removeWorktreeAndFilesystemPath(
-      { gitPort, settingsConfig, worktreeFiles },
-      {
-        force: true,
-        managedWorktreeBasePath: managedWorktreeBaseForRepoConfig(settingsConfig, repoConfig),
-        missingOutsideManagedRootPathPolicy: "skip",
-        repoPath: repoConfig.repoPath,
-        worktreePath,
-      },
-    );
-
   const failRemovalPhase = (
     workspaceId: string,
     phase: WorkspaceRemovalPhase,
@@ -326,6 +315,10 @@ export const createWorkspaceLifecycleService = ({
             repoConfig,
           ),
         );
+        const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
+          settingsConfig,
+          repoConfig,
+        );
         const removedComparisons = new Set(
           removedWorktrees.map((path) => normalizePathForComparison(path)),
         );
@@ -333,7 +326,18 @@ export const createWorkspaceLifecycleService = ({
           if (removedComparisons.has(normalizePathForComparison(worktreePath))) {
             continue;
           }
-          const result = yield* Effect.either(removeWorktree(repoConfig, worktreePath));
+          const result = yield* Effect.either(
+            removeWorktreeAndFilesystemPath(
+              { gitPort, settingsConfig, worktreeFiles },
+              {
+                force: true,
+                managedWorktreeBasePath,
+                missingOutsideManagedRootPathPolicy: "skip",
+                repoPath: repoConfig.repoPath,
+                worktreePath,
+              },
+            ),
+          );
           if (result._tag === "Left") {
             return yield* failRemovalPhase(
               input.workspaceId,
@@ -362,7 +366,7 @@ export const createWorkspaceLifecycleService = ({
             "attachments",
             removedWorktrees,
             undefined,
-            `Failed to remove workspace task attachments: ${unwrapUnknownError(assetsResult.left).message}. Retry removal to continue.`,
+            `Failed to remove workspace task attachments: ${assetsResult.left.message}. Retry removal to continue.`,
             assetsResult.left,
           );
         }
@@ -380,7 +384,7 @@ export const createWorkspaceLifecycleService = ({
             "task_store",
             removedWorktrees,
             undefined,
-            `Failed to remove the workspace task store: ${unwrapUnknownError(storeResult.left).message}. The workspace stays frozen. Retry removal to continue.`,
+            `Failed to remove the workspace task store: ${storeResult.left.message}. The workspace stays frozen. Retry removal to continue.`,
             storeResult.left,
           );
         }

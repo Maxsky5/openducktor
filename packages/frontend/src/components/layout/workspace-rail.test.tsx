@@ -138,11 +138,15 @@ describe("WorkspaceRail", () => {
           workspaceName: "Stuck Repo",
           repoPath: "/stuck",
         }),
-        operationId: "op-1",
-        phase: "attachments",
-        removeTaskWorktrees: true,
-        removedWorktrees: ["/managed/stuck/task-1"],
-        lastFailure: "disk failure",
+        record: {
+          version: 1,
+          operationId: "op-1",
+          phase: "attachments",
+          removeTaskWorktrees: true,
+          removedWorktrees: ["/managed/stuck/task-1"],
+          startedAt: "2026-01-01T00:00:00.000Z",
+          lastFailure: "disk failure",
+        },
       },
     ];
     workspaceState.removeWorkspace = removeWorkspace;

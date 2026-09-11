@@ -1,4 +1,5 @@
 import type { RepoConfig, WorkspaceRecord } from "@openducktor/contracts";
+import { pathStartsWith } from "@openducktor/path-support";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import { HostValidationError } from "../../effect/host-errors";
@@ -15,57 +16,11 @@ export type WorkspaceWorktreeInventoryError =
   | WorkspaceSettingsError;
 
 export type WorkspaceWorktreeInventoryDependencies = {
-  gitPort: Pick<
-    GitPort,
-    "canonicalizePath" | "isRegisteredWorktree" | "listWorktrees" | "removeWorktree"
-  >;
+  gitPort: Pick<GitPort, "canonicalizePath" | "listWorktrees">;
   settingsConfig: SettingsConfigPort;
   taskStore: Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
 };
-
-const pathIsWithinRoot = (root: string, candidate: string): boolean => {
-  const normalizedRoot = normalizePathForComparison(root);
-  const normalizedCandidate = normalizePathForComparison(candidate);
-  return (
-    normalizedCandidate === normalizedRoot || normalizedCandidate.startsWith(`${normalizedRoot}/`)
-  );
-};
-
-const collectWorkspaceClaims = (
-  dependencies: WorkspaceWorktreeInventoryDependencies,
-  workspaces: WorkspaceRecord[],
-) =>
-  Effect.gen(function* () {
-    const claims = new Set<string>();
-    for (const workspace of workspaces) {
-      const tasks = yield* dependencies.taskStore.listTasks({ repoPath: workspace.repoPath });
-      if (tasks.length === 0) {
-        continue;
-      }
-      const basePath = workspace.effectiveWorktreeBasePath;
-      if (basePath !== null) {
-        for (const task of tasks) {
-          claims.add(
-            normalizePathForComparison(dependencies.settingsConfig.join(basePath, task.id)),
-          );
-        }
-      }
-      const sessionsByTask = yield* dependencies.taskStore.listAgentSessionsForTasks({
-        repoPath: workspace.repoPath,
-        taskIds: tasks.map((task) => task.id),
-      });
-      for (const record of sessionsByTask) {
-        for (const session of record.agentSessions) {
-          const workingDirectory = session.workingDirectory.trim();
-          if (workingDirectory) {
-            claims.add(normalizePathForComparison(workingDirectory));
-          }
-        }
-      }
-    }
-    return claims;
-  });
 
 export const collectWorkspaceTaskWorktreePaths = (
   dependencies: WorkspaceWorktreeInventoryDependencies,
@@ -163,13 +118,15 @@ export const collectWorkspaceTaskWorktreePaths = (
       worktreePaths.push(canonicalPath);
     }
 
+    // A worktree under our base with no task or session evidence cannot be
+    // attributed. Stop instead of guessing ownership or skipping it.
     const unclassifiedPaths: string[] = [];
     for (const worktree of inventory) {
       const normalized = normalizePathForComparison(worktree.worktreePath);
       if (seen.has(normalized)) {
         continue;
       }
-      if (!pathIsWithinRoot(managedWorktreeBasePath, worktree.worktreePath)) {
+      if (!pathStartsWith(worktree.worktreePath, managedWorktreeBasePath)) {
         continue;
       }
       if (normalized === repoPathComparison || otherWorkspacePaths.has(normalized)) {
@@ -196,4 +153,39 @@ export const collectWorkspaceTaskWorktreePaths = (
     }
 
     return worktreePaths;
+  });
+
+const collectWorkspaceClaims = (
+  dependencies: WorkspaceWorktreeInventoryDependencies,
+  workspaces: WorkspaceRecord[],
+) =>
+  Effect.gen(function* () {
+    const claims = new Set<string>();
+    for (const workspace of workspaces) {
+      const tasks = yield* dependencies.taskStore.listTasks({ repoPath: workspace.repoPath });
+      if (tasks.length === 0) {
+        continue;
+      }
+      const basePath = workspace.effectiveWorktreeBasePath;
+      if (basePath !== null) {
+        for (const task of tasks) {
+          claims.add(
+            normalizePathForComparison(dependencies.settingsConfig.join(basePath, task.id)),
+          );
+        }
+      }
+      const sessionsByTask = yield* dependencies.taskStore.listAgentSessionsForTasks({
+        repoPath: workspace.repoPath,
+        taskIds: tasks.map((task) => task.id),
+      });
+      for (const record of sessionsByTask) {
+        for (const session of record.agentSessions) {
+          const workingDirectory = session.workingDirectory.trim();
+          if (workingDirectory) {
+            claims.add(normalizePathForComparison(workingDirectory));
+          }
+        }
+      }
+    }
+    return claims;
   });

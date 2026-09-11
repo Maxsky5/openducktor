@@ -11,6 +11,10 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { buildAgentStudioStateUpdate } from "./workspace-agent-studio-state";
 import { createCustomAgentRoleOperations } from "./custom-agent-role-operations";
+import {
+  openWorkspaceRecordsInEffectiveOrder,
+  workspaceRecordsInEffectiveOrder,
+} from "./workspace-catalog-model";
 import { createWorkspaceLifecycleSettingsMethods } from "./workspace-lifecycle-settings";
 import {
   areAgentModelFavoritesEqual,
@@ -22,14 +26,12 @@ import {
   findRepoConfigByRepoPath,
   loadGlobalConfig,
   normalizeSnapshotWorkspaces,
-  openWorkspaceRecordsInEffectiveOrder,
   requireConfiguredWorkspace,
   saveAndReturnWorkspaceRecord,
   toSettingsSnapshot,
   touchRecentWorkspace,
   validateAndNormalizeRepoConfig,
   type WorkspaceSettingsService,
-  workspaceRecordsInEffectiveOrder,
 } from "./workspace-settings-model";
 
 export type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";

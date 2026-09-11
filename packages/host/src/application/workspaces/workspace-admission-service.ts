@@ -2,7 +2,6 @@ import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import {
   HostOperationError,
-  type HostOperationErrorAggregate,
   HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
@@ -11,8 +10,6 @@ import type { WorkspaceSettingsService } from "./workspace-settings-model";
 export type WorkspaceBlockReason = "closed" | "removal";
 
 export type WorkspaceReservationOperation = "close" | "reopen" | "remove";
-
-export type WorkspaceAdmissionError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 
 type BlockedWorkspace = {
   repoPath: string;
@@ -29,7 +26,6 @@ type WorkspaceReservation = {
 export type WorkspaceAdmissionService = {
   initialize(): Effect.Effect<void, HostOperationError>;
   isWorkspaceBlocked(workspaceId: string): boolean;
-  isWorkspaceReserved(workspaceId: string): boolean;
   reserveWorkspace(input: {
     operation: WorkspaceReservationOperation;
     repoPath: string;
@@ -54,31 +50,6 @@ export type WorkspaceAdmissionService = {
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E, R>;
 };
-
-const MUTATING_TASK_STORE_OPERATION =
-  /\.(clear|create|delete|promote|record|register|remove|set|transition|update|upsert)/i;
-
-export const isMutatingTaskStoreOperation = (operation: string): boolean =>
-  MUTATING_TASK_STORE_OPERATION.test(operation);
-
-const blockedWorkspaceError = (blocked: BlockedWorkspace): HostValidationError => {
-  if (blocked.reason === "removal") {
-    return new HostValidationError({
-      message: `Workspace removal is incomplete for ${blocked.workspaceId}. Retry removal before accessing this workspace.`,
-      field: "workspaceId",
-    });
-  }
-  return new HostValidationError({
-    message: `Workspace is closed: ${blocked.workspaceId}. Reopen it before using it.`,
-    field: "workspaceId",
-  });
-};
-
-const reservedWorkspaceError = (reservation: WorkspaceReservation): HostValidationError =>
-  new HostValidationError({
-    message: `A workspace ${reservation.operation} operation is already in progress for ${reservation.workspaceId}. Wait for it to finish and retry.`,
-    field: "workspaceId",
-  });
 
 export const createWorkspaceAdmissionService = ({
   workspaceSettingsService,
@@ -151,7 +122,7 @@ export const createWorkspaceAdmissionService = ({
           if (
             reservation.operation === "remove" ||
             reservation.operation === "reopen" ||
-            isMutatingTaskStoreOperation(input.operation)
+            isTaskStoreWriteOperation(input.operation)
           ) {
             return Effect.fail(reservedWorkspaceError(reservation));
           }
@@ -161,7 +132,7 @@ export const createWorkspaceAdmissionService = ({
         if (!blocked) {
           return Effect.void;
         }
-        if (blocked.reason === "removal" || isMutatingTaskStoreOperation(input.operation)) {
+        if (blocked.reason === "removal" || isTaskStoreWriteOperation(input.operation)) {
           return Effect.fail(blockedWorkspaceError(blocked));
         }
         return Effect.void;
@@ -188,7 +159,6 @@ export const createWorkspaceAdmissionService = ({
   return {
     initialize,
     isWorkspaceBlocked: (workspaceId) => blockedByWorkspaceId.has(workspaceId),
-    isWorkspaceReserved: (workspaceId) => reservationsByWorkspaceId.has(workspaceId),
     reserveWorkspace: (input) =>
       Effect.suspend(() => {
         const existing = reservationsByWorkspaceId.get(input.workspaceId);
@@ -228,3 +198,29 @@ export const createWorkspaceAdmissionService = ({
       ),
   };
 };
+
+// Adapter operation names. Only these change stored task data.
+const TASK_STORE_WRITE_OPERATION =
+  /\.(clear|create|delete|promote|record|register|remove|set|transition|update|upsert)/i;
+
+export const isTaskStoreWriteOperation = (operation: string): boolean =>
+  TASK_STORE_WRITE_OPERATION.test(operation);
+
+const blockedWorkspaceError = (blocked: BlockedWorkspace): HostValidationError => {
+  if (blocked.reason === "removal") {
+    return new HostValidationError({
+      message: `Workspace removal is incomplete for ${blocked.workspaceId}. Retry removal before accessing this workspace.`,
+      field: "workspaceId",
+    });
+  }
+  return new HostValidationError({
+    message: `Workspace is closed: ${blocked.workspaceId}. Reopen it before using it.`,
+    field: "workspaceId",
+  });
+};
+
+const reservedWorkspaceError = (reservation: WorkspaceReservation): HostValidationError =>
+  new HostValidationError({
+    message: `A workspace ${reservation.operation} operation is already in progress for ${reservation.workspaceId}. Wait for it to finish and retry.`,
+    field: "workspaceId",
+  });
