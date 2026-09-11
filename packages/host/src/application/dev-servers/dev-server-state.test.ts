@@ -26,6 +26,11 @@ const repoConfig: RepoConfig = {
   agentStudioState: { openTaskIds: [] },
 };
 
+const updatedRepoConfig: RepoConfig = {
+  ...repoConfig,
+  devServers: [{ id: "web", name: "Web next", command: "bun run dev:next" }],
+};
+
 const createRuntime = (): DevServerGroupRuntime => ({
   processes: new Map(),
   state: buildGroupState(repoConfig, "task-1", "/worktrees/task-1", "2026-05-24T00:00:00.000Z"),
@@ -64,15 +69,7 @@ describe("dev-server state helpers", () => {
     firstScript.startedCommand = "bun run dev";
     startTerminalRun(runtime, firstScript, "host-1");
 
-    syncGroupState(
-      runtime.state,
-      {
-        ...repoConfig,
-        devServers: [{ id: "web", name: "Web next", command: "bun run dev:next" }],
-      },
-      "task-1",
-      "/worktrees/task-1",
-    );
+    syncGroupState(runtime.state, updatedRepoConfig, "task-1", "/worktrees/task-1");
 
     expect(runtime.state.scripts[0]).toMatchObject({
       command: "bun run dev:next",
@@ -84,15 +81,7 @@ describe("dev-server state helpers", () => {
   test("leaves the started command unset for scripts without a run", () => {
     const runtime = createRuntime();
 
-    syncGroupState(
-      runtime.state,
-      {
-        ...repoConfig,
-        devServers: [{ id: "web", name: "Web next", command: "bun run dev:next" }],
-      },
-      "task-1",
-      "/worktrees/task-1",
-    );
+    syncGroupState(runtime.state, updatedRepoConfig, "task-1", "/worktrees/task-1");
 
     expect(runtime.state.scripts[0]).toMatchObject({
       command: "bun run dev:next",

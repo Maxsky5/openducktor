@@ -118,6 +118,16 @@ const createProcessPort = () => {
   };
   return { handles, processPort, starts, stoppedPids };
 };
+const createServiceWithMutableConfig = () => {
+  const { processPort, starts } = createProcessPort();
+  const config = repoConfig();
+  const service = createDevServerService({
+    processPort,
+    taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+    workspaceSettingsService: createWorkspaceSettingsService(config),
+  });
+  return { config, service, starts };
+};
 const devServerStartFailureSchema = z.object({
   message: z.string(),
   details: z.object({
@@ -381,13 +391,7 @@ describe("createDevServerService", () => {
     );
   });
   test("keeps the started command when repository settings change during the run", async () => {
-    const { processPort, starts } = createProcessPort();
-    const config = repoConfig();
-    const service = createDevServerService({
-      processPort,
-      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
-      workspaceSettingsService: createWorkspaceSettingsService(config),
-    });
+    const { config, service, starts } = createServiceWithMutableConfig();
 
     await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
     config.devServers = [{ id: "web", name: "Web", command: "bun run dev:next" }];
@@ -422,13 +426,7 @@ describe("createDevServerService", () => {
     });
   });
   test("keeps the started command after a failure when repository settings change", async () => {
-    const { processPort, starts } = createProcessPort();
-    const config = repoConfig();
-    const service = createDevServerService({
-      processPort,
-      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
-      workspaceSettingsService: createWorkspaceSettingsService(config),
-    });
+    const { config, service, starts } = createServiceWithMutableConfig();
 
     await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
     config.devServers = [{ id: "web", name: "Web", command: "bun run dev:next" }];
