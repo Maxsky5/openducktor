@@ -73,7 +73,7 @@ export type DevServerStopAllResult = {
 };
 
 export type CreateDevServerServiceInput = {
-  assertProcessStart?: (
+  assertWorkspaceAdmitsWork: (
     repoPath: string,
   ) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
   eventBus?: HostEventBusPort;

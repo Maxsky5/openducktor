@@ -330,6 +330,44 @@ test("closes retained connections during disposal", async () => {
   expect(queryResult._tag).toBe("Left");
 });
 
+test("closes one workspace connection and opens a new one on the next operation", async () => {
+  const { manager } = await createHarness();
+
+  try {
+    const first = await Effect.runPromise(
+      manager.withDatabase("/repos/alpha", "test.first", ({ session }) =>
+        Effect.succeed(session.database),
+      ),
+    );
+    await Effect.runPromise(manager.closeWorkspace("alpha"));
+    const second = await Effect.runPromise(
+      manager.withDatabase("/repos/alpha", "test.second", ({ session }) =>
+        Effect.succeed(session.database),
+      ),
+    );
+
+    expect(second).not.toBe(first);
+  } finally {
+    await Effect.runPromise(manager.dispose());
+  }
+});
+
+test("keeps the connection slot when a workspace close fails", async () => {
+  const manager = await createCloseFailureHarness();
+  await Effect.runPromise(manager.withDatabase("/repos/alpha", "test.open", () => Effect.void));
+
+  const closeResult = await Effect.runPromise(Effect.either(manager.closeWorkspace("alpha")));
+
+  expect(closeResult._tag).toBe("Left");
+  if (closeResult._tag === "Left") {
+    expect(closeResult.left.message).toBe(
+      "Failed to close the task store for workspace alpha: Failed to close alpha.",
+    );
+  }
+  const disposeResult = await Effect.runPromise(Effect.either(manager.dispose()));
+  expect(disposeResult._tag).toBe("Left");
+});
+
 test("reports close failures from every retained database during disposal", async () => {
   const manager = await createCloseFailureHarness();
   await Effect.runPromise(

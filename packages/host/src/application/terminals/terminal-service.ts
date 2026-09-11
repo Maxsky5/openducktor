@@ -67,7 +67,9 @@ export type TerminalService = {
 };
 
 type CreateTerminalServiceInput = {
-  assertProcessStart?: (repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>;
+  assertWorkspaceAdmitsWork: (
+    repoPath: string,
+  ) => Effect.Effect<void, HostValidationErrorAggregate>;
   filesystem: FilesystemPort;
   ptyPort: TerminalPtyPort;
   resolveLaunchEnvironment: TerminalLaunchEnvironmentPort;
@@ -78,7 +80,7 @@ type CreateTerminalServiceInput = {
 };
 
 export const createTerminalService = ({
-  assertProcessStart,
+  assertWorkspaceAdmitsWork,
   filesystem,
   ptyPort,
   resolveLaunchEnvironment,
@@ -144,8 +146,8 @@ export const createTerminalService = ({
             (reservation) =>
               Effect.gen(function* () {
                 const context = yield* canonicalizeContext(input.context, "create");
-                if ("taskId" in context && assertProcessStart) {
-                  yield* assertProcessStart(context.repoPath).pipe(
+                if ("taskId" in context) {
+                  yield* assertWorkspaceAdmitsWork(context.repoPath).pipe(
                     Effect.mapError(
                       (cause) =>
                         new TerminalServiceError({
@@ -188,11 +190,7 @@ export const createTerminalService = ({
               : filter;
           return { hostInstanceId, terminals: engine.list(canonicalFilter) };
         }),
-      inspectWorkspaceActivity: (repoPath) =>
-        Effect.gen(function* () {
-          const canonicalRepoPath = yield* canonicalizeRepositoryPath(repoPath, "list");
-          return yield* engine.inspectWorkspaceActivity(canonicalRepoPath);
-        }),
+      inspectWorkspaceActivity: (repoPath) => engine.inspectWorkspaceActivity(repoPath),
       preparePathInput: (rawInput) =>
         Effect.gen(function* () {
           const input = terminalPreparePathInputRequestSchema.parse(rawInput);
@@ -203,8 +201,8 @@ export const createTerminalService = ({
       write: (terminalId, data) =>
         Effect.gen(function* () {
           const context = engine.getContext(terminalId);
-          if (context && "taskId" in context && assertProcessStart) {
-            yield* assertProcessStart(context.repoPath).pipe(
+          if (context && "taskId" in context) {
+            yield* assertWorkspaceAdmitsWork(context.repoPath).pipe(
               Effect.mapError(
                 (cause) =>
                   new TerminalServiceError({

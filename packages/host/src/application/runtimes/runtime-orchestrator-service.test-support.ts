@@ -11,9 +11,17 @@ import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import { createRuntimeOrchestratorService as createEffectRuntimeOrchestratorService } from "./runtime-orchestrator-service";
 
+type RuntimeOrchestratorInput = Parameters<typeof createEffectRuntimeOrchestratorService>[0];
+
 export const createRuntimeOrchestratorService = (
-  input: Parameters<typeof createEffectRuntimeOrchestratorService>[0],
-) => createEffectRuntimeOrchestratorService(input);
+  input: Omit<RuntimeOrchestratorInput, "assertWorkspaceAdmitsWork"> & {
+    assertWorkspaceAdmitsWork?: RuntimeOrchestratorInput["assertWorkspaceAdmitsWork"];
+  },
+) =>
+  createEffectRuntimeOrchestratorService({
+    ...input,
+    assertWorkspaceAdmitsWork: input.assertWorkspaceAdmitsWork ?? (() => Effect.void),
+  });
 
 export const createGitPort = (
   canonicalizePath: (path: string) => string = (path) =>

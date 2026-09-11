@@ -55,7 +55,7 @@ export type {
 } from "./dev-server-service-types";
 
 export const createDevServerService = ({
-  assertProcessStart,
+  assertWorkspaceAdmitsWork,
   eventBus,
   processPort,
   taskWorktreeService,
@@ -360,8 +360,8 @@ export const createDevServerService = ({
       return Effect.gen(function* () {
         const { repoPath, taskId } = input;
         const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-        if (assertProcessStart) {
-          yield* assertProcessStart(repoConfig.repoPath);
+        if (assertWorkspaceAdmitsWork) {
+          yield* assertWorkspaceAdmitsWork(repoConfig.repoPath);
         }
         if (repoConfig.devServers.length === 0) {
           return yield* Effect.fail(

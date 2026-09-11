@@ -250,9 +250,9 @@ export type RepoPullRequestSyncResult = {
 export type RepoPullRequestSyncDetailedError = TaskServiceError | TaskMutationProgressFailure;
 export type TaskTerminalCleanupPort = Pick<TerminalService, "acquireTaskCleanup">;
 export type CreateTaskServiceInput = {
-  assertProcessStart?:
-    | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
-    | undefined;
+  assertWorkspaceAdmitsWork: (
+    repoPath: string,
+  ) => Effect.Effect<void, HostValidationErrorAggregate>;
   devServerService?: DevServerService;
   terminalService?: TaskTerminalCleanupPort;
   gitPort?: GitPort;

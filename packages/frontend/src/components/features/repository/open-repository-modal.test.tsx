@@ -243,6 +243,38 @@ describe("OpenRepositoryModal", () => {
     unmount();
   });
 
+  test("reports an open repository through the duplicate validation path", async () => {
+    const openWorkspace = {
+      workspaceId: "existing",
+      workspaceName: "Existing",
+      repoPath: "/repo",
+      isActive: true,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: "/worktrees",
+      effectiveWorktreeBasePath: "/worktrees",
+    };
+    const { unmount } = render(
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider
+          value={createWorkspaceStateValue({
+            workspaces: [openWorkspace],
+            resolveWorkspacePath: async () => ({ kind: "open", workspace: openWorkspace }),
+          })}
+        >
+          <SeedFilesystemDirectory />
+          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
+
+    expect(await screen.findByText(/Repository is already configured as Existing/)).toBeTruthy();
+    unmount();
+  });
+
   test("keeps the folder picker open when the path has an incomplete removal", async () => {
     const { unmount } = render(
       <QueryProvider useIsolatedClient>

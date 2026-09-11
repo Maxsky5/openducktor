@@ -23,7 +23,7 @@ export const createTaskAssetRecoveryService = ({
   taskStore,
 }: {
   filePort: RecoveryFilePort;
-  isWorkspaceBlocked?: (workspaceId: string) => boolean;
+  isWorkspaceBlocked: (workspaceId: string) => boolean;
   registry: RecoveryRegistryPort;
   resolveRepoPath: (workspaceId: string) => Effect.Effect<string, TaskStoreError>;
   taskStore: Pick<TaskStorePort, "deleteTask">;
@@ -32,7 +32,7 @@ export const createTaskAssetRecoveryService = ({
     return Effect.gen(function* () {
       const quarantines = yield* filePort.listQuarantines();
       for (const quarantine of quarantines) {
-        if (isWorkspaceBlocked?.(quarantine.workspaceId) === true) {
+        if (isWorkspaceBlocked(quarantine.workspaceId)) {
           continue;
         }
         const repoPath = yield* resolveRepoPath(quarantine.workspaceId);

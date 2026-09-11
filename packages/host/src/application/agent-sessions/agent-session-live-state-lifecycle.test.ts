@@ -28,6 +28,7 @@ describe("live runtime registration lifecycle", () => {
           remove: (id) =>
             registry.remove(id).pipe(Effect.tap(() => Effect.sync(() => detached.resolve()))),
         },
+        assertWorkspaceAdmitsWork: () => Effect.void,
         faultLog: () => Effect.void,
         publish: (event) => {
           events.push(event);
