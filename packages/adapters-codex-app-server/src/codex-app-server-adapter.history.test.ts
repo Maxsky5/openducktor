@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { CodexAppServerThread, CodexAppServerTurn } from "@openducktor/contracts";
 import {
   createAdapterWithTransport,
+  codexSessionRef,
   codexThreadStartResultFixture,
   codexThreadFixture,
   codexTurnFixture,
@@ -538,6 +539,10 @@ describe("CodexAppServerAdapter history loading", () => {
       externalSessionId: "thread/start-runtime-live",
       sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPromptContext: {
+        startedAt: "2026-05-08T00:00:00.000Z",
+        systemPrompt: "Use the supplied display context.",
+      },
     });
 
     expect(history[0]).toEqual({
@@ -625,6 +630,68 @@ describe("CodexAppServerAdapter history loading", () => {
         }),
       ]),
     );
+  });
+
+  test("keeps supplied prompt context after loading session context without changing live state", async () => {
+    const { adapter, transports, respondServerRequest } = createHarness();
+    const ref = codexSessionRef("thread-idle");
+    const input = {
+      ...ref,
+      systemPromptContext: {
+        startedAt: "2026-05-08T00:00:00.000Z",
+        systemPrompt: "Use the hydrated task context.",
+      },
+    };
+
+    try {
+      const historyBefore = await adapter.loadSessionHistory(input);
+      const systemMessagesBefore = historyBefore.filter((message) => message.role === "system");
+      expect(systemMessagesBefore).toEqual([
+        {
+          messageId: "codex-system-prompt:thread-idle",
+          role: "system",
+          timestamp: input.systemPromptContext.startedAt,
+          text: "System prompt:\n\nUse the hydrated task context.",
+          parts: [],
+        },
+      ]);
+
+      await adapter.loadSessionContextUsage(ref);
+      const snapshotsBefore = structuredClone(adapter.listLiveSessionSnapshots("runtime-live"));
+      expect(snapshotsBefore.map((snapshot) => snapshot.ref.externalSessionId)).toEqual([
+        ref.externalSessionId,
+      ]);
+      const callsBefore = transports.get("runtime-live")?.calls.length;
+      const historyAfter = await adapter.loadSessionHistory(input);
+      expect(historyAfter.filter((message) => message.role === "system")).toEqual(
+        systemMessagesBefore,
+      );
+
+      const historyWithoutPrompt = await adapter.loadSessionHistory(ref);
+      expect(historyWithoutPrompt.filter((message) => message.role === "system")).toEqual([]);
+      const historyWithBlankPrompt = await adapter.loadSessionHistory({
+        ...input,
+        systemPromptContext: { ...input.systemPromptContext, systemPrompt: " \n " },
+      });
+      expect(historyWithBlankPrompt.filter((message) => message.role === "system")).toEqual([]);
+      expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual(snapshotsBefore);
+      expect(
+        transports
+          .get("runtime-live")
+          ?.calls.slice(callsBefore)
+          .map((call) => call.method),
+      ).toEqual([
+        "thread/read",
+        "thread/turns/list",
+        "thread/read",
+        "thread/turns/list",
+        "thread/read",
+        "thread/turns/list",
+      ]);
+      expect(respondServerRequest).not.toHaveBeenCalled();
+    } finally {
+      adapter.releaseRuntime("runtime-live");
+    }
   });
 
   test("loads search command metadata and hides contextual user fragments from paginated history", async () => {

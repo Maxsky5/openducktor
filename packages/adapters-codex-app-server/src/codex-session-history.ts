@@ -69,7 +69,8 @@ const codexHistorySystemPrompt = (
   input: LoadAgentSessionHistoryInput,
   session: CodexSessionState | undefined,
 ): AgentSessionHistoryMessage | null => {
-  if (session) {
+  // Restored sessions can lack prompt text while the history input supplies display context.
+  if (session && session.systemPrompt.trim().length > 0) {
     return codexSystemPromptHistoryMessage({
       threadId: session.threadId,
       startedAt: session.summary.startedAt,
