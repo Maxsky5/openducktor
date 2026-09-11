@@ -20,7 +20,7 @@ The user approved this shape on 2026-09-11. The user required the format version
 ## Consequences
 
 - An older OpenDucktor binary can read a version 3 file. The older binary ignores the new fields when it writes the file. A closed workspace can then appear open. The user accepted this risk.
-- A legacy file with workspaces has no `onboardingCompleted` value. The host treats it as complete, so the app does not repeat onboarding after the upgrade.
+- A legacy file with workspaces has no `onboardingCompleted` value. The host initializes the value from the workspace list on load and persists it on the next settings write. The app does not repeat onboarding after the upgrade, including after the user removes the last workspace.
 - The removal record holds recovery data for an incomplete removal: operation ID, phase, worktree choice, removed worktrees, and the last failure. The record stays in the target workspace configuration and leaves with the registration.
 - The task store schema and its migration files stay unchanged.
 
