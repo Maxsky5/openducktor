@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isoTimestampSchema as appUpdateCheckedAtSchema } from "./string-schemas";
 
 const appUpdateErrorDetailsSchema = z.record(z.string(), z.json());
 
@@ -58,7 +59,6 @@ export const appUpdateErrorSchema = z
 export type AppUpdateError = z.infer<typeof appUpdateErrorSchema>;
 
 const appUpdateVersionSchema = z.string().trim().min(1);
-const appUpdateCheckedAtSchema = z.string().datetime({ offset: true });
 const appUpdateProgressPercentSchema = z.number().min(0).max(100);
 
 export const appUpdateStateSchema = z.discriminatedUnion("status", [

@@ -5,7 +5,7 @@ type AgentSessionLiveAttachment = {
   restart: () => void;
 };
 
-const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
+export const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
   switch (envelope.type) {
     case "snapshot":
     case "transcript_gap":

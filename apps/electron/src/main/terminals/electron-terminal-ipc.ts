@@ -2,6 +2,7 @@ import {
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
   isTerminalClientMessage,
+  withMaxUtf16Length,
 } from "@openducktor/contracts";
 import {
   createTerminalClientSession,
@@ -23,7 +24,7 @@ import type { IpcMain } from "electron";
 
 const MAX_CLIENT_ID_LENGTH = 128;
 
-const electronTerminalClientIdSchema = z.string().min(1).max(MAX_CLIENT_ID_LENGTH);
+const electronTerminalClientIdSchema = withMaxUtf16Length(z.string().min(1), MAX_CLIENT_ID_LENGTH);
 const electronTerminalFrameSchema = z.instanceof(Uint8Array);
 const electronTerminalSendRequestSchema = z.strictObject({
   clientId: electronTerminalClientIdSchema,

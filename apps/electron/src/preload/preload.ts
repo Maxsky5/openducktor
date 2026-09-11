@@ -152,8 +152,8 @@ const notifications: OpenDucktorElectronNotificationApi = {
 const electronApi: OpenDucktorElectronApi = {
   platform: appPlatformSchema.parse(process.platform),
   invoke: invokeHost,
-  subscribe(channel, listener) {
-    return subscribeElectronHostEvent(ipcRenderer, channel, listener);
+  subscribe(...subscription) {
+    return subscribeElectronHostEvent(ipcRenderer, ...subscription);
   },
   appUpdates,
   notifications,

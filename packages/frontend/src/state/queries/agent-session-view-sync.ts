@@ -9,6 +9,8 @@ import {
   refreshAgentSessionLists,
 } from "./agent-sessions";
 
+const queryKeyStringSchema = z.string();
+
 export type AgentSessionViewSync = {
   reconcileExternalEvent: (event: ExternalTaskSyncEvent) => Promise<void>;
   reconcileStreamSnapshot: (activeRepoPath: string | null, taskIds: string[]) => Promise<void>;
@@ -68,7 +70,7 @@ function cachedAgentSessionTaskIds(queryClient: QueryClient, repoPath: string): 
     .findAll({ queryKey: agentSessionQueryKeys.all, exact: false })
     .flatMap((query) => {
       const [, kind, cachedRepoPath, taskId] = query.queryKey;
-      const taskIdResult = z.string().safeParse(taskId);
+      const taskIdResult = queryKeyStringSchema.safeParse(taskId);
       return kind === "list" && cachedRepoPath === repoPath && taskIdResult.success
         ? [taskIdResult.data]
         : [];

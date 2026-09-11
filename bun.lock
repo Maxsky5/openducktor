@@ -14,7 +14,7 @@
         "oxlint": "^1.80.0",
         "typescript": "^7.0.2",
         "yaml": "^2.9.0",
-        "zod": "^4.4.3",
+        "zod": "^4.6.2",
       },
     },
     "apps/electron": {
@@ -45,7 +45,7 @@
         "react": "^19.2.8",
         "react-dom": "^19.2.8",
         "vite": "^8.2.2",
-        "zod": "^4.4.3",
+        "zod": "^4.6.2",
       },
       "optionalDependencies": {
         "node-mac-permissions": "github:codebytere/node-mac-permissions#b2b0a18e4d21d6926fde1cd84d9124a0b8e6b755",
@@ -59,7 +59,7 @@
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
-        "zod": "^4.4.3",
+        "zod": "^4.6.2",
       },
     },
     "packages/adapters-opencode-sdk": {
@@ -71,7 +71,7 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
         "undici": "^8.10.2",
-        "zod": "^4.4.3",
+        "zod": "^4.6.2",
       },
     },
     "packages/build-tools": {
@@ -85,7 +85,7 @@
       "name": "@openducktor/contracts",
       "version": "0.6.3",
       "dependencies": {
-        "zod": "^4.4.3",
+        "zod": "^4.6.2",
       },
     },
     "packages/core": {
@@ -94,7 +94,7 @@
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
-        "zod": "^4.4.3",
+        "zod": "^4.6.2",
       },
     },
     "packages/frontend": {
@@ -161,7 +161,7 @@
         "tailwind-merge": "^3.6.0",
         "unified": "^11.0.5",
         "unist-util-visit": "^5.0.0",
-        "zod": "^4.4.3",
+        "zod": "^4.6.2",
         "zustand": "^5.0.15",
       },
       "devDependencies": {
@@ -196,7 +196,7 @@
         "remark-parse": "^11.0.0",
         "unified": "^11.0.5",
         "unist-util-visit": "^5.0.0",
-        "zod": "^4.4.3",
+        "zod": "^4.6.2",
       },
       "devDependencies": {
         "@types/node": "^26.4.0",
@@ -210,7 +210,7 @@
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
-        "zod": "^4.4.3",
+        "zod": "^4.6.2",
       },
     },
     "packages/openducktor-mcp": {
@@ -221,7 +221,7 @@
       },
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.30.0",
-        "zod": "^4.4.3",
+        "zod": "^4.6.2",
       },
       "devDependencies": {
         "@openducktor/build-tools": "workspace:*",
@@ -240,7 +240,7 @@
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.251",
         "undici": "^8.10.2",
-        "zod": "^4.4.3",
+        "zod": "^4.6.2",
       },
       "devDependencies": {
         "@openducktor/build-tools": "workspace:*",
@@ -2296,7 +2296,7 @@
 
     "yocto-queue": ["yocto-queue@0.1.0", "", {}, "sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q=="],
 
-    "zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
+    "zod": ["zod@4.6.2", "", {}, "sha512-lh5RCAGFa1Cm2hjtNwLQhSs/AsqdWnTQaBER9fEwN/88pSh7KOtJavtBx/0VlkN/uFd61SwYmljLMDAsHlvzBQ=="],
 
     "zod-to-json-schema": ["zod-to-json-schema@3.25.2", "", { "peerDependencies": { "zod": "^3.25.28 || ^4" } }, "sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA=="],
 

@@ -45,7 +45,6 @@ import {
   ELECTRON_APP_UPDATE_GET_STATE_CHANNEL,
   ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
-  ELECTRON_HOST_EVENT_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
   type ElectronAppUpdateCheckInput,
@@ -531,7 +530,6 @@ const registerHostEventForwarding = (): void => {
     hostEventBus.subscribe(channel, (envelope) => {
       forwardElectronHostEvent(
         BrowserWindow.getAllWindows(),
-        ELECTRON_HOST_EVENT_CHANNEL,
         envelope,
         ({ channel: failedChannel, cause }) =>
           reportElectronNonFatalDeliveryFailure(

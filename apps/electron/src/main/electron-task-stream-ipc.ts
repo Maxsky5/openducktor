@@ -3,7 +3,6 @@ import {
   type TaskEventStreamFrame,
   type TaskEventStreamSubscribe,
   taskEventStreamAcknowledgeSchema,
-  taskEventStreamFrameSchema,
   taskEventStreamSubscribeSchema,
 } from "@openducktor/contracts";
 import type { EffectNodeHostCommandRouter } from "@openducktor/host";
@@ -269,14 +268,17 @@ export const registerElectronTaskStreamIpc = ({
         pendingFrames.push(frame);
         return;
       }
-      const parsedFrame = taskEventStreamFrameSchema.safeParse(frame);
-      if (!parsedFrame.success) {
+      const parsedEnvelope = electronTaskStreamFrameEnvelopeSchema.safeParse({
+        frame,
+        subscriptionId,
+      });
+      if (!parsedEnvelope.success) {
         reportDeliveryFailure({
           cause: validationError(
             "electron.task-stream.delivery.validate",
             "frame",
             "Task stream produced an invalid frame.",
-            { issues: jsonIssues(parsedFrame.error.issues) },
+            { issues: jsonIssues(parsedEnvelope.error.issues) },
           ),
           subscriptionId,
         });
@@ -302,13 +304,7 @@ export const registerElectronTaskStreamIpc = ({
         return;
       }
       try {
-        owner.senderFrame.send(
-          ELECTRON_TASK_STREAM_FRAME_CHANNEL,
-          electronTaskStreamFrameEnvelopeSchema.parse({
-            frame: parsedFrame.data,
-            subscriptionId,
-          }),
-        );
+        owner.senderFrame.send(ELECTRON_TASK_STREAM_FRAME_CHANNEL, parsedEnvelope.data);
       } catch (cause) {
         reportDeliveryFailure({ cause, subscriptionId });
         cleanup();

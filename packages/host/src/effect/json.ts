@@ -1,3 +1,5 @@
 import { z, type JSONType } from "zod";
 
-export const parseJson = (payload: string): JSONType => z.json().parse(JSON.parse(payload));
+const jsonValueSchema = z.json();
+
+export const parseJson = (payload: string): JSONType => jsonValueSchema.parse(JSON.parse(payload));

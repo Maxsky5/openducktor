@@ -416,9 +416,13 @@ const validateAppCookieOrHeader = (
   );
 
 const writeSseEvent = (event: BufferedHostEvent): string =>
-  [`id: ${event.id}`, ...event.payload.split(/\r?\n/).map((line) => `data: ${line}`), "", ""].join(
-    "\n",
-  );
+  [
+    `id: ${event.id}`,
+    `event: ${event.eventName}`,
+    ...event.payload.split(/\r?\n/).map((line) => `data: ${line}`),
+    "",
+    "",
+  ].join("\n");
 const writeSseNamedEvent = (eventName: string, data: string): string =>
   [`event: ${eventName}`, ...data.split(/\r?\n/).map((line) => `data: ${line}`), "", ""].join("\n");
 const SSE_READY_COMMENT = ": openducktor-ready\n\n";
@@ -513,14 +517,15 @@ const webHostRequestErrorResponse = (
   );
 };
 
-const webRequestBodySchema = z.record(z.string(), z.json());
+const webRequestJsonValueSchema = z.json();
+const webRequestBodySchema = z.record(z.string(), webRequestJsonValueSchema);
 
 const parseJsonObjectBody = (
   request: Request,
 ): Effect.Effect<WebRequestBody, WebHostRequestError> =>
   Effect.gen(function* () {
     const parsed = yield* Effect.tryPromise({
-      try: async () => z.json().parse(await request.json()),
+      try: async () => webRequestJsonValueSchema.parse(await request.json()),
       catch: (error) =>
         new WebHostRequestError({
           message: error instanceof Error ? error.message : "Malformed JSON request body.",

@@ -1078,8 +1078,9 @@ describe("runtime schemas", () => {
     expect(result.error.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "invalid_key",
-          path: ["workflowToolAliasesByCanonical", "odt_set_specc"],
+          code: "unrecognized_keys",
+          path: ["workflowToolAliasesByCanonical"],
+          keys: ["odt_set_specc"],
         }),
       ]),
     );

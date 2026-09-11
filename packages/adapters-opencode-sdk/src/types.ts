@@ -18,6 +18,7 @@ import type {
 } from "./event-stream/shared";
 import type { ParsedOpencodeEvent as Event } from "./opencode-global-event-ingress";
 import type { ParsedOpencodePart } from "./opencode-ingress";
+import type { RuntimeEventSubscribers } from "./runtime-event-subscribers";
 
 /**
  * Cache TTL for workflow tool selection (5 minutes).
@@ -105,7 +106,7 @@ export type RuntimeEventTransportRecord = {
   dispatch: (event: Event) => Promise<boolean>;
   ready: Promise<void>;
   streamDone: Promise<void>;
-  subscribers: Map<string, EventStreamSubscriber>;
+  subscribers: RuntimeEventSubscribers;
   observers: Set<(event: Event) => void | Promise<void>>;
   terminalObservers: Set<(error: Error) => void | Promise<void>>;
   parentExternalSessionIdByChildExternalSessionId: Map<string, string>;

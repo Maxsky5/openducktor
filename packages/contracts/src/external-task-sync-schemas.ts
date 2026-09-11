@@ -154,10 +154,10 @@ export const taskEventSnapshotRequiredFrameSchema = z
   .strict();
 export type TaskEventSnapshotRequiredFrame = z.infer<typeof taskEventSnapshotRequiredFrameSchema>;
 
-export const taskEventStreamFrameSchema = z.discriminatedUnion("type", [
-  taskEventChangeFrameSchema,
-  taskEventSnapshotRequiredFrameSchema,
-]);
+export const taskEventStreamFrameSchema = z.compile(
+  z.discriminatedUnion("type", [taskEventChangeFrameSchema, taskEventSnapshotRequiredFrameSchema]),
+  { strict: true },
+);
 export type TaskEventStreamFrame = z.infer<typeof taskEventStreamFrameSchema>;
 
 export const taskEventStreamSubscribeSchema = z

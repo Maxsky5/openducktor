@@ -12,6 +12,9 @@ import {
 import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 import { previewInput, readStringProp, toolPartPresentation } from "./claude-agent-sdk-utils";
 
+const toolContentStringSchema = z.string();
+const toolContentScalarSchema = z.union([z.number(), z.boolean()]);
+
 type ClaudeToolUseMetadata =
   | {
       blockType: ClaudeToolUseBlockType;
@@ -190,7 +193,7 @@ const stringifyToolResultContent = (value: ClaudeProtocolValue): string => {
   if (value === null) {
     return "";
   }
-  const primitive = z.union([z.number(), z.boolean()]).safeParse(value);
+  const primitive = toolContentScalarSchema.safeParse(value);
   if (primitive.success) {
     return String(primitive.data);
   }
@@ -198,7 +201,7 @@ const stringifyToolResultContent = (value: ClaudeProtocolValue): string => {
 };
 
 const toolResultBlockText = (block: ClaudeProtocolValue): string => {
-  const text = z.string().safeParse(block);
+  const text = toolContentStringSchema.safeParse(block);
   if (text.success) {
     return text.data;
   }

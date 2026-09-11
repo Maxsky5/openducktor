@@ -17,6 +17,8 @@ type SafeParser<Input, Output> = {
 };
 
 const labelsSchema = z.array(z.string());
+const jsonValueSchema = z.json();
+const agentSessionListSchema = agentSessionRecordSchema.array();
 
 export const normalizeLabels = (labels: string[]): string[] =>
   Array.from(new Set(labels.map((label) => label.trim()).filter(Boolean))).sort();
@@ -75,7 +77,7 @@ export const parseJsonColumnValue = (
     return Effect.succeed(fallback);
   }
   return Effect.try({
-    try: () => z.json().parse(JSON.parse(value)),
+    try: () => jsonValueSchema.parse(JSON.parse(value)),
     catch: (cause) =>
       new SqliteTaskStoreDataError({
         message: `Invalid SQLite task ${taskId} ${field} JSON: ${errorMessage(cause)}`,
@@ -126,7 +128,7 @@ export const agentSessionsFromRow = (
     row.agentSessionsJson,
     [],
     (value) =>
-      decodeWithSchema(agentSessionRecordSchema.array(), value, "agent_sessions_json", {
+      decodeWithSchema(agentSessionListSchema, value, "agent_sessions_json", {
         taskId: row.id,
       }),
     "agent_sessions_json",

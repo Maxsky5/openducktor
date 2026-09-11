@@ -1,6 +1,9 @@
 import type { PlannerTools } from "@openducktor/core";
 
-export { createAgentSessionLiveAttachment } from "./agent-session-live-attachment";
+export {
+  createAgentSessionLiveAttachment,
+  envelopeRepoPath as agentSessionLiveEnvelopeRepoPath,
+} from "./agent-session-live-attachment";
 
 import { HostAgentSessionLiveClient } from "./agent-session-live-client";
 import { HostAgentClient } from "./build-runtime-client";

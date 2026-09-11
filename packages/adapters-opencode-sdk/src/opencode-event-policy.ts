@@ -146,7 +146,7 @@ export type ConsumedOpencodeEventType = {
   ]: (typeof OPENCODE_EVENT_POLICY_BY_TYPE)[Type]["ingress"] extends "validate" ? Type : never;
 }[OpencodeEventType];
 
-export const isKnownOpencodeEventType = (value: string): value is OpencodeEventType =>
+const isKnownOpencodeEventType = (value: string): value is OpencodeEventType =>
   Object.hasOwn(OPENCODE_EVENT_POLICY_BY_TYPE, value);
 
 export const isConsumedOpencodeEventType = (value: string): value is ConsumedOpencodeEventType =>

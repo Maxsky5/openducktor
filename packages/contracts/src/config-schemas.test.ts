@@ -589,7 +589,11 @@ describe("config-schemas", () => {
     });
     expect(invalidRoleOverride.success).toBe(false);
     if (invalidRoleOverride.success) throw new Error("unsupported Codex role must fail");
-    expect(invalidRoleOverride.error.issues[0]?.path).toEqual(["roleOverrides", "review"]);
+    expect(invalidRoleOverride.error.issues[0]).toMatchObject({
+      code: "unrecognized_keys",
+      path: ["roleOverrides"],
+      keys: ["review"],
+    });
     expect(() =>
       codexRuntimeConfigSchema.parse({
         ...baseConfig,

@@ -216,6 +216,7 @@ describe("electron shell bridge", () => {
     expect(electronApi.subscribe).toHaveBeenCalledWith(
       "openducktor://agent-session-live-event",
       expect.any(Function),
+      "/repo",
     );
     expect(electronApi.invoke).toHaveBeenCalledWith("agent_session_live_refresh", {
       repoPath: "/repo",

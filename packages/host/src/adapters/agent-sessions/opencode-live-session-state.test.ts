@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/core";
+import { HostValidationError } from "../../effect/host-errors";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
 import { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 
@@ -54,6 +55,25 @@ describe("OpenCode host live-session state", () => {
         title: "OpenDucktor session",
       }),
     ]);
+  });
+
+  test("indexes external ids through replacement, ambiguity, removal, and release", () => {
+    const state = createState();
+    expect(state.refForExternalSession("session-1")).toBeNull();
+    state.applyControlSummary(summary());
+    const first = state.refForExternalSession("session-1");
+    if (!first) throw new Error("Expected a live session reference.");
+    state.applyControlSummary({ ...summary(), title: "Updated title" });
+    expect(state.refForExternalSession("session-1")).toEqual(first);
+    state.applyControlSummary({ ...summary(), workingDirectory: "/other" });
+    expect(() => state.refForExternalSession("session-1")).toThrow("ambiguous session id");
+    state.removeSession(first);
+    const remaining = state.refForExternalSession("session-1");
+    expect(remaining?.workingDirectory).toBe("/other");
+    state.release();
+    expect(state.refForExternalSession("session-1")).toBeNull();
+    state.applyControlSummary(summary());
+    expect(state.refForExternalSession("session-1")).toEqual(first);
   });
 
   test("retains and resolves pending input from runtime events", () => {
@@ -143,6 +163,8 @@ describe("OpenCode host live-session state", () => {
       childExternalSessionId: "grandchild",
     });
 
+    expect(state.refForExternalSession("child")?.externalSessionId).toBe("child");
+    expect(state.refForExternalSession("grandchild")?.externalSessionId).toBe("grandchild");
     expect(state.listSnapshots()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ ref: expect.objectContaining({ externalSessionId: "parent" }) }),
@@ -196,6 +218,57 @@ describe("OpenCode host live-session state", () => {
     });
     expect(state.removeSession(ref)).toEqual([{ type: "session_removed", ref }]);
     expect(state.listSnapshots()).toEqual([]);
+  });
+
+  test("retains early context and updates only the matching session", () => {
+    const state = createState();
+    expect(state.setContext("session-1", { totalTokens: 42 })).toEqual([]);
+    expect(state.listSnapshots()).toEqual([]);
+    state.applyControlSummary(summary());
+    state.applyControlSummary(summary("session-2"));
+    const ref = state.refForExternalSession("session-1");
+    if (!ref) throw new Error("Expected a live session reference.");
+    expect(state.contextUsage(ref)).toEqual({ totalTokens: 42 });
+
+    expect(state.setContext("session-1", { totalTokens: 84 })).toEqual([
+      {
+        type: "session_upsert",
+        snapshot: expect.objectContaining({ ref, contextUsage: { totalTokens: 84 } }),
+      },
+    ]);
+    expect(state.contextUsage(ref)).toEqual({ totalTokens: 84 });
+    expect(state.listSnapshots()).toContainEqual(
+      expect.objectContaining({
+        ref: expect.objectContaining({ externalSessionId: "session-2" }),
+        contextUsage: null,
+      }),
+    );
+    expect(state.setContext("session-1", { totalTokens: 84 })).toEqual([]);
+  });
+
+  test("rejects ambiguous context updates without changing state and resumes after removal", () => {
+    const state = createState();
+    state.applyControlSummary(summary());
+    const first = state.refForExternalSession("session-1");
+    if (!first) throw new Error("Expected a live session reference.");
+    state.setContext("session-1", { totalTokens: 42 });
+    state.applyControlSummary({ ...summary(), workingDirectory: "/other" });
+    const before = state.listSnapshots();
+
+    expect(() => state.setContext("session-1", { totalTokens: 84 })).toThrow(HostValidationError);
+    state.applyControlSummary(summary());
+    expect(state.listSnapshots()).toEqual(before);
+
+    state.removeSession(first);
+    expect(state.setContext("session-1", { totalTokens: 84 })).toEqual([
+      {
+        type: "session_upsert",
+        snapshot: expect.objectContaining({
+          ref: { ...first, workingDirectory: "/other" },
+          contextUsage: { totalTokens: 84 },
+        }),
+      },
+    ]);
   });
 
   test("removes a vanished descendant when the runtime list omits it", () => {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isoTimestampSchema } from "./string-schemas";
 import {
   runtimeApprovalReplyOutcomeSchema,
   runtimeApprovalRequestTypeSchema,
@@ -19,7 +20,6 @@ import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { fileDiffSchema } from "./git-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
-const isoTimestampSchema = z.string().datetime({ offset: true });
 const finiteNonNegativeNumberSchema = z.number().finite().nonnegative();
 
 export const agentSessionContextUsageSchema = z

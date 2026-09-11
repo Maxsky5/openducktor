@@ -138,7 +138,7 @@ const normalizedAgentSessionInputSchema = z.record(z.string(), z.json()).transfo
   const normalized = { ...record };
   for (const key of agentSessionStringKeys) {
     const value = normalized[key];
-    const parsed = z.string().safeParse(value);
+    const parsed = commandInputStringSchema.safeParse(value);
     if (parsed.success) {
       normalized[key] = parsed.data.trim();
     }
@@ -191,7 +191,7 @@ export const parsePullRequestContent = (
 ): PullRequestContent => {
   const record = requireParsedRecord(result, "task_pull_request_upsert input.input");
   const title = requireString(commandInputStringSchema.safeParse(record.title), "input.title");
-  const body = z.string().safeParse(record.body);
+  const body = commandInputStringSchema.safeParse(record.body);
   if (!body.success) {
     throw invalidInput("input.body is required.", "input.body");
   }

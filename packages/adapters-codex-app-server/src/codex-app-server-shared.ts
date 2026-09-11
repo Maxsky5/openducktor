@@ -8,6 +8,7 @@ export const unsupported = (surface: string): never => {
 };
 
 const codexStringValueSchema = z.string();
+const codexJsonValueSchema = z.json();
 
 export const isPlainObject = (
   value: CodexAppServerJsonValue | undefined,
@@ -68,7 +69,7 @@ export const parseCodexJsonObjectString = (
   }
 
   try {
-    const parsed = z.json().safeParse(JSON.parse(text));
+    const parsed = codexJsonValueSchema.safeParse(JSON.parse(text));
     return parsed.success && isPlainObject(parsed.data) ? parsed.data : null;
   } catch {
     return null;

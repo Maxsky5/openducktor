@@ -1,3 +1,4 @@
+import { OpenCodeSessionRefIndex } from "./opencode-live-session-ref-index";
 import type {
   OpencodeRuntimeSnapshotRead,
   OpencodeSessionContextUsage,
@@ -43,6 +44,7 @@ export const createOpenCodeLiveSessionState = ({
   readonly nextOccurrenceId: () => string;
 }) => {
   const sessionsByRef = new Map<string, OpenCodeLiveSession>();
+  const refsByExternalSessionId = new OpenCodeSessionRefIndex(runtime.runtimeId);
   const contextUsageBySessionId = new Map<string, AgentSessionContextUsage>();
   const versionsByRef = new Map<string, number>();
   const pendingRequests = createOpenCodePendingRequestRouter({
@@ -57,6 +59,7 @@ export const createOpenCodeLiveSessionState = ({
     const key = refKey(session.snapshot.ref);
     const previous = sessionsByRef.get(key)?.snapshot;
     sessionsByRef.set(key, session);
+    refsByExternalSessionId.set(session.snapshot.ref);
     if (previous && openCodeLiveSnapshotsEqual(previous, session.snapshot)) {
       return [];
     }
@@ -133,21 +136,12 @@ export const createOpenCodeLiveSessionState = ({
     usage: OpencodeSessionContextUsage,
   ): AgentSessionLiveAdapterChange[] => {
     const contextUsage = toContextUsage(usage);
-    const matches = [...sessionsByRef.values()].filter(
-      ({ snapshot }) => snapshot.ref.externalSessionId === externalSessionId,
-    );
-    if (matches.length > 1) {
-      throw new HostValidationError({
-        field: "externalSessionId",
-        message: `OpenCode runtime '${runtime.runtimeId}' has multiple live sessions with id '${externalSessionId}'.`,
-        details: { runtimeId: runtime.runtimeId, externalSessionId },
-      });
-    }
-    const session = matches[0];
-    if (!session) {
+    const ref = refsByExternalSessionId.find(externalSessionId);
+    if (!ref) {
       contextUsageBySessionId.set(externalSessionId, contextUsage);
       return [];
     }
+    const session = requireSession(ref);
     if (openCodeLiveSnapshotsEqual(session.snapshot, { ...session.snapshot, contextUsage })) {
       contextUsageBySessionId.set(externalSessionId, contextUsage);
       return [];
@@ -394,6 +388,7 @@ export const createOpenCodeLiveSessionState = ({
       return [];
     }
     sessionsByRef.delete(key);
+    refsByExternalSessionId.delete(ref);
     versionsByRef.set(key, (versionsByRef.get(key) ?? 0) + 1);
     contextUsageBySessionId.delete(ref.externalSessionId);
     pendingRequests.removeSession(ref);
@@ -464,19 +459,8 @@ export const createOpenCodeLiveSessionState = ({
     requirePendingRoute,
     completePendingReply,
     removeSession,
-    refForExternalSession: (externalSessionId: string): AgentSessionLiveRef | null => {
-      const matches = [...sessionsByRef.values()].filter(
-        ({ snapshot }) => snapshot.ref.externalSessionId === externalSessionId,
-      );
-      if (matches.length > 1) {
-        throw new HostValidationError({
-          field: "externalSessionId",
-          message: `OpenCode runtime '${runtime.runtimeId}' cannot route ambiguous session id '${externalSessionId}'.`,
-          details: { runtimeId: runtime.runtimeId, externalSessionId },
-        });
-      }
-      return matches[0] ? toSessionRef(matches[0].snapshot.ref) : null;
-    },
+    refForExternalSession: (externalSessionId: string): AgentSessionLiveRef | null =>
+      refsByExternalSessionId.find(externalSessionId),
     release: (): AgentSessionLiveRef[] => {
       const refs = [...sessionsByRef.values()].map(({ snapshot }) => toSessionRef(snapshot.ref));
       for (const ref of refs) {
@@ -484,6 +468,7 @@ export const createOpenCodeLiveSessionState = ({
         versionsByRef.set(key, (versionsByRef.get(key) ?? 0) + 1);
       }
       sessionsByRef.clear();
+      refsByExternalSessionId.clear();
       pendingRequests.clear();
       contextUsageBySessionId.clear();
       return refs;

@@ -36,7 +36,8 @@ const claudeHistoryContentBlockSchema = z.looseObject({
 });
 const claudeHistoryMessageContentSchema = z.looseObject({ content: z.unknown() });
 const claudeHistorySourceSchema = z.looseObject({ media_type: z.string().optional() });
-const claudeHistoryStringArraySchema = z.array(z.string().min(1));
+const claudeHistoryStringSchema = z.string().min(1);
+const claudeHistoryStringArraySchema = z.array(claudeHistoryStringSchema);
 
 export const appendUnmatchedLiveUserMessages = (
   history: AgentSessionHistoryMessage[],
@@ -170,7 +171,7 @@ export const readClaudeHistoryDisplayParts = (
     return [];
   }
   const content = parsedMessage.data.content;
-  const textContent = z.string().min(1).safeParse(content);
+  const textContent = claudeHistoryStringSchema.safeParse(content);
   if (textContent.success) {
     return readClaudeHistoryTextDisplayParts(textContent.data);
   }

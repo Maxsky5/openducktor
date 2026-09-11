@@ -22,6 +22,21 @@ import {
 
 const MAX_CAPTURED_STDERR_BYTES = 64 * 1024;
 
+const responseIdSchema = z.number();
+const methodSchema = z.string();
+const serverRequestIdSchema = z.union([z.number(), z.string()]);
+
+export const readCodexMessageRouting = (message: CodexAppServerJsonObject) => {
+  const parsedResponseId = responseIdSchema.safeParse(message.id);
+  const parsedServerRequestId = serverRequestIdSchema.safeParse(message.id);
+  return {
+    responseId: parsedResponseId.success ? parsedResponseId.data : null,
+    serverRequestId: parsedServerRequestId.success ? parsedServerRequestId.data : null,
+    hasMethod: methodSchema.safeParse(message.method).success,
+    hasResponse: "result" in message || "error" in message,
+  };
+};
+
 const isCodexServerRequestMethod = (method: string): method is CodexAppServerServerRequestMethod =>
   CODEX_APP_SERVER_SERVER_REQUEST_METHODS.some((candidate) => candidate === method);
 
@@ -81,7 +96,7 @@ export function parseStreamMessage(
   message: CodexAppServerJsonObject,
   kind: "notification" | "server_request",
 ): CodexAppServerProtocolMessage {
-  const parsedMethod = z.string().safeParse(message.method);
+  const parsedMethod = methodSchema.safeParse(message.method);
   if (!parsedMethod.success || parsedMethod.data.trim().length === 0) {
     throw new HostValidationError({
       message: `Codex app-server ${kind} for ${runtimeId} is missing a method`,
@@ -98,7 +113,7 @@ export function parseStreamMessage(
     });
   }
   if (kind === "server_request") {
-    if (!z.union([z.number(), z.string()]).safeParse(message.id).success) {
+    if (!serverRequestIdSchema.safeParse(message.id).success) {
       throw new HostValidationError({
         message: `Codex app-server server request for ${runtimeId} is missing an id`,
         field: "id",

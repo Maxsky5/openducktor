@@ -7,7 +7,10 @@ import {
   opencodePartPayloadSchema,
   opencodeSessionDetailPayloadSchema,
 } from "./opencode-ingress";
-import { isConsumedOpencodeEventType, isKnownOpencodeEventType } from "./opencode-event-policy";
+import {
+  isConsumedOpencodeEventType,
+  OPENCODE_EVENT_POLICY_BY_TYPE,
+} from "./opencode-event-policy";
 
 const eventSchema = <Type extends string, Properties extends z.ZodType>(
   type: Type,
@@ -39,15 +42,18 @@ const messagePartRemovedEventSchema = eventSchema(
   "message.part.removed",
   z.object({ sessionID: z.string(), messageID: z.string(), partID: z.string() }),
 );
-const messagePartDeltaEventSchema = eventSchema(
-  "message.part.delta",
-  z.object({
-    sessionID: z.string(),
-    messageID: z.string(),
-    partID: z.string(),
-    field: z.string(),
-    delta: z.string(),
-  }),
+const messagePartDeltaEventSchema = z.compile(
+  eventSchema(
+    "message.part.delta",
+    z.object({
+      sessionID: z.string(),
+      messageID: z.string(),
+      partID: z.string(),
+      field: z.string(),
+      delta: z.string(),
+    }),
+  ),
+  { strict: true },
 );
 
 const sessionEventSchema = <Type extends "session.created" | "session.updated" | "session.deleted">(
@@ -191,19 +197,18 @@ const todoUpdatedEventSchema = eventSchema(
   }),
 );
 
+const ignoredEventTypes = Object.keys(OPENCODE_EVENT_POLICY_BY_TYPE).filter(
+  (type) => !isConsumedOpencodeEventType(type),
+);
 const ignoredDirectEventSchema = z
   .object({
     id: z.string(),
-    type: z.string(),
+    type: z.enum(ignoredEventTypes),
     properties: z.unknown(),
-  })
-  .refine(({ type }) => isKnownOpencodeEventType(type) && !isConsumedOpencodeEventType(type), {
-    message: "OpenCode events must have an explicit ingress policy.",
-    path: ["type"],
   })
   .transform(({ id, type }) => ({ kind: "ignored" as const, id, type }));
 
-export const opencodeDirectEventSchema = z.union([
+export const opencodeDirectEventSchema = z.discriminatedUnion("type", [
   sessionCreatedEventSchema,
   sessionUpdatedEventSchema,
   sessionDeletedEventSchema,
@@ -229,7 +234,10 @@ export const opencodeDirectEventSchema = z.union([
   sessionCompactedEventSchema,
 ]);
 
-const opencodeIngressEventSchema = z.union([opencodeDirectEventSchema, ignoredDirectEventSchema]);
+const opencodeIngressEventSchema = z.discriminatedUnion("type", [
+  opencodeDirectEventSchema,
+  ignoredDirectEventSchema,
+]);
 
 const syncEventSchema = z.object({
   aggregateID: z.string(),
@@ -249,7 +257,7 @@ const ingressEventDescriptorSchema = z.object({
   syncEvent: z.object({ type: z.string() }).optional(),
 });
 
-const opencodeGlobalEventPayloadSchema = z.union([
+const opencodeGlobalEventPayloadSchema = z.discriminatedUnion("type", [
   opencodeIngressEventSchema,
   syncEnvelopeSchema,
   serverHeartbeatSchema,

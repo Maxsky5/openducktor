@@ -24,6 +24,7 @@ import {
 import {
   appendCapturedStderr,
   parseStreamMessage,
+  readCodexMessageRouting,
   respondToAutomaticServerRequest,
 } from "./codex-app-server-transport-messages";
 import type {
@@ -256,12 +257,8 @@ export const createCodexAppServerTransport = (
   };
 
   const handleMessage = (messageRecord: CodexAppServerJsonObject): void => {
-    const parsedResponseId = z.number().safeParse(messageRecord.id);
-    const responseId = parsedResponseId.success ? parsedResponseId.data : null;
-    const parsedServerRequestId = z.union([z.number(), z.string()]).safeParse(messageRecord.id);
-    const serverRequestId = parsedServerRequestId.success ? parsedServerRequestId.data : null;
-    const hasMethod = z.string().safeParse(messageRecord.method).success;
-    const hasResponse = "result" in messageRecord || "error" in messageRecord;
+    const { responseId, serverRequestId, hasMethod, hasResponse } =
+      readCodexMessageRouting(messageRecord);
 
     if (hasResponse) {
       if (responseId === null) {

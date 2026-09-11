@@ -2,6 +2,36 @@ import { describe, expect, test } from "bun:test";
 import { relativizeDisplayPath, relativizeDisplayPathsInValue } from "./tool-path-utils";
 
 describe("tool-path-utils", () => {
+  test("relativizes nested tool input while preserving non-path values", () => {
+    const input = {
+      entries: [
+        {
+          details: {
+            path: "/repo/src/a.ts",
+            description: "/repo/leave-this-text",
+            enabled: false,
+            count: 0,
+            missing: null,
+          },
+        },
+      ],
+    };
+
+    expect(relativizeDisplayPathsInValue(input, "/repo")).toEqual({
+      entries: [
+        {
+          details: {
+            path: "src/a.ts",
+            description: "/repo/leave-this-text",
+            enabled: false,
+            count: 0,
+            missing: null,
+          },
+        },
+      ],
+    });
+  });
+
   test("relativizes string arrays for plural path keys", () => {
     expect(
       relativizeDisplayPathsInValue(

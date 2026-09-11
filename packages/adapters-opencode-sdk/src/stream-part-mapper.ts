@@ -8,7 +8,6 @@ import {
   asJsonObject,
   type OpenCodeProtocolObject,
   type OpenCodeProtocolValue,
-  opencodeProtocolObjectSchema,
   opencodeProtocolValueSchema,
   readBooleanProp,
   readNumberProp,
@@ -20,8 +19,12 @@ import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 import type { ParsedOpencodePart } from "./opencode-ingress";
 import { z } from "zod";
 
+const stringSchema = z.string();
+const booleanSchema = z.boolean();
+const displayScalarSchema = z.union([z.number(), booleanSchema]);
+
 const toDisplayText = (value: OpenCodeProtocolValue | undefined): string | undefined => {
-  const stringValue = z.string().safeParse(value);
+  const stringValue = stringSchema.safeParse(value);
   if (stringValue.success) {
     const trimmed = stringValue.data.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -29,7 +32,7 @@ const toDisplayText = (value: OpenCodeProtocolValue | undefined): string | undef
   if (value === null || value === undefined) {
     return undefined;
   }
-  const scalarValue = z.union([z.number(), z.boolean()]).safeParse(value);
+  const scalarValue = displayScalarSchema.safeParse(value);
   if (scalarValue.success) {
     return String(scalarValue.data);
   }
@@ -77,7 +80,7 @@ const outputTextFromMcpPayload = (
       if (!entryRecord) {
         return null;
       }
-      const text = z.string().safeParse(entryRecord.text);
+      const text = stringSchema.safeParse(entryRecord.text);
       return text.success ? text.data.trim() : null;
     })
     .filter((entry): entry is string => entry !== null && entry.length > 0);
@@ -92,7 +95,7 @@ const readToolOutputText = (value: string | undefined): string | undefined => to
 const MCP_TRANSPORT_ERROR_PREFIX = /^MCP error\s+-?\d+:/i;
 
 const readErrorValueMessage = (value: OpenCodeProtocolValue | undefined): string | undefined => {
-  const stringValue = z.string().safeParse(value);
+  const stringValue = stringSchema.safeParse(value);
   if (stringValue.success) {
     const trimmed = stringValue.data.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -109,13 +112,10 @@ const readErrorValueMessage = (value: OpenCodeProtocolValue | undefined): string
 const readEnvelopeErrorMessage = (
   value: string | OpenCodeProtocolObject | undefined,
 ): string | undefined => {
-  const stringValue = z.string().safeParse(value);
-  const objectValue = opencodeProtocolObjectSchema.safeParse(value);
+  const stringValue = stringSchema.safeParse(value);
   const record = stringValue.success
     ? parseStructuredTextObject(stringValue.data)
-    : objectValue.success
-      ? objectValue.data
-      : undefined;
+    : asJsonObject(value);
   if (!record) {
     return undefined;
   }
@@ -154,13 +154,10 @@ const readMcpContentTextError = (value: OpenCodeProtocolObject | undefined): str
 const readStructuredToolError = (
   value: string | OpenCodeProtocolObject | undefined,
 ): string | undefined => {
-  const stringValue = z.string().safeParse(value);
-  const objectValue = opencodeProtocolObjectSchema.safeParse(value);
+  const stringValue = stringSchema.safeParse(value);
   const record = stringValue.success
     ? parseStructuredTextObject(stringValue.data)
-    : objectValue.success
-      ? objectValue.data
-      : undefined;
+    : asJsonObject(value);
   const contentTextError = readMcpContentTextError(record);
   const transportError = readMcpTransportError(stringValue.success ? stringValue.data : undefined);
   if (!record) {
@@ -210,7 +207,7 @@ const normalizeMetadata = (
 };
 
 const normalizeFileDiffType = (value: OpenCodeProtocolValue | undefined): FileDiff["type"] => {
-  const parsed = z.string().safeParse(value);
+  const parsed = stringSchema.safeParse(value);
   if (!parsed.success) {
     return "modified";
   }
@@ -454,7 +451,7 @@ const readTrimmedString = (
 const normalizeSubagentExecutionMode = (
   value: OpenCodeProtocolValue | undefined,
 ): SubagentStreamPart["executionMode"] => {
-  const stringValue = z.string().safeParse(value);
+  const stringValue = stringSchema.safeParse(value);
   if (stringValue.success) {
     const normalized = stringValue.data.trim().toLowerCase();
     if (normalized === "background" || normalized === "foreground") {
@@ -462,7 +459,7 @@ const normalizeSubagentExecutionMode = (
     }
   }
 
-  const booleanValue = z.boolean().safeParse(value);
+  const booleanValue = booleanSchema.safeParse(value);
   if (booleanValue.success) {
     return booleanValue.data ? "background" : "foreground";
   }

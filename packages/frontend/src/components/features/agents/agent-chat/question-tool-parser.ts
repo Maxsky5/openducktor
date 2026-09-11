@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { hasNonEmptyText } from "./tool-lifecycle";
 
+const questionJsonValueSchema = z.json();
+
 export type QuestionToolDetail = {
   prompt: string;
   answers: string[];
@@ -22,7 +24,7 @@ const parseJsonIfPossible = (value: string | undefined): AgentToolValue | undefi
     return undefined;
   }
   try {
-    return z.json().parse(JSON.parse(trimmed));
+    return questionJsonValueSchema.parse(JSON.parse(trimmed));
   } catch {
     return undefined;
   }
@@ -134,8 +136,8 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     return [];
   }
 
-  const parsedInput = z.json().safeParse(meta.input);
-  const parsedMetadata = z.json().safeParse(meta.metadata);
+  const parsedInput = questionJsonValueSchema.safeParse(meta.input);
+  const parsedMetadata = questionJsonValueSchema.safeParse(meta.metadata);
   const inputRecord =
     parsedInput.success && isAgentToolData(parsedInput.data) ? parsedInput.data : undefined;
   const metadataRecord =

@@ -1,8 +1,22 @@
-import type { OpenCodeProtocolObject, OpenCodeProtocolValue } from "./guards";
+import {
+  type OpenCodeProtocolObject,
+  type OpenCodeProtocolValue,
+  opencodeProtocolObjectSchema,
+  opencodeProtocolValueSchema,
+} from "./guards";
 import type { AgentToolType } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import { z } from "zod";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
+
+const stringSchema = z.string();
+const finiteNumberSchema = z.number().finite();
+const collectionItemsSchema = z.object({
+  items: z.array(opencodeProtocolValueSchema).optional(),
+  questions: z.array(opencodeProtocolValueSchema).optional(),
+  summary: z.array(opencodeProtocolValueSchema).optional(),
+  todos: z.array(opencodeProtocolValueSchema).optional(),
+});
 
 export const deriveToolType = (toolName: string): AgentToolType => {
   return resolveOpencodeToolStrategy(toolName).toolType;
@@ -24,7 +38,7 @@ const readTrimmedString = (
     return null;
   }
   for (const key of keys) {
-    const parsed = z.string().safeParse(source[key]);
+    const parsed = stringSchema.safeParse(source[key]);
     if (parsed.success && parsed.data.trim().length > 0) {
       return parsed.data.trim();
     }
@@ -79,14 +93,7 @@ const countCollectionItems = (value: OpenCodeProtocolValue | undefined): number 
   if (Array.isArray(value)) {
     return value.length;
   }
-  const parsed = z
-    .object({
-      items: z.array(z.json()).optional(),
-      questions: z.array(z.json()).optional(),
-      summary: z.array(z.json()).optional(),
-      todos: z.array(z.json()).optional(),
-    })
-    .safeParse(value);
+  const parsed = collectionItemsSchema.safeParse(value);
   if (!parsed.success) {
     return null;
   }
@@ -124,7 +131,7 @@ const summarizeQuestionTool = (
     if (!Array.isArray(questions) || questions.length === 0) {
       continue;
     }
-    const firstQuestion = z.record(z.string(), z.json()).safeParse(questions[0]);
+    const firstQuestion = opencodeProtocolObjectSchema.safeParse(questions[0]);
     const prompt = readTrimmedString(firstQuestion.success ? firstQuestion.data : undefined, [
       "question",
       "prompt",
@@ -176,7 +183,7 @@ const summarizeOdtMutation = (
   }
   if (tool === "odt_set_pull_request") {
     const providerId = readTrimmedString(input, ["providerId"]);
-    const parsedNumber = z.number().finite().safeParse(input?.number);
+    const parsedNumber = finiteNumberSchema.safeParse(input?.number);
     const number = parsedNumber.success ? `#${parsedNumber.data}` : null;
     const taskId = readTrimmedString(input, ["taskId"]);
     return [taskId, providerId, number].filter((value) => value && value.length > 0).join(" · ");
@@ -196,7 +203,7 @@ const summarizeOdtMutation = (
 const summarizeSkillTool = (input: OpenCodeProtocolObject | undefined): string | null => {
   const direct =
     readTrimmedString(input, ["name", "skillName", "skill", "id"]) ??
-    readTrimmedString(z.record(z.string(), z.json()).safeParse(input?.skill).data, ["name", "id"]);
+    readTrimmedString(opencodeProtocolObjectSchema.safeParse(input?.skill).data, ["name", "id"]);
   if (direct) {
     return direct;
   }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isoTimestampSchema } from "./string-schemas";
 import { agentImageGenerationPartSchema } from "./agent-image-generation-schemas";
 import {
   runtimeApprovalReplyOutcomeSchema,
@@ -18,7 +19,6 @@ import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { subagentDescriptorSchema } from "./subagent-schemas";
 
-const isoTimestampSchema = z.string().datetime({ offset: true });
 const finiteNonNegativeNumberSchema = z.number().finite().nonnegative();
 export const agentToolDataSchema = z.record(z.string(), z.json());
 export type AgentToolData = z.output<typeof agentToolDataSchema>;
