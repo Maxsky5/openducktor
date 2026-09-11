@@ -3,15 +3,9 @@ import { FileAudio2, FileText, Film, Image as ImageIcon, LoaderCircle, X } from 
 import type { ReactElement, SyntheticEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { AgentChatPreviewDialog, type AgentChatPreviewMedia } from "./agent-chat-preview-dialog";
 import {
   type AgentChatAttachmentPreviewTarget,
   useAgentChatAttachmentPreview,
@@ -93,13 +87,22 @@ export function AgentChatAttachmentChip(
     markPreviewUnavailable(failingSrc);
   };
 
-  const handleDialogPreviewMediaError = (
-    event: SyntheticEvent<HTMLImageElement | HTMLVideoElement>,
-  ): void => {
-    const failingSrc =
-      event.currentTarget.currentSrc || event.currentTarget.getAttribute("src") || undefined;
-    markPreviewUnavailable(failingSrc);
+  const handleDialogPreviewMediaError = (media: AgentChatPreviewMedia): void => {
+    markPreviewUnavailable(media.src);
   };
+
+  const previewMedia: AgentChatPreviewMedia[] =
+    resolvedPreviewSrc === null
+      ? []
+      : attachment.kind === "video"
+        ? [
+            {
+              kind: "video",
+              src: resolvedPreviewSrc,
+              ariaLabel: `Preview video ${attachment.name}`,
+            },
+          ]
+        : [{ kind: "image", src: resolvedPreviewSrc, alt: attachment.name }];
 
   const handleOpenPreview = (): void => {
     const previewError = requestPreviewOpen();
@@ -187,37 +190,14 @@ export function AgentChatAttachmentChip(
       </div>
 
       {previewable && resolvedPreviewSrc && !previewError ? (
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="max-w-[min(96vw,72rem)] border-border bg-background">
-            <DialogHeader>
-              <DialogTitle>{attachment.name}</DialogTitle>
-              <DialogDescription>
-                {attachment.kind === "image" ? "Image preview" : "Video preview"}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="max-h-[80vh] overflow-hidden rounded-md border border-border bg-muted">
-              {attachment.kind === "image" ? (
-                <img
-                  src={resolvedPreviewSrc}
-                  alt={attachment.name}
-                  className="max-h-[75vh] w-full object-contain"
-                  onError={handleDialogPreviewMediaError}
-                />
-              ) : (
-                <video
-                  src={resolvedPreviewSrc}
-                  aria-label={`Preview video ${attachment.name}`}
-                  className="max-h-[75vh] w-full object-contain"
-                  controls
-                  autoPlay
-                  onError={handleDialogPreviewMediaError}
-                >
-                  <track kind="captions" />
-                </video>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        <AgentChatPreviewDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          title={attachment.name}
+          description={attachment.kind === "image" ? "Image preview" : "Video preview"}
+          media={previewMedia}
+          onMediaError={handleDialogPreviewMediaError}
+        />
       ) : null}
     </>
   );
