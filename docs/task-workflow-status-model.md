@@ -68,27 +68,9 @@ Store agent-written output as task documents, not user task fields. SQLite store
 | Builder | Implementation details, work order, tests, and verification within the required outcomes and design contracts. |
 | QA | Independent review of outcomes, contracts, correctness, and maintainability, with checks based on risk. |
 
-Spec researches facts and uses the conversation to resolve product decisions. The user's answers settle those decisions. Spec records delegated assumptions and asks follow-up questions when an answer exposes a new choice that affects the result. A fully specified task can go straight to writing.
+Spec and Planner save complete documents with `odt_set_spec` and `odt_set_plan` once required decisions are resolved. Builder and QA work from the saved requirements and design contracts. Later document revisions follow the [transition matrix](task-workflow-transition-matrix.md).
 
-Spec describes behavior as users or external systems experience it. Planner owns the technical solution. A technical detail belongs in the spec only when the task or user explicitly fixes it as part of the required outcome or scope, or when it defines an external contract the change must preserve. State its source and required effect. Leave repository coding conventions and internal design rules to Planner and Builder.
-
-Keep observable outcomes and limits beside the requirements they qualify. Do not add a separate acceptance-criteria section or completion checklist. Planner covers the full spec, including its scope and constraints. Builder and QA work from the full requirements and design contracts.
-
-Spec and Planner own the work through saving the canonical document. A ready spec covers the agreed scope with requirements whose outcomes are clear. A ready plan connects required outcomes to defined interfaces and integration points. Required decisions must be resolved before saving. Each role then saves in the same turn. Later revisions update the saved document. Completion depends on a successful tool call.
-
-All roles follow the shared `Artifact format` rules in the built-in workflow prompt. These rules apply regardless of document type. Spec and Planner prompts define the content of each document section. The format follows the content: headings name topics, paragraphs explain reasoning, lists separate rules, and tables compare entries with common fields. There is no sentence or paragraph count limit.
-
-System prompts own role responsibilities, decision policy, document structure, and completion. Kickoffs request the artifact for the current task. Keep general workflow instructions in the system prompt so kickoffs do not become a second policy source.
-
-Spec and Planner describe what must hold. Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of these documents. Builder and QA choose verification methods and follow the repository's required checks. A required product behavior or quality limit remains part of the spec.
-
-Plans distinguish required design decisions from suggestions. Builder can adapt suggested steps and implementation order while preserving the required outcomes and contracts. QA reviews the finished result against those requirements.
-
-The built-in system and kickoff prompts live in `packages/core/src/services/agent-system-prompts.ts`. For each changed template, set `builtinVersion` to the target branch's version plus one. Increment it only once per PR, even when later commits revise the prompt. Existing custom overrides remain active. Users must review, update, or disable old overrides themselves. The app does not display a version-mismatch warning. A new built-in version does not replace custom text.
-
-The prompt design uses the autonomy and testing guidance in the [OpenAI model guide](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra). The role contracts apply across supported models and runtimes.
-
-The document contracts also draw on [Superpowers' plans for readers without conversation context](https://github.com/obra/superpowers/blob/b36e0829c6d0140e93cfef2ca599b1b07d4a7797/skills/writing-plans/SKILL.md), [GSD's distinction between settled decisions and agent discretion](https://github.com/gsd-build/get-shit-done/blob/bdcaab2c752d9a33a1a1ca9acf3a3c81fb991815/get-shit-done/templates/context.md), and [OpenSpec's separation of behavior requirements from technical design](https://github.com/Fission-AI/OpenSpec/blob/9d4e5974e5c0d9a09b9c6c1e1eb0975e80ec4461/schemas/spec-driven/schema.yaml). OpenDucktor keeps its own role boundaries and lifecycle; these references do not add approval gates or prescribe Builder's execution method.
+See [workflow prompts](runtime-integration-guide.md#workflow-prompts) for template ownership, versions, and overrides.
 
 ### Storage
 
