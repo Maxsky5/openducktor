@@ -4,6 +4,7 @@ import { createOpencodePartFixture } from "./opencode-protocol-test-fixtures";
 import type { ParsedOpencodePart } from "./opencode-ingress";
 import {
   extractMessageTotalTokens,
+  mergePreservedAttachmentDisplayParts,
   normalizeUserMessageDisplayParts,
   readMessageModelSelection,
   readTextFromParts,
@@ -387,6 +388,96 @@ describe("message-normalizers", () => {
           id: "image-source-path",
           path: "/var/folders/example/Screenshot 2026-04-01 at 00.33.32.png",
           name: "Screenshot 2026-04-01 at 00.33.32.png",
+          kind: "image",
+          mime: "image/png",
+        },
+      },
+    ]);
+  });
+
+  test("marks data url attachments without a source path as not locally previewable", () => {
+    const parts: OpenCodeProtocolObject[] = [
+      {
+        id: "image-data-1",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "image/png",
+        filename: "image.png",
+        url: "data:image/png;base64,aGVsbG8=",
+      },
+      {
+        id: "image-data-2",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "image/png",
+        filename: "image.png",
+        url: "data:image/png;base64,d29ybGQ=",
+      },
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
+      {
+        kind: "attachment",
+        attachment: {
+          id: "image-data-1",
+          path: "image.png",
+          name: "image.png",
+          kind: "image",
+          mime: "image/png",
+          localPreviewAvailable: false,
+        },
+      },
+      {
+        kind: "attachment",
+        attachment: {
+          id: "image-data-2",
+          path: "image.png",
+          name: "image.png",
+          kind: "image",
+          mime: "image/png",
+          localPreviewAvailable: false,
+        },
+      },
+    ]);
+  });
+
+  test("uses preserved local paths and clears the unavailable preview flag", () => {
+    const runtimeParts = normalizeUserMessageDisplayParts(
+      parseOpencodeParts([
+        {
+          id: "image-data-1",
+          sessionID: "session-1",
+          messageID: "message-1",
+          type: "file",
+          mime: "image/png",
+          filename: "image.png",
+          url: "data:image/png;base64,aGVsbG8=",
+        },
+      ]),
+    );
+
+    expect(
+      mergePreservedAttachmentDisplayParts(runtimeParts, [
+        {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-image-1",
+            path: "/tmp/openducktor-local-attachments/staged-image.png",
+            name: "image.png",
+            kind: "image",
+            mime: "image/png",
+          },
+        },
+      ]),
+    ).toEqual([
+      {
+        kind: "attachment",
+        attachment: {
+          id: "image-data-1",
+          path: "/tmp/openducktor-local-attachments/staged-image.png",
+          name: "image.png",
           kind: "image",
           mime: "image/png",
         },

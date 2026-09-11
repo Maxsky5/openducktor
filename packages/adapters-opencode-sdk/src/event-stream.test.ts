@@ -77,6 +77,17 @@ const PDF_ATTACHMENT_DISPLAY_PART = {
   },
 };
 
+const SECOND_IMAGE_ATTACHMENT_DISPLAY_PART = {
+  kind: "attachment" as const,
+  attachment: {
+    id: "attachment-image-2",
+    path: "/tmp/local-second-screenshot.png",
+    name: "Second-2026-03-17-at-12.05.00.png",
+    kind: "image" as const,
+    mime: "image/png",
+  },
+};
+
 test("global event observation becomes ready only after the lazy SSE stream connects", async () => {
   let connect: (() => void) | undefined;
   const connected = new Promise<void>((resolve) => {
@@ -1359,6 +1370,92 @@ describe("event-stream", () => {
         }),
       }),
     );
+  });
+
+  test("keeps one attachment per send when metadata and the matched queued send both preserve it", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        makeUserMessageUpdatedEvent({
+          messageId: "msg-attachment-pair-1",
+          createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
+          parts: [
+            {
+              id: "part-pair-text-1",
+              sessionID: "external-session-1",
+              messageID: "msg-attachment-pair-1",
+              type: "text",
+              text: "Describe both screenshots",
+            },
+            {
+              id: "part-pair-file-1",
+              sessionID: "external-session-1",
+              messageID: "msg-attachment-pair-1",
+              type: "file",
+              mime: "image/png",
+              filename: "Screenshot-2026-03-17-at-12.04.45.png",
+              url: "data:image/png;base64,aGVsbG8=",
+            },
+            {
+              id: "part-pair-file-2",
+              sessionID: "external-session-1",
+              messageID: "msg-attachment-pair-1",
+              type: "file",
+              mime: "image/png",
+              filename: "Second-2026-03-17-at-12.05.00.png",
+              url: "data:image/png;base64,d29ybGQ=",
+            },
+          ],
+        }),
+      ],
+      (nextSessionRecord) => {
+        nextSessionRecord.messageMetadataById.set("msg-attachment-pair-1", {
+          timestamp: "2026-02-22T12:00:02.000Z",
+          displayParts: [IMAGE_ATTACHMENT_DISPLAY_PART, SECOND_IMAGE_ATTACHMENT_DISPLAY_PART],
+        });
+        nextSessionRecord.pendingQueuedUserMessages.push({
+          messageId: "msg-attachment-pair-1",
+          signature: buildQueuedRequestSignature(
+            [
+              { kind: "text", text: "Describe both screenshots" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+              SECOND_IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] satisfies AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
+            [
+              { kind: "text", text: "Describe both screenshots" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+              SECOND_IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] satisfies AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentParts: [IMAGE_ATTACHMENT_DISPLAY_PART, SECOND_IMAGE_ATTACHMENT_DISPLAY_PART],
+        });
+      },
+    );
+
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    const userMessage = userMessages.at(-1);
+    if (userMessage?.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    const attachmentParts = userMessage.parts.filter((part) => part.kind === "attachment");
+    expect(attachmentParts).toHaveLength(2);
+    expect(attachmentParts).toEqual([
+      expect.objectContaining({
+        attachment: expect.objectContaining({
+          path: "/tmp/local-screenshot.png",
+          name: "Screenshot-2026-03-17-at-12.04.45.png",
+        }),
+      }),
+      expect.objectContaining({
+        attachment: expect.objectContaining({
+          path: "/tmp/local-second-screenshot.png",
+          name: "Second-2026-03-17-at-12.05.00.png",
+        }),
+      }),
+    ]);
   });
 
   test("matches queued attachment sends when the runtime fills user parts through message.part.updated", async () => {

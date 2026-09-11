@@ -44,66 +44,53 @@ const readFilePathFromUrl = (url: string): string | null => {
   }
 };
 
+type AttachmentKind = Extract<
+  AgentUserMessageDisplayPart,
+  { kind: "attachment" }
+>["attachment"]["kind"];
+
+const readAttachmentKind = (mime: string): AttachmentKind | null => {
+  if (mime.startsWith("image/")) {
+    return "image";
+  }
+  if (mime.startsWith("audio/")) {
+    return "audio";
+  }
+  if (mime.startsWith("video/")) {
+    return "video";
+  }
+  if (mime === "application/pdf") {
+    return "pdf";
+  }
+
+  return null;
+};
+
 const normalizeAttachmentPart = (
   part: Extract<ParsedOpencodePart, { type: "file" }>,
 ): AgentUserMessageDisplayPart | null => {
   const sourcePath = part.source?.type === "file" ? part.source.path.trim() : "";
-  const filePath = readFilePathFromUrl(part.url) ?? (sourcePath || part.filename?.trim() || "");
+  const fileUrlPath = readFilePathFromUrl(part.url);
+  const filePath = fileUrlPath ?? (sourcePath || part.filename?.trim() || "");
   if (filePath.length === 0 || !part.mime) {
     return null;
   }
-
-  const name = part.filename?.trim() || basenameForPath(filePath);
-  if (part.mime.startsWith("image/")) {
-    return {
-      kind: "attachment",
-      attachment: {
-        id: part.id,
-        path: filePath,
-        name,
-        kind: "image",
-        mime: part.mime,
-      },
-    };
-  }
-  if (part.mime.startsWith("audio/")) {
-    return {
-      kind: "attachment",
-      attachment: {
-        id: part.id,
-        path: filePath,
-        name,
-        kind: "audio",
-        mime: part.mime,
-      },
-    };
-  }
-  if (part.mime.startsWith("video/")) {
-    return {
-      kind: "attachment",
-      attachment: {
-        id: part.id,
-        path: filePath,
-        name,
-        kind: "video",
-        mime: part.mime,
-      },
-    };
-  }
-  if (part.mime === "application/pdf") {
-    return {
-      kind: "attachment",
-      attachment: {
-        id: part.id,
-        path: filePath,
-        name,
-        kind: "pdf",
-        mime: part.mime,
-      },
-    };
+  const attachmentKind = readAttachmentKind(part.mime);
+  if (!attachmentKind) {
+    return null;
   }
 
-  return null;
+  const attachment: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>["attachment"] = {
+    id: part.id,
+    path: filePath,
+    name: part.filename?.trim() || basenameForPath(filePath),
+    kind: attachmentKind,
+    mime: part.mime,
+  };
+  if (!fileUrlPath && sourcePath.length === 0) {
+    attachment.localPreviewAvailable = false;
+  }
+  return { kind: "attachment", attachment };
 };
 
 const normalizeFileReferencePart = (
@@ -254,12 +241,19 @@ export const mergePreservedAttachmentDisplayParts = (
       return part;
     }
 
+    const mergedAttachment = {
+      ...part.attachment,
+      path: preservedAttachment.attachment.path,
+    };
+    if (preservedAttachment.attachment.localPreviewAvailable === undefined) {
+      delete mergedAttachment.localPreviewAvailable;
+    } else {
+      mergedAttachment.localPreviewAvailable = preservedAttachment.attachment.localPreviewAvailable;
+    }
+
     return {
       ...part,
-      attachment: {
-        ...part.attachment,
-        path: preservedAttachment.attachment.path,
-      },
+      attachment: mergedAttachment,
     };
   });
 
