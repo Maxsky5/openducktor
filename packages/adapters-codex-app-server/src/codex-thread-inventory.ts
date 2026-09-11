@@ -1,9 +1,6 @@
 import { AgentRuntimeQueryError } from "@openducktor/core";
 import type { CodexAppServerThreadListParams, CodexAppServerTurn } from "@openducktor/contracts";
-import {
-  isCodexThreadNotLoadedError,
-  isCodexUnmaterializedThreadError,
-} from "./codex-app-server-shared";
+import { isCodexUnmaterializedThreadError } from "./codex-app-server-shared";
 import {
   type CodexThreadInventory,
   type CodexThreadSnapshot,
@@ -11,7 +8,6 @@ import {
   codexLoadedThreadIds,
   codexThreadList,
 } from "./codex-app-server-threads";
-import type { CodexTransportPolicy } from "./codex-session-policy";
 import type { CodexAppServerClient, CodexThreadHistoryReadResponse } from "./types";
 
 type PendingInventoryRead = {
@@ -164,52 +160,6 @@ export class CodexThreadInventoryReader {
       projected.threadsById.set(threadId, { ...thread, status });
     }
     return projected ?? inventory;
-  }
-
-  async findThread(
-    client: CodexAppServerClient,
-    runtimeId: string,
-    externalSessionId: string,
-  ): Promise<CodexThreadSnapshot | null> {
-    return (await this.read(client, runtimeId)).threadsById.get(externalSessionId) ?? null;
-  }
-
-  async ensureThreadReadable(
-    client: CodexAppServerClient,
-    runtimeId: string,
-    input: { externalSessionId: string; workingDirectory: string },
-    policy: CodexTransportPolicy,
-  ): Promise<boolean> {
-    const thread = await this.findThread(client, runtimeId, input.externalSessionId);
-    if (!thread || thread.cwd !== input.workingDirectory) {
-      return false;
-    }
-    if (thread.status.classification === "idle") {
-      try {
-        await client.threadRead({
-          threadId: input.externalSessionId,
-          includeTurns: false,
-        });
-        return true;
-      } catch (error) {
-        if (!isCodexThreadNotLoadedError(error)) {
-          throw error;
-        }
-        return false;
-      }
-    }
-    await client.threadResume({
-      ...policy,
-      threadId: input.externalSessionId,
-      cwd: input.workingDirectory,
-      excludeTurns: true,
-    });
-    this.clearInventory(runtimeId);
-    await client.threadRead({
-      threadId: input.externalSessionId,
-      includeTurns: false,
-    });
-    return true;
   }
 
   async readThreadHistory(

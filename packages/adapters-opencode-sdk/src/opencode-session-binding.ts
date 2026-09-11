@@ -111,25 +111,6 @@ export const synchronizeOpencodeSessionPolicy = async (input: {
   input.session.summary = { ...input.session.summary, title: input.policy.title };
 };
 
-export const adoptPreparedOpencodeSessionPolicy = async (input: {
-  action: string;
-  policy: OpencodeSessionPolicy;
-  request: PolicyBoundSessionRef;
-  session: SessionRecord;
-}): Promise<void> => {
-  assertRuntimeContextCompatibleWithSession(input.session, input.request, input.action);
-  if (!input.session.input.sessionScope) {
-    await applySessionPolicy({
-      client: input.session.client,
-      externalSessionId: input.session.externalSessionId,
-      policy: input.policy,
-      workingDirectory: input.request.workingDirectory,
-    });
-  }
-  applyRuntimeContextToSession(input.session, input.request, input.action);
-  input.session.summary = { ...input.session.summary, title: input.policy.title };
-};
-
 export const resolveOpencodePolicyBoundSession = (input: {
   action: string;
   bindSession: () => Promise<SessionRecord>;

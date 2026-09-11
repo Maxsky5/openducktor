@@ -15,12 +15,20 @@ import {
   createWorkspaceSettingsServiceTestDouble,
 } from "../../test-support/service-test-doubles";
 import { HostOperationError } from "../../effect/host-errors";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createAgentRuntimeQueryService } from "./agent-runtime-query-service";
 
 const repoPath = "/remote/repo";
 const workingDirectory = "/worktrees/workspace/task";
-const harness = async (runtimeKind: RuntimeKind = "opencode") => {
+const harness = async (
+  runtimeKind: RuntimeKind = "opencode",
+  options: {
+    sessionWorkingDirectory?: string;
+    worktreeBasePath?: string | undefined;
+    canonicalizePath?: SettingsConfigPort["canonicalizePath"];
+  } = {},
+) => {
   let runtime: RuntimeInstanceSummary | null = {
     runtimeId: "runtime-1",
     kind: runtimeKind,
@@ -83,12 +91,15 @@ const harness = async (runtimeKind: RuntimeKind = "opencode") => {
       isGitRepository: (path) => Effect.succeed(path === repoPath),
     },
     settingsConfig: createSettingsConfigTestDouble({
-      canonicalizePath: (path) =>
-        path === "/missing"
-          ? Effect.fail(new HostOperationError({ operation: "realpath", message: "missing" }))
-          : Effect.succeed(path),
+      canonicalizePath:
+        options.canonicalizePath ??
+        ((path) =>
+          path === "/missing"
+            ? Effect.fail(new HostOperationError({ operation: "realpath", message: "missing" }))
+            : Effect.succeed(path)),
       defaultWorktreeBasePath: () => "/worktrees/workspace",
       defaultRepoWorktreeBasePath: () => "/legacy/repo",
+      resolveConfiguredPath: (path) => path,
     }),
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
       getRepoConfigByRepoPath: () =>
@@ -98,6 +109,7 @@ const harness = async (runtimeKind: RuntimeKind = "opencode") => {
             workspaceName: "Workspace",
             repoPath,
             defaultRuntimeKind: "opencode",
+            worktreeBasePath: options.worktreeBasePath,
           }),
         ),
     }),
@@ -110,7 +122,7 @@ const harness = async (runtimeKind: RuntimeKind = "opencode") => {
             {
               externalSessionId: "root",
               runtimeKind,
-              workingDirectory,
+              workingDirectory: options.sessionWorkingDirectory ?? workingDirectory,
               role: "build",
               startedAt: "2026-09-10T10:00:00.000Z",
               selectedModel: null,
@@ -181,6 +193,76 @@ for (const directory of ["/missing", "/unrelated", "/remote/repository"]) {
     expect(failure.failure.code).toBe("scope_mismatch");
     expect(h.calls).toHaveLength(0);
   });
+}
+
+for (const runtime of [
+  { runtimeKind: "opencode", runtimePolicy: { kind: "opencode" } },
+  {
+    runtimeKind: "codex",
+    runtimePolicy: {
+      kind: "codex",
+      policy: {
+        sandboxMode: "workspace-write",
+        approvalPolicy: "on-request",
+        approvalsReviewer: "user",
+        commandNetworkAccess: false,
+        approvalsReviewerApplies: true,
+      },
+    },
+  },
+] as const) {
+  const { runtimeKind } = runtime;
+  for (const worktreeBasePath of [undefined, "/configured/worktrees"]) {
+    test(`${runtimeKind} reads legacy sessions when the ${worktreeBasePath === undefined ? "default" : "configured"} worktree base is absent`, async () => {
+      const legacyDirectory = "/legacy/repo/task";
+      const missingBase = worktreeBasePath ?? "/worktrees/workspace";
+      const h = await harness(runtimeKind, {
+        sessionWorkingDirectory: legacyDirectory,
+        worktreeBasePath,
+        canonicalizePath: (path) =>
+          path === missingBase || path === "/missing"
+            ? Effect.fail(
+                new HostOperationError({
+                  operation: "settingsConfig.canonicalizePath",
+                  message: "Worktree base does not exist",
+                  cause: Object.assign(new Error("No such directory"), { code: "ENOENT" }),
+                }),
+              )
+            : Effect.succeed(path),
+      });
+      const historyInput = {
+        ...runtime,
+        repoPath,
+        workingDirectory: legacyDirectory,
+        externalSessionId: "root",
+        sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+      } as const;
+      const searchInput = {
+        repoPath,
+        runtimeKind,
+        workingDirectory: legacyDirectory,
+        query: "src",
+      };
+
+      expect(await Effect.runPromise(h.service.loadSessionHistory(historyInput))).toEqual([]);
+      expect(await Effect.runPromise(h.service.searchFiles(searchInput))).toEqual([]);
+      expect(h.calls).toEqual([historyInput, searchInput]);
+
+      const failure = await Effect.runPromise(
+        Effect.flip(
+          h.service.loadSessionHistory({ ...historyInput, externalSessionId: "unowned" }),
+        ),
+      );
+      expect(failure.failure.code).toBe("scope_mismatch");
+      for (const directory of ["/missing", "/unrelated"]) {
+        const directoryFailure = await Effect.runPromise(
+          Effect.flip(h.service.searchFiles({ ...searchInput, workingDirectory: directory })),
+        );
+        expect(directoryFailure.failure.code).toBe("scope_mismatch");
+      }
+      expect(h.calls).toHaveLength(2);
+    });
+  }
 }
 
 test("rejects missing and mismatched runtime bindings without starting another runtime", async () => {

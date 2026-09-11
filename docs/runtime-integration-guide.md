@@ -55,6 +55,8 @@ Electron and remote browsers use the same nine `agent_runtime_*` commands throug
 
 Each live-session adapter registration provides an `AgentRuntimeQueryAdapterPort`. The host query service resolves the current runtime and registration for every read, checks directory and session ownership, and rejects results that overlap runtime replacement. Reads use the worktree lifecycle guard. They do not start or resume a runtime or repeat repository setup.
 
+Directory checks require the repository and requested directory to exist. An absent workspace or legacy worktree base does not block checks of the other allowed roots. Other path errors fail the read.
+
 Native query adapters reuse the controller that owns live events and retained message metadata. Reads must not bind scope, change policy or prompt context, admit a session, or drain events. Cold child reads use the host-only `resolveSessionParent` method to trace native parent links to an existing OpenDucktor task session record. Native links alone do not grant task ownership.
 
 An unbound discovery record has no scope claim. The host can read a restored session or child after it verifies workflow ownership against a task session record. The read leaves discovery unbound and still rejects conflicts with a retained identity or bound scope.

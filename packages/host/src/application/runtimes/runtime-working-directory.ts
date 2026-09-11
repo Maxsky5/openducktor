@@ -1,6 +1,10 @@
 import { pathStartsWith } from "@openducktor/path-support";
 import { Effect } from "effect";
-import { HostValidationError } from "../../effect/host-errors";
+import {
+  hasNestedNodeErrorCode,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+} from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-model";
 
@@ -34,16 +38,25 @@ export const requireRuntimeWorkingDirectory = (
       repoConfig.worktreeBasePath !== undefined
         ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
         : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
-    const canonicalWorktreeBasePath =
-      yield* dependencies.settingsConfig.canonicalizePath(worktreeBasePath);
-    if (pathStartsWith(canonicalWorkingDirectory, canonicalWorktreeBasePath)) {
+    const canonicalWorktreeBasePath = yield* canonicalizeWorktreeBasePath(
+      dependencies.settingsConfig,
+      worktreeBasePath,
+    );
+    if (
+      canonicalWorktreeBasePath !== null &&
+      pathStartsWith(canonicalWorkingDirectory, canonicalWorktreeBasePath)
+    ) {
       return;
     }
 
-    const canonicalLegacyWorktreeBasePath = yield* dependencies.settingsConfig.canonicalizePath(
+    const canonicalLegacyWorktreeBasePath = yield* canonicalizeWorktreeBasePath(
+      dependencies.settingsConfig,
       dependencies.settingsConfig.defaultRepoWorktreeBasePath(canonicalRepoPath),
     );
-    if (pathStartsWith(canonicalWorkingDirectory, canonicalLegacyWorktreeBasePath)) {
+    if (
+      canonicalLegacyWorktreeBasePath !== null &&
+      pathStartsWith(canonicalWorkingDirectory, canonicalLegacyWorktreeBasePath)
+    ) {
       return;
     }
 
@@ -58,3 +71,17 @@ export const requireRuntimeWorkingDirectory = (
       }),
     );
   });
+
+function canonicalizeWorktreeBasePath(
+  settingsConfig: RuntimeWorkingDirectoryDependencies["settingsConfig"],
+  worktreeBasePath: string,
+): Effect.Effect<string | null, HostOperationErrorAggregate> {
+  // A repository can use its legacy root before the current worktree base exists.
+  return settingsConfig
+    .canonicalizePath(worktreeBasePath)
+    .pipe(
+      Effect.catchTag("HostOperationError", (error) =>
+        hasNestedNodeErrorCode(error, "ENOENT") ? Effect.succeed(null) : Effect.fail(error),
+      ),
+    );
+}
