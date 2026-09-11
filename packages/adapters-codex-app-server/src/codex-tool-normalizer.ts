@@ -16,7 +16,7 @@ import {
   readPathFromCommand,
   searchInputFromCommand,
 } from "./codex-app-server-shared";
-import type { CodexAppServerJsonValue } from "@openducktor/contracts";
+import type { AgentToolImage, CodexAppServerJsonValue } from "@openducktor/contracts";
 import type { CodexToolTimingFields } from "./codex-tool-timing";
 
 /**
@@ -45,8 +45,6 @@ export type CodexToolInvocationMetadata = {
 };
 
 export const COMPUTER_USE_MCP_SERVER = "cua_repl";
-
-export type CodexToolImages = NonNullable<Extract<AgentStreamPart, { kind: "tool" }>["images"]>;
 
 export type CodexToolQuestion = {
   header: string;
@@ -91,7 +89,7 @@ export type NormalizedCodexToolInvocation = CodexToolTimingFields & {
   output?: string | null;
   error?: string | null;
   fileDiffs?: FileDiff[];
-  images?: CodexToolImages;
+  images?: AgentToolImage[];
   metadata?: CodexToolInvocationMetadata;
 };
 

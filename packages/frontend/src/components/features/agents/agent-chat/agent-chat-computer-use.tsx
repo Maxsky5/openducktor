@@ -19,72 +19,6 @@ type ComputerUseToolMessageProps = {
   timeLabel: string;
 };
 
-const isActiveComputerUse = (meta: ToolMeta): boolean =>
-  meta.status === "pending" || meta.status === "running";
-
-const FAILED_SUMMARY = "Computer action failed.";
-
-const ComputerUseScreenshot = ({
-  image,
-  index,
-}: {
-  image: AgentToolImage;
-  index: number;
-}): ReactElement => {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <p role="alert" className="rounded border border-border bg-muted/50 px-2 py-2 text-[11px]">
-        Screenshot {index + 1} is unavailable.
-      </p>
-    );
-  }
-  return (
-    <img
-      src={`data:${image.mimeType};base64,${image.dataBase64}`}
-      alt={`Computer Use screenshot ${index + 1}`}
-      className="max-h-80 w-full rounded border border-border bg-muted/40 object-contain"
-      onError={() => setFailed(true)}
-    />
-  );
-};
-
-const ComputerUseSection = ({
-  label,
-  children,
-  tone = "default",
-}: {
-  label: string;
-  children: string;
-  tone?: "default" | "error";
-}): ReactElement => (
-  <div
-    className={cn(
-      "rounded border",
-      tone === "error"
-        ? "border-destructive-border bg-destructive-surface"
-        : "border-border bg-muted/50",
-    )}
-  >
-    <p
-      className={cn(
-        "px-2 py-1 text-xs font-medium",
-        tone === "error" ? "text-destructive-surface-foreground" : "text-foreground",
-      )}
-    >
-      {label}
-    </p>
-    <pre
-      className={cn(
-        "overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px]",
-        tone === "error" ? "text-destructive-surface-foreground" : "text-foreground",
-      )}
-    >
-      {children}
-    </pre>
-  </div>
-);
-
 export const ComputerUseToolMessage = ({
   meta,
   messageTimestamp,
@@ -193,5 +127,71 @@ export const ComputerUseToolMessage = ({
         summary
       )}
     </div>
+  );
+};
+
+const FAILED_SUMMARY = "Computer action failed.";
+
+const isActiveComputerUse = (meta: ToolMeta): boolean =>
+  meta.status === "pending" || meta.status === "running";
+
+const ComputerUseSection = ({
+  label,
+  children,
+  tone = "default",
+}: {
+  label: string;
+  children: string;
+  tone?: "default" | "error";
+}): ReactElement => (
+  <div
+    className={cn(
+      "rounded border",
+      tone === "error"
+        ? "border-destructive-border bg-destructive-surface"
+        : "border-border bg-muted/50",
+    )}
+  >
+    <p
+      className={cn(
+        "px-2 py-1 text-xs font-medium",
+        tone === "error" ? "text-destructive-surface-foreground" : "text-foreground",
+      )}
+    >
+      {label}
+    </p>
+    <pre
+      className={cn(
+        "overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px]",
+        tone === "error" ? "text-destructive-surface-foreground" : "text-foreground",
+      )}
+    >
+      {children}
+    </pre>
+  </div>
+);
+
+const ComputerUseScreenshot = ({
+  image,
+  index,
+}: {
+  image: AgentToolImage;
+  index: number;
+}): ReactElement => {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <p role="alert" className="rounded border border-border bg-muted/50 px-2 py-2 text-[11px]">
+        Screenshot {index + 1} is unavailable.
+      </p>
+    );
+  }
+  return (
+    <img
+      src={`data:${image.mimeType};base64,${image.dataBase64}`}
+      alt={`Computer Use screenshot ${index + 1}`}
+      className="max-h-80 w-full rounded border border-border bg-muted/40 object-contain"
+      onError={() => setFailed(true)}
+    />
   );
 };

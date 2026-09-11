@@ -27,7 +27,6 @@ import {
 import {
   codexNamespacedToolName,
   COMPUTER_USE_MCP_SERVER,
-  type CodexToolImages,
   type NormalizedCodexToolInvocation,
   normalizeCodexToolInvocation,
   stableToolTitle,
@@ -45,6 +44,7 @@ import {
 import { codexUserInputsFromItem } from "./codex-user-inputs";
 import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
 import {
+  type AgentToolImage,
   type CodexAppServerCommandAction,
   type CodexAppServerThreadItem,
   type CodexAppServerTurn,
@@ -442,7 +442,7 @@ const codexObjectInput = (
   return isPlainObject(value) ? value : (parseCodexJsonObjectString(value) ?? undefined);
 };
 
-const codexToolResultContentText = (value: CodexAppServerJsonValue | undefined): string | null => {
+const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string | null => {
   if (value === undefined || value === null) {
     return null;
   }
@@ -475,21 +475,16 @@ const codexToolResultContentText = (value: CodexAppServerJsonValue | undefined):
   return text.length > 0 ? text : null;
 };
 
-const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string | null =>
-  codexToolResultContentText(value) ?? stringifyJsonValue(value);
+const codexToolResultDisplayText = (value: CodexAppServerJsonValue | undefined): string | null =>
+  codexToolResultText(value) ?? stringifyJsonValue(value);
 
 const DATA_URL_PREFIX_PATTERN = /^data:[^,]*,/;
 
-const codexToolResultImageBase64 = (data: string): string | null => {
-  const base64 = data.replace(DATA_URL_PREFIX_PATTERN, "");
-  return base64.length > 0 ? base64 : null;
-};
-
-const codexMcpToolImages = (value: CodexAppServerJsonValue | undefined): CodexToolImages => {
+const codexToolResultImages = (value: CodexAppServerJsonValue | undefined): AgentToolImage[] => {
   if (!isPlainObject(value)) {
     return [];
   }
-  const images: CodexToolImages = [];
+  const images: AgentToolImage[] = [];
   for (const entry of arrayFromCodexJsonValue(value.content)) {
     if (!isPlainObject(entry) || extractStringField(entry, ["type"]) !== "image") {
       continue;
@@ -499,7 +494,7 @@ const codexMcpToolImages = (value: CodexAppServerJsonValue | undefined): CodexTo
     if (!mimeType || !data) {
       continue;
     }
-    const dataBase64 = codexToolResultImageBase64(data);
+    const dataBase64 = data.replace(DATA_URL_PREFIX_PATTERN, "");
     if (!dataBase64) {
       continue;
     }
@@ -709,9 +704,9 @@ const codexMcpToolCallStreamParts = (
   const error = codexMcpToolErrorFromResult(value);
   const status = error ? "error" : statusFromCodexStatus(value.status);
   const output = isComputerUse
-    ? codexToolResultContentText(value.result)
-    : codexToolResultText(value.result);
-  const images = isComputerUse ? codexMcpToolImages(value.result) : [];
+    ? codexToolResultText(value.result)
+    : codexToolResultDisplayText(value.result);
+  const images = isComputerUse ? codexToolResultImages(value.result) : [];
   const resolvedError = isComputerUse && status === "error" && !error ? output : error;
   const toolInvocation: NormalizedCodexToolInvocation = {
     messageId,
@@ -789,7 +784,7 @@ const codexDynamicToolCallStreamParts = (
   const fileDiffs = patch ? codexApplyPatchFileDiffs(patch) : [];
   const patchOutput = fileDiffsPatchOutput(fileDiffs);
   const resultPayload = codexDynamicToolDisplayPayload(value);
-  const output = codexToolResultText(resultPayload);
+  const output = codexToolResultDisplayText(resultPayload);
   const error = codexDynamicToolErrorFromItem(value);
   const failed = value.success === false || error !== null || value.status === "failed";
   const toolInvocation: NormalizedCodexToolInvocation = {
