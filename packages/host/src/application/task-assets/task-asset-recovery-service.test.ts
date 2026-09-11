@@ -17,6 +17,7 @@ describe("task asset recovery service", () => {
     const restored: string[] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
+      isWorkspaceBlocked: () => false,
       filePort: {
         durableExists: () => Effect.succeed(false),
         listQuarantines: () => Effect.succeed([updateQuarantine]),
@@ -60,6 +61,7 @@ describe("task asset recovery service", () => {
     const restored: string[] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
+      isWorkspaceBlocked: () => false,
       filePort: {
         durableExists: () => Effect.succeed(false),
         listQuarantines: () => Effect.succeed([updateQuarantine, deleteQuarantine]),
@@ -93,6 +95,7 @@ describe("task asset recovery service", () => {
     const removed: string[][] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
+      isWorkspaceBlocked: () => false,
       filePort: {
         durableExists: () => Effect.succeed(true),
         listQuarantines: () => Effect.succeed([createQuarantine]),
@@ -129,6 +132,7 @@ describe("task asset recovery service", () => {
     const removed: string[][] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
+      isWorkspaceBlocked: () => false,
       filePort: {
         durableExists: () => Effect.succeed(true),
         listQuarantines: () => Effect.succeed([createQuarantine]),
@@ -163,6 +167,7 @@ describe("task asset recovery service", () => {
     };
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
+      isWorkspaceBlocked: () => false,
       filePort: {
         durableExists: () => Effect.die("Committed create recovery must not inspect files."),
         listQuarantines: () => Effect.succeed([createQuarantine]),

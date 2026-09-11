@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import { rm } from "node:fs/promises";
-import path from "node:path";
 import { createNodeTaskAssetFilePort } from "../../adapters/node/filesystem-task-asset-file-port";
 import { createSqliteTaskAssetRegistry } from "../../adapters/sqlite/sqlite-task-asset-registry";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
@@ -18,6 +17,7 @@ import {
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
 import type { TaskAssetError } from "../../effect/task-asset-error";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
+import { sqliteTaskStoreDirectoryPath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import {
   HostOperationError,
   type HostOperationErrorAggregate,
@@ -46,13 +46,13 @@ export const createNodeTaskAssetServices = ({
   processEnv,
   workspaceSettingsService,
 }: {
-  assertWorkspaceAdmitted?: (input: {
+  assertWorkspaceAdmitted: (input: {
     operation: string;
     repoPath: string;
     workspaceId: string;
   }) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
   configuredTaskStore?: TaskStorePort;
-  isWorkspaceBlocked?: (workspaceId: string) => boolean;
+  isWorkspaceBlocked: (workspaceId: string) => boolean;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv: NodeJS.ProcessEnv;
   workspaceSettingsService: WorkspaceSettingsService;
@@ -61,19 +61,15 @@ export const createNodeTaskAssetServices = ({
     workspaceSettingsService
       .getRepoConfigByRepoPath(repoPath)
       .pipe(Effect.map((repoConfig) => repoConfig.workspaceId));
-  const filePort = createNodeTaskAssetFilePort({
-    configDir: resolveOpenDucktorBaseDir(processEnv),
-  });
+  const configDir = resolveOpenDucktorBaseDir(processEnv);
+  const filePort = createNodeTaskAssetFilePort({ configDir });
   const taskAssetStagingService = createTaskAssetStagingService(filePort);
-  const contextManagerInput: Parameters<typeof createSqliteTaskRepositoryContextManager>[0] = {
+  const contextManager = createSqliteTaskRepositoryContextManager({
+    assertWorkspaceAdmitted,
     onBackgroundFailure,
     processEnv,
     resolveWorkspaceIdForRepoPath,
-  };
-  if (assertWorkspaceAdmitted) {
-    contextManagerInput.assertWorkspaceAdmitted = assertWorkspaceAdmitted;
-  }
-  const contextManager = createSqliteTaskRepositoryContextManager(contextManagerInput);
+  });
   const registry = createSqliteTaskAssetRegistry({
     contextProvider: contextManager.withDatabase,
   });
@@ -90,21 +86,16 @@ export const createNodeTaskAssetServices = ({
         .getRepoConfig(workspaceId)
         .pipe(Effect.map((repoConfig) => repoConfig.repoPath)),
   });
-  const recoveryServiceInput: Parameters<typeof createTaskAssetRecoveryService>[0] = {
+  const taskAssetRecoveryService = createTaskAssetRecoveryService({
     filePort,
+    isWorkspaceBlocked,
     registry,
     resolveRepoPath: (workspaceId) =>
       workspaceSettingsService
         .getRepoConfig(workspaceId)
         .pipe(Effect.map((repoConfig) => repoConfig.repoPath)),
     taskStore: inner,
-  };
-  if (isWorkspaceBlocked) {
-    recoveryServiceInput.isWorkspaceBlocked = isWorkspaceBlocked;
-  }
-  const taskAssetRecoveryService = createTaskAssetRecoveryService(recoveryServiceInput);
-  const taskStoreRoot = path.join(resolveOpenDucktorBaseDir(processEnv), "task-stores");
-
+  });
   return {
     startupSweep: () =>
       taskAssetRecoveryService
@@ -129,7 +120,11 @@ export const createNodeTaskAssetServices = ({
       Effect.gen(function* () {
         yield* contextManager.closeWorkspace(workspaceId);
         yield* Effect.tryPromise({
-          try: () => rm(path.join(taskStoreRoot, workspaceId), { force: true, recursive: true }),
+          try: () =>
+            rm(sqliteTaskStoreDirectoryPath(configDir, workspaceId), {
+              force: true,
+              recursive: true,
+            }),
           catch: (cause) =>
             new HostOperationError({
               operation: "workspace.removeTaskStoreDirectory",

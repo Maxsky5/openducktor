@@ -470,6 +470,18 @@ describe("AppShell", () => {
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 
+  test("keeps the workspace shell when onboarding completed with no workspaces", async () => {
+    renderAppShellForTest({
+      workspacePresence: { hasWorkspaces: false, onboardingCompleted: true },
+    });
+
+    await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
+    expect(await screen.findByRole("heading", { name: "Open a Repository" })).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Set up your local coding workspace" }),
+    ).toBeNull();
+  });
+
   test("shows the workspace load failure when no cached workspace exists", () => {
     renderAppShellForTest({
       workspacePresence: {

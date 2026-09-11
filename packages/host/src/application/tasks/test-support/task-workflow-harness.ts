@@ -147,7 +147,11 @@ const extendSettingsConfigPort = (
 ): SettingsConfigPort => createSettingsConfigPort({ ...base, ...overrides });
 const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
   createTaskStoreTestDouble(overrides);
-type TaskServiceTestInput = Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
+type TaskServiceTestInput = Omit<
+  CreateTaskServiceInput,
+  "assertWorkspaceAdmitsWork" | "taskStore" | "taskActivityGuard"
+> & {
+  assertWorkspaceAdmitsWork?: CreateTaskServiceInput["assertWorkspaceAdmitsWork"];
   taskActivityGuard?: TaskActivityGuardPort;
   taskStore: TaskStorePort;
 };
@@ -167,6 +171,7 @@ const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceI
   const resolvedToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter({ systemCommands });
   const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
+    assertWorkspaceAdmitsWork: rest.assertWorkspaceAdmitsWork ?? (() => Effect.void),
     gitProviderResolver: rest.gitProviderResolver ?? createDefaultGitProviderResolver(),
     terminalService:
       rest.terminalService ??

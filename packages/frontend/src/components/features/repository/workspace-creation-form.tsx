@@ -140,17 +140,23 @@ export function useWorkspaceCreation({
   const confirmRepo = async (repoPath: string): Promise<void> => {
     if (resolveRepoPath) {
       const resolution = await resolveRepoPath(repoPath);
-      if (resolution.kind === "removing") {
-        throw new Error(
-          `Workspace removal is incomplete for ${resolution.removal.workspace.workspaceName}. Retry removal from the workspace rail.`,
-        );
-      }
-      if (resolution.kind === "closed") {
-        if (onReopenClosedWorkspace) {
+      switch (resolution.kind) {
+        case "removing":
+          throw new Error(
+            `Workspace removal is incomplete for ${resolution.removal.workspace.workspaceName}. Retry removal from the workspace rail.`,
+          );
+        case "closed":
+          if (!onReopenClosedWorkspace) {
+            throw new Error("This form cannot reopen a closed workspace.");
+          }
           await onReopenClosedWorkspace(resolution.workspace);
-        }
-        onSuccess?.();
-        return;
+          onSuccess?.();
+          return;
+        case "open":
+          // The draft validation reports the repository as already configured.
+          break;
+        case "new":
+          break;
       }
     }
     const workspaceName = deriveWorkspaceNameFromRepoPath(repoPath);

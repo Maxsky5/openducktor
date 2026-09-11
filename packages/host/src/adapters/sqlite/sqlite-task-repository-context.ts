@@ -1,5 +1,4 @@
 import { Deferred, Effect } from "effect";
-import path from "node:path";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import {
   HostOperationError,
@@ -44,7 +43,7 @@ export type SqliteTaskRepositoryContextProvider = <A>(
 export type SqliteTaskRepositoryContextManager = {
   readonly closeWorkspace: (
     workspaceId: string,
-  ) => Effect.Effect<void, HostOperationError<{ failures: HostOperationErrorAggregate[] }>>;
+  ) => Effect.Effect<void, HostOperationError<{ workspaceId: string }>>;
   readonly dispose: () => Effect.Effect<
     void,
     HostOperationError<{ failures: HostOperationErrorAggregate[] }>
@@ -154,15 +153,15 @@ export const createSqliteTaskRepositoryContextManager = ({
       return { databasePath, repoPath, workspaceId };
     });
 
-  const getSlot = (databasePath: string) => {
-    const current = slots.get(databasePath);
+  const getSlot = (workspaceId: string, databasePath: string) => {
+    const current = slots.get(workspaceId);
     if (current) return current;
     const slot = createSqliteTaskStoreConnectionSlot({
       databasePath,
       onBackgroundFailure,
       openConnection,
     });
-    slots.set(databasePath, slot);
+    slots.set(workspaceId, slot);
     return slot;
   };
 
@@ -177,7 +176,7 @@ export const createSqliteTaskRepositoryContextManager = ({
             workspaceId: storage.workspaceId,
           });
         }
-        const slot = getSlot(storage.databasePath);
+        const slot = getSlot(storage.workspaceId, storage.databasePath);
         return yield* slot
           .run((session) => use({ ...storage, session }))
           .pipe(
@@ -190,25 +189,20 @@ export const createSqliteTaskRepositoryContextManager = ({
 
   const closeWorkspace = (workspaceId: string) =>
     Effect.gen(function* () {
-      const matches = Array.from(slots.entries()).filter(
-        ([databasePath]) => path.basename(path.dirname(databasePath)) === workspaceId,
-      );
-      const failures: HostOperationErrorAggregate[] = [];
-      for (const [databasePath, slot] of matches) {
-        slots.delete(databasePath);
-        const result = yield* Effect.either(slot.shutdown());
-        if (result._tag === "Left") {
-          failures.push(result.left);
-        }
+      const slot = slots.get(workspaceId);
+      if (!slot) {
+        return;
       }
-      if (failures.length > 0) {
+      const result = yield* Effect.either(slot.shutdown());
+      if (result._tag === "Left") {
         return yield* new HostOperationError({
           operation: "sqliteTaskRepository.closeWorkspace",
-          message: failures.map((failure) => failure.message).join("\n"),
-          cause: failures[0],
-          details: { failures, workspaceId },
+          message: `Failed to close the task store for workspace ${workspaceId}: ${result.left.message}`,
+          cause: result.left,
+          details: { workspaceId },
         });
       }
+      slots.delete(workspaceId);
     });
 
   const dispose = () =>

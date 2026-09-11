@@ -133,6 +133,11 @@ export const loadWorkspaceListFromQuery = (
   hostClient?: WorkspaceListQueryHost,
 ): Promise<WorkspaceRecord[]> => queryClient.fetchQuery(workspaceListQueryOptions(hostClient));
 
+export const loadWorkspaceCatalogFromQuery = (
+  queryClient: QueryClient,
+  hostClient?: WorkspaceCatalogQueryHost,
+): Promise<WorkspaceCatalog> => queryClient.fetchQuery(workspaceCatalogQueryOptions(hostClient));
+
 export const writeWorkspaceListToQuery = (
   queryClient: QueryClient,
   recordsOrUpdater: WorkspaceRecordUpdate,

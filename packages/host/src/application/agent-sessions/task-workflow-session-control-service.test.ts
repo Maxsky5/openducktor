@@ -14,7 +14,11 @@ import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-s
 import { createTaskWorkflowSessionControlService as createControlService } from "./task-workflow-session-control-service";
 
 type ControlServiceInput = Parameters<typeof createControlService>[0];
-type TestControlServiceInput = Omit<ControlServiceInput, "taskSessionStart" | "tasks"> & {
+type TestControlServiceInput = Omit<
+  ControlServiceInput,
+  "assertWorkspaceAdmitsWork" | "taskSessionStart" | "tasks"
+> & {
+  assertWorkspaceAdmitsWork?: ControlServiceInput["assertWorkspaceAdmitsWork"];
   taskSessionStart?: ControlServiceInput["taskSessionStart"];
   tasks: Omit<ControlServiceInput["tasks"], "transitionTask"> &
     Partial<Pick<ControlServiceInput["tasks"], "transitionTask">>;
@@ -27,6 +31,7 @@ const createTaskWorkflowSessionControlService = (input: TestControlServiceInput)
       complete: () => Effect.dieMessage("unexpected task session completion"),
     },
     ...input,
+    assertWorkspaceAdmitsWork: input.assertWorkspaceAdmitsWork ?? (() => Effect.void),
     tasks: {
       transitionTask: () => Effect.dieMessage("unexpected task transition"),
       ...input.tasks,
@@ -181,7 +186,7 @@ describe("createTaskWorkflowSessionControlService", () => {
     const prepared: string[] = [];
     const service = createTaskWorkflowSessionControlService({
       ...createControlDeps(),
-      assertProcessStart: () =>
+      assertWorkspaceAdmitsWork: () =>
         Effect.fail(
           new HostValidationError({
             message: "Workspace is closed: /repo. Reopen it before using it.",

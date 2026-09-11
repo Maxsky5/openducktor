@@ -37,7 +37,7 @@ export type WorkspaceAdmissionService = {
     repoPath: string;
     workspaceId: string;
   }): Effect.Effect<void, HostValidationErrorAggregate>;
-  assertProcessStart(repoPath: string): Effect.Effect<void, HostValidationErrorAggregate>;
+  assertWorkspaceAdmitsWork(repoPath: string): Effect.Effect<void, HostValidationErrorAggregate>;
   blockWorkspace(input: {
     reason: WorkspaceBlockReason;
     repoPath: string;
@@ -139,7 +139,9 @@ export const createWorkspaceAdmissionService = ({
       }),
     );
 
-  const assertProcessStart: WorkspaceAdmissionService["assertProcessStart"] = (repoPath) =>
+  const assertWorkspaceAdmitsWork: WorkspaceAdmissionService["assertWorkspaceAdmitsWork"] = (
+    repoPath,
+  ) =>
     ensureInitialized().pipe(
       Effect.flatMap(() => {
         const normalizedRepoPath = normalizePathForComparison(repoPath);
@@ -172,7 +174,7 @@ export const createWorkspaceAdmissionService = ({
       reservationsByWorkspaceId.delete(workspaceId);
     },
     assertTaskStoreAccess,
-    assertProcessStart,
+    assertWorkspaceAdmitsWork,
     blockWorkspace: (input) => {
       blockedByWorkspaceId.set(input.workspaceId, input);
     },

@@ -112,7 +112,7 @@ export const buildWorkspaceCatalog = (
       const record = config.workspaces[workspace.workspaceId]?.removal;
       return record ? [{ workspace, record }] : [];
     }),
-    onboardingCompleted: config.onboardingCompleted ?? Object.keys(config.workspaces).length > 0,
+    onboardingCompleted: config.onboardingCompleted === true,
   };
 };
 export const firstOpenWorkspaceId = (

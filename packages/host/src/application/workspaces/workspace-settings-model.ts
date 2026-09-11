@@ -23,7 +23,11 @@ import {
   type WorkspaceRepoSettingsInput,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
+import {
+  createDefaultGlobalConfig,
+  type LoadedGlobalConfig,
+  withInferredOnboardingCompletion,
+} from "../../config/global-config";
 import { workspaceRecordForId } from "./workspace-catalog-model";
 import {
   type HostInvariantErrorAggregate,
@@ -114,10 +118,7 @@ export type WorkspaceAddInput = {
 export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
     const config = (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
-    if (config.onboardingCompleted === undefined) {
-      config.onboardingCompleted = Object.keys(config.workspaces).length > 0;
-    }
-    return config;
+    return withInferredOnboardingCompletion(config);
   });
 const normalizeOptionalNonEmptyString = (value: string | undefined): string | undefined => {
   if (value === undefined) {

@@ -298,6 +298,7 @@ describe("terminalWebSocketHandler", () => {
     } satisfies TerminalPtyPort;
     const service = await Effect.runPromise(
       createTerminalService({
+        assertWorkspaceAdmitsWork: () => Effect.void,
         filesystem: unusedFilesystem,
         ptyPort: unusedPtyPort,
         resolveLaunchEnvironment: () =>

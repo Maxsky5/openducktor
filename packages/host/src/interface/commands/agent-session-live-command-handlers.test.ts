@@ -133,6 +133,7 @@ const createHarness = async (
     releaseSession: () => Effect.dieMessage("unexpected release"),
   };
   const service = createAgentSessionLiveStateService({
+    assertWorkspaceAdmitsWork: () => Effect.void,
     adapterRegistry: createLiveSessionAdapterRegistry(),
     faultLog: () => Effect.void,
     publish: (envelope) => envelopes.push(envelope),

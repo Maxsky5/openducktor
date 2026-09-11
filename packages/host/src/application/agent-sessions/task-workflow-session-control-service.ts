@@ -147,7 +147,7 @@ const toRuntimeModel = (
 };
 
 export const createTaskWorkflowSessionControlService = ({
-  assertProcessStart,
+  assertWorkspaceAdmitsWork,
   canonicalizeRepoPath,
   runtime,
   taskReader,
@@ -155,9 +155,9 @@ export const createTaskWorkflowSessionControlService = ({
   taskLifecycle,
   taskSessionStart,
 }: {
-  assertProcessStart?:
-    | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
-    | undefined;
+  assertWorkspaceAdmitsWork: (
+    repoPath: string,
+  ) => Effect.Effect<void, HostValidationErrorAggregate>;
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtime: RuntimeControl;
   taskReader: TaskReader;
@@ -174,7 +174,7 @@ export const createTaskWorkflowSessionControlService = ({
 } => ({
   ...runtime,
   startWorkflowSession: createStartTaskWorkflowSession({
-    assertProcessStart,
+    assertWorkspaceAdmitsWork,
     canonicalizeRepoPath,
     runtime,
     tasks,

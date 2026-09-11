@@ -77,9 +77,16 @@ export const collectWorkspaceTaskWorktreePaths = (
     }
 
     const inventory = yield* dependencies.gitPort.listWorktrees(repoPath);
-    const inventoryPaths = new Set(
-      inventory.map((worktree) => normalizePathForComparison(worktree.worktreePath)),
-    );
+    const inventoryPaths = new Map<string, string>();
+    for (const worktree of inventory) {
+      const canonical = yield* Effect.either(
+        dependencies.gitPort.canonicalizePath(worktree.worktreePath),
+      );
+      const comparison = normalizePathForComparison(
+        canonical._tag === "Right" ? canonical.right : worktree.worktreePath,
+      );
+      inventoryPaths.set(comparison, worktree.worktreePath);
+    }
     const repoPathComparison = normalizePathForComparison(repoPath);
     const seen = new Set<string>();
     const worktreePaths: string[] = [];
@@ -121,12 +128,11 @@ export const collectWorkspaceTaskWorktreePaths = (
     // A worktree under our base with no task or session evidence cannot be
     // attributed. Stop instead of guessing ownership or skipping it.
     const unclassifiedPaths: string[] = [];
-    for (const worktree of inventory) {
-      const normalized = normalizePathForComparison(worktree.worktreePath);
+    for (const [normalized, worktreePath] of inventoryPaths) {
       if (seen.has(normalized)) {
         continue;
       }
-      if (!pathStartsWith(worktree.worktreePath, managedWorktreeBasePath)) {
+      if (!pathStartsWith(worktreePath, managedWorktreeBasePath)) {
         continue;
       }
       if (normalized === repoPathComparison || otherWorkspacePaths.has(normalized)) {
@@ -135,10 +141,10 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (otherWorkspaceClaims.has(normalized)) {
         continue;
       }
-      if (!(yield* dependencies.settingsConfig.pathExists(worktree.worktreePath))) {
+      if (!(yield* dependencies.settingsConfig.pathExists(worktreePath))) {
         continue;
       }
-      unclassifiedPaths.push(worktree.worktreePath);
+      unclassifiedPaths.push(worktreePath);
     }
     if (unclassifiedPaths.length > 0) {
       return yield* Effect.fail(

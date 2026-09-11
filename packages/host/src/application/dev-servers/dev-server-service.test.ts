@@ -172,6 +172,7 @@ const expectStartFailure = async (
 describe("createDevServerService", () => {
   test("returns stopped state for configured dev server scripts", async () => {
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
     await expect(
@@ -204,6 +205,7 @@ describe("createDevServerService", () => {
   });
   test("includes the deterministic task worktree when resolved", async () => {
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
@@ -222,6 +224,7 @@ describe("createDevServerService", () => {
     const { eventBus, events } = createEventBus();
     const { processPort, starts } = createProcessPort();
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       eventBus,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
@@ -297,6 +300,7 @@ describe("createDevServerService", () => {
       },
     };
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
@@ -324,6 +328,7 @@ describe("createDevServerService", () => {
       },
     };
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
@@ -350,6 +355,7 @@ describe("createDevServerService", () => {
       },
     };
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       eventBus,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
@@ -379,6 +385,7 @@ describe("createDevServerService", () => {
   test("rejects duplicate starts while a script is running", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
@@ -469,6 +476,7 @@ describe("createDevServerService", () => {
   test("requires a task worktree before starting scripts", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService(null),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
@@ -482,6 +490,7 @@ describe("createDevServerService", () => {
   test("fails start when no dev server scripts are configured", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig({ devServers: [] })),
@@ -512,6 +521,7 @@ describe("createDevServerService", () => {
       },
     };
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(
@@ -586,6 +596,7 @@ describe("createDevServerService", () => {
       },
     };
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(
@@ -644,6 +655,7 @@ describe("createDevServerService", () => {
       },
     };
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
@@ -680,6 +692,7 @@ describe("createDevServerService", () => {
   test("stops running scripts and returns stopped state", async () => {
     const { processPort, stoppedPids } = createProcessPort();
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
@@ -710,6 +723,7 @@ describe("createDevServerService", () => {
       },
     };
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
@@ -743,6 +757,7 @@ describe("createDevServerService", () => {
     };
     const { eventBus, events } = createEventBus();
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       eventBus,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
@@ -768,6 +783,7 @@ describe("createDevServerService", () => {
     const createStartedService = async () => {
       const { processPort } = createProcessPort();
       const service = createDevServerService({
+        assertWorkspaceAdmitsWork: () => Effect.void,
         processPort,
         taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
         workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
@@ -790,6 +806,7 @@ describe("createDevServerService", () => {
   test("keeps runtime ownership isolated for delimiter-colliding repo and task strings", async () => {
     const { processPort, starts } = createProcessPort();
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task" }),
       workspaceSettingsService: createWorkspaceSettingsServiceByRepoPath({
@@ -837,6 +854,7 @@ describe("createDevServerService", () => {
   test("stops all running task dev server groups during host shutdown", async () => {
     const { processPort, stoppedPids } = createProcessPort();
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
@@ -895,6 +913,7 @@ describe("createDevServerService", () => {
       },
     };
     const service = createDevServerService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       processPort,
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task" }),
       workspaceSettingsService: createWorkspaceSettingsService(

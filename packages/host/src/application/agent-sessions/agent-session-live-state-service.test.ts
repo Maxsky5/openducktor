@@ -83,14 +83,16 @@ const fakeAdapter = (input: {
 };
 
 const createHarness = (
-  assertProcessStart?: (repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>,
+  assertWorkspaceAdmitsWork?: (
+    repoPath: string,
+  ) => Effect.Effect<void, HostValidationErrorAggregate>,
 ) => {
   const events: AgentSessionLiveEnvelope[] = [];
   const faultLogs: string[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const service = createAgentSessionLiveStateService({
     adapterRegistry,
-    assertProcessStart,
+    assertWorkspaceAdmitsWork: assertWorkspaceAdmitsWork ?? (() => Effect.void),
     faultLog: (message) => Effect.sync(() => faultLogs.push(message)),
     publish: (event) => events.push(event),
   });
@@ -109,14 +111,14 @@ const expectHostFailure = async <Success>(
 
 describe("createAgentSessionLiveStateService", () => {
   test("rejects a session start for a blocked workspace before resolving an adapter", async () => {
-    const assertProcessStart = (repoPath: string) =>
+    const assertWorkspaceAdmitsWork = (repoPath: string) =>
       Effect.fail(
         new HostValidationError({
           message: `Workspace is closed: ${repoPath}. Reopen it before using it.`,
           field: "workspaceId",
         }),
       );
-    const { service } = createHarness(assertProcessStart);
+    const { service } = createHarness(assertWorkspaceAdmitsWork);
 
     const failure = await expectHostFailure(
       service.startSession({
@@ -635,6 +637,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault logging failed",
     });
     const service = createAgentSessionLiveStateService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
         Effect.sync(() => {
@@ -677,6 +680,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.fail(logFailure),
       publish: (event) => events.push(event),
@@ -717,6 +721,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault publication failed",
     });
     const service = createAgentSessionLiveStateService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
         Effect.sync(() => {
@@ -756,6 +761,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
       publish: (event) => {
@@ -804,6 +810,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault publication failed",
     });
     const service = createAgentSessionLiveStateService({
+      assertWorkspaceAdmitsWork: () => Effect.void,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
         Effect.sync(() => {

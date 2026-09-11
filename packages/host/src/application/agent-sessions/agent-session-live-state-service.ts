@@ -107,9 +107,9 @@ export type AgentSessionLiveStateService = {
 
 export type CreateAgentSessionLiveStateServiceInput = {
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
-  readonly assertProcessStart?:
-    | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
-    | undefined;
+  readonly assertWorkspaceAdmitsWork: (
+    repoPath: string,
+  ) => Effect.Effect<void, HostValidationErrorAggregate>;
   readonly faultLog: AgentSessionLiveFaultLogger;
   readonly publish: AgentSessionLiveEnvelopePublisher;
   readonly coordinator?: LiveStateCoordinator;
@@ -132,15 +132,14 @@ const parseAdapterOutput = <Schema extends z.ZodType, Input>(
 
 export const createAgentSessionLiveStateService = ({
   adapterRegistry,
-  assertProcessStart,
+  assertWorkspaceAdmitsWork,
   faultLog,
   publish,
   coordinator = createLiveStateCoordinator(),
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
   const assertStartAllowed = (
     repoPath: string,
-  ): Effect.Effect<void, HostValidationErrorAggregate> =>
-    assertProcessStart ? assertProcessStart(repoPath) : Effect.void;
+  ): Effect.Effect<void, HostValidationErrorAggregate> => assertWorkspaceAdmitsWork(repoPath);
   const withStartAdmission =
     <Input extends { repoPath: string }, Success>(
       operation: (input: Input) => Effect.Effect<Success, HostError>,

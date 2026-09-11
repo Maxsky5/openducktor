@@ -16,6 +16,7 @@ import type {
 } from "@/types/state-slices";
 import {
   dropWorkspaceQueries,
+  loadWorkspaceCatalogFromQuery,
   loadWorkspaceListFromQuery,
   markWorkspaceCachesChanged,
   workspaceCatalogQueryOptions,
@@ -137,8 +138,9 @@ export function useWorkspaceSelectionOperations({
   const closedWorkspaces = workspaceCatalogQuery.data?.closedWorkspaces ?? [];
   const incompleteRemovals = workspaceCatalogQuery.data?.incompleteRemovals ?? [];
   const onboardingCompleted = workspaceCatalogQuery.data?.onboardingCompleted ?? false;
-  const workspaceLoadError = workspaceListQuery.error
-    ? new Error(errorMessage(workspaceListQuery.error), { cause: workspaceListQuery.error })
+  const workspaceQueryError = workspaceListQuery.error ?? workspaceCatalogQuery.error;
+  const workspaceLoadError = workspaceQueryError
+    ? new Error(errorMessage(workspaceQueryError), { cause: workspaceQueryError })
     : null;
   const workspacesRef = useRef(workspaces);
 
@@ -320,7 +322,10 @@ export function useWorkspaceSelectionOperations({
   );
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
-    const data = await loadWorkspaceListFromQuery(queryClient, hostClient);
+    const [data] = await Promise.all([
+      loadWorkspaceListFromQuery(queryClient, hostClient),
+      loadWorkspaceCatalogFromQuery(queryClient, hostClient),
+    ]);
     applyWorkspaceRecords(data);
   }, [applyWorkspaceRecords, hostClient, queryClient]);
 
@@ -412,7 +417,12 @@ export function useWorkspaceSelectionOperations({
       workspaceReorderVersionRef.current += 1;
       setIsSwitchingWorkspace(true);
       try {
-        await run();
+        try {
+          await run();
+        } catch (cause) {
+          await refreshWorkspaceCachesAfterMutation().catch(() => undefined);
+          throw cause;
+        }
         await refreshWorkspaceCachesAfterMutation();
         const { title, description } = success();
         toast.success(title, { description });
@@ -492,8 +502,9 @@ export function useWorkspaceSelectionOperations({
     closedWorkspaces,
     incompleteRemovals,
     onboardingCompleted,
-    hasLoadedWorkspaceList: workspaceListQuery.data !== undefined,
-    isLoadingWorkspaces: workspaceListQuery.isPending,
+    hasLoadedWorkspaceList:
+      workspaceListQuery.data !== undefined && workspaceCatalogQuery.data !== undefined,
+    isLoadingWorkspaces: workspaceListQuery.isPending || workspaceCatalogQuery.isPending,
     workspaceLoadError,
     isSwitchingWorkspace,
     refreshWorkspaces,

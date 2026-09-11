@@ -7,6 +7,7 @@ import { useWorkspaceSelectionOperations } from "./use-workspace-selection-opera
 import {
   createDeferred,
   createWorkspaceHostClient,
+  flush,
   workspace,
 } from "./workspace-hook-test-fixtures";
 import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
@@ -487,6 +488,71 @@ describe("use-workspace-selection-operations", () => {
       ]);
     } finally {
       reorderDeferred.resolve([workspace("/repo-b"), workspace("/repo-a", true)]);
+      await harness.unmount();
+    }
+  });
+
+  test("reports a catalog load error and keeps the list gate closed", async () => {
+    workspaceHost.workspaceCatalogGet = mock(async () => {
+      throw new Error("catalog failed");
+    });
+    const harness = createSelectionHarness({
+      activeRepo: null,
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.workspaceLoadError !== null);
+
+      expect(harness.getLatest().workspaceLoadError?.message).toContain("catalog failed");
+      expect(harness.getLatest().hasLoadedWorkspaceList).toBe(false);
+      expect(harness.getLatest().isLoadingWorkspaces).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("refreshes the catalog when a removal fails", async () => {
+    const workspaceCatalogGet = mock(async () => ({
+      openWorkspaces: [workspace("/repo", true)],
+      closedWorkspaces: [],
+      incompleteRemovals: [],
+      onboardingCompleted: true,
+    }));
+    workspaceHost.workspaceCatalogGet = workspaceCatalogGet;
+    workspaceHost.workspaceRemove = mock(async () => {
+      throw new Error("git worktree list failed");
+    });
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => !state.isLoadingWorkspaces);
+      const callsBefore = workspaceCatalogGet.mock.calls.length;
+
+      await expect(
+        harness.run((value) =>
+          value.removeWorkspace({
+            workspaceId: "repo",
+            expectedRepoPath: "/repo",
+            removeTaskWorktrees: true,
+          }),
+        ),
+      ).rejects.toThrow("git worktree list failed");
+      await flush();
+
+      expect(workspaceCatalogGet.mock.calls.length).toBeGreaterThan(callsBefore);
+    } finally {
       await harness.unmount();
     }
   });

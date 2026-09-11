@@ -827,6 +827,72 @@ describe("createWorkspaceSettingsService", () => {
     });
     expect(await Effect.runPromise(service.listWorkspaces())).toEqual([]);
   });
+  test("lets the worktree choice change before any worktree is removed", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: {
+          "repo-a": {
+            ...repoConfig("repo-a", "/repos/a"),
+            removal: {
+              version: 1 as const,
+              operationId: "op-1",
+              removeTaskWorktrees: true,
+              phase: "worktrees" as const,
+              removedWorktrees: [],
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: "Cannot classify registered worktree(s).",
+            },
+          },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const record = await Effect.runPromise(
+      service.beginWorkspaceRemoval({
+        workspaceId: "repo-a",
+        expectedRepoPath: "/repos/a",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(record.removeTaskWorktrees).toBe(false);
+    expect(record.phase).toBe("attachments");
+    expect(record.lastFailure).toBeNull();
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal).toEqual(record);
+  });
+  test("keeps the worktree choice after a worktree is removed", async () => {
+    const storedRemoval = {
+      version: 1 as const,
+      operationId: "op-1",
+      removeTaskWorktrees: true,
+      phase: "worktrees" as const,
+      removedWorktrees: ["/managed/repo-a/task-1"],
+      startedAt: "2026-01-01T00:00:00.000Z",
+      lastFailure: null,
+    };
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: {
+          "repo-a": { ...repoConfig("repo-a", "/repos/a"), removal: storedRemoval },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const record = await Effect.runPromise(
+      service.beginWorkspaceRemoval({
+        workspaceId: "repo-a",
+        expectedRepoPath: "/repos/a",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(record).toEqual(storedRemoval);
+    expect(settingsConfig.writtenConfigs).toEqual([]);
+  });
   test("rejects close, reopen, and select while removal is incomplete", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({
