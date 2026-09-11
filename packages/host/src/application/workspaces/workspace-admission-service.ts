@@ -203,7 +203,7 @@ export const createWorkspaceAdmissionService = ({
 const TASK_STORE_WRITE_OPERATION =
   /\.(clear|create|delete|promote|record|register|remove|set|transition|update|upsert)/i;
 
-export const isTaskStoreWriteOperation = (operation: string): boolean =>
+const isTaskStoreWriteOperation = (operation: string): boolean =>
   TASK_STORE_WRITE_OPERATION.test(operation);
 
 const blockedWorkspaceError = (blocked: BlockedWorkspace): HostValidationError => {

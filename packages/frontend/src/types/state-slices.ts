@@ -52,6 +52,15 @@ export type WorkspaceSelectionOperationsInput = {
 
 export type ActiveWorkspace = Pick<WorkspaceRecord, "workspaceId" | "workspaceName" | "repoPath">;
 
+export type WorkspaceLifecycleTarget = {
+  workspaceId: string;
+  expectedRepoPath: string;
+};
+
+export type WorkspaceRemovalInput = WorkspaceLifecycleTarget & {
+  removeTaskWorktrees: boolean;
+};
+
 export type RepoAgentDefaultInput = {
   runtimeKind?: RuntimeKind | null;
   providerId: string;
@@ -92,13 +101,9 @@ export type WorkspaceStateContextValue = {
   activeBranch: GitCurrentBranch | null;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
-  closeWorkspace: (input: { workspaceId: string; expectedRepoPath: string }) => Promise<void>;
-  removeWorkspace: (input: {
-    workspaceId: string;
-    expectedRepoPath: string;
-    removeTaskWorktrees: boolean;
-  }) => Promise<void>;
-  reopenWorkspace: (input: { workspaceId: string; expectedRepoPath: string }) => Promise<void>;
+  closeWorkspace: (input: WorkspaceLifecycleTarget) => Promise<void>;
+  removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
+  reopenWorkspace: (input: WorkspaceLifecycleTarget) => Promise<void>;
   resolveWorkspacePath: (repoPath: string) => Promise<WorkspacePathResolution>;
   reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
