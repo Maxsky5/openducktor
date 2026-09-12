@@ -169,7 +169,7 @@ describe("Workspace Session persistence through the shared command module", () =
     });
     const live = createAgentSessionLiveStateService({
       adapterRegistry: createLiveSessionAdapterRegistry(),
-      assertWorkspaceAdmitsWork: () => Effect.void,
+      withWorkStartLease: (_repoPath, effect) => effect,
       persistence,
       faultLog: () => Effect.void,
       publish: (event) => {
@@ -226,7 +226,7 @@ describe("Workspace Session persistence through the shared command module", () =
     );
     events.length = 0;
     const commands = createAgentSessionCommandService({
-      assertWorkspaceAdmitsWork: () => Effect.void,
+      withWorkStartLease: (_repoPath, effect) => effect,
       runtime: live,
       repositoryPolicy: persistence,
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),

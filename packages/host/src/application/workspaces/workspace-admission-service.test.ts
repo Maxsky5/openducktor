@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkspaceCatalog, WorkspaceRecord } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber, Option } from "effect";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { createWorkspaceAdmissionService } from "./workspace-admission-service";
 
@@ -61,6 +61,9 @@ describe("workspace admission service", () => {
     expect(admission.isWorkspaceBlocked("closed-ws")).toBe(true);
     expect(admission.isWorkspaceBlocked("removing-ws")).toBe(true);
     expect(admission.isWorkspaceBlocked("open-ws")).toBe(false);
+    expect(admission.isWorkspaceRemovalPending("closed-ws")).toBe(false);
+    expect(admission.isWorkspaceRemovalPending("removing-ws")).toBe(true);
+    expect(admission.isWorkspaceRemovalPending("open-ws")).toBe(false);
   });
 
   test("blocks task store writes for closed workspaces but allows reads", async () => {
@@ -228,6 +231,58 @@ describe("workspace admission service", () => {
         }),
       ),
     ).rejects.toThrow("already in progress for ws");
+  });
+
+  test("holds a work start lease until the operation finishes", async () => {
+    const admission = createAdmission(catalog());
+    await Effect.runPromise(admission.initialize());
+
+    const { closeExit, releaseExit } = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/repos/open",
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(entered);
+        const waitForStarts = yield* Effect.fork(admission.awaitWorkStarts("/repos/open"));
+        yield* Effect.sleep("20 millis");
+        const waitExitBeforeRelease = yield* Fiber.poll(waitForStarts);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        yield* Fiber.join(waitForStarts);
+        return {
+          closeExit: waitExitBeforeRelease,
+          releaseExit: yield* Fiber.poll(waitForStarts),
+        };
+      }),
+    );
+
+    expect(Option.isNone(closeExit)).toBe(true);
+    expect(Option.isSome(releaseExit)).toBe(true);
+  });
+
+  test("releases the work start lease when the workspace is blocked", async () => {
+    const admission = createAdmission(
+      catalog({ closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")] }),
+    );
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        admission.withWorkStartLease(
+          "/repos/closed",
+          Effect.dieMessage("a blocked workspace must not start work"),
+        ),
+      ),
+    );
+
+    expect(error.message).toContain("Workspace is closed");
+    await expect(
+      Effect.runPromise(admission.awaitWorkStarts("/repos/closed")),
+    ).resolves.toBeUndefined();
   });
 
   test("tracks block and unblock changes after initialization", async () => {

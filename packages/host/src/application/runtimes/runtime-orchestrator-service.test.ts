@@ -281,7 +281,7 @@ describe("createRuntimeOrchestratorService", () => {
   test("rejects runtime ensure for a blocked workspace before starting a runtime", async () => {
     const ensureWorkspaceRuntime = mock(() => Effect.dieMessage("unexpected runtime start"));
     const service = createRuntimeOrchestratorService({
-      assertWorkspaceAdmitsWork: () =>
+      withWorkStartLease: () =>
         Effect.fail(
           new HostValidationError({
             message: "Workspace is closed: canonical/repo. Reopen it before using it.",

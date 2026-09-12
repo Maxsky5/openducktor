@@ -211,7 +211,7 @@ export const createWorkspaceLifecycleSettingsMethods = (
         const removal: WorkspaceRemovalRecord = {
           ...repoConfig.removal,
           removeTaskWorktrees: input.removeTaskWorktrees,
-          phase: input.removeTaskWorktrees ? "worktrees" : "attachments",
+          phase: input.removeTaskWorktrees ? "worktrees" : "task_store",
           lastFailure: null,
         };
         config.workspaces[input.workspaceId] = { ...repoConfig, removal };
@@ -223,7 +223,7 @@ export const createWorkspaceLifecycleSettingsMethods = (
         version: 1,
         operationId: globalThis.crypto.randomUUID(),
         removeTaskWorktrees: input.removeTaskWorktrees,
-        phase: input.removeTaskWorktrees ? "worktrees" : "attachments",
+        phase: input.removeTaskWorktrees ? "worktrees" : "task_store",
         removedWorktrees: [],
         startedAt: new Date().toISOString(),
         lastFailure: null,

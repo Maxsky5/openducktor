@@ -151,7 +151,7 @@ export type TaskSessionModelPersistence = (
 ) => Effect.Effect<{ updated: boolean; publish: Effect.Effect<void, HostError> }, HostError>;
 
 export const createTaskWorkflowSessionPolicy = ({
-  assertWorkspaceAdmitsWork,
+  withWorkStartLease,
   canonicalizeRepoPath,
   runtime,
   taskReader,
@@ -160,9 +160,10 @@ export const createTaskWorkflowSessionPolicy = ({
   taskSessionStart,
   persistTaskModel,
 }: {
-  assertWorkspaceAdmitsWork: (
+  withWorkStartLease: <A, E, R>(
     repoPath: string,
-  ) => Effect.Effect<void, HostValidationErrorAggregate>;
+    effect: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E | HostValidationErrorAggregate, R>;
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtime: RuntimeControl;
   taskReader: TaskReader;
@@ -172,7 +173,7 @@ export const createTaskWorkflowSessionPolicy = ({
   persistTaskModel: TaskSessionModelPersistence;
 }) => ({
   startWorkflowSession: createStartTaskWorkflowSession({
-    assertWorkspaceAdmitsWork,
+    withWorkStartLease,
     canonicalizeRepoPath,
     runtime,
     tasks,
