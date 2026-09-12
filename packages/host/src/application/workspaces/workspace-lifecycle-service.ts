@@ -121,6 +121,8 @@ export const createWorkspaceLifecycleService = ({
   workspaceSettingsService,
   worktreeFiles,
 }: CreateWorkspaceLifecycleServiceInput): WorkspaceLifecycleService => {
+  const removalSemaphore = Effect.unsafeMakeSemaphore(1);
+
   const requireTarget = (workspaceId: string, expectedRepoPath: string) =>
     Effect.gen(function* () {
       const repoConfig = yield* workspaceSettingsService.getRepoConfig(workspaceId);
@@ -239,36 +241,6 @@ export const createWorkspaceLifecycleService = ({
           removedWorktrees.map((path) => normalizePathForComparison(path)),
         );
         const pendingWorktreePath = startedRecord.pendingWorktreePath;
-        if (
-          pendingWorktreePath !== null &&
-          !removedComparisons.has(normalizePathForComparison(pendingWorktreePath))
-        ) {
-          const pendingResult = yield* Effect.either(
-            removeWorktreeAndFilesystemPath(
-              { gitPort, settingsConfig, worktreeFiles },
-              {
-                force: true,
-                managedWorktreeBasePath,
-                missingOutsideManagedRootPathPolicy: "skip",
-                repoPath: journaledRepoConfig.repoPath,
-                worktreePath: pendingWorktreePath,
-              },
-            ),
-          );
-          if (pendingResult._tag === "Left") {
-            return yield* failRemovalPhase(
-              input.workspaceId,
-              "worktrees",
-              removedWorktrees,
-              pendingWorktreePath,
-              `Failed to finish the pending cleanup of ${pendingWorktreePath}: ${pendingResult.left.message}. Delete that directory manually, or retry removal to continue. Local branches and committed history stay.`,
-              pendingResult.left,
-            );
-          }
-          removedWorktrees.push(pendingWorktreePath);
-          removedComparisons.add(normalizePathForComparison(pendingWorktreePath));
-          yield* persistProgress(input.workspaceId, "worktrees", removedWorktrees, null, null);
-        }
         const catalog = yield* workspaceSettingsService.getWorkspaceCatalog();
         const inventoryResult = yield* Effect.either(
           admission.withAdministrativeAccess(
@@ -279,6 +251,7 @@ export const createWorkspaceLifecycleService = ({
             collectWorkspaceTaskWorktreePaths(
               { gitPort, settingsConfig, taskStore, workspaceSettingsService },
               journaledRepoConfig,
+              pendingWorktreePath,
             ),
           ),
         );
@@ -293,6 +266,17 @@ export const createWorkspaceLifecycleService = ({
           );
         }
         const worktreePaths = inventoryResult.right;
+        if (
+          pendingWorktreePath !== null &&
+          !worktreePaths.some(
+            (worktreePath) =>
+              normalizePathForComparison(worktreePath) ===
+              normalizePathForComparison(pendingWorktreePath),
+          ) &&
+          !(yield* settingsConfig.pathExists(pendingWorktreePath))
+        ) {
+          yield* persistProgress(input.workspaceId, "worktrees", removedWorktrees, null, null);
+        }
         for (const worktreePath of worktreePaths) {
           if (removedComparisons.has(normalizePathForComparison(worktreePath))) {
             continue;
@@ -328,7 +312,7 @@ export const createWorkspaceLifecycleService = ({
               "worktrees",
               removedWorktrees,
               worktreePath,
-              `Removed ${removedWorktrees.length} task worktree(s). Failed to remove ${worktreePath}: ${removalResult.left.message}. Retry removal to continue. Local branches and committed history stay.`,
+              `Removed ${removedWorktrees.length} task worktree(s). Failed to remove ${worktreePath}: ${removalResult.left.message}. Retry removal to continue. If it keeps failing, delete that directory manually. Local branches and committed history stay.`,
               removalResult.left,
             );
           }
@@ -458,17 +442,19 @@ export const createWorkspaceLifecycleService = ({
       });
     },
     removeWorkspace(input) {
-      return Effect.gen(function* () {
-        const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-        return yield* runUnderReservation(
-          {
-            operation: "remove",
-            repoPath: repoConfig.repoPath,
-            workspaceId: input.workspaceId,
-          },
-          () => executeRemoval(input, repoConfig),
-        );
-      });
+      return removalSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
+          return yield* runUnderReservation(
+            {
+              operation: "remove",
+              repoPath: repoConfig.repoPath,
+              workspaceId: input.workspaceId,
+            },
+            () => executeRemoval(input, repoConfig),
+          );
+        }),
+      );
     },
   };
 };
