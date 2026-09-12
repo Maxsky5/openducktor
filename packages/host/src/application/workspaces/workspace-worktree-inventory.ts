@@ -73,8 +73,12 @@ export const collectWorkspaceTaskWorktreePaths = (
     const incompleteRemovalWorkspaceIds = new Set(
       catalog.incompleteRemovals.map((removal) => removal.workspace.workspaceId),
     );
+    const managedBaseComparison = normalizePathForComparison(managedBaseForComparison);
     const otherWorkspacePaths = new Set<string>();
-    const sharedBaseWorkspaces: WorkspaceRecord[] = [];
+    const overlappingBaseWorkspaces: {
+      workspace: WorkspaceRecord;
+      baseComparison: string;
+    }[] = [];
     for (const workspace of otherWorkspaces) {
       otherWorkspacePaths.add(normalizePathForComparison(workspace.repoPath));
       otherWorkspacePaths.add(
@@ -90,37 +94,45 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (otherBasePath === null) {
         continue;
       }
-      const otherBaseForComparison = yield* canonicalizeExistingPath(
-        dependencies,
-        dependencies.settingsConfig.canonicalizePath(otherBasePath),
-        otherBasePath,
+      const otherBaseForComparison = normalizePathForComparison(
+        yield* canonicalizeExistingPath(
+          dependencies,
+          dependencies.settingsConfig.canonicalizePath(otherBasePath),
+          otherBasePath,
+        ),
       );
       if (
-        normalizePathForComparison(otherBaseForComparison) ===
-        normalizePathForComparison(managedBaseForComparison)
+        pathStartsWith(otherBaseForComparison, managedBaseComparison) ||
+        pathStartsWith(managedBaseComparison, otherBaseForComparison)
       ) {
-        sharedBaseWorkspaces.push(workspace);
+        overlappingBaseWorkspaces.push({
+          workspace,
+          baseComparison: otherBaseForComparison,
+        });
       }
     }
-    const unreadableSharedBaseRemoval = sharedBaseWorkspaces.find((workspace) =>
-      incompleteRemovalWorkspaceIds.has(workspace.workspaceId),
+    const unreadableOverlappingBaseRemoval = overlappingBaseWorkspaces.find((entry) =>
+      incompleteRemovalWorkspaceIds.has(entry.workspace.workspaceId),
     );
-    if (unreadableSharedBaseRemoval) {
+    if (unreadableOverlappingBaseRemoval) {
       return yield* Effect.fail(
         new HostValidationError({
-          message: `Cannot check task worktree ownership under ${managedWorktreeBasePath}: workspace ${unreadableSharedBaseRemoval.workspaceId} has an incomplete removal on the same worktree base. Finish that removal first, or retry without removing task worktrees.`,
+          message: `Cannot check task worktree ownership under ${managedWorktreeBasePath}: workspace ${unreadableOverlappingBaseRemoval.workspace.workspaceId} has an incomplete removal on an overlapping worktree base. Finish that removal first, or retry without removing task worktrees.`,
           field: "worktreePath",
           details: {
             repoPath,
-            sharedBaseWorkspaceId: unreadableSharedBaseRemoval.workspaceId,
+            overlappingWorkspaceId: unreadableOverlappingBaseRemoval.workspace.workspaceId,
           },
         }),
       );
     }
     const otherWorkspaceClaims =
-      sharedBaseWorkspaces.length === 0
+      overlappingBaseWorkspaces.length === 0
         ? new Set<string>()
-        : yield* collectWorkspaceClaims(dependencies, sharedBaseWorkspaces);
+        : yield* collectWorkspaceClaims(
+            dependencies,
+            overlappingBaseWorkspaces.map((entry) => entry.workspace),
+          );
 
     const candidates = new Map<string, { path: string; taskId: string }>();
     for (const task of tasks) {
@@ -180,6 +192,23 @@ export const collectWorkspaceTaskWorktreePaths = (
       }
       if (seen.has(canonicalComparison)) {
         continue;
+      }
+      const containingBase = overlappingBaseWorkspaces.find((entry) =>
+        pathStartsWith(entry.baseComparison, canonicalComparison),
+      );
+      if (containingBase) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Cannot remove ${canonicalPath}: it contains the worktree base of workspace ${containingBase.workspace.workspaceId}. Change that base first, or retry without removing task worktrees.`,
+            field: "worktreePath",
+            details: {
+              repoPath,
+              taskId: candidate.taskId,
+              worktreePath: canonicalPath,
+              overlappingWorkspaceId: containingBase.workspace.workspaceId,
+            },
+          }),
+        );
       }
       if (otherWorkspaceClaims.has(canonicalComparison)) {
         return yield* Effect.fail(

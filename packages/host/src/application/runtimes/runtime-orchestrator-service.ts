@@ -271,41 +271,47 @@ export const createRuntimeOrchestratorService = ({
       });
     },
     repoRuntimeHealth(input) {
-      return Effect.gen(function* () {
-        const { runtimeKind, repoPath } = input;
-        const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
-        const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
-        yield* writeRuntimeLog(
-          "info",
-          `Checking ${runtimeKind} repo runtime health for repository ${canonicalRepoPath}`,
-        );
-        const runtimeResult = yield* Effect.either(runtimeEnsure(input));
-        if (runtimeResult._tag === "Left") {
-          if (runtimeResult.left instanceof RuntimeOrchestratorLoggingError) {
-            return yield* Effect.fail(runtimeResult.left);
-          }
-          return yield* buildHealthStatus(
-            descriptor,
-            yield* loadRuntimeStartupStatus({ runtimeKind, repoPath: canonicalRepoPath }),
-            runtimeRegistry,
+      return withWorkStartLease(
+        input.repoPath,
+        Effect.gen(function* () {
+          const { runtimeKind, repoPath } = input;
+          const descriptor = yield* resolveRuntimeDescriptor(
+            runtimeDefinitionsService,
+            runtimeKind,
           );
-        }
-        const runtime: RuntimeInstanceSummary = runtimeResult.right;
-        const health = yield* buildHealthStatus(
-          descriptor,
-          buildReadyStartupStatus(runtime),
-          runtimeRegistry,
-          {
-            mcpProbeAttempts: ACTIVE_MCP_PROBE_ATTEMPTS,
-            mcpProbeRetryDelayMs: activeMcpProbeRetryDelayMs,
-          },
-        );
-        yield* writeRuntimeLog(
-          "info",
-          `${runtimeKind} repo runtime health is ${health.status} for repository ${runtime.repoPath}`,
-        );
-        return health;
-      });
+          const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
+          yield* writeRuntimeLog(
+            "info",
+            `Checking ${runtimeKind} repo runtime health for repository ${canonicalRepoPath}`,
+          );
+          const runtimeResult = yield* Effect.either(runtimeEnsure(input));
+          if (runtimeResult._tag === "Left") {
+            if (runtimeResult.left instanceof RuntimeOrchestratorLoggingError) {
+              return yield* Effect.fail(runtimeResult.left);
+            }
+            return yield* buildHealthStatus(
+              descriptor,
+              yield* loadRuntimeStartupStatus({ runtimeKind, repoPath: canonicalRepoPath }),
+              runtimeRegistry,
+            );
+          }
+          const runtime: RuntimeInstanceSummary = runtimeResult.right;
+          const health = yield* buildHealthStatus(
+            descriptor,
+            buildReadyStartupStatus(runtime),
+            runtimeRegistry,
+            {
+              mcpProbeAttempts: ACTIVE_MCP_PROBE_ATTEMPTS,
+              mcpProbeRetryDelayMs: activeMcpProbeRetryDelayMs,
+            },
+          );
+          yield* writeRuntimeLog(
+            "info",
+            `${runtimeKind} repo runtime health is ${health.status} for repository ${runtime.repoPath}`,
+          );
+          return health;
+        }),
+      );
     },
     repoRuntimeHealthStatus(input) {
       return Effect.gen(function* () {

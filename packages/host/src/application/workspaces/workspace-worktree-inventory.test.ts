@@ -316,7 +316,78 @@ describe("workspace worktree inventory", () => {
       ),
     );
 
-    expect(error.message).toContain("incomplete removal on the same worktree base");
+    expect(error.message).toContain("incomplete removal on an overlapping worktree base");
+    expect(listedRepos).toEqual(["/repos/ws"]);
+  });
+
+  test("rejects removal when a nested workspace base is claimed by a candidate", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: () => Effect.succeed([task("task-1")]),
+      workspaceCatalog: {
+        ...catalog(),
+        openWorkspaces: [workspaceRecord({ effectiveWorktreeBasePath: "/base/task-1" })],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("contains the worktree base");
+    expect(error.message).toContain("/base/task-1");
+  });
+
+  test("rejects removal when a nested workspace base is deeper than the candidate", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: () => Effect.succeed([task("task-1")]),
+      workspaceCatalog: {
+        ...catalog(),
+        openWorkspaces: [workspaceRecord({ effectiveWorktreeBasePath: "/base/task-1/nested" })],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("contains the worktree base");
+  });
+
+  test("rejects removal when an incomplete removal has a nested base under the managed base", async () => {
+    const listedRepos: string[] = [];
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: (input) => {
+        listedRepos.push(input.repoPath);
+        return Effect.succeed([]);
+      },
+      workspaceCatalog: {
+        ...catalog(),
+        incompleteRemovals: [
+          incompleteRemoval(workspaceRecord({ effectiveWorktreeBasePath: "/base/task-1" })),
+        ],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("incomplete removal on an overlapping worktree base");
     expect(listedRepos).toEqual(["/repos/ws"]);
   });
 

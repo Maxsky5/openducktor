@@ -694,4 +694,59 @@ describe("use-workspace-selection-operations", () => {
       await harness.unmount();
     }
   });
+
+  test("keeps global and other-workspace caches when the removed workspace id matches a namespace", async () => {
+    workspaceHost.workspaceRemove = mock(async () => ({
+      catalog: {
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+        onboardingCompleted: true,
+      },
+      removedWorktrees: [],
+    }));
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      const survivingKeys = [
+        ["workspace", "list"],
+        ["workspace", "catalog"],
+        ["workspace", "repo-config", "other"],
+        ["tasks", "repo-data", "/other"],
+        ["checks", "runtime-health", "/other"],
+        ["agent-sessions", "list", "/other", "task-1"],
+      ] as const;
+      for (const key of survivingKeys) {
+        queryClient.setQueryData(key, { marker: key.join("/") });
+      }
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [{ id: "task-1" }],
+      });
+
+      for (const workspaceId of ["workspace", "tasks", "list", "runtime"]) {
+        await harness.run((value) =>
+          value.removeWorkspace({
+            workspaceId,
+            expectedRepoPath: "/repo",
+            removeTaskWorktrees: false,
+          }),
+        );
+      }
+
+      for (const key of survivingKeys) {
+        expect(queryClient.getQueryData(key)).toBeDefined();
+      }
+      expect(queryClient.getQueryData(taskQueryKeys.repoData("/repo"))).toBeUndefined();
+    } finally {
+      await harness.unmount();
+    }
+  });
 });
