@@ -492,4 +492,65 @@ describe("workspace worktree inventory", () => {
     expect(paths).toEqual(["/base/task-1"]);
     expect(listedRepos).toEqual(["/repos/ws"]);
   });
+
+  test("rejects removal when a candidate contains another workspace repository", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: () => Effect.succeed([task("task-1")]),
+      workspaceCatalog: {
+        ...catalog(),
+        openWorkspaces: [workspaceRecord({ repoPath: "/base/task-1/nested-repo" })],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("it contains the repository of workspace other");
+    expect(error.message).toContain("/base/task-1");
+  });
+
+  test("rejects removal when a candidate is inside another workspace repository", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: () => Effect.succeed([task("task-1")]),
+      workspaceCatalog: {
+        ...catalog(),
+        openWorkspaces: [workspaceRecord({ repoPath: "/base" })],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("it is inside the repository of workspace other");
+  });
+
+  test("validates a recorded pending worktree path that git no longer registers", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([]),
+      pathExists: (path) => Effect.succeed(path === "/base/task-1"),
+    });
+
+    const paths = await Effect.runPromise(
+      collectWorkspaceTaskWorktreePaths(
+        dependencies,
+        repoConfig({ worktreeBasePath: "/base" }),
+        "/base/task-1",
+      ),
+    );
+
+    expect(paths).toEqual(["/base/task-1"]);
+  });
 });
