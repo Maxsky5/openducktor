@@ -5,6 +5,7 @@ import {
   type WorkspaceRemovalRecord,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import type { LoadedGlobalConfig } from "../../config/global-config";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import {
@@ -67,6 +68,48 @@ const assertExpectedRepoPath = (
   );
 };
 
+const moveActiveSelection = (config: LoadedGlobalConfig, workspaceId: string): void => {
+  if (config.activeWorkspace !== workspaceId) {
+    return;
+  }
+  const nextActiveWorkspace = firstOpenWorkspaceId(config, workspaceId);
+  if (nextActiveWorkspace === undefined) {
+    delete config.activeWorkspace;
+  } else {
+    config.activeWorkspace = nextActiveWorkspace;
+  }
+};
+
+const nextRemovalRecord = (
+  existing: WorkspaceRemovalRecord | undefined,
+  removeTaskWorktrees: boolean,
+): WorkspaceRemovalRecord => {
+  if (!existing) {
+    return {
+      version: 1,
+      operationId: globalThis.crypto.randomUUID(),
+      removeTaskWorktrees,
+      phase: removeTaskWorktrees ? "worktrees" : "task_store",
+      removedWorktrees: [],
+      startedAt: new Date().toISOString(),
+      lastFailure: null,
+    };
+  }
+  const canChangeChoice =
+    existing.phase === "worktrees" &&
+    existing.removedWorktrees.length === 0 &&
+    existing.removeTaskWorktrees !== removeTaskWorktrees;
+  if (!canChangeChoice) {
+    return existing;
+  }
+  return {
+    ...existing,
+    removeTaskWorktrees,
+    phase: removeTaskWorktrees ? "worktrees" : "task_store",
+    lastFailure: null,
+  };
+};
+
 const readCatalog = (
   settingsConfig: SettingsConfigPort,
   config: Parameters<typeof buildWorkspaceCatalog>[1],
@@ -115,14 +158,7 @@ export const createWorkspaceLifecycleSettingsMethods = (
       }
 
       config.workspaces[workspaceId] = { ...repoConfig, closed: true };
-      if (config.activeWorkspace === workspaceId) {
-        const nextActiveWorkspace = firstOpenWorkspaceId(config, workspaceId);
-        if (nextActiveWorkspace === undefined) {
-          delete config.activeWorkspace;
-        } else {
-          config.activeWorkspace = nextActiveWorkspace;
-        }
-      }
+      moveActiveSelection(config, workspaceId);
       yield* writeConfig(settingsConfig, config);
       return yield* readCatalog(settingsConfig, config);
     });
@@ -200,35 +236,10 @@ export const createWorkspaceLifecycleSettingsMethods = (
       const config = yield* loadGlobalConfig(settingsConfig);
       const repoConfig = yield* requireWorkspace(config, input.workspaceId);
       yield* assertExpectedRepoPath(input.workspaceId, repoConfig, input.expectedRepoPath);
-      if (repoConfig.removal) {
-        const canChangeChoice =
-          repoConfig.removal.phase === "worktrees" &&
-          repoConfig.removal.removedWorktrees.length === 0 &&
-          repoConfig.removal.removeTaskWorktrees !== input.removeTaskWorktrees;
-        if (!canChangeChoice) {
-          return repoConfig.removal;
-        }
-        const removal: WorkspaceRemovalRecord = {
-          ...repoConfig.removal,
-          removeTaskWorktrees: input.removeTaskWorktrees,
-          phase: input.removeTaskWorktrees ? "worktrees" : "task_store",
-          lastFailure: null,
-        };
-        config.workspaces[input.workspaceId] = { ...repoConfig, removal };
-        yield* writeConfig(settingsConfig, config);
-        return removal;
-      }
 
-      const removal: WorkspaceRemovalRecord = {
-        version: 1,
-        operationId: globalThis.crypto.randomUUID(),
-        removeTaskWorktrees: input.removeTaskWorktrees,
-        phase: input.removeTaskWorktrees ? "worktrees" : "task_store",
-        removedWorktrees: [],
-        startedAt: new Date().toISOString(),
-        lastFailure: null,
-      };
+      const removal = nextRemovalRecord(repoConfig.removal, input.removeTaskWorktrees);
       config.workspaces[input.workspaceId] = { ...repoConfig, removal };
+      moveActiveSelection(config, input.workspaceId);
       yield* writeConfig(settingsConfig, config);
       return removal;
     });

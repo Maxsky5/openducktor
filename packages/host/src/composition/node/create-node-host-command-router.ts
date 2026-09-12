@@ -119,6 +119,7 @@ export const assembleNodeEffectHostCommandRouter = (
   } = defaultPorts;
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
   const workspaceAdmissionService = createWorkspaceAdmissionService({
+    settingsConfig,
     workspaceSettingsService,
   });
   const assets = createNodeTaskAssetServices({
