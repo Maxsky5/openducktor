@@ -29,7 +29,7 @@ export const createTaskAssetRecoveryService = ({
   resolveRepoPath: (workspaceId: string) => Effect.Effect<string, TaskStoreError>;
   taskStore: Pick<TaskStorePort, "deleteTask">;
   withAdministrativeAccess: <A, E, R>(
-    workspaceId: string,
+    workspaceIds: readonly string[],
     effect: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E, R>;
 }): TaskAssetRecoveryService => {
@@ -135,7 +135,10 @@ export const createTaskAssetRecoveryService = ({
           if (isWorkspaceRemovalPending(quarantine.workspaceId)) {
             continue;
           }
-          yield* withAdministrativeAccess(quarantine.workspaceId, reconcileQuarantine(quarantine));
+          yield* withAdministrativeAccess(
+            [quarantine.workspaceId],
+            reconcileQuarantine(quarantine),
+          );
         }
         return quarantines.length;
       });

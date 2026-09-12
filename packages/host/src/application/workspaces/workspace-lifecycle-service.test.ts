@@ -14,6 +14,7 @@ import { HostOperationError, HostValidationError } from "../../effect/host-error
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { GitPort } from "../../ports/git-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
@@ -110,19 +111,19 @@ const createAdmissionDouble = (): Pick<
   WorkspaceAdmissionService,
   | "awaitWorkStarts"
   | "blockWorkspace"
-  | "forgetWorkspace"
+  | "forgetWorkspaceWhenDrained"
   | "releaseReservation"
   | "reserveWorkspace"
   | "unblockWorkspace"
   | "withAdministrativeAccess"
 > => ({
   blockWorkspace: () => {},
-  forgetWorkspace: () => {},
+  forgetWorkspaceWhenDrained: () => Effect.succeed(true),
   releaseReservation: () => {},
   reserveWorkspace: () => Effect.void,
   unblockWorkspace: () => {},
   awaitWorkStarts: () => Effect.void,
-  withAdministrativeAccess: (_workspaceId, effect) => effect,
+  withAdministrativeAccess: (_workspaceIds, effect) => effect,
 });
 
 const createService = ({
@@ -153,6 +154,7 @@ const createService = ({
   listWorktrees = () => Effect.succeed([]),
   isRegisteredWorktree = () => Effect.succeed(true),
   removeWorktree = () => Effect.void,
+  removePathIfPresent = () => Effect.void,
   canonicalizePath = (path: string) => Effect.succeed(path),
   pathExists = () => Effect.succeed(true),
   resolvedPathKind = "descendant" as const,
@@ -183,6 +185,7 @@ const createService = ({
   listWorktrees?: GitPort["listWorktrees"];
   isRegisteredWorktree?: () => Effect.Effect<boolean, never>;
   removeWorktree?: GitPort["removeWorktree"];
+  removePathIfPresent?: WorktreeFilePort["removePathIfPresent"];
   canonicalizePath?: (path: string) => Effect.Effect<string, never>;
   pathExists?: (path: string) => Effect.Effect<boolean, never>;
   resolvedPathKind?: "descendant" | "outside";
@@ -222,7 +225,7 @@ const createService = ({
     }),
     worktreeFiles: createWorktreeFilePortTestDouble({
       pathIsWithinRoot: () => Effect.succeed(false),
-      removePathIfPresent: () => Effect.void,
+      removePathIfPresent,
       resolvePathWithinRoot: (_root, candidate) =>
         Effect.succeed({
           canonicalPath: candidate,
@@ -953,6 +956,117 @@ describe("workspace lifecycle service", () => {
     expect(progress.at(-2)?.pendingWorktreePath).toBe("/managed/ws/task-1");
     expect(progress.at(-1)?.pendingWorktreePath).toBeUndefined();
     expect(progress.at(-1)?.lastFailure).toContain("git worktree remove failed");
+  });
+
+  test("removeWorkspace drains late work starts before forgetting the removal block", async () => {
+    let forgetAttempts = 0;
+    const awaitWorkStarts = mock(() => Effect.void);
+    const service = createService({
+      admission: {
+        ...createAdmissionDouble(),
+        awaitWorkStarts,
+        forgetWorkspaceWhenDrained: () => {
+          forgetAttempts += 1;
+          return Effect.succeed(forgetAttempts > 1);
+        },
+      },
+    });
+
+    await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(forgetAttempts).toBe(2);
+  });
+
+  test("removeWorkspace resumes a journaled pending worktree that git already unregistered", async () => {
+    const removedPaths: string[] = [];
+    let pendingExists = true;
+    const service = createService({
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      beginWorkspaceRemoval: () =>
+        Effect.succeed({
+          record: removalRecord({
+            phase: "worktrees",
+            pendingWorktreePath: "/managed/ws/task-1",
+          }),
+          repoConfig: repoConfig(),
+        }),
+      listWorktrees: () => Effect.succeed([]),
+      pathExists: (path) =>
+        Effect.succeed(
+          path === "/managed/ws/task-1" ? pendingExists : path.startsWith("/managed/"),
+        ),
+      isRegisteredWorktree: () => Effect.succeed(false),
+      removeWorktree: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "test.removeWorktree",
+            message: "not a registered worktree",
+          }),
+        ),
+      removePathIfPresent: (path) =>
+        Effect.sync(() => {
+          removedPaths.push(path);
+          pendingExists = false;
+        }),
+    });
+
+    const result = await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    expect(removedPaths).toEqual(["/managed/ws/task-1"]);
+    expect(result.result.removedWorktrees).toEqual(["/managed/ws/task-1"]);
+  });
+
+  test("removeWorkspace reports a journaled pending worktree cleanup that keeps failing", async () => {
+    const service = createService({
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      beginWorkspaceRemoval: () =>
+        Effect.succeed({
+          record: removalRecord({
+            phase: "worktrees",
+            pendingWorktreePath: "/managed/ws/task-1",
+          }),
+          repoConfig: repoConfig(),
+        }),
+      listWorktrees: () => Effect.succeed([]),
+      pathExists: () => Effect.succeed(true),
+      isRegisteredWorktree: () => Effect.succeed(false),
+      removeWorktree: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "test.removeWorktree",
+            message: "not a registered worktree",
+          }),
+        ),
+      removePathIfPresent: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "test.removePathIfPresent",
+            message: "permission denied",
+          }),
+        ),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: true,
+        }),
+      ),
+    ).rejects.toThrow("Delete that directory manually");
   });
 
   test("reopens a workspace through settings and clears its admission block", async () => {

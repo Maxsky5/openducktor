@@ -430,7 +430,13 @@ export function useWorkspaceSelectionOperations({
           }
           throw cause;
         }
-        await refreshWorkspaceCachesAfterMutation();
+        try {
+          await refreshWorkspaceCachesAfterMutation();
+        } catch (refreshCause) {
+          toast.error("Workspace refresh failed", {
+            description: errorMessage(refreshCause),
+          });
+        }
         const { title, description } = success(result);
         toast.success(title, { description });
       } finally {

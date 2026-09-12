@@ -126,13 +126,18 @@ export const collectWorkspaceTaskWorktreePaths = (
         }),
       );
     }
+    const deletedTaskStoreWorkspaceIds = new Set(
+      catalog.incompleteRemovals
+        .filter((removal) => removal.record.phase === "attachments")
+        .map((removal) => removal.workspace.workspaceId),
+    );
+    const claimSourceWorkspaces = otherWorkspaces.filter(
+      (workspace) => !deletedTaskStoreWorkspaceIds.has(workspace.workspaceId),
+    );
     const otherWorkspaceClaims =
-      overlappingBaseWorkspaces.length === 0
+      claimSourceWorkspaces.length === 0
         ? new Set<string>()
-        : yield* collectWorkspaceClaims(
-            dependencies,
-            overlappingBaseWorkspaces.map((entry) => entry.workspace),
-          );
+        : yield* collectWorkspaceClaims(dependencies, claimSourceWorkspaces);
 
     const candidates = new Map<string, { path: string; taskId: string }>();
     for (const task of tasks) {

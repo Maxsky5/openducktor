@@ -1,4 +1,4 @@
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, FiberId } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import {
   HostOperationError,
@@ -56,9 +56,12 @@ export type WorkspaceAdmissionService = {
     workspaceId: string;
   }): void;
   unblockWorkspace(workspaceId: string): void;
-  forgetWorkspace(workspaceId: string): void;
+  forgetWorkspaceWhenDrained(input: {
+    repoPath: string;
+    workspaceId: string;
+  }): Effect.Effect<boolean>;
   withAdministrativeAccess<A, E, R>(
-    workspaceId: string,
+    workspaceIds: readonly string[],
     effect: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E, R>;
 };
@@ -214,15 +217,18 @@ export const createWorkspaceAdmissionService = ({
       return Deferred.succeed(waiter, undefined).pipe(Effect.asVoid);
     });
 
+  const activeWorkStartCount = (key: string): number => workStartsByRepoPath.get(key)?.active ?? 0;
+
   const awaitWorkStartDrain = (key: string): Effect.Effect<void> =>
-    Effect.gen(function* () {
+    Effect.suspend(() => {
       const state = workStartsByRepoPath.get(key);
       if (!state || state.active === 0) {
-        return;
+        return Effect.void;
       }
-      const waiter = state.drained ?? (yield* Deferred.make<void>());
-      state.drained = waiter;
-      yield* Deferred.await(waiter);
+      if (!state.drained) {
+        state.drained = Deferred.unsafeMake<void>(FiberId.none);
+      }
+      return Deferred.await(state.drained);
     });
 
   const withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"] = (repoPath, effect) =>
@@ -286,22 +292,42 @@ export const createWorkspaceAdmissionService = ({
       blockedByWorkspaceId.delete(workspaceId);
       reservationsByWorkspaceId.delete(workspaceId);
     },
-    forgetWorkspace: (workspaceId) => {
-      blockedByWorkspaceId.delete(workspaceId);
-      reservationsByWorkspaceId.delete(workspaceId);
-      administrativeWorkspaceIds.delete(workspaceId);
-    },
-    withAdministrativeAccess: (workspaceId, effect) =>
-      Effect.acquireUseRelease(
+    forgetWorkspaceWhenDrained: (input) =>
+      Effect.gen(function* () {
+        const arrivalKey = normalizePathForComparison(input.repoPath);
+        const canonicalKey = yield* canonicalRepoPathKey(input.repoPath).pipe(
+          Effect.orElseSucceed(() => arrivalKey),
+        );
+        return yield* Effect.suspend(() => {
+          if (
+            activeWorkStartCount(arrivalKey) > 0 ||
+            (canonicalKey !== arrivalKey && activeWorkStartCount(canonicalKey) > 0)
+          ) {
+            return Effect.succeed(false);
+          }
+          blockedByWorkspaceId.delete(input.workspaceId);
+          reservationsByWorkspaceId.delete(input.workspaceId);
+          administrativeWorkspaceIds.delete(input.workspaceId);
+          return Effect.succeed(true);
+        });
+      }),
+    withAdministrativeAccess: (workspaceIds, effect) => {
+      const ids = [...new Set(workspaceIds)];
+      return Effect.acquireUseRelease(
         Effect.sync(() => {
-          administrativeWorkspaceIds.add(workspaceId);
+          for (const workspaceId of ids) {
+            administrativeWorkspaceIds.add(workspaceId);
+          }
         }),
         () => effect,
         () =>
           Effect.sync(() => {
-            administrativeWorkspaceIds.delete(workspaceId);
+            for (const workspaceId of ids) {
+              administrativeWorkspaceIds.delete(workspaceId);
+            }
           }),
-      ),
+      );
+    },
   };
 };
 

@@ -133,7 +133,7 @@ describe("workspace admission service", () => {
     await expect(
       Effect.runPromise(
         admission.withAdministrativeAccess(
-          "removing-ws",
+          ["removing-ws"],
           admission.assertTaskStoreAccess({
             operation: "sqliteTaskRepository.listTasks",
             repoPath: "/repos/removing",
@@ -428,6 +428,52 @@ describe("workspace admission service", () => {
     expect(Option.isSome(releaseExit)).toBe(true);
   });
 
+  test("keeps the workspace blocked until active work starts finish", async () => {
+    const admission = createAdmission(catalog());
+    await Effect.runPromise(admission.initialize());
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/repos/open",
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(entered);
+        admission.blockWorkspace({
+          reason: "removal",
+          repoPath: "/repos/open",
+          workspaceId: "open",
+        });
+        const whileActive = yield* admission.forgetWorkspaceWhenDrained({
+          repoPath: "/repos/open",
+          workspaceId: "open",
+        });
+        const admittedWhileActive = yield* Effect.exit(
+          admission.assertWorkspaceAdmitsWork("/repos/open"),
+        );
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        const whenDrained = yield* admission.forgetWorkspaceWhenDrained({
+          repoPath: "/repos/open",
+          workspaceId: "open",
+        });
+        const admittedWhenDrained = yield* Effect.exit(
+          admission.assertWorkspaceAdmitsWork("/repos/open"),
+        );
+        return { admittedWhenDrained, admittedWhileActive, whenDrained, whileActive };
+      }),
+    );
+
+    expect(result.whileActive).toBe(false);
+    expect(result.admittedWhileActive._tag).toBe("Failure");
+    expect(result.whenDrained).toBe(true);
+    expect(result.admittedWhenDrained._tag).toBe("Success");
+  });
+
   test("keeps the drain waiter when a rejected start arrives during the drain", async () => {
     const admission = createAdmission(
       catalog({ openWorkspaces: [workspaceRecord("open", "/repos/open")] }),
@@ -504,7 +550,14 @@ describe("workspace admission service", () => {
       repoPath: "/repos/removed",
       workspaceId: "removed",
     });
-    admission.forgetWorkspace("removed");
+    await expect(
+      Effect.runPromise(
+        admission.forgetWorkspaceWhenDrained({
+          repoPath: "/repos/removed",
+          workspaceId: "removed",
+        }),
+      ),
+    ).resolves.toBe(true);
     expect(admission.isWorkspaceBlocked("removed")).toBe(false);
   });
 });

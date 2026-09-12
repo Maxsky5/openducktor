@@ -185,4 +185,47 @@ describe("WorkspaceRail", () => {
     expect(screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("disabled")).toBe(null);
     expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("disabled")).toBe(null);
   });
+
+  test("disables lifecycle entries while a workspace operation is pending", async () => {
+    workspaceState.isSwitchingWorkspace = true;
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", {
+        workspaceName: "Alpha Repo",
+        isActive: true,
+      }),
+    ];
+    workspaceState.incompleteRemovals = [
+      {
+        workspace: workspaceRecord("stuck", {
+          workspaceName: "Stuck Repo",
+          repoPath: "/stuck",
+        }),
+        record: {
+          version: 1,
+          operationId: "op-1",
+          phase: "attachments",
+          removeTaskWorktrees: true,
+          removedWorktrees: [],
+          pendingWorktreePath: null,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          lastFailure: null,
+        },
+      },
+    ];
+
+    renderRail();
+
+    expect(
+      screen.getByRole("button", { name: "Finish removing Stuck Repo" }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(screen.getByRole("button", { name: "Open repository" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Alpha Repo" }));
+    const closeItem = await screen.findByRole("menuitem", { name: "Close workspace" });
+    const removeItem = screen.getByRole("menuitem", { name: "Remove workspace" });
+    expect(closeItem.getAttribute("data-disabled")).not.toBe(null);
+    expect(removeItem.getAttribute("data-disabled")).not.toBe(null);
+  });
 });
