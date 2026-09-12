@@ -750,6 +750,50 @@ describe("workspace lifecycle service", () => {
     });
   });
 
+  test("removeWorkspace asks the user to restart when the task store connection cannot close", async () => {
+    const service = createService({
+      removeWorkspaceTaskStore: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "sqliteTaskRepository.closeWorkspace",
+            message: "Failed to close the task store for workspace ws: connection busy.",
+          }),
+        ),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: false,
+        }),
+      ),
+    ).rejects.toThrow("Restart OpenDucktor, then retry removal.");
+  });
+
+  test("removeWorkspace keeps the retry hint for other task store failures", async () => {
+    const service = createService({
+      removeWorkspaceTaskStore: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "workspace.removeTaskStoreDirectory",
+            message: "Failed to remove the task store directory for workspace ws.",
+          }),
+        ),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: false,
+        }),
+      ),
+    ).rejects.toThrow("Retry removal to continue.");
+  });
+
   test("removeWorkspace drains work starts before purging task assets", async () => {
     const events: string[] = [];
     const service = createService({

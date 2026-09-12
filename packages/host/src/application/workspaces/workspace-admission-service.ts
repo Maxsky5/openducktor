@@ -221,6 +221,7 @@ export const createWorkspaceAdmissionService = ({
 
   const awaitWorkStarts: WorkspaceAdmissionService["awaitWorkStarts"] = (repoPath) =>
     canonicalRepoPathKey(repoPath).pipe(
+      Effect.orElseSucceed(() => normalizePathForComparison(repoPath)),
       Effect.flatMap((key) =>
         Effect.gen(function* () {
           const state = workStartsByRepoPath.get(key);
