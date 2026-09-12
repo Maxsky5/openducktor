@@ -70,6 +70,10 @@ type CreateTerminalServiceInput = {
   assertWorkspaceAdmitsWork: (
     repoPath: string,
   ) => Effect.Effect<void, HostValidationErrorAggregate>;
+  withWorkStartLease<A, E, R>(
+    repoPath: string,
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
   filesystem: FilesystemPort;
   ptyPort: TerminalPtyPort;
   resolveLaunchEnvironment: TerminalLaunchEnvironmentPort;
@@ -81,6 +85,7 @@ type CreateTerminalServiceInput = {
 
 export const createTerminalService = ({
   assertWorkspaceAdmitsWork,
+  withWorkStartLease,
   filesystem,
   ptyPort,
   resolveLaunchEnvironment,
@@ -146,34 +151,38 @@ export const createTerminalService = ({
             (reservation) =>
               Effect.gen(function* () {
                 const context = yield* canonicalizeContext(input.context, "create");
+                const startTerminal = Effect.gen(function* () {
+                  yield* reservation.bind(context);
+                  const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
+                  const terminalId = idFactory();
+                  const summary: TerminalSummary = {
+                    terminalId,
+                    label: plan.cwd,
+                    context,
+                    initialWorkingDir: plan.cwd,
+                    createdAt: now().toISOString(),
+                    lifecycle: "starting",
+                    exit: null,
+                  };
+                  const started = yield* engine.start(summary, plan);
+                  return { ref: { terminalId }, summary: started };
+                });
                 if ("taskId" in context) {
-                  yield* assertWorkspaceAdmitsWork(context.repoPath).pipe(
-                    Effect.mapError(
-                      (cause) =>
-                        new TerminalServiceError({
-                          code: "invalid_input",
-                          operation: "create",
-                          message: cause.message,
-                          cause,
-                          workingDir: context.repoPath,
-                        }),
+                  return yield* withWorkStartLease(context.repoPath, startTerminal).pipe(
+                    Effect.mapError((cause) =>
+                      cause instanceof TerminalServiceError
+                        ? cause
+                        : new TerminalServiceError({
+                            code: "invalid_input",
+                            operation: "create",
+                            message: cause.message,
+                            cause,
+                            workingDir: context.repoPath,
+                          }),
                     ),
                   );
                 }
-                yield* reservation.bind(context);
-                const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
-                const terminalId = idFactory();
-                const summary: TerminalSummary = {
-                  terminalId,
-                  label: plan.cwd,
-                  context,
-                  initialWorkingDir: plan.cwd,
-                  createdAt: now().toISOString(),
-                  lifecycle: "starting",
-                  exit: null,
-                };
-                const started = yield* engine.start(summary, plan);
-                return { ref: { terminalId }, summary: started };
+                return yield* startTerminal;
               }),
             (reservation) => Effect.sync(() => reservation.release()),
           );

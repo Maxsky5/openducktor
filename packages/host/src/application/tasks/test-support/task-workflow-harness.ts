@@ -149,9 +149,10 @@ const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
   createTaskStoreTestDouble(overrides);
 type TaskServiceTestInput = Omit<
   CreateTaskServiceInput,
-  "assertWorkspaceAdmitsWork" | "taskStore" | "taskActivityGuard"
+  "assertWorkspaceAdmitsWork" | "withWorkStartLease" | "taskStore" | "taskActivityGuard"
 > & {
   assertWorkspaceAdmitsWork?: CreateTaskServiceInput["assertWorkspaceAdmitsWork"];
+  withWorkStartLease?: CreateTaskServiceInput["withWorkStartLease"];
   taskActivityGuard?: TaskActivityGuardPort;
   taskStore: TaskStorePort;
 };
@@ -172,6 +173,7 @@ const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceI
   const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
     assertWorkspaceAdmitsWork: rest.assertWorkspaceAdmitsWork ?? (() => Effect.void),
+    withWorkStartLease: rest.withWorkStartLease ?? ((_repoPath, effect) => effect),
     gitProviderResolver: rest.gitProviderResolver ?? createDefaultGitProviderResolver(),
     terminalService:
       rest.terminalService ??

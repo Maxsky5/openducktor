@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import {
   HostOperationError,
@@ -23,9 +23,15 @@ type WorkspaceReservation = {
   workspaceId: string;
 };
 
+type WorkStartState = {
+  active: number;
+  drained: Deferred.Deferred<void> | null;
+};
+
 export type WorkspaceAdmissionService = {
   initialize(): Effect.Effect<void, HostOperationError>;
   isWorkspaceBlocked(workspaceId: string): boolean;
+  isWorkspaceRemovalPending(workspaceId: string): boolean;
   reserveWorkspace(input: {
     operation: WorkspaceReservationOperation;
     repoPath: string;
@@ -38,6 +44,11 @@ export type WorkspaceAdmissionService = {
     workspaceId: string;
   }): Effect.Effect<void, HostValidationErrorAggregate>;
   assertWorkspaceAdmitsWork(repoPath: string): Effect.Effect<void, HostValidationErrorAggregate>;
+  awaitWorkStarts(repoPath: string): Effect.Effect<void>;
+  withWorkStartLease<A, E, R>(
+    repoPath: string,
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
   blockWorkspace(input: {
     reason: WorkspaceBlockReason;
     repoPath: string;
@@ -58,6 +69,7 @@ export const createWorkspaceAdmissionService = ({
 }): WorkspaceAdmissionService => {
   const blockedByWorkspaceId = new Map<string, BlockedWorkspace>();
   const reservationsByWorkspaceId = new Map<string, WorkspaceReservation>();
+  const workStartsByRepoPath = new Map<string, WorkStartState>();
   const administrativeWorkspaceIds = new Set<string>();
   let initialized = false;
 
@@ -158,9 +170,54 @@ export const createWorkspaceAdmissionService = ({
       }),
     );
 
+  const withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"] = (
+    repoPath,
+    effect,
+  ) => {
+    const key = normalizePathForComparison(repoPath);
+    return Effect.acquireUseRelease(
+      Effect.suspend(() => {
+        const state = workStartsByRepoPath.get(key) ?? { active: 0, drained: null };
+        state.active += 1;
+        state.drained = null;
+        workStartsByRepoPath.set(key, state);
+        return Effect.void;
+      }),
+      () => Effect.zipRight(assertWorkspaceAdmitsWork(repoPath), effect),
+      () =>
+        Effect.suspend(() => {
+          const state = workStartsByRepoPath.get(key);
+          if (!state || state.active === 0) {
+            return Effect.void;
+          }
+          state.active -= 1;
+          if (state.active > 0 || !state.drained) {
+            return Effect.void;
+          }
+          const waiter = state.drained;
+          state.drained = null;
+          return Deferred.succeed(waiter, undefined).pipe(Effect.asVoid);
+        }),
+    );
+  };
+
+  const awaitWorkStarts: WorkspaceAdmissionService["awaitWorkStarts"] = (repoPath) =>
+    Effect.gen(function* () {
+      const key = normalizePathForComparison(repoPath);
+      const state = workStartsByRepoPath.get(key);
+      if (!state || state.active === 0) {
+        return;
+      }
+      const waiter = state.drained ?? (yield* Deferred.make<void>());
+      state.drained = waiter;
+      yield* Deferred.await(waiter);
+    });
+
   return {
     initialize,
     isWorkspaceBlocked: (workspaceId) => blockedByWorkspaceId.has(workspaceId),
+    isWorkspaceRemovalPending: (workspaceId) =>
+      blockedByWorkspaceId.get(workspaceId)?.reason === "removal",
     reserveWorkspace: (input) =>
       Effect.suspend(() => {
         const existing = reservationsByWorkspaceId.get(input.workspaceId);
@@ -175,6 +232,8 @@ export const createWorkspaceAdmissionService = ({
     },
     assertTaskStoreAccess,
     assertWorkspaceAdmitsWork,
+    awaitWorkStarts,
+    withWorkStartLease,
     blockWorkspace: (input) => {
       blockedByWorkspaceId.set(input.workspaceId, input);
     },

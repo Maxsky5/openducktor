@@ -114,9 +114,10 @@ export type AgentSessionLiveStateService = {
 export type CreateAgentSessionLiveStateServiceInput = {
   readonly persistence?: AgentSessionPersistencePort;
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
-  readonly assertWorkspaceAdmitsWork: (
+  readonly withWorkStartLease: <A, E, R>(
     repoPath: string,
-  ) => Effect.Effect<void, HostValidationErrorAggregate>;
+    effect: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E | HostValidationErrorAggregate, R>;
   readonly faultLog: AgentSessionLiveFaultLogger;
   readonly publish: AgentSessionLiveEnvelopePublisher;
   readonly coordinator?: LiveStateCoordinator;
@@ -124,7 +125,7 @@ export type CreateAgentSessionLiveStateServiceInput = {
 
 export const createAgentSessionLiveStateService = ({
   adapterRegistry,
-  assertWorkspaceAdmitsWork,
+  withWorkStartLease,
   faultLog,
   publish,
   coordinator = createLiveStateCoordinator(),
@@ -135,7 +136,7 @@ export const createAgentSessionLiveStateService = ({
       operation: (input: Input) => Effect.Effect<Success, HostError>,
     ) =>
     (input: Input): Effect.Effect<Success, HostError> =>
-      assertWorkspaceAdmitsWork(input.repoPath).pipe(Effect.zipRight(operation(input)));
+      withWorkStartLease(input.repoPath, operation(input));
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
   const refreshGate = createLiveStateCoordinator();
   const executionEpisodes = createAgentSessionExecutionEpisodes();

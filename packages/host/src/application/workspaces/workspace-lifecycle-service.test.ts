@@ -102,6 +102,7 @@ const activityWith = (
 
 const createAdmissionDouble = (): Pick<
   WorkspaceAdmissionService,
+  | "awaitWorkStarts"
   | "blockWorkspace"
   | "forgetWorkspace"
   | "releaseReservation"
@@ -114,6 +115,7 @@ const createAdmissionDouble = (): Pick<
   releaseReservation: () => {},
   reserveWorkspace: () => Effect.void,
   unblockWorkspace: () => {},
+  awaitWorkStarts: () => Effect.void,
   withAdministrativeAccess: (_workspaceId, effect) => effect,
 });
 
@@ -132,7 +134,7 @@ const createService = ({
     Effect.succeed(
       removalRecord({
         removeTaskWorktrees: input.removeTaskWorktrees,
-        phase: input.removeTaskWorktrees ? "worktrees" : "attachments",
+        phase: input.removeTaskWorktrees ? "worktrees" : "task_store",
       }),
     ),
   recordWorkspaceRemovalProgress = () => Effect.void,
@@ -292,7 +294,7 @@ describe("workspace lifecycle service", () => {
         return Effect.succeed(
           removalRecord({
             removeTaskWorktrees: input.removeTaskWorktrees,
-            phase: input.removeTaskWorktrees ? "worktrees" : "attachments",
+            phase: input.removeTaskWorktrees ? "worktrees" : "task_store",
           }),
         );
       },
@@ -319,7 +321,7 @@ describe("workspace lifecycle service", () => {
       }),
     );
 
-    expect(calls).toEqual(["beginRemoval", "removeAssets", "removeTaskStore", "unregister"]);
+    expect(calls).toEqual(["beginRemoval", "removeTaskStore", "removeAssets", "unregister"]);
     expect(result.removedWorktrees).toEqual([]);
   });
 
@@ -342,7 +344,7 @@ describe("workspace lifecycle service", () => {
       }),
     );
 
-    expect(progress).toEqual([{ phase: "task_store", lastFailure: null }]);
+    expect(progress).toEqual([{ phase: "attachments", lastFailure: null }]);
     expect(blockWorkspace).toHaveBeenCalledWith({
       reason: "removal",
       repoPath: "/repos/ws",
