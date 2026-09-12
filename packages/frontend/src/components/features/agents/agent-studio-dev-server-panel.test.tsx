@@ -404,6 +404,33 @@ describe("AgentStudioDevServerPanel", () => {
     expect(html).toContain("bun run configured");
   });
 
+  test("shows the last started command after the server stops", () => {
+    const stoppedAfterRunScript: DevServerScriptState = {
+      ...runningScript,
+      command: "bun run configured",
+      startedCommand: "bun run started",
+      status: "stopped",
+      pid: null,
+      startedAt: null,
+      lastError: null,
+    };
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioDevServerPanel, {
+        model: baseModel({
+          mode: "stopped",
+          isExpanded: true,
+          scripts: [stoppedAfterRunScript],
+          selectedScriptId: stoppedAfterRunScript.scriptId,
+          selectedScript: stoppedAfterRunScript,
+          selectedScriptTerminalBuffer: buildTerminalBuffer(stoppedAfterRunScript),
+        }),
+      }),
+    );
+
+    expect(html).toContain("bun run started");
+    expect(html).not.toContain("bun run configured");
+  });
+
   test("renders failed dev server tabs with failed status styling", () => {
     const html = renderToStaticMarkup(
       createElement(AgentStudioDevServerPanel, {

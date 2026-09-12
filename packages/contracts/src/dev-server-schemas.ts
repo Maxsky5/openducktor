@@ -59,6 +59,14 @@ export const devServerScriptStateSchema = z
       return;
     }
 
+    if (script.runIdentity !== null && script.startedCommand === null) {
+      context.addIssue({
+        code: "custom",
+        message: "Dev server scripts with a run must state the started command.",
+        path: ["startedCommand"],
+      });
+    }
+
     for (const [index, chunk] of script.bufferedTerminalChunks.entries()) {
       if (
         chunk.scriptId !== script.scriptId ||
