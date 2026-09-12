@@ -44,10 +44,8 @@ const readFilePathFromUrl = (url: string): string | null => {
   }
 };
 
-type AttachmentKind = Extract<
-  AgentUserMessageDisplayPart,
-  { kind: "attachment" }
->["attachment"]["kind"];
+type AttachmentDisplayPart = Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>;
+type AttachmentKind = AttachmentDisplayPart["attachment"]["kind"];
 
 const readAttachmentKind = (mime: string): AttachmentKind | null => {
   if (mime.startsWith("image/")) {
@@ -80,7 +78,7 @@ const normalizeAttachmentPart = (
     return null;
   }
 
-  const attachment: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>["attachment"] = {
+  const attachment: AttachmentDisplayPart["attachment"] = {
     id: part.id,
     path: filePath,
     name: part.filename?.trim() || basenameForPath(filePath),
@@ -214,7 +212,7 @@ export const ensureVisibleUserTextDisplayParts = (
 
 export const mergePreservedAttachmentDisplayParts = (
   displayParts: AgentUserMessageDisplayPart[],
-  preservedAttachmentParts: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>[],
+  preservedAttachmentParts: AttachmentDisplayPart[],
 ): AgentUserMessageDisplayPart[] => {
   if (preservedAttachmentParts.length === 0) {
     return displayParts;
@@ -226,11 +224,12 @@ export const mergePreservedAttachmentDisplayParts = (
       return part;
     }
 
+    const runtimeAttachment = part.attachment;
     const preservedIndex = remainingPreservedAttachments.findIndex(
       (candidate) =>
-        candidate.attachment.name === part.attachment.name &&
-        candidate.attachment.kind === part.attachment.kind &&
-        (candidate.attachment.mime ?? "") === (part.attachment.mime ?? ""),
+        candidate.attachment.name === runtimeAttachment.name &&
+        candidate.attachment.kind === runtimeAttachment.kind &&
+        (candidate.attachment.mime ?? "") === (runtimeAttachment.mime ?? ""),
     );
     if (preservedIndex < 0) {
       return part;
@@ -241,14 +240,16 @@ export const mergePreservedAttachmentDisplayParts = (
       return part;
     }
 
+    const preservedPath = preservedAttachment.attachment.path;
+    const preservedLocalPreviewAvailable = preservedAttachment.attachment.localPreviewAvailable;
     const mergedAttachment = {
-      ...part.attachment,
-      path: preservedAttachment.attachment.path,
+      ...runtimeAttachment,
+      path: preservedPath,
     };
-    if (preservedAttachment.attachment.localPreviewAvailable === undefined) {
+    if (preservedLocalPreviewAvailable === undefined) {
       delete mergedAttachment.localPreviewAvailable;
     } else {
-      mergedAttachment.localPreviewAvailable = preservedAttachment.attachment.localPreviewAvailable;
+      mergedAttachment.localPreviewAvailable = preservedLocalPreviewAvailable;
     }
 
     return {
