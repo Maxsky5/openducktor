@@ -116,6 +116,15 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (seen.has(canonicalComparison)) {
         continue;
       }
+      if (otherWorkspaceClaims.has(canonicalComparison)) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Cannot remove ${canonicalPath}: another workspace also claims it. Remove it manually, or retry without removing task worktrees.`,
+            field: "worktreePath",
+            details: { repoPath, taskId: candidate.taskId, worktreePath: canonicalPath },
+          }),
+        );
+      }
       if (!inventoryPaths.has(canonicalComparison)) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -134,10 +143,12 @@ export const collectWorkspaceTaskWorktreePaths = (
     const canonicalManagedWorktreeBase = yield* Effect.either(
       dependencies.settingsConfig.canonicalizePath(managedWorktreeBasePath),
     );
-    const managedBaseForComparison =
-      canonicalManagedWorktreeBase._tag === "Right"
-        ? canonicalManagedWorktreeBase.right
-        : managedWorktreeBasePath;
+    let managedBaseForComparison = managedWorktreeBasePath;
+    if (canonicalManagedWorktreeBase._tag === "Right") {
+      managedBaseForComparison = canonicalManagedWorktreeBase.right;
+    } else if (yield* dependencies.settingsConfig.pathExists(managedWorktreeBasePath)) {
+      return yield* Effect.fail(canonicalManagedWorktreeBase.left);
+    }
     const unclassifiedPaths: string[] = [];
     for (const [normalized, worktreePath] of inventoryPaths) {
       if (seen.has(normalized)) {

@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { repoConfigSchema, type RepoConfig, type WorkspaceCatalog } from "@openducktor/contracts";
+import {
+  repoConfigSchema,
+  type RepoConfig,
+  taskCardSchema,
+  type TaskCard,
+  type WorkspaceCatalog,
+  workspaceRecordSchema,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
@@ -21,6 +28,16 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig =>
     ...overrides,
   });
 
+const task = (id: string): TaskCard =>
+  taskCardSchema.parse({
+    id,
+    title: id,
+    status: "open",
+    issueType: "task",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  });
+
 const catalog = (): WorkspaceCatalog => ({
   openWorkspaces: [],
   closedWorkspaces: [],
@@ -33,11 +50,15 @@ const createDependencies = ({
   listWorktrees,
   pathExists,
   settingsCanonicalizePath = (path) => Effect.succeed(path),
+  listTasks = () => Effect.succeed([]),
+  workspaceCatalog = catalog(),
 }: {
   canonicalizePath: (path: string) => Effect.Effect<string, HostOperationErrorAggregate>;
   listWorktrees: GitPort["listWorktrees"];
   pathExists: (path: string) => Effect.Effect<boolean, never>;
   settingsCanonicalizePath?: (path: string) => Effect.Effect<string, HostOperationErrorAggregate>;
+  listTasks?: (input: { repoPath: string }) => Effect.Effect<TaskCard[], never>;
+  workspaceCatalog?: WorkspaceCatalog;
 }) => ({
   gitPort: createGitPortTestDouble({
     canonicalizePath,
@@ -54,11 +75,11 @@ const createDependencies = ({
     resolveConfiguredPath: (path) => path,
   }),
   taskStore: {
-    listTasks: () => Effect.succeed([]),
+    listTasks,
     listAgentSessionsForTasks: () => Effect.succeed([]),
   } satisfies Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">,
   workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
-    getWorkspaceCatalog: () => Effect.succeed(catalog()),
+    getWorkspaceCatalog: () => Effect.succeed(workspaceCatalog),
   }),
 });
 
@@ -129,5 +150,88 @@ describe("workspace worktree inventory", () => {
     );
 
     expect(error.message).toContain("Cannot classify registered worktree(s) under");
+  });
+
+  test("propagates a canonicalization failure for a managed base that exists", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/orphan", worktreePath: "/base/orphan-1" }]),
+      pathExists: (path) => Effect.succeed(path === "/base"),
+      settingsCanonicalizePath: (path) =>
+        path === "/base"
+          ? Effect.fail(
+              new HostOperationError({
+                operation: "settingsConfig.canonicalizePath",
+                message: "Failed to canonicalize /base.",
+              }),
+            )
+          : Effect.succeed(path),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("Failed to canonicalize /base.");
+  });
+
+  test("uses the lexical base when the managed base no longer exists", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/orphan", worktreePath: "/base/orphan-1" }]),
+      pathExists: () => Effect.succeed(false),
+      settingsCanonicalizePath: (path) =>
+        path === "/base"
+          ? Effect.fail(
+              new HostOperationError({
+                operation: "settingsConfig.canonicalizePath",
+                message: "Failed to canonicalize /base.",
+              }),
+            )
+          : Effect.succeed(path),
+    });
+
+    const paths = await Effect.runPromise(
+      collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+    );
+
+    expect(paths).toEqual([]);
+  });
+
+  test("rejects a candidate claimed by another workspace on the shared base", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: () => Effect.succeed([task("task-1")]),
+      workspaceCatalog: {
+        ...catalog(),
+        openWorkspaces: [
+          workspaceRecordSchema.parse({
+            workspaceId: "other",
+            workspaceName: "Other",
+            repoPath: "/repos/other",
+            isActive: false,
+            hasConfig: true,
+            configuredWorktreeBasePath: "/base",
+            defaultWorktreeBasePath: "/base",
+            effectiveWorktreeBasePath: "/base",
+          }),
+        ],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("another workspace also claims it");
+    expect(error.message).toContain("/base/task-1");
   });
 });

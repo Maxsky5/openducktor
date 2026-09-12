@@ -375,12 +375,15 @@ export const normalizeSnapshotWorkspaces = (
           }),
         );
       }
+      if (existingRepoConfig.removal !== undefined) {
+        nextWorkspaces[workspaceId] = existingRepoConfig;
+        continue;
+      }
       const normalizedRepoConfig = yield* validateAndNormalizeRepoConfig(settingsConfig, {
         ...repoConfig,
         workspaceId,
         agentStudioState: existingRepoConfig.agentStudioState,
         closed: existingRepoConfig.closed,
-        removal: existingRepoConfig.removal,
       });
       const conflictingWorkspaceId = Object.entries(nextWorkspaces).find(
         ([, workspace]) => workspace.repoPath === normalizedRepoConfig.repoPath,

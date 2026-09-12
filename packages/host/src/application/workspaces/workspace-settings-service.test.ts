@@ -1059,6 +1059,51 @@ describe("createWorkspaceSettingsService", () => {
       Effect.runPromise(service.updateRepoConfig("repo-a", { branchPrefix: "feat" })),
     ).rejects.toThrow("Finish the removal before changing repository settings");
   });
+  test("keeps the stored config for a workspace under removal in a snapshot save", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      existingPaths: new Set(["/repos/a", "/repos/a/.git"]),
+      config: globalConfig({
+        workspaceOrder: ["repo-a", "repo-b"],
+        workspaces: {
+          "repo-a": repoConfig("repo-a", "/repos/a"),
+          "repo-b": {
+            ...repoConfig("repo-b", "/repos/b"),
+            worktreeBasePath: "/old-base",
+            removal: {
+              version: 1 as const,
+              operationId: "op-1",
+              removeTaskWorktrees: true,
+              phase: "worktrees" as const,
+              removedWorktrees: [],
+              pendingWorktreePath: null,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    await Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...snapshot,
+        workspaces: {
+          "repo-a": { ...repoConfig("repo-a", "/repos/a"), branchPrefix: "feat" },
+          "repo-b": {
+            ...repoConfig("repo-b", "/repos/b"),
+            worktreeBasePath: "/new-base",
+          },
+        },
+      }),
+    );
+
+    const written = settingsConfig.writtenConfigs[0];
+    expect(written?.workspaces["repo-b"]?.worktreeBasePath).toBe("/old-base");
+    expect(written?.workspaces["repo-b"]?.removal?.operationId).toBe("op-1");
+    expect(written?.workspaces["repo-a"]?.branchPrefix).toBe("feat");
+  });
   test("resolves a path with an incomplete removal as removing", async () => {
     const service = createWorkspaceSettingsService(
       createFakeSettingsConfig({
