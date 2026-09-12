@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { WorkspaceRecord } from "@openducktor/contracts";
+import type { IncompleteWorkspaceRemoval, WorkspaceRecord } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
-import { WorkspaceCloseDialog, WorkspaceRemoveDialog } from "./workspace-lifecycle-dialogs";
+import {
+  WorkspaceCloseDialog,
+  WorkspaceRemovalRecoveryDialog,
+  WorkspaceRemoveDialog,
+} from "./workspace-lifecycle-dialogs";
 
 const workspace: WorkspaceRecord = {
   workspaceId: "alpha",
@@ -118,6 +122,64 @@ describe("workspace lifecycle dialogs", () => {
     expect(screen.queryByText(/Leave unchecked/)).toBe(null);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove workspace" }));
+
+    await waitFor(() =>
+      expect(removeWorkspace).toHaveBeenCalledWith({
+        workspaceId: "alpha",
+        expectedRepoPath: "/projects/alpha",
+        removeTaskWorktrees: true,
+      }),
+    );
+  });
+
+  test("lets the recovery dialog finish removal without task worktrees", async () => {
+    const removal: IncompleteWorkspaceRemoval = {
+      workspace,
+      record: {
+        version: 1,
+        operationId: "op-1",
+        removeTaskWorktrees: true,
+        phase: "worktrees",
+        removedWorktrees: [],
+        startedAt: "2026-01-01T00:00:00.000Z",
+        lastFailure: null,
+      },
+    };
+    renderDialog(<WorkspaceRemovalRecoveryDialog removal={removal} onOpenChange={() => {}} />);
+
+    expect(screen.getByText(/Task worktrees are part of this removal./)).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByText(/Task worktrees are kept./)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry removal" }));
+
+    await waitFor(() =>
+      expect(removeWorkspace).toHaveBeenCalledWith({
+        workspaceId: "alpha",
+        expectedRepoPath: "/projects/alpha",
+        removeTaskWorktrees: false,
+      }),
+    );
+  });
+
+  test("keeps the recorded choice when the recovery already removed worktrees", async () => {
+    const removal: IncompleteWorkspaceRemoval = {
+      workspace,
+      record: {
+        version: 1,
+        operationId: "op-1",
+        removeTaskWorktrees: true,
+        phase: "worktrees",
+        removedWorktrees: ["/managed/alpha/task-1"],
+        startedAt: "2026-01-01T00:00:00.000Z",
+        lastFailure: null,
+      },
+    };
+    renderDialog(<WorkspaceRemovalRecoveryDialog removal={removal} onOpenChange={() => {}} />);
+
+    expect(screen.queryByRole("checkbox")).toBe(null);
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry removal" }));
 
     await waitFor(() =>
       expect(removeWorkspace).toHaveBeenCalledWith({

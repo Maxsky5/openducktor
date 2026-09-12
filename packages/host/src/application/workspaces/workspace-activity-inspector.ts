@@ -11,6 +11,7 @@ export type WorkspaceActivityBlocker = {
 
 export type WorkspaceActivityPort = {
   inspect(repoPath: string): Effect.Effect<WorkspaceActivityBlocker[], HostOperationErrorAggregate>;
+  releaseWorkspaceSessions(repoPath: string): Effect.Effect<void, HostOperationErrorAggregate>;
 };
 
 const toHostOperationError = (operation: string, message: string, cause: unknown) =>
@@ -25,7 +26,7 @@ export const createWorkspaceActivityInspector = ({
   devServerService,
   terminalService,
 }: {
-  agentSessionLiveStateService: Pick<AgentSessionLiveStateService, "list">;
+  agentSessionLiveStateService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">;
   devServerService: Pick<DevServerService, "inspectWorkspaceActivity">;
   terminalService: Pick<TerminalService, "inspectWorkspaceActivity">;
 }): WorkspaceActivityPort => ({
@@ -95,5 +96,32 @@ export const createWorkspaceActivityInspector = ({
       }
 
       return blockers;
+    }),
+  releaseWorkspaceSessions: (repoPath) =>
+    Effect.gen(function* () {
+      const sessions = yield* agentSessionLiveStateService
+        .list({ repoPath })
+        .pipe(
+          Effect.mapError((cause) =>
+            toHostOperationError(
+              "workspace.releaseAgentSessions",
+              `Failed to inspect agent sessions for ${repoPath}. Retry removal.`,
+              cause,
+            ),
+          ),
+        );
+      for (const session of sessions) {
+        yield* agentSessionLiveStateService
+          .releaseSession(session.ref)
+          .pipe(
+            Effect.mapError((cause) =>
+              toHostOperationError(
+                "workspace.releaseAgentSessions",
+                `Failed to release agent session ${session.ref.externalSessionId} for ${repoPath}. Retry removal.`,
+                cause,
+              ),
+            ),
+          );
+      }
     }),
 });

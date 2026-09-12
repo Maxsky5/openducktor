@@ -288,6 +288,7 @@ export const assembleNodeEffectHostCommandRouter = (
     gitPort: git,
     settingsConfig,
     storage: {
+      assertPermanentRemovalSupported: assets.assertPermanentRemovalSupported,
       removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
       removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
     },

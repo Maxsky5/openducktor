@@ -79,6 +79,7 @@ const reducer = (state: State, action: Action): State => {
 
 type WorkspaceCreationFormProps = {
   workspaces: WorkspaceRecord[];
+  reservedWorkspaceIds?: ReadonlySet<string>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   disabled?: boolean;
   onSubmittingChange?: (submitting: boolean) => void;
@@ -106,6 +107,7 @@ export type WorkspaceCreationController = {
 
 export function useWorkspaceCreation({
   workspaces,
+  reservedWorkspaceIds,
   addWorkspace,
   disabled = false,
   onSubmittingChange,
@@ -120,8 +122,12 @@ export function useWorkspaceCreation({
   });
   const submitInFlight = useRef(false);
   const existingIds = useMemo(
-    () => new Set(workspaces.map((workspace) => workspace.workspaceId)),
-    [workspaces],
+    () =>
+      new Set([
+        ...workspaces.map((workspace) => workspace.workspaceId),
+        ...(reservedWorkspaceIds ?? []),
+      ]),
+    [workspaces, reservedWorkspaceIds],
   );
   const duplicateRepo = workspaces.find((workspace) => workspace.repoPath === state.repoPath);
   let validationError: string | null = null;

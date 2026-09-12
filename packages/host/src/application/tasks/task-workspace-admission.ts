@@ -2,19 +2,22 @@ import { Effect } from "effect";
 import type { HostValidationErrorAggregate } from "../../effect/host-errors";
 import type { TaskServiceWithMutationProgress } from "./task-service";
 
-export type WorkspaceAdmissionAssert = (
-  repoPath: string,
-) => Effect.Effect<void, HostValidationErrorAggregate>;
+export type WorkspaceAdmission = {
+  withWorkStartLease<A, E, R>(
+    repoPath: string,
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
+};
 
 export const withWorkspaceAdmission = (
   service: TaskServiceWithMutationProgress,
-  assertWorkspaceAdmitsWork: WorkspaceAdmissionAssert,
+  admission: WorkspaceAdmission,
 ): TaskServiceWithMutationProgress => {
-  const guard = <A, E>(
+  const guard = <A, E, R>(
     repoPath: string,
-    operation: Effect.Effect<A, E>,
-  ): Effect.Effect<A, E | HostValidationErrorAggregate> =>
-    assertWorkspaceAdmitsWork(repoPath).pipe(Effect.zipRight(operation));
+    operation: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | HostValidationErrorAggregate, R> =>
+    admission.withWorkStartLease(repoPath, operation);
 
   return {
     ...service,
