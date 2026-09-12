@@ -69,7 +69,8 @@ const normalizeAttachmentPart = (
 ): AgentUserMessageDisplayPart | null => {
   const sourcePath = part.source?.type === "file" ? part.source.path.trim() : "";
   const fileUrlPath = readFilePathFromUrl(part.url);
-  const filePath = fileUrlPath ?? (sourcePath || part.filename?.trim() || "");
+  const previewPath = fileUrlPath ?? (sourcePath.length > 0 ? sourcePath : null);
+  const filePath = previewPath ?? part.filename?.trim() ?? "";
   if (filePath.length === 0 || !part.mime) {
     return null;
   }
@@ -85,7 +86,7 @@ const normalizeAttachmentPart = (
     kind: attachmentKind,
     mime: part.mime,
   };
-  if (!fileUrlPath && sourcePath.length === 0) {
+  if (previewPath === null) {
     attachment.localPreviewAvailable = false;
   }
   return { kind: "attachment", attachment };

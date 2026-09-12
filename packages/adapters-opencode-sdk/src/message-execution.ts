@@ -1,6 +1,7 @@
 import {
   type AgentModelSelection,
   type AgentUserMessageDisplayPart,
+  type AgentUserMessagePart,
   type AgentUserMessageState,
   classifySystemSlashCommandInvocation,
   normalizeAgentUserMessageParts,
@@ -72,6 +73,18 @@ type OpenCodePromptPart =
       };
     };
 
+type OpenCodePromptFilePart = Extract<OpenCodePromptPart, { type: "file" }>;
+type OpenCodePromptFileSource = NonNullable<OpenCodePromptFilePart["source"]>;
+
+const toFileSource = (
+  path: string,
+  text: OpenCodePromptFileSource["text"],
+): OpenCodePromptFileSource => ({
+  type: "file",
+  path,
+  text,
+});
+
 const toCommandModelInput = (
   modelInput: ReturnType<typeof normalizeModelInput>,
 ): string | undefined => {
@@ -84,7 +97,7 @@ const toCommandModelInput = (
 const toPromptFilePart = (
   fileReference: ReturnType<typeof buildOpenCodePromptText>["fileReferences"][number],
   workingDirectory: string,
-): Extract<OpenCodePromptPart, { type: "file" }> => {
+): OpenCodePromptFilePart => {
   const normalizedPath = fileReference.file.path.trim();
   if (normalizedPath.length === 0) {
     throw new Error("OpenCode file references require a non-empty path.");
@@ -95,11 +108,34 @@ const toPromptFilePart = (
     mime: detectAgentFileReferenceMime(fileReference.file),
     url: toFileUrl(resolveAgainstWorkingDirectory(workingDirectory, normalizedPath)),
     filename: fileReference.file.name,
-    source: {
-      type: "file",
-      path: normalizedPath,
-      text: fileReference.sourceText,
-    },
+    source: toFileSource(normalizedPath, fileReference.sourceText),
+  };
+};
+
+const toPromptAttachmentPart = (
+  part: Extract<AgentUserMessagePart, { kind: "attachment" }>,
+  workingDirectory: string,
+): OpenCodePromptFilePart => {
+  const { attachment } = part;
+  const normalizedPath = attachment.path.trim();
+  if (normalizedPath.length === 0) {
+    throw new Error("OpenCode attachments require a non-empty path.");
+  }
+  if (!attachment.mime || attachment.mime.trim().length === 0) {
+    throw new Error(`OpenCode attachment "${attachment.name}" is missing a MIME type.`);
+  }
+
+  const resolvedPath = resolveAgainstWorkingDirectory(workingDirectory, normalizedPath);
+  return {
+    type: "file",
+    mime: attachment.mime,
+    url: toFileUrl(resolvedPath),
+    filename: attachment.name,
+    source: toFileSource(resolvedPath, {
+      value: resolvedPath,
+      start: 0,
+      end: resolvedPath.length,
+    }),
   };
 };
 
@@ -129,38 +165,9 @@ const toPromptParts = (
       toPromptFilePart(fileReference, workingDirectory),
     ),
     ...promptText.subagentReferences.map(toPromptSubagentPart),
-    ...parts.flatMap((part) => {
-      if (part.kind !== "attachment") {
-        return [];
-      }
-
-      const normalizedPath = part.attachment.path.trim();
-      if (normalizedPath.length === 0) {
-        throw new Error("OpenCode attachments require a non-empty path.");
-      }
-      if (!part.attachment.mime || part.attachment.mime.trim().length === 0) {
-        throw new Error(`OpenCode attachment "${part.attachment.name}" is missing a MIME type.`);
-      }
-
-      const resolvedPath = resolveAgainstWorkingDirectory(workingDirectory, normalizedPath);
-      return [
-        {
-          type: "file" as const,
-          mime: part.attachment.mime,
-          url: toFileUrl(resolvedPath),
-          filename: part.attachment.name,
-          source: {
-            type: "file" as const,
-            path: resolvedPath,
-            text: {
-              value: resolvedPath,
-              start: 0,
-              end: resolvedPath.length,
-            },
-          },
-        },
-      ];
-    }),
+    ...parts.flatMap((part) =>
+      part.kind === "attachment" ? toPromptAttachmentPart(part, workingDirectory) : [],
+    ),
   ];
 };
 

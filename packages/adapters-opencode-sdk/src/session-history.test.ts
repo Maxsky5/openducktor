@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import type { AgentEvent } from "@openducktor/core";
+import type { AgentEvent, AgentUserMessageDisplayPart } from "@openducktor/core";
+import type {
+  OpencodeMessageInfoFixtureInput,
+  OpencodePartFixtureInput,
+} from "./opencode-protocol-test-fixtures";
 import {
   defaultRepoRuntimeInput,
   completeMockEvent,
@@ -1739,37 +1743,93 @@ describe("OpencodeSdkAdapter session history", () => {
     );
   });
 
+  const makeImageFilePart = ({
+    id,
+    messageID,
+    url,
+    sourcePath,
+  }: {
+    id: string;
+    messageID: string;
+    url: string;
+    sourcePath?: string;
+  }): OpencodePartFixtureInput => {
+    const part: OpencodePartFixtureInput = {
+      id,
+      sessionID: "session-opencode-1",
+      messageID,
+      type: "file",
+      mime: "image/png",
+      filename: "image.png",
+      url,
+    };
+    if (sourcePath !== undefined) {
+      part.source = {
+        type: "file",
+        path: sourcePath,
+        text: { value: sourcePath, start: 0, end: sourcePath.length },
+      };
+    }
+    return part;
+  };
+
+  const makeUserImagesMessage = ({
+    messageID,
+    parts,
+  }: {
+    messageID: string;
+    parts: OpencodePartFixtureInput[];
+  }) => ({
+    info: {
+      id: messageID,
+      role: "user",
+      text: "Two images",
+      time: { created: Date.parse("2026-02-17T11:59:00Z") },
+    } satisfies OpencodeMessageInfoFixtureInput,
+    parts,
+  });
+
+  const makeImageAttachmentDisplayPart = ({
+    id,
+    path,
+    localPreviewAvailable,
+  }: {
+    id: string;
+    path: string;
+    localPreviewAvailable?: boolean;
+  }): AgentUserMessageDisplayPart => {
+    const attachment: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>["attachment"] = {
+      id,
+      path,
+      name: "image.png",
+      kind: "image",
+      mime: "image/png",
+    };
+    if (localPreviewAvailable !== undefined) {
+      attachment.localPreviewAvailable = localPreviewAvailable;
+    }
+    return { kind: "attachment", attachment };
+  };
+
   test("loadSessionHistory maps each data url attachment to its preserved local path", async () => {
+    const messageID = "msg-user-images-1";
     const mock = makeMockClient({
       messagesResponse: [
-        {
-          info: {
-            id: "msg-user-images-1",
-            role: "user",
-            text: "Two images",
-            time: { created: Date.parse("2026-02-17T11:59:00Z") },
-          },
+        makeUserImagesMessage({
+          messageID,
           parts: [
-            {
+            makeImageFilePart({
               id: "file-image-1",
-              sessionID: "session-opencode-1",
-              messageID: "msg-user-images-1",
-              type: "file",
-              mime: "image/png",
-              filename: "image.png",
+              messageID,
               url: "data:image/png;base64,aGVsbG8=",
-            },
-            {
+            }),
+            makeImageFilePart({
               id: "file-image-2",
-              sessionID: "session-opencode-1",
-              messageID: "msg-user-images-1",
-              type: "file",
-              mime: "image/png",
-              filename: "image.png",
+              messageID,
               url: "data:image/png;base64,d29ybGQ=",
-            },
+            }),
           ],
-        },
+        }),
       ],
     });
     const adapter = new OpencodeSdkAdapter({
@@ -1783,29 +1843,17 @@ describe("OpencodeSdkAdapter session history", () => {
     if (!session) {
       throw new Error("Expected started session");
     }
-    session.messageMetadataById.set("msg-user-images-1", {
+    session.messageMetadataById.set(messageID, {
       timestamp: "2026-02-17T11:59:00Z",
       displayParts: [
-        {
-          kind: "attachment",
-          attachment: {
-            id: "attachment-image-1",
-            path: "/tmp/local-first-image.png",
-            name: "image.png",
-            kind: "image",
-            mime: "image/png",
-          },
-        },
-        {
-          kind: "attachment",
-          attachment: {
-            id: "attachment-image-2",
-            path: "/tmp/local-second-image.png",
-            name: "image.png",
-            kind: "image",
-            mime: "image/png",
-          },
-        },
+        makeImageAttachmentDisplayPart({
+          id: "attachment-image-1",
+          path: "/tmp/local-first-image.png",
+        }),
+        makeImageAttachmentDisplayPart({
+          id: "attachment-image-2",
+          path: "/tmp/local-second-image.png",
+        }),
       ],
     });
 
@@ -1819,78 +1867,32 @@ describe("OpencodeSdkAdapter session history", () => {
       throw new Error("Expected user history entry");
     }
     expect(history[0].displayParts).toEqual([
-      {
-        kind: "attachment",
-        attachment: {
-          id: "file-image-1",
-          path: "/tmp/local-first-image.png",
-          name: "image.png",
-          kind: "image",
-          mime: "image/png",
-        },
-      },
-      {
-        kind: "attachment",
-        attachment: {
-          id: "file-image-2",
-          path: "/tmp/local-second-image.png",
-          name: "image.png",
-          kind: "image",
-          mime: "image/png",
-        },
-      },
+      makeImageAttachmentDisplayPart({ id: "file-image-1", path: "/tmp/local-first-image.png" }),
+      makeImageAttachmentDisplayPart({ id: "file-image-2", path: "/tmp/local-second-image.png" }),
     ]);
   });
 
   test("loadSessionHistory restores staged preview paths from runtime source metadata", async () => {
+    const messageID = "msg-user-images-3";
     const mock = makeMockClient({
       messagesResponse: [
-        {
-          info: {
-            id: "msg-user-images-3",
-            role: "user",
-            text: "Two images",
-            time: { created: Date.parse("2026-02-17T11:59:00Z") },
-          },
+        makeUserImagesMessage({
+          messageID,
           parts: [
-            {
+            makeImageFilePart({
               id: "file-image-1",
-              sessionID: "session-opencode-1",
-              messageID: "msg-user-images-3",
-              type: "file",
-              mime: "image/png",
-              filename: "image.png",
+              messageID,
               url: "data:image/png;base64,aGVsbG8=",
-              source: {
-                type: "file",
-                path: "/tmp/staged-first-image.png",
-                text: {
-                  value: "/tmp/staged-first-image.png",
-                  start: 0,
-                  end: 27,
-                },
-              },
-            },
-            {
+              sourcePath: "/tmp/staged-first-image.png",
+            }),
+            makeImageFilePart({
               id: "file-image-2",
-              sessionID: "session-opencode-1",
-              messageID: "msg-user-images-3",
-              type: "file",
-              mime: "image/png",
-              filename: "image.png",
+              messageID,
               url: "data:image/png;base64,d29ybGQ=",
-              source: {
-                type: "file",
-                path: "/tmp/staged-second-image.png",
-                text: {
-                  value: "/tmp/staged-second-image.png",
-                  start: 0,
-                  end: 28,
-                },
-              },
-            },
+              sourcePath: "/tmp/staged-second-image.png",
+            }),
           ],
-        },
+        }),
       ],
     });
     const adapter = new OpencodeSdkAdapter({
@@ -1908,60 +1910,30 @@ describe("OpencodeSdkAdapter session history", () => {
       throw new Error("Expected user history entry");
     }
     expect(history[0].displayParts).toEqual([
-      {
-        kind: "attachment",
-        attachment: {
-          id: "file-image-1",
-          path: "/tmp/staged-first-image.png",
-          name: "image.png",
-          kind: "image",
-          mime: "image/png",
-        },
-      },
-      {
-        kind: "attachment",
-        attachment: {
-          id: "file-image-2",
-          path: "/tmp/staged-second-image.png",
-          name: "image.png",
-          kind: "image",
-          mime: "image/png",
-        },
-      },
+      makeImageAttachmentDisplayPart({ id: "file-image-1", path: "/tmp/staged-first-image.png" }),
+      makeImageAttachmentDisplayPart({ id: "file-image-2", path: "/tmp/staged-second-image.png" }),
     ]);
   });
 
   test("loadSessionHistory keeps data url attachment echoes without local preview paths", async () => {
+    const messageID = "msg-user-images-2";
     const mock = makeMockClient({
       messagesResponse: [
-        {
-          info: {
-            id: "msg-user-images-2",
-            role: "user",
-            text: "Two images",
-            time: { created: Date.parse("2026-02-17T11:59:00Z") },
-          },
+        makeUserImagesMessage({
+          messageID,
           parts: [
-            {
+            makeImageFilePart({
               id: "file-image-1",
-              sessionID: "session-opencode-1",
-              messageID: "msg-user-images-2",
-              type: "file",
-              mime: "image/png",
-              filename: "image.png",
+              messageID,
               url: "data:image/png;base64,aGVsbG8=",
-            },
-            {
+            }),
+            makeImageFilePart({
               id: "file-image-2",
-              sessionID: "session-opencode-1",
-              messageID: "msg-user-images-2",
-              type: "file",
-              mime: "image/png",
-              filename: "image.png",
+              messageID,
               url: "data:image/png;base64,d29ybGQ=",
-            },
+            }),
           ],
-        },
+        }),
       ],
     });
     const adapter = new OpencodeSdkAdapter({
@@ -1979,28 +1951,16 @@ describe("OpencodeSdkAdapter session history", () => {
       throw new Error("Expected user history entry");
     }
     expect(history[0].displayParts).toEqual([
-      {
-        kind: "attachment",
-        attachment: {
-          id: "file-image-1",
-          path: "image.png",
-          name: "image.png",
-          kind: "image",
-          mime: "image/png",
-          localPreviewAvailable: false,
-        },
-      },
-      {
-        kind: "attachment",
-        attachment: {
-          id: "file-image-2",
-          path: "image.png",
-          name: "image.png",
-          kind: "image",
-          mime: "image/png",
-          localPreviewAvailable: false,
-        },
-      },
+      makeImageAttachmentDisplayPart({
+        id: "file-image-1",
+        path: "image.png",
+        localPreviewAvailable: false,
+      }),
+      makeImageAttachmentDisplayPart({
+        id: "file-image-2",
+        path: "image.png",
+        localPreviewAvailable: false,
+      }),
     ]);
   });
 });
