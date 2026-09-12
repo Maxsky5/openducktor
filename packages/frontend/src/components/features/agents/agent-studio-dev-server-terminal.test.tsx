@@ -57,6 +57,7 @@ const createQueuedWriteTerminalHarness = (queuedData: string) => {
     open(container);
     loadAddon({ dispose: () => {} });
     return {
+      dispose,
       terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
       fitAddon: { dispose: mock(() => {}), fit },
     };
@@ -82,6 +83,7 @@ describe("AgentStudioDevServerTerminal", () => {
       callback?.();
     });
     const dispose = mock(() => {});
+    const terminalDispose = mock(() => {});
     const onRendererError = mock(() => {});
     let capturedOptions: CapturedOptionsContract = {};
     const createTerminalBinding = (
@@ -92,12 +94,21 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({ dispose: () => {} });
       return {
-        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
+        dispose,
+        terminal: {
+          clear,
+          dispose: terminalDispose,
+          loadAddon,
+          open,
+          options: {},
+          reset,
+          write,
+        },
         fitAddon: { dispose, fit },
       };
     };
 
-    render(
+    const view = render(
       <AgentStudioDevServerTerminal
         scopeKey="/repo::task-1"
         scriptId="frontend"
@@ -128,6 +139,9 @@ describe("AgentStudioDevServerTerminal", () => {
     expect(capturedOptions.disableStdin).toBe(true);
     expect(capturedOptions.fontFamily).toContain('"Symbols Nerd Font Mono"');
     expect(reset).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(terminalDispose).not.toHaveBeenCalled();
     expect(writes).toEqual(["ready\r\n"]);
     expect(onRendererError).toHaveBeenCalledWith(null);
   });
@@ -149,6 +163,7 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({ dispose: () => {} });
       return {
+        dispose,
         terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
       };
@@ -277,6 +292,7 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({ dispose: () => {} });
       return {
+        dispose,
         terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
       };
@@ -420,6 +436,7 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({ dispose: () => {} });
       return {
+        dispose,
         terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
       };
@@ -507,6 +524,7 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({ dispose: () => {} });
       return {
+        dispose,
         terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
       };
@@ -593,6 +611,7 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({ dispose: () => {} });
       return {
+        dispose,
         terminal: {
           clear,
           dispose,
@@ -948,6 +967,7 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({ dispose: () => {} });
       return {
+        dispose,
         terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
       };
@@ -1043,6 +1063,7 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({ dispose: () => {} });
       return {
+        dispose,
         terminal: {
           attachCustomKeyEventHandler: (handler: (event: KeyboardEvent) => boolean) => {
             keyHandler = handler;

@@ -43,7 +43,9 @@ export const createHttpLinkProvider = (
 
   return {
     provideLinks: (row, callback) => {
-      const targets = readRow(row);
+      const targets = readRow(row).filter(
+        ({ range }) => range.start.y <= row && row <= range.end.y,
+      );
       const links: ILink[] = targets.map((target) => ({
         text: target.url,
         range: target.range,

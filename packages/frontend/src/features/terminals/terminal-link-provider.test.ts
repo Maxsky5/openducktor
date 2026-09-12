@@ -95,6 +95,24 @@ describe("terminal HTTP link provider", () => {
     expect(readTerminalLinksForBufferLine(terminal, 2)).toEqual([]);
   });
 
+  test("returns only links that cross the requested row", () => {
+    const columns = 20;
+    const terminal = createTerminal(
+      [
+        createTextLine("https://one.test", columns, false),
+        createTextLine("https://two.test", columns, true),
+      ],
+      columns,
+    );
+
+    expect(readTerminalLinksForBufferLine(terminal, 1).map((link) => link.text)).toEqual([
+      "https://one.test",
+    ]);
+    expect(readTerminalLinksForBufferLine(terminal, 2).map((link) => link.text)).toEqual([
+      "https://two.test",
+    ]);
+  });
+
   test("accounts for wide and combining cells before a link", () => {
     const cells = [
       createCell("界", 2),
