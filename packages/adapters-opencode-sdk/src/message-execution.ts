@@ -142,12 +142,22 @@ const toPromptParts = (
         throw new Error(`OpenCode attachment "${part.attachment.name}" is missing a MIME type.`);
       }
 
+      const resolvedPath = resolveAgainstWorkingDirectory(workingDirectory, normalizedPath);
       return [
         {
           type: "file" as const,
           mime: part.attachment.mime,
-          url: toFileUrl(resolveAgainstWorkingDirectory(workingDirectory, normalizedPath)),
+          url: toFileUrl(resolvedPath),
           filename: part.attachment.name,
+          source: {
+            type: "file" as const,
+            path: resolvedPath,
+            text: {
+              value: resolvedPath,
+              start: 0,
+              end: resolvedPath.length,
+            },
+          },
         },
       ];
     }),

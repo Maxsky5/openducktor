@@ -443,6 +443,42 @@ describe("message-normalizers", () => {
     ]);
   });
 
+  test("prefers the source file path over a data url so staged previews stay available", () => {
+    const parts: OpenCodeProtocolObject[] = [
+      {
+        id: "image-data-source",
+        sessionID: "session-1",
+        messageID: "message-1",
+        type: "file",
+        mime: "image/png",
+        filename: "image.png",
+        url: "data:image/png;base64,aGVsbG8=",
+        source: {
+          type: "file",
+          path: "/var/folders/example/staged-image.png",
+          text: {
+            value: "/var/folders/example/staged-image.png",
+            start: 0,
+            end: 37,
+          },
+        },
+      },
+    ];
+
+    expect(normalizeUserMessageDisplayParts(parseOpencodeParts(parts))).toEqual([
+      {
+        kind: "attachment",
+        attachment: {
+          id: "image-data-source",
+          path: "/var/folders/example/staged-image.png",
+          name: "image.png",
+          kind: "image",
+          mime: "image/png",
+        },
+      },
+    ]);
+  });
+
   test("uses preserved local paths and clears the unavailable preview flag", () => {
     const runtimeParts = normalizeUserMessageDisplayParts(
       parseOpencodeParts([

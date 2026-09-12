@@ -1842,6 +1842,95 @@ describe("OpencodeSdkAdapter session history", () => {
     ]);
   });
 
+  test("loadSessionHistory restores staged preview paths from runtime source metadata", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-user-images-3",
+            role: "user",
+            text: "Two images",
+            time: { created: Date.parse("2026-02-17T11:59:00Z") },
+          },
+          parts: [
+            {
+              id: "file-image-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-user-images-3",
+              type: "file",
+              mime: "image/png",
+              filename: "image.png",
+              url: "data:image/png;base64,aGVsbG8=",
+              source: {
+                type: "file",
+                path: "/tmp/staged-first-image.png",
+                text: {
+                  value: "/tmp/staged-first-image.png",
+                  start: 0,
+                  end: 27,
+                },
+              },
+            },
+            {
+              id: "file-image-2",
+              sessionID: "session-opencode-1",
+              messageID: "msg-user-images-3",
+              type: "file",
+              mime: "image/png",
+              filename: "image.png",
+              url: "data:image/png;base64,d29ybGQ=",
+              source: {
+                type: "file",
+                path: "/tmp/staged-second-image.png",
+                text: {
+                  value: "/tmp/staged-second-image.png",
+                  start: 0,
+                  end: 28,
+                },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      ...defaultRepoRuntimeInput,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+
+    if (history[0]?.role !== "user") {
+      throw new Error("Expected user history entry");
+    }
+    expect(history[0].displayParts).toEqual([
+      {
+        kind: "attachment",
+        attachment: {
+          id: "file-image-1",
+          path: "/tmp/staged-first-image.png",
+          name: "image.png",
+          kind: "image",
+          mime: "image/png",
+        },
+      },
+      {
+        kind: "attachment",
+        attachment: {
+          id: "file-image-2",
+          path: "/tmp/staged-second-image.png",
+          name: "image.png",
+          kind: "image",
+          mime: "image/png",
+        },
+      },
+    ]);
+  });
+
   test("loadSessionHistory keeps data url attachment echoes without local preview paths", async () => {
     const mock = makeMockClient({
       messagesResponse: [
