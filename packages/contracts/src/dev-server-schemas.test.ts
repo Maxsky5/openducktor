@@ -44,6 +44,7 @@ describe("dev-server-schemas", () => {
             scriptId: "frontend",
             name: "Frontend",
             command: "bun run dev",
+            startedCommand: null,
             status: "running",
             pid: 4242,
             startedAt: "2026-03-25T10:00:00.000Z",
@@ -62,6 +63,7 @@ describe("dev-server-schemas", () => {
         scriptId: "frontend",
         name: "Frontend",
         command: "bun run dev",
+        startedCommand: null,
         status,
         runIdentity: null,
         pid: null,
@@ -85,6 +87,7 @@ describe("dev-server-schemas", () => {
       scriptId: "frontend",
       name: "Frontend",
       command: "bun run dev",
+      startedCommand: null,
       status: "failed",
       runIdentity: null,
       pid: null,
@@ -123,6 +126,7 @@ describe("dev-server-schemas", () => {
           scriptId: "frontend",
           name: "Frontend",
           command: "bun run dev",
+          startedCommand: null,
           status: "stopped",
           runIdentity: null,
           pid: null,
@@ -135,7 +139,76 @@ describe("dev-server-schemas", () => {
     });
 
     expect(parsed.scripts[0]?.runIdentity).toBeNull();
+    expect(parsed.scripts[0]?.startedCommand).toBeNull();
     expect(parsed.scripts[0]?.bufferedTerminalChunks).toEqual([]);
+  });
+
+  test("requires scripts to state the started command explicitly", () => {
+    const parsed = devServerScriptStateSchema.safeParse({
+      scriptId: "frontend",
+      name: "Frontend",
+      command: "bun run dev",
+      status: "stopped",
+      runIdentity: null,
+      pid: null,
+      startedAt: null,
+      exitCode: null,
+      lastError: null,
+    });
+
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      throw new Error("Expected a script without startedCommand to be rejected.");
+    }
+    expect(parsed.error.issues[0]?.path).toEqual(["startedCommand"]);
+  });
+
+  test("rejects a run that does not state the started command", () => {
+    const parsed = devServerScriptStateSchema.safeParse({
+      scriptId: "frontend",
+      name: "Frontend",
+      command: "bun run dev:next",
+      startedCommand: null,
+      status: "running",
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
+      pid: 4242,
+      startedAt: "2026-03-25T10:00:00.000Z",
+      exitCode: null,
+      lastError: null,
+      bufferedTerminalChunks: [],
+    });
+
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      throw new Error("Expected a run without a started command to be rejected.");
+    }
+    expect(parsed.error.issues).toHaveLength(1);
+    expect(parsed.error.issues[0]?.path).toEqual(["startedCommand"]);
+  });
+
+  test("keeps the started command distinct from the configured command", () => {
+    const parsed = devServerScriptStateSchema.parse({
+      scriptId: "frontend",
+      name: "Frontend",
+      command: "bun run dev:next",
+      startedCommand: "bun run dev",
+      status: "running",
+      runIdentity: {
+        runId: "frontend:1",
+        runOrder: { hostInstanceId: "host-1", generation: 1 },
+      },
+      pid: 4242,
+      startedAt: "2026-03-25T10:00:00.000Z",
+      exitCode: null,
+      lastError: null,
+      bufferedTerminalChunks: [],
+    });
+
+    expect(parsed.command).toBe("bun run dev:next");
+    expect(parsed.startedCommand).toBe("bun run dev");
   });
 
   test("rejects structurally incomplete run identity", () => {
@@ -149,6 +222,7 @@ describe("dev-server-schemas", () => {
             scriptId: "frontend",
             name: "Frontend",
             command: "bun run dev",
+            startedCommand: null,
             status: "running",
             runIdentity: { runId: "frontend:1" },
             pid: 4242,
@@ -173,6 +247,7 @@ describe("dev-server-schemas", () => {
             scriptId: "frontend",
             name: "Frontend",
             command: "bun run dev",
+            startedCommand: "bun run dev",
             status: "stopped",
             runIdentity: {
               runId: "frontend:2",

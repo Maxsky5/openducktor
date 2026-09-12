@@ -118,6 +118,16 @@ const createProcessPort = () => {
   };
   return { handles, processPort, starts, stoppedPids };
 };
+const createServiceWithMutableConfig = () => {
+  const { processPort, starts } = createProcessPort();
+  const config = repoConfig();
+  const service = createDevServerService({
+    processPort,
+    taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+    workspaceSettingsService: createWorkspaceSettingsService(config),
+  });
+  return { config, service, starts };
+};
 const devServerStartFailureSchema = z.object({
   message: z.string(),
   details: z.object({
@@ -180,6 +190,7 @@ describe("createDevServerService", () => {
           scriptId: "web",
           name: "Web",
           command: "bun run dev",
+          startedCommand: null,
           status: "stopped",
           pid: null,
           startedAt: null,
@@ -230,6 +241,7 @@ describe("createDevServerService", () => {
           scriptId: "web",
           status: "running",
           pid: 400,
+          startedCommand: "bun run dev",
           bufferedTerminalChunks: [
             {
               data: "Starting `bun run dev`\r\n",
@@ -377,6 +389,82 @@ describe("createDevServerService", () => {
     ).rejects.toThrow(
       "Dev servers are already running for task task-1. Stop or restart them instead.",
     );
+  });
+  test("keeps the started command when repository settings change during the run", async () => {
+    const { config, service, starts } = createServiceWithMutableConfig();
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    config.devServers = [{ id: "web", name: "Web", command: "bun run dev:next" }];
+
+    await expect(
+      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toMatchObject({
+      scripts: [
+        {
+          scriptId: "web",
+          command: "bun run dev:next",
+          startedCommand: "bun run dev",
+          status: "running",
+        },
+      ],
+    });
+
+    await Effect.runPromise(service.restart({ repoPath: "/repo", taskId: "task-1" }));
+
+    expect(starts.map((start) => start.command)).toEqual(["bun run dev", "bun run dev:next"]);
+    await expect(
+      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toMatchObject({
+      scripts: [
+        {
+          scriptId: "web",
+          command: "bun run dev:next",
+          startedCommand: "bun run dev:next",
+          status: "running",
+        },
+      ],
+    });
+  });
+  test("keeps the started command after a failure when repository settings change", async () => {
+    const { config, service, starts } = createServiceWithMutableConfig();
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    config.devServers = [{ id: "web", name: "Web", command: "bun run dev:next" }];
+    starts[0]?.onExit({ pid: 400, exitCode: 7, signal: null, error: null });
+
+    await expect(
+      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toMatchObject({
+      scripts: [
+        {
+          scriptId: "web",
+          command: "bun run dev:next",
+          startedCommand: "bun run dev",
+          status: "failed",
+          exitCode: 7,
+        },
+      ],
+    });
+  });
+  test("reports the started command when stopping scripts after repository settings change", async () => {
+    const { config, service } = createServiceWithMutableConfig();
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    config.devServers = [{ id: "web", name: "Web", command: "bun run dev:next" }];
+    await Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" }));
+
+    await expect(Effect.runPromise(service.stopAll())).resolves.toEqual({
+      stoppedScripts: [
+        {
+          command: "bun run dev",
+          name: "Web",
+          pid: 400,
+          repoPath: "/canonical/repo",
+          scriptId: "web",
+          taskId: "task-1",
+        },
+      ],
+    });
   });
   test("requires a task worktree before starting scripts", async () => {
     const { processPort } = createProcessPort();

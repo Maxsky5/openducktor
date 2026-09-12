@@ -19,6 +19,7 @@ const createRuntime = (runIdentity: DevServerRunIdentity | null): DevServerGroup
         scriptId: "web",
         name: "Web",
         command: "bun run dev",
+        startedCommand: runIdentity === null ? null : "bun run dev",
         status: runIdentity === null ? "stopped" : "running",
         runIdentity,
         pid: runIdentity === null ? null : 4242,

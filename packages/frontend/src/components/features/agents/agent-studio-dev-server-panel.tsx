@@ -94,6 +94,34 @@ const getEmptyTerminalMessage = (script: DevServerScriptState): string => {
   return "Terminal output will appear here once this dev server writes output. Drag to select logs, then press Cmd/Ctrl+C to copy.";
 };
 
+const getDisplayedScriptCommand = (script: DevServerScriptState): string =>
+  script.startedCommand ?? script.command;
+
+const getHeaderSummary = (
+  mode: AgentStudioDevServerPanelMode,
+  worktreePath: string | null,
+): string => {
+  if (mode === "empty") {
+    return DEV_SERVER_EMPTY_REASON;
+  }
+
+  if (mode === "disabled") {
+    return DEV_SERVER_DISABLED_REASON;
+  }
+
+  if (mode === "loading") {
+    return "Loading builder dev server state…";
+  }
+
+  if (mode === "stopped") {
+    return "Start the configured builder dev servers for this task worktree.";
+  }
+
+  return worktreePath
+    ? `Running in ${worktreePath}`
+    : "Builder dev server terminals stream here while the task worktree is active.";
+};
+
 function CompactStartButton({
   button,
   disabledReason,
@@ -136,6 +164,186 @@ function CompactStartButton({
   );
 }
 
+function CompactDevServerPanel({
+  compactAction,
+  disabledReason,
+  disabledReasonId,
+  isActionPending,
+  isStartPending,
+  mode,
+  onStart,
+  panelError,
+}: {
+  compactAction: ReactElement | undefined;
+  disabledReason: string | null;
+  disabledReasonId: string;
+  isActionPending: boolean;
+  isStartPending: boolean;
+  mode: AgentStudioDevServerPanelMode;
+  onStart: () => void;
+  panelError: string | null;
+}): ReactElement {
+  const isEmpty = mode === "empty";
+  const isDisabled = mode === "disabled";
+  const isLoading = mode === "loading";
+  const startDisabled = isEmpty || isDisabled || isLoading || isActionPending;
+  const startLabel = getStartLabel(isLoading, isStartPending);
+  const startButton = (
+    <Button
+      type="button"
+      size="sm"
+      className="w-full justify-center rounded-lg"
+      disabled={startDisabled}
+      onClick={onStart}
+      data-testid="agent-studio-dev-server-start-button"
+    >
+      <Play className="size-4" />
+      {startLabel}
+    </Button>
+  );
+  // `disabledReason` is only produced for the stable `empty`/`disabled` modes.
+  // It cannot overlap with the transient loading/start-pending button labels.
+
+  return (
+    <div
+      className="border-t border-border bg-card/70 p-3"
+      data-testid="agent-studio-dev-server-compact-panel"
+    >
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <CompactStartButton
+            button={startButton}
+            disabledReason={disabledReason}
+            disabledReasonId={disabledReasonId}
+          />
+        </div>
+        {compactAction}
+      </div>
+      <DevServerErrorBanner
+        className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        message={panelError}
+      />
+    </div>
+  );
+}
+
+function DevServerWorktreePathHeader({
+  headerSummary,
+  isWorktreePathCopied,
+  onCopyWorktreePath,
+  worktreePath,
+}: {
+  headerSummary: string;
+  isWorktreePathCopied: boolean;
+  onCopyWorktreePath: () => void;
+  worktreePath: string | null;
+}): ReactElement {
+  if (worktreePath === null) {
+    return (
+      <p
+        className="mt-3 text-xs text-muted-foreground"
+        data-testid="agent-studio-dev-server-header-summary"
+      >
+        {headerSummary}
+      </p>
+    );
+  }
+
+  return (
+    <div className="inline-flex max-w-full items-center gap-1.5 text-xs text-muted-foreground">
+      <p className="min-w-0 truncate" data-testid="agent-studio-dev-server-header-summary">
+        {headerSummary}
+      </p>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-6 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={onCopyWorktreePath}
+        data-testid="agent-studio-dev-server-copy-worktree-path"
+        aria-label="Copy working directory"
+      >
+        {isWorktreePathCopied ? (
+          <Check className="size-3.5 text-emerald-500 dark:text-emerald-400" />
+        ) : (
+          <Copy className="size-3.5" />
+        )}
+      </Button>
+    </div>
+  );
+}
+
+function DevServerErrorBanner({
+  className,
+  message,
+}: {
+  className: string;
+  message: string | null;
+}): ReactElement | null {
+  if (message === null) {
+    return null;
+  }
+
+  return (
+    <div className={className} data-testid="agent-studio-dev-server-error-banner">
+      {message}
+    </div>
+  );
+}
+
+function DevServerTerminalContent({
+  onRendererError,
+  script,
+  terminalBuffer,
+  terminalChunkCount,
+  terminalScopeKey,
+}: {
+  onRendererError: (message: string | null) => void;
+  script: DevServerScriptState | null;
+  terminalBuffer: AgentStudioDevServerTerminalBuffer | null;
+  terminalChunkCount: number;
+  terminalScopeKey: string;
+}): ReactElement | null {
+  if (script === null) {
+    return null;
+  }
+
+  return (
+    <TabsContent
+      value={script.scriptId}
+      className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden outline-none"
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--dev-server-terminal-panel)] text-[var(--dev-server-terminal-foreground)]">
+        <div className="border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-panel-header)] px-3 py-2 text-xs text-[var(--dev-server-terminal-muted)]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[var(--dev-server-terminal-subtle)]">$</span>
+            <span className="font-mono text-[var(--dev-server-terminal-foreground)]">
+              {getDisplayedScriptCommand(script)}
+            </span>
+          </div>
+        </div>
+
+        <div className="relative min-h-0 flex-1 overflow-hidden bg-[var(--dev-server-terminal-panel)]">
+          <AgentStudioDevServerTerminal
+            scopeKey={terminalScopeKey}
+            scriptId={script.scriptId}
+            terminalBuffer={terminalBuffer}
+            onRendererError={onRendererError}
+          />
+          {terminalChunkCount === 0 ? (
+            <div
+              className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 py-8 text-center text-sm text-[var(--dev-server-terminal-muted)]"
+              data-testid="agent-studio-dev-server-empty-log-state"
+            >
+              {getEmptyTerminalMessage(script)}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </TabsContent>
+  );
+}
+
 export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel({
   model,
   compactAction,
@@ -174,27 +382,10 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
     errorLogContext: "AgentStudioDevServerPanel",
   });
 
-  const headerSummary = useMemo(() => {
-    if (model.mode === "empty") {
-      return DEV_SERVER_EMPTY_REASON;
-    }
-
-    if (model.mode === "disabled") {
-      return DEV_SERVER_DISABLED_REASON;
-    }
-
-    if (model.mode === "loading") {
-      return "Loading builder dev server state…";
-    }
-
-    if (model.mode === "stopped") {
-      return "Start the configured builder dev servers for this task worktree.";
-    }
-
-    return model.worktreePath
-      ? `Running in ${model.worktreePath}`
-      : "Builder dev server terminals stream here while the task worktree is active.";
-  }, [model.mode, model.worktreePath]);
+  const headerSummary = useMemo(
+    () => getHeaderSummary(model.mode, model.worktreePath),
+    [model.mode, model.worktreePath],
+  );
 
   const handleCopyWorktreePath = useCallback(() => {
     if (!model.worktreePath) {
@@ -205,51 +396,17 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
   }, [copyWorktreePath, model.worktreePath]);
 
   if (!hasExpandedActions) {
-    const isEmpty = model.mode === "empty";
-    const isDisabled = model.mode === "disabled";
-    const isLoading = model.mode === "loading";
-    const startDisabled = isEmpty || isDisabled || isLoading || isActionPending;
-    const startLabel = getStartLabel(isLoading, model.isStartPending);
-    const startButton = (
-      <Button
-        type="button"
-        size="sm"
-        className="w-full justify-center rounded-lg"
-        disabled={startDisabled}
-        onClick={model.onStart}
-        data-testid="agent-studio-dev-server-start-button"
-      >
-        <Play className="size-4" />
-        {startLabel}
-      </Button>
-    );
-    // `disabledReason` is only produced for the stable `empty`/`disabled` modes.
-    // It cannot overlap with the transient loading/start-pending button labels.
-
     return (
-      <div
-        className="border-t border-border bg-card/70 p-3"
-        data-testid="agent-studio-dev-server-compact-panel"
-      >
-        <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <CompactStartButton
-              button={startButton}
-              disabledReason={model.disabledReason}
-              disabledReasonId={disabledReasonId}
-            />
-          </div>
-          {compactAction}
-        </div>
-        {panelError ? (
-          <div
-            className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
-            data-testid="agent-studio-dev-server-error-banner"
-          >
-            {panelError}
-          </div>
-        ) : null}
-      </div>
+      <CompactDevServerPanel
+        compactAction={compactAction}
+        disabledReason={model.disabledReason}
+        disabledReasonId={disabledReasonId}
+        isActionPending={isActionPending}
+        isStartPending={model.isStartPending}
+        mode={model.mode}
+        onStart={model.onStart}
+        panelError={panelError}
+      />
     );
   }
 
@@ -288,45 +445,18 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
           </Button>
         </div>
 
-        {model.worktreePath ? (
-          <div className="inline-flex max-w-full items-center gap-1.5 text-xs text-muted-foreground">
-            <p className="min-w-0 truncate" data-testid="agent-studio-dev-server-header-summary">
-              {headerSummary}
-            </p>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-6 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={handleCopyWorktreePath}
-              data-testid="agent-studio-dev-server-copy-worktree-path"
-              aria-label="Copy working directory"
-            >
-              {copiedWorktreePath ? (
-                <Check className="size-3.5 text-emerald-500 dark:text-emerald-400" />
-              ) : (
-                <Copy className="size-3.5" />
-              )}
-            </Button>
-          </div>
-        ) : (
-          <p
-            className="mt-3 text-xs text-muted-foreground"
-            data-testid="agent-studio-dev-server-header-summary"
-          >
-            {headerSummary}
-          </p>
-        )}
+        <DevServerWorktreePathHeader
+          headerSummary={headerSummary}
+          isWorktreePathCopied={copiedWorktreePath}
+          onCopyWorktreePath={handleCopyWorktreePath}
+          worktreePath={model.worktreePath}
+        />
       </div>
 
-      {panelError ? (
-        <div
-          className="border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive"
-          data-testid="agent-studio-dev-server-error-banner"
-        >
-          {panelError}
-        </div>
-      ) : null}
+      <DevServerErrorBanner
+        className="border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        message={panelError}
+      />
 
       <Tabs
         value={selectedTabsValue}
@@ -361,40 +491,13 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
             </TabsList>
           </div>
 
-          {selectedScriptContent ? (
-            <TabsContent
-              value={selectedScriptContent.scriptId}
-              className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden outline-none"
-            >
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--dev-server-terminal-panel)] text-[var(--dev-server-terminal-foreground)]">
-                <div className="border-b border-[var(--dev-server-terminal-border)] bg-[var(--dev-server-terminal-panel-header)] px-3 py-2 text-xs text-[var(--dev-server-terminal-muted)]">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[var(--dev-server-terminal-subtle)]">$</span>
-                    <span className="font-mono text-[var(--dev-server-terminal-foreground)]">
-                      {selectedScriptContent.command}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="relative min-h-0 flex-1 overflow-hidden bg-[var(--dev-server-terminal-panel)]">
-                  <AgentStudioDevServerTerminal
-                    scopeKey={terminalScopeKey}
-                    scriptId={selectedScriptContent.scriptId}
-                    terminalBuffer={selectedScriptTerminalBuffer}
-                    onRendererError={setRendererError}
-                  />
-                  {selectedScriptTerminalChunkCount === 0 ? (
-                    <div
-                      className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 py-8 text-center text-sm text-[var(--dev-server-terminal-muted)]"
-                      data-testid="agent-studio-dev-server-empty-log-state"
-                    >
-                      {getEmptyTerminalMessage(selectedScriptContent)}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </TabsContent>
-          ) : null}
+          <DevServerTerminalContent
+            onRendererError={setRendererError}
+            script={selectedScriptContent}
+            terminalBuffer={selectedScriptTerminalBuffer}
+            terminalChunkCount={selectedScriptTerminalChunkCount}
+            terminalScopeKey={terminalScopeKey}
+          />
         </div>
       </Tabs>
     </div>

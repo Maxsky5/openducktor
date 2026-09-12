@@ -35,6 +35,7 @@ export const devServerScriptStateSchema = z
     scriptId: z.string().min(1),
     name: z.string().min(1),
     command: z.string().min(1),
+    startedCommand: z.string().min(1).nullable(),
     status: devServerScriptStatusSchema,
     runIdentity: devServerRunIdentitySchema.nullable(),
     pid: z.number().int().positive().nullable(),
@@ -56,6 +57,14 @@ export const devServerScriptStateSchema = z
         path: ["runIdentity"],
       });
       return;
+    }
+
+    if (script.runIdentity !== null && script.startedCommand === null) {
+      context.addIssue({
+        code: "custom",
+        message: "Dev server scripts with a run must state the started command.",
+        path: ["startedCommand"],
+      });
     }
 
     for (const [index, chunk] of script.bufferedTerminalChunks.entries()) {

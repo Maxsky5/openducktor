@@ -51,6 +51,7 @@ const runningScript: DevServerScriptState = {
   scriptId: "frontend",
   name: "Frontend",
   command: "bun run dev",
+  startedCommand: "bun run dev",
   status: "running",
   runIdentity: {
     runId: "frontend:1",
@@ -88,6 +89,7 @@ const backendScript: DevServerScriptState = {
   scriptId: "backend",
   name: "Backend",
   command: "bun run api",
+  startedCommand: "bun run api",
   status: "running",
   runIdentity: {
     runId: "backend:1",
@@ -115,6 +117,7 @@ const failedScript: DevServerScriptState = {
   scriptId: "failed",
   name: "Failed server",
   command: "bun run broken",
+  startedCommand: "bun run broken",
   status: "failed",
   runIdentity: {
     runId: "failed:1",
@@ -347,6 +350,85 @@ describe("AgentStudioDevServerPanel", () => {
     expect(html).toContain("Frontend");
     expect(html).toContain("bun run dev");
     expect(html).not.toContain("agent-studio-dev-server-empty-log-state");
+  });
+
+  test("prefers the started command over the configured command", () => {
+    const reconfiguredScript: DevServerScriptState = {
+      ...runningScript,
+      command: "bun run configured",
+      startedCommand: "bun run started",
+    };
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioDevServerPanel, {
+        model: baseModel({
+          mode: "active",
+          isExpanded: true,
+          scripts: [reconfiguredScript],
+          selectedScriptId: reconfiguredScript.scriptId,
+          selectedScript: reconfiguredScript,
+          selectedScriptTerminalBuffer: buildTerminalBuffer(reconfiguredScript),
+        }),
+      }),
+    );
+
+    expect(html).toContain("bun run started");
+    expect(html).not.toContain("bun run configured");
+  });
+
+  test("shows the configured command before the first run", () => {
+    const neverStartedScript: DevServerScriptState = {
+      ...runningScript,
+      command: "bun run configured",
+      startedCommand: null,
+      status: "stopped",
+      runIdentity: null,
+      pid: null,
+      startedAt: null,
+      exitCode: null,
+      lastError: null,
+      bufferedTerminalChunks: [],
+    };
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioDevServerPanel, {
+        model: baseModel({
+          mode: "stopped",
+          isExpanded: true,
+          scripts: [neverStartedScript],
+          selectedScriptId: neverStartedScript.scriptId,
+          selectedScript: neverStartedScript,
+          selectedScriptTerminalBuffer: buildTerminalBuffer(neverStartedScript),
+        }),
+      }),
+    );
+
+    expect(html).toContain("bun run configured");
+  });
+
+  test("shows the last started command after the server stops", () => {
+    const stoppedAfterRunScript: DevServerScriptState = {
+      ...runningScript,
+      command: "bun run configured",
+      startedCommand: "bun run started",
+      status: "stopped",
+      pid: null,
+      startedAt: null,
+      lastError: null,
+    };
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioDevServerPanel, {
+        model: baseModel({
+          mode: "stopped",
+          isExpanded: true,
+          scripts: [stoppedAfterRunScript],
+          selectedScriptId: stoppedAfterRunScript.scriptId,
+          selectedScript: stoppedAfterRunScript,
+          selectedScriptTerminalBuffer: buildTerminalBuffer(stoppedAfterRunScript),
+        }),
+      }),
+    );
+
+    expect(html).toContain("bun run started");
+    expect(html).not.toContain("bun run configured");
   });
 
   test("renders failed dev server tabs with failed status styling", () => {

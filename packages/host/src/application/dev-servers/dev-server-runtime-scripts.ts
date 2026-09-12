@@ -1,6 +1,6 @@
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { errorMessage } from "../../effect/host-errors";
+import { errorMessage, HostInvariantError } from "../../effect/host-errors";
 import type { DevServerProcessHandle } from "../../ports/dev-server-process-port";
 import type { StoppedDevServerScript } from "./dev-server-service-types";
 import type { DevServerGroupRuntime } from "./dev-server-state";
@@ -15,14 +15,23 @@ const stoppedScriptFromState = (
   runtime: DevServerGroupRuntime,
   script: DevServerScriptState,
   pid: number,
-): StoppedDevServerScript => ({
-  command: script.command,
-  name: script.name,
-  pid,
-  repoPath: runtime.state.repoPath,
-  scriptId: script.scriptId,
-  taskId: runtime.state.taskId,
-});
+): StoppedDevServerScript => {
+  if (script.startedCommand === null) {
+    throw new HostInvariantError({
+      invariant: "dev_server_started_command_recorded",
+      message: `Dev server script has no recorded started command: ${script.scriptId}`,
+    });
+  }
+
+  return {
+    command: script.startedCommand,
+    name: script.name,
+    pid,
+    repoPath: runtime.state.repoPath,
+    scriptId: script.scriptId,
+    taskId: runtime.state.taskId,
+  };
+};
 
 export const markScriptProcessHandleMissing = ({
   pid,

@@ -33,10 +33,12 @@ export const buildScript = (
     overrides.runIdentity === undefined
       ? (bufferedRunIdentity ?? defaultRunIdentity)
       : overrides.runIdentity;
+  const startedCommand = runIdentity === null ? null : (overrides.command ?? "bun run dev");
   return {
     scriptId: "frontend",
     name: "Frontend",
     command: "bun run dev",
+    startedCommand,
     status: "stopped",
     runIdentity,
     pid: null,

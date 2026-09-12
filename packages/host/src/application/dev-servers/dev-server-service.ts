@@ -195,6 +195,7 @@ export const createDevServerService = ({
       }
       updateScriptState(runtime, scriptConfig.id, (script) => {
         script.status = "starting";
+        script.startedCommand = scriptConfig.command;
         startTerminalRun(runtime, script, hostInstanceId);
         script.pid = null;
         script.startedAt = null;

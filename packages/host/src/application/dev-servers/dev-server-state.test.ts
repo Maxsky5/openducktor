@@ -26,6 +26,11 @@ const repoConfig: RepoConfig = {
   agentStudioState: { openTaskIds: [] },
 };
 
+const updatedRepoConfig: RepoConfig = {
+  ...repoConfig,
+  devServers: [{ id: "web", name: "Web next", command: "bun run dev:next" }],
+};
+
 const createRuntime = (): DevServerGroupRuntime => ({
   processes: new Map(),
   state: buildGroupState(repoConfig, "task-1", "/worktrees/task-1", "2026-05-24T00:00:00.000Z"),
@@ -53,6 +58,36 @@ describe("dev-server state helpers", () => {
     expect(runtime.terminalBufferedBytesByScriptId.get("web")).toBe(12);
     expect(runtime.terminalNextSequenceByScriptId.get("web")).toBe(3);
     expect(runtime.terminalRunGeneration).toBe(2);
+  });
+
+  test("keeps the started command when the configured command changes", () => {
+    const runtime = createRuntime();
+    const firstScript = runtime.state.scripts[0];
+    if (!firstScript) {
+      throw new Error("Expected configured web script.");
+    }
+    firstScript.startedCommand = "bun run dev";
+    startTerminalRun(runtime, firstScript, "host-1");
+
+    syncGroupState(runtime.state, updatedRepoConfig, "task-1", "/worktrees/task-1");
+
+    expect(runtime.state.scripts[0]).toMatchObject({
+      command: "bun run dev:next",
+      name: "Web next",
+      startedCommand: "bun run dev",
+    });
+  });
+
+  test("leaves the started command unset for scripts without a run", () => {
+    const runtime = createRuntime();
+
+    syncGroupState(runtime.state, updatedRepoConfig, "task-1", "/worktrees/task-1");
+
+    expect(runtime.state.scripts[0]).toMatchObject({
+      command: "bun run dev:next",
+      name: "Web next",
+      startedCommand: null,
+    });
   });
 
   test("does not reuse a run identity after a script is removed and re-added", () => {

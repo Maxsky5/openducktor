@@ -1,7 +1,9 @@
 import type { RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { HostInvariantError } from "../../effect/host-errors";
 import type { DevServerProcessHandle } from "../../ports/dev-server-process-port";
 import {
+  listRunningScripts,
   markScriptProcessHandleMissing,
   stopScriptProcessHandle,
   type UpdateScriptState,
@@ -108,6 +110,55 @@ describe("dev-server runtime script helpers", () => {
       status: "running",
       pid: 402,
       startedAt: "2026-05-24T00:00:00.000Z",
+    });
+  });
+
+  test("reports the started command for a live process", () => {
+    const runtime = createRuntime();
+    const script = requireScript(runtime, "web");
+    script.command = "bun run dev:next";
+    script.startedCommand = "bun run dev";
+    script.status = "running";
+    script.runIdentity = {
+      runId: "web:1",
+      runOrder: { hostInstanceId: "host-1", generation: 1 },
+    };
+    script.pid = 401;
+    script.startedAt = "2026-05-24T00:00:00.000Z";
+
+    expect(listRunningScripts(runtime)).toEqual([
+      {
+        command: "bun run dev",
+        name: "Web",
+        pid: 401,
+        repoPath: "/canonical/repo",
+        scriptId: "web",
+        taskId: "task-1",
+      },
+    ]);
+  });
+
+  test("fails when a live process has no recorded started command", () => {
+    const runtime = createRuntime();
+    const script = requireScript(runtime, "web");
+    script.status = "running";
+    script.runIdentity = {
+      runId: "web:1",
+      runOrder: { hostInstanceId: "host-1", generation: 1 },
+    };
+    script.pid = 401;
+
+    let caught: unknown;
+    try {
+      listRunningScripts(runtime);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(HostInvariantError);
+    expect(caught).toMatchObject({
+      invariant: "dev_server_started_command_recorded",
+      message: "Dev server script has no recorded started command: web",
     });
   });
 });

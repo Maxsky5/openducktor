@@ -38,6 +38,7 @@ const scriptStateFromConfig = (script: RepoConfig["devServers"][number]): DevSer
   scriptId: script.id,
   name: script.name,
   command: script.command,
+  startedCommand: null,
   status: "stopped",
   runIdentity: null,
   pid: null,
