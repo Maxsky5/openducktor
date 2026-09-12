@@ -299,6 +299,26 @@ describe("createRuntimeOrchestratorService", () => {
     ).rejects.toThrow("Workspace is closed");
     expect(ensureWorkspaceRuntime).not.toHaveBeenCalled();
   });
+  test("acquires the work start lease for the raw repository path before resolving it", async () => {
+    const events: string[] = [];
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort((path) => {
+        events.push(`canonicalize:${path}`);
+        return path === "/repo" ? "/canonical/repo" : path;
+      }),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry(),
+      taskReader: createTaskStore(),
+      withWorkStartLease: (repoPath, effect) => {
+        events.push(`lease:${repoPath}`);
+        return effect;
+      },
+    });
+
+    await Effect.runPromise(service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" }));
+
+    expect(events.slice(0, 2)).toEqual(["lease:/repo", "canonicalize:/repo"]);
+  });
   test("delegates workspace runtime reuse to the registry", async () => {
     const runtime = createRuntime();
     const ensureCalls: unknown[] = [];

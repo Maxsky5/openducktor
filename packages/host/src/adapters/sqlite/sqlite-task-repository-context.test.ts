@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { sql } from "drizzle-orm";
 import { Deferred, Effect, Fiber, Option, TestClock, TestContext } from "effect";
-import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+} from "../../effect/host-errors";
 import { createSqliteTaskRepositoryContextManager } from "./sqlite-task-repository-context";
 import { openSqliteTaskStoreConnection } from "./sqlite-task-store-connection";
 
@@ -120,6 +124,69 @@ test("opens a connection using only the resolved database path", async () => {
 
   expect(inputs).toEqual(["/task-stores/alpha/database.sqlite"]);
   await Effect.runPromise(manager.dispose());
+});
+
+test("rejects an operation when the workspace registration changed under the lease", async () => {
+  const openInputs: string[] = [];
+  const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-reregister-"));
+  tempDirectories.add(configDir);
+  let resolutionCount = 0;
+  const manager = createSqliteTaskRepositoryContextManager({
+    openConnection: (databasePath) => {
+      openInputs.push(databasePath);
+      return openSqliteTaskStoreConnection(databasePath);
+    },
+    processEnv: {},
+    resolveDatabasePath: ({ workspaceId }) =>
+      Effect.succeed(path.join(configDir, workspaceId, "database.sqlite")),
+    resolveWorkspaceIdForRepoPath: () => Effect.succeed(resolutionCount++ === 0 ? "alpha" : "beta"),
+  });
+
+  try {
+    const error = await Effect.runPromise(
+      Effect.flip(manager.withDatabase("/repos/alpha", "test.reregistered", () => Effect.void)),
+    );
+
+    expect(error.message).toContain("changed while the operation waited");
+    expect(openInputs).toEqual([]);
+    expect(await Bun.file(path.join(configDir, "alpha", "database.sqlite")).exists()).toBe(false);
+    expect(await Bun.file(path.join(configDir, "beta", "database.sqlite")).exists()).toBe(false);
+  } finally {
+    await Effect.runPromise(manager.dispose());
+  }
+});
+
+test("fails without opening a store when the workspace registration is gone under the lease", async () => {
+  const openInputs: string[] = [];
+  const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-removed-"));
+  tempDirectories.add(configDir);
+  let resolutionCount = 0;
+  const removalError = new HostValidationError({
+    message: "Workspace not found for repository /repos/alpha.",
+    field: "repoPath",
+  });
+  const manager = createSqliteTaskRepositoryContextManager({
+    openConnection: (databasePath) => {
+      openInputs.push(databasePath);
+      return openSqliteTaskStoreConnection(databasePath);
+    },
+    processEnv: {},
+    resolveDatabasePath: ({ workspaceId }) =>
+      Effect.succeed(path.join(configDir, workspaceId, "database.sqlite")),
+    resolveWorkspaceIdForRepoPath: () =>
+      resolutionCount++ === 0 ? Effect.succeed("alpha") : Effect.fail(removalError),
+  });
+
+  try {
+    const error = await Effect.runPromise(
+      Effect.flip(manager.withDatabase("/repos/alpha", "test.removed", () => Effect.void)),
+    );
+
+    expect(error).toBe(removalError);
+    expect(openInputs).toEqual([]);
+  } finally {
+    await Effect.runPromise(manager.dispose());
+  }
 });
 
 test("closes an idle SQLite connection after five minutes", async () => {

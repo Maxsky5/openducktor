@@ -177,6 +177,35 @@ describe("TerminalService", () => {
     expect(pty.operations).not.toContain("write:ls");
   });
 
+  test("acquires the work start lease for the raw repository path before canonicalizing", async () => {
+    const events: string[] = [];
+    const { service } = await makeService(
+      makePty(),
+      undefined,
+      {
+        ...filesystem,
+        canonicalize: (path: string) => {
+          events.push(`canonicalize:${path}`);
+          return Effect.succeed(`/canonical${path}`);
+        },
+      },
+      () => Effect.void,
+      (repoPath, effect) => {
+        events.push(`lease:${repoPath}`);
+        return effect;
+      },
+    );
+
+    await Effect.runPromise(
+      service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
+    );
+
+    expect(events.slice(0, 2)).toEqual(["lease:/repo", "canonicalize:/repo"]);
+  });
+
   test("inspects workspace activity without touching the filesystem", async () => {
     const canonicalize = mock((path: string) => Effect.succeed(`/canonical${path}`));
     const { service } = await makeService(makePty(true, true), undefined, {

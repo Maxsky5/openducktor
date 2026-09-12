@@ -421,7 +421,13 @@ export function useWorkspaceSelectionOperations({
         try {
           result = await run();
         } catch (cause) {
-          await refreshWorkspaceCachesAfterMutation().catch(() => undefined);
+          try {
+            await refreshWorkspaceCachesAfterMutation();
+          } catch (refreshCause) {
+            toast.error("Workspace refresh failed", {
+              description: errorMessage(refreshCause),
+            });
+          }
           throw cause;
         }
         await refreshWorkspaceCachesAfterMutation();

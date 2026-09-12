@@ -150,25 +150,32 @@ export const createTerminalService = ({
             admission.beginCreation(),
             (reservation) =>
               Effect.gen(function* () {
-                const context = yield* canonicalizeContext(input.context, "create");
-                const startTerminal = Effect.gen(function* () {
-                  yield* reservation.bind(context);
-                  const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
-                  const terminalId = idFactory();
-                  const summary: TerminalSummary = {
-                    terminalId,
-                    label: plan.cwd,
-                    context,
-                    initialWorkingDir: plan.cwd,
-                    createdAt: now().toISOString(),
-                    lifecycle: "starting",
-                    exit: null,
-                  };
-                  const started = yield* engine.start(summary, plan);
-                  return { ref: { terminalId }, summary: started };
-                });
-                if ("taskId" in context) {
-                  return yield* withWorkStartLease(context.repoPath, startTerminal).pipe(
+                const rawContext = input.context;
+                const startTerminal = (context: TerminalContext) =>
+                  Effect.gen(function* () {
+                    yield* reservation.bind(context);
+                    const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
+                    const terminalId = idFactory();
+                    const summary: TerminalSummary = {
+                      terminalId,
+                      label: plan.cwd,
+                      context,
+                      initialWorkingDir: plan.cwd,
+                      createdAt: now().toISOString(),
+                      lifecycle: "starting",
+                      exit: null,
+                    };
+                    const started = yield* engine.start(summary, plan);
+                    return { ref: { terminalId }, summary: started };
+                  });
+                if ("taskId" in rawContext) {
+                  return yield* withWorkStartLease(
+                    rawContext.repoPath,
+                    Effect.gen(function* () {
+                      const context = yield* canonicalizeContext(rawContext, "create");
+                      return yield* startTerminal(context);
+                    }),
+                  ).pipe(
                     Effect.mapError((cause) =>
                       cause instanceof TerminalServiceError
                         ? cause
@@ -177,12 +184,13 @@ export const createTerminalService = ({
                             operation: "create",
                             message: cause.message,
                             cause,
-                            workingDir: context.repoPath,
+                            workingDir: rawContext.repoPath,
                           }),
                     ),
                   );
                 }
-                return yield* startTerminal;
+                const context = yield* canonicalizeContext(rawContext, "create");
+                return yield* startTerminal(context);
               }),
             (reservation) => Effect.sync(() => reservation.release()),
           );
