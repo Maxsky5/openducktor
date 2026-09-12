@@ -707,6 +707,11 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   animation: odt-border-ray-run var(--odt-border-ray-turn-duration) linear infinite;
 }
 
+.odt-border-ray-segment {
+  stroke: var(--odt-border-ray-color);
+  stroke-width: var(--odt-border-ray-stroke-width);
+}
+
 .odt-terminal-links .xterm-screen.xterm-cursor-pointer {
   cursor: text;
 }
@@ -714,11 +719,6 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
 .odt-terminal-links.odt-terminal-link-pointer .xterm,
 .odt-terminal-links.odt-terminal-link-pointer .xterm-screen.xterm-cursor-pointer {
   cursor: pointer;
-}
-
-.odt-border-ray-segment {
-  stroke: var(--odt-border-ray-color);
-  stroke-width: var(--odt-border-ray-stroke-width);
 }
 
 .kanban-active-session-content {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { IBufferCell, IBufferLine, ILink, Terminal } from "@xterm/xterm";
 import { createHttpLinkProvider } from "./terminal-link-provider";
 
@@ -32,10 +32,11 @@ const createTextLine = (text: string, columns: number, isWrapped: boolean): IBuf
 const createTerminal = (
   lines: IBufferLine[],
   columns: number,
+  getLine = (row: number): IBufferLine | undefined => lines[row],
 ): Pick<Terminal, "buffer" | "cols"> => {
   const active = {
     length: lines.length,
-    getLine: (row: number) => lines[row],
+    getLine,
   };
   return {
     cols: columns,
@@ -110,6 +111,35 @@ describe("terminal HTTP link provider", () => {
     expect(readTerminalLinksForBufferLine(terminal, 2).map((link) => link.text)).toEqual([
       "https://two.test",
     ]);
+  });
+
+  test("reuses a wrapped line until the provider is cleared", () => {
+    const columns = 16;
+    const lines = [
+      createTextLine("https://example.", columns, false),
+      createTextLine("test/path", columns, true),
+    ];
+    const getLine = mock((row: number) => lines[row]);
+    const provider = createHttpLinkProvider(createTerminal(lines, columns, getLine), {
+      hover: () => undefined,
+      leave: () => undefined,
+    });
+    const readRow = (row: number): ILink[] => {
+      let links: ILink[] | undefined;
+      provider.provideLinks(row, (provided) => {
+        links = provided;
+      });
+      return links ?? [];
+    };
+
+    expect(readRow(1).map((link) => link.text)).toEqual(["https://example.test/path"]);
+    const firstReadCount = getLine.mock.calls.length;
+    expect(readRow(2).map((link) => link.text)).toEqual(["https://example.test/path"]);
+    expect(getLine).toHaveBeenCalledTimes(firstReadCount);
+
+    provider.clear();
+    expect(readRow(2).map((link) => link.text)).toEqual(["https://example.test/path"]);
+    expect(getLine.mock.calls.length).toBeGreaterThan(firstReadCount);
   });
 
   test("accounts for wide and combining cells before a link", () => {

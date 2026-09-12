@@ -104,11 +104,13 @@ export const createLinkController = ({
   };
 
   const reset = (): void => {
+    provider?.clear();
     clearHover();
     stopPress();
   };
 
   const checkHover = (): void => {
+    provider?.clear();
     if (hovered?.source !== "plain" || provider?.isCurrent(hovered)) return;
     reset();
   };

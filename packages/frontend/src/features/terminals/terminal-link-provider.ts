@@ -21,7 +21,15 @@ type LogicalCell = {
 
 type LogicalLine = {
   cells: LogicalCell[];
+  firstRow: number;
+  lastRow: number;
   text: string;
+};
+
+type LineLinks = {
+  firstRow: number;
+  lastRow: number;
+  targets: LinkTarget[];
 };
 
 type LinkCallbacks = {
@@ -30,6 +38,7 @@ type LinkCallbacks = {
 };
 
 export type HttpLinkProvider = ILinkProvider & {
+  clear(): void;
   findLinkAt(position: IBufferCellPosition): LinkTarget | null;
   isCurrent(target: LinkTarget): boolean;
 };
@@ -38,9 +47,19 @@ export const createHttpLinkProvider = (
   terminal: Pick<Terminal, "buffer" | "cols">,
   callbacks: LinkCallbacks,
 ): HttpLinkProvider => {
-  const readRow = (row: number): LinkTarget[] => readLinks(terminal, row);
+  let lastRead: LineLinks | null = null;
+  const readRow = (row: number): LinkTarget[] => {
+    if (lastRead && lastRead.firstRow <= row && row <= lastRead.lastRow) {
+      return lastRead.targets;
+    }
+    lastRead = readLinks(terminal, row);
+    return lastRead.targets;
+  };
 
   return {
+    clear: () => {
+      lastRead = null;
+    },
     provideLinks: (row, callback) => {
       const targets = readRow(row).filter(
         ({ range }) => range.start.y <= row && row <= range.end.y,
@@ -123,7 +142,7 @@ function readLogicalLine(terminal: Pick<Terminal, "buffer" | "cols">, row: numbe
       });
     }
   }
-  return { cells, text };
+  return { cells, firstRow: firstRow + 1, lastRow: lastRow + 1, text };
 }
 
 function findCellRange(
@@ -137,11 +156,14 @@ function findCellRange(
   return { start: first.range.start, end: last.range.end };
 }
 
-function readLinks(terminal: Pick<Terminal, "buffer" | "cols">, row: number): LinkTarget[] {
-  if (row < 1 || row > terminal.buffer.active.length) return [];
+function readLinks(terminal: Pick<Terminal, "buffer" | "cols">, row: number): LineLinks {
+  if (row < 1 || row > terminal.buffer.active.length) {
+    return { firstRow: row, lastRow: row, targets: [] };
+  }
   const line = readLogicalLine(terminal, row);
-  return findHttpUrls(line.text).flatMap((match) => {
+  const targets = findHttpUrls(line.text).flatMap((match) => {
     const range = findCellRange(line.cells, match.start, match.end);
     return range ? [{ range, source: "plain" as const, url: match.url }] : [];
   });
+  return { firstRow: line.firstRow, lastRow: line.lastRow, targets };
 }
