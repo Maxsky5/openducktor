@@ -5,18 +5,18 @@ import type {
   ILinkProvider,
   Terminal,
 } from "@xterm/xterm";
-import { findTerminalHttpUrls } from "./terminal-url-policy";
+import { findHttpUrls } from "./terminal-url-policy";
 
-export type TerminalLinkTarget = {
+export type LinkTarget = {
   range: IBufferRange;
   source: "osc" | "plain";
   url: string;
 };
 
 type LogicalCell = {
-  endOffset: number;
+  end: number;
   range: IBufferRange;
-  startOffset: number;
+  start: number;
 };
 
 type LogicalLine = {
@@ -24,36 +24,65 @@ type LogicalLine = {
   text: string;
 };
 
-type TerminalLinkCallbacks = {
-  activate(event: MouseEvent, target: TerminalLinkTarget): void;
-  hover(event: MouseEvent, target: TerminalLinkTarget): void;
-  leave(event: MouseEvent, target: TerminalLinkTarget): void;
+type LinkCallbacks = {
+  activate(event: MouseEvent, target: LinkTarget): void;
+  hover(event: MouseEvent, target: LinkTarget): void;
+  leave(event: MouseEvent, target: LinkTarget): void;
 };
 
-const samePosition = (left: IBufferCellPosition, right: IBufferCellPosition): boolean =>
-  left.x === right.x && left.y === right.y;
+export type HttpLinkProvider = ILinkProvider & {
+  findLinkAt(position: IBufferCellPosition): LinkTarget | null;
+  isCurrent(target: LinkTarget): boolean;
+};
 
-export const sameTerminalLinkTarget = (
-  left: TerminalLinkTarget,
-  right: TerminalLinkTarget,
-): boolean =>
+export const createHttpLinkProvider = (
+  terminal: Pick<Terminal, "buffer" | "cols">,
+  callbacks: LinkCallbacks,
+): HttpLinkProvider => {
+  const readRow = (row: number): LinkTarget[] => readLinks(terminal, row);
+
+  return {
+    provideLinks: (row, callback) => {
+      const targets = readRow(row);
+      const links: ILink[] = targets.map((target) => ({
+        text: target.url,
+        range: target.range,
+        decorations: { pointerCursor: false, underline: true },
+        activate: (event) => callbacks.activate(event, target),
+        hover: (event) => callbacks.hover(event, target),
+        leave: (event) => callbacks.leave(event, target),
+      }));
+      callback(links.length > 0 ? links : undefined);
+    },
+    findLinkAt: (position) =>
+      readRow(position.y).find((target) => rangeHasCell(target.range, position, terminal.cols)) ??
+      null,
+    isCurrent: (target) => readRow(target.range.start.y).some((link) => sameLink(link, target)),
+  };
+};
+
+export const sameLink = (left: LinkTarget, right: LinkTarget): boolean =>
   left.url === right.url &&
   left.source === right.source &&
   samePosition(left.range.start, right.range.start) &&
   samePosition(left.range.end, right.range.end);
 
-export const terminalRangeContains = (
+export const rangeHasCell = (
   range: IBufferRange,
   position: IBufferCellPosition,
-  columns: number,
+  cols: number,
 ): boolean => {
-  const lower = range.start.y * columns + range.start.x;
-  const upper = range.end.y * columns + range.end.x;
-  const current = position.y * columns + position.x;
+  const lower = range.start.y * cols + range.start.x;
+  const upper = range.end.y * cols + range.end.x;
+  const current = position.y * cols + position.x;
   return lower <= current && current <= upper;
 };
 
-const readLogicalLine = (terminal: Pick<Terminal, "buffer" | "cols">, row: number): LogicalLine => {
+function samePosition(left: IBufferCellPosition, right: IBufferCellPosition): boolean {
+  return left.x === right.x && left.y === right.y;
+}
+
+function readLogicalLine(terminal: Pick<Terminal, "buffer" | "cols">, row: number): LogicalLine {
   const buffer = terminal.buffer.active;
   let firstRow = row - 1;
   while (firstRow > 0 && buffer.getLine(firstRow)?.isWrapped) firstRow -= 1;
@@ -71,19 +100,19 @@ const readLogicalLine = (terminal: Pick<Terminal, "buffer" | "cols">, row: numbe
       const cell = line.getCell(column);
       if (!cell || cell.getWidth() === 0) continue;
 
-      const isSoftWrapPadding =
+      const softWrapPad =
         bufferRow < lastRow &&
         column === cellCount - 1 &&
         cell.getChars().length === 0 &&
         cell.getCode() === 0;
-      if (isSoftWrapPadding) continue;
+      if (softWrapPad) continue;
 
-      const value = cell.getChars() || " ";
-      const startOffset = text.length;
-      text += value;
+      const chars = cell.getChars() || " ";
+      const start = text.length;
+      text += chars;
       cells.push({
-        startOffset,
-        endOffset: text.length,
+        start,
+        end: text.length,
         range: {
           start: { x: column + 1, y: bufferRow + 1 },
           end: { x: column + cell.getWidth(), y: bufferRow + 1 },
@@ -92,61 +121,24 @@ const readLogicalLine = (terminal: Pick<Terminal, "buffer" | "cols">, row: numbe
     }
   }
   return { cells, text };
-};
+}
 
-const findCellRange = (
+function findCellRange(
   cells: readonly LogicalCell[],
-  startOffset: number,
-  endOffset: number,
-): IBufferRange | null => {
-  const first = cells.find((cell) => cell.endOffset > startOffset);
-  const last = cells.findLast((cell) => cell.startOffset < endOffset);
+  start: number,
+  end: number,
+): IBufferRange | null {
+  const first = cells.find((cell) => cell.end > start);
+  const last = cells.findLast((cell) => cell.start < end);
   if (!first || !last) return null;
   return { start: first.range.start, end: last.range.end };
-};
+}
 
-const readTerminalLinksForBufferLine = (
-  terminal: Pick<Terminal, "buffer" | "cols">,
-  row: number,
-): TerminalLinkTarget[] => {
+function readLinks(terminal: Pick<Terminal, "buffer" | "cols">, row: number): LinkTarget[] {
   if (row < 1 || row > terminal.buffer.active.length) return [];
-  const logicalLine = readLogicalLine(terminal, row);
-  return findTerminalHttpUrls(logicalLine.text).flatMap((match) => {
-    const range = findCellRange(logicalLine.cells, match.start, match.end);
+  const line = readLogicalLine(terminal, row);
+  return findHttpUrls(line.text).flatMap((match) => {
+    const range = findCellRange(line.cells, match.start, match.end);
     return range ? [{ range, source: "plain" as const, url: match.url }] : [];
   });
-};
-
-export type TerminalHttpLinkProvider = ILinkProvider & {
-  findLinkAt(position: IBufferCellPosition): TerminalLinkTarget | null;
-  isCurrent(target: TerminalLinkTarget): boolean;
-};
-
-export const createTerminalHttpLinkProvider = (
-  terminal: Pick<Terminal, "buffer" | "cols">,
-  callbacks: TerminalLinkCallbacks,
-): TerminalHttpLinkProvider => {
-  const linksForRow = (row: number): TerminalLinkTarget[] =>
-    readTerminalLinksForBufferLine(terminal, row);
-
-  return {
-    provideLinks: (row, callback) => {
-      const targets = linksForRow(row);
-      const links: ILink[] = targets.map((target) => ({
-        text: target.url,
-        range: target.range,
-        decorations: { pointerCursor: false, underline: true },
-        activate: (event) => callbacks.activate(event, target),
-        hover: (event) => callbacks.hover(event, target),
-        leave: (event) => callbacks.leave(event, target),
-      }));
-      callback(links.length > 0 ? links : undefined);
-    },
-    findLinkAt: (position) =>
-      linksForRow(position.y).find((target) =>
-        terminalRangeContains(target.range, position, terminal.cols),
-      ) ?? null,
-    isCurrent: (target) =>
-      linksForRow(target.range.start.y).some((current) => sameTerminalLinkTarget(current, target)),
-  };
-};
+}

@@ -2,7 +2,7 @@ import type { FitAddon } from "@xterm/addon-fit";
 import type { ITerminalOptions, Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
-import { createSharedTerminalBinding } from "@/features/terminals/shared-terminal-binding";
+import { createTerminalBinding } from "@/features/terminals/shared-terminal-binding";
 import {
   createTerminalOptions,
   createTerminalTheme,
@@ -50,7 +50,7 @@ type UseDevServerTerminalRenderingArgs = TerminalRenderController & {
 };
 
 export const defaultCreateTerminalBinding: CreateTerminalBinding = (container, options) => {
-  const binding = createSharedTerminalBinding(container, options);
+  const binding = createTerminalBinding(container, options);
   binding.fitAddon.fit();
   return binding;
 };

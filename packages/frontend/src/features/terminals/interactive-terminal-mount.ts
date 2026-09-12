@@ -16,7 +16,7 @@ import {
 import { createTerminalKeyEventHandler, encodeTerminalTextInput } from "./terminal-keyboard-policy";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 import { createTerminalOptions } from "./terminal-xterm-options";
-import { createSharedTerminalBinding } from "./shared-terminal-binding";
+import { createTerminalBinding } from "./shared-terminal-binding";
 
 export type InteractiveTerminalMount = {
   activate(focus: boolean): void;
@@ -62,7 +62,7 @@ export const mountInteractiveTerminal = ({
   const reportFailure = (title: string, cause: unknown): void => {
     if (!disposed) onInteractionFailure(title, cause);
   };
-  const binding = createSharedTerminalBinding(
+  const binding = createTerminalBinding(
     container,
     createTerminalOptions(container, { cursorBlink: true, screenReaderMode: true }),
   );

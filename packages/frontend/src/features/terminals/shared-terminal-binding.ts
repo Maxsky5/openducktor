@@ -3,61 +3,57 @@ import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
-import {
-  createTerminalLinkController,
-  type TerminalLinkController,
-} from "./terminal-link-controller";
+import { createLinkController, type LinkController } from "./terminal-link-controller";
 
-type SharedTerminalDependencies = {
+type BindingDeps = {
   openUrl?: (url: string) => Promise<void>;
   reportOpenError?: (url: string, cause: unknown) => void;
 };
 
-export type SharedTerminalBinding = {
+export type TerminalBinding = {
   terminal: Terminal;
   fitAddon: FitAddon;
-  linkController: TerminalLinkController;
+  linkController: LinkController;
   dispose(): void;
   resetLinkState(): void;
 };
 
-const reportTerminalLinkOpenError = (_url: string, cause: unknown): void => {
+const reportOpenError = (_url: string, cause: unknown): void => {
   toast.error("Failed to open terminal link", {
     description: `${errorMessage(cause)} Copy the URL into a browser.`,
   });
 };
 
-export const createSharedTerminalBinding = (
+export const createTerminalBinding = (
   container: HTMLElement,
   options: ITerminalOptions,
-  dependencies: SharedTerminalDependencies = {},
-): SharedTerminalBinding => {
-  const linkController = createTerminalLinkController({
+  deps: BindingDeps = {},
+): TerminalBinding => {
+  const links = createLinkController({
     container,
-    openUrl: dependencies.openUrl ?? openExternalUrl,
-    reportOpenError: dependencies.reportOpenError ?? reportTerminalLinkOpenError,
+    openUrl: deps.openUrl ?? openExternalUrl,
+    reportOpenError: deps.reportOpenError ?? reportOpenError,
   });
-  const { linkHandler: _ignoredLinkHandler, ...ownedOptions } = options;
-  const terminal = new Terminal({ ...ownedOptions, linkHandler: linkController.linkHandler });
+  const terminal = new Terminal({ ...options, linkHandler: links.linkHandler });
   const fitAddon = new FitAddon();
   let disposed = false;
 
   try {
     terminal.loadAddon(fitAddon);
     terminal.open(container);
-    terminal.loadAddon(linkController);
+    terminal.loadAddon(links);
   } catch (cause) {
     terminal.dispose();
     fitAddon.dispose();
-    linkController.dispose();
+    links.dispose();
     throw cause;
   }
 
   return {
     terminal,
     fitAddon,
-    linkController,
-    resetLinkState: () => linkController.reset(),
+    linkController: links,
+    resetLinkState: () => links.reset(),
     dispose: () => {
       if (disposed) return;
       disposed = true;

@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { IBufferLine, IDisposable, ILink, ILinkProvider, Terminal } from "@xterm/xterm";
-import { createTerminalLinkController, hasTerminalOpenModifier } from "./terminal-link-controller";
+import { createLinkController, hasOpenKey } from "./terminal-link-controller";
 
 if (globalThis.document === undefined) GlobalRegistrator.register();
 
@@ -15,7 +15,7 @@ const createLine = (text: string, columns: number): IBufferLine => ({
       getCode: () => (character ? (character.codePointAt(0) ?? 0) : 0),
       getWidth: () => 1,
     };
-    // SAFETY: The link provider only reads the three cell methods implemented above.
+    // SAFETY: This fake has the three cell methods that the link reader calls.
     return cell as ReturnType<IBufferLine["getCell"]>;
   },
   translateToString: () => text,
@@ -31,7 +31,7 @@ const createHarness = (openUrl: (url: string) => Promise<void>) => {
   terminalElement.append(screen);
   container.append(terminalElement);
   document.body.append(container);
-  // SAFETY: Pointer mapping reads only the six DOMRect fields supplied by this fixed test box.
+  // SAFETY: The pointer code reads only these six box fields.
   screen.getBoundingClientRect = () =>
     ({ left: 0, right: 200, top: 0, bottom: 120, width: 200, height: 20 }) as DOMRect;
 
@@ -64,11 +64,11 @@ const createHarness = (openUrl: (url: string) => Promise<void>) => {
     if (url.length === 0) throw new Error("Expected a non-empty URL.");
     if (!(cause instanceof Error)) throw new Error("Expected an Error cause.");
   });
-  const controller = createTerminalLinkController({ container, openUrl, reportOpenError });
+  const controller = createLinkController({ container, openUrl, reportOpenError });
   controller.activate(terminal);
   if (!provider) throw new Error("Expected the terminal link provider to register.");
   let link: ILink | undefined;
-  // SAFETY: controller.activate assigned the registered provider through the fake above.
+  // SAFETY: activate stores the provider through the fake above.
   (provider as ILinkProvider).provideLinks(1, (links) => {
     link = links?.[0];
   });
@@ -93,12 +93,12 @@ const createHarness = (openUrl: (url: string) => Promise<void>) => {
 
 describe("terminal link controller", () => {
   test("uses Cmd on macOS and Ctrl on other platforms", () => {
-    expect(hasTerminalOpenModifier({ metaKey: true, ctrlKey: false }, "MacIntel")).toBe(true);
-    expect(hasTerminalOpenModifier({ metaKey: false, ctrlKey: true }, "MacIntel")).toBe(false);
-    expect(hasTerminalOpenModifier({ metaKey: false, ctrlKey: true }, "Win32")).toBe(true);
+    expect(hasOpenKey({ metaKey: true, ctrlKey: false }, "MacIntel")).toBe(true);
+    expect(hasOpenKey({ metaKey: false, ctrlKey: true }, "MacIntel")).toBe(false);
+    expect(hasOpenKey({ metaKey: false, ctrlKey: true }, "Win32")).toBe(true);
   });
 
-  test("opens one link for a modified primary click and consumes the gesture", async () => {
+  test("opens one link for a modified primary click and blocks the browser click", async () => {
     const openUrl = mock(async (_url: string) => undefined);
     const harness = createHarness(openUrl);
     try {
@@ -197,7 +197,7 @@ describe("terminal link controller", () => {
     }
   });
 
-  test("releases gesture listeners when the window loses focus", () => {
+  test("stops press listeners when the window loses focus", () => {
     const openUrl = mock(async (_url: string) => undefined);
     const harness = createHarness(openUrl);
     try {

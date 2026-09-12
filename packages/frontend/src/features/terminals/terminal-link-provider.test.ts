@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { IBufferCell, IBufferLine, ILink, Terminal } from "@xterm/xterm";
-import { createTerminalHttpLinkProvider } from "./terminal-link-provider";
+import { createHttpLinkProvider } from "./terminal-link-provider";
 
 type TestCell = Pick<IBufferCell, "getChars" | "getCode" | "getWidth">;
 
@@ -16,7 +16,7 @@ const createLine = (cells: TestCell[], columns: number, isWrapped: boolean): IBu
   return {
     isWrapped,
     length: padded.length,
-    // SAFETY: The provider only reads the three IBufferCell methods implemented by TestCell.
+    // SAFETY: The provider reads only the three cell methods in TestCell.
     getCell: (column) => padded[column] as IBufferCell | undefined,
     translateToString: () => "",
   };
@@ -39,7 +39,7 @@ const createTerminal = (
   };
   return {
     cols: columns,
-    // SAFETY: The provider only reads active.length and active.getLine from this buffer fake.
+    // SAFETY: The provider reads only active.length and active.getLine from this fake.
     buffer: { active } as Terminal["buffer"],
   };
 };
@@ -48,7 +48,7 @@ const readTerminalLinksForBufferLine = (
   terminal: Pick<Terminal, "buffer" | "cols">,
   row: number,
 ): ILink[] => {
-  const provider = createTerminalHttpLinkProvider(terminal, {
+  const provider = createHttpLinkProvider(terminal, {
     activate: () => undefined,
     hover: () => undefined,
     leave: () => undefined,

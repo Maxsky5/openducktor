@@ -6,53 +6,332 @@ import type {
   Terminal,
 } from "@xterm/xterm";
 import {
-  createTerminalHttpLinkProvider,
-  sameTerminalLinkTarget,
-  terminalRangeContains,
-  type TerminalHttpLinkProvider,
-  type TerminalLinkTarget,
+  createHttpLinkProvider,
+  type HttpLinkProvider,
+  type LinkTarget,
+  rangeHasCell,
+  sameLink,
 } from "./terminal-link-provider";
-import { validateTerminalHttpUrl } from "./terminal-url-policy";
+import { checkHttpUrl } from "./terminal-url-policy";
 
 const LINK_POINTER_CLASS = "odt-terminal-link-pointer";
 const LINKS_ENABLED_CLASS = "odt-terminal-links";
 const DRAG_THRESHOLD_PX = 4;
 
-type TerminalLinkGesture = {
-  cancelled: boolean;
-  originX: number;
-  originY: number;
-  target: TerminalLinkTarget;
+type LinkPress = {
+  startX: number;
+  startY: number;
+  stopped: boolean;
+  target: LinkTarget;
 };
 
-type TerminalLinkControllerInput = {
+type LinkControllerOptions = {
   container: HTMLElement;
   openUrl(url: string): Promise<void>;
   reportOpenError(url: string, cause: unknown): void;
 };
 
-export type TerminalLinkController = ITerminalAddon & {
+export type LinkController = ITerminalAddon & {
   readonly linkHandler: ILinkHandler;
   reset(): void;
 };
 
-const isMacPlatform = (platform: string): boolean => /mac/i.test(platform);
+export const createLinkController = ({
+  container,
+  openUrl,
+  reportOpenError,
+}: LinkControllerOptions): LinkController => {
+  const view = container.ownerDocument.defaultView;
+  if (!view) throw new Error("Cannot create terminal links without a browser window.");
+  const platform = view.navigator.platform;
+  let terminal: Terminal | null = null;
+  let provider: HttpLinkProvider | null = null;
+  let hovered: LinkTarget | null = null;
+  let press: LinkPress | null = null;
+  let blockClick = false;
+  let clickBlockTimer: number | null = null;
+  let disposed = false;
+  let keyWatchActive = false;
+  let dragWatchActive = false;
+  let clickBlockActive = false;
+  const subscriptions: IDisposable[] = [];
 
-export const hasTerminalOpenModifier = (
-  event: Pick<MouseEvent, "ctrlKey" | "metaKey">,
-  platform: string,
-): boolean => (isMacPlatform(platform) ? event.metaKey : event.ctrlKey);
+  const startKeyWatch = (): void => {
+    if (keyWatchActive) return;
+    keyWatchActive = true;
+    view.addEventListener("keydown", handleKeyChange, true);
+    view.addEventListener("keyup", handleKeyChange, true);
+    view.addEventListener("blur", handleBlur);
+  };
 
-const stopTerminalLinkEvent = (event: Event): void => {
-  event.preventDefault();
-  event.stopPropagation();
-  event.stopImmediatePropagation();
+  const stopKeyWatchIfIdle = (): void => {
+    if (!keyWatchActive || hovered || press) return;
+    keyWatchActive = false;
+    view.removeEventListener("keydown", handleKeyChange, true);
+    view.removeEventListener("keyup", handleKeyChange, true);
+    view.removeEventListener("blur", handleBlur);
+  };
+
+  const startDragWatch = (): void => {
+    startKeyWatch();
+    if (dragWatchActive) return;
+    dragWatchActive = true;
+    view.addEventListener("mousemove", handleMouseMove, true);
+    view.addEventListener("mouseup", handleMouseUp, true);
+  };
+
+  const stopDragWatch = (): void => {
+    if (!dragWatchActive) return;
+    dragWatchActive = false;
+    view.removeEventListener("mousemove", handleMouseMove, true);
+    view.removeEventListener("mouseup", handleMouseUp, true);
+    stopKeyWatchIfIdle();
+  };
+
+  const endPress = (): void => {
+    press = null;
+    stopDragWatch();
+  };
+
+  const startClickBlock = (): void => {
+    if (clickBlockActive) return;
+    clickBlockActive = true;
+    view.addEventListener("click", handleClick, true);
+  };
+
+  const stopClickBlock = (): void => {
+    if (!clickBlockActive) return;
+    clickBlockActive = false;
+    view.removeEventListener("click", handleClick, true);
+  };
+
+  const setPointer = (event?: Pick<KeyboardEvent, "ctrlKey" | "metaKey">): void => {
+    const show = hovered !== null && event !== undefined && hasOpenKey(event, platform);
+    container.classList.toggle(LINK_POINTER_CLASS, show);
+  };
+
+  const clearHover = (): void => {
+    hovered = null;
+    container.classList.remove(LINK_POINTER_CLASS);
+    stopKeyWatchIfIdle();
+  };
+
+  const stopPress = (): void => {
+    if (press) press.stopped = true;
+  };
+
+  const reset = (): void => {
+    clearHover();
+    stopPress();
+  };
+
+  const checkHover = (): void => {
+    if (hovered?.source !== "plain" || provider?.isCurrent(hovered)) return;
+    reset();
+  };
+
+  const readLink = (event: MouseEvent): LinkTarget | null => {
+    if (!terminal || !provider) return null;
+    const position = readPointerCell(terminal, event);
+    if (!position) return null;
+    if (
+      hovered?.source === "osc" &&
+      rangeHasCell(hovered.range, position, terminal.cols) &&
+      checkHttpUrl(hovered.url)
+    ) {
+      return hovered;
+    }
+    if (terminal.element?.querySelector(".xterm-screen.xterm-cursor-pointer")) return null;
+    return provider.findLinkAt(position);
+  };
+
+  const findOscLink = (event: MouseEvent): void => {
+    if (hovered || !terminal) return;
+    const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+    if (!screen) return;
+    // xterm finds OSC 8 links on mousemove. A non-bubbling event keeps it out of mouse tracking.
+    screen.dispatchEvent(
+      new view.MouseEvent("mousemove", {
+        altKey: event.altKey,
+        bubbles: false,
+        cancelable: false,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+      }),
+    );
+  };
+
+  const openLink = (target: LinkTarget): void => {
+    void openUrl(target.url).catch((cause) => {
+      if (!disposed) reportOpenError(target.url, cause);
+    });
+  };
+
+  const handleHover = (event: MouseEvent, target: LinkTarget): void => {
+    if (disposed) return;
+    hovered = target;
+    startKeyWatch();
+    setPointer(event);
+  };
+
+  const handleLeave = (_event: MouseEvent, target: LinkTarget): void => {
+    if (!hovered || !sameLink(hovered, target)) return;
+    clearHover();
+    stopPress();
+  };
+
+  const handleMouseDown = (event: MouseEvent): void => {
+    if (event.button !== 0 || !hasOpenKey(event, platform)) return;
+    findOscLink(event);
+    const target = readLink(event);
+    if (!target) return;
+    press = {
+      startX: event.clientX,
+      startY: event.clientY,
+      stopped: false,
+      target,
+    };
+    startDragWatch();
+    stopEvent(event);
+  };
+
+  const handleMouseMove = (event: MouseEvent): void => {
+    if (!press) return;
+    stopEvent(event);
+    const distance = Math.hypot(event.clientX - press.startX, event.clientY - press.startY);
+    const target = readLink(event);
+    if (
+      distance > DRAG_THRESHOLD_PX ||
+      !hasOpenKey(event, platform) ||
+      !target ||
+      !sameLink(target, press.target)
+    ) {
+      stopPress();
+    }
+  };
+
+  const handleMouseUp = (event: MouseEvent): void => {
+    if (!press || event.button !== 0) return;
+    const done = press;
+    press = null;
+    stopDragWatch();
+    stopEvent(event);
+    blockClick = true;
+    startClickBlock();
+    if (clickBlockTimer !== null) view.clearTimeout(clickBlockTimer);
+    clickBlockTimer = view.setTimeout(() => {
+      blockClick = false;
+      clickBlockTimer = null;
+      stopClickBlock();
+    }, 0);
+
+    const target = readLink(event);
+    if (!done.stopped && hasOpenKey(event, platform) && target && sameLink(target, done.target)) {
+      openLink(done.target);
+    }
+  };
+
+  const handleClick = (event: MouseEvent): void => {
+    if (!blockClick) return;
+    blockClick = false;
+    if (clickBlockTimer !== null) view.clearTimeout(clickBlockTimer);
+    clickBlockTimer = null;
+    stopClickBlock();
+    stopEvent(event);
+  };
+
+  const handleKeyChange = (event: KeyboardEvent): void => {
+    setPointer(event);
+    if (press && !hasOpenKey(event, platform)) stopPress();
+  };
+
+  const handleBlur = (): void => {
+    clearHover();
+    endPress();
+  };
+
+  const handleContainerLeave = (): void => {
+    clearHover();
+    stopPress();
+  };
+
+  const linkHandler: ILinkHandler = {
+    allowNonHttpProtocols: false,
+    activate: () => {
+      // The capture handler opens links.
+    },
+    hover: (event, url, range) => {
+      const href = checkHttpUrl(url);
+      if (!href) return;
+      handleHover(event, { range, source: "osc", url: href });
+    },
+    leave: (event, url, range) => {
+      const href = checkHttpUrl(url);
+      if (!href) return;
+      handleLeave(event, { range, source: "osc", url: href });
+    },
+  };
+
+  return {
+    linkHandler,
+    activate: (activeTerminal) => {
+      if (disposed) throw new Error("Cannot activate a disposed terminal link controller.");
+      terminal = activeTerminal;
+      container.classList.add(LINKS_ENABLED_CLASS);
+      provider = createHttpLinkProvider(activeTerminal, {
+        activate: () => {
+          // The capture handler opens links.
+        },
+        hover: handleHover,
+        leave: handleLeave,
+      });
+      subscriptions.push(
+        activeTerminal.registerLinkProvider(provider),
+        activeTerminal.onWriteParsed(reset),
+        activeTerminal.onRender(checkHover),
+        activeTerminal.onResize(reset),
+        activeTerminal.onScroll(reset),
+        activeTerminal.buffer.onBufferChange(reset),
+      );
+      container.addEventListener("mousedown", handleMouseDown, true);
+      container.addEventListener("mouseleave", handleContainerLeave);
+    },
+    reset,
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      if (clickBlockTimer !== null) view.clearTimeout(clickBlockTimer);
+      clickBlockTimer = null;
+      reset();
+      container.classList.remove(LINKS_ENABLED_CLASS);
+      press = null;
+      hovered = null;
+      stopDragWatch();
+      stopKeyWatchIfIdle();
+      stopClickBlock();
+      for (const subscription of subscriptions.splice(0)) subscription.dispose();
+      container.removeEventListener("mousedown", handleMouseDown, true);
+      container.removeEventListener("mouseleave", handleContainerLeave);
+      terminal = null;
+      provider = null;
+    },
+  };
 };
 
-export const readTerminalPointerPosition = (
+export function hasOpenKey(
+  event: Pick<MouseEvent, "ctrlKey" | "metaKey">,
+  platform: string,
+): boolean {
+  return isMac(platform) ? event.metaKey : event.ctrlKey;
+}
+
+export function readPointerCell(
   terminal: Pick<Terminal, "buffer" | "cols" | "element" | "rows">,
   event: Pick<MouseEvent, "clientX" | "clientY">,
-): IBufferCellPosition | null => {
+): IBufferCellPosition | null {
   const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
   if (!screen || terminal.cols < 1 || terminal.rows < 1) return null;
   const rect = screen.getBoundingClientRect();
@@ -74,296 +353,14 @@ export const readTerminalPointerPosition = (
       Math.floor(((event.clientY - rect.top) / rect.height) * terminal.rows) +
       1,
   };
-};
+}
 
-export const createTerminalLinkController = ({
-  container,
-  openUrl,
-  reportOpenError,
-}: TerminalLinkControllerInput): TerminalLinkController => {
-  const view = container.ownerDocument.defaultView;
-  if (!view) throw new Error("Cannot create terminal links without a browser window.");
-  const platform = view.navigator.platform;
-  let terminal: Terminal | null = null;
-  let provider: TerminalHttpLinkProvider | null = null;
-  let hovered: TerminalLinkTarget | null = null;
-  let gesture: TerminalLinkGesture | null = null;
-  let suppressClick = false;
-  let clickResetHandle: number | null = null;
-  let disposed = false;
-  let hoverWindowListenersAttached = false;
-  let gestureWindowListenersAttached = false;
-  let clickWindowListenerAttached = false;
-  const subscriptions: IDisposable[] = [];
+function isMac(platform: string): boolean {
+  return /mac/i.test(platform);
+}
 
-  const attachHoverWindowListeners = (): void => {
-    if (hoverWindowListenersAttached) return;
-    hoverWindowListenersAttached = true;
-    view.addEventListener("keydown", handleKeyChange, true);
-    view.addEventListener("keyup", handleKeyChange, true);
-    view.addEventListener("blur", handleBlur);
-  };
-
-  const detachHoverWindowListenersIfIdle = (): void => {
-    if (!hoverWindowListenersAttached || hovered || gesture) return;
-    hoverWindowListenersAttached = false;
-    view.removeEventListener("keydown", handleKeyChange, true);
-    view.removeEventListener("keyup", handleKeyChange, true);
-    view.removeEventListener("blur", handleBlur);
-  };
-
-  const attachGestureWindowListeners = (): void => {
-    attachHoverWindowListeners();
-    if (gestureWindowListenersAttached) return;
-    gestureWindowListenersAttached = true;
-    view.addEventListener("mousemove", handleMouseMove, true);
-    view.addEventListener("mouseup", handleMouseUp, true);
-  };
-
-  const detachGestureWindowListeners = (): void => {
-    if (!gestureWindowListenersAttached) return;
-    gestureWindowListenersAttached = false;
-    view.removeEventListener("mousemove", handleMouseMove, true);
-    view.removeEventListener("mouseup", handleMouseUp, true);
-    detachHoverWindowListenersIfIdle();
-  };
-
-  const abortGesture = (): void => {
-    gesture = null;
-    detachGestureWindowListeners();
-  };
-
-  const attachClickWindowListener = (): void => {
-    if (clickWindowListenerAttached) return;
-    clickWindowListenerAttached = true;
-    view.addEventListener("click", handleClick, true);
-  };
-
-  const detachClickWindowListener = (): void => {
-    if (!clickWindowListenerAttached) return;
-    clickWindowListenerAttached = false;
-    view.removeEventListener("click", handleClick, true);
-  };
-
-  const updatePointer = (event?: Pick<KeyboardEvent, "ctrlKey" | "metaKey">): void => {
-    const openable =
-      hovered !== null && event !== undefined && hasTerminalOpenModifier(event, platform);
-    container.classList.toggle(LINK_POINTER_CLASS, openable);
-  };
-
-  const clearHover = (): void => {
-    hovered = null;
-    container.classList.remove(LINK_POINTER_CLASS);
-    detachHoverWindowListenersIfIdle();
-  };
-
-  const cancelGesture = (): void => {
-    if (gesture) gesture.cancelled = true;
-  };
-
-  const reset = (): void => {
-    clearHover();
-    cancelGesture();
-  };
-
-  const validateHover = (): void => {
-    if (hovered?.source !== "plain" || provider?.isCurrent(hovered)) return;
-    reset();
-  };
-
-  const readTargetAt = (event: MouseEvent): TerminalLinkTarget | null => {
-    if (!terminal || !provider) return null;
-    const position = readTerminalPointerPosition(terminal, event);
-    if (!position) return null;
-    if (
-      hovered?.source === "osc" &&
-      terminalRangeContains(hovered.range, position, terminal.cols) &&
-      validateTerminalHttpUrl(hovered.url)
-    ) {
-      return hovered;
-    }
-    if (terminal.element?.querySelector(".xterm-screen.xterm-cursor-pointer")) return null;
-    return provider.findLinkAt(position);
-  };
-
-  const refreshLinkHover = (event: MouseEvent): void => {
-    if (hovered || !terminal) return;
-    const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
-    if (!screen) return;
-    // xterm resolves OSC 8 links on mousemove. Keep this event on the screen so it cannot reach
-    // terminal mouse tracking on the parent element.
-    screen.dispatchEvent(
-      new view.MouseEvent("mousemove", {
-        altKey: event.altKey,
-        bubbles: false,
-        cancelable: false,
-        clientX: event.clientX,
-        clientY: event.clientY,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-        shiftKey: event.shiftKey,
-      }),
-    );
-  };
-
-  const openTarget = (target: TerminalLinkTarget): void => {
-    void openUrl(target.url).catch((cause) => {
-      if (!disposed) reportOpenError(target.url, cause);
-    });
-  };
-
-  const handleHover = (event: MouseEvent, target: TerminalLinkTarget): void => {
-    if (disposed) return;
-    hovered = target;
-    attachHoverWindowListeners();
-    updatePointer(event);
-  };
-
-  const handleLeave = (_event: MouseEvent, target: TerminalLinkTarget): void => {
-    if (!hovered || !sameTerminalLinkTarget(hovered, target)) return;
-    clearHover();
-    cancelGesture();
-  };
-
-  const handleMouseDown = (event: MouseEvent): void => {
-    if (event.button !== 0 || !hasTerminalOpenModifier(event, platform)) return;
-    refreshLinkHover(event);
-    const target = readTargetAt(event);
-    if (!target) return;
-    gesture = {
-      cancelled: false,
-      originX: event.clientX,
-      originY: event.clientY,
-      target,
-    };
-    attachGestureWindowListeners();
-    stopTerminalLinkEvent(event);
-  };
-
-  const handleMouseMove = (event: MouseEvent): void => {
-    if (!gesture) return;
-    stopTerminalLinkEvent(event);
-    const distance = Math.hypot(event.clientX - gesture.originX, event.clientY - gesture.originY);
-    const target = readTargetAt(event);
-    if (
-      distance > DRAG_THRESHOLD_PX ||
-      !hasTerminalOpenModifier(event, platform) ||
-      !target ||
-      !sameTerminalLinkTarget(target, gesture.target)
-    ) {
-      cancelGesture();
-    }
-  };
-
-  const handleMouseUp = (event: MouseEvent): void => {
-    if (!gesture || event.button !== 0) return;
-    const completedGesture = gesture;
-    gesture = null;
-    detachGestureWindowListeners();
-    stopTerminalLinkEvent(event);
-    suppressClick = true;
-    attachClickWindowListener();
-    if (clickResetHandle !== null) view.clearTimeout(clickResetHandle);
-    clickResetHandle = view.setTimeout(() => {
-      suppressClick = false;
-      clickResetHandle = null;
-      detachClickWindowListener();
-    }, 0);
-
-    const target = readTargetAt(event);
-    if (
-      !completedGesture.cancelled &&
-      hasTerminalOpenModifier(event, platform) &&
-      target &&
-      sameTerminalLinkTarget(target, completedGesture.target)
-    ) {
-      openTarget(completedGesture.target);
-    }
-  };
-
-  const handleClick = (event: MouseEvent): void => {
-    if (!suppressClick) return;
-    suppressClick = false;
-    if (clickResetHandle !== null) view.clearTimeout(clickResetHandle);
-    clickResetHandle = null;
-    detachClickWindowListener();
-    stopTerminalLinkEvent(event);
-  };
-
-  const handleKeyChange = (event: KeyboardEvent): void => {
-    updatePointer(event);
-    if (gesture && !hasTerminalOpenModifier(event, platform)) cancelGesture();
-  };
-
-  const handleBlur = (): void => {
-    clearHover();
-    abortGesture();
-  };
-
-  const handleContainerLeave = (): void => {
-    clearHover();
-    cancelGesture();
-  };
-
-  const linkHandler: ILinkHandler = {
-    allowNonHttpProtocols: false,
-    activate: () => {
-      // Capture-phase gesture handling owns activation.
-    },
-    hover: (event, url, range) => {
-      const validated = validateTerminalHttpUrl(url);
-      if (!validated) return;
-      handleHover(event, { range, source: "osc", url: validated });
-    },
-    leave: (event, url, range) => {
-      const validated = validateTerminalHttpUrl(url);
-      if (!validated) return;
-      handleLeave(event, { range, source: "osc", url: validated });
-    },
-  };
-
-  return {
-    linkHandler,
-    activate: (activeTerminal) => {
-      if (disposed) throw new Error("Cannot activate a disposed terminal link controller.");
-      terminal = activeTerminal;
-      container.classList.add(LINKS_ENABLED_CLASS);
-      provider = createTerminalHttpLinkProvider(activeTerminal, {
-        activate: () => {
-          // Capture-phase gesture handling owns activation.
-        },
-        hover: handleHover,
-        leave: handleLeave,
-      });
-      subscriptions.push(
-        activeTerminal.registerLinkProvider(provider),
-        activeTerminal.onWriteParsed(reset),
-        activeTerminal.onRender(validateHover),
-        activeTerminal.onResize(reset),
-        activeTerminal.onScroll(reset),
-        activeTerminal.buffer.onBufferChange(reset),
-      );
-      container.addEventListener("mousedown", handleMouseDown, true);
-      container.addEventListener("mouseleave", handleContainerLeave);
-    },
-    reset,
-    dispose: () => {
-      if (disposed) return;
-      disposed = true;
-      if (clickResetHandle !== null) view.clearTimeout(clickResetHandle);
-      clickResetHandle = null;
-      reset();
-      container.classList.remove(LINKS_ENABLED_CLASS);
-      gesture = null;
-      hovered = null;
-      detachGestureWindowListeners();
-      detachHoverWindowListenersIfIdle();
-      detachClickWindowListener();
-      for (const subscription of subscriptions.splice(0)) subscription.dispose();
-      container.removeEventListener("mousedown", handleMouseDown, true);
-      container.removeEventListener("mouseleave", handleContainerLeave);
-      terminal = null;
-      provider = null;
-    },
-  };
-};
+function stopEvent(event: Event): void {
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+}
