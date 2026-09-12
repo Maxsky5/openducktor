@@ -234,8 +234,8 @@ describe("task asset recovery service", () => {
     const administrativeWorkspaces: string[] = [];
     const service = createTaskAssetRecoveryService({
       isWorkspaceRemovalPending: () => false,
-      withAdministrativeAccess: (workspaceId, effect) => {
-        administrativeWorkspaces.push(workspaceId);
+      withAdministrativeAccess: (workspaceIds, effect) => {
+        administrativeWorkspaces.push(...workspaceIds);
         return effect;
       },
       filePort: {

@@ -613,6 +613,56 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
+  test("keeps a successful removal when the following refresh fails", async () => {
+    workspaceHost.workspaceRemove = mock(async () => ({
+      catalog: {
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+        onboardingCompleted: true,
+      },
+      removedWorktrees: ["/managed/repo/task-1"],
+    }));
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
+    const toastSuccess = spyOn(toast, "success").mockImplementation(() => "");
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => !state.isLoadingWorkspaces);
+      spyOn(harness.getQueryClient(), "invalidateQueries").mockImplementation(async () => {
+        throw new Error("cache refresh failed");
+      });
+
+      await expect(
+        harness.run((value) =>
+          value.removeWorkspace({
+            workspaceId: "repo",
+            expectedRepoPath: "/repo",
+            removeTaskWorktrees: true,
+          }),
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(toastError).toHaveBeenCalledWith("Workspace refresh failed", {
+        description: "cache refresh failed",
+      });
+      expect(toastSuccess).toHaveBeenCalledWith("Workspace removed", {
+        description: "Removed 1 task worktree(s). The repository and its branches remain.",
+      });
+    } finally {
+      await harness.unmount();
+      toastError.mockRestore();
+      toastSuccess.mockRestore();
+    }
+  });
+
   test("clears the active workspace when a failed removal refresh returns no open workspace", async () => {
     let removalFailed = false;
     workspaceHost.workspaceList = mock(async () =>
