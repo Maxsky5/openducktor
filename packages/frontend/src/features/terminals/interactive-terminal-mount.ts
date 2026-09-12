@@ -1,6 +1,4 @@
 import type { AppPlatform, TerminalLifecycle, TerminalServerMessage } from "@openducktor/contracts";
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
 import {
   createLatestResizeScheduler,
   createLiveTerminalFitScheduler,
@@ -18,6 +16,7 @@ import {
 import { createTerminalKeyEventHandler, encodeTerminalTextInput } from "./terminal-keyboard-policy";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 import { createTerminalOptions } from "./terminal-xterm-options";
+import { createSharedTerminalBinding } from "./shared-terminal-binding";
 
 export type InteractiveTerminalMount = {
   activate(focus: boolean): void;
@@ -63,19 +62,15 @@ export const mountInteractiveTerminal = ({
   const reportFailure = (title: string, cause: unknown): void => {
     if (!disposed) onInteractionFailure(title, cause);
   };
-  const terminal = new Terminal(
+  const binding = createSharedTerminalBinding(
+    container,
     createTerminalOptions(container, { cursorBlink: true, screenReaderMode: true }),
   );
-  let fitAddon: FitAddon | undefined;
-  try {
-    fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(container);
-  } catch (cause) {
-    fitAddon?.dispose();
-    terminal.dispose();
-    throw cause;
-  }
+  const { fitAddon, terminal } = binding;
+  const resetTerminal = (): void => {
+    binding.resetLinkState();
+    terminal.reset();
+  };
   const activateViewport = createTerminalViewportActivator({
     fit: () => fitAddon.fit(),
     scrollToBottom: () => terminal.scrollToBottom(),
@@ -170,12 +165,12 @@ export const mountInteractiveTerminal = ({
     const isReplayGap = message.type === "replay_gap";
     if (isReplayGap) {
       void outputSequencer
-        .skipTo(message.missingSequenceEnd, () => terminal.reset())
+        .skipTo(message.missingSequenceEnd, resetTerminal)
         .catch((cause) => reportFailure("Terminal output failed", cause));
     }
     if (
       handleTerminalMetadataFrame(message, {
-        reset: isReplayGap ? () => undefined : () => terminal.reset(),
+        reset: isReplayGap ? () => undefined : resetTerminal,
         onAttention,
         onLifecycle,
         onTitle: onTitleChange,
@@ -196,7 +191,10 @@ export const mountInteractiveTerminal = ({
   if (isActive()) fitAddon.fit();
 
   return {
-    activate: (focus) => activateViewport(focus ? () => terminal.focus() : null),
+    activate: (focus) => {
+      binding.resetLinkState();
+      activateViewport(focus ? () => terminal.focus() : null);
+    },
     dispose: () => {
       if (disposed) return;
       disposed = true;
@@ -212,8 +210,7 @@ export const mountInteractiveTerminal = ({
       oscClipboardSubscription.dispose();
       dataSubscription.dispose();
       resizeSubscription.dispose();
-      fitAddon.dispose();
-      terminal.dispose();
+      binding.dispose();
     },
   };
 };
