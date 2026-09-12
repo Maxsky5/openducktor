@@ -16,7 +16,7 @@ const stoppedScriptFromState = (
   script: DevServerScriptState,
   pid: number,
 ): StoppedDevServerScript => ({
-  command: script.command,
+  command: script.startedCommand ?? script.command,
   name: script.name,
   pid,
   repoPath: runtime.state.repoPath,

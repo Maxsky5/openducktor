@@ -355,8 +355,8 @@ describe("AgentStudioDevServerPanel", () => {
   test("prefers the started command over the configured command", () => {
     const reconfiguredScript: DevServerScriptState = {
       ...runningScript,
-      command: "bun run dev:next",
-      startedCommand: "bun run dev",
+      command: "bun run configured",
+      startedCommand: "bun run started",
     };
     const html = renderToStaticMarkup(
       createElement(AgentStudioDevServerPanel, {
@@ -371,8 +371,37 @@ describe("AgentStudioDevServerPanel", () => {
       }),
     );
 
-    expect(html).toContain("bun run dev");
-    expect(html).not.toContain("bun run dev:next");
+    expect(html).toContain("bun run started");
+    expect(html).not.toContain("bun run configured");
+  });
+
+  test("shows the configured command before the first run", () => {
+    const neverStartedScript: DevServerScriptState = {
+      ...runningScript,
+      command: "bun run configured",
+      startedCommand: null,
+      status: "stopped",
+      runIdentity: null,
+      pid: null,
+      startedAt: null,
+      exitCode: null,
+      lastError: null,
+      bufferedTerminalChunks: [],
+    };
+    const html = renderToStaticMarkup(
+      createElement(AgentStudioDevServerPanel, {
+        model: baseModel({
+          mode: "stopped",
+          isExpanded: true,
+          scripts: [neverStartedScript],
+          selectedScriptId: neverStartedScript.scriptId,
+          selectedScript: neverStartedScript,
+          selectedScriptTerminalBuffer: buildTerminalBuffer(neverStartedScript),
+        }),
+      }),
+    );
+
+    expect(html).toContain("bun run configured");
   });
 
   test("renders failed dev server tabs with failed status styling", () => {

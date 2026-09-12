@@ -446,6 +446,26 @@ describe("createDevServerService", () => {
       ],
     });
   });
+  test("reports the started command when stopping scripts after repository settings change", async () => {
+    const { config, service } = createServiceWithMutableConfig();
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    config.devServers = [{ id: "web", name: "Web", command: "bun run dev:next" }];
+    await Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" }));
+
+    await expect(Effect.runPromise(service.stopAll())).resolves.toEqual({
+      stoppedScripts: [
+        {
+          command: "bun run dev",
+          name: "Web",
+          pid: 400,
+          repoPath: "/canonical/repo",
+          scriptId: "web",
+          taskId: "task-1",
+        },
+      ],
+    });
+  });
   test("requires a task worktree before starting scripts", async () => {
     const { processPort } = createProcessPort();
     const service = createDevServerService({
