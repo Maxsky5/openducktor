@@ -557,6 +557,47 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
+  test("clears the active workspace when a failed removal refresh returns no open workspace", async () => {
+    let removalFailed = false;
+    workspaceHost.workspaceList = mock(async () =>
+      removalFailed ? [] : [workspace("/repo", true)],
+    );
+    workspaceHost.workspaceRemove = mock(async () => {
+      removalFailed = true;
+      throw new Error("worktree removal failed");
+    });
+    let latestActiveWorkspace: ActiveWorkspace | null = createActiveWorkspace("/repo");
+    const harness = createSelectionHarness({
+      activeWorkspace: latestActiveWorkspace,
+      setActiveWorkspace: (workspaceSelection) => {
+        latestActiveWorkspace = workspaceSelection;
+      },
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => !state.isLoadingWorkspaces);
+
+      await expect(
+        harness.run((value) =>
+          value.removeWorkspace({
+            workspaceId: "repo",
+            expectedRepoPath: "/repo",
+            removeTaskWorktrees: true,
+          }),
+        ),
+      ).rejects.toThrow("worktree removal failed");
+      await flush();
+
+      expect(latestActiveWorkspace).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("drops repository-path and workspace-id caches after committed removal", async () => {
     workspaceHost.workspaceRemove = mock(async () => ({
       catalog: {

@@ -10,6 +10,7 @@ export const workspaceRemovalRecordSchema = z.object({
   removeTaskWorktrees: z.boolean(),
   phase: workspaceRemovalPhaseSchema,
   removedWorktrees: z.array(z.string()).default([]),
+  pendingWorktreePath: z.string().nullable().default(null),
   startedAt: z.string(),
   lastFailure: z.string().nullable().default(null),
 });

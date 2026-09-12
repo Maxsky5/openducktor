@@ -91,6 +91,7 @@ const nextRemovalRecord = (
       removeTaskWorktrees,
       phase: removeTaskWorktrees ? "worktrees" : "task_store",
       removedWorktrees: [],
+      pendingWorktreePath: null,
       startedAt: new Date().toISOString(),
       lastFailure: null,
     };
@@ -98,6 +99,7 @@ const nextRemovalRecord = (
   const canChangeChoice =
     existing.phase === "worktrees" &&
     existing.removedWorktrees.length === 0 &&
+    existing.pendingWorktreePath === null &&
     existing.removeTaskWorktrees !== removeTaskWorktrees;
   if (!canChangeChoice) {
     return existing;
@@ -106,6 +108,7 @@ const nextRemovalRecord = (
     ...existing,
     removeTaskWorktrees,
     phase: removeTaskWorktrees ? "worktrees" : "task_store",
+    pendingWorktreePath: null,
     lastFailure: null,
   };
 };
@@ -238,10 +241,11 @@ export const createWorkspaceLifecycleSettingsMethods = (
       yield* assertExpectedRepoPath(input.workspaceId, repoConfig, input.expectedRepoPath);
 
       const removal = nextRemovalRecord(repoConfig.removal, input.removeTaskWorktrees);
-      config.workspaces[input.workspaceId] = { ...repoConfig, removal };
+      const journaledRepoConfig = { ...repoConfig, removal };
+      config.workspaces[input.workspaceId] = journaledRepoConfig;
       moveActiveSelection(config, input.workspaceId);
       yield* writeConfig(settingsConfig, config);
-      return removal;
+      return { record: removal, repoConfig: journaledRepoConfig };
     });
   },
   recordWorkspaceRemovalProgress(input) {
@@ -257,12 +261,17 @@ export const createWorkspaceLifecycleSettingsMethods = (
         );
       }
 
+      const pendingWorktreePath =
+        input.pendingWorktreePath === undefined
+          ? repoConfig.removal.pendingWorktreePath
+          : input.pendingWorktreePath;
       config.workspaces[input.workspaceId] = {
         ...repoConfig,
         removal: {
           ...repoConfig.removal,
           phase: input.phase,
           removedWorktrees: input.removedWorktrees,
+          pendingWorktreePath,
           lastFailure: input.lastFailure,
         },
       };

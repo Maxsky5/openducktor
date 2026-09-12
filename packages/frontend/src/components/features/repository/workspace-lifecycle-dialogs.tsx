@@ -283,7 +283,9 @@ export function WorkspaceRemovalRecoveryDialog({
     removal.record.removeTaskWorktrees,
   );
   const canChangeWorktreeChoice =
-    removal.record.phase === "worktrees" && removal.record.removedWorktrees.length === 0;
+    removal.record.phase === "worktrees" &&
+    removal.record.removedWorktrees.length === 0 &&
+    removal.record.pendingWorktreePath === null;
   const submit = useLifecycleSubmit(
     () =>
       removeWorkspace({

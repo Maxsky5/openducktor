@@ -833,7 +833,7 @@ describe("createWorkspaceSettingsService", () => {
     });
     const service = createWorkspaceSettingsService(settingsConfig);
 
-    const record = await Effect.runPromise(
+    const { record } = await Effect.runPromise(
       service.beginWorkspaceRemoval({
         workspaceId: "repo-a",
         expectedRepoPath: "/repos/a",
@@ -851,6 +851,7 @@ describe("createWorkspaceSettingsService", () => {
         phase: "attachments",
         removedWorktrees: ["/managed/repo-a/task-1"],
         lastFailure: "worktree removal failed",
+        pendingWorktreePath: undefined,
       }),
     );
 
@@ -882,6 +883,7 @@ describe("createWorkspaceSettingsService", () => {
               removeTaskWorktrees: true,
               phase: "worktrees" as const,
               removedWorktrees: [],
+              pendingWorktreePath: null,
               startedAt: "2026-01-01T00:00:00.000Z",
               lastFailure: "Cannot classify registered worktree(s).",
             },
@@ -891,7 +893,7 @@ describe("createWorkspaceSettingsService", () => {
     });
     const service = createWorkspaceSettingsService(settingsConfig);
 
-    const record = await Effect.runPromise(
+    const { record } = await Effect.runPromise(
       service.beginWorkspaceRemoval({
         workspaceId: "repo-a",
         expectedRepoPath: "/repos/a",
@@ -911,6 +913,7 @@ describe("createWorkspaceSettingsService", () => {
       removeTaskWorktrees: true,
       phase: "worktrees" as const,
       removedWorktrees: ["/managed/repo-a/task-1"],
+      pendingWorktreePath: null,
       startedAt: "2026-01-01T00:00:00.000Z",
       lastFailure: null,
     };
@@ -924,7 +927,7 @@ describe("createWorkspaceSettingsService", () => {
     });
     const service = createWorkspaceSettingsService(settingsConfig);
 
-    const record = await Effect.runPromise(
+    const { record } = await Effect.runPromise(
       service.beginWorkspaceRemoval({
         workspaceId: "repo-a",
         expectedRepoPath: "/repos/a",
@@ -935,6 +938,103 @@ describe("createWorkspaceSettingsService", () => {
     expect(record).toEqual(storedRemoval);
     expect(settingsConfig.writtenConfigs).toHaveLength(1);
     expect(settingsConfig.writtenConfigs[0]?.workspaces["repo-a"]?.removal).toEqual(storedRemoval);
+  });
+  test("persists the pending worktree path and keeps it when progress omits it", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: {
+          "repo-a": {
+            ...repoConfig("repo-a", "/repos/a"),
+            removal: {
+              version: 1 as const,
+              operationId: "op-1",
+              removeTaskWorktrees: true,
+              phase: "worktrees" as const,
+              removedWorktrees: [],
+              pendingWorktreePath: null,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    await Effect.runPromise(
+      service.recordWorkspaceRemovalProgress({
+        workspaceId: "repo-a",
+        phase: "worktrees",
+        removedWorktrees: [],
+        lastFailure: null,
+        pendingWorktreePath: "/managed/repo-a/task-1",
+      }),
+    );
+    expect(
+      settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal?.pendingWorktreePath,
+    ).toBe("/managed/repo-a/task-1");
+
+    await Effect.runPromise(
+      service.recordWorkspaceRemovalProgress({
+        workspaceId: "repo-a",
+        phase: "worktrees",
+        removedWorktrees: [],
+        lastFailure: "worktree removal failed",
+        pendingWorktreePath: undefined,
+      }),
+    );
+    const failedRemoval = settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal;
+    expect(failedRemoval?.pendingWorktreePath).toBe("/managed/repo-a/task-1");
+    expect(failedRemoval?.lastFailure).toBe("worktree removal failed");
+
+    await Effect.runPromise(
+      service.recordWorkspaceRemovalProgress({
+        workspaceId: "repo-a",
+        phase: "worktrees",
+        removedWorktrees: ["/managed/repo-a/task-1"],
+        lastFailure: null,
+        pendingWorktreePath: null,
+      }),
+    );
+    expect(
+      settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal?.pendingWorktreePath,
+    ).toBeNull();
+  });
+  test("keeps the worktree choice while a worktree deletion is pending", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: {
+          "repo-a": {
+            ...repoConfig("repo-a", "/repos/a"),
+            removal: {
+              version: 1 as const,
+              operationId: "op-1",
+              removeTaskWorktrees: true,
+              phase: "worktrees" as const,
+              removedWorktrees: [],
+              pendingWorktreePath: "/managed/repo-a/task-1",
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const { record } = await Effect.runPromise(
+      service.beginWorkspaceRemoval({
+        workspaceId: "repo-a",
+        expectedRepoPath: "/repos/a",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(record.removeTaskWorktrees).toBe(true);
+    expect(record.phase).toBe("worktrees");
+    expect(record.pendingWorktreePath).toBe("/managed/repo-a/task-1");
   });
   test("moves the active selection when removal starts", async () => {
     const settingsConfig = createFakeSettingsConfig({
@@ -975,6 +1075,7 @@ describe("createWorkspaceSettingsService", () => {
               removeTaskWorktrees: false,
               phase: "attachments" as const,
               removedWorktrees: [],
+              pendingWorktreePath: null,
               startedAt: "2026-01-01T00:00:00.000Z",
               lastFailure: null,
             },
@@ -1008,6 +1109,7 @@ describe("createWorkspaceSettingsService", () => {
                 removeTaskWorktrees: true,
                 phase: "task_store" as const,
                 removedWorktrees: ["/managed/repo-a/task-1"],
+                pendingWorktreePath: null,
                 startedAt: "2026-01-01T00:00:00.000Z",
                 lastFailure: null,
               },
