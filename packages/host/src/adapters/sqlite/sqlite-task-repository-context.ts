@@ -218,6 +218,20 @@ export const createSqliteTaskRepositoryContextManager = ({
           acquireWorkspaceLease(storage.workspaceId),
           () =>
             Effect.gen(function* () {
+              const currentWorkspaceId = yield* resolveWorkspaceIdForRepoPath(repoPath);
+              if (currentWorkspaceId !== storage.workspaceId) {
+                return yield* Effect.fail(
+                  mapSqliteTaskStoreAdapterError(
+                    operation,
+                    storage.databasePath,
+                    new HostValidationError({
+                      field: "repoPath",
+                      message: `The workspace registered for repository '${repoPath}' changed while the operation waited for the task store. Retry the operation.`,
+                      details: { repoPath },
+                    }),
+                  ),
+                );
+              }
               if (assertWorkspaceAdmitted) {
                 yield* assertWorkspaceAdmitted({
                   operation,

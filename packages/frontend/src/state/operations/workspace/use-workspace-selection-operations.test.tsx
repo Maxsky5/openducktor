@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { taskQueryKeys } from "../../queries/tasks";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -570,6 +571,45 @@ describe("use-workspace-selection-operations", () => {
       expect(workspaceCatalogGet.mock.calls.length).toBeGreaterThan(callsBefore);
     } finally {
       await harness.unmount();
+    }
+  });
+
+  test("reports a workspace refresh failure that follows a failed action", async () => {
+    workspaceHost.workspaceRemove = mock(async () => {
+      throw new Error("git worktree list failed");
+    });
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => !state.isLoadingWorkspaces);
+      spyOn(harness.getQueryClient(), "invalidateQueries").mockImplementation(async () => {
+        throw new Error("cache refresh failed");
+      });
+
+      await expect(
+        harness.run((value) =>
+          value.removeWorkspace({
+            workspaceId: "repo",
+            expectedRepoPath: "/repo",
+            removeTaskWorktrees: true,
+          }),
+        ),
+      ).rejects.toThrow("git worktree list failed");
+
+      expect(toastError).toHaveBeenCalledWith("Workspace refresh failed", {
+        description: "cache refresh failed",
+      });
+    } finally {
+      await harness.unmount();
+      toastError.mockRestore();
     }
   });
 

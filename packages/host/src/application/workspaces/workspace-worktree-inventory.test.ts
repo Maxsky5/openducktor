@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type IncompleteWorkspaceRemoval,
   repoConfigSchema,
   type RepoConfig,
   taskCardSchema,
   type TaskCard,
   type WorkspaceCatalog,
+  type WorkspaceRecord,
   workspaceRecordSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -43,6 +45,33 @@ const catalog = (): WorkspaceCatalog => ({
   closedWorkspaces: [],
   incompleteRemovals: [],
   onboardingCompleted: true,
+});
+
+const workspaceRecord = (overrides: Partial<WorkspaceRecord> = {}): WorkspaceRecord =>
+  workspaceRecordSchema.parse({
+    workspaceId: "other",
+    workspaceName: "Other",
+    repoPath: "/repos/other",
+    isActive: false,
+    hasConfig: true,
+    configuredWorktreeBasePath: null,
+    defaultWorktreeBasePath: null,
+    effectiveWorktreeBasePath: null,
+    ...overrides,
+  });
+
+const incompleteRemoval = (workspace: WorkspaceRecord): IncompleteWorkspaceRemoval => ({
+  workspace,
+  record: {
+    version: 1,
+    operationId: "removal-1",
+    removeTaskWorktrees: true,
+    phase: "worktrees",
+    removedWorktrees: [],
+    pendingWorktreePath: null,
+    startedAt: "2026-01-01T00:00:00.000Z",
+    lastFailure: null,
+  },
 });
 
 const createDependencies = ({
@@ -233,5 +262,81 @@ describe("workspace worktree inventory", () => {
 
     expect(error.message).toContain("another workspace also claims it");
     expect(error.message).toContain("/base/task-1");
+  });
+
+  test("rejects a candidate claimed through an aliased workspace base", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) =>
+        Effect.succeed(path === "/link-base/task-1" ? "/base/task-1" : path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: () => Effect.succeed([task("task-1")]),
+      settingsCanonicalizePath: (path) => Effect.succeed(path === "/link-base" ? "/base" : path),
+      workspaceCatalog: {
+        ...catalog(),
+        openWorkspaces: [
+          workspaceRecord({
+            effectiveWorktreeBasePath: "/link-base",
+            repoPath: "/repos/other",
+          }),
+        ],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("another workspace also claims it");
+  });
+
+  test("rejects removal when another workspace on the shared base has an incomplete removal", async () => {
+    const listedRepos: string[] = [];
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: (input) => {
+        listedRepos.push(input.repoPath);
+        return Effect.succeed([]);
+      },
+      workspaceCatalog: {
+        ...catalog(),
+        incompleteRemovals: [
+          incompleteRemoval(workspaceRecord({ effectiveWorktreeBasePath: "/base" })),
+        ],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("incomplete removal on the same worktree base");
+    expect(listedRepos).toEqual(["/repos/ws"]);
+  });
+
+  test("keeps the repository path of a workspace with an incomplete removal", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "(detached)", worktreePath: "/base/other-repo" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: () => Effect.succeed([]),
+      workspaceCatalog: {
+        ...catalog(),
+        incompleteRemovals: [incompleteRemoval(workspaceRecord({ repoPath: "/base/other-repo" }))],
+      },
+    });
+
+    const paths = await Effect.runPromise(
+      collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+    );
+
+    expect(paths).toEqual([]);
   });
 });
