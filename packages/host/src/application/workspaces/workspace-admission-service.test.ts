@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkspaceCatalog, WorkspaceRecord } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { createWorkspaceAdmissionService } from "./workspace-admission-service";
 
@@ -27,8 +28,13 @@ const catalog = (overrides: Partial<WorkspaceCatalog> = {}): WorkspaceCatalog =>
   ...overrides,
 });
 
-const createAdmission = (workspaceCatalog: WorkspaceCatalog) =>
+const createAdmission = (
+  workspaceCatalog: WorkspaceCatalog,
+  canonicalizePath: (path: string) => Effect.Effect<string, HostOperationErrorAggregate> = (path) =>
+    Effect.succeed(path),
+) =>
   createWorkspaceAdmissionService({
+    settingsConfig: { canonicalizePath },
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
       getWorkspaceCatalog: () => Effect.succeed(workspaceCatalog),
     }),
@@ -149,6 +155,68 @@ describe("workspace admission service", () => {
     ).resolves.toBeUndefined();
   });
 
+  test("matches a work start by the canonical repository path", async () => {
+    const admission = createAdmission(catalog(), (path) =>
+      Effect.succeed(path === "/alias/open" ? "/repos/open" : path),
+    );
+    await Effect.runPromise(admission.initialize());
+
+    const waited = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/alias/open",
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(entered);
+        const waitForStarts = yield* Effect.fork(admission.awaitWorkStarts("/repos/open"));
+        yield* Effect.sleep("20 millis");
+        const beforeRelease = yield* Fiber.poll(waitForStarts);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        yield* Fiber.join(waitForStarts);
+        return beforeRelease;
+      }),
+    );
+
+    expect(Option.isNone(waited)).toBe(true);
+  });
+
+  test("blocks a work start when the canonical path has a reservation", async () => {
+    const admission = createAdmission(catalog(), (path) =>
+      Effect.succeed(path === "/alias/open" ? "/repos/open" : path),
+    );
+    await Effect.runPromise(
+      admission.reserveWorkspace({
+        operation: "close",
+        repoPath: "/repos/open",
+        workspaceId: "open",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.assertWorkspaceAdmitsWork("/alias/open")),
+    ).rejects.toThrow("already in progress for open");
+  });
+
+  test("reports a canonicalization failure for a work start", async () => {
+    const admission = createAdmission(catalog(), () =>
+      Effect.fail(
+        new HostOperationError({
+          operation: "git.canonicalizePath",
+          message: "Failed to canonicalize /repos/missing.",
+        }),
+      ),
+    );
+
+    await expect(
+      Effect.runPromise(admission.assertWorkspaceAdmitsWork("/repos/missing")),
+    ).rejects.toThrow("Cannot resolve the repository path /repos/missing.");
+  });
+
   test("reserves a workspace and rejects a second reservation", async () => {
     const admission = createAdmission(catalog());
 
@@ -263,6 +331,43 @@ describe("workspace admission service", () => {
 
     expect(Option.isNone(closeExit)).toBe(true);
     expect(Option.isSome(releaseExit)).toBe(true);
+  });
+
+  test("keeps the drain waiter when a rejected start arrives during the drain", async () => {
+    const admission = createAdmission(
+      catalog({ openWorkspaces: [workspaceRecord("open", "/repos/open")] }),
+    );
+    await Effect.runPromise(admission.initialize());
+
+    const { rejectedExit } = await Effect.runPromise(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/repos/open",
+            Deferred.succeed(started, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(started);
+        yield* admission.reserveWorkspace({
+          operation: "close",
+          repoPath: "/repos/open",
+          workspaceId: "open",
+        });
+        const waitForStarts = yield* Effect.fork(admission.awaitWorkStarts("/repos/open"));
+        yield* Effect.sleep("20 millis");
+        const rejectedExit = yield* Effect.exit(
+          admission.withWorkStartLease("/repos/open", Effect.void),
+        );
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        yield* Fiber.join(waitForStarts);
+        return { rejectedExit };
+      }),
+    );
+
+    expect(rejectedExit._tag).toBe("Failure");
   });
 
   test("releases the work start lease when the workspace is blocked", async () => {

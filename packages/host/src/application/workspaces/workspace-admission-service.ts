@@ -5,6 +5,7 @@ import {
   HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
 export type WorkspaceBlockReason = "closed" | "removal";
@@ -44,7 +45,7 @@ export type WorkspaceAdmissionService = {
     workspaceId: string;
   }): Effect.Effect<void, HostValidationErrorAggregate>;
   assertWorkspaceAdmitsWork(repoPath: string): Effect.Effect<void, HostValidationErrorAggregate>;
-  awaitWorkStarts(repoPath: string): Effect.Effect<void>;
+  awaitWorkStarts(repoPath: string): Effect.Effect<void, HostValidationErrorAggregate>;
   withWorkStartLease<A, E, R>(
     repoPath: string,
     effect: Effect.Effect<A, E, R>,
@@ -63,8 +64,10 @@ export type WorkspaceAdmissionService = {
 };
 
 export const createWorkspaceAdmissionService = ({
+  settingsConfig,
   workspaceSettingsService,
 }: {
+  settingsConfig: Pick<SettingsConfigPort, "canonicalizePath">;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
 }): WorkspaceAdmissionService => {
   const blockedByWorkspaceId = new Map<string, BlockedWorkspace>();
@@ -151,67 +154,85 @@ export const createWorkspaceAdmissionService = ({
       }),
     );
 
-  const assertWorkspaceAdmitsWork: WorkspaceAdmissionService["assertWorkspaceAdmitsWork"] = (
-    repoPath,
-  ) =>
+  const canonicalRepoPathKey = (
+    repoPath: string,
+  ): Effect.Effect<string, HostValidationErrorAggregate> =>
+    settingsConfig.canonicalizePath(repoPath).pipe(
+      Effect.map((canonicalPath) => normalizePathForComparison(canonicalPath)),
+      Effect.mapError(
+        (cause) =>
+          new HostValidationError({
+            message: `Cannot resolve the repository path ${repoPath}. Check the path and retry.`,
+            field: "repoPath",
+            cause,
+          }),
+      ),
+    );
+
+  const assertCanonicalWorkspaceAdmitsWork = (
+    key: string,
+  ): Effect.Effect<void, HostValidationErrorAggregate> =>
     ensureInitialized().pipe(
       Effect.flatMap(() => {
-        const normalizedRepoPath = normalizePathForComparison(repoPath);
         const reservation = [...reservationsByWorkspaceId.values()].find(
-          (candidate) => normalizePathForComparison(candidate.repoPath) === normalizedRepoPath,
+          (candidate) => normalizePathForComparison(candidate.repoPath) === key,
         );
         if (reservation) {
           return Effect.fail(reservedWorkspaceError(reservation));
         }
         const blocked = [...blockedByWorkspaceId.values()].find(
-          (candidate) => normalizePathForComparison(candidate.repoPath) === normalizedRepoPath,
+          (candidate) => normalizePathForComparison(candidate.repoPath) === key,
         );
         return blocked ? Effect.fail(blockedWorkspaceError(blocked)) : Effect.void;
       }),
     );
 
-  const withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"] = (
+  const assertWorkspaceAdmitsWork: WorkspaceAdmissionService["assertWorkspaceAdmitsWork"] = (
     repoPath,
-    effect,
-  ) => {
-    const key = normalizePathForComparison(repoPath);
-    return Effect.acquireUseRelease(
-      Effect.suspend(() => {
-        const state = workStartsByRepoPath.get(key) ?? { active: 0, drained: null };
-        state.active += 1;
-        state.drained = null;
-        workStartsByRepoPath.set(key, state);
-        return Effect.void;
-      }),
-      () => Effect.zipRight(assertWorkspaceAdmitsWork(repoPath), effect),
-      () =>
+  ) => canonicalRepoPathKey(repoPath).pipe(Effect.flatMap(assertCanonicalWorkspaceAdmitsWork));
+
+  const withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"] = (repoPath, effect) =>
+    Effect.gen(function* () {
+      const key = yield* canonicalRepoPathKey(repoPath);
+      return yield* Effect.acquireUseRelease(
         Effect.suspend(() => {
-          const state = workStartsByRepoPath.get(key);
-          if (!state || state.active === 0) {
-            return Effect.void;
-          }
-          state.active -= 1;
-          if (state.active > 0 || !state.drained) {
-            return Effect.void;
-          }
-          const waiter = state.drained;
-          state.drained = null;
-          return Deferred.succeed(waiter, undefined).pipe(Effect.asVoid);
+          const state = workStartsByRepoPath.get(key) ?? { active: 0, drained: null };
+          state.active += 1;
+          workStartsByRepoPath.set(key, state);
+          return Effect.void;
         }),
-    );
-  };
+        () => Effect.zipRight(assertCanonicalWorkspaceAdmitsWork(key), effect),
+        () =>
+          Effect.suspend(() => {
+            const state = workStartsByRepoPath.get(key);
+            if (!state || state.active === 0) {
+              return Effect.void;
+            }
+            state.active -= 1;
+            if (state.active > 0 || !state.drained) {
+              return Effect.void;
+            }
+            const waiter = state.drained;
+            state.drained = null;
+            return Deferred.succeed(waiter, undefined).pipe(Effect.asVoid);
+          }),
+      );
+    });
 
   const awaitWorkStarts: WorkspaceAdmissionService["awaitWorkStarts"] = (repoPath) =>
-    Effect.gen(function* () {
-      const key = normalizePathForComparison(repoPath);
-      const state = workStartsByRepoPath.get(key);
-      if (!state || state.active === 0) {
-        return;
-      }
-      const waiter = state.drained ?? (yield* Deferred.make<void>());
-      state.drained = waiter;
-      yield* Deferred.await(waiter);
-    });
+    canonicalRepoPathKey(repoPath).pipe(
+      Effect.flatMap((key) =>
+        Effect.gen(function* () {
+          const state = workStartsByRepoPath.get(key);
+          if (!state || state.active === 0) {
+            return;
+          }
+          const waiter = state.drained ?? (yield* Deferred.make<void>());
+          state.drained = waiter;
+          yield* Deferred.await(waiter);
+        }),
+      ),
+    );
 
   return {
     initialize,

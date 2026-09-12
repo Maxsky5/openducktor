@@ -122,6 +122,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
   const workspaceAdmissionService = createWorkspaceAdmissionService({
+    settingsConfig,
     workspaceSettingsService,
   });
   const assets = createNodeTaskAssetServices({
