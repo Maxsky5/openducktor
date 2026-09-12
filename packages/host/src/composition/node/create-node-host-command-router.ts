@@ -39,6 +39,7 @@ import { createTaskWorktreeService } from "../../application/tasks/worktrees/tas
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
 import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
+import { createWorkspaceOwnershipLock } from "../../application/workspaces/workspace-ownership-lock";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
@@ -119,7 +120,11 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     worktreeFiles,
   } = defaultPorts;
-  const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
+  const workspaceOwnershipLock = createWorkspaceOwnershipLock();
+  const workspaceSettingsService = createWorkspaceSettingsService(
+    settingsConfig,
+    workspaceOwnershipLock,
+  );
   const workspaceAdmissionService = createWorkspaceAdmissionService({
     settingsConfig,
     workspaceSettingsService,
@@ -289,6 +294,7 @@ export const assembleNodeEffectHostCommandRouter = (
     }),
     admission: workspaceAdmissionService,
     gitPort: git,
+    ownershipLock: workspaceOwnershipLock,
     settingsConfig,
     storage: {
       assertPermanentRemovalSupported: assets.assertPermanentRemovalSupported,

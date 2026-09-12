@@ -25,6 +25,10 @@ import {
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { WorkspaceActivityPort } from "./workspace-activity-inspector";
 import {
+  createWorkspaceOwnershipLock,
+  type WorkspaceOwnershipLock,
+} from "./workspace-ownership-lock";
+import {
   createWorkspaceLifecycleService,
   type WorkspaceStoragePort,
 } from "./workspace-lifecycle-service";
@@ -159,6 +163,7 @@ const createService = ({
   canonicalizePath = (path: string) => Effect.succeed(path),
   pathExists = () => Effect.succeed(true),
   resolvedPathKind = "descendant" as const,
+  ownershipLock,
 }: {
   activity?: WorkspaceActivityPort;
   admission?: ReturnType<typeof createAdmissionDouble>;
@@ -190,13 +195,14 @@ const createService = ({
   canonicalizePath?: (path: string) => Effect.Effect<string, never>;
   pathExists?: (path: string) => Effect.Effect<boolean, never>;
   resolvedPathKind?: "descendant" | "outside";
+  ownershipLock?: WorkspaceOwnershipLock;
 } = {}) => {
   const storage: WorkspaceStoragePort = {
     assertPermanentRemovalSupported,
     removeWorkspaceTaskAssets,
     removeWorkspaceTaskStore,
   };
-  return createWorkspaceLifecycleService({
+  const serviceInput: Parameters<typeof createWorkspaceLifecycleService>[0] = {
     activity,
     admission,
     gitPort: createGitPortTestDouble({
@@ -236,7 +242,11 @@ const createService = ({
         }),
       resolveWorktreePath: (_repoPath, worktreePath) => worktreePath,
     }),
-  });
+  };
+  if (ownershipLock !== undefined) {
+    serviceInput.ownershipLock = ownershipLock;
+  }
+  return createWorkspaceLifecycleService(serviceInput);
 };
 
 describe("workspace lifecycle service", () => {
@@ -1173,6 +1183,46 @@ describe("workspace lifecycle service", () => {
     );
 
     expect(events).toEqual(["first-started", "first-released", "second-started"]);
+  });
+
+  test("removeWorkspace waits for the shared ownership lock", async () => {
+    const ownershipLock = createWorkspaceOwnershipLock();
+    const service = createService({ ownershipLock });
+    let release!: () => void;
+    let acquired!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const lockAcquired = new Promise<void>((resolve) => {
+      acquired = resolve;
+    });
+    const lockHolder = Effect.runPromise(
+      ownershipLock.runExclusive(
+        Effect.promise(async () => {
+          acquired();
+          await held;
+        }),
+      ),
+    );
+    await lockAcquired;
+
+    let removalCompleted = false;
+    const removal = Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: false,
+      }),
+    ).then(() => {
+      removalCompleted = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(removalCompleted).toBe(false);
+
+    release();
+    await lockHolder;
+    await removal;
+    expect(removalCompleted).toBe(true);
   });
 
   test("reopens a workspace through settings and clears its admission block", async () => {

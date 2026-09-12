@@ -17,6 +17,7 @@ import {
   workspaceRecordsInEffectiveOrder,
 } from "./workspace-catalog-model";
 import { createWorkspaceLifecycleSettingsMethods } from "./workspace-lifecycle-settings";
+import type { WorkspaceOwnershipLock } from "./workspace-ownership-lock";
 import {
   areAgentModelFavoritesEqual,
   withSerializedConfigWrites,
@@ -491,5 +492,9 @@ const createUnserializedWorkspaceSettingsService = (
 
 export const createWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
+  ownershipLock?: WorkspaceOwnershipLock,
 ): WorkspaceSettingsService =>
-  withSerializedConfigWrites(createUnserializedWorkspaceSettingsService(settingsConfig));
+  withSerializedConfigWrites(
+    createUnserializedWorkspaceSettingsService(settingsConfig),
+    ownershipLock,
+  );
