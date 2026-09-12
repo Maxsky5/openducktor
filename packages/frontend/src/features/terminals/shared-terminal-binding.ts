@@ -3,7 +3,7 @@ import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
-import { createLinkController, type LinkController } from "./terminal-link-controller";
+import { createLinkController } from "./terminal-link-controller";
 
 type BindingDeps = {
   openUrl?: (url: string) => Promise<void>;
@@ -13,7 +13,6 @@ type BindingDeps = {
 export type TerminalBinding = {
   terminal: Terminal;
   fitAddon: FitAddon;
-  linkController: LinkController;
   dispose(): void;
   resetLinkState(): void;
 };
@@ -52,7 +51,6 @@ export const createTerminalBinding = (
   return {
     terminal,
     fitAddon,
-    linkController: links,
     resetLinkState: () => links.reset(),
     dispose: () => {
       if (disposed) return;

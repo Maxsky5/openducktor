@@ -29,7 +29,6 @@ export const checkHttpUrl = (text: string): string | null => {
 
 export const findHttpUrls = (text: string): UrlMatch[] => {
   const matches: UrlMatch[] = [];
-  HTTP_URL.lastIndex = 0;
   for (const match of text.matchAll(HTTP_URL)) {
     if (match.index === undefined) continue;
     const urlText = trimUrlEnd(match[0]);

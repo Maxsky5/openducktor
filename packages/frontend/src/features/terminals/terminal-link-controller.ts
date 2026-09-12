@@ -51,22 +51,16 @@ export const createLinkController = ({
   let blockClick = false;
   let clickBlockTimer: number | null = null;
   let disposed = false;
-  let keyWatchActive = false;
-  let dragWatchActive = false;
-  let clickBlockActive = false;
   const subscriptions: IDisposable[] = [];
 
   const startKeyWatch = (): void => {
-    if (keyWatchActive) return;
-    keyWatchActive = true;
     view.addEventListener("keydown", handleKeyChange, true);
     view.addEventListener("keyup", handleKeyChange, true);
     view.addEventListener("blur", handleBlur);
   };
 
   const stopKeyWatchIfIdle = (): void => {
-    if (!keyWatchActive || hovered || press) return;
-    keyWatchActive = false;
+    if (hovered || press) return;
     view.removeEventListener("keydown", handleKeyChange, true);
     view.removeEventListener("keyup", handleKeyChange, true);
     view.removeEventListener("blur", handleBlur);
@@ -74,15 +68,11 @@ export const createLinkController = ({
 
   const startDragWatch = (): void => {
     startKeyWatch();
-    if (dragWatchActive) return;
-    dragWatchActive = true;
     view.addEventListener("mousemove", handleMouseMove, true);
     view.addEventListener("mouseup", handleMouseUp, true);
   };
 
   const stopDragWatch = (): void => {
-    if (!dragWatchActive) return;
-    dragWatchActive = false;
     view.removeEventListener("mousemove", handleMouseMove, true);
     view.removeEventListener("mouseup", handleMouseUp, true);
     stopKeyWatchIfIdle();
@@ -94,14 +84,10 @@ export const createLinkController = ({
   };
 
   const startClickBlock = (): void => {
-    if (clickBlockActive) return;
-    clickBlockActive = true;
     view.addEventListener("click", handleClick, true);
   };
 
   const stopClickBlock = (): void => {
-    if (!clickBlockActive) return;
-    clickBlockActive = false;
     view.removeEventListener("click", handleClick, true);
   };
 
