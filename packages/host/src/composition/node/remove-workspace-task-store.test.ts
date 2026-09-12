@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { createRemoveWorkspaceTaskStore } from "./remove-workspace-task-store";
+import {
+  createAssertPermanentRemovalSupported,
+  createRemoveWorkspaceTaskStore,
+} from "./remove-workspace-task-store";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 
 describe("remove workspace task store", () => {
@@ -42,5 +45,23 @@ describe("remove workspace task store", () => {
       "Permanent removal is not supported with a configured task store.",
     );
     expect(calls).toEqual([]);
+  });
+
+  test("accepts permanent removal for the built-in task store", async () => {
+    const assertPermanentRemovalSupported = createAssertPermanentRemovalSupported({});
+
+    await Effect.runPromise(assertPermanentRemovalSupported("alpha"));
+  });
+
+  test("rejects permanent removal before any work starts when a configured task store is injected", async () => {
+    const assertPermanentRemovalSupported = createAssertPermanentRemovalSupported({
+      configuredTaskStore: createTaskStoreTestDouble({}),
+    });
+
+    const error = await Effect.runPromise(Effect.flip(assertPermanentRemovalSupported("alpha")));
+
+    expect(error.message).toContain(
+      "Permanent removal is not supported with a configured task store.",
+    );
   });
 });

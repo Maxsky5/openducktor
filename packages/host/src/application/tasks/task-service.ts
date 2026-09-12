@@ -413,7 +413,9 @@ const createTaskServiceImplementation = (
     updateTask: (input) => mapTaskMutationProgressErrors(service.updateTask(input)),
     upsertPullRequest: (input) => mapTaskServiceErrors(service.upsertPullRequest(input)),
   };
-  return withWorkspaceAdmission(serviceWithProgress, input.assertWorkspaceAdmitsWork);
+  return withWorkspaceAdmission(serviceWithProgress, {
+    withWorkStartLease: input.withWorkStartLease,
+  });
 };
 
 export const createTaskService = (input: CreateTaskServiceInput): TaskService => {

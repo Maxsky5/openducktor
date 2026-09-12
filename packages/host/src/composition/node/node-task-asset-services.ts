@@ -27,7 +27,10 @@ import {
 } from "../../effect/host-errors";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { HostShutdownStep } from "../host-lifecycle";
-import { createRemoveWorkspaceTaskStore } from "./remove-workspace-task-store";
+import {
+  createAssertPermanentRemovalSupported,
+  createRemoveWorkspaceTaskStore,
+} from "./remove-workspace-task-store";
 
 export type NodeTaskAssetServices = {
   workspaceSessionStore: WorkspaceSessionStorePort;
@@ -39,6 +42,9 @@ export type NodeTaskAssetServices = {
   taskStore: TaskStorePort;
   removeWorkspaceTaskAssets: (workspaceId: string) => Effect.Effect<void, TaskAssetError>;
   removeWorkspaceTaskStore: (
+    workspaceId: string,
+  ) => Effect.Effect<void, HostOperationErrorAggregate>;
+  assertPermanentRemovalSupported: (
     workspaceId: string,
   ) => Effect.Effect<void, HostOperationErrorAggregate>;
 };
@@ -161,5 +167,6 @@ export const createNodeTaskAssetServices = ({
             }),
         }),
     }),
+    assertPermanentRemovalSupported: createAssertPermanentRemovalSupported({ configuredTaskStore }),
   };
 };

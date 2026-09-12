@@ -279,12 +279,19 @@ export function WorkspaceRemovalRecoveryDialog({
   onOpenChange: (open: boolean) => void;
 }): ReactElement {
   const { removeWorkspace } = useWorkspaceState();
+  const [removeTaskWorktrees, setRemoveTaskWorktrees] = useState(
+    removal.record.removeTaskWorktrees,
+  );
+  const canChangeWorktreeChoice =
+    removal.record.phase === "worktrees" && removal.record.removedWorktrees.length === 0;
   const submit = useLifecycleSubmit(
     () =>
       removeWorkspace({
         workspaceId: removal.workspace.workspaceId,
         expectedRepoPath: removal.workspace.repoPath,
-        removeTaskWorktrees: removal.record.removeTaskWorktrees,
+        removeTaskWorktrees: canChangeWorktreeChoice
+          ? removeTaskWorktrees
+          : removal.record.removeTaskWorktrees,
       }),
     () => onOpenChange(false),
   );
@@ -311,7 +318,7 @@ export function WorkspaceRemovalRecoveryDialog({
         <p>
           Stopped at: {removalPhaseLabel[removal.record.phase]}. Removed task worktrees:{" "}
           {removal.record.removedWorktrees.length}.
-          {removal.record.removeTaskWorktrees
+          {removeTaskWorktrees
             ? " Task worktrees are part of this removal."
             : " Task worktrees are kept."}
         </p>
@@ -320,6 +327,29 @@ export function WorkspaceRemovalRecoveryDialog({
         <p className="mt-3 text-sm text-destructive-muted" role="alert">
           {removal.record.lastFailure}
         </p>
+      ) : null}
+      {canChangeWorktreeChoice ? (
+        <div className="mt-3 flex items-start gap-3 rounded-lg border border-border bg-card p-3">
+          <Checkbox
+            id="recovery-remove-task-worktrees"
+            className="mt-0.5"
+            checked={removeTaskWorktrees}
+            disabled={submit.submitting}
+            onCheckedChange={(checked) => setRemoveTaskWorktrees(checked === true)}
+          />
+          <div className="flex min-w-0 flex-col gap-1">
+            <Label
+              htmlFor="recovery-remove-task-worktrees"
+              className="cursor-pointer text-sm font-medium"
+            >
+              Remove task worktrees
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Uncheck to finish removal without deleting task worktrees. Local branches and
+              committed history stay in both cases.
+            </p>
+          </div>
+        </div>
       ) : null}
     </LifecycleDialog>
   );

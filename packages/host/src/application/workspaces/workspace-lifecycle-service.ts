@@ -42,6 +42,9 @@ export type WorkspaceLifecycleError =
   | WorkspaceWorktreeInventoryError;
 
 export type WorkspaceStoragePort = {
+  assertPermanentRemovalSupported(
+    workspaceId: string,
+  ): Effect.Effect<void, HostOperationErrorAggregate>;
   removeWorkspaceTaskAssets(workspaceId: string): Effect.Effect<void, TaskAssetError>;
   removeWorkspaceTaskStore(workspaceId: string): Effect.Effect<void, HostOperationErrorAggregate>;
 };
@@ -202,9 +205,13 @@ export const createWorkspaceLifecycleService = ({
     repoConfig: RepoConfig,
   ) =>
     Effect.gen(function* () {
+      yield* storage.assertPermanentRemovalSupported(input.workspaceId);
       if (!repoConfig.removal) {
         yield* assertNoBlockingActivity(repoConfig.repoPath);
+      } else {
+        yield* admission.awaitWorkStarts(repoConfig.repoPath);
       }
+      yield* activity.releaseWorkspaceSessions(repoConfig.repoPath);
       const startedRecord = yield* workspaceSettingsService.beginWorkspaceRemoval({
         workspaceId: input.workspaceId,
         expectedRepoPath: input.expectedRepoPath,
