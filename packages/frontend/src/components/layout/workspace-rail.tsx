@@ -409,7 +409,12 @@ export function WorkspaceRail({
       ) : null}
       {lifecycleRequest?.action === "recovery" ? (
         <WorkspaceRemovalRecoveryDialog
-          removal={lifecycleRequest.removal}
+          removal={
+            incompleteRemovals.find(
+              (removal) =>
+                removal.workspace.workspaceId === lifecycleRequest.removal.workspace.workspaceId,
+            ) ?? lifecycleRequest.removal
+          }
           onOpenChange={(open) => {
             if (!open) setLifecycleRequest(null);
           }}

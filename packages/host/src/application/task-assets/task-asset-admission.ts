@@ -34,9 +34,10 @@ export const withTaskAssetWorkspaceAdmission = ({
         admission
           .withWorkStartLease(
             repoPath,
-            admission
-              .assertWorkspaceAdmitsWork(repoPath)
-              .pipe(Effect.zipRight(service.stage(input))),
+            admission.assertWorkspaceAdmitsWork(repoPath).pipe(
+              Effect.zipRight(resolveRepoPath(input.workspaceId)),
+              Effect.flatMap(() => service.stage(input)),
+            ),
           )
           .pipe(Effect.mapError(toTaskAssetError)),
       ),

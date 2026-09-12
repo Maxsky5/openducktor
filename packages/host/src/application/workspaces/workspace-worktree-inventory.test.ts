@@ -11,13 +11,14 @@ import {
 } from "../../test-support/service-test-doubles";
 import { collectWorkspaceTaskWorktreePaths } from "./workspace-worktree-inventory";
 
-const repoConfig = (): RepoConfig =>
+const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig =>
   repoConfigSchema.parse({
     workspaceId: "ws",
     workspaceName: "Workspace",
     repoPath: "/repos/ws",
     defaultRuntimeKind: "opencode",
     agentStudioState: { openTaskIds: [] },
+    ...overrides,
   });
 
 const catalog = (): WorkspaceCatalog => ({
@@ -31,10 +32,12 @@ const createDependencies = ({
   canonicalizePath,
   listWorktrees,
   pathExists,
+  settingsCanonicalizePath = (path) => Effect.succeed(path),
 }: {
   canonicalizePath: (path: string) => Effect.Effect<string, HostOperationErrorAggregate>;
   listWorktrees: GitPort["listWorktrees"];
   pathExists: (path: string) => Effect.Effect<boolean, never>;
+  settingsCanonicalizePath?: (path: string) => Effect.Effect<string, HostOperationErrorAggregate>;
 }) => ({
   gitPort: createGitPortTestDouble({
     canonicalizePath,
@@ -43,7 +46,7 @@ const createDependencies = ({
     removeWorktree: () => Effect.void,
   }),
   settingsConfig: createSettingsConfigTestDouble({
-    canonicalizePath: (path) => Effect.succeed(path),
+    canonicalizePath: settingsCanonicalizePath,
     defaultWorktreeBasePath: (workspaceId) => `/managed/${workspaceId}`,
     join: (...paths) => paths.join("/").replaceAll(/\/+/g, "/"),
     pathExists,
@@ -104,5 +107,27 @@ describe("workspace worktree inventory", () => {
     );
 
     expect(paths).toEqual([]);
+  });
+
+  test("classifies an orphan worktree under a symlinked managed base", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/orphan", worktreePath: "/real-base/orphan-1" }]),
+      pathExists: (path) => Effect.succeed(path === "/real-base/orphan-1"),
+      settingsCanonicalizePath: (path) =>
+        Effect.succeed(path === "/link-base" ? "/real-base" : path),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(
+          dependencies,
+          repoConfig({ worktreeBasePath: "/link-base" }),
+        ),
+      ),
+    );
+
+    expect(error.message).toContain("Cannot classify registered worktree(s) under");
   });
 });

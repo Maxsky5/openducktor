@@ -187,6 +187,45 @@ describe("workspace admission service", () => {
     expect(Option.isNone(waited)).toBe(true);
   });
 
+  test("drains a work start that is still resolving its path", async () => {
+    const observed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const canonicalizeGate = yield* Deferred.make<void>();
+        let canonicalizeCalls = 0;
+        const admission = createAdmission(catalog(), (path) => {
+          canonicalizeCalls += 1;
+          return canonicalizeCalls === 1
+            ? Deferred.await(canonicalizeGate).pipe(Effect.as(path))
+            : Effect.succeed(path);
+        });
+        yield* admission.initialize();
+
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/repos/open",
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Effect.sleep("20 millis");
+        const waitForStarts = yield* Effect.fork(admission.awaitWorkStarts("/repos/open"));
+        yield* Effect.sleep("20 millis");
+        const whileResolving = yield* Fiber.poll(waitForStarts);
+        yield* Deferred.succeed(canonicalizeGate, undefined);
+        yield* Deferred.await(entered);
+        const whileRunning = yield* Fiber.poll(waitForStarts);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        yield* Fiber.join(waitForStarts);
+        return { whileResolving, whileRunning };
+      }),
+    );
+
+    expect(Option.isNone(observed.whileResolving)).toBe(true);
+    expect(Option.isNone(observed.whileRunning)).toBe(true);
+  });
+
   test("blocks a work start when the canonical path has a reservation", async () => {
     const admission = createAdmission(catalog(), (path) =>
       Effect.succeed(path === "/alias/open" ? "/repos/open" : path),
