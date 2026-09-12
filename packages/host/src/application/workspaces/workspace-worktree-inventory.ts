@@ -2,7 +2,11 @@ import type { RepoConfig, WorkspaceRecord } from "@openducktor/contracts";
 import { pathStartsWith } from "@openducktor/path-support";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
-import { HostValidationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import {
+  type HostOperationErrorAggregate,
+  type HostPathAccessErrorAggregate,
+  HostValidationError,
+} from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
@@ -23,6 +27,22 @@ export type WorkspaceWorktreeInventoryDependencies = {
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
 };
 
+const canonicalizeExistingPath = <E>(
+  dependencies: Pick<WorkspaceWorktreeInventoryDependencies, "settingsConfig">,
+  canonicalize: Effect.Effect<string, E>,
+  path: string,
+): Effect.Effect<string, E | HostPathAccessErrorAggregate> =>
+  Effect.gen(function* () {
+    const result = yield* Effect.either(canonicalize);
+    if (result._tag === "Right") {
+      return result.right;
+    }
+    if (yield* dependencies.settingsConfig.pathExists(path)) {
+      return yield* Effect.fail(result.left);
+    }
+    return path;
+  });
+
 export const collectWorkspaceTaskWorktreePaths = (
   dependencies: WorkspaceWorktreeInventoryDependencies,
   repoConfig: RepoConfig,
@@ -39,19 +59,64 @@ export const collectWorkspaceTaskWorktreePaths = (
       dependencies.settingsConfig,
       repoConfig,
     );
+    const managedBaseForComparison = yield* canonicalizeExistingPath(
+      dependencies,
+      dependencies.settingsConfig.canonicalizePath(managedWorktreeBasePath),
+      managedWorktreeBasePath,
+    );
     const catalog = yield* dependencies.workspaceSettingsService.getWorkspaceCatalog();
-    const otherWorkspaces = [...catalog.openWorkspaces, ...catalog.closedWorkspaces].filter(
-      (workspace) => workspace.workspaceId !== workspaceId,
+    const otherWorkspaces = [
+      ...catalog.openWorkspaces,
+      ...catalog.closedWorkspaces,
+      ...catalog.incompleteRemovals.map((removal) => removal.workspace),
+    ].filter((workspace) => workspace.workspaceId !== workspaceId);
+    const incompleteRemovalWorkspaceIds = new Set(
+      catalog.incompleteRemovals.map((removal) => removal.workspace.workspaceId),
     );
-    const otherWorkspacePaths = new Set(
-      otherWorkspaces.map((workspace) => normalizePathForComparison(workspace.repoPath)),
+    const otherWorkspacePaths = new Set<string>();
+    const sharedBaseWorkspaces: WorkspaceRecord[] = [];
+    for (const workspace of otherWorkspaces) {
+      otherWorkspacePaths.add(normalizePathForComparison(workspace.repoPath));
+      otherWorkspacePaths.add(
+        normalizePathForComparison(
+          yield* canonicalizeExistingPath(
+            dependencies,
+            dependencies.gitPort.canonicalizePath(workspace.repoPath),
+            workspace.repoPath,
+          ),
+        ),
+      );
+      const otherBasePath = workspace.effectiveWorktreeBasePath;
+      if (otherBasePath === null) {
+        continue;
+      }
+      const otherBaseForComparison = yield* canonicalizeExistingPath(
+        dependencies,
+        dependencies.settingsConfig.canonicalizePath(otherBasePath),
+        otherBasePath,
+      );
+      if (
+        normalizePathForComparison(otherBaseForComparison) ===
+        normalizePathForComparison(managedBaseForComparison)
+      ) {
+        sharedBaseWorkspaces.push(workspace);
+      }
+    }
+    const unreadableSharedBaseRemoval = sharedBaseWorkspaces.find((workspace) =>
+      incompleteRemovalWorkspaceIds.has(workspace.workspaceId),
     );
-    const sharedBaseWorkspaces = otherWorkspaces.filter(
-      (workspace) =>
-        workspace.effectiveWorktreeBasePath !== null &&
-        normalizePathForComparison(workspace.effectiveWorktreeBasePath) ===
-          normalizePathForComparison(managedWorktreeBasePath),
-    );
+    if (unreadableSharedBaseRemoval) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          message: `Cannot check task worktree ownership under ${managedWorktreeBasePath}: workspace ${unreadableSharedBaseRemoval.workspaceId} has an incomplete removal on the same worktree base. Finish that removal first, or retry without removing task worktrees.`,
+          field: "worktreePath",
+          details: {
+            repoPath,
+            sharedBaseWorkspaceId: unreadableSharedBaseRemoval.workspaceId,
+          },
+        }),
+      );
+    }
     const otherWorkspaceClaims =
       sharedBaseWorkspaces.length === 0
         ? new Set<string>()
@@ -140,15 +205,6 @@ export const collectWorkspaceTaskWorktreePaths = (
 
     // A worktree under our base with no task or session evidence cannot be
     // attributed. Stop instead of guessing ownership or skipping it.
-    const canonicalManagedWorktreeBase = yield* Effect.either(
-      dependencies.settingsConfig.canonicalizePath(managedWorktreeBasePath),
-    );
-    let managedBaseForComparison = managedWorktreeBasePath;
-    if (canonicalManagedWorktreeBase._tag === "Right") {
-      managedBaseForComparison = canonicalManagedWorktreeBase.right;
-    } else if (yield* dependencies.settingsConfig.pathExists(managedWorktreeBasePath)) {
-      return yield* Effect.fail(canonicalManagedWorktreeBase.left);
-    }
     const unclassifiedPaths: string[] = [];
     for (const [normalized, worktreePath] of inventoryPaths) {
       if (seen.has(normalized)) {
@@ -189,6 +245,18 @@ const collectWorkspaceClaims = (
 ) =>
   Effect.gen(function* () {
     const claims = new Set<string>();
+    const addClaim = (claimPath: string) =>
+      Effect.gen(function* () {
+        claims.add(
+          normalizePathForComparison(
+            yield* canonicalizeExistingPath(
+              dependencies,
+              dependencies.gitPort.canonicalizePath(claimPath),
+              claimPath,
+            ),
+          ),
+        );
+      });
     for (const workspace of workspaces) {
       const tasks = yield* dependencies.taskStore.listTasks({ repoPath: workspace.repoPath });
       if (tasks.length === 0) {
@@ -197,9 +265,7 @@ const collectWorkspaceClaims = (
       const basePath = workspace.effectiveWorktreeBasePath;
       if (basePath !== null) {
         for (const task of tasks) {
-          claims.add(
-            normalizePathForComparison(dependencies.settingsConfig.join(basePath, task.id)),
-          );
+          yield* addClaim(dependencies.settingsConfig.join(basePath, task.id));
         }
       }
       const sessionsByTask = yield* dependencies.taskStore.listAgentSessionsForTasks({
@@ -210,7 +276,7 @@ const collectWorkspaceClaims = (
         for (const session of record.agentSessions) {
           const workingDirectory = session.workingDirectory.trim();
           if (workingDirectory) {
-            claims.add(normalizePathForComparison(workingDirectory));
+            yield* addClaim(workingDirectory);
           }
         }
       }

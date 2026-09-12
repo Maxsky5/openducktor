@@ -181,71 +181,69 @@ export const createRuntimeOrchestratorService = ({
       return runtimeInstanceSummarySchema.parse(runtime);
     });
   const runtimeEnsure: RuntimeOrchestratorService["runtimeEnsure"] = (input) =>
-    Effect.gen(function* () {
-      const { runtimeKind, repoPath } = input;
-      const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
-      const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
-      return yield* withWorkStartLease(
-        canonicalRepoPath,
-        Effect.gen(function* () {
-          const statusKey = startupStatusKey(runtimeKind, canonicalRepoPath);
-          const startedAt = isoFromMillis(yield* Clock.currentTimeMillis);
-          runtimeStartupStatuses.set(
-            statusKey,
-            buildWaitingStartupStatus(runtimeKind, canonicalRepoPath, startedAt),
+    withWorkStartLease(
+      input.repoPath,
+      Effect.gen(function* () {
+        const { runtimeKind, repoPath } = input;
+        const descriptor = yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
+        const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
+        const statusKey = startupStatusKey(runtimeKind, canonicalRepoPath);
+        const startedAt = isoFromMillis(yield* Clock.currentTimeMillis);
+        runtimeStartupStatuses.set(
+          statusKey,
+          buildWaitingStartupStatus(runtimeKind, canonicalRepoPath, startedAt),
+        );
+        const ensureResult = yield* Effect.either(
+          ensureWorkspaceRuntime({
+            runtimeKind,
+            repoPath: canonicalRepoPath,
+            descriptor,
+          }),
+        );
+        if (ensureResult._tag === "Right") {
+          const parsed = ensureResult.right;
+          runtimeStartupStatuses.set(statusKey, buildReadyStartupStatus(parsed));
+          yield* writeRuntimeLog(
+            "info",
+            `${parsed.kind} workspace runtime ${parsed.runtimeId} is ready at ${describeRuntimeRoute(parsed.runtimeRoute)}`,
           );
-          const ensureResult = yield* Effect.either(
-            ensureWorkspaceRuntime({
-              runtimeKind,
-              repoPath: canonicalRepoPath,
-              descriptor,
+          return parsed;
+        }
+        const message = errorMessage(ensureResult.left);
+        const failedAt = isoFromMillis(yield* Clock.currentTimeMillis);
+        runtimeStartupStatuses.set(
+          statusKey,
+          buildFailedStartupStatus(
+            runtimeKind,
+            canonicalRepoPath,
+            startedAt,
+            failedAt,
+            "error",
+            message,
+          ),
+        );
+        const loggingResult = yield* Effect.either(
+          writeRuntimeLog(
+            "error",
+            `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,
+          ),
+        );
+        if (loggingResult._tag === "Left") {
+          return yield* Effect.fail(
+            new RuntimeOrchestratorLoggingError({
+              operation: "runtime-orchestrator.ensure",
+              message: `${message}; additionally failed to persist the runtime startup failure: ${loggingResult.left.message}`,
+              cause: ensureResult.left,
+              details: {
+                runtimeFailure: ensureResult.left,
+                loggingFailure: loggingResult.left,
+              },
             }),
           );
-          if (ensureResult._tag === "Right") {
-            const parsed = ensureResult.right;
-            runtimeStartupStatuses.set(statusKey, buildReadyStartupStatus(parsed));
-            yield* writeRuntimeLog(
-              "info",
-              `${parsed.kind} workspace runtime ${parsed.runtimeId} is ready at ${describeRuntimeRoute(parsed.runtimeRoute)}`,
-            );
-            return parsed;
-          }
-          const message = errorMessage(ensureResult.left);
-          const failedAt = isoFromMillis(yield* Clock.currentTimeMillis);
-          runtimeStartupStatuses.set(
-            statusKey,
-            buildFailedStartupStatus(
-              runtimeKind,
-              canonicalRepoPath,
-              startedAt,
-              failedAt,
-              "error",
-              message,
-            ),
-          );
-          const loggingResult = yield* Effect.either(
-            writeRuntimeLog(
-              "error",
-              `Failed to ensure ${runtimeKind} workspace runtime for repository ${canonicalRepoPath}: ${message}`,
-            ),
-          );
-          if (loggingResult._tag === "Left") {
-            return yield* Effect.fail(
-              new RuntimeOrchestratorLoggingError({
-                operation: "runtime-orchestrator.ensure",
-                message: `${message}; additionally failed to persist the runtime startup failure: ${loggingResult.left.message}`,
-                cause: ensureResult.left,
-                details: {
-                  runtimeFailure: ensureResult.left,
-                  loggingFailure: loggingResult.left,
-                },
-              }),
-            );
-          }
-          return yield* Effect.fail(ensureResult.left);
-        }),
-      );
-    });
+        }
+        return yield* Effect.fail(ensureResult.left);
+      }),
+    );
   const service: RuntimeOrchestratorService = {
     agentSessionStop(input) {
       return Effect.gen(function* () {
