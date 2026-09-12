@@ -18,8 +18,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { WorkspaceRecord } from "@openducktor/contracts";
-import { Plus } from "lucide-react";
+import type { IncompleteWorkspaceRemoval, WorkspaceRecord } from "@openducktor/contracts";
+import { EyeOff, Plus, Trash2, TriangleAlert } from "lucide-react";
 import {
   type CSSProperties,
   type ReactElement,
@@ -27,36 +27,27 @@ import {
   type RefCallback,
   useEffect,
   useMemo,
-  useReducer,
   useRef,
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
+import {
+  WorkspaceCloseDialog,
+  WorkspaceRemovalRecoveryDialog,
+  WorkspaceRemoveDialog,
+} from "../features/repository/workspace-lifecycle-dialogs";
+import { WorkspaceAvatar } from "../features/repository/workspace-identity";
 
 const DRAG_DISTANCE_PX = 6;
-
-const deriveWorkspaceInitials = (workspaceName: string): string => {
-  const trimmedName = workspaceName.trim();
-  if (!trimmedName) {
-    return "?";
-  }
-
-  const segments = trimmedName.split(/[^A-Za-z0-9]+/).reduce<string[]>((nextSegments, segment) => {
-    const trimmedSegment = segment.trim();
-    if (trimmedSegment.length > 0) {
-      nextSegments.push(trimmedSegment);
-    }
-    return nextSegments;
-  }, []);
-
-  if (segments.length >= 2) {
-    return `${segments[0]?.[0] ?? ""}${segments[1]?.[0] ?? ""}`.toUpperCase();
-  }
-
-  return trimmedName.slice(0, 2).toUpperCase();
-};
 
 const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
   const pendingFrame = frameRef.current;
@@ -65,34 +56,6 @@ const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void
     frameRef.current = null;
   }
 };
-
-function WorkspaceRailAvatar({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
-  const [failedIconDataUrl, markIconDataUrlFailed] = useReducer(
-    (_current: string | null, next: string) => next,
-    null,
-  );
-  const iconDataUrl = workspace.iconDataUrl ?? null;
-
-  if (iconDataUrl && failedIconDataUrl !== iconDataUrl) {
-    return (
-      <img
-        src={iconDataUrl}
-        alt=""
-        aria-hidden="true"
-        className="size-6 rounded-md object-cover"
-        onError={() => {
-          markIconDataUrlFailed(iconDataUrl);
-        }}
-      />
-    );
-  }
-
-  return (
-    <span className="text-xs font-semibold uppercase">
-      {deriveWorkspaceInitials(workspace.workspaceName)}
-    </span>
-  );
-}
 
 type WorkspaceRailButtonShellProps = {
   workspace: WorkspaceRecord;
@@ -169,7 +132,7 @@ function WorkspaceRailButtonShell({
           onSelectWorkspace?.(workspace.workspaceId);
         }}
       >
-        <WorkspaceRailAvatar workspace={workspace} />
+        <WorkspaceAvatar workspace={workspace} />
       </Button>
     </div>
   );
@@ -181,12 +144,16 @@ function SortableWorkspaceRailButton({
   shouldSuppressSelection,
   isSwitchingWorkspace,
   onSelectWorkspace,
+  onRequestCloseWorkspace,
+  onRequestRemoveWorkspace,
 }: {
   workspace: WorkspaceRecord;
   isActiveDrag: boolean;
   shouldSuppressSelection: boolean;
   isSwitchingWorkspace: boolean;
   onSelectWorkspace: (workspaceId: string) => void;
+  onRequestCloseWorkspace: (workspace: WorkspaceRecord) => void;
+  onRequestRemoveWorkspace: (workspace: WorkspaceRecord) => void;
 }): ReactElement {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workspace.workspaceId,
@@ -198,21 +165,47 @@ function SortableWorkspaceRailButton({
   });
 
   return (
-    <WorkspaceRailButtonShell
-      workspace={workspace}
-      shellRef={setNodeRef}
-      dragListeners={isSwitchingWorkspace ? undefined : listeners}
-      dragState={{
-        isSource: (isDragging || isActiveDrag) && !isSwitchingWorkspace,
-        shouldSuppressSelection,
-      }}
-      interactionState={{ isSwitchingWorkspace }}
-      onSelectWorkspace={onSelectWorkspace}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-      }}
-    />
+    <ContextMenu>
+      <ContextMenuTrigger
+        className="block"
+        onContextMenu={() => {
+          getShellBridge().claimContextMenu?.();
+        }}
+      >
+        <WorkspaceRailButtonShell
+          workspace={workspace}
+          shellRef={setNodeRef}
+          dragListeners={isSwitchingWorkspace ? undefined : listeners}
+          dragState={{
+            isSource: (isDragging || isActiveDrag) && !isSwitchingWorkspace,
+            shouldSuppressSelection,
+          }}
+          interactionState={{ isSwitchingWorkspace }}
+          onSelectWorkspace={onSelectWorkspace}
+          style={{
+            transform: CSS.Transform.toString(transform),
+            transition,
+          }}
+        />
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-52">
+        <ContextMenuItem
+          disabled={isSwitchingWorkspace}
+          onSelect={() => onRequestCloseWorkspace(workspace)}
+        >
+          <EyeOff />
+          Close workspace
+        </ContextMenuItem>
+        <ContextMenuItem
+          variant="destructive"
+          disabled={isSwitchingWorkspace}
+          onSelect={() => onRequestRemoveWorkspace(workspace)}
+        >
+          <Trash2 />
+          Remove workspace
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -221,8 +214,18 @@ export function WorkspaceRail({
 }: {
   onOpenRepositoryModal: () => void;
 }): ReactElement {
-  const { workspaces, selectWorkspace, reorderWorkspaces, isSwitchingWorkspace } =
-    useWorkspaceState();
+  const {
+    workspaces,
+    incompleteRemovals,
+    selectWorkspace,
+    reorderWorkspaces,
+    isSwitchingWorkspace,
+  } = useWorkspaceState();
+  const [lifecycleRequest, setLifecycleRequest] = useState<
+    | { action: "close" | "remove"; workspace: WorkspaceRecord }
+    | { action: "recovery"; removal: IncompleteWorkspaceRemoval }
+    | null
+  >(null);
   const workspaceIds = useMemo(
     () => workspaces.map((workspace) => workspace.workspaceId),
     [workspaces],
@@ -286,71 +289,125 @@ export function WorkspaceRail({
   };
 
   return (
-    <aside className="workspace-rail flex h-full w-14 shrink-0 flex-col border-r border-border bg-background">
-      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
-        {workspaces.length > 0 ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            measuring={{
-              droppable: {
-                strategy: MeasuringStrategy.Always,
-              },
-            }}
-            modifiers={[restrictToVerticalAxis]}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <SortableContext items={workspaceIds} strategy={verticalListSortingStrategy}>
-              <div className="flex flex-col gap-2">
-                {workspaces.map((workspace) => (
-                  <SortableWorkspaceRailButton
-                    key={workspace.workspaceId}
-                    workspace={workspace}
-                    isActiveDrag={activeWorkspaceId === workspace.workspaceId}
-                    shouldSuppressSelection={
-                      suppressedSelectionWorkspaceIdRef.current === workspace.workspaceId
-                    }
-                    isSwitchingWorkspace={isSwitchingWorkspace}
-                    onSelectWorkspace={(workspaceId) => {
-                      void selectWorkspace(workspaceId);
-                    }}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-
-            <DragOverlay
-              dropAnimation={{
-                duration: 220,
-                easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+    <>
+      <aside className="workspace-rail flex h-full w-14 shrink-0 flex-col border-r border-border bg-background">
+        <div className="hide-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+          {workspaces.length > 0 ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              measuring={{
+                droppable: {
+                  strategy: MeasuringStrategy.Always,
+                },
               }}
-              zIndex={40}
+              modifiers={[restrictToVerticalAxis]}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragCancel={handleDragCancel}
             >
-              {activeDragWorkspace ? (
-                <WorkspaceRailButtonShell
-                  workspace={activeDragWorkspace}
-                  dragState={{ isOverlay: true }}
-                  interactionState={{ isSwitchingWorkspace }}
-                />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        ) : null}
+              <SortableContext items={workspaceIds} strategy={verticalListSortingStrategy}>
+                <div className="flex flex-col gap-2">
+                  {workspaces.map((workspace) => (
+                    <SortableWorkspaceRailButton
+                      key={workspace.workspaceId}
+                      workspace={workspace}
+                      isActiveDrag={activeWorkspaceId === workspace.workspaceId}
+                      shouldSuppressSelection={
+                        suppressedSelectionWorkspaceIdRef.current === workspace.workspaceId
+                      }
+                      isSwitchingWorkspace={isSwitchingWorkspace}
+                      onSelectWorkspace={(workspaceId) => {
+                        void selectWorkspace(workspaceId);
+                      }}
+                      onRequestCloseWorkspace={(workspace) =>
+                        setLifecycleRequest({ action: "close", workspace })
+                      }
+                      onRequestRemoveWorkspace={(workspace) =>
+                        setLifecycleRequest({ action: "remove", workspace })
+                      }
+                    />
+                  ))}
+                </div>
+              </SortableContext>
 
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-10"
-          aria-label="Open repository"
-          title="Open repository"
-          onClick={onOpenRepositoryModal}
-        >
-          <Plus className="size-5" />
-        </Button>
-      </div>
-    </aside>
+              <DragOverlay
+                dropAnimation={{
+                  duration: 220,
+                  easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+                }}
+                zIndex={40}
+              >
+                {activeDragWorkspace ? (
+                  <WorkspaceRailButtonShell
+                    workspace={activeDragWorkspace}
+                    dragState={{ isOverlay: true }}
+                    interactionState={{ isSwitchingWorkspace }}
+                  />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          ) : null}
+
+          {incompleteRemovals.map((removal) => (
+            <Button
+              key={removal.workspace.workspaceId}
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-10 text-destructive hover:text-destructive"
+              aria-label={`Finish removing ${removal.workspace.workspaceName}`}
+              title={`Finish removing ${removal.workspace.workspaceName}`}
+              disabled={isSwitchingWorkspace}
+              onClick={() => setLifecycleRequest({ action: "recovery", removal })}
+            >
+              <TriangleAlert className="size-5" />
+            </Button>
+          ))}
+
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-10"
+            aria-label="Open repository"
+            title="Open repository"
+            disabled={isSwitchingWorkspace}
+            onClick={onOpenRepositoryModal}
+          >
+            <Plus className="size-5" />
+          </Button>
+        </div>
+      </aside>
+      {lifecycleRequest?.action === "close" ? (
+        <WorkspaceCloseDialog
+          workspace={lifecycleRequest.workspace}
+          onOpenChange={(open) => {
+            if (!open) setLifecycleRequest(null);
+          }}
+        />
+      ) : null}
+      {lifecycleRequest?.action === "remove" ? (
+        <WorkspaceRemoveDialog
+          workspace={lifecycleRequest.workspace}
+          onOpenChange={(open) => {
+            if (!open) setLifecycleRequest(null);
+          }}
+        />
+      ) : null}
+      {lifecycleRequest?.action === "recovery" ? (
+        <WorkspaceRemovalRecoveryDialog
+          removal={
+            incompleteRemovals.find(
+              (removal) =>
+                removal.workspace.workspaceId === lifecycleRequest.removal.workspace.workspaceId,
+            ) ?? lifecycleRequest.removal
+          }
+          onOpenChange={(open) => {
+            if (!open) setLifecycleRequest(null);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

@@ -147,7 +147,12 @@ const extendSettingsConfigPort = (
 ): SettingsConfigPort => createSettingsConfigPort({ ...base, ...overrides });
 const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
   createTaskStoreTestDouble(overrides);
-type TaskServiceTestInput = Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
+type TaskServiceTestInput = Omit<
+  CreateTaskServiceInput,
+  "assertWorkspaceAdmitsWork" | "withWorkStartLease" | "taskStore" | "taskActivityGuard"
+> & {
+  assertWorkspaceAdmitsWork?: CreateTaskServiceInput["assertWorkspaceAdmitsWork"];
+  withWorkStartLease?: CreateTaskServiceInput["withWorkStartLease"];
   taskActivityGuard?: TaskActivityGuardPort;
   taskStore: TaskStorePort;
 };
@@ -167,6 +172,8 @@ const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceI
   const resolvedToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter({ systemCommands });
   const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
+    assertWorkspaceAdmitsWork: rest.assertWorkspaceAdmitsWork ?? (() => Effect.void),
+    withWorkStartLease: rest.withWorkStartLease ?? ((_repoPath, effect) => effect),
     gitProviderResolver: rest.gitProviderResolver ?? createDefaultGitProviderResolver(),
     terminalService:
       rest.terminalService ??
@@ -441,6 +448,9 @@ const createBuildStartGitPort = ({
         return true;
       });
     },
+    listWorktrees() {
+      return Effect.dieMessage("unexpected list worktrees");
+    },
     referenceExists(workingDir, reference) {
       return Effect.sync(() => {
         calls.push({ type: "referenceExists", workingDir, reference });
@@ -598,6 +608,9 @@ const createDirectMergeGitPort = ({
     isRegisteredWorktree() {
       return Effect.succeed(true);
     },
+    listWorktrees() {
+      return Effect.dieMessage("unexpected list worktrees");
+    },
     referenceExists() {
       return Effect.succeed(true);
     },
@@ -710,6 +723,9 @@ const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =
   ({
     getState() {
       return Effect.dieMessage("unexpected dev server get state");
+    },
+    inspectWorkspaceActivity() {
+      return Effect.dieMessage("unexpected dev server activity inspection");
     },
     restart() {
       return Effect.dieMessage("unexpected dev server restart");

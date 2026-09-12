@@ -3,16 +3,19 @@ import {
   chatSettingsSchema,
   type RepoConfig,
   type SettingsSnapshot,
+  type WorkspaceCatalog,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { normalizeTargetBranch } from "@/lib/target-branch";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "../operations/host";
 
 type SettingsSnapshotQueryHost = Pick<typeof host, "workspaceGetSettingsSnapshot">;
 type RepoConfigQueryHost = Pick<typeof host, "workspaceGetRepoConfig">;
 type WorkspaceListQueryHost = Pick<typeof host, "workspaceList">;
+type WorkspaceCatalogQueryHost = Pick<typeof host, "workspaceCatalogGet">;
 type WorkspaceRecordUpdate =
   | WorkspaceRecord[]
   | ((current: WorkspaceRecord[] | undefined) => WorkspaceRecord[]);
@@ -27,6 +30,7 @@ export const workspaceQueryKeys = {
   repoConfig: (workspaceId: string) =>
     [...workspaceQueryKeys.all, "repo-config", workspaceId] as const,
   list: () => [...workspaceQueryKeys.all, "list"] as const,
+  catalog: () => [...workspaceQueryKeys.all, "catalog"] as const,
 };
 
 export const toRepoSettingsInput = (config: RepoConfig): RepoSettingsInput => ({
@@ -105,6 +109,13 @@ export const workspaceListQueryOptions = (hostClient: WorkspaceListQueryHost = h
     staleTime: WORKSPACE_LIST_STALE_TIME_MS,
   });
 
+export const workspaceCatalogQueryOptions = (hostClient: WorkspaceCatalogQueryHost = host) =>
+  queryOptions({
+    queryKey: workspaceQueryKeys.catalog(),
+    queryFn: (): Promise<WorkspaceCatalog> => hostClient.workspaceCatalogGet(),
+    staleTime: WORKSPACE_LIST_STALE_TIME_MS,
+  });
+
 export const loadSettingsSnapshotFromQuery = (
   queryClient: QueryClient,
   hostClient?: SettingsSnapshotQueryHost,
@@ -122,6 +133,11 @@ export const loadWorkspaceListFromQuery = (
   queryClient: QueryClient,
   hostClient?: WorkspaceListQueryHost,
 ): Promise<WorkspaceRecord[]> => queryClient.fetchQuery(workspaceListQueryOptions(hostClient));
+
+export const loadWorkspaceCatalogFromQuery = (
+  queryClient: QueryClient,
+  hostClient?: WorkspaceCatalogQueryHost,
+): Promise<WorkspaceCatalog> => queryClient.fetchQuery(workspaceCatalogQueryOptions(hostClient));
 
 export const writeWorkspaceListToQuery = (
   queryClient: QueryClient,
@@ -141,9 +157,26 @@ export const writeWorkspaceListToQuery = (
   queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), recordsOrUpdater);
 };
 
+export const writeWorkspaceCatalogToQuery = (
+  queryClient: QueryClient,
+  catalog: WorkspaceCatalog,
+): void => {
+  void queryClient.cancelQueries(
+    {
+      queryKey: workspaceQueryKeys.catalog(),
+      exact: true,
+    },
+    { revert: false },
+  );
+  queryClient.setQueryData<WorkspaceCatalog>(workspaceQueryKeys.catalog(), catalog);
+};
+
 export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Promise<void> => {
   await queryClient.invalidateQueries({
     queryKey: workspaceQueryKeys.list(),
+  });
+  await queryClient.invalidateQueries({
+    queryKey: workspaceQueryKeys.catalog(),
   });
   await queryClient.invalidateQueries({
     queryKey: workspaceQueryKeys.settingsSnapshot(),
@@ -154,4 +187,28 @@ export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Prom
     exact: true,
     type: "inactive",
   });
+};
+
+const workspaceConfigQueryKeyMatches = (
+  queryKey: readonly unknown[],
+  workspaceId: string,
+): boolean =>
+  queryKey[0] === "workspace" && queryKey[1] === "repo-config" && queryKey[2] === workspaceId;
+
+const repoScopedQueryKeyMatches = (queryKey: readonly unknown[], repoPath: string): boolean => {
+  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+  return queryKey.some(
+    (segment, index) => index >= 1 && (segment === repoPath || segment === normalizedRepoPath),
+  );
+};
+
+export const dropWorkspaceQueries = (
+  queryClient: QueryClient,
+  identity: { repoPath: string; workspaceId: string },
+): void => {
+  const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean =>
+    workspaceConfigQueryKeyMatches(query.queryKey, identity.workspaceId) ||
+    repoScopedQueryKeyMatches(query.queryKey, identity.repoPath);
+  void queryClient.cancelQueries({ predicate: matchesRemovedWorkspace }, { revert: false });
+  queryClient.removeQueries({ predicate: matchesRemovedWorkspace });
 };

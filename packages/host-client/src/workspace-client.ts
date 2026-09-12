@@ -16,6 +16,12 @@ import {
   type WorkspaceRepoConfigInput,
   type WorkspaceRepoHooksInput,
   type WorkspaceRepoSettingsInput,
+  type WorkspaceCatalog,
+  type WorkspacePathResolution,
+  type WorkspaceRemovalCommandResult,
+  workspaceCatalogSchema,
+  workspacePathResolutionSchema,
+  workspaceRemovalCommandResultSchema,
   workspaceRecordSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
@@ -61,6 +67,44 @@ const workspaceSelect = async (
   workspaceId: string,
 ): Promise<WorkspaceRecord> => {
   return invokeFn("workspace_select", { workspaceId }, workspaceRecordSchema);
+};
+
+const workspaceCatalogGet = async (invokeFn: InvokeFn): Promise<WorkspaceCatalog> => {
+  return invokeFn("workspace_catalog_get", undefined, workspaceCatalogSchema);
+};
+
+const workspaceResolvePath = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+): Promise<WorkspacePathResolution> => {
+  return invokeFn("workspace_resolve_path", { repoPath }, workspacePathResolutionSchema);
+};
+
+const workspaceClose = async (
+  invokeFn: InvokeFn,
+  workspaceId: string,
+  expectedRepoPath: string,
+): Promise<WorkspaceCatalog> => {
+  return invokeFn("workspace_close", { workspaceId, expectedRepoPath }, workspaceCatalogSchema);
+};
+
+const workspaceReopen = async (
+  invokeFn: InvokeFn,
+  workspaceId: string,
+  expectedRepoPath: string,
+): Promise<WorkspaceCatalog> => {
+  return invokeFn("workspace_reopen", { workspaceId, expectedRepoPath }, workspaceCatalogSchema);
+};
+
+const workspaceRemove = async (
+  invokeFn: InvokeFn,
+  input: {
+    workspaceId: string;
+    expectedRepoPath: string;
+    removeTaskWorktrees: boolean;
+  },
+): Promise<WorkspaceRemovalCommandResult> => {
+  return invokeFn("workspace_remove", input, workspaceRemovalCommandResultSchema);
 };
 
 const workspaceReorder = async (
@@ -201,6 +245,30 @@ export class HostWorkspaceClient {
 
   async workspaceSelect(workspaceId: string): Promise<WorkspaceRecord> {
     return workspaceSelect(this.invokeFn, workspaceId);
+  }
+
+  async workspaceCatalogGet(): Promise<WorkspaceCatalog> {
+    return workspaceCatalogGet(this.invokeFn);
+  }
+
+  async workspaceResolvePath(repoPath: string): Promise<WorkspacePathResolution> {
+    return workspaceResolvePath(this.invokeFn, repoPath);
+  }
+
+  async workspaceClose(workspaceId: string, expectedRepoPath: string): Promise<WorkspaceCatalog> {
+    return workspaceClose(this.invokeFn, workspaceId, expectedRepoPath);
+  }
+
+  async workspaceReopen(workspaceId: string, expectedRepoPath: string): Promise<WorkspaceCatalog> {
+    return workspaceReopen(this.invokeFn, workspaceId, expectedRepoPath);
+  }
+
+  async workspaceRemove(input: {
+    workspaceId: string;
+    expectedRepoPath: string;
+    removeTaskWorktrees: boolean;
+  }): Promise<WorkspaceRemovalCommandResult> {
+    return workspaceRemove(this.invokeFn, input);
   }
 
   async workspaceReorder(workspaceOrder: string[]): Promise<WorkspaceRecord[]> {

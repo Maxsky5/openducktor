@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { TaskCreatedAssetError } from "../../effect/task-asset-error";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import {
@@ -2687,6 +2687,27 @@ describe("createTaskService task mutations and reset", () => {
         }),
       ),
     ).rejects.toThrow("Transition not allowed for feature-1 (feature): open -> in_progress");
+  });
+
+  test("rejects a task mutation for a closed workspace before writing to the store", async () => {
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          withWorkStartLease: () =>
+            Effect.fail(
+              new HostValidationError({
+                message: "Workspace is closed: /repos/closed. Reopen it before using it.",
+                field: "workspaceId",
+              }),
+            ),
+          taskStore: {
+            deleteTask() {
+              return Effect.dieMessage("a blocked mutation must not reach the task store");
+            },
+          },
+        }).deleteTask({ repoPath: "/repos/closed", taskId: "task-1", deleteSubtasks: false }),
+      ),
+    ).rejects.toThrow("Workspace is closed");
   });
 
   test("rejects generic transitions to closed", async () => {

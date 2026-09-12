@@ -119,7 +119,7 @@ describe("settings config adapter initialization", () => {
     });
   });
 
-  test("does not rerun initialization for version 3", async () => {
+  test("does not rerun initialization for the current config version", async () => {
     await withTempConfig(async (configPath) => {
       await writeFile(configPath, JSON.stringify(createDefaultGlobalConfig()));
       let calls = 0;

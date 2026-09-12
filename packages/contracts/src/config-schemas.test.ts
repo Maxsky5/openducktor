@@ -67,6 +67,7 @@ describe("config-schemas", () => {
     });
 
     expect(current.version).toBe(3);
+    expect(current.onboardingCompleted).toBeUndefined();
     expect(current.agentRuntimes.opencode.executablePath).toBe("");
     expect(current.agentRuntimes.codex.executablePath).toBe("");
     expect(current.agentRuntimes.claude.executablePath).toBe("");

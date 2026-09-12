@@ -800,6 +800,45 @@ describe("createTaskService list and session reads", () => {
       },
     ]);
   });
+  test("holds the work-start lease around a task mutation", async () => {
+    const events: string[] = [];
+    const taskStore: TaskStorePort = {
+      upsertAgentSession() {
+        events.push("task-store-write");
+        return Effect.succeed(true);
+      },
+    };
+    const service = createTaskService({
+      taskStore,
+      withWorkStartLease: (_repoPath, effect) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => {
+            events.push("lease-acquired");
+          }),
+          () => effect,
+          () =>
+            Effect.sync(() => {
+              events.push("lease-released");
+            }),
+        ),
+      settingsConfig: createAgentSessionSettingsConfig(new Set(["/repo", "/repo/task-1"])),
+      workspaceSettingsService: createAgentSessionWorkspaceSettingsService({
+        repoPath: "/repo",
+        effectiveWorktreeBasePath: "/worktrees/repo",
+      }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.agentSessionUpsert({
+          repoPath: "/repo",
+          taskId: "task-1",
+          session: createAgentSessionRecord({ workingDirectory: "/repo/task-1" }),
+        }),
+      ),
+    ).resolves.toBe(true);
+    expect(events).toEqual(["lease-acquired", "task-store-write", "lease-released"]);
+  });
   test("deletes one exact durable agent session identity", async () => {
     const calls: Array<Parameters<NonNullable<TaskStorePort["deleteAgentSession"]>>[0]> = [];
     const taskStore: TaskStorePort = {

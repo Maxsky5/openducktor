@@ -17,7 +17,9 @@ import type {
   TaskCreateInput,
   TaskStatus,
   TaskStoreCheck,
+  IncompleteWorkspaceRemoval,
   TaskUpdatePatch,
+  WorkspacePathResolution,
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type {
@@ -49,6 +51,15 @@ export type WorkspaceSelectionOperationsInput = {
 };
 
 export type ActiveWorkspace = Pick<WorkspaceRecord, "workspaceId" | "workspaceName" | "repoPath">;
+
+export type WorkspaceLifecycleTarget = {
+  workspaceId: string;
+  expectedRepoPath: string;
+};
+
+export type WorkspaceRemovalInput = WorkspaceLifecycleTarget & {
+  removeTaskWorktrees: boolean;
+};
 
 export type RepoAgentDefaultInput = {
   runtimeKind?: RuntimeKind | null;
@@ -83,11 +94,17 @@ export type WorkspaceStateContextValue = {
   isSwitchingBranch: boolean;
   branchSyncDegraded: boolean;
   workspaces: WorkspaceRecord[];
+  closedWorkspaces: WorkspaceRecord[];
+  incompleteRemovals: IncompleteWorkspaceRemoval[];
   activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
   activeBranch: GitCurrentBranch | null;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
+  closeWorkspace: (input: WorkspaceLifecycleTarget) => Promise<void>;
+  removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
+  reopenWorkspace: (input: WorkspaceLifecycleTarget) => Promise<void>;
+  resolveWorkspacePath: (repoPath: string) => Promise<WorkspacePathResolution>;
   reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;
@@ -113,6 +130,7 @@ export type WorkspaceBranchStateContextValue = Pick<
 
 export type WorkspacePresenceContextValue = {
   hasWorkspaces: boolean;
+  onboardingCompleted: boolean;
   hasLoadedWorkspaceList: boolean;
   isLoadingWorkspaces: boolean;
   workspaceLoadError: Error | null;

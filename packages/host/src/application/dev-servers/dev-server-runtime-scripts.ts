@@ -1,9 +1,46 @@
 import type { DevServerScriptState } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { errorMessage, HostInvariantError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  HostInvariantError,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+} from "../../effect/host-errors";
 import type { DevServerProcessHandle } from "../../ports/dev-server-process-port";
-import type { StoppedDevServerScript } from "./dev-server-service-types";
+import type {
+  FailedDevServerScriptStart,
+  StoppedDevServerScript,
+} from "./dev-server-service-types";
 import type { DevServerGroupRuntime } from "./dev-server-state";
+
+export const failedDevServerStartError = ({
+  cleanupErrors,
+  failedScript,
+  repoPath,
+  stoppedScripts,
+  taskId,
+}: {
+  cleanupErrors: string[];
+  failedScript: FailedDevServerScriptStart;
+  repoPath: string;
+  stoppedScripts: StoppedDevServerScript[];
+  taskId: string;
+}): HostOperationErrorAggregate =>
+  new HostOperationError({
+    operation: "dev_server.start",
+    message: [
+      "Failed to start all configured dev server scripts.",
+      `Failed starting dev server ${failedScript.scriptId}: ${failedScript.message}`,
+      ...cleanupErrors,
+    ].join("\n"),
+    details: {
+      cleanupErrors,
+      failedScripts: [failedScript],
+      repoPath,
+      stoppedScripts,
+      taskId,
+    },
+  });
 
 export type UpdateScriptState = (
   runtime: DevServerGroupRuntime,

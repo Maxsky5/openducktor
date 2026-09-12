@@ -16,6 +16,7 @@ import {
   type HostError,
   HostOperationError,
   HostValidationError,
+  type HostValidationErrorAggregate,
   toHostOperationError,
 } from "../../effect/host-errors";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
@@ -146,6 +147,7 @@ const toRuntimeModel = (
 };
 
 export const createTaskWorkflowSessionControlService = ({
+  withWorkStartLease,
   canonicalizeRepoPath,
   runtime,
   taskReader,
@@ -153,6 +155,10 @@ export const createTaskWorkflowSessionControlService = ({
   taskLifecycle,
   taskSessionStart,
 }: {
+  withWorkStartLease<A, E, R>(
+    repoPath: string,
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtime: RuntimeControl;
   taskReader: TaskReader;
@@ -169,6 +175,7 @@ export const createTaskWorkflowSessionControlService = ({
 } => ({
   ...runtime,
   startWorkflowSession: createStartTaskWorkflowSession({
+    withWorkStartLease,
     canonicalizeRepoPath,
     runtime,
     tasks,

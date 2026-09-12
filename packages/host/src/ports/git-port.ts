@@ -19,6 +19,7 @@ import type {
   GitResetWorktreeSelection,
   GitResetWorktreeSelectionResult,
   GitUpstreamAheadBehind,
+  GitWorktreeSummary,
 } from "@openducktor/contracts";
 import { Context, type Effect } from "effect";
 import type {
@@ -103,6 +104,7 @@ export type GitPort = {
     repoPath: string,
     worktreePath: string,
   ): Effect.Effect<boolean, GitPortError>;
+  listWorktrees(repoPath: string): Effect.Effect<GitWorktreeSummary[], GitPortError>;
   referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;
   listBranches(workingDir: string): Effect.Effect<GitBranch[], GitPortError>;

@@ -19,6 +19,7 @@ import type { createTaskCommandHandlers } from "../commands/task-command-handler
 import type { createTaskWorktreeCommandHandlers } from "../commands/task-worktree-command-handlers";
 import type { createTerminalCommandHandlers } from "../commands/terminal-command-handlers";
 import type { createWorkspaceFilesCommandHandlers } from "../commands/workspace-files-command-handlers";
+import type { createWorkspaceLifecycleCommandHandlers } from "../commands/workspace-lifecycle-command-handlers";
 import type { createWorkspaceSettingsCommandHandlers } from "../commands/workspace-settings-command-handlers";
 import type { HostCommandName } from "../commands/host-command-registry";
 
@@ -42,6 +43,7 @@ type AllHostCommandHandlers = ReturnType<typeof createGeneratedImageCommandHandl
   ReturnType<typeof createTaskWorktreeCommandHandlers> &
   ReturnType<typeof createTerminalCommandHandlers> &
   ReturnType<typeof createWorkspaceFilesCommandHandlers> &
+  ReturnType<typeof createWorkspaceLifecycleCommandHandlers> &
   ReturnType<typeof createWorkspaceSettingsCommandHandlers>;
 
 type CompleteHostCommandHandlers<Handlers> =

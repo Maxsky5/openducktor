@@ -166,6 +166,12 @@ const createWorkspaceState = (
   overrides: Partial<WorkspaceStateContextValue> = {},
 ): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
+  closedWorkspaces: [],
+  incompleteRemovals: [],
+  closeWorkspace: async () => {},
+  removeWorkspace: async () => {},
+  reopenWorkspace: async () => {},
+  resolveWorkspacePath: async () => ({ kind: "new" }),
   isLoadingBranches: false,
   isSwitchingBranch: false,
   branchSyncDegraded: false,
@@ -306,6 +312,8 @@ function AppShellTestEnvironment({
                 retryWorkspaces: async () => {},
                 ...options.workspacePresence,
                 hasWorkspaces,
+                onboardingCompleted:
+                  options.workspacePresence?.onboardingCompleted ?? hasWorkspaces,
               }}
             >
               <WorkspaceStateContext.Provider
@@ -462,10 +470,23 @@ describe("AppShell", () => {
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 
+  test("keeps the workspace shell when onboarding completed with no workspaces", async () => {
+    renderAppShellForTest({
+      workspacePresence: { hasWorkspaces: false, onboardingCompleted: true },
+    });
+
+    await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
+    expect(await screen.findByRole("heading", { name: "Open a Repository" })).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Set up your local coding workspace" }),
+    ).toBeNull();
+  });
+
   test("shows the workspace load failure when no cached workspace exists", () => {
     renderAppShellForTest({
       workspacePresence: {
         hasWorkspaces: false,
+        onboardingCompleted: false,
         hasLoadedWorkspaceList: false,
         workspaceLoadError: new Error("Workspace list unavailable"),
       },
@@ -484,6 +505,7 @@ describe("AppShell", () => {
     renderAppShellForTest({
       workspacePresence: {
         hasWorkspaces: false,
+        onboardingCompleted: false,
         hasLoadedWorkspaceList: false,
         workspaceLoadError: new Error("Workspace list unavailable"),
         retryWorkspaces,
@@ -514,6 +536,7 @@ describe("AppShell", () => {
       initialEntry: "/onboarding",
       workspacePresence: {
         hasWorkspaces: false,
+        onboardingCompleted: false,
         workspaceLoadError: new Error("Workspace refresh unavailable"),
       },
     });

@@ -30,6 +30,7 @@ export const createNodeTaskSessionServices = ({
   const agentSessionCommandService = {
     ...agentSessionLiveStateService,
     ...createTaskWorkflowSessionControlService({
+      withWorkStartLease: taskServiceInput.withWorkStartLease,
       canonicalizeRepoPath,
       runtime: agentSessionLiveStateService,
       taskReader: taskServiceInput.taskStore,

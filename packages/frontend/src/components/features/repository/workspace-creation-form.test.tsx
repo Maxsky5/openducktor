@@ -116,10 +116,12 @@ const renderForm = ({
   addWorkspace,
   onSuccess,
   duplicate = false,
+  reservedWorkspaceIds,
 }: {
   addWorkspace: Parameters<typeof WorkspaceCreationForm>[0]["addWorkspace"];
   onSuccess?: () => void;
   duplicate?: boolean;
+  reservedWorkspaceIds?: ReadonlySet<string>;
 }): void => {
   const formProps: Parameters<typeof WorkspaceCreationForm>[0] = {
     workspaces: duplicate
@@ -140,6 +142,9 @@ const renderForm = ({
   };
   if (onSuccess) {
     formProps.onSuccess = onSuccess;
+  }
+  if (reservedWorkspaceIds) {
+    formProps.reservedWorkspaceIds = reservedWorkspaceIds;
   }
   const view = render(
     <QueryProvider useIsolatedClient>
@@ -229,6 +234,14 @@ describe("WorkspaceCreationForm", () => {
     });
     deferred.resolve();
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  });
+
+  test("avoids workspace IDs reserved by closed or removing workspaces", async () => {
+    const addWorkspace = mock(async () => {});
+    renderForm({ addWorkspace, reservedWorkspaceIds: new Set(["repo"]) });
+    await chooseRepository();
+
+    expect(screen.getByLabelText<HTMLInputElement>("Workspace ID").value).toBe("repo-2");
   });
 
   test("starts one repository add when two submit events arrive before a rerender", async () => {

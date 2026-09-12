@@ -12,6 +12,7 @@ describe("global config", () => {
     const config = createDefaultGlobalConfig();
 
     expect(config.version).toBe(3);
+    expect(config.onboardingCompleted).toBeUndefined();
     expect(config.agentRuntimes.opencode).toEqual({ enabled: false, executablePath: "" });
     expect(config.autopilot.alwaysStartQaReviewsFresh).toBe(false);
     expect(config.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
@@ -21,6 +22,9 @@ describe("global config", () => {
     expect(parsePersistedGlobalConfig({ version: 3 }).autopilot.alwaysStartQaReviewsFresh).toBe(
       false,
     );
+    expect(
+      parsePersistedGlobalConfig({ version: 3, onboardingCompleted: true }).onboardingCompleted,
+    ).toBe(true);
     expect(parsePersistedGlobalConfigV2({ version: 2 }).autopilot.alwaysStartQaReviewsFresh).toBe(
       false,
     );

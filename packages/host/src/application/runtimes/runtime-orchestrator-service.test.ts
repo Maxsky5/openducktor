@@ -1,5 +1,6 @@
+import { describe, expect, mock, test } from "bun:test";
 import { Cause, Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   createGitPort,
   createRegistry,
@@ -276,6 +277,90 @@ describe("createRuntimeOrchestratorService", () => {
       role: "workspace",
       workingDirectory: "/canonical/repo",
     });
+  });
+  test("rejects runtime ensure for a blocked workspace before starting a runtime", async () => {
+    const ensureWorkspaceRuntime = mock(() => Effect.dieMessage("unexpected runtime start"));
+    const service = createRuntimeOrchestratorService({
+      withWorkStartLease: () =>
+        Effect.fail(
+          new HostValidationError({
+            message: "Workspace is closed: canonical/repo. Reopen it before using it.",
+            field: "workspaceId",
+          }),
+        ),
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([], { ensureWorkspaceRuntime }),
+      taskReader: createTaskStore(),
+    });
+
+    await expect(
+      Effect.runPromise(service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" })),
+    ).rejects.toThrow("Workspace is closed");
+    expect(ensureWorkspaceRuntime).not.toHaveBeenCalled();
+  });
+  test("acquires the work start lease for the raw repository path before resolving it", async () => {
+    const events: string[] = [];
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort((path) => {
+        events.push(`canonicalize:${path}`);
+        return path === "/repo" ? "/canonical/repo" : path;
+      }),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry(),
+      taskReader: createTaskStore(),
+      withWorkStartLease: (repoPath, effect) => {
+        events.push(`lease:${repoPath}`);
+        return effect;
+      },
+    });
+
+    await Effect.runPromise(service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "/repo" }));
+
+    expect(events.slice(0, 2)).toEqual(["lease:/repo", "canonicalize:/repo"]);
+  });
+  test("rejects a repo runtime health check for a blocked workspace before starting a runtime", async () => {
+    const ensureWorkspaceRuntime = mock(() => Effect.dieMessage("unexpected runtime start"));
+    const service = createRuntimeOrchestratorService({
+      withWorkStartLease: () =>
+        Effect.fail(
+          new HostValidationError({
+            message: "Workspace is closed: canonical/repo. Reopen it before using it.",
+            field: "workspaceId",
+          }),
+        ),
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([], { ensureWorkspaceRuntime }),
+      taskReader: createTaskStore(),
+    });
+
+    await expect(
+      Effect.runPromise(service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" })),
+    ).rejects.toThrow("Workspace is closed");
+    expect(ensureWorkspaceRuntime).not.toHaveBeenCalled();
+  });
+  test("acquires the work start lease before resolving the health check path", async () => {
+    const events: string[] = [];
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort((path) => {
+        events.push(`canonicalize:${path}`);
+        return path === "/repo" ? "/canonical/repo" : path;
+      }),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry(),
+      taskReader: createTaskStore(),
+      withWorkStartLease: (repoPath, effect) => {
+        events.push(`lease:${repoPath}`);
+        return effect;
+      },
+    });
+
+    await Effect.runPromise(
+      service.repoRuntimeHealth({ runtimeKind: "opencode", repoPath: "/repo" }),
+    );
+
+    expect(events.slice(0, 2)).toEqual(["lease:/repo", "canonicalize:/repo"]);
   });
   test("delegates workspace runtime reuse to the registry", async () => {
     const runtime = createRuntime();

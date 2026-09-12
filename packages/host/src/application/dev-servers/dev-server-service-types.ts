@@ -34,8 +34,15 @@ export type DevServerTaskInput = {
   taskId: string;
 };
 
+export type DevServerWorkspaceActivity = {
+  activeTaskIds: string[];
+};
+
 export type DevServerService = {
   getState(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
+  inspectWorkspaceActivity(input: {
+    repoPath: string;
+  }): Effect.Effect<DevServerWorkspaceActivity, DevServerServiceError>;
   restart(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
   start(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
   stop(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
@@ -66,6 +73,10 @@ export type DevServerStopAllResult = {
 };
 
 export type CreateDevServerServiceInput = {
+  withWorkStartLease<A, E, R>(
+    repoPath: string,
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | HostOperationErrorAggregate | HostValidationErrorAggregate, R>;
   eventBus?: HostEventBusPort;
   processPort?: DevServerProcessPort;
   taskWorktreeService?: TaskWorktreeService;

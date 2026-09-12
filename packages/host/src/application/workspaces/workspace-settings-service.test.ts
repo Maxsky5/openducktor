@@ -38,6 +38,7 @@ const repoConfig = (workspaceId: string, repoPath: string): RepoConfig => ({
 });
 const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   version: 3,
+  onboardingCompleted: false,
   system: {},
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
@@ -503,7 +504,7 @@ describe("createWorkspaceSettingsService", () => {
       "Workspace is not configured for repository: /other",
     );
   });
-  test("reorders only when the order exactly matches configured workspaces", async () => {
+  test("reorders only open workspaces and rejects incomplete or duplicate orders", async () => {
     const service = createWorkspaceSettingsService(
       createFakeSettingsConfig({
         config: globalConfig({
@@ -515,11 +516,628 @@ describe("createWorkspaceSettingsService", () => {
       }),
     );
     await expect(Effect.runPromise(service.reorderWorkspaces(["repo-a"]))).rejects.toThrow(
-      "Workspace reorder must include exactly 2 configured workspaces.",
+      "Workspace reorder must include exactly 2 open workspaces.",
     );
     await expect(
       Effect.runPromise(service.reorderWorkspaces(["repo-a", "repo-a"])),
     ).rejects.toThrow("Workspace reorder included duplicate workspace id: repo-a");
+  });
+  test("reorders open workspaces and preserves closed workspace slots", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo-a",
+        workspaceOrder: ["repo-a", "repo-b", "repo-c"],
+        workspaces: {
+          "repo-a": repoConfig("repo-a", "/repos/a"),
+          "repo-b": { ...repoConfig("repo-b", "/repos/b"), closed: true },
+          "repo-c": repoConfig("repo-c", "/repos/c"),
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const records = await Effect.runPromise(service.reorderWorkspaces(["repo-c", "repo-a"]));
+
+    expect(records.map((record) => record.workspaceId)).toEqual(["repo-c", "repo-a"]);
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaceOrder).toEqual([
+      "repo-c",
+      "repo-b",
+      "repo-a",
+    ]);
+    const catalog = await Effect.runPromise(service.getWorkspaceCatalog());
+    expect(catalog.openWorkspaces.map((record) => record.workspaceId)).toEqual([
+      "repo-c",
+      "repo-a",
+    ]);
+    expect(catalog.closedWorkspaces.map((record) => record.workspaceId)).toEqual(["repo-b"]);
+    expect(catalog.onboardingCompleted).toBe(false);
+  });
+  test("closes the active workspace and selects the first remaining open workspace", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo-a",
+        workspaceOrder: ["repo-a", "repo-b"],
+        workspaces: {
+          "repo-a": repoConfig("repo-a", "/repos/a"),
+          "repo-b": repoConfig("repo-b", "/repos/b"),
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const catalog = await Effect.runPromise(service.closeWorkspace("repo-a", "/repos/a"));
+
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.closed).toBe(true);
+    expect(settingsConfig.writtenConfigs.at(-1)?.activeWorkspace).toBe("repo-b");
+    expect(catalog.openWorkspaces.map((record) => record.workspaceId)).toEqual(["repo-b"]);
+    expect(catalog.closedWorkspaces.map((record) => record.workspaceId)).toEqual(["repo-a"]);
+    expect(catalog.openWorkspaces[0]?.isActive).toBe(true);
+    expect(await Effect.runPromise(service.listWorkspaces())).toHaveLength(1);
+  });
+  test("closing an inactive workspace keeps the active selection", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo-b",
+        workspaceOrder: ["repo-a", "repo-b"],
+        workspaces: {
+          "repo-a": repoConfig("repo-a", "/repos/a"),
+          "repo-b": repoConfig("repo-b", "/repos/b"),
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    await Effect.runPromise(service.closeWorkspace("repo-a", "/repos/a"));
+
+    expect(settingsConfig.writtenConfigs.at(-1)?.activeWorkspace).toBe("repo-b");
+  });
+  test("closing or removing the last open workspace clears the active workspace", async () => {
+    const closeConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo-a",
+        workspaceOrder: ["repo-a"],
+        workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+      }),
+    });
+    await Effect.runPromise(
+      createWorkspaceSettingsService(closeConfig).closeWorkspace("repo-a", "/repos/a"),
+    );
+    expect(closeConfig.writtenConfigs.at(-1)?.activeWorkspace).toBeUndefined();
+
+    const removeConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo-a",
+        workspaceOrder: ["repo-a"],
+        workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+      }),
+    });
+    await Effect.runPromise(
+      createWorkspaceSettingsService(removeConfig).removeWorkspaceRegistration(
+        "repo-a",
+        "/repos/a",
+      ),
+    );
+    expect(removeConfig.writtenConfigs.at(-1)?.activeWorkspace).toBeUndefined();
+    expect(removeConfig.writtenConfigs.at(-1)?.workspaces).toEqual({});
+  });
+  test("reopens a closed workspace, validates its repository, and selects it", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo-b",
+        workspaceOrder: ["repo-a", "repo-b"],
+        workspaces: {
+          "repo-a": { ...repoConfig("repo-a", "/repos/a"), closed: true },
+          "repo-b": repoConfig("repo-b", "/repos/b"),
+        },
+      }),
+      existingPaths: new Set(["/repos/a", "/repos/a/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const catalog = await Effect.runPromise(service.reopenWorkspace("repo-a", "/repos/a"));
+
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.closed).toBe(false);
+    expect(settingsConfig.writtenConfigs.at(-1)?.activeWorkspace).toBe("repo-a");
+    expect(catalog.openWorkspaces.map((record) => record.workspaceId)).toEqual([
+      "repo-a",
+      "repo-b",
+    ]);
+    expect(catalog.closedWorkspaces).toEqual([]);
+  });
+  test("rejects reopening a closed workspace whose repository is unavailable", async () => {
+    const service = createWorkspaceSettingsService(
+      createFakeSettingsConfig({
+        config: globalConfig({
+          workspaces: {
+            "repo-a": { ...repoConfig("repo-a", "/repos/a"), closed: true },
+          },
+        }),
+      }),
+    );
+
+    await expect(Effect.runPromise(service.reopenWorkspace("repo-a", "/repos/a"))).rejects.toThrow(
+      "Workspace path does not exist: /repos/a",
+    );
+  });
+  test("rejects selecting a closed workspace", async () => {
+    const service = createWorkspaceSettingsService(
+      createFakeSettingsConfig({
+        config: globalConfig({
+          workspaces: {
+            "repo-a": { ...repoConfig("repo-a", "/repos/a"), closed: true },
+          },
+        }),
+      }),
+    );
+
+    await expect(Effect.runPromise(service.selectWorkspace("repo-a"))).rejects.toThrow(
+      "Workspace is closed: repo-a. Reopen it before selecting it.",
+    );
+  });
+  test("resolves repository paths to new, open, and closed matches", async () => {
+    const service = createWorkspaceSettingsService(
+      createFakeSettingsConfig({
+        config: globalConfig({
+          workspaceOrder: ["repo-a", "repo-b"],
+          workspaces: {
+            "repo-a": { ...repoConfig("repo-a", "/repos/a"), closed: true },
+            "repo-b": repoConfig("repo-b", "/repos/b"),
+          },
+        }),
+        canonicalPaths: {
+          "/picked-open": "/repos/b",
+          "/picked-closed": "/repos/a",
+        },
+      }),
+    );
+
+    expect(await Effect.runPromise(service.resolveWorkspacePath("/picked-new"))).toEqual({
+      kind: "new",
+    });
+    expect(await Effect.runPromise(service.resolveWorkspacePath("/picked-open"))).toMatchObject({
+      kind: "open",
+      workspace: { workspaceId: "repo-b" },
+    });
+    expect(await Effect.runPromise(service.resolveWorkspacePath("/picked-closed"))).toMatchObject({
+      kind: "closed",
+      workspace: { workspaceId: "repo-a" },
+    });
+  });
+  test("removes a workspace registration with its order and recent references", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo-a",
+        workspaceOrder: ["repo-a", "repo-b"],
+        recentWorkspaces: ["repo-b", "repo-a"],
+        workspaces: {
+          "repo-a": repoConfig("repo-a", "/repos/a"),
+          "repo-b": repoConfig("repo-b", "/repos/b"),
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const catalog = await Effect.runPromise(
+      service.removeWorkspaceRegistration("repo-a", "/repos/a"),
+    );
+
+    const written = settingsConfig.writtenConfigs.at(-1);
+    expect(written?.workspaces).toEqual({ "repo-b": expect.any(Object) });
+    expect(written?.workspaceOrder).toEqual(["repo-b"]);
+    expect(written?.recentWorkspaces).toEqual(["repo-b"]);
+    expect(written?.activeWorkspace).toBe("repo-b");
+    expect(catalog.openWorkspaces.map((record) => record.workspaceId)).toEqual(["repo-b"]);
+  });
+  test("removing the last workspace keeps inferred onboarding completion", async () => {
+    const config = globalConfig({
+      activeWorkspace: "repo-a",
+      workspaceOrder: ["repo-a"],
+      workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+    });
+    delete config.onboardingCompleted;
+    const settingsConfig = createFakeSettingsConfig({ config });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const catalog = await Effect.runPromise(
+      service.removeWorkspaceRegistration("repo-a", "/repos/a"),
+    );
+
+    expect(catalog.openWorkspaces).toEqual([]);
+    expect(catalog.onboardingCompleted).toBe(true);
+    expect(settingsConfig.writtenConfigs.at(-1)?.onboardingCompleted).toBe(true);
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces).toEqual({});
+  });
+  test("addWorkspace marks onboarding completed", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      existingPaths: new Set(["/repos/new", "/repos/new/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    await Effect.runPromise(
+      service.addWorkspace({
+        workspaceId: "repo-new",
+        workspaceName: "Repo New",
+        repoPath: "/repos/new",
+      }),
+    );
+
+    const written = settingsConfig.writtenConfigs.at(-1);
+    expect(written?.onboardingCompleted).toBe(true);
+    expect(written?.workspaces["repo-new"]?.closed).toBeUndefined();
+  });
+  test("settings snapshots omit closed workspaces", async () => {
+    const service = createWorkspaceSettingsService(
+      createFakeSettingsConfig({
+        config: globalConfig({
+          workspaceOrder: ["repo-a", "repo-b"],
+          workspaces: {
+            "repo-a": repoConfig("repo-a", "/repos/a"),
+            "repo-b": { ...repoConfig("repo-b", "/repos/b"), closed: true },
+          },
+        }),
+      }),
+    );
+
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    expect(Object.keys(snapshot.workspaces)).toEqual(["repo-a"]);
+  });
+  test("begins, records, and exposes an incomplete workspace removal", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const { record } = await Effect.runPromise(
+      service.beginWorkspaceRemoval({
+        workspaceId: "repo-a",
+        expectedRepoPath: "/repos/a",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    expect(record.phase).toBe("worktrees");
+    expect(record.removeTaskWorktrees).toBe(true);
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal).toEqual(record);
+
+    await Effect.runPromise(
+      service.recordWorkspaceRemovalProgress({
+        workspaceId: "repo-a",
+        phase: "attachments",
+        removedWorktrees: ["/managed/repo-a/task-1"],
+        lastFailure: "worktree removal failed",
+        pendingWorktreePath: undefined,
+      }),
+    );
+
+    const catalog = await Effect.runPromise(service.getWorkspaceCatalog());
+    expect(catalog.openWorkspaces).toEqual([]);
+    expect(catalog.closedWorkspaces).toEqual([]);
+    expect(catalog.incompleteRemovals).toHaveLength(1);
+    expect(catalog.incompleteRemovals[0]).toMatchObject({
+      workspace: { workspaceId: "repo-a" },
+      record: {
+        phase: "attachments",
+        removeTaskWorktrees: true,
+        removedWorktrees: ["/managed/repo-a/task-1"],
+        lastFailure: "worktree removal failed",
+      },
+    });
+    expect(await Effect.runPromise(service.listWorkspaces())).toEqual([]);
+  });
+  test("lets the worktree choice change before any worktree is removed", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: {
+          "repo-a": {
+            ...repoConfig("repo-a", "/repos/a"),
+            removal: {
+              version: 1 as const,
+              operationId: "op-1",
+              removeTaskWorktrees: true,
+              phase: "worktrees" as const,
+              removedWorktrees: [],
+              pendingWorktreePath: null,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: "Cannot classify registered worktree(s).",
+            },
+          },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const { record } = await Effect.runPromise(
+      service.beginWorkspaceRemoval({
+        workspaceId: "repo-a",
+        expectedRepoPath: "/repos/a",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(record.removeTaskWorktrees).toBe(false);
+    expect(record.phase).toBe("task_store");
+    expect(record.lastFailure).toBeNull();
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal).toEqual(record);
+  });
+  test("keeps the worktree choice after a worktree is removed", async () => {
+    const storedRemoval = {
+      version: 1 as const,
+      operationId: "op-1",
+      removeTaskWorktrees: true,
+      phase: "worktrees" as const,
+      removedWorktrees: ["/managed/repo-a/task-1"],
+      pendingWorktreePath: null,
+      startedAt: "2026-01-01T00:00:00.000Z",
+      lastFailure: null,
+    };
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: {
+          "repo-a": { ...repoConfig("repo-a", "/repos/a"), removal: storedRemoval },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const { record } = await Effect.runPromise(
+      service.beginWorkspaceRemoval({
+        workspaceId: "repo-a",
+        expectedRepoPath: "/repos/a",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(record).toEqual(storedRemoval);
+    expect(settingsConfig.writtenConfigs).toHaveLength(1);
+    expect(settingsConfig.writtenConfigs[0]?.workspaces["repo-a"]?.removal).toEqual(storedRemoval);
+  });
+  test("persists the pending worktree path and keeps it when progress omits it", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: {
+          "repo-a": {
+            ...repoConfig("repo-a", "/repos/a"),
+            removal: {
+              version: 1 as const,
+              operationId: "op-1",
+              removeTaskWorktrees: true,
+              phase: "worktrees" as const,
+              removedWorktrees: [],
+              pendingWorktreePath: null,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    await Effect.runPromise(
+      service.recordWorkspaceRemovalProgress({
+        workspaceId: "repo-a",
+        phase: "worktrees",
+        removedWorktrees: [],
+        lastFailure: null,
+        pendingWorktreePath: "/managed/repo-a/task-1",
+      }),
+    );
+    expect(
+      settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal?.pendingWorktreePath,
+    ).toBe("/managed/repo-a/task-1");
+
+    await Effect.runPromise(
+      service.recordWorkspaceRemovalProgress({
+        workspaceId: "repo-a",
+        phase: "worktrees",
+        removedWorktrees: [],
+        lastFailure: "worktree removal failed",
+        pendingWorktreePath: undefined,
+      }),
+    );
+    const failedRemoval = settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal;
+    expect(failedRemoval?.pendingWorktreePath).toBe("/managed/repo-a/task-1");
+    expect(failedRemoval?.lastFailure).toBe("worktree removal failed");
+
+    await Effect.runPromise(
+      service.recordWorkspaceRemovalProgress({
+        workspaceId: "repo-a",
+        phase: "worktrees",
+        removedWorktrees: ["/managed/repo-a/task-1"],
+        lastFailure: null,
+        pendingWorktreePath: null,
+      }),
+    );
+    expect(
+      settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal?.pendingWorktreePath,
+    ).toBeNull();
+  });
+  test("keeps the worktree choice while a worktree deletion is pending", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: {
+          "repo-a": {
+            ...repoConfig("repo-a", "/repos/a"),
+            removal: {
+              version: 1 as const,
+              operationId: "op-1",
+              removeTaskWorktrees: true,
+              phase: "worktrees" as const,
+              removedWorktrees: [],
+              pendingWorktreePath: "/managed/repo-a/task-1",
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const { record } = await Effect.runPromise(
+      service.beginWorkspaceRemoval({
+        workspaceId: "repo-a",
+        expectedRepoPath: "/repos/a",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(record.removeTaskWorktrees).toBe(true);
+    expect(record.phase).toBe("worktrees");
+    expect(record.pendingWorktreePath).toBe("/managed/repo-a/task-1");
+  });
+  test("moves the active selection when removal starts", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo-a",
+        workspaceOrder: ["repo-a", "repo-b"],
+        workspaces: {
+          "repo-a": repoConfig("repo-a", "/repos/a"),
+          "repo-b": repoConfig("repo-b", "/repos/b"),
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    await Effect.runPromise(
+      service.beginWorkspaceRemoval({
+        workspaceId: "repo-a",
+        expectedRepoPath: "/repos/a",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    const catalog = await Effect.runPromise(service.getWorkspaceCatalog());
+    expect(catalog.openWorkspaces.map((workspace) => workspace.isActive)).toEqual([true]);
+    expect(catalog.openWorkspaces[0]?.workspaceId).toBe("repo-b");
+    expect(catalog.incompleteRemovals).toHaveLength(1);
+  });
+  test("rejects close, reopen, and select while removal is incomplete", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: {
+          "repo-a": {
+            ...repoConfig("repo-a", "/repos/a"),
+            removal: {
+              version: 1 as const,
+              operationId: "op-1",
+              removeTaskWorktrees: false,
+              phase: "attachments" as const,
+              removedWorktrees: [],
+              pendingWorktreePath: null,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    await expect(Effect.runPromise(service.closeWorkspace("repo-a", "/repos/a"))).rejects.toThrow(
+      "Workspace removal is incomplete",
+    );
+    await expect(Effect.runPromise(service.reopenWorkspace("repo-a", "/repos/a"))).rejects.toThrow(
+      "Workspace removal is incomplete",
+    );
+    await expect(Effect.runPromise(service.selectWorkspace("repo-a"))).rejects.toThrow(
+      "Workspace removal is incomplete",
+    );
+    await expect(
+      Effect.runPromise(service.saveRepoSettings("repo-a", { worktreeBasePath: "/new-base" })),
+    ).rejects.toThrow("Finish the removal before changing repository settings");
+    await expect(
+      Effect.runPromise(service.updateRepoConfig("repo-a", { branchPrefix: "feat" })),
+    ).rejects.toThrow("Finish the removal before changing repository settings");
+  });
+  test("keeps the stored config for a workspace under removal in a snapshot save", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      existingPaths: new Set(["/repos/a", "/repos/a/.git"]),
+      config: globalConfig({
+        workspaceOrder: ["repo-a", "repo-b"],
+        workspaces: {
+          "repo-a": repoConfig("repo-a", "/repos/a"),
+          "repo-b": {
+            ...repoConfig("repo-b", "/repos/b"),
+            worktreeBasePath: "/old-base",
+            removal: {
+              version: 1 as const,
+              operationId: "op-1",
+              removeTaskWorktrees: true,
+              phase: "worktrees" as const,
+              removedWorktrees: [],
+              pendingWorktreePath: null,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+
+    await Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...snapshot,
+        workspaces: {
+          "repo-a": { ...repoConfig("repo-a", "/repos/a"), branchPrefix: "feat" },
+          "repo-b": {
+            ...repoConfig("repo-b", "/repos/b"),
+            worktreeBasePath: "/new-base",
+          },
+        },
+      }),
+    );
+
+    const written = settingsConfig.writtenConfigs[0];
+    expect(written?.workspaces["repo-b"]?.worktreeBasePath).toBe("/old-base");
+    expect(written?.workspaces["repo-b"]?.removal?.operationId).toBe("op-1");
+    expect(written?.workspaces["repo-a"]?.branchPrefix).toBe("feat");
+  });
+  test("resolves a path with an incomplete removal as removing", async () => {
+    const service = createWorkspaceSettingsService(
+      createFakeSettingsConfig({
+        config: globalConfig({
+          workspaceOrder: ["repo-a"],
+          workspaces: {
+            "repo-a": {
+              ...repoConfig("repo-a", "/repos/a"),
+              removal: {
+                version: 1 as const,
+                operationId: "op-1",
+                removeTaskWorktrees: true,
+                phase: "task_store" as const,
+                removedWorktrees: ["/managed/repo-a/task-1"],
+                pendingWorktreePath: null,
+                startedAt: "2026-01-01T00:00:00.000Z",
+                lastFailure: null,
+              },
+            },
+          },
+        }),
+      }),
+    );
+
+    expect(await Effect.runPromise(service.resolveWorkspacePath("/repos/a"))).toMatchObject({
+      kind: "removing",
+      removal: {
+        workspace: { workspaceId: "repo-a" },
+        record: {
+          phase: "task_store",
+          removedWorktrees: ["/managed/repo-a/task-1"],
+        },
+      },
+    });
   });
   test("saves settings snapshots without changing theme and preserves workspace metadata", async () => {
     const settingsConfig = createFakeSettingsConfig({

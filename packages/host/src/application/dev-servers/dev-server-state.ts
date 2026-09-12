@@ -9,6 +9,7 @@ import {
   type RepoConfig,
 } from "@openducktor/contracts";
 import type { DevServerProcessHandle } from "../../ports/dev-server-process-port";
+import type { DevServerWorkspaceActivity } from "./dev-server-service-types";
 
 export type DevServerGroupRuntime = {
   processes: Map<string, DevServerProcessHandle>;
@@ -32,7 +33,7 @@ export const createDevServerEventEnvelope = (event: DevServerEvent): HostEventEn
 const TERMINAL_BUFFER_CHUNK_LIMIT = 2_000;
 const TERMINAL_BUFFER_BYTE_LIMIT = 512 * 1024;
 
-const nowIso = (): string => new Date().toISOString();
+export const nowIso = (): string => new Date().toISOString();
 
 const scriptStateFromConfig = (script: RepoConfig["devServers"][number]): DevServerScriptState => ({
   scriptId: script.id,
@@ -49,6 +50,32 @@ const scriptStateFromConfig = (script: RepoConfig["devServers"][number]): DevSer
 });
 
 export const scriptHasLiveProcess = (script: DevServerScriptState): boolean => script.pid !== null;
+
+export const inspectDevServerWorkspaceActivity = (
+  groups: Map<string, Map<string, DevServerGroupRuntime>>,
+  repoPath: string,
+): DevServerWorkspaceActivity => {
+  const repoGroups = groups.get(repoPath);
+  if (!repoGroups) {
+    return { activeTaskIds: [] };
+  }
+  const activeTaskIds: string[] = [];
+  for (const [taskId, runtime] of repoGroups) {
+    const isActive =
+      runtime.processes.size > 0 ||
+      runtime.state.scripts.some(
+        (script) =>
+          scriptHasLiveProcess(script) ||
+          script.status === "starting" ||
+          script.status === "running" ||
+          script.status === "stopping",
+      );
+    if (isActive) {
+      activeTaskIds.push(taskId);
+    }
+  }
+  return { activeTaskIds };
+};
 
 export const buildGroupState = (
   repoConfig: RepoConfig,

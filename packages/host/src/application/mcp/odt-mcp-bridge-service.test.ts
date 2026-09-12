@@ -124,6 +124,8 @@ describe("createOdtMcpBridgeService", () => {
       let current = taskCard({ status });
       const transitions: unknown[] = [];
       const taskService = createRealTaskService({
+        assertWorkspaceAdmitsWork: () => Effect.void,
+        withWorkStartLease: (_repoPath, effect) => effect,
         gitPort: createGitPortTestDouble({ canonicalizePath: (path) => Effect.succeed(path) }),
         taskStore: createTaskStoreTestDouble({
           listTasks: () => Effect.succeed([current]),

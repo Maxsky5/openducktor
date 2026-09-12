@@ -305,6 +305,12 @@ const createWorkspaceStateValue = (
   branches: [],
   activeBranch: null,
   isSwitchingWorkspace: false,
+  closedWorkspaces: [],
+  incompleteRemovals: [],
+  closeWorkspace: async () => {},
+  removeWorkspace: async () => {},
+  reopenWorkspace: async () => {},
+  resolveWorkspacePath: async () => ({ kind: "new" }),
   isLoadingBranches: false,
   isSwitchingBranch: false,
   branchSyncDegraded: false,
@@ -336,6 +342,7 @@ const createWorkspaceBranchStateValue = (): WorkspaceBranchStateContextValue => 
 
 const createWorkspacePresenceValue = (): WorkspacePresenceContextValue => ({
   hasWorkspaces: true,
+  onboardingCompleted: true,
   hasLoadedWorkspaceList: true,
   isLoadingWorkspaces: false,
   workspaceLoadError: null,

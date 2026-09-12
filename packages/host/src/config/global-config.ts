@@ -14,6 +14,18 @@ const isPersistedConfigObject = (value: JSONType | undefined): value is Persiste
 
 export type LoadedGlobalConfig = GlobalConfig;
 
+type ConfigWithOnboarding = {
+  workspaces: object;
+  onboardingCompleted?: boolean | undefined;
+};
+
+export const withInferredOnboardingCompletion = <Config extends ConfigWithOnboarding>(
+  config: Config,
+): Config & { onboardingCompleted: boolean } => ({
+  ...config,
+  onboardingCompleted: config.onboardingCompleted ?? Object.keys(config.workspaces).length > 0,
+});
+
 export const createDefaultGlobalConfig = (): LoadedGlobalConfig =>
   globalConfigSchema.parse({ version: 3 });
 
@@ -146,9 +158,11 @@ export const upgradePersistedGlobalConfigV2 = (
     ]),
   );
 
-  return globalConfigSchema.parse({
-    ...config,
-    version: 3,
-    agentRuntimes,
-  });
+  return globalConfigSchema.parse(
+    withInferredOnboardingCompletion({
+      ...config,
+      version: 3,
+      agentRuntimes,
+    }),
+  );
 };

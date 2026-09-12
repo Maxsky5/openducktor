@@ -1,3 +1,4 @@
+import type { GitWorktreeSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { type CanonicalPathPlatform, canonicalPathsEqual } from "../../domain/path-comparison";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
@@ -48,6 +49,44 @@ export const createWorktree = (
     yield* runGit(runner, repoPath, args);
   });
 
+export const listWorktrees = (runner: GitCommandRunner, repoPath: string) =>
+  Effect.gen(function* () {
+    const output = yield* runGit(runner, repoPath, ["worktree", "list", "--porcelain", "-z"]);
+    const worktrees: GitWorktreeSummary[] = [];
+    let currentPath: string | null = null;
+    let currentBranch: string | null = null;
+    const flush = (): void => {
+      if (currentPath !== null) {
+        worktrees.push({
+          branch: currentBranch ?? "detached",
+          worktreePath: currentPath,
+        });
+      }
+      currentPath = null;
+      currentBranch = null;
+    };
+
+    for (const entry of output.split("\0")) {
+      if (entry.startsWith("worktree ")) {
+        flush();
+        currentPath = entry.slice("worktree ".length);
+        continue;
+      }
+      if (currentPath === null) {
+        continue;
+      }
+      if (entry.startsWith("branch ")) {
+        currentBranch = entry.slice("branch ".length).replace(/^refs\/heads\//, "");
+        continue;
+      }
+      if (entry === "detached") {
+        currentBranch = "detached";
+      }
+    }
+    flush();
+    return worktrees;
+  });
+
 export const isRegisteredWorktree = (
   runner: GitCommandRunner,
   repoPath: string,
@@ -55,13 +94,9 @@ export const isRegisteredWorktree = (
 ) =>
   Effect.gen(function* () {
     const targetPath = yield* requireNonEmptyEffect(worktreePath, "worktree path");
-    const output = yield* runGit(runner, repoPath, ["worktree", "list", "--porcelain", "-z"]);
-    const registeredPaths = output
-      .split("\0")
-      .filter((entry) => entry.startsWith("worktree "))
-      .map((entry) => entry.slice("worktree ".length));
-    return registeredPaths.some((registeredPath) =>
-      canonicalPathsEqual(registeredPath, targetPath, HOST_PATH_PLATFORM),
+    const worktrees = yield* listWorktrees(runner, repoPath);
+    return worktrees.some((worktree) =>
+      canonicalPathsEqual(worktree.worktreePath, targetPath, HOST_PATH_PLATFORM),
     );
   });
 export const deleteReference = (runner: GitCommandRunner, repoPath: string, reference: string) =>

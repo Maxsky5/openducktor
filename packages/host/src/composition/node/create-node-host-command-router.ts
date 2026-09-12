@@ -22,7 +22,11 @@ import { createDevServerService } from "../../application/dev-servers/dev-server
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import { createFilesystemService } from "../../application/filesystem/filesystem-service";
 import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
+import { createWorkspaceActivityInspector } from "../../application/workspaces/workspace-activity-inspector";
+import { createWorkspaceLifecycleService } from "../../application/workspaces/workspace-lifecycle-service";
 import { createGitService } from "../../application/git/git-service";
+import { withGitWorkspaceAdmission } from "../../application/git/git-workspace-admission";
+import { withTaskAssetWorkspaceAdmission } from "../../application/task-assets/task-asset-admission";
 import { createGitProviderService } from "../../application/git/git-provider-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
@@ -30,11 +34,11 @@ import { createRuntimeDefinitionsService } from "../../application/runtimes/runt
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { readSavedRuntimeExecutablePath } from "../../application/runtimes/saved-runtime-executable";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
-import type { TaskSyncLoopHandle } from "../../application/tasks/sync/task-sync-service";
 import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
+import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import { HostOperationError } from "../../effect/host-errors";
@@ -58,16 +62,9 @@ import { createTaskCommandHandlers } from "../../interface/commands/task-command
 import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
 import { createTerminalCommandHandlers } from "../../interface/commands/terminal-command-handlers";
 import { createWorkspaceFilesCommandHandlers } from "../../interface/commands/workspace-files-command-handlers";
+import { createWorkspaceLifecycleCommandHandlers } from "../../interface/commands/workspace-lifecycle-command-handlers";
 import { createWorkspaceSettingsCommandHandlers } from "../../interface/commands/workspace-settings-command-handlers";
 import { createEffectHostCommandRouter } from "../../interface/router/host-command-router";
-import {
-  createStopDevServersStep,
-  createStopMcpHostBridgeStep,
-  createStopRuntimesStep,
-  createStopTerminalsStep,
-  runShutdownSteps,
-  writeHostLifecycleLog,
-} from "../host-lifecycle";
 import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
 import type {
   CreateNodeHostCommandRouterInput,
@@ -76,6 +73,7 @@ import type {
 import { createNodeHostDefaultPorts } from "./node-host-default-ports";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
+import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createOpenCodeRuntimeComposition } from "./opencode-runtime-composition";
@@ -119,12 +117,19 @@ export const assembleNodeEffectHostCommandRouter = (
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
-  const gitService = createGitService({
-    gitPort: git,
-    settingsConfig,
-    worktreeFiles,
-  });
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
+  const workspaceAdmissionService = createWorkspaceAdmissionService({
+    settingsConfig,
+    workspaceSettingsService,
+  });
+  const gitService = withGitWorkspaceAdmission(
+    createGitService({
+      gitPort: git,
+      settingsConfig,
+      worktreeFiles,
+    }),
+    workspaceAdmissionService,
+  );
   const gitProviderService = createGitProviderService({
     resolver: gitProviderResolver,
     workspaceSettingsService,
@@ -133,6 +138,9 @@ export const assembleNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const taskAssetServiceInput: Parameters<typeof createNodeTaskAssetServices>[0] = {
+    assertWorkspaceAdmitted: workspaceAdmissionService.assertTaskStoreAccess,
+    isWorkspaceRemovalPending: workspaceAdmissionService.isWorkspaceRemovalPending,
+    withAdministrativeAccess: workspaceAdmissionService.withAdministrativeAccess,
     onBackgroundFailure,
     processEnv,
     workspaceSettingsService,
@@ -142,8 +150,17 @@ export const assembleNodeEffectHostCommandRouter = (
   }
   const assets = createNodeTaskAssetServices(taskAssetServiceInput);
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
+  const admittedTaskAssetStagingService = withTaskAssetWorkspaceAdmission({
+    admission: workspaceAdmissionService,
+    resolveRepoPath: (workspaceId) =>
+      workspaceSettingsService
+        .getRepoConfig(workspaceId)
+        .pipe(Effect.map((repoConfig) => repoConfig.repoPath)),
+    service: taskAssetStagingService,
+  });
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
     adapterRegistry: liveSessionAdapterRegistry,
+    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
     faultLog: createLiveSessionFaultLogger(lifecycleLogger),
     publish: createLiveSessionPublisher(eventBus),
   });
@@ -258,12 +275,15 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const terminalService = Effect.runSync(
     createTerminalService({
+      assertWorkspaceAdmitsWork: workspaceAdmissionService.assertWorkspaceAdmitsWork,
+      withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
       filesystem,
       ptyPort: terminalPty,
       resolveLaunchEnvironment: createTerminalLaunchEnvironment({ processEnv }),
     }),
   );
   const devServerServiceInput: Parameters<typeof createDevServerService>[0] = {
+    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
     processPort: devServerProcesses,
     taskWorktreeService,
     workspaceSettingsService,
@@ -272,6 +292,24 @@ export const assembleNodeEffectHostCommandRouter = (
     devServerServiceInput.eventBus = eventBus;
   }
   const devServerService = createDevServerService(devServerServiceInput);
+  const workspaceLifecycleService = createWorkspaceLifecycleService({
+    activity: createWorkspaceActivityInspector({
+      agentSessionLiveStateService,
+      devServerService,
+      terminalService,
+    }),
+    admission: workspaceAdmissionService,
+    gitPort: git,
+    settingsConfig,
+    storage: {
+      assertPermanentRemovalSupported: assets.assertPermanentRemovalSupported,
+      removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
+      removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
+    },
+    taskStore,
+    workspaceSettingsService,
+    worktreeFiles,
+  });
   const taskActivityGuard = createRuntimeTaskActivityGuard({
     runtimeRegistry: effectiveRuntimeRegistry,
     sessionService: agentSessionLiveStateService,
@@ -280,6 +318,8 @@ export const assembleNodeEffectHostCommandRouter = (
   const { taskEventStream, taskService, taskSyncService, agentSessionCommandService } =
     createNodeTaskSessionServices({
       taskServiceInput: {
+        assertWorkspaceAdmitsWork: workspaceAdmissionService.assertWorkspaceAdmitsWork,
+        withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
         devServerService,
         terminalService,
         gitPort: git,
@@ -321,129 +361,31 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceSettingsService,
   });
   const runtimeOrchestratorWithEffectiveRegistry = createRuntimeOrchestratorService({
+    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
     gitPort: git,
     runtimeDefinitionsService,
     runtimeRegistry: effectiveRuntimeRegistry,
     taskReader: taskStore,
     logger: lifecycleLogger,
   });
-  let pullRequestSyncLoop: TaskSyncLoopHandle | null = null;
-  let taskAssetStagingSwept = false;
-  const stopPullRequestSyncLoop = () =>
-    Effect.gen(function* () {
-      if (!pullRequestSyncLoop) {
-        yield* writeHostLifecycleLog(
-          lifecycleLogger,
-          "info",
-          "No pull request sync loop is running",
-        );
-        return;
-      }
-      yield* pullRequestSyncLoop.stop();
-      pullRequestSyncLoop = null;
-      yield* writeHostLifecycleLog(lifecycleLogger, "info", "Pull request sync loop stopped");
-    });
+  const hostRouterLifecycle = createNodeHostRouterLifecycle({
+    assets,
+    devServerService,
+    imageWorkers: defaultPorts.imageWorkers,
+    lifecycleLogger,
+    mcpHostBridge: resolvedMcpHostBridge,
+    runtimeRegistry: effectiveRuntimeRegistry,
+    startupSweep,
+    taskAssetStagingService,
+    taskSyncService,
+    terminalService,
+  });
   const router = createEffectHostCommandRouter({
     initialize: () =>
-      Effect.gen(function* () {
-        if (!taskAssetStagingSwept) {
-          yield* startupSweep();
-          taskAssetStagingSwept = true;
-        }
-        if (resolvedMcpHostBridge) {
-          yield* resolvedMcpHostBridge.ensureExternalDiscoveryReady().pipe(
-            Effect.mapError(
-              (cause) =>
-                new HostOperationError({
-                  operation: "mcp-host-bridge.ensure-external-discovery",
-                  message: cause.message,
-                  cause,
-                }),
-            ),
-          );
-        }
-        if (taskSyncService && pullRequestSyncLoop === null) {
-          pullRequestSyncLoop = yield* taskSyncService.startPullRequestSyncLoop();
-        }
-      }),
-    dispose: () =>
-      Effect.gen(function* () {
-        const loggingFailures: HostOperationError[] = [];
-        const startLogResult = yield* Effect.either(
-          writeHostLifecycleLog(lifecycleLogger, "info", "Shutting down OpenDucktor host services"),
-        );
-        if (startLogResult._tag === "Left") {
-          loggingFailures.push(startLogResult.left);
-        }
-        const shutdownResult = yield* Effect.either(
-          runShutdownSteps(
-            [
-              { label: "pull request sync loop", run: stopPullRequestSyncLoop },
-              { label: "image workers", run: () => defaultPorts.imageWorkers.shutdown },
-              createStopTerminalsStep(terminalService),
-              createStopDevServersStep(devServerService, lifecycleLogger),
-              createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
-              createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
-              {
-                label: "task asset staging",
-                run: () =>
-                  taskAssetStagingService.shutdownCleanup().pipe(
-                    Effect.mapError(
-                      (cause) =>
-                        new HostOperationError({
-                          operation: "host.dispose.task_assets",
-                          message: cause.message,
-                          cause,
-                        }),
-                    ),
-                  ),
-              },
-              assets.taskStoreConnectionShutdownStep,
-            ],
-            lifecycleLogger,
-          ),
-        );
-        if (shutdownResult._tag === "Right") {
-          const completeLogResult = yield* Effect.either(
-            writeHostLifecycleLog(lifecycleLogger, "info", "OpenDucktor host services stopped"),
-          );
-          if (completeLogResult._tag === "Left") {
-            loggingFailures.push(completeLogResult.left);
-          }
-        }
-        if (shutdownResult._tag === "Left" && loggingFailures.length > 0) {
-          return yield* Effect.fail(
-            new HostOperationError({
-              operation: "host.dispose",
-              message: `${shutdownResult.left.message}\nLifecycle logging: ${loggingFailures
-                .map((failure) => failure.message)
-                .join("\n")}`,
-              cause: shutdownResult.left,
-              details: {
-                shutdownFailure: shutdownResult.left,
-                loggingFailures,
-              },
-            }),
-          );
-        }
-        if (shutdownResult._tag === "Left") {
-          return yield* Effect.fail(shutdownResult.left);
-        }
-        const [loggingFailure] = loggingFailures;
-        if (loggingFailures.length === 1 && loggingFailure) {
-          return yield* Effect.fail(loggingFailure);
-        }
-        if (loggingFailures.length > 1) {
-          return yield* Effect.fail(
-            new HostOperationError({
-              operation: "host.dispose",
-              message: loggingFailures.map((failure) => failure.message).join("\n"),
-              cause: loggingFailures[0],
-              details: { loggingFailures },
-            }),
-          );
-        }
-      }),
+      workspaceAdmissionService
+        .initialize()
+        .pipe(Effect.zipRight(hostRouterLifecycle.initialize())),
+    dispose: hostRouterLifecycle.dispose,
     handlers: {
       ...createAgentSessionLiveCommandHandlers(agentSessionCommandService, localAttachmentService),
       ...createAgentRuntimeQueryCommandHandlers(
@@ -481,11 +423,15 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createRuntimeOrchestratorCommandHandlers(runtimeOrchestratorWithEffectiveRegistry),
       ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService),
       ...createSystemPlatformCommandHandlers(),
-      ...createTaskAssetCommandHandlers(taskAssetStagingService),
+      ...createTaskAssetCommandHandlers(admittedTaskAssetStagingService),
       ...createTaskCommandHandlers(taskService),
       ...createTaskWorktreeCommandHandlers(taskWorktreeService),
       ...createTerminalCommandHandlers(terminalService),
       ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService),
+      ...createWorkspaceLifecycleCommandHandlers(
+        workspaceSettingsService,
+        workspaceLifecycleService,
+      ),
     },
   });
   return Object.assign(router, {

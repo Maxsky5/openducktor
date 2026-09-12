@@ -57,6 +57,9 @@ export function useWorkspaceOperations({
 
   const {
     workspaces,
+    closedWorkspaces,
+    incompleteRemovals,
+    onboardingCompleted,
     hasLoadedWorkspaceList,
     isLoadingWorkspaces,
     workspaceLoadError,
@@ -64,6 +67,10 @@ export function useWorkspaceOperations({
     refreshWorkspaces,
     addWorkspace,
     selectWorkspace,
+    closeWorkspace,
+    removeWorkspace,
+    reopenWorkspace,
+    resolveWorkspacePath,
     reorderWorkspaces,
     applyWorkspaceRecords,
     applyWorkspaceRecord,
@@ -90,6 +97,9 @@ export function useWorkspaceOperations({
 
   return {
     workspaces,
+    closedWorkspaces,
+    incompleteRemovals,
+    onboardingCompleted,
     hasLoadedWorkspaceList,
     isLoadingWorkspaces,
     workspaceLoadError,
@@ -102,6 +112,10 @@ export function useWorkspaceOperations({
     refreshWorkspaces,
     addWorkspace,
     selectWorkspace,
+    closeWorkspace,
+    removeWorkspace,
+    reopenWorkspace,
+    resolveWorkspacePath,
     reorderWorkspaces,
     refreshBranches,
     switchBranch,

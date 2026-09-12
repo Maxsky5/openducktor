@@ -45,6 +45,7 @@ import {
   ELECTRON_APP_UPDATE_GET_STATE_CHANNEL,
   ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
+  ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
   type ElectronAppUpdateCheckInput,
@@ -92,7 +93,11 @@ import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
-import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
+import {
+  installApplicationMenu,
+  markContextMenuClaimed,
+  registerWindowContextMenu,
+} from "./main-menu";
 import { registerElectronTerminalIpc } from "./terminals/electron-terminal-ipc";
 import { createNodePtyPort } from "./terminals/node-pty-adapter";
 
@@ -725,6 +730,10 @@ const registerIpcHandlers = (
       }
       return result;
     },
+  });
+
+  ipcMain.on(ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL, () => {
+    markContextMenuClaimed();
   });
 
   ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url) => {

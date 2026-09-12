@@ -59,4 +59,5 @@ export type TaskAssetFilePort = {
     taskId: string;
     assetId: string;
   }): Effect.Effect<Uint8Array | null, TaskAssetError>;
+  removeWorkspaceData(input: { workspaceId: string }): Effect.Effect<void, TaskAssetError>;
 };
