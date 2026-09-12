@@ -218,6 +218,81 @@ describe("agent-orchestrator session transcript events", () => {
     expect(message.meta.input).toEqual({ file_path: "/tmp/repo/src/auth.ts" });
   });
 
+  test("preserves computer use screenshots across later tool updates for the same call", async () => {
+    const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "running" })]);
+    const updateSession = createSessionUpdater(sessionsRef);
+
+    await listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    const computerUse = {
+      action: "Click the button",
+      code: "await tab.click()",
+      images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
+    };
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:20.000Z",
+      part: {
+        kind: "tool",
+        messageId: "tool-msg-cua",
+        partId: "cua-1",
+        callId: "cua-1",
+        tool: "cua_repl.js",
+        toolType: "computer_use" as const,
+        status: "completed",
+        computerUse,
+      },
+    });
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:00:21.000Z",
+      part: {
+        kind: "tool",
+        messageId: "tool-msg-cua",
+        partId: "cua-1",
+        callId: "cua-1",
+        tool: "cua_repl.js",
+        toolType: "computer_use" as const,
+        status: "error",
+        error: "Script error: boom",
+      },
+    });
+
+    const message = getSessionMessages(sessionsRef).find(
+      (entry) => entry.meta?.kind === "tool" && entry.meta.callId === "cua-1",
+    );
+    if (message?.meta?.kind !== "tool") {
+      throw new Error("Expected computer use tool message");
+    }
+    expect(message.meta.status).toBe("error");
+    expect(message.meta.computerUse).toEqual(computerUse);
+  });
+
   test("does not revive an idle session from a terminal tool update", async () => {
     const handlers: Array<Parameters<SessionEventAdapter["subscribeEvents"]>[1]> = [];
     const adapter: SessionEventAdapter = {

@@ -1,4 +1,5 @@
 import type {
+  AgentComputerUse,
   AgentImageGenerationPart,
   AgentSessionAssociation,
   AgentSessionLiveLoadContextInput,
@@ -41,6 +42,7 @@ export type AgentChatMessageMeta =
       error?: string;
       fileDiffs?: FileDiff[];
       fileContent?: FileContent[];
+      computerUse?: AgentComputerUse;
       /** @deprecated Use fileDiffs. Kept only for already-persisted transcript messages. */
       fileChanges?: FileDiff[];
       metadata?: AgentToolData;

@@ -1,15 +1,13 @@
 import type { AgentModelSelection, AgentStreamPart } from "@openducktor/core";
 import {
-  arrayFromCodexJsonValue,
-  extractStringField,
   isCodexApplyPatchTool,
   isCodexContextualUserMessage,
   parseCodexJsonObjectString,
   isPlainObject,
-  readCodexString,
   stringifyJsonValue,
 } from "./codex-app-server-shared";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
+import { codexComputerUseResult } from "./codex-computer-use";
 import {
   CodexFileDiffParseError,
   codexApplyPatchFileDiffs,
@@ -18,6 +16,7 @@ import {
   fileDiffsPatchOutput,
   toFileDiffs,
 } from "./codex-file-diffs";
+import { codexToolResultDisplayText } from "./codex-mcp-result";
 import {
   codexDynamicToolDisplayPayload,
   codexDynamicToolErrorFromItem,
@@ -26,6 +25,7 @@ import {
 } from "./codex-tool-error-extractor";
 import {
   codexNamespacedToolName,
+  COMPUTER_USE_MCP_SERVER,
   type NormalizedCodexToolInvocation,
   normalizeCodexToolInvocation,
   stableToolTitle,
@@ -440,39 +440,6 @@ const codexObjectInput = (
   return isPlainObject(value) ? value : (parseCodexJsonObjectString(value) ?? undefined);
 };
 
-const codexToolResultText = (value: CodexAppServerJsonValue | undefined): string | null => {
-  if (value === undefined || value === null) {
-    return null;
-  }
-  const textValue = readCodexString(value);
-  if (textValue !== null) {
-    return textValue;
-  }
-  const content = Array.isArray(value)
-    ? value
-    : isPlainObject(value)
-      ? arrayFromCodexJsonValue(value.content)
-      : [];
-  const text = content
-    .map((entry) => {
-      const entryText = readCodexString(entry);
-      if (entryText !== null) {
-        return entryText;
-      }
-      if (!isPlainObject(entry)) {
-        return "";
-      }
-      const entryType = extractStringField(entry, ["type"]);
-      if (entryType === "inputImage" || entryType === "image") {
-        return "";
-      }
-      return extractStringField(entry, ["text"]) ?? "";
-    })
-    .filter((entry) => entry.trim().length > 0)
-    .join("\n");
-  return text.length > 0 ? text : stringifyJsonValue(value);
-};
-
 const webSearchActionInput = (action: CodexAppServerWebSearchAction | null) => {
   if (!action) {
     return undefined;
@@ -671,20 +638,35 @@ const codexMcpToolCallStreamParts = (
   const tool = value.tool;
   const args = codexObjectInput(value.arguments);
   const error = codexMcpToolErrorFromResult(value);
-  const output = codexToolResultText(value.result);
+  const status = error ? "error" : statusFromCodexStatus(value.status);
   const toolInvocation: NormalizedCodexToolInvocation = {
     messageId,
     partId,
     callId: partId,
     rawToolName: codexNamespacedToolName(server, tool),
-    status: error ? "error" : statusFromCodexStatus(value.status),
-    output: error ? null : output,
-    error,
+    status,
     ...codexToolTimingFields(value, timingOptions),
     metadata: {
       server,
     },
   };
+
+  if (server === COMPUTER_USE_MCP_SERVER) {
+    const computerUseResult = codexComputerUseResult({
+      tool,
+      input: args,
+      result: value.result,
+      itemError: error,
+      failed: status === "error",
+    });
+    toolInvocation.computerUse = computerUseResult.computerUse;
+    toolInvocation.output = computerUseResult.output;
+    toolInvocation.error = computerUseResult.error;
+  } else {
+    const output = codexToolResultDisplayText(value.result);
+    toolInvocation.output = error ? null : output;
+    toolInvocation.error = error;
+  }
 
   if (args) {
     toolInvocation.input = args;
@@ -747,7 +729,7 @@ const codexDynamicToolCallStreamParts = (
   const fileDiffs = patch ? codexApplyPatchFileDiffs(patch) : [];
   const patchOutput = fileDiffsPatchOutput(fileDiffs);
   const resultPayload = codexDynamicToolDisplayPayload(value);
-  const output = codexToolResultText(resultPayload);
+  const output = codexToolResultDisplayText(resultPayload);
   const error = codexDynamicToolErrorFromItem(value);
   const failed = value.success === false || error !== null || value.status === "failed";
   const toolInvocation: NormalizedCodexToolInvocation = {

@@ -42,6 +42,10 @@ export const isToolMessageFailure = (meta: ToolMeta): boolean => {
   return meta.status === "error";
 };
 
+export const isToolMessageActive = (meta: ToolMeta): boolean => {
+  return meta.status === "pending" || meta.status === "running";
+};
+
 export const isToolMessageCancelled = (meta: ToolMeta): boolean => {
   if (meta.status !== "error") {
     return false;

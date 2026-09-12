@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentChatToolCallPresentation } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
+import { ComputerUseToolMessage } from "./agent-chat-computer-use";
 import { AgentChatFileReferenceChip } from "./agent-chat-file-reference-chip";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import {
@@ -21,11 +22,12 @@ import {
   roleLabel,
   SYSTEM_PROMPT_PREFIX,
 } from "./agent-chat-message-card-model";
-import type { SubagentMeta } from "./agent-chat-message-card-model.types";
-import { RegularToolMessage, WorkflowToolMessage } from "./agent-chat-message-card-tool-presenters";
+import type { SubagentMeta, ToolMeta } from "./agent-chat-message-card-model.types";
+import { RegularToolMessage } from "./agent-chat-regular-tool-message";
 import { AgentChatSkillReferenceChip } from "./agent-chat-skill-reference-chip";
 import { AgentChatSubagentReferenceChip } from "./agent-chat-subagent-reference-chip";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
+import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
 import { AssistantRoleIcon } from "./agent-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
@@ -684,6 +686,56 @@ type MessageBodyProps = {
   subagentPendingQuestionCount?: number;
 };
 
+type ToolMessageBodyProps = {
+  message: AgentChatMessage;
+  meta: ToolMeta;
+  timeLabel: string;
+  sessionWorkingDirectory?: string | null | undefined;
+  toolCallPresentation: AgentChatToolCallPresentation | null;
+};
+
+const ToolMessageBody = ({
+  message,
+  meta,
+  timeLabel,
+  sessionWorkingDirectory,
+  toolCallPresentation,
+}: ToolMessageBodyProps): ReactElement => {
+  if (meta.toolType === "computer_use") {
+    return (
+      <ComputerUseToolMessage
+        meta={meta}
+        messageTimestamp={message.timestamp}
+        timeLabel={timeLabel}
+      />
+    );
+  }
+  if (!toolCallPresentation) {
+    throw new Error(`Tool Call presentation is missing for ${meta.tool}.`);
+  }
+  if (toolCallPresentation.kind === "workflow") {
+    return (
+      <WorkflowToolMessage
+        meta={meta}
+        messageTimestamp={message.timestamp}
+        timeLabel={timeLabel}
+        sessionWorkingDirectory={sessionWorkingDirectory}
+        displayName={toolCallPresentation.displayName}
+      />
+    );
+  }
+  return (
+    <RegularToolMessage
+      meta={meta}
+      messageContent={message.content}
+      messageTimestamp={message.timestamp}
+      timeLabel={timeLabel}
+      sessionWorkingDirectory={sessionWorkingDirectory}
+      displayName={toolCallPresentation.displayName}
+    />
+  );
+};
+
 export const MessageBody = ({
   message,
   modelCatalog,
@@ -708,28 +760,13 @@ export const MessageBody = ({
   }
 
   if (meta?.kind === "tool") {
-    if (!toolCallPresentation) {
-      throw new Error(`Tool Call presentation is missing for ${meta.tool}.`);
-    }
-    if (toolCallPresentation.kind === "workflow") {
-      return (
-        <WorkflowToolMessage
-          meta={meta}
-          messageTimestamp={message.timestamp}
-          timeLabel={timeLabel}
-          sessionWorkingDirectory={sessionWorkingDirectory}
-          displayName={toolCallPresentation.displayName}
-        />
-      );
-    }
     return (
-      <RegularToolMessage
+      <ToolMessageBody
+        message={message}
         meta={meta}
-        messageContent={message.content}
-        messageTimestamp={message.timestamp}
         timeLabel={timeLabel}
         sessionWorkingDirectory={sessionWorkingDirectory}
-        displayName={toolCallPresentation.displayName}
+        toolCallPresentation={toolCallPresentation}
       />
     );
   }

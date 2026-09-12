@@ -20,14 +20,7 @@ import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { DialogTrigger } from "@/components/ui/dialog";
 import {
   useAgentOperationsContext,
   useRuntimeDefinitionsContext,
@@ -37,6 +30,7 @@ import {
   type AgentGeneratedImageQueryInput,
 } from "@/state/queries/agent-generated-images";
 import { AgentChatImageSessionContext } from "./agent-chat-image-session-context";
+import { MediaPreviewDialog } from "@/components/ui/media-preview-dialog";
 import { useAgentGeneratedImagePreview } from "./use-agent-generated-image-preview";
 
 export function AgentChatImageGeneration({
@@ -368,39 +362,35 @@ function LoadedImagePreview({
     onOpenChange(false);
   };
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          aria-label="Open generated image preview"
-          className="h-full w-full min-w-0 flex-col gap-0 overflow-hidden rounded-lg bg-muted/40 p-0"
-        >
-          <img
-            src={src}
-            alt={alt}
-            className="min-h-0 w-full flex-1 object-contain"
-            onError={onImageError}
-          />
-          <span className="flex w-full shrink-0 items-center justify-center gap-2 border-t border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-            <Maximize2 aria-hidden="true" className="size-3.5" />
-            View image
-          </span>
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="my-0 max-w-[min(96vw,72rem)] gap-4">
-        <DialogHeader>
-          <DialogTitle>Generated image</DialogTitle>
-          <DialogDescription>Preview of the generated image.</DialogDescription>
-        </DialogHeader>
-        <img
-          src={src}
-          alt={alt}
-          className="min-h-0 max-h-[70dvh] w-full object-contain"
-          onError={onImageError}
-        />
-      </DialogContent>
-    </Dialog>
+    <MediaPreviewDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Generated image"
+      description="Preview of the generated image."
+      media={[{ id: "generated-image", kind: "image", src, alt }]}
+      onMediaError={onImageError}
+      trigger={
+        <DialogTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            aria-label="Open generated image preview"
+            className="h-full w-full min-w-0 flex-col gap-0 overflow-hidden rounded-lg bg-muted/40 p-0"
+          >
+            <img
+              src={src}
+              alt={alt}
+              className="min-h-0 w-full flex-1 object-contain"
+              onError={onImageError}
+            />
+            <span className="flex w-full shrink-0 items-center justify-center gap-2 border-t border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+              <Maximize2 aria-hidden="true" className="size-3.5" />
+              View image
+            </span>
+          </Button>
+        </DialogTrigger>
+      }
+    />
   );
 }
 

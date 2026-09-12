@@ -87,6 +87,72 @@ describe("agent session transcript event contract", () => {
     }
   });
 
+  test("accepts computer use tool parts with a normalized action", () => {
+    const event = {
+      ...base,
+      type: "assistant_part",
+      part: {
+        kind: "tool",
+        messageId: "m1",
+        partId: "p1",
+        callId: "c1",
+        tool: "cua_repl.js",
+        toolType: "computer_use",
+        status: "completed",
+        input: { code: "await tab.click()", title: "Click" },
+        computerUse: {
+          action: "Click the button",
+          code: "await tab.click()",
+          images: [{ mimeType: "image/png", dataBase64: "AAAA" }],
+        },
+      },
+    } as const;
+
+    expect(agentRuntimeEventSchema.parse(event)).toEqual(event);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...event,
+        part: {
+          ...event.part,
+          computerUse: {
+            ...event.part.computerUse,
+            images: [{ mimeType: "", dataBase64: "AAAA" }],
+          },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...event,
+        part: { ...event.part, computerUse: { code: "1 + 1" } },
+      }).success,
+    ).toBe(false);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...event,
+        part: { ...event.part, computerUse: { ...event.part.computerUse, action: "   " } },
+      }).success,
+    ).toBe(false);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...event,
+        part: { ...event.part, computerUse: { ...event.part.computerUse, staleField: 1 } },
+      }).success,
+    ).toBe(false);
+    expect(
+      agentRuntimeEventSchema.safeParse({
+        ...event,
+        part: {
+          ...event.part,
+          computerUse: {
+            ...event.part.computerUse,
+            images: [{ mimeType: "image/png", dataBase64: "AAAA", staleField: 1 }],
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   test("keeps retained projection state changes out of transcript envelopes", () => {
     const liveProjectionEvents = [
       { ...base, type: "session_context_updated", totalTokens: 12 },

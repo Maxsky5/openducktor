@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { act, fireEvent, render } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { RegularToolMessage, WorkflowToolMessage } from "./agent-chat-message-card-tool-presenters";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import { RegularToolMessage } from "./agent-chat-regular-tool-message";
+import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
 
 enableReactActEnvironment();
 

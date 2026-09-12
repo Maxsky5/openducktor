@@ -16,7 +16,7 @@ import {
   readPathFromCommand,
   searchInputFromCommand,
 } from "./codex-app-server-shared";
-import type { CodexAppServerJsonValue } from "@openducktor/contracts";
+import type { AgentComputerUse, CodexAppServerJsonValue } from "@openducktor/contracts";
 import type { CodexToolTimingFields } from "./codex-tool-timing";
 
 /**
@@ -43,6 +43,8 @@ export type CodexToolInvocationMetadata = {
   answers?: Record<string, { answers: string[] }>;
   server?: string;
 };
+
+export const COMPUTER_USE_MCP_SERVER = "cua_repl";
 
 export type CodexToolQuestion = {
   header: string;
@@ -87,6 +89,7 @@ export type NormalizedCodexToolInvocation = CodexToolTimingFields & {
   output?: string | null;
   error?: string | null;
   fileDiffs?: FileDiff[];
+  computerUse?: AgentComputerUse;
   metadata?: CodexToolInvocationMetadata;
 };
 
@@ -168,9 +171,14 @@ const canonicalOdtToolName = (rawToolName: string): string | null => {
 const codexToolType = (
   rawToolName: string,
   input?: Record<string, CodexAppServerJsonValue>,
+  server?: string,
 ): AgentToolType | null => {
   if (isCodexWriteStdinTool(rawToolName)) {
     return null;
+  }
+
+  if (server === COMPUTER_USE_MCP_SERVER) {
+    return "computer_use";
   }
 
   const odtToolName = canonicalOdtToolName(rawToolName);
@@ -361,6 +369,7 @@ export const normalizeCodexToolInvocation = ({
   output,
   error,
   fileDiffs,
+  computerUse,
   title,
   displayLabel,
   preview,
@@ -370,7 +379,7 @@ export const normalizeCodexToolInvocation = ({
   ...ids
 }: NormalizedCodexToolInvocation): import("@openducktor/core").AgentStreamPart | null => {
   const tool = canonicalCodexToolName(rawToolName);
-  const toolType = codexToolType(rawToolName, input);
+  const toolType = codexToolType(rawToolName, input, metadata?.server);
   if (!tool || !toolType) {
     return null;
   }
@@ -410,6 +419,9 @@ export const normalizeCodexToolInvocation = ({
   }
   if (fileDiffs && fileDiffs.length > 0) {
     normalizedTool.fileDiffs = fileDiffs;
+  }
+  if (computerUse) {
+    normalizedTool.computerUse = computerUse;
   }
   if (namespace) {
     metadataFields.namespace = namespace;

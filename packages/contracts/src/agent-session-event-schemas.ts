@@ -120,8 +120,26 @@ const agentToolTypeSchema = z.enum([
   "file_edit",
   "workflow",
   "question",
+  "computer_use",
   "generic",
 ]);
+
+export const agentToolImageSchema = z
+  .object({
+    mimeType: z.string().min(1),
+    dataBase64: z.string().min(1),
+  })
+  .strict();
+export type AgentToolImage = z.infer<typeof agentToolImageSchema>;
+
+export const agentComputerUseSchema = z
+  .object({
+    action: z.string().trim().min(1),
+    code: z.string().trim().min(1).optional(),
+    images: z.array(agentToolImageSchema).optional(),
+  })
+  .strict();
+export type AgentComputerUse = z.infer<typeof agentComputerUseSchema>;
 
 const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
   agentImageGenerationPartSchema,
@@ -162,6 +180,7 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
       fileDiffs: z.array(fileDiffSchema.strict()).optional(),
       fileContent: z.array(fileContentSchema.strict()).optional(),
       fileChanges: z.array(fileDiffSchema.strict()).optional(),
+      computerUse: agentComputerUseSchema.optional(),
       metadata: agentToolDataSchema.optional(),
       startedAtMs: finiteNonNegativeNumberSchema.optional(),
       endedAtMs: finiteNonNegativeNumberSchema.optional(),
