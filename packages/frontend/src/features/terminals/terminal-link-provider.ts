@@ -105,7 +105,7 @@ const findCellRange = (
   return { start: first.range.start, end: last.range.end };
 };
 
-export const readTerminalLinksForBufferLine = (
+const readTerminalLinksForBufferLine = (
   terminal: Pick<Terminal, "buffer" | "cols">,
   row: number,
 ): TerminalLinkTarget[] => {

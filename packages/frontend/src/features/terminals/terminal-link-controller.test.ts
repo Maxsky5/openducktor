@@ -88,7 +88,7 @@ const createHarness = (openUrl: (url: string) => Promise<void>) => {
     return mouseEvent;
   };
 
-  return { container, controller, dispatchMouse, link, reportOpenError };
+  return { container, controller, dispatchMouse, link, reportOpenError, screen };
 };
 
 describe("terminal link controller", () => {
@@ -148,6 +148,69 @@ describe("terminal link controller", () => {
 
       expect(openUrl).toHaveBeenCalledWith("https://osc.test/path");
       expect(openUrl).toHaveBeenCalledTimes(1);
+    } finally {
+      harness.controller.dispose();
+      harness.container.remove();
+    }
+  });
+
+  test("resolves an OSC 8 destination before the first modified press", () => {
+    const openUrl = mock(async (_url: string) => undefined);
+    const harness = createHarness(openUrl);
+    const parentMouseMove = mock(() => undefined);
+    const handleMouseMove = (event: MouseEvent) => {
+      harness.controller.linkHandler.hover?.(
+        event,
+        "https://osc.test/first-press",
+        harness.link.range,
+      );
+    };
+    harness.screen.addEventListener("mousemove", handleMouseMove);
+    harness.container.addEventListener("mousemove", parentMouseMove);
+    try {
+      harness.dispatchMouse("mousedown");
+      harness.dispatchMouse("mouseup");
+
+      expect(openUrl).toHaveBeenCalledWith("https://osc.test/first-press");
+      expect(openUrl).toHaveBeenCalledTimes(1);
+      expect(parentMouseMove).not.toHaveBeenCalled();
+    } finally {
+      harness.screen.removeEventListener("mousemove", handleMouseMove);
+      harness.container.removeEventListener("mousemove", parentMouseMove);
+      harness.controller.dispose();
+      harness.container.remove();
+    }
+  });
+
+  test("does not replace an unresolved xterm link with its visible URL", () => {
+    const openUrl = mock(async (_url: string) => undefined);
+    const harness = createHarness(openUrl);
+    try {
+      harness.screen.classList.add("xterm-cursor-pointer");
+      harness.dispatchMouse("mousedown");
+      harness.dispatchMouse("mouseup");
+
+      expect(openUrl).not.toHaveBeenCalled();
+    } finally {
+      harness.controller.dispose();
+      harness.container.remove();
+    }
+  });
+
+  test("releases gesture listeners when the window loses focus", () => {
+    const openUrl = mock(async (_url: string) => undefined);
+    const harness = createHarness(openUrl);
+    try {
+      harness.link.hover?.(harness.dispatchMouse("mousemove"), harness.link.text);
+      harness.dispatchMouse("mousedown");
+      window.dispatchEvent(new Event("blur"));
+
+      const move = harness.dispatchMouse("mousemove", { ctrlKey: false });
+      const up = harness.dispatchMouse("mouseup", { ctrlKey: false });
+
+      expect(move.defaultPrevented).toBe(false);
+      expect(up.defaultPrevented).toBe(false);
+      expect(openUrl).not.toHaveBeenCalled();
     } finally {
       harness.controller.dispose();
       harness.container.remove();

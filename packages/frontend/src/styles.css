@@ -707,11 +707,12 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   animation: odt-border-ray-run var(--odt-border-ray-turn-duration) linear infinite;
 }
 
-.odt-terminal-links .xterm.xterm-cursor-pointer {
+.odt-terminal-links .xterm-screen.xterm-cursor-pointer {
   cursor: text;
 }
 
-.odt-terminal-link-pointer .xterm {
+.odt-terminal-links.odt-terminal-link-pointer .xterm,
+.odt-terminal-links.odt-terminal-link-pointer .xterm-screen.xterm-cursor-pointer {
   cursor: pointer;
 }
 

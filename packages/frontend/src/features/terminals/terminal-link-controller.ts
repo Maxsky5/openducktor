@@ -128,6 +128,11 @@ export const createTerminalLinkController = ({
     detachHoverWindowListenersIfIdle();
   };
 
+  const abortGesture = (): void => {
+    gesture = null;
+    detachGestureWindowListeners();
+  };
+
   const attachClickWindowListener = (): void => {
     if (clickWindowListenerAttached) return;
     clickWindowListenerAttached = true;
@@ -177,7 +182,28 @@ export const createTerminalLinkController = ({
     ) {
       return hovered;
     }
+    if (terminal.element?.querySelector(".xterm-screen.xterm-cursor-pointer")) return null;
     return provider.findLinkAt(position);
+  };
+
+  const refreshLinkHover = (event: MouseEvent): void => {
+    if (hovered || !terminal) return;
+    const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+    if (!screen) return;
+    // xterm resolves OSC 8 links on mousemove. Keep this event on the screen so it cannot reach
+    // terminal mouse tracking on the parent element.
+    screen.dispatchEvent(
+      new view.MouseEvent("mousemove", {
+        altKey: event.altKey,
+        bubbles: false,
+        cancelable: false,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+      }),
+    );
   };
 
   const openTarget = (target: TerminalLinkTarget): void => {
@@ -201,6 +227,7 @@ export const createTerminalLinkController = ({
 
   const handleMouseDown = (event: MouseEvent): void => {
     if (event.button !== 0 || !hasTerminalOpenModifier(event, platform)) return;
+    refreshLinkHover(event);
     const target = readTargetAt(event);
     if (!target) return;
     gesture = {
@@ -269,7 +296,8 @@ export const createTerminalLinkController = ({
   };
 
   const handleBlur = (): void => {
-    reset();
+    clearHover();
+    abortGesture();
   };
 
   const handleContainerLeave = (): void => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { IBufferCell, IBufferLine, Terminal } from "@xterm/xterm";
-import { readTerminalLinksForBufferLine } from "./terminal-link-provider";
+import type { IBufferCell, IBufferLine, ILink, Terminal } from "@xterm/xterm";
+import { createTerminalHttpLinkProvider } from "./terminal-link-provider";
 
 type TestCell = Pick<IBufferCell, "getChars" | "getCode" | "getWidth">;
 
@@ -44,6 +44,22 @@ const createTerminal = (
   };
 };
 
+const readTerminalLinksForBufferLine = (
+  terminal: Pick<Terminal, "buffer" | "cols">,
+  row: number,
+): ILink[] => {
+  const provider = createTerminalHttpLinkProvider(terminal, {
+    activate: () => undefined,
+    hover: () => undefined,
+    leave: () => undefined,
+  });
+  let links: ILink[] | undefined;
+  provider.provideLinks(row, (provided) => {
+    links = provided;
+  });
+  return links ?? [];
+};
+
 describe("terminal HTTP link provider", () => {
   test("joins soft-wrapped rows and maps the complete URL to terminal cells", () => {
     const columns = 12;
@@ -58,16 +74,11 @@ describe("terminal HTTP link provider", () => {
 
     const links = readTerminalLinksForBufferLine(terminal, 2);
 
-    expect(links).toEqual([
-      {
-        source: "plain",
-        url: "https://example.com/a?x=1",
-        range: {
-          start: { x: 4, y: 1 },
-          end: { x: 4, y: 3 },
-        },
-      },
-    ]);
+    expect(links[0]?.text).toBe("https://example.com/a?x=1");
+    expect(links[0]?.range).toEqual({
+      start: { x: 4, y: 1 },
+      end: { x: 4, y: 3 },
+    });
   });
 
   test("does not join separate logical lines", () => {
@@ -80,7 +91,7 @@ describe("terminal HTTP link provider", () => {
       columns,
     );
 
-    expect(readTerminalLinksForBufferLine(terminal, 1)[0]?.url).toBe("https://one.test");
+    expect(readTerminalLinksForBufferLine(terminal, 1)[0]?.text).toBe("https://one.test");
     expect(readTerminalLinksForBufferLine(terminal, 2)).toEqual([]);
   });
 

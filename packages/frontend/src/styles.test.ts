@@ -26,4 +26,14 @@ describe("global styles", () => {
     expect(styles).toContain("::view-transition-new(onboarding-stage-content)");
     expect(styles).not.toContain("@keyframes onboarding-stage-enter");
   });
+
+  test("targets the xterm screen for modifier-only OSC link cursors", () => {
+    const styles = readStyles();
+
+    expect(styles).toContain(".odt-terminal-links .xterm-screen.xterm-cursor-pointer");
+    expect(styles).toContain(
+      ".odt-terminal-links.odt-terminal-link-pointer .xterm-screen.xterm-cursor-pointer",
+    );
+    expect(styles).not.toContain(".odt-terminal-links .xterm.xterm-cursor-pointer");
+  });
 });

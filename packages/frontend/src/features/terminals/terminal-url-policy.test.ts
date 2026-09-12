@@ -39,4 +39,10 @@ describe("terminal URL policy", () => {
     expect(validateTerminalHttpUrl("https://exa\nmple.com")).toBeNull();
     expect(validateTerminalHttpUrl("javascript:alert(1)")).toBeNull();
   });
+
+  test("preserves explicit OSC 8 destinations without trimming valid punctuation", () => {
+    expect(validateTerminalHttpUrl("https://example.com/run!?q=ready!")).toBe(
+      "https://example.com/run!?q=ready!",
+    );
+  });
 });
