@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -234,9 +234,18 @@ for (const code of ["EACCES", "EIO", "ENOTDIR"]) {
 test("propagates path resolution failures from the managed worktree root", async () => {
   const h = await historyHarness();
   await rm(h.managedRoot, { recursive: true });
-  await writeFile(h.managedRoot, "not a directory");
-  const failure = await Effect.runPromise(Effect.flip(h.service.loadSessionHistory(h.input)));
+  const error = new HostOperationError({
+    operation: "worktreeFile.resolvePathWithinRoot",
+    message: "Cannot resolve the managed worktree root",
+    cause: Object.assign(new Error("Access denied"), { code: "EACCES" }),
+  });
+  const service = createAgentRuntimeQueryService({
+    ...h.dependencies,
+    worktreeFiles: { resolvePathWithinRoot: () => Effect.fail(error) },
+  });
+  const failure = await Effect.runPromise(Effect.flip(service.loadSessionHistory(h.input)));
   expect(failure.failure.code).toBe("scope_mismatch");
+  expect(failure.cause).toBe(error);
   expect(h.calls).toEqual([]);
 });
 
