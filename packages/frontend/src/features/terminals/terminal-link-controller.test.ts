@@ -35,10 +35,11 @@ const createHarness = (openUrl: (url: string) => Promise<void>) => {
   screen.getBoundingClientRect = () =>
     ({ left: 0, right: 200, top: 0, bottom: 120, width: 200, height: 20 }) as DOMRect;
 
-  const listeners: Array<() => void> = [];
-  const event = (listener: () => void): IDisposable => {
-    listeners.push(listener);
-    return { dispose: () => undefined };
+  const disposers: Array<ReturnType<typeof mock>> = [];
+  const event = (_listener: () => void): IDisposable => {
+    const dispose = mock(() => undefined);
+    disposers.push(dispose);
+    return { dispose };
   };
   let provider: ILinkProvider | null = null;
   const line = createLine("https://a.test", columns);
@@ -55,7 +56,9 @@ const createHarness = (openUrl: (url: string) => Promise<void>) => {
     onWriteParsed: event,
     registerLinkProvider: (nextProvider: ILinkProvider) => {
       provider = nextProvider;
-      return { dispose: () => undefined };
+      const dispose = mock(() => undefined);
+      disposers.push(dispose);
+      return { dispose };
     },
     rows: 1,
   };
@@ -88,7 +91,7 @@ const createHarness = (openUrl: (url: string) => Promise<void>) => {
     return mouseEvent;
   };
 
-  return { container, controller, dispatchMouse, link, reportOpenError, screen };
+  return { container, controller, dispatchMouse, disposers, link, reportOpenError, screen };
 };
 
 describe("terminal link controller", () => {
@@ -237,6 +240,29 @@ describe("terminal link controller", () => {
 
       window.dispatchEvent(new KeyboardEvent("keyup", { ctrlKey: false, key: "Control" }));
       expect(harness.container.classList.contains("odt-terminal-link-pointer")).toBe(false);
+    } finally {
+      harness.controller.dispose();
+      harness.container.remove();
+    }
+  });
+
+  test("disposes subscriptions and stops link input", () => {
+    const openUrl = mock(async (_url: string) => undefined);
+    const harness = createHarness(openUrl);
+    try {
+      harness.link.hover?.(harness.dispatchMouse("mousemove"), harness.link.text);
+      harness.controller.dispose();
+      harness.controller.dispose();
+
+      expect(harness.disposers).toHaveLength(6);
+      for (const dispose of harness.disposers) expect(dispose).toHaveBeenCalledTimes(1);
+      expect(harness.container.classList.contains("odt-terminal-links")).toBe(false);
+      expect(harness.container.classList.contains("odt-terminal-link-pointer")).toBe(false);
+
+      const down = harness.dispatchMouse("mousedown");
+      harness.dispatchMouse("mouseup");
+      expect(down.defaultPrevented).toBe(false);
+      expect(openUrl).not.toHaveBeenCalled();
     } finally {
       harness.controller.dispose();
       harness.container.remove();

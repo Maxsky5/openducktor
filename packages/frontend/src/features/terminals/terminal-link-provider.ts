@@ -25,7 +25,6 @@ type LogicalLine = {
 };
 
 type LinkCallbacks = {
-  activate(event: MouseEvent, target: LinkTarget): void;
   hover(event: MouseEvent, target: LinkTarget): void;
   leave(event: MouseEvent, target: LinkTarget): void;
 };
@@ -50,7 +49,9 @@ export const createHttpLinkProvider = (
         text: target.url,
         range: target.range,
         decorations: { pointerCursor: false, underline: true },
-        activate: (event) => callbacks.activate(event, target),
+        activate: () => {
+          // The capture handler opens links.
+        },
         hover: (event) => callbacks.hover(event, target),
         leave: (event) => callbacks.leave(event, target),
       }));

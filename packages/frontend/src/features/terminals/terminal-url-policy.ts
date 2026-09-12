@@ -1,16 +1,10 @@
+import { HTTP_URL, URL_BARE_END_MARKS, URL_BRACKETS, URL_END_MARKS } from "./constants";
+
 export type UrlMatch = {
   end: number;
   start: number;
   url: string;
 };
-
-const HTTP_URL = /https?:\/\/[^\s<>"'`|]+/giu;
-const END_PUNCTUATION = new Set([".", ",", ";", ":", "!", "?"]);
-const BRACKETS = new Map([
-  [")", "("],
-  ["]", "["],
-  ["}", "{"],
-]);
 
 export const checkHttpUrl = (text: string): string | null => {
   if (text.length === 0 || text.trim() !== text) return null;
@@ -60,16 +54,21 @@ function trimUrlEnd(text: string): string {
   while (end > 0) {
     const last = text[end - 1];
     if (!last) break;
-    if (END_PUNCTUATION.has(last)) {
+    if (URL_END_MARKS.has(last) || (URL_BARE_END_MARKS.has(last) && !hasUrlBody(text, end))) {
       end -= 1;
       continue;
     }
 
-    const open = BRACKETS.get(last);
+    const open = URL_BRACKETS.get(last);
     if (!open) break;
     const url = text.slice(0, end);
     if (countChar(url, last) <= countChar(url, open)) break;
     end -= 1;
   }
   return text.slice(0, end);
+}
+
+function hasUrlBody(text: string, end: number): boolean {
+  const schemeEnd = text.indexOf("://") + 3;
+  return /[/?#]/u.test(text.slice(schemeEnd, end - 1));
 }

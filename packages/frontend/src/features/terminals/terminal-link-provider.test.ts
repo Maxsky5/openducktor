@@ -49,7 +49,6 @@ const readTerminalLinksForBufferLine = (
   row: number,
 ): ILink[] => {
   const provider = createHttpLinkProvider(terminal, {
-    activate: () => undefined,
     hover: () => undefined,
     leave: () => undefined,
   });

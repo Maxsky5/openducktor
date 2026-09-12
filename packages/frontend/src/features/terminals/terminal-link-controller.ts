@@ -12,11 +12,8 @@ import {
   rangeHasCell,
   sameLink,
 } from "./terminal-link-provider";
+import { LINK_DRAG_PX, LINK_POINTER_CLASS, LINKS_ENABLED_CLASS } from "./constants";
 import { checkHttpUrl } from "./terminal-url-policy";
-
-const LINK_POINTER_CLASS = "odt-terminal-link-pointer";
-const LINKS_ENABLED_CLASS = "odt-terminal-links";
-const DRAG_THRESHOLD_PX = 4;
 
 type LinkPress = {
   startX: number;
@@ -190,7 +187,7 @@ export const createLinkController = ({
     const distance = Math.hypot(event.clientX - press.startX, event.clientY - press.startY);
     const target = readLink(event);
     if (
-      distance > DRAG_THRESHOLD_PX ||
+      distance > LINK_DRAG_PX ||
       !hasOpenKey(event, platform) ||
       !target ||
       !sameLink(target, press.target)
@@ -201,7 +198,7 @@ export const createLinkController = ({
 
   const handleMouseUp = (event: MouseEvent): void => {
     if (!press || event.button !== 0) return;
-    const done = press;
+    const completedPress = press;
     press = null;
     stopDragWatch();
     stopEvent(event);
@@ -215,8 +212,13 @@ export const createLinkController = ({
     }, 0);
 
     const target = readLink(event);
-    if (!done.stopped && hasOpenKey(event, platform) && target && sameLink(target, done.target)) {
-      openLink(done.target);
+    if (
+      !completedPress.stopped &&
+      hasOpenKey(event, platform) &&
+      target &&
+      sameLink(target, completedPress.target)
+    ) {
+      openLink(completedPress.target);
     }
   };
 
@@ -268,9 +270,6 @@ export const createLinkController = ({
       terminal = activeTerminal;
       container.classList.add(LINKS_ENABLED_CLASS);
       provider = createHttpLinkProvider(activeTerminal, {
-        activate: () => {
-          // The capture handler opens links.
-        },
         hover: handleHover,
         leave: handleLeave,
       });
@@ -314,7 +313,7 @@ export function hasOpenKey(
   return isMac(platform) ? event.metaKey : event.ctrlKey;
 }
 
-export function readPointerCell(
+function readPointerCell(
   terminal: Pick<Terminal, "buffer" | "cols" | "element" | "rows">,
   event: Pick<MouseEvent, "clientX" | "clientY">,
 ): IBufferCellPosition | null {

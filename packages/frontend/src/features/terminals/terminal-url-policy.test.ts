@@ -28,6 +28,7 @@ describe("terminal URL policy", () => {
         url: "https://example.com/docs_(v2)",
       },
     ]);
+    expect(findHttpUrls("See https://example.com!")[0]?.url).toBe("https://example.com");
   });
 
   test("does not infer or repair unsupported destinations", () => {
@@ -44,5 +45,18 @@ describe("terminal URL policy", () => {
     expect(checkHttpUrl("https://example.com/run!?q=ready!")).toBe(
       "https://example.com/run!?q=ready!",
     );
+  });
+
+  test("preserves valid punctuation at the end of plain-text links", () => {
+    const urls = [
+      "https://example.com/run!",
+      "https://example.com/run;",
+      "https://example.com/run:",
+      "https://example.com/run?q=ready?",
+    ];
+
+    for (const url of urls) {
+      expect(findHttpUrls(`Open ${url}`)[0]?.url).toBe(url);
+    }
   });
 });

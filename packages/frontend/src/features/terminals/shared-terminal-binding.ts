@@ -5,11 +5,6 @@ import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { createLinkController } from "./terminal-link-controller";
 
-type BindingDeps = {
-  openUrl?: (url: string) => Promise<void>;
-  reportOpenError?: (url: string, cause: unknown) => void;
-};
-
 export type TerminalBinding = {
   terminal: Terminal;
   fitAddon: FitAddon;
@@ -26,12 +21,11 @@ const reportOpenError = (_url: string, cause: unknown): void => {
 export const createTerminalBinding = (
   container: HTMLElement,
   options: ITerminalOptions,
-  deps: BindingDeps = {},
 ): TerminalBinding => {
   const links = createLinkController({
     container,
-    openUrl: deps.openUrl ?? openExternalUrl,
-    reportOpenError: deps.reportOpenError ?? reportOpenError,
+    openUrl: openExternalUrl,
+    reportOpenError,
   });
   const terminal = new Terminal({ ...options, linkHandler: links.linkHandler });
   const fitAddon = new FitAddon();
