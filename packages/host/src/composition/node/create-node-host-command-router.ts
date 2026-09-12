@@ -25,6 +25,8 @@ import { createWorkspaceFilesService } from "../../application/filesystem/worksp
 import { createWorkspaceActivityInspector } from "../../application/workspaces/workspace-activity-inspector";
 import { createWorkspaceLifecycleService } from "../../application/workspaces/workspace-lifecycle-service";
 import { createGitService } from "../../application/git/git-service";
+import { withGitWorkspaceAdmission } from "../../application/git/git-workspace-admission";
+import { withTaskAssetWorkspaceAdmission } from "../../application/task-assets/task-asset-admission";
 import { createGitProviderService } from "../../application/git/git-provider-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
@@ -115,16 +117,19 @@ export const assembleNodeEffectHostCommandRouter = (
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
-  const gitService = createGitService({
-    gitPort: git,
-    settingsConfig,
-    worktreeFiles,
-  });
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
   const workspaceAdmissionService = createWorkspaceAdmissionService({
     settingsConfig,
     workspaceSettingsService,
   });
+  const gitService = withGitWorkspaceAdmission(
+    createGitService({
+      gitPort: git,
+      settingsConfig,
+      worktreeFiles,
+    }),
+    workspaceAdmissionService,
+  );
   const gitProviderService = createGitProviderService({
     resolver: gitProviderResolver,
     workspaceSettingsService,
@@ -145,6 +150,14 @@ export const assembleNodeEffectHostCommandRouter = (
   }
   const assets = createNodeTaskAssetServices(taskAssetServiceInput);
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
+  const admittedTaskAssetStagingService = withTaskAssetWorkspaceAdmission({
+    admission: workspaceAdmissionService,
+    resolveRepoPath: (workspaceId) =>
+      workspaceSettingsService
+        .getRepoConfig(workspaceId)
+        .pipe(Effect.map((repoConfig) => repoConfig.repoPath)),
+    service: taskAssetStagingService,
+  });
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
     adapterRegistry: liveSessionAdapterRegistry,
     withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
@@ -410,7 +423,7 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createRuntimeOrchestratorCommandHandlers(runtimeOrchestratorWithEffectiveRegistry),
       ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService),
       ...createSystemPlatformCommandHandlers(),
-      ...createTaskAssetCommandHandlers(taskAssetStagingService),
+      ...createTaskAssetCommandHandlers(admittedTaskAssetStagingService),
       ...createTaskCommandHandlers(taskService),
       ...createTaskWorktreeCommandHandlers(taskWorktreeService),
       ...createTerminalCommandHandlers(terminalService),

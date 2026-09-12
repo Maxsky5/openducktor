@@ -71,12 +71,16 @@ export type WorkspaceSettingsService = {
     workspaceId: string;
     expectedRepoPath: string;
     removeTaskWorktrees: boolean;
-  }): Effect.Effect<WorkspaceRemovalRecord, WorkspaceSettingsError>;
+  }): Effect.Effect<
+    { record: WorkspaceRemovalRecord; repoConfig: RepoConfig },
+    WorkspaceSettingsError
+  >;
   recordWorkspaceRemovalProgress(input: {
     workspaceId: string;
     phase: WorkspaceRemovalPhase;
     removedWorktrees: string[];
     lastFailure: string | null;
+    pendingWorktreePath: string | null | undefined;
   }): Effect.Effect<void, WorkspaceSettingsError>;
   reorderWorkspaces(
     workspaceOrder: string[],

@@ -345,10 +345,11 @@ export const createAgentSessionLiveStateService = ({
         .resolveControlForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.sendUserMessage(input))),
     ),
-    updateSessionModel: (input) =>
+    updateSessionModel: withStartAdmission((input) =>
       adapterRegistry
         .resolveControlForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.updateSessionModel(input))),
+    ),
     stopSession: (input) =>
       adapterRegistry
         .resolveControlForScope(input)

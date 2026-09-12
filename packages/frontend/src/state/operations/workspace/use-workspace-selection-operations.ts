@@ -102,7 +102,7 @@ const resolveActiveWorkspaceFromRecords = ({
 }: {
   records: WorkspaceRecord[];
   activeWorkspace: ActiveWorkspace | null;
-}): WorkspaceRecord | ActiveWorkspace | null => {
+}): WorkspaceRecord | null => {
   const activeRecord = records.find((entry) => entry.isActive);
   if (activeRecord) {
     return activeRecord;
@@ -115,7 +115,7 @@ const resolveActiveWorkspaceFromRecords = ({
   return (
     records.find((entry) => entry.workspaceId === activeWorkspace.workspaceId) ??
     records.find((entry) => entry.repoPath === activeWorkspace.repoPath) ??
-    activeWorkspace
+    null
   );
 };
 

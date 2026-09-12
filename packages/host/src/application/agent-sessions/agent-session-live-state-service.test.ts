@@ -1218,6 +1218,45 @@ describe("createAgentSessionLiveStateService", () => {
     ]);
   });
 
+  test("rejects a session model update for a blocked workspace before resolving an adapter", async () => {
+    const withWorkStartLease: CreateAgentSessionLiveStateServiceInput["withWorkStartLease"] = (
+      repoPath,
+      _effect,
+    ) =>
+      Effect.fail(
+        new HostValidationError({
+          message: `Workspace is closed: ${repoPath}. Reopen it before using it.`,
+          field: "workspaceId",
+        }),
+      );
+    const { service } = createHarness(withWorkStartLease);
+    const adapter = {
+      ...fakeAdapter({
+        runtimeId: "runtime-1",
+        snapshots: () => [],
+      }),
+      supportsSessionControl: true,
+      startSession: () => Effect.dieMessage("unexpected start"),
+      resumeSession: () => Effect.dieMessage("unexpected resume"),
+      forkSession: () => Effect.dieMessage("unexpected fork"),
+      sendUserMessage: () => Effect.dieMessage("unexpected send"),
+      updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+      stopSession: () => Effect.dieMessage("unexpected stop"),
+      releaseSession: () => Effect.dieMessage("unexpected release"),
+    } satisfies AgentSessionRuntimeAdapterPort;
+    await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+
+    const failure = await expectHostFailure(
+      service.updateSessionModel({
+        ...sessionRef("persisted-session"),
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        model: null,
+      }),
+    );
+
+    expect(failure.message).toBe("Workspace is closed: /repo. Reopen it before using it.");
+  });
+
   test("fails scoped operations when the workspace has no live runtime", async () => {
     const { service } = createHarness();
     const ref = {

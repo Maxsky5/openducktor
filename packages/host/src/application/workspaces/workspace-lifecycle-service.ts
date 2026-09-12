@@ -156,12 +156,14 @@ export const createWorkspaceLifecycleService = ({
     phase: WorkspaceRemovalPhase,
     removedWorktrees: string[],
     lastFailure: string | null,
+    pendingWorktreePath: string | null | undefined = undefined,
   ) =>
     workspaceSettingsService.recordWorkspaceRemovalProgress({
       workspaceId,
       phase,
       removedWorktrees,
       lastFailure,
+      pendingWorktreePath,
     });
 
   const failRemovalPhase = (
@@ -212,15 +214,16 @@ export const createWorkspaceLifecycleService = ({
         yield* admission.awaitWorkStarts(repoConfig.repoPath);
       }
       yield* activity.releaseWorkspaceSessions(repoConfig.repoPath);
-      const startedRecord = yield* workspaceSettingsService.beginWorkspaceRemoval({
-        workspaceId: input.workspaceId,
-        expectedRepoPath: input.expectedRepoPath,
-        removeTaskWorktrees: input.removeTaskWorktrees,
-      });
+      const { record: startedRecord, repoConfig: journaledRepoConfig } =
+        yield* workspaceSettingsService.beginWorkspaceRemoval({
+          workspaceId: input.workspaceId,
+          expectedRepoPath: input.expectedRepoPath,
+          removeTaskWorktrees: input.removeTaskWorktrees,
+        });
       const removeTaskWorktrees = startedRecord.removeTaskWorktrees;
       admission.blockWorkspace({
         reason: "removal",
-        repoPath: repoConfig.repoPath,
+        repoPath: journaledRepoConfig.repoPath,
         workspaceId: input.workspaceId,
       });
 
@@ -233,7 +236,7 @@ export const createWorkspaceLifecycleService = ({
             input.workspaceId,
             collectWorkspaceTaskWorktreePaths(
               { gitPort, settingsConfig, taskStore, workspaceSettingsService },
-              repoConfig,
+              journaledRepoConfig,
             ),
           ),
         );
@@ -250,7 +253,7 @@ export const createWorkspaceLifecycleService = ({
         const worktreePaths = inventoryResult.right;
         const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
           settingsConfig,
-          repoConfig,
+          journaledRepoConfig,
         );
         const removedComparisons = new Set(
           removedWorktrees.map((path) => normalizePathForComparison(path)),
@@ -260,30 +263,43 @@ export const createWorkspaceLifecycleService = ({
             continue;
           }
           const result = yield* Effect.either(
+            persistProgress(input.workspaceId, "worktrees", removedWorktrees, null, worktreePath),
+          );
+          if (result._tag === "Left") {
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: "workspace.removeWorkspace.worktrees",
+                message: `Cannot journal the pending worktree deletion of ${worktreePath}: ${result.left.message}. Retry removal to continue.`,
+                cause: unwrapUnknownError(result.left),
+                details: { failedPath: worktreePath, workspaceId: input.workspaceId },
+              }),
+            );
+          }
+          const removalResult = yield* Effect.either(
             removeWorktreeAndFilesystemPath(
               { gitPort, settingsConfig, worktreeFiles },
               {
                 force: true,
                 managedWorktreeBasePath,
                 missingOutsideManagedRootPathPolicy: "skip",
-                repoPath: repoConfig.repoPath,
+                repoPath: journaledRepoConfig.repoPath,
                 worktreePath,
               },
             ),
           );
-          if (result._tag === "Left") {
+          if (removalResult._tag === "Left") {
             return yield* failRemovalPhase(
               input.workspaceId,
               "worktrees",
               removedWorktrees,
               worktreePath,
-              `Removed ${removedWorktrees.length} task worktree(s). Failed to remove ${worktreePath}: ${result.left.message}. Retry removal to continue. Local branches and committed history stay.`,
-              result.left,
+              `Removed ${removedWorktrees.length} task worktree(s). Failed to remove ${worktreePath}: ${removalResult.left.message}. Retry removal to continue. Local branches and committed history stay.`,
+              removalResult.left,
             );
           }
           removedWorktrees.push(worktreePath);
           removedComparisons.add(normalizePathForComparison(worktreePath));
-          yield* persistProgress(input.workspaceId, "worktrees", removedWorktrees, null);
+          yield* persistProgress(input.workspaceId, "worktrees", removedWorktrees, null, null);
         }
         phase = "task_store";
         yield* persistProgress(input.workspaceId, phase, removedWorktrees, null);
@@ -308,6 +324,7 @@ export const createWorkspaceLifecycleService = ({
       }
 
       if (phase === "attachments") {
+        yield* admission.awaitWorkStarts(journaledRepoConfig.repoPath);
         const assetsResult = yield* Effect.either(
           storage.removeWorkspaceTaskAssets(input.workspaceId),
         );
