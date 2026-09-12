@@ -20,26 +20,6 @@ export type CodexAppServerError =
   | HostResourceErrorAggregate
   | HostValidationErrorAggregate;
 
-export const CODEX_APP_SERVER_REQUEST_METHODS = [
-  "initialize",
-  "model/list",
-  "thread/fork",
-  "thread/list",
-  "thread/loaded/list",
-  "thread/compact/start",
-  "thread/read",
-  "thread/resume",
-  "thread/start",
-  "thread/name/set",
-  "thread/turns/list",
-  "skills/list",
-  "turn/start",
-  "turn/steer",
-  "turn/interrupt",
-  "gitDiffToRemote",
-  "fuzzyFileSearch",
-] as const satisfies readonly CodexAppServerRequestMethod[];
-
 export type {
   CodexAppServerProtocolMessage,
   CodexAppServerRequestId,

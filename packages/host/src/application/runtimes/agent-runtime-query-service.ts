@@ -4,6 +4,7 @@ import type {
   RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { hasNestedNodeErrorCode } from "../../effect/host-errors";
 import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
 import type {
   AgentSessionLiveAdapterPort,
@@ -15,13 +16,14 @@ import type { TaskReader } from "../../ports/task-repository-ports";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { resolveRepoPath } from "./runtime-orchestrator-model";
 import { requireSessionScope, type QueryInput } from "./runtime-query-scope";
+import { requireRuntimeWorkingDirectory } from "./runtime-working-directory";
 import {
-  requireRuntimeWorkingDirectory,
-  type RuntimeWorkingDirectoryDependencies,
-} from "./runtime-working-directory";
+  requireManagedHistoryDirectory,
+  type RuntimeHistoryWorkingDirectoryDependencies,
+} from "./runtime-history-working-directory";
 import { runtimeQueryError, type RuntimeQueryError } from "../../ports/runtime-query-error";
 
-export type AgentRuntimeQueryDependencies = RuntimeWorkingDirectoryDependencies & {
+export type AgentRuntimeQueryDependencies = RuntimeHistoryWorkingDirectoryDependencies & {
   adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   runtimeRegistry: Pick<RuntimeRegistryPort, "findWorkspaceRuntime">;
   gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository">;
@@ -60,22 +62,30 @@ export const createAgentRuntimeQueryService = (
       );
       const request = { ...input, repoPath };
       const directory = input.workingDirectory ?? repoPath;
+      const directoryFailure = (cause: unknown) =>
+        runtimeQueryError(
+          method,
+          request,
+          "scope_mismatch",
+          "The working directory is missing, inaccessible, or outside the selected workspace. Select an existing workspace directory.",
+          cause,
+        );
       return yield* dependencies.worktreeReads.runWorktreeRead(
         directory,
         Effect.gen(function* () {
-          yield* requireRuntimeWorkingDirectory(dependencies, {
+          const readsRemovedWorktree = yield* requireRuntimeWorkingDirectory(dependencies, {
             repoPath,
             workingDirectory: directory,
           }).pipe(
-            Effect.mapError((cause) =>
-              runtimeQueryError(
-                method,
-                request,
-                "scope_mismatch",
-                "The working directory is missing, inaccessible, or outside the selected workspace. Select an existing workspace directory.",
-                cause,
-              ),
+            Effect.as(false),
+            Effect.catchTag("HostOperationError", (cause) =>
+              method === "loadSessionHistory" &&
+              input.sessionScope?.kind === "workflow" &&
+              hasNestedNodeErrorCode(cause, "ENOENT")
+                ? Effect.succeed(true)
+                : Effect.fail(cause),
             ),
+            Effect.mapError(directoryFailure),
           );
           const { runtime, adapter } = yield* resolveAdapter(request, method);
           if (!supportsQuery(runtime.descriptor, method)) {
@@ -87,6 +97,12 @@ export const createAgentRuntimeQueryService = (
             );
           }
           yield* requireSessionScope(dependencies.taskReader, adapter, request, method);
+          if (readsRemovedWorktree) {
+            yield* requireManagedHistoryDirectory(dependencies, {
+              repoPath,
+              workingDirectory: directory,
+            }).pipe(Effect.mapError(directoryFailure));
+          }
           const result = yield* invoke(adapter.queries, request);
           const current = yield* resolveAdapter(request, method);
           if (current.adapter !== adapter) {

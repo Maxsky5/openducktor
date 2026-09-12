@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { taskQueryKeys } from "@/state/queries/tasks";
+import { invalidateRuntimeQueries } from "@/state/queries/runtime-query-invalidation";
 import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
 import type { TaskStreamController } from "@/state/tasks/task-stream-controller";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
@@ -94,11 +95,23 @@ export function useAppLifecycle({
       runtimeKinds,
       isCurrent: () => activeWorkspaceRef.current?.repoPath === repoPath,
       startRepoRuntime,
+      onRuntimeReady: (runtime) =>
+        invalidateRuntimeQueries(
+          queryClient,
+          { repoPath: runtime.repoPath, runtimeKind: runtime.kind },
+          "ready",
+        ),
       refreshRepoRuntimeHealth,
       notifications: lifecycleNotifications,
       timers: lifecycleTimers,
     });
-  }, [activeWorkspace?.repoPath, refreshRepoRuntimeHealth, runtimeKinds, startRepoRuntime]);
+  }, [
+    activeWorkspace?.repoPath,
+    queryClient,
+    refreshRepoRuntimeHealth,
+    runtimeKinds,
+    startRepoRuntime,
+  ]);
 
   useEffect(() => {
     failedStreamSnapshotReposRef.current = new Set();

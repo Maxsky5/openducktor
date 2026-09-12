@@ -19,7 +19,8 @@ export const createLiveSessionPublisher =
 
 export const createRuntimeLifecyclePublisher =
   (
-    eventBus: HostEventBusPort | undefined,
+    eventBus: HostEventBusPort,
+    onBackgroundFailure: (failure: HostOperationError) => Effect.Effect<void>,
   ): NonNullable<CreateRuntimeRegistryInput["onRuntimeChanged"]> =>
   (runtime, state) =>
     Effect.try({
@@ -36,4 +37,4 @@ export const createRuntimeLifecyclePublisher =
           message: "Cannot publish the runtime change. Check the host event bus.",
           cause,
         }),
-    });
+    }).pipe(Effect.catchTag("HostOperationError", onBackgroundFailure));

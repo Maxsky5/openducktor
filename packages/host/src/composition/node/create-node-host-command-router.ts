@@ -232,22 +232,26 @@ export const assembleNodeEffectHostCommandRouter = (
         resolveRuntimeMcpBridge("opencode", runtimeInput.repoPath),
     }),
   });
-  const effectiveRuntimeRegistry =
-    runtimeRegistry ??
-    createRuntimeRegistry({
-      workspaceStarter,
-      onRuntimeChanged: createRuntimeLifecyclePublisher(eventBus),
-      hasActiveRuntimeSessions: createRuntimeActiveSessionResolver(agentSessionLiveStateService),
-      resolveRuntimeExecutablePath: (runtimeInput) =>
-        readSavedRuntimeExecutablePath({
-          kind: runtimeInput.descriptor.kind,
-          settingsConfig,
-        }),
-      sessionOperations: createRuntimeSessionOperations({
-        codexAppServer: effectiveCodexAppServer,
-        claudeAgentSdk: claudeRuntime.sessionOperations,
+  const runtimeRegistryInput: Parameters<typeof createRuntimeRegistry>[0] = {
+    workspaceStarter,
+    hasActiveRuntimeSessions: createRuntimeActiveSessionResolver(agentSessionLiveStateService),
+    resolveRuntimeExecutablePath: (runtimeInput) =>
+      readSavedRuntimeExecutablePath({
+        kind: runtimeInput.descriptor.kind,
+        settingsConfig,
       }),
-    });
+    sessionOperations: createRuntimeSessionOperations({
+      codexAppServer: effectiveCodexAppServer,
+      claudeAgentSdk: claudeRuntime.sessionOperations,
+    }),
+  };
+  if (eventBus) {
+    runtimeRegistryInput.onRuntimeChanged = createRuntimeLifecyclePublisher(
+      eventBus,
+      onBackgroundFailure,
+    );
+  }
+  const effectiveRuntimeRegistry = runtimeRegistry ?? createRuntimeRegistry(runtimeRegistryInput);
   const taskWorktreeService = createTaskWorktreeService({
     settingsConfig,
     workspaceSettingsService,
@@ -450,6 +454,7 @@ export const assembleNodeEffectHostCommandRouter = (
           gitPort: git,
           taskReader: taskStore,
           worktreeReads: taskSessionLifecycleCoordinator,
+          worktreeFiles,
         }),
       ),
       ...createDevServerCommandHandlers(devServerService),

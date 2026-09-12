@@ -131,6 +131,9 @@ const harness = async (
         }),
     },
     worktreeReads: createTaskSessionLifecycleCoordinator(),
+    worktreeFiles: {
+      resolvePathWithinRoot: () => Effect.die("Unexpected removed-worktree history lookup"),
+    },
   });
   return {
     service,
