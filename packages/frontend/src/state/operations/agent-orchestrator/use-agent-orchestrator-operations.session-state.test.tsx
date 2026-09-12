@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { CodexAppServerAdapter } from "@openducktor/adapters-codex-app-server";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
@@ -24,7 +23,7 @@ import {
 } from "./use-agent-orchestrator-operations.test-helpers";
 
 interface ReceivedHistoryInputRefContract {
-  current: Parameters<InstanceType<typeof CodexAppServerAdapter>["loadSessionHistory"]>[0] | null;
+  current: Parameters<typeof host.agentRuntimeLoadSessionHistory>[0] | null;
 }
 
 interface ReceivedContextInputRefContract {
@@ -768,7 +767,7 @@ describe("use-agent-orchestrator-operations session state", () => {
 
   test("passes prompt context to Codex session history loads", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
-    const originalCodexLoadSessionHistory = CodexAppServerAdapter.prototype.loadSessionHistory;
+    const originalCodexLoadSessionHistory = host.agentRuntimeLoadSessionHistory;
     const codexRecord = {
       ...persistedSessionFixture,
       runtimeKind: "codex" as const,
@@ -776,7 +775,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     const receivedHistoryInputRef: ReceivedHistoryInputRefContract = { current: null };
 
     host.agentSessionsList = async () => [codexRecord];
-    CodexAppServerAdapter.prototype.loadSessionHistory = async (input) => {
+    host.agentRuntimeLoadSessionHistory = async (input) => {
       receivedHistoryInputRef.current = input;
       return [
         {
@@ -858,7 +857,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
-      CodexAppServerAdapter.prototype.loadSessionHistory = originalCodexLoadSessionHistory;
+      host.agentRuntimeLoadSessionHistory = originalCodexLoadSessionHistory;
     }
   });
 

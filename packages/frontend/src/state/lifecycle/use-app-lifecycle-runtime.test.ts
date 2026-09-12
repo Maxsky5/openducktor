@@ -54,6 +54,59 @@ const runtime: RuntimeInstanceSummary = {
 };
 
 describe("useAppLifecycle runtime coordination", () => {
+  test("does not report cache refresh failures as runtime startup failures", async () => {
+    const notices = notifications();
+    const stop = startRepositoryRuntimes({
+      repoPath: "/repo",
+      runtimeKinds: ["opencode"],
+      isCurrent: () => true,
+      startRepoRuntime: async () => runtime,
+      onRuntimeReady: async () => {
+        throw new Error("cache unavailable");
+      },
+      refreshRepoRuntimeHealth: async () => ({}),
+      notifications: notices,
+      timers: createTimers(),
+    });
+    try {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(notices.error).toHaveBeenCalledTimes(1);
+      expect(notices.error).toHaveBeenCalledWith(
+        "Runtime data refresh failed for opencode",
+        "cache unavailable",
+      );
+    } finally {
+      stop();
+    }
+  });
+
+  test("does not refresh runtime queries after startup fails", async () => {
+    const notices = notifications();
+    const onRuntimeReady = mock(async () => {});
+    const stop = startRepositoryRuntimes({
+      repoPath: "/repo",
+      runtimeKinds: ["opencode"],
+      isCurrent: () => true,
+      startRepoRuntime: async () => {
+        throw new Error("startup unavailable");
+      },
+      onRuntimeReady,
+      refreshRepoRuntimeHealth: async () => ({}),
+      notifications: notices,
+      timers: createTimers(),
+    });
+    try {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(onRuntimeReady).not.toHaveBeenCalled();
+      expect(notices.error).toHaveBeenCalledWith(
+        "Runtime startup failed for opencode",
+        "startup unavailable",
+      );
+    } finally {
+      stop();
+    }
+  });
+
   test("starts repository runtimes outside diagnostics without blocking independent mount work", async () => {
     const startup = createDeferred<RuntimeInstanceSummary>();
     const startRepoRuntime = mock(async () => await startup.promise);
@@ -66,6 +119,7 @@ describe("useAppLifecycle runtime coordination", () => {
       runtimeKinds: ["opencode"],
       isCurrent: () => true,
       startRepoRuntime,
+      onRuntimeReady: async () => {},
       refreshRepoRuntimeHealth,
       notifications: notices,
       timers,
@@ -81,10 +135,7 @@ describe("useAppLifecycle runtime coordination", () => {
     expect(refreshRepoRuntimeHealth).toHaveBeenCalledTimes(1);
 
     startup.resolve(runtime);
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(refreshRepoRuntimeHealth).toHaveBeenCalledTimes(2);
     stop();
   });
@@ -99,6 +150,7 @@ describe("useAppLifecycle runtime coordination", () => {
       runtimeKinds: ["opencode"],
       isCurrent: () => current,
       startRepoRuntime: async () => await startup.promise,
+      onRuntimeReady: async () => {},
       refreshRepoRuntimeHealth: async () => ({}),
       notifications: notices,
       timers: createTimers(),

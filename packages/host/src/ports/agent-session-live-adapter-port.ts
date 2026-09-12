@@ -30,6 +30,7 @@ import type {
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { HostError } from "../effect/host-errors";
+import type { AgentRuntimeQueryAdapterPort } from "./agent-runtime-query-port";
 
 export type AgentSessionCatalogInvalidation = {
   readonly repoPath: string;
@@ -81,6 +82,7 @@ export type AgentSessionLiveAdapterBinding = {
 export type AgentSessionLiveAdapterScope = Pick<AgentSessionLiveRef, "repoPath" | "runtimeKind">;
 
 type AgentSessionLiveAdapterBase = {
+  readonly queries: AgentRuntimeQueryAdapterPort;
   readonly beginGeneratedImageBatch: (
     input: AgentGeneratedImageBatchInput,
   ) => Effect.Effect<AgentGeneratedImageBatchResult, HostError>;

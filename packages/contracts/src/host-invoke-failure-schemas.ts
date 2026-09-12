@@ -1,10 +1,14 @@
 import { z } from "zod";
+import { runtimeQueryFailureSchema } from "./runtime-query-failure-schemas";
 import { workspaceTextFileWriteFailureSchema } from "./filesystem-schemas";
 import { sessionHistoryFailureSchema } from "./session-history-failure-schemas";
 import { taskAssetFailureSchema } from "./task-asset-schemas";
 import { terminalFailureSchema } from "./terminal-schemas";
 
 export const hostInvokeFailureSchema = z.discriminatedUnion("kind", [
+  z
+    .object({ kind: z.literal("runtime_query"), runtimeQueryFailure: runtimeQueryFailureSchema })
+    .strict(),
   z
     .object({
       kind: z.literal("terminal"),

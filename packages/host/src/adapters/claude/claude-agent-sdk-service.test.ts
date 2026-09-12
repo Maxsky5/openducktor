@@ -113,6 +113,21 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
 };
 
 describe("createClaudeAgentSdkService", () => {
+  test("resolves a cold child parent without starting or admitting a session", async () => {
+    const emit = mock(() => {});
+    const service = createService(null, emit);
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "root::claude-subagent::child",
+    };
+    await expect(Effect.runPromise(service.resolveSessionParent(ref))).resolves.toBe("root");
+    await expect(
+      Effect.runPromise(service.resolveSessionParent({ ...ref, externalSessionId: "root" })),
+    ).resolves.toBeNull();
+    expect(emit).not.toHaveBeenCalled();
+  });
   test("resumes and sends through a retained repository session without a fake workflow role", async () => {
     const repositoryScope = { kind: "repository" } as const;
     const mcpServerStatus = mock(async () => [
@@ -255,7 +270,7 @@ describe("createClaudeAgentSdkService", () => {
             runtimePolicy: { kind: "claude" },
           }),
         ),
-      ).rejects.toThrow("Failed to load Claude session");
+      ).rejects.toThrow("The selected Claude session is unavailable");
     }
   });
 
@@ -270,7 +285,7 @@ describe("createClaudeAgentSdkService", () => {
         externalSessionId: "session-1",
         runtimePolicy: { kind: "claude" },
       }),
-    ).toThrow("Cannot load session history Claude session 'session-1'");
+    ).toThrow("The registered session belongs to another repository");
   });
 
   test("rejects live child history and TODO reads from another working directory", () => {
@@ -285,10 +300,10 @@ describe("createClaudeAgentSdkService", () => {
     };
 
     expect(() => service.loadSessionHistory(ref)).toThrow(
-      "Cannot load session history Claude session 'session-1'",
+      "The registered session belongs to another repository",
     );
     expect(() => service.loadSessionTodos(ref)).toThrow(
-      "Cannot load session todos Claude session 'session-1'",
+      "The registered session belongs to another repository",
     );
   });
 

@@ -1,3 +1,4 @@
+import { resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -192,16 +193,15 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     return fromPromise("claudeRuntime.searchFiles", () => searchClaudeWorkspaceFiles(input));
   }
 
+  resolveSessionParent(input: SessionRef) {
+    return fromPromise("claudeRuntime.resolveSessionParent", async () => {
+      const target = parseClaudeTranscriptTarget(input.externalSessionId);
+      return target.subpath ? target.sessionId : null;
+    });
+  }
+
   loadSessionHistory(input: LoadAgentSessionHistoryInput) {
-    const target = parseClaudeTranscriptTarget(input.externalSessionId);
-    const session = this.sessionStore.get(target.sessionId);
-    if (session) {
-      assertClaudeSessionRef(
-        session,
-        { ...input, externalSessionId: target.sessionId },
-        "load session history",
-      );
-    }
+    const { target, session } = resolveClaudeQuerySession(this.sessionStore, input);
     const liveContext =
       session && !target.subpath
         ? {
@@ -225,15 +225,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   loadSessionTodos(input: LoadAgentSessionTodosInput) {
-    const target = parseClaudeTranscriptTarget(input.externalSessionId);
-    const session = this.sessionStore.get(target.sessionId);
-    if (session) {
-      assertClaudeSessionRef(
-        session,
-        { ...input, externalSessionId: target.sessionId },
-        "load session todos",
-      );
-    }
+    const { target, session } = resolveClaudeQuerySession(this.sessionStore, input);
     if (session && !target.subpath) {
       return Effect.succeed([...session.todosById.values()]);
     }

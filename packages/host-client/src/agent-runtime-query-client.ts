@@ -1,4 +1,4 @@
-import { CLAUDE_RUNTIME_COMMAND_CONTRACTS } from "@openducktor/contracts";
+import { AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS } from "@openducktor/contracts";
 import type {
   ListAgentModelsInput,
   ListAgentSkillsInput,
@@ -12,11 +12,11 @@ import type {
 } from "@openducktor/core";
 import type { InvokeFn } from "./invoke-utils";
 
-export class HostClaudeRuntimeClient {
+export class HostAgentRuntimeQueryClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
-  claudeRuntimeListModels(input: ListAgentModelsInput) {
-    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.listModels;
+  agentRuntimeListModels(input: ListAgentModelsInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listModels;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },
@@ -24,8 +24,8 @@ export class HostClaudeRuntimeClient {
     );
   }
 
-  claudeRuntimeListSlashCommands(input: ListAgentSlashCommandsInput) {
-    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSlashCommands;
+  agentRuntimeListSlashCommands(input: ListAgentSlashCommandsInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listSlashCommands;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },
@@ -33,8 +33,8 @@ export class HostClaudeRuntimeClient {
     );
   }
 
-  claudeRuntimeListSkills(input: ListAgentSkillsInput) {
-    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSkills;
+  agentRuntimeListSkills(input: ListAgentSkillsInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listSkills;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },
@@ -42,8 +42,8 @@ export class HostClaudeRuntimeClient {
     );
   }
 
-  claudeRuntimeListSubagents(input: ListAgentSubagentsInput) {
-    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.listSubagents;
+  agentRuntimeListSubagents(input: ListAgentSubagentsInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.listSubagents;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },
@@ -51,8 +51,8 @@ export class HostClaudeRuntimeClient {
     );
   }
 
-  claudeRuntimeSearchFiles(input: SearchAgentFilesInput) {
-    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.searchFiles;
+  agentRuntimeSearchFiles(input: SearchAgentFilesInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.searchFiles;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },
@@ -60,8 +60,8 @@ export class HostClaudeRuntimeClient {
     );
   }
 
-  claudeRuntimeLoadSessionHistory(input: LoadAgentSessionHistoryInput) {
-    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionHistory;
+  agentRuntimeLoadSessionHistory(input: LoadAgentSessionHistoryInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionHistory;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },
@@ -69,8 +69,8 @@ export class HostClaudeRuntimeClient {
     );
   }
 
-  claudeRuntimeLoadSessionTodos(input: LoadAgentSessionTodosInput) {
-    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionTodos;
+  agentRuntimeLoadSessionTodos(input: LoadAgentSessionTodosInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionTodos;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },
@@ -78,8 +78,8 @@ export class HostClaudeRuntimeClient {
     );
   }
 
-  claudeRuntimeLoadSessionDiff(input: LoadAgentSessionDiffInput) {
-    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.loadSessionDiff;
+  agentRuntimeLoadSessionDiff(input: LoadAgentSessionDiffInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadSessionDiff;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },
@@ -87,8 +87,8 @@ export class HostClaudeRuntimeClient {
     );
   }
 
-  claudeRuntimeFileStatus(input: LoadAgentFileStatusInput) {
-    const contract = CLAUDE_RUNTIME_COMMAND_CONTRACTS.fileStatus;
+  agentRuntimeFileStatus(input: LoadAgentFileStatusInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.fileStatus;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },

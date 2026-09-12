@@ -1,3 +1,4 @@
+import { createClaudeRuntimeQueryAdapter } from "./claude-runtime-query-adapter";
 import {
   unsupportedGeneratedImageSource,
   unsupportedGeneratedImageOperations,
@@ -14,7 +15,7 @@ import { Effect } from "effect";
 import type { z } from "zod";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
-import { requireClaudeWorkspaceWorkingDirectory } from "../../application/runtimes/claude-workspace-runtime";
+import { requireRuntimeWorkingDirectory } from "../../application/runtimes/runtime-working-directory";
 import {
   type HostError,
   type HostOperationErrorAggregate,
@@ -266,12 +267,11 @@ export const createClaudeLiveSessionAdapterPreparer =
         operation: string,
       ) =>
         requireClaudePolicy(input.runtimeKind, operation).pipe(
-          Effect.flatMap(() =>
-            requireClaudeWorkspaceWorkingDirectory(workingDirectoryDependencies, input),
-          ),
+          Effect.flatMap(() => requireRuntimeWorkingDirectory(workingDirectoryDependencies, input)),
         );
 
       const adapter: AgentSessionRuntimeAdapterPort = {
+        queries: createClaudeRuntimeQueryAdapter(service),
         ...unsupportedGeneratedImageOperations,
         resolveGeneratedImageSource: unsupportedGeneratedImageSource,
         supportsSessionControl: true,

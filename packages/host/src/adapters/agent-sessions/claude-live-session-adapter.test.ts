@@ -1,3 +1,4 @@
+import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND, repoConfigSchema } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/core";
@@ -6,7 +7,7 @@ import type {
   ClaudeAgentSdkService,
   ClaudePendingInputResolution,
 } from "../../application/runtimes/claude-agent-sdk-service";
-import type { ClaudeWorkspaceWorkingDirectoryDependencies } from "../../application/runtimes/claude-workspace-runtime";
+import type { RuntimeWorkingDirectoryDependencies } from "../../application/runtimes/runtime-working-directory";
 import { HostOperationError } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
@@ -117,7 +118,7 @@ type MutationBarrier = {
 };
 
 const createHarness = async (
-  workingDirectoryDependenciesOverride: ClaudeWorkspaceWorkingDirectoryDependencies = workingDirectoryDependencies,
+  workingDirectoryDependenciesOverride: RuntimeWorkingDirectoryDependencies = workingDirectoryDependencies,
 ) => {
   const changes: AgentSessionLiveAdapterChange[] = [];
   const eventHub = createClaudeAgentSdkEventHub();
@@ -157,6 +158,7 @@ const createHarness = async (
     return Effect.succeed(summary);
   };
   const service = {
+    ...unexpectedRuntimeQueries,
     startSession: (
       input: Parameters<ClaudeAgentSdkService["startSession"]>[0],
       runtimeId: string,

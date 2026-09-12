@@ -126,11 +126,13 @@ const createAdapter = (overrides: Partial<AgentCatalogPort> = {}): AgentCatalogP
 });
 
 const createOperations = (adapter: AgentCatalogPort) =>
-  createHostRuntimeCatalogOperations((runtimeKind) => {
-    if (runtimeKind !== "opencode") {
-      throw new Error(`Unsupported agent runtime '${runtimeKind}'.`);
-    }
-    return adapter;
+  createHostRuntimeCatalogOperations({
+    repoRuntimeHealthStatus: (...args) => host.repoRuntimeHealthStatus(...args),
+    agentRuntimeListModels: adapter.listAvailableModels,
+    agentRuntimeListSlashCommands: adapter.listAvailableSlashCommands,
+    agentRuntimeListSkills: adapter.listAvailableSkills,
+    agentRuntimeListSubagents: adapter.listAvailableSubagents,
+    agentRuntimeSearchFiles: adapter.searchFiles,
   });
 
 describe("runtime-catalog", () => {

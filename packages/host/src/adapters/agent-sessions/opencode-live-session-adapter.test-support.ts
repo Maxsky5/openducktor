@@ -1,3 +1,4 @@
+import { unexpectedNativeRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import type {
   OpencodeNativeApprovalReply,
   OpencodeNativeQuestionReply,
@@ -155,6 +156,7 @@ export const createRuntimeHarness = (
 
   return {
     prepareRuntime: async (input) => ({
+      queries: unexpectedNativeRuntimeQueries,
       connection,
       startForwarding: async (nextListener) => {
         listener = nextListener;

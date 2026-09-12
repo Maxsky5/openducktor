@@ -5,6 +5,8 @@ import type {
   RuntimeInstanceSummary,
   RuntimeKind,
 } from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import type { HostClient } from "@openducktor/host-client";
 import type { AcceptedAgentUserMessage, AgentEnginePort } from "@openducktor/core";
 import { validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
 import { host } from "./operations/shared/host";
@@ -12,15 +14,79 @@ import {
   createHostRuntimeCatalogOperations,
   type RuntimeCatalogOperations,
 } from "./operations/shared/runtime-catalog";
-import type { AgentRuntimeAdapter } from "./runtime-adapters/agent-runtime-adapter";
-import { createClaudeRuntimeAdapter } from "./runtime-adapters/claude-runtime-adapter";
-import { createCodexAppServerRuntimeAdapter } from "./runtime-adapters/codex-app-server-runtime-adapter";
-import { createOpenCodeRuntimeAdapter } from "./runtime-adapters/opencode-runtime-adapter";
 
 type AgentRuntimeServices = {
   agentEngine: AgentEnginePort;
   runtimeCatalogOperations: RuntimeCatalogOperations;
   startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
+};
+
+export const createAgentRuntimeServices = (hostClient: HostClient = host): AgentRuntimeServices => {
+  const runtimeDefinitions = Object.values(RUNTIME_DESCRIPTORS_BY_KIND);
+  for (const definition of runtimeDefinitions) {
+    const validationErrors = validateRuntimeDefinitionForOpenDucktor(definition);
+    if (validationErrors.length > 0) {
+      throw new Error(
+        `Runtime '${definition.kind}' is incompatible with OpenDucktor: ${validationErrors.join("; ")}`,
+      );
+    }
+  }
+  return {
+    agentEngine: createAgentEngine(hostClient),
+    runtimeCatalogOperations: createHostRuntimeCatalogOperations(hostClient),
+    startRepoRuntime: (repoPath, runtimeKind) => hostClient.runtimeEnsure(repoPath, runtimeKind),
+  };
+};
+
+const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
+  return {
+    describeGeneratedImages: (input) => hostClient.agentSessionDescribeGeneratedImages(input),
+    beginGeneratedImageBatch: (input) => hostClient.agentSessionBeginGeneratedImageBatch(input),
+    releaseGeneratedImageBatch: (input) => hostClient.agentSessionReleaseGeneratedImageBatch(input),
+    readGeneratedImage: (input) => hostClient.agentSessionReadGeneratedImage(input),
+    startSession: (input) => {
+      if (input.sessionScope.kind === "workflow") {
+        return Promise.reject(
+          new Error("Workflow sessions must start through agentSessionWorkflowStart."),
+        );
+      }
+      const startInput: AgentRepositorySessionStartInput = {
+        repoPath: input.repoPath,
+        runtimeKind: input.runtimeKind,
+        workingDirectory: input.workingDirectory,
+        sessionScope: input.sessionScope,
+        systemPrompt: input.systemPrompt,
+      };
+      if (input.model) {
+        startInput.model = input.model;
+      }
+      return hostClient.agentSessionControlStart(startInput);
+    },
+    resumeSession: (input) => hostClient.agentSessionControlResume(input),
+    releaseSession: (input) => hostClient.agentSessionControlRelease(input),
+    forkSession: (input) => hostClient.agentSessionControlFork(input),
+    listRuntimeDefinitions: () => Object.values(RUNTIME_DESCRIPTORS_BY_KIND),
+    listAvailableModels: (input) => hostClient.agentRuntimeListModels(input),
+    listAvailableSlashCommands: (input) => hostClient.agentRuntimeListSlashCommands(input),
+    listAvailableSkills: (input) => hostClient.agentRuntimeListSkills(input),
+    listAvailableSubagents: (input) => hostClient.agentRuntimeListSubagents(input),
+    searchFiles: (input) => hostClient.agentRuntimeSearchFiles(input),
+    loadSessionHistory: async (input) => {
+      const history = await hostClient.agentRuntimeLoadSessionHistory(input);
+      const filters = { queryKey: generatedImageMetadataSessionKey(input) };
+      void appQueryClient
+        .cancelQueries(filters)
+        .then(() => appQueryClient.invalidateQueries(filters));
+      return history;
+    },
+    loadSessionTodos: (input) => hostClient.agentRuntimeLoadSessionTodos(input),
+    updateSessionModel: (input) => hostClient.agentSessionControlUpdateModel(input),
+    sendUserMessage: (input) =>
+      hostClient.agentSessionControlSend(input).then(toAcceptedAgentUserMessage),
+    stopSession: (input) => hostClient.agentSessionControlStop(input),
+    loadSessionDiff: (input) => hostClient.agentRuntimeLoadSessionDiff(input),
+    loadFileStatus: (input) => hostClient.agentRuntimeFileStatus(input),
+  };
 };
 
 const toAcceptedAgentUserMessage = (
@@ -48,96 +114,4 @@ const toAcceptedAgentUserMessage = (
     acceptedMessage.model = acceptedModel;
   }
   return acceptedMessage;
-};
-
-export const createAgentRuntimeServices = (): AgentRuntimeServices => {
-  const opencodeAdapter = createOpenCodeRuntimeAdapter();
-  const codexAdapter = createCodexAppServerRuntimeAdapter();
-  const claudeAdapter = createClaudeRuntimeAdapter();
-  const adapters = new Map<RuntimeKind, AgentRuntimeAdapter>([
-    ["opencode", opencodeAdapter],
-    ["codex", codexAdapter],
-    ["claude", claudeAdapter],
-  ]);
-  const runtimeKinds = Array.from(adapters.keys());
-
-  const getAdapter = (runtimeKind: RuntimeKind): AgentRuntimeAdapter => {
-    const adapter = adapters.get(runtimeKind);
-    if (!adapter) {
-      throw new Error(`Unsupported agent runtime '${runtimeKind}'.`);
-    }
-    return adapter;
-  };
-
-  for (const runtimeKind of runtimeKinds) {
-    const definition = getAdapter(runtimeKind).getRuntimeDefinition();
-    const validationErrors = validateRuntimeDefinitionForOpenDucktor(definition);
-    if (validationErrors.length > 0) {
-      throw new Error(
-        `Runtime '${definition.kind}' is incompatible with OpenDucktor: ${validationErrors.join("; ")}`,
-      );
-    }
-  }
-
-  return {
-    agentEngine: createAgentEngine(getAdapter, runtimeKinds),
-    runtimeCatalogOperations: createHostRuntimeCatalogOperations(getAdapter),
-    startRepoRuntime: (repoPath, runtimeKind) => host.runtimeEnsure(repoPath, runtimeKind),
-  };
-};
-
-const createAgentEngine = (
-  getAdapter: (runtimeKind: RuntimeKind) => AgentRuntimeAdapter,
-  runtimeKinds: RuntimeKind[],
-): AgentEnginePort => {
-  return {
-    describeGeneratedImages: (input) => host.agentSessionDescribeGeneratedImages(input),
-    beginGeneratedImageBatch: (input) => host.agentSessionBeginGeneratedImageBatch(input),
-    releaseGeneratedImageBatch: (input) => host.agentSessionReleaseGeneratedImageBatch(input),
-    readGeneratedImage: (input) => host.agentSessionReadGeneratedImage(input),
-    startSession: (input) => {
-      if (input.sessionScope.kind === "workflow") {
-        return Promise.reject(
-          new Error("Workflow sessions must start through agentSessionWorkflowStart."),
-        );
-      }
-      const startInput: AgentRepositorySessionStartInput = {
-        repoPath: input.repoPath,
-        runtimeKind: input.runtimeKind,
-        workingDirectory: input.workingDirectory,
-        sessionScope: input.sessionScope,
-        systemPrompt: input.systemPrompt,
-      };
-      if (input.model) {
-        startInput.model = input.model;
-      }
-      return host.agentSessionControlStart(startInput);
-    },
-    resumeSession: (input) => host.agentSessionControlResume(input),
-    releaseSession: (input) => host.agentSessionControlRelease(input),
-    forkSession: (input) => host.agentSessionControlFork(input),
-    listRuntimeDefinitions: () =>
-      runtimeKinds.map((runtimeKind) => getAdapter(runtimeKind).getRuntimeDefinition()),
-    listAvailableModels: (input) => getAdapter(input.runtimeKind).listAvailableModels(input),
-    listAvailableSlashCommands: (input) =>
-      getAdapter(input.runtimeKind).listAvailableSlashCommands(input),
-    listAvailableSkills: (input) => getAdapter(input.runtimeKind).listAvailableSkills(input),
-    listAvailableSubagents: (input) => getAdapter(input.runtimeKind).listAvailableSubagents(input),
-    searchFiles: (input) => getAdapter(input.runtimeKind).searchFiles(input),
-    loadSessionHistory: async (input) => {
-      const history = await getAdapter(input.runtimeKind).loadSessionHistory(input);
-      const filters = { queryKey: generatedImageMetadataSessionKey(input) };
-      void appQueryClient
-        .cancelQueries(filters)
-        .then(() => appQueryClient.invalidateQueries(filters));
-      return history;
-    },
-    loadSessionTodos: (input) => getAdapter(input.runtimeKind).loadSessionTodos(input),
-    updateSessionModel: (input) => host.agentSessionControlUpdateModel(input),
-    sendUserMessage: (input) =>
-      host.agentSessionControlSend(input).then(toAcceptedAgentUserMessage),
-    stopSession: (input) => host.agentSessionControlStop(input),
-    loadSessionDiff: (input) => getAdapter(input.runtimeKind).loadSessionDiff(input),
-    loadFileStatus: (input) => getAdapter(input.runtimeKind).loadFileStatus(input),
-  };
 };

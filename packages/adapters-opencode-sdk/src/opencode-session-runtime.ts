@@ -1,4 +1,8 @@
 import type {
+  AgentCatalogPort,
+  AgentSessionQueryParentPort,
+  AgentSessionHistoryPort,
+  AgentWorkspaceInspectionPort,
   AcceptedAgentUserMessage,
   AgentEvent,
   AgentSessionSummary,
@@ -67,6 +71,10 @@ export type OpencodeSessionRuntimeConnection = {
 };
 
 export type PreparedOpencodeSessionRuntime = {
+  readonly queries: AgentCatalogPort &
+    AgentSessionHistoryPort &
+    AgentWorkspaceInspectionPort &
+    AgentSessionQueryParentPort;
   readonly connection: OpencodeSessionRuntimeConnection;
   readonly startForwarding: (
     listener: (signal: OpencodeSessionRuntimeSignal) => void | Promise<void>,
@@ -502,6 +510,7 @@ export const createPrepareOpencodeSessionRuntime = (
     };
 
     return {
+      queries: controlAdapter,
       connection,
       startForwarding,
       release,

@@ -23,6 +23,23 @@ const todoFixture: AgentSessionTodoItem = {
 };
 
 describe("agent session todos queries", () => {
+  test("an event prevents an older pending read from replacing its todos", async () => {
+    const client = new QueryClient();
+    const read = Promise.withResolvers<AgentSessionTodoItem[]>();
+    const pending = client
+      .fetchQuery(sessionTodosQueryOptions(sessionRefFixture, () => read.promise))
+      .catch(() => undefined);
+    updateSessionTodosQueryData(client, sessionRefFixture, () => [
+      { ...todoFixture, status: "completed" },
+    ]);
+    read.resolve([todoFixture]);
+    await pending;
+    expect(
+      client.getQueryData<AgentSessionTodoItem[]>(
+        agentSessionTodosQueryKeys.todos(sessionRefFixture),
+      ),
+    ).toEqual([{ ...todoFixture, status: "completed" }]);
+  });
   test("keeps absent, repository, and workflow session scopes distinct", () => {
     expect(agentSessionTodosQueryKeys.todos(sessionRefFixture)).toEqual([
       "agent-session-todos",

@@ -1,3 +1,7 @@
+import {
+  createLiveSessionPublisher,
+  createRuntimeLifecyclePublisher,
+} from "./runtime-lifecycle-publisher";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -22,7 +26,6 @@ import { createGitService } from "../../application/git/git-service";
 import { createGitProviderService } from "../../application/git/git-provider-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
-import { createCodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { readSavedRuntimeExecutablePath } from "../../application/runtimes/saved-runtime-executable";
@@ -34,11 +37,11 @@ import { createTerminalService } from "../../application/terminals/terminal-serv
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
-import { HostOperationError, HostResourceError } from "../../effect/host-errors";
+import { HostOperationError } from "../../effect/host-errors";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
 import { createAgentSessionLiveCommandHandlers } from "../../interface/commands/agent-session-live-command-handlers";
-import { createClaudeRuntimeCommandHandlers } from "../../interface/commands/claude-runtime-command-handlers";
-import { createCodexAppServerCommandHandlers } from "../../interface/commands/codex-app-server-command-handlers";
+import { createAgentRuntimeQueryCommandHandlers } from "../../interface/commands/agent-runtime-query-command-handlers";
+import { createAgentRuntimeQueryService } from "../../application/runtimes/agent-runtime-query-service";
 import { createDevServerCommandHandlers } from "../../interface/commands/dev-server-command-handlers";
 import { createFilesystemCommandHandlers } from "../../interface/commands/filesystem-command-handlers";
 import { createGitCommandHandlers } from "../../interface/commands/git-command-handlers";
@@ -113,7 +116,6 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     worktreeFiles,
   } = defaultPorts;
-  const codexAppServerService = createCodexAppServerService(effectiveCodexAppServer);
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const filesystemService = createFilesystemService(filesystem);
   const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
@@ -143,19 +145,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
     adapterRegistry: liveSessionAdapterRegistry,
     faultLog: createLiveSessionFaultLogger(lifecycleLogger),
-    publish: (envelope) => {
-      if (!eventBus) {
-        throw new HostResourceError({
-          resource: "host-event-bus",
-          operation: "agent-session-live.publish",
-          message: "Live agent-session events require a configured host event bus.",
-        });
-      }
-      eventBus.publish({
-        channel: "openducktor://agent-session-live-event",
-        payload: envelope,
-      });
-    },
+    publish: createLiveSessionPublisher(eventBus),
   });
   const systemDiagnosticsService = createSystemDiagnosticsService({
     runtimeDefinitionsService,
@@ -165,7 +155,7 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     repoStoreDiagnostics: taskStore,
   });
-  const claudeWorkingDirectoryDependencies = {
+  const workingDirectoryDependencies = {
     settingsConfig,
     workspaceSettingsService,
   };
@@ -180,7 +170,7 @@ export const assembleNodeEffectHostCommandRouter = (
     runtimeDistribution,
     settingsConfig,
     toolDiscovery,
-    workingDirectoryDependencies: claudeWorkingDirectoryDependencies,
+    workingDirectoryDependencies,
     resolveMcpBridgeConnection: (repoPath) =>
       resolvedMcpHostBridge
         ? resolvedMcpHostBridge.ensureConnection({ repoPath }).pipe(
@@ -242,21 +232,26 @@ export const assembleNodeEffectHostCommandRouter = (
         resolveRuntimeMcpBridge("opencode", runtimeInput.repoPath),
     }),
   });
-  const effectiveRuntimeRegistry =
-    runtimeRegistry ??
-    createRuntimeRegistry({
-      workspaceStarter,
-      hasActiveRuntimeSessions: createRuntimeActiveSessionResolver(agentSessionLiveStateService),
-      resolveRuntimeExecutablePath: (runtimeInput) =>
-        readSavedRuntimeExecutablePath({
-          kind: runtimeInput.descriptor.kind,
-          settingsConfig,
-        }),
-      sessionOperations: createRuntimeSessionOperations({
-        codexAppServer: effectiveCodexAppServer,
-        claudeAgentSdk: claudeRuntime.sessionOperations,
+  const runtimeRegistryInput: Parameters<typeof createRuntimeRegistry>[0] = {
+    workspaceStarter,
+    hasActiveRuntimeSessions: createRuntimeActiveSessionResolver(agentSessionLiveStateService),
+    resolveRuntimeExecutablePath: (runtimeInput) =>
+      readSavedRuntimeExecutablePath({
+        kind: runtimeInput.descriptor.kind,
+        settingsConfig,
       }),
-    });
+    sessionOperations: createRuntimeSessionOperations({
+      codexAppServer: effectiveCodexAppServer,
+      claudeAgentSdk: claudeRuntime.sessionOperations,
+    }),
+  };
+  if (eventBus) {
+    runtimeRegistryInput.onRuntimeChanged = createRuntimeLifecyclePublisher(
+      eventBus,
+      onBackgroundFailure,
+    );
+  }
+  const effectiveRuntimeRegistry = runtimeRegistry ?? createRuntimeRegistry(runtimeRegistryInput);
   const taskWorktreeService = createTaskWorktreeService({
     settingsConfig,
     workspaceSettingsService,
@@ -451,16 +446,18 @@ export const assembleNodeEffectHostCommandRouter = (
       }),
     handlers: {
       ...createAgentSessionLiveCommandHandlers(agentSessionCommandService, localAttachmentService),
-      ...createClaudeRuntimeCommandHandlers(
-        claudeRuntime.agentSdkService,
-        effectiveRuntimeRegistry,
-        claudeWorkingDirectoryDependencies,
+      ...createAgentRuntimeQueryCommandHandlers(
+        createAgentRuntimeQueryService({
+          ...workingDirectoryDependencies,
+          adapterRegistry: liveSessionAdapterRegistry,
+          runtimeRegistry: effectiveRuntimeRegistry,
+          gitPort: git,
+          taskReader: taskStore,
+          worktreeReads: taskSessionLifecycleCoordinator,
+          worktreeFiles,
+        }),
       ),
       ...createDevServerCommandHandlers(devServerService),
-      ...createCodexAppServerCommandHandlers(codexAppServerService, {
-        logger: lifecycleLogger,
-        onBackgroundFailure,
-      }),
       ...createFilesystemCommandHandlers(filesystemService),
       ...createWorkspaceFilesCommandHandlers(workspaceFilesService),
       ...createGitCommandHandlers(gitService),

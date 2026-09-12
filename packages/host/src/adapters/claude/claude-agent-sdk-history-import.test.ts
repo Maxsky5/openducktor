@@ -157,8 +157,7 @@ describe("Claude SDK history import", () => {
           runtimePolicy: { kind: "claude" },
         }),
       ).rejects.toMatchObject({
-        _tag: "HostOperationError",
-        operation: "claude.session.history.import",
+        code: "request_failed",
       });
     } finally {
       await rm(workingDirectory, { recursive: true, force: true });

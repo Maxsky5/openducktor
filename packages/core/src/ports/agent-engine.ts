@@ -15,7 +15,6 @@ import type {
   AgentSessionModelSettings,
   AgentSessionScope,
   AgentSessionWorkflowScope,
-  CodexEffectivePolicy,
   AgentSessionHistoryMessage as ContractsAgentSessionHistoryMessage,
   FileDiff,
   FileStatus,
@@ -63,19 +62,19 @@ export type {
   AgentSessionWorkflowScope,
 } from "@openducktor/contracts";
 
-export type AgentSessionRef = SessionRef & { sessionScope?: AgentSessionScope };
+export type AgentSessionRef = SessionRef & { sessionScope?: AgentSessionScope | undefined };
 export type WorkflowSessionRef = SessionRef & { sessionScope: AgentSessionWorkflowScope };
-export type AgentSessionRuntimePolicy =
-  | { kind: "opencode" }
-  | { kind: "claude" }
-  | { kind: "codex"; policy: CodexEffectivePolicy };
-export type AgentRuntimePolicyBinding =
-  | {
-      runtimeKind: "opencode";
-      runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "opencode" }>;
-    }
-  | { runtimeKind: "claude"; runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "claude" }> }
-  | { runtimeKind: "codex"; runtimePolicy: Extract<AgentSessionRuntimePolicy, { kind: "codex" }> };
+export type {
+  AgentSessionRuntimePolicy,
+  AgentRuntimePolicyBinding,
+  PolicyBoundSessionRef,
+  AgentSessionHistorySystemPromptContext,
+} from "@openducktor/contracts";
+import type {
+  AgentSessionRuntimePolicy,
+  AgentRuntimePolicyBinding,
+  PolicyBoundSessionRef,
+} from "@openducktor/contracts";
 
 export const workflowAgentSessionScope = (
   taskId: string,
@@ -123,12 +122,6 @@ export const toAgentRuntimePolicyBinding = (input: {
   return input;
 };
 
-export type PolicyBoundSessionRef = AgentSessionRef &
-  AgentRuntimePolicyBinding & {
-    model?: AgentModelSelection;
-    systemPrompt?: string;
-  };
-
 export type PolicyBoundSessionControlRef = PolicyBoundSessionRef & {
   sessionScope: AgentSessionScope;
 };
@@ -163,15 +156,8 @@ export type UpdateControlledAgentSessionModelInput = SessionRef & {
   model: AgentSessionModelSettings | null;
 };
 
-export type AgentSessionHistorySystemPromptContext = {
-  systemPrompt: string;
-  startedAt: string;
-};
-
-export type LoadAgentSessionHistoryInput = PolicyBoundSessionRef & {
-  systemPromptContext?: AgentSessionHistorySystemPromptContext;
-  limit?: number;
-};
+export type LoadAgentSessionHistoryInput =
+  import("@openducktor/contracts").AgentRuntimeLoadSessionHistoryInput;
 
 export type LoadAgentSessionTodosInput = PolicyBoundSessionRef;
 
@@ -183,9 +169,7 @@ export type ListAgentSkillsInput = RuntimeWorkingDirectoryRef;
 
 export type ListAgentSubagentsInput = RuntimeWorkingDirectoryRef;
 
-export type SearchAgentFilesInput = RuntimeWorkingDirectoryRef & {
-  query: string;
-};
+export type SearchAgentFilesInput = import("@openducktor/contracts").AgentRuntimeSearchFilesInput;
 
 export type ListSessionRuntimeSnapshotsInput = RepoRuntimeRef & {
   directories?: string[];
@@ -193,10 +177,8 @@ export type ListSessionRuntimeSnapshotsInput = RepoRuntimeRef & {
 
 export type ReadSessionRuntimeSnapshotInput = SessionRef;
 
-export type LoadAgentSessionDiffInput = RuntimeWorkingDirectoryRef & {
-  externalSessionId: ExternalSessionId;
-  runtimeHistoryAnchor?: RuntimeHistoryAnchor;
-};
+export type LoadAgentSessionDiffInput =
+  import("@openducktor/contracts").AgentRuntimeLoadSessionDiffInput;
 
 export type LoadAgentFileStatusInput = RuntimeWorkingDirectoryRef;
 

@@ -120,8 +120,7 @@ describe("loadClaudeHistory", () => {
         { source: "persisted", userMessages: [] },
       ),
     ).rejects.toMatchObject({
-      _tag: "HostOperationError",
-      operation: "claude.session.history.import",
+      code: "request_failed",
     });
   });
 });

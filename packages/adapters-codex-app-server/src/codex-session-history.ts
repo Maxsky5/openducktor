@@ -69,7 +69,8 @@ const codexHistorySystemPrompt = (
   input: LoadAgentSessionHistoryInput,
   session: CodexSessionState | undefined,
 ): AgentSessionHistoryMessage | null => {
-  if (session) {
+  const hasRetainedSystemPrompt = session && session.systemPrompt.trim().length > 0;
+  if (hasRetainedSystemPrompt) {
     return codexSystemPromptHistoryMessage({
       threadId: session.threadId,
       startedAt: session.summary.startedAt,

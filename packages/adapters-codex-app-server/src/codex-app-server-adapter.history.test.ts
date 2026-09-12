@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { CodexAppServerThread, CodexAppServerTurn } from "@openducktor/contracts";
 import {
   createAdapterWithTransport,
+  codexSessionRef,
   codexThreadStartResultFixture,
   codexThreadFixture,
   codexTurnFixture,
@@ -70,6 +71,35 @@ const paginatedThreadListResponse = (threads: ThreadListFixture[]) => ({
 });
 
 describe("CodexAppServerAdapter history loading", () => {
+  test("validates cold child ancestry with a passive targeted read", async () => {
+    const requests: CodexJsonRpcRequest[] = [];
+    const adapter = createAdapterWithTransport({
+      request: async (request) => {
+        requests.push(request);
+        return {
+          thread: codexThreadFixture({
+            id: "child",
+            cwd: "/repo",
+            status: { type: "idle" },
+            parentThreadId: "root",
+          }),
+        };
+      },
+    });
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      externalSessionId: "child",
+    };
+    await expect(adapter.resolveSessionParent(ref)).resolves.toBe("root");
+    expect(requests).toEqual([
+      { method: "thread/read", params: { threadId: "child", includeTurns: false } },
+    ]);
+    await expect(
+      adapter.resolveSessionParent({ ...ref, workingDirectory: "/other" }),
+    ).rejects.toMatchObject({ code: "scope_mismatch" });
+  });
   test("keeps a hydrated subagent at its exact thread item position", async () => {
     const thread = {
       id: "parent-thread",
@@ -509,6 +539,10 @@ describe("CodexAppServerAdapter history loading", () => {
       externalSessionId: "thread/start-runtime-live",
       sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPromptContext: {
+        startedAt: "2026-05-08T00:00:00.000Z",
+        systemPrompt: "Use the supplied display context.",
+      },
     });
 
     expect(history[0]).toEqual({
@@ -596,6 +630,66 @@ describe("CodexAppServerAdapter history loading", () => {
         }),
       ]),
     );
+  });
+
+  test("keeps supplied prompt context after loading session context without changing live state", async () => {
+    const transport = new RecordingTransport("runtime-live", false);
+    const { adapter, respondServerRequest } = createHarness({
+      transportFactory: () => transport,
+    });
+    const ref = codexSessionRef("thread-idle");
+    const input = {
+      ...ref,
+      systemPromptContext: {
+        startedAt: "2026-05-08T00:00:00.000Z",
+        systemPrompt: "Use the hydrated task context.",
+      },
+    };
+
+    try {
+      const historyBefore = await adapter.loadSessionHistory(input);
+      const systemMessagesBefore = historyBefore.filter((message) => message.role === "system");
+      expect(systemMessagesBefore).toEqual([
+        {
+          messageId: "codex-system-prompt:thread-idle",
+          role: "system",
+          timestamp: input.systemPromptContext.startedAt,
+          text: "System prompt:\n\nUse the hydrated task context.",
+          parts: [],
+        },
+      ]);
+
+      await adapter.loadSessionContextUsage(ref);
+      const snapshotsBefore = structuredClone(adapter.listLiveSessionSnapshots("runtime-live"));
+      expect(snapshotsBefore.map((snapshot) => snapshot.ref.externalSessionId)).toEqual([
+        ref.externalSessionId,
+      ]);
+      const callsBefore = transport.calls.length;
+      const historyAfter = await adapter.loadSessionHistory(input);
+      expect(historyAfter.filter((message) => message.role === "system")).toEqual(
+        systemMessagesBefore,
+      );
+
+      const historyWithoutPrompt = await adapter.loadSessionHistory(ref);
+      expect(historyWithoutPrompt.filter((message) => message.role === "system")).toEqual([]);
+      const historyWithBlankPrompt = await adapter.loadSessionHistory({
+        ...input,
+        systemPromptContext: { ...input.systemPromptContext, systemPrompt: " \n " },
+      });
+      expect(historyWithBlankPrompt.filter((message) => message.role === "system")).toEqual([]);
+      expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual(snapshotsBefore);
+      expect(transport.calls.slice(callsBefore).map((call) => call.method)).toEqual([
+        "thread/read",
+        "thread/turns/list",
+        "thread/read",
+        "thread/turns/list",
+        "thread/read",
+        "thread/turns/list",
+      ]);
+      expect(respondServerRequest).not.toHaveBeenCalled();
+    } finally {
+      adapter.releaseRuntime("runtime-live");
+    }
   });
 
   test("loads search command metadata and hides contextual user fragments from paginated history", async () => {
@@ -1176,7 +1270,7 @@ describe("CodexAppServerAdapter history loading", () => {
     );
   });
 
-  test("returns empty history when Codex has no stored thread", async () => {
+  test("rejects history when Codex has no stored thread", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
       async request(request: CodexJsonRpcRequest) {
@@ -1204,7 +1298,7 @@ describe("CodexAppServerAdapter history loading", () => {
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
       }),
-    ).resolves.toEqual([]);
+    ).rejects.toThrow();
 
     expect(calls).toEqual([
       { method: "thread/read", params: { threadId: "missing-thread", includeTurns: false } },
@@ -1358,7 +1452,7 @@ describe("CodexAppServerAdapter history loading", () => {
       expect.objectContaining({ content: "Load transcript once", status: "completed" }),
       expect.objectContaining({ content: "Reuse todos", status: "in_progress" }),
     ]);
-    expect(calls.filter((call) => call.method === "thread/read")).toHaveLength(2);
+    expect(calls.map((call) => call.method)).toEqual(["thread/read", "thread/turns/list"]);
   });
 
   test("rejects Codex todo policy mismatches before returning cached todos", async () => {

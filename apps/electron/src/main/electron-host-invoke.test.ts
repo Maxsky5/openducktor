@@ -2,8 +2,39 @@ import { describe, expect, test } from "bun:test";
 import { CodexSessionHistoryError, TaskAssetError, TerminalServiceError } from "@openducktor/host";
 import { Effect } from "effect";
 import { runElectronHostInvoke } from "./electron-host-invoke";
+import { RuntimeQueryError } from "@openducktor/host";
 
 describe("runElectronHostInvoke", () => {
+  test("preserves runtime query identity and diagnostics across Electron IPC", async () => {
+    const failure = {
+      code: "invalid_runtime_response" as const,
+      operation: "load session history",
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "thread-1",
+      summary: "Could not load session history.",
+      detail: "Check the host runtime logs.",
+      sessionHistoryFailure: {
+        code: "invalid_runtime_response" as const,
+        summary: "Codex returned invalid history.",
+        detail: "A history item has an invalid shape.",
+        diagnosticId: "diagnostic-1",
+        method: "thread/turns/list" as const,
+        pageCursor: null,
+      },
+    };
+    const response = await runElectronHostInvoke(
+      Effect.fail(new RuntimeQueryError({ message: failure.detail, failure })),
+    );
+    expect(response).toEqual({
+      ok: false,
+      error: {
+        message: failure.detail,
+        failure: { kind: "runtime_query", runtimeQueryFailure: failure },
+      },
+    });
+  });
   test("preserves void command results across the Electron boundary", async () => {
     const response = await runElectronHostInvoke(Effect.void);
 

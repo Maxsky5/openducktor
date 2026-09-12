@@ -2292,10 +2292,28 @@ describe("createElectronHostCommandRouter", () => {
       status: "closed",
     });
 
+    const removedMergedWorktreePaths: string[] = [];
     const mergedPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
+      worktreeFiles: {
+        ensureDirectory: () => Effect.void,
+        copyConfiguredPaths: () => Effect.void,
+        removePathIfPresent: (worktreePath) =>
+          Effect.sync(() => {
+            removedMergedWorktreePaths.push(worktreePath);
+          }),
+        resolveWorktreePath: (_repoPath, worktreePath) => worktreePath,
+        resolvePathWithinRoot: (_root, candidate) =>
+          Effect.succeed({
+            canonicalPath: candidate,
+            cleanupPath: candidate,
+            isSymlink: false,
+            kind: "descendant",
+          }),
+        pathIsWithinRoot: () => Effect.succeed(false),
+      },
       settingsConfig: createSettingsConfig(
         globalConfig({
           workspaces: {
@@ -2388,6 +2406,7 @@ describe("createElectronHostCommandRouter", () => {
       id: "task-1",
       status: "closed",
     });
+    expect(removedMergedWorktreePaths).toEqual(["/home/dev/.openducktor/worktrees/repo/task-1"]);
 
     const blockRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),

@@ -1,3 +1,4 @@
+import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
 import type {
   CodexAppServerAdapter,
   CodexAppServerAdapterOptions,
@@ -22,6 +23,15 @@ import type {
 
 export type CodexSessionController = Pick<
   CodexAppServerAdapter,
+  | "resolveSessionParent"
+  | "listAvailableModels"
+  | "listAvailableSlashCommands"
+  | "listAvailableSkills"
+  | "listAvailableSubagents"
+  | "searchFiles"
+  | "loadSessionHistory"
+  | "loadSessionTodos"
+  | "loadFileStatus"
   | "resolveGeneratedImageSource"
   | "beginGeneratedImageBatch"
   | "releaseGeneratedImageBatch"
@@ -56,7 +66,7 @@ export type CodexLiveSessionAdapterPreparer = (
 export type CreateCodexLiveSessionAdapterPreparerInput = {
   readonly prepareImageGenerations: CodexImageGenerationPreparer;
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "runAdapterMutation">;
-  readonly codexAppServer: CodexAppServerPort;
+  readonly codexAppServer: CodexAppServerPort & CodexSessionHistoryPort;
   readonly onBackgroundFailure: (
     failure: HostOperationErrorAggregate,
   ) => Effect.Effect<void, never>;

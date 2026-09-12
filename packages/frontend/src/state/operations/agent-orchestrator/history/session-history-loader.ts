@@ -92,6 +92,16 @@ const sessionHistoryFailureFromError = (cause: unknown): SessionHistoryFailure =
   if (cause instanceof HostInvokeError && cause.failure?.kind === "session_history") {
     return cause.failure.sessionHistoryFailure;
   }
+  if (cause instanceof HostInvokeError && cause.failure?.kind === "runtime_query") {
+    const failure = cause.failure.runtimeQueryFailure;
+    return (
+      failure.sessionHistoryFailure ?? {
+        code: failure.code === "invalid_runtime_response" ? failure.code : "request_failed",
+        summary: failure.summary,
+        detail: failure.detail,
+      }
+    );
+  }
   return {
     code: "request_failed",
     summary: "Conversation history could not be loaded.",

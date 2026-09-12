@@ -1,10 +1,6 @@
 import { expect, mock, spyOn, test } from "bun:test";
-import {
-  codexImageGenerationPart,
-  type CodexImageGenerationPreparation,
-} from "@openducktor/adapters-codex-app-server";
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
-import { decodeGeneratedImage, prepareCodexImageGenerations } from "./image-worker-client";
+import { decodeGeneratedImage } from "./image-worker-client";
 
 const payload = { mime: "image/png", byteLength: 3, base64: "AQID" };
 
@@ -44,33 +40,6 @@ test("payload limits and MIME fail before a worker receives the bytes", async ()
   } finally {
     worker.mockRestore();
   }
-});
-
-test("history worker preserves the interpreter's source revisions and turn outcomes for multiple images", async () => {
-  const base: CodexImageGenerationPreparation = {
-    item: {
-      type: "imageGeneration",
-      id: "image",
-      status: "completed",
-      result: "AQID",
-      revisedPrompt: null,
-      transparentBackground: null,
-      failure: null,
-    },
-    context: { turnId: "turn", turnStatus: "completed" },
-  };
-  const images = [
-    base,
-    { ...base, item: { ...base.item, id: "saved", savedPath: "/image.png" } },
-    {
-      ...base,
-      item: { ...base.item, id: "failed", status: "in_progress" },
-      context: { turnId: "failed", turnStatus: "failed" as const },
-    },
-  ];
-  expect(await prepareCodexImageGenerations(images)).toEqual(
-    images.map(({ item, context }) => codexImageGenerationPart(item, context)),
-  );
 });
 
 type ImageWorkerTestDouble = {
@@ -128,48 +97,3 @@ for (const failure of [
     }
   });
 }
-
-test("history preparation forwards cancellation to its browser worker", async () => {
-  const stub: ImageWorkerTestDouble = {
-    onmessage: null,
-    onerror: null,
-    onmessageerror: null,
-    postMessage: mock(() => {}),
-    terminate: mock(() => {}),
-  };
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "Worker")!;
-  Object.defineProperty(globalThis, "Worker", {
-    configurable: true,
-    value: class {
-      constructor() {
-        return stub;
-      }
-    },
-  });
-  const controller = new AbortController();
-  try {
-    const pending = prepareCodexImageGenerations(
-      [
-        {
-          item: {
-            type: "imageGeneration",
-            id: "image",
-            status: "completed",
-            result: "bytes",
-            revisedPrompt: null,
-            transparentBackground: null,
-            failure: null,
-          },
-          context: {},
-        },
-      ],
-      controller.signal,
-    );
-    await Promise.resolve();
-    controller.abort(new Error("history canceled"));
-    await expect(pending).rejects.toThrow("history canceled");
-    expect(stub.terminate).toHaveBeenCalledTimes(1);
-  } finally {
-    Object.defineProperty(globalThis, "Worker", descriptor);
-  }
-});

@@ -1,6 +1,6 @@
+import type { HostClient } from "@openducktor/host-client";
 import type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 import type {
-  AgentCatalogPort,
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentSkillCatalog,
@@ -29,21 +29,26 @@ export type RuntimeCatalogOperations = {
 };
 
 export const createHostRuntimeCatalogOperations = (
-  getAdapter: (runtimeKind: RuntimeKind) => AgentCatalogPort,
+  hostClient: Pick<
+    HostClient,
+    | "agentRuntimeListModels"
+    | "agentRuntimeListSlashCommands"
+    | "agentRuntimeListSkills"
+    | "agentRuntimeListSubagents"
+    | "agentRuntimeSearchFiles"
+    | "repoRuntimeHealthStatus"
+  > = host,
 ): RuntimeCatalogOperations => ({
-  loadRepoRuntimeCatalog: async (runtimeRef) =>
-    getAdapter(runtimeRef.runtimeKind).listAvailableModels(runtimeRef),
+  loadRepoRuntimeCatalog: async (runtimeRef) => hostClient.agentRuntimeListModels(runtimeRef),
   loadRepoRuntimeSlashCommands: async (runtimeRef) =>
-    getAdapter(runtimeRef.runtimeKind).listAvailableSlashCommands(runtimeRef),
-  loadRepoRuntimeSkills: async (runtimeRef) =>
-    getAdapter(runtimeRef.runtimeKind).listAvailableSkills(runtimeRef),
-  loadRepoRuntimeSubagents: async (runtimeRef) =>
-    getAdapter(runtimeRef.runtimeKind).listAvailableSubagents(runtimeRef),
+    hostClient.agentRuntimeListSlashCommands(runtimeRef),
+  loadRepoRuntimeSkills: async (runtimeRef) => hostClient.agentRuntimeListSkills(runtimeRef),
+  loadRepoRuntimeSubagents: async (runtimeRef) => hostClient.agentRuntimeListSubagents(runtimeRef),
   loadRepoRuntimeFileSearch: async (runtimeRef, query) =>
-    getAdapter(runtimeRef.runtimeKind).searchFiles({
+    hostClient.agentRuntimeSearchFiles({
       ...runtimeRef,
       query,
     }),
   checkRepoRuntimeHealth: async (repoPath, runtimeKind) =>
-    host.repoRuntimeHealthStatus(repoPath, runtimeKind),
+    hostClient.repoRuntimeHealthStatus(repoPath, runtimeKind),
 });

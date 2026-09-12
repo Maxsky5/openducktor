@@ -1,3 +1,4 @@
+import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { describe, expect, test } from "bun:test";
 import type {
   AgentSessionLiveEnvelope,
@@ -50,6 +51,7 @@ const fakeAdapter = (input: {
     ? { refreshSnapshots: () => input.refreshEffect?.() ?? Effect.void }
     : {};
   const adapter = {
+    queries: unexpectedRuntimeQueries,
     supportsSessionControl: false,
     beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
     releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
@@ -1091,6 +1093,7 @@ describe("createAgentSessionLiveStateService", () => {
         runtimeKind: "opencode",
         snapshots: () => [],
       }),
+      queries: unexpectedRuntimeQueries,
       supportsSessionControl: true,
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: (input) =>
@@ -1135,6 +1138,7 @@ describe("createAgentSessionLiveStateService", () => {
         runtimeId: "runtime-1",
         snapshots: () => [],
       }),
+      queries: unexpectedRuntimeQueries,
       supportsSessionControl: true,
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: () => Effect.dieMessage("unexpected resume"),

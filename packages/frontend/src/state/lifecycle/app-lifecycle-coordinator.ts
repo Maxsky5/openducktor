@@ -30,6 +30,7 @@ type RuntimeStartupInput<TimerHandle> = {
   runtimeKinds: RuntimeKind[];
   isCurrent: () => boolean;
   startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
+  onRuntimeReady: (runtime: RuntimeInstanceSummary) => Promise<void>;
   refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
   notifications: LifecycleNotificationPort;
   timers: LifecycleTimerPort<TimerHandle>;
@@ -40,6 +41,7 @@ export const startRepositoryRuntimes = <TimerHandle>({
   runtimeKinds,
   isCurrent,
   startRepoRuntime,
+  onRuntimeReady,
   refreshRepoRuntimeHealth,
   notifications,
   timers,
@@ -58,12 +60,24 @@ export const startRepositoryRuntimes = <TimerHandle>({
 
   for (const runtimeKind of runtimeKinds) {
     void startRepoRuntime(repoPath, runtimeKind)
-      .catch((cause: unknown) => {
-        if (!isActive()) {
-          return;
-        }
-        notifications.error(`Runtime startup failed for ${runtimeKind}`, errorMessage(cause));
-      })
+      .then(
+        (runtime) => {
+          if (!isActive()) return;
+          return onRuntimeReady(runtime).catch((cause: unknown) => {
+            if (isActive()) {
+              notifications.error(
+                `Runtime data refresh failed for ${runtimeKind}`,
+                errorMessage(cause),
+              );
+            }
+          });
+        },
+        (cause: unknown) => {
+          if (isActive()) {
+            notifications.error(`Runtime startup failed for ${runtimeKind}`, errorMessage(cause));
+          }
+        },
+      )
       .finally(() => {
         if (isActive()) {
           refreshHealth();

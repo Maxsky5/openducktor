@@ -1,7 +1,8 @@
-import { CLAUDE_RUNTIME_HOST_COMMAND_NAMES } from "./claude-runtime-command-contracts";
+import { AGENT_RUNTIME_QUERY_HOST_COMMAND_NAMES } from "./agent-runtime-query-command-contracts";
 import { z } from "zod";
 
 export const HOST_COMMAND_NAMES = [
+  ...AGENT_RUNTIME_QUERY_HOST_COMMAND_NAMES,
   "agent_session_begin_generated_image_batch",
   "agent_session_control_fork",
   "agent_session_control_release",
@@ -29,8 +30,6 @@ export const HOST_COMMAND_NAMES = [
   "build_completed",
   "build_resumed",
   "build_start",
-  ...CLAUDE_RUNTIME_HOST_COMMAND_NAMES,
-  "codex_app_server_request",
   "dev_server_get_state",
   "dev_server_restart",
   "dev_server_start",

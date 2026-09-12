@@ -541,7 +541,7 @@ describe("CodexThreadInventoryReader", () => {
     expect(historyLoad).toEqual(threadReadResponse("thread-idle", "/repo", { type: "idle" }, []));
   });
 
-  test("returns null when read-only history has no stored thread", async () => {
+  test("rejects when read-only history has no stored thread", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
     const client = createInventoryClient({
@@ -551,12 +551,12 @@ describe("CodexThreadInventoryReader", () => {
       },
     });
 
-    const historyLoad = await reader.readThreadHistory(client, {
-      externalSessionId: "thread-idle",
-      workingDirectory: "/repo",
-    });
-
-    expect(historyLoad).toBeNull();
+    await expect(
+      reader.readThreadHistory(client, {
+        externalSessionId: "thread-idle",
+        workingDirectory: "/repo",
+      }),
+    ).rejects.toThrow("thread not loaded");
     expect(calls).toEqual(["thread/read"]);
   });
 
@@ -597,7 +597,7 @@ describe("CodexThreadInventoryReader", () => {
     ).resolves.toEqual({ thread: { id: "thread-local", cwd: "/repo", turns: [] } });
   });
 
-  test("returns null when read-only history cwd does not match", async () => {
+  test("rejects when read-only history cwd does not match", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
     const client = createInventoryClient({
@@ -611,12 +611,12 @@ describe("CodexThreadInventoryReader", () => {
       },
     });
 
-    const historyLoad = await reader.readThreadHistory(client, {
-      externalSessionId: "thread-idle",
-      workingDirectory: "/repo",
-    });
-
-    expect(historyLoad).toBeNull();
+    await expect(
+      reader.readThreadHistory(client, {
+        externalSessionId: "thread-idle",
+        workingDirectory: "/repo",
+      }),
+    ).rejects.toThrow("does not match the selected session");
     expect(calls).toEqual(["thread/read", "thread/turns/list"]);
   });
 

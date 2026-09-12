@@ -200,7 +200,7 @@ test("loads unbound session history without applying a session policy", async ()
 
   await expect(
     adapter.loadSessionHistory(
-      sessionRuntimeRef("unbound-history", {
+      sessionRuntimeRef("external-session-1", {
         sessionScope: undefined,
       }),
     ),

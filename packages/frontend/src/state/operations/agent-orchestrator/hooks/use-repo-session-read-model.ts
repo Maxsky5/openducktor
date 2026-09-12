@@ -18,6 +18,7 @@ import {
   retryAgentSessionListQueries,
 } from "@/state/queries/agent-sessions";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import { invalidateRuntimeQueries } from "@/state/queries/runtime-query-invalidation";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
@@ -747,6 +748,14 @@ export const useRepoSessionReadModel = ({
               runtimeKind: envelope.scope.runtimeKind,
             },
           },
+        );
+        return;
+      }
+      if (envelope.type === "runtime_changed") {
+        runOrchestratorSideEffect(
+          "agent-session-live-runtime-changed",
+          invalidateRuntimeQueries(queryClient, envelope.scope, envelope.state),
+          { tags: envelope.scope },
         );
         return;
       }

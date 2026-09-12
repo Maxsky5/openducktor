@@ -1,8 +1,7 @@
 import type { createGeneratedImageCommandHandlers } from "../commands/generated-image-command-handlers";
 import type { Effect } from "effect";
 import type { createAgentSessionLiveCommandHandlers } from "../commands/agent-session-live-command-handlers";
-import type { createClaudeRuntimeCommandHandlers } from "../commands/claude-runtime-command-handlers";
-import type { createCodexAppServerCommandHandlers } from "../commands/codex-app-server-command-handlers";
+import type { createAgentRuntimeQueryCommandHandlers } from "../commands/agent-runtime-query-command-handlers";
 import type { createDevServerCommandHandlers } from "../commands/dev-server-command-handlers";
 import type { createFilesystemCommandHandlers } from "../commands/filesystem-command-handlers";
 import type { createGitCommandHandlers } from "../commands/git-command-handlers";
@@ -25,8 +24,7 @@ import type { HostCommandName } from "../commands/host-command-registry";
 
 type AllHostCommandHandlers = ReturnType<typeof createGeneratedImageCommandHandlers> &
   ReturnType<typeof createAgentSessionLiveCommandHandlers> &
-  ReturnType<typeof createClaudeRuntimeCommandHandlers> &
-  ReturnType<typeof createCodexAppServerCommandHandlers> &
+  ReturnType<typeof createAgentRuntimeQueryCommandHandlers> &
   ReturnType<typeof createDevServerCommandHandlers> &
   ReturnType<typeof createFilesystemCommandHandlers> &
   ReturnType<typeof createGitCommandHandlers> &

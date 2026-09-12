@@ -42,6 +42,7 @@ export type ClaudePendingInputResolution = {
 };
 
 export type ClaudeAgentSdkService = {
+  resolveSessionParent(input: SessionRef): Effect.Effect<string | null, ClaudeAgentSdkServiceError>;
   startSession(
     input: StartAgentSessionInput,
     runtimeId: string,

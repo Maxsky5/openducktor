@@ -51,6 +51,11 @@ describe("OpencodeSdkAdapter session todos", () => {
     ]);
     expect(createClientCalls).toEqual([
       {
+        runtimeId: "runtime-opencode-1",
+        runtimeEndpoint: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
+      {
         runtimeEndpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
@@ -94,6 +99,11 @@ describe("OpencodeSdkAdapter session todos", () => {
     ]);
     expect(createClientCalls).toEqual([
       {
+        runtimeId: "runtime-opencode-1",
+        runtimeEndpoint: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
+      {
         runtimeEndpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",
       },
@@ -119,6 +129,11 @@ describe("OpencodeSdkAdapter session todos", () => {
       },
     ]);
     expect(createClientCalls).toEqual([
+      {
+        runtimeId: "runtime-opencode-1",
+        runtimeEndpoint: "http://127.0.0.1:12345",
+        workingDirectory: "/repo",
+      },
       {
         runtimeEndpoint: "http://127.0.0.1:12345",
         workingDirectory: "/repo",

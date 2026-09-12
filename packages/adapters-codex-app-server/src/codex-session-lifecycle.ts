@@ -36,13 +36,11 @@ type SessionInput =
   | ForkAgentSessionInput
   | PolicyBoundSessionRef;
 
-type SessionStateInput = SessionInput & { sessionScope?: StartAgentSessionInput["sessionScope"] };
-
-const inputAssociation = (input: SessionStateInput): AgentSessionAssociation =>
+const inputAssociation = (input: SessionInput): AgentSessionAssociation =>
   input.sessionScope ?? { kind: "unbound" };
 
 const buildSessionState = (
-  input: SessionStateInput,
+  input: SessionInput,
   summary: AgentSessionSummary,
   runtimeId: string,
   model: AgentModelSelection | undefined,

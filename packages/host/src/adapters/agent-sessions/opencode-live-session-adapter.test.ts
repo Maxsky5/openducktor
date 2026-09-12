@@ -1,3 +1,4 @@
+import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { describe, expect, test } from "bun:test";
 import type { PrepareOpencodeSessionRuntime } from "@openducktor/adapters-opencode-sdk";
 import type {
@@ -666,6 +667,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       contextUsage: null,
     };
     const otherAdapter: AgentSessionLiveAdapterPort = {
+      queries: unexpectedRuntimeQueries,
       supportsSessionControl: false,
       beginGeneratedImageBatch: () => Effect.dieMessage("Unexpected beginGeneratedImageBatch"),
       releaseGeneratedImageBatch: () => Effect.dieMessage("Unexpected releaseGeneratedImageBatch"),
