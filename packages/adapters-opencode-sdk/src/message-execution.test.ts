@@ -473,7 +473,7 @@ describe("message-execution", () => {
     expect(command).not.toHaveBeenCalled();
   });
 
-  test("routes local attachments through native prompt file parts without repo source text", async () => {
+  test("routes local attachments through native prompt file parts with staged source metadata", async () => {
     const { session, promptAsync } = createSession();
 
     await sendUserMessage({
@@ -500,6 +500,15 @@ describe("message-execution", () => {
           mime: "image/png",
           url: "file:///tmp/diagram.png",
           filename: "diagram.png",
+          source: {
+            type: "file",
+            path: "/tmp/diagram.png",
+            text: {
+              value: "/tmp/diagram.png",
+              start: 0,
+              end: 16,
+            },
+          },
         },
       ],
     });
@@ -586,6 +595,15 @@ describe("message-execution", () => {
           mime: "image/png",
           url: "file:///tmp/diagram.png",
           filename: "diagram.png",
+          source: {
+            type: "file",
+            path: "/tmp/diagram.png",
+            text: {
+              value: "/tmp/diagram.png",
+              start: 0,
+              end: 16,
+            },
+          },
         },
       ],
     });
@@ -619,7 +637,7 @@ describe("message-execution", () => {
     ]);
   });
 
-  test("omits file source metadata for local attachments so the runtime accepts the payload schema", async () => {
+  test("sends staged source metadata for local attachments so history can restore preview paths", async () => {
     const { session, promptAsync } = createSession();
 
     await sendUserMessage({
@@ -635,7 +653,55 @@ describe("message-execution", () => {
       promptAsync.mock.calls[0]?.[0];
     const attachmentPart = promptRequest?.parts?.find((part) => part.type === "file");
     expect(attachmentPart).toBeDefined();
-    expect(attachmentPart?.source).toBeUndefined();
+    expect(attachmentPart?.source).toEqual({
+      type: "file",
+      path: "/tmp/diagram.png",
+      text: {
+        value: "/tmp/diagram.png",
+        start: 0,
+        end: 16,
+      },
+    });
+  });
+
+  test("resolves relative attachment paths into the native source metadata", async () => {
+    const { session, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        externalSessionId: "session-1",
+        parts: [
+          {
+            kind: "attachment",
+            attachment: {
+              id: "attachment-relative-1",
+              path: "uploads/photo.png",
+              name: "photo.png",
+              kind: "image",
+              mime: "image/png",
+            },
+          },
+        ],
+      },
+      tools: {},
+    });
+
+    const promptRequest:
+      | { parts?: Array<{ type: string; url?: string; source?: unknown }> }
+      | undefined = promptAsync.mock.calls[0]?.[0];
+    const attachmentPart = promptRequest?.parts?.find((part) => part.type === "file");
+    expect(attachmentPart).toBeDefined();
+    expect(attachmentPart?.url).toBe("file:///repo/uploads/photo.png");
+    expect(attachmentPart?.source).toEqual({
+      type: "file",
+      path: "/repo/uploads/photo.png",
+      text: {
+        value: "/repo/uploads/photo.png",
+        start: 0,
+        end: 23,
+      },
+    });
   });
 
   test("encodes file URLs for special characters and relative paths", async () => {

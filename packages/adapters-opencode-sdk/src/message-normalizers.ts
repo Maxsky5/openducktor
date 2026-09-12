@@ -44,66 +44,52 @@ const readFilePathFromUrl = (url: string): string | null => {
   }
 };
 
+type AttachmentDisplayPart = Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>;
+type AttachmentKind = AttachmentDisplayPart["attachment"]["kind"];
+
+const readAttachmentKind = (mime: string): AttachmentKind | null => {
+  if (mime.startsWith("image/")) {
+    return "image";
+  }
+  if (mime.startsWith("audio/")) {
+    return "audio";
+  }
+  if (mime.startsWith("video/")) {
+    return "video";
+  }
+  if (mime === "application/pdf") {
+    return "pdf";
+  }
+
+  return null;
+};
+
 const normalizeAttachmentPart = (
   part: Extract<ParsedOpencodePart, { type: "file" }>,
 ): AgentUserMessageDisplayPart | null => {
   const sourcePath = part.source?.type === "file" ? part.source.path.trim() : "";
-  const filePath = readFilePathFromUrl(part.url) ?? (sourcePath || part.filename?.trim() || "");
+  const fileUrlPath = readFilePathFromUrl(part.url);
+  const previewPath = fileUrlPath ?? (sourcePath.length > 0 ? sourcePath : null);
+  const filePath = previewPath ?? part.filename?.trim() ?? "";
   if (filePath.length === 0 || !part.mime) {
     return null;
   }
-
-  const name = part.filename?.trim() || basenameForPath(filePath);
-  if (part.mime.startsWith("image/")) {
-    return {
-      kind: "attachment",
-      attachment: {
-        id: part.id,
-        path: filePath,
-        name,
-        kind: "image",
-        mime: part.mime,
-      },
-    };
-  }
-  if (part.mime.startsWith("audio/")) {
-    return {
-      kind: "attachment",
-      attachment: {
-        id: part.id,
-        path: filePath,
-        name,
-        kind: "audio",
-        mime: part.mime,
-      },
-    };
-  }
-  if (part.mime.startsWith("video/")) {
-    return {
-      kind: "attachment",
-      attachment: {
-        id: part.id,
-        path: filePath,
-        name,
-        kind: "video",
-        mime: part.mime,
-      },
-    };
-  }
-  if (part.mime === "application/pdf") {
-    return {
-      kind: "attachment",
-      attachment: {
-        id: part.id,
-        path: filePath,
-        name,
-        kind: "pdf",
-        mime: part.mime,
-      },
-    };
+  const attachmentKind = readAttachmentKind(part.mime);
+  if (!attachmentKind) {
+    return null;
   }
 
-  return null;
+  const attachment: AttachmentDisplayPart["attachment"] = {
+    id: part.id,
+    path: filePath,
+    name: part.filename?.trim() || basenameForPath(filePath),
+    kind: attachmentKind,
+    mime: part.mime,
+  };
+  if (previewPath === null) {
+    attachment.localPreviewAvailable = false;
+  }
+  return { kind: "attachment", attachment };
 };
 
 const normalizeFileReferencePart = (
@@ -227,7 +213,7 @@ export const ensureVisibleUserTextDisplayParts = (
 
 export const mergePreservedAttachmentDisplayParts = (
   displayParts: AgentUserMessageDisplayPart[],
-  preservedAttachmentParts: Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>[],
+  preservedAttachmentParts: AttachmentDisplayPart[],
 ): AgentUserMessageDisplayPart[] => {
   if (preservedAttachmentParts.length === 0) {
     return displayParts;
@@ -239,11 +225,12 @@ export const mergePreservedAttachmentDisplayParts = (
       return part;
     }
 
+    const runtimeAttachment = part.attachment;
     const preservedIndex = remainingPreservedAttachments.findIndex(
       (candidate) =>
-        candidate.attachment.name === part.attachment.name &&
-        candidate.attachment.kind === part.attachment.kind &&
-        (candidate.attachment.mime ?? "") === (part.attachment.mime ?? ""),
+        candidate.attachment.name === runtimeAttachment.name &&
+        candidate.attachment.kind === runtimeAttachment.kind &&
+        (candidate.attachment.mime ?? "") === (runtimeAttachment.mime ?? ""),
     );
     if (preservedIndex < 0) {
       return part;
@@ -254,12 +241,27 @@ export const mergePreservedAttachmentDisplayParts = (
       return part;
     }
 
+    const preservedPath = preservedAttachment.attachment.path;
+    const preservedLocalPreviewAvailable = preservedAttachment.attachment.localPreviewAvailable;
+    if (
+      preservedLocalPreviewAvailable === false &&
+      runtimeAttachment.localPreviewAvailable !== false
+    ) {
+      return part;
+    }
+    const mergedAttachment = {
+      ...runtimeAttachment,
+      path: preservedPath,
+    };
+    if (preservedLocalPreviewAvailable === undefined) {
+      delete mergedAttachment.localPreviewAvailable;
+    } else {
+      mergedAttachment.localPreviewAvailable = preservedLocalPreviewAvailable;
+    }
+
     return {
       ...part,
-      attachment: {
-        ...part.attachment,
-        path: preservedAttachment.attachment.path,
-      },
+      attachment: mergedAttachment,
     };
   });
 
