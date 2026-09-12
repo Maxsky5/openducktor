@@ -191,49 +191,72 @@ export const createWorkspaceAdmissionService = ({
     repoPath,
   ) => canonicalRepoPathKey(repoPath).pipe(Effect.flatMap(assertCanonicalWorkspaceAdmitsWork));
 
+  const acquireWorkStart = (key: string): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const state = workStartsByRepoPath.get(key) ?? { active: 0, drained: null };
+      state.active += 1;
+      workStartsByRepoPath.set(key, state);
+      return Effect.void;
+    });
+
+  const releaseWorkStart = (key: string): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const state = workStartsByRepoPath.get(key);
+      if (!state || state.active === 0) {
+        return Effect.void;
+      }
+      state.active -= 1;
+      if (state.active > 0 || !state.drained) {
+        return Effect.void;
+      }
+      const waiter = state.drained;
+      state.drained = null;
+      return Deferred.succeed(waiter, undefined).pipe(Effect.asVoid);
+    });
+
+  const awaitWorkStartDrain = (key: string): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const state = workStartsByRepoPath.get(key);
+      if (!state || state.active === 0) {
+        return;
+      }
+      const waiter = state.drained ?? (yield* Deferred.make<void>());
+      state.drained = waiter;
+      yield* Deferred.await(waiter);
+    });
+
   const withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"] = (repoPath, effect) =>
     Effect.gen(function* () {
-      const key = yield* canonicalRepoPathKey(repoPath);
+      const arrivalKey = normalizePathForComparison(repoPath);
       return yield* Effect.acquireUseRelease(
-        Effect.suspend(() => {
-          const state = workStartsByRepoPath.get(key) ?? { active: 0, drained: null };
-          state.active += 1;
-          workStartsByRepoPath.set(key, state);
-          return Effect.void;
-        }),
-        () => Effect.zipRight(assertCanonicalWorkspaceAdmitsWork(key), effect),
+        acquireWorkStart(arrivalKey),
         () =>
-          Effect.suspend(() => {
-            const state = workStartsByRepoPath.get(key);
-            if (!state || state.active === 0) {
-              return Effect.void;
-            }
-            state.active -= 1;
-            if (state.active > 0 || !state.drained) {
-              return Effect.void;
-            }
-            const waiter = state.drained;
-            state.drained = null;
-            return Deferred.succeed(waiter, undefined).pipe(Effect.asVoid);
-          }),
+          canonicalRepoPathKey(repoPath).pipe(
+            Effect.flatMap((key) =>
+              key === arrivalKey
+                ? Effect.zipRight(assertCanonicalWorkspaceAdmitsWork(key), effect)
+                : Effect.acquireUseRelease(
+                    acquireWorkStart(key),
+                    () => Effect.zipRight(assertCanonicalWorkspaceAdmitsWork(key), effect),
+                    () => releaseWorkStart(key),
+                  ),
+            ),
+          ),
+        () => releaseWorkStart(arrivalKey),
       );
     });
 
   const awaitWorkStarts: WorkspaceAdmissionService["awaitWorkStarts"] = (repoPath) =>
-    canonicalRepoPathKey(repoPath).pipe(
-      Effect.orElseSucceed(() => normalizePathForComparison(repoPath)),
-      Effect.flatMap((key) =>
-        Effect.gen(function* () {
-          const state = workStartsByRepoPath.get(key);
-          if (!state || state.active === 0) {
-            return;
-          }
-          const waiter = state.drained ?? (yield* Deferred.make<void>());
-          state.drained = waiter;
-          yield* Deferred.await(waiter);
-        }),
-      ),
-    );
+    Effect.gen(function* () {
+      const arrivalKey = normalizePathForComparison(repoPath);
+      yield* awaitWorkStartDrain(arrivalKey);
+      const canonicalKey = yield* canonicalRepoPathKey(repoPath).pipe(
+        Effect.orElseSucceed(() => arrivalKey),
+      );
+      if (canonicalKey !== arrivalKey) {
+        yield* awaitWorkStartDrain(canonicalKey);
+      }
+    });
 
   return {
     initialize,

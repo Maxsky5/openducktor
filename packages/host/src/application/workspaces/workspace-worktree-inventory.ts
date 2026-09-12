@@ -131,12 +131,19 @@ export const collectWorkspaceTaskWorktreePaths = (
 
     // A worktree under our base with no task or session evidence cannot be
     // attributed. Stop instead of guessing ownership or skipping it.
+    const canonicalManagedWorktreeBase = yield* Effect.either(
+      dependencies.settingsConfig.canonicalizePath(managedWorktreeBasePath),
+    );
+    const managedBaseForComparison =
+      canonicalManagedWorktreeBase._tag === "Right"
+        ? canonicalManagedWorktreeBase.right
+        : managedWorktreeBasePath;
     const unclassifiedPaths: string[] = [];
     for (const [normalized, worktreePath] of inventoryPaths) {
       if (seen.has(normalized)) {
         continue;
       }
-      if (!pathStartsWith(worktreePath, managedWorktreeBasePath)) {
+      if (!pathStartsWith(normalized, managedBaseForComparison)) {
         continue;
       }
       if (normalized === repoPathComparison || otherWorkspacePaths.has(normalized)) {

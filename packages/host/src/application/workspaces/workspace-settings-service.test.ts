@@ -1052,6 +1052,12 @@ describe("createWorkspaceSettingsService", () => {
     await expect(Effect.runPromise(service.selectWorkspace("repo-a"))).rejects.toThrow(
       "Workspace removal is incomplete",
     );
+    await expect(
+      Effect.runPromise(service.saveRepoSettings("repo-a", { worktreeBasePath: "/new-base" })),
+    ).rejects.toThrow("Finish the removal before changing repository settings");
+    await expect(
+      Effect.runPromise(service.updateRepoConfig("repo-a", { branchPrefix: "feat" })),
+    ).rejects.toThrow("Finish the removal before changing repository settings");
   });
   test("resolves a path with an incomplete removal as removing", async () => {
     const service = createWorkspaceSettingsService(

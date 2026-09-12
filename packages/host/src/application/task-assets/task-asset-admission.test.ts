@@ -81,7 +81,40 @@ describe("task asset workspace admission", () => {
     const result = await Effect.runPromise(guarded.stage(stageInput));
 
     expect(result).toEqual(stageResult);
-    expect(events).toEqual(["resolve:repo-a", "lease:/repos/a", "assert:/repos/a", "stage"]);
+    expect(events).toEqual([
+      "resolve:repo-a",
+      "lease:/repos/a",
+      "assert:/repos/a",
+      "resolve:repo-a",
+      "stage",
+    ]);
+  });
+
+  test("re-resolves the workspace inside the lease before staging", async () => {
+    let resolved = 0;
+    let staged = false;
+    const guarded = withTaskAssetWorkspaceAdmission({
+      admission: createAdmissionDouble({}),
+      resolveRepoPath: () => {
+        resolved += 1;
+        return resolved === 1
+          ? Effect.succeed("/repos/a")
+          : Effect.fail(new Error("Workspace not found: repo-a."));
+      },
+      service: createStagingDouble({
+        stage: () =>
+          Effect.sync(() => {
+            staged = true;
+            return stageResult;
+          }),
+      }),
+    });
+
+    const error = await Effect.runPromise(Effect.flip(guarded.stage(stageInput)));
+
+    expect(error.message).toContain("Workspace not found: repo-a.");
+    expect(staged).toBe(false);
+    expect(resolved).toBe(2);
   });
 
   test("rejects staging when the workspace admission fails", async () => {
