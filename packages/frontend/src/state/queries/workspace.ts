@@ -8,6 +8,7 @@ import {
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { normalizeTargetBranch } from "@/lib/target-branch";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "../operations/host";
 
@@ -188,16 +189,26 @@ export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Prom
   });
 };
 
-const queryKeyHasIdentity = (queryKey: readonly unknown[], identity: string): boolean =>
-  JSON.stringify(queryKey).includes(JSON.stringify(identity));
+const workspaceConfigQueryKeyMatches = (
+  queryKey: readonly unknown[],
+  workspaceId: string,
+): boolean =>
+  queryKey[0] === "workspace" && queryKey[1] === "repo-config" && queryKey[2] === workspaceId;
+
+const repoScopedQueryKeyMatches = (queryKey: readonly unknown[], repoPath: string): boolean => {
+  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
+  return queryKey.some(
+    (segment, index) => index >= 1 && (segment === repoPath || segment === normalizedRepoPath),
+  );
+};
 
 export const dropWorkspaceQueries = (
   queryClient: QueryClient,
   identity: { repoPath: string; workspaceId: string },
 ): void => {
   const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean =>
-    queryKeyHasIdentity(query.queryKey, identity.workspaceId) ||
-    queryKeyHasIdentity(query.queryKey, identity.repoPath);
+    workspaceConfigQueryKeyMatches(query.queryKey, identity.workspaceId) ||
+    repoScopedQueryKeyMatches(query.queryKey, identity.repoPath);
   void queryClient.cancelQueries({ predicate: matchesRemovedWorkspace }, { revert: false });
   queryClient.removeQueries({ predicate: matchesRemovedWorkspace });
 };
