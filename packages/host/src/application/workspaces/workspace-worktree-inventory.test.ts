@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  agentSessionRecordSchema,
   type IncompleteWorkspaceRemoval,
   repoConfigSchema,
   type RepoConfig,
   taskCardSchema,
+  type TaskAgentSessions,
   type TaskCard,
   type WorkspaceCatalog,
   type WorkspaceRecord,
@@ -60,18 +62,35 @@ const workspaceRecord = (overrides: Partial<WorkspaceRecord> = {}): WorkspaceRec
     ...overrides,
   });
 
-const incompleteRemoval = (workspace: WorkspaceRecord): IncompleteWorkspaceRemoval => ({
+const incompleteRemoval = (
+  workspace: WorkspaceRecord,
+  phase: IncompleteWorkspaceRemoval["record"]["phase"] = "worktrees",
+): IncompleteWorkspaceRemoval => ({
   workspace,
   record: {
     version: 1,
     operationId: "removal-1",
     removeTaskWorktrees: true,
-    phase: "worktrees",
+    phase,
     removedWorktrees: [],
     pendingWorktreePath: null,
     startedAt: "2026-01-01T00:00:00.000Z",
     lastFailure: null,
   },
+});
+
+const agentSessions = (taskId: string, workingDirectory: string): TaskAgentSessions => ({
+  taskId,
+  agentSessions: [
+    agentSessionRecordSchema.parse({
+      externalSessionId: `${taskId}-session`,
+      role: "build",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory,
+      selectedModel: null,
+    }),
+  ],
 });
 
 const createDependencies = ({
@@ -80,6 +99,7 @@ const createDependencies = ({
   pathExists,
   settingsCanonicalizePath = (path) => Effect.succeed(path),
   listTasks = () => Effect.succeed([]),
+  listAgentSessionsForTasks = () => Effect.succeed([]),
   workspaceCatalog = catalog(),
 }: {
   canonicalizePath: (path: string) => Effect.Effect<string, HostOperationErrorAggregate>;
@@ -87,6 +107,10 @@ const createDependencies = ({
   pathExists: (path: string) => Effect.Effect<boolean, never>;
   settingsCanonicalizePath?: (path: string) => Effect.Effect<string, HostOperationErrorAggregate>;
   listTasks?: (input: { repoPath: string }) => Effect.Effect<TaskCard[], never>;
+  listAgentSessionsForTasks?: (input: {
+    repoPath: string;
+    taskIds: string[];
+  }) => Effect.Effect<TaskAgentSessions[], never>;
   workspaceCatalog?: WorkspaceCatalog;
 }) => ({
   gitPort: createGitPortTestDouble({
@@ -105,7 +129,7 @@ const createDependencies = ({
   }),
   taskStore: {
     listTasks,
-    listAgentSessionsForTasks: () => Effect.succeed([]),
+    listAgentSessionsForTasks,
   } satisfies Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">,
   workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
     getWorkspaceCatalog: () => Effect.succeed(workspaceCatalog),
@@ -409,5 +433,63 @@ describe("workspace worktree inventory", () => {
     );
 
     expect(paths).toEqual([]);
+  });
+
+  test("rejects a candidate claimed by a session of a workspace with a different base", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: (input) =>
+        Effect.succeed(input.repoPath === "/repos/ws" ? [task("task-1")] : [task("other-task")]),
+      listAgentSessionsForTasks: (input) =>
+        Effect.succeed(
+          input.repoPath === "/repos/other" ? [agentSessions("other-task", "/base/task-1")] : [],
+        ),
+      workspaceCatalog: {
+        ...catalog(),
+        openWorkspaces: [workspaceRecord({ effectiveWorktreeBasePath: "/elsewhere" })],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("another workspace also claims it");
+    expect(error.message).toContain("/base/task-1");
+  });
+
+  test("ignores workspaces whose removal already deleted the task store", async () => {
+    const listedRepos: string[] = [];
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: (input) => {
+        listedRepos.push(input.repoPath);
+        return Effect.succeed(
+          input.repoPath === "/repos/ws" ? [task("task-1")] : [task("other-task")],
+        );
+      },
+      workspaceCatalog: {
+        ...catalog(),
+        incompleteRemovals: [
+          incompleteRemoval(
+            workspaceRecord({ effectiveWorktreeBasePath: "/elsewhere" }),
+            "attachments",
+          ),
+        ],
+      },
+    });
+
+    const paths = await Effect.runPromise(
+      collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+    );
+
+    expect(paths).toEqual(["/base/task-1"]);
+    expect(listedRepos).toEqual(["/repos/ws"]);
   });
 });

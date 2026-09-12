@@ -70,7 +70,7 @@ export const createNodeTaskAssetServices = ({
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv: NodeJS.ProcessEnv;
   withAdministrativeAccess: <A, E, R>(
-    workspaceId: string,
+    workspaceIds: readonly string[],
     effect: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E, R>;
   workspaceSettingsService: WorkspaceSettingsService;

@@ -206,11 +206,18 @@ function SortableWorkspaceRailButton({
         />
       </ContextMenuTrigger>
       <ContextMenuContent className="w-52">
-        <ContextMenuItem onSelect={() => onRequestCloseWorkspace(workspace)}>
+        <ContextMenuItem
+          disabled={isSwitchingWorkspace}
+          onSelect={() => onRequestCloseWorkspace(workspace)}
+        >
           <EyeOff />
           Close workspace
         </ContextMenuItem>
-        <ContextMenuItem variant="destructive" onSelect={() => onRequestRemoveWorkspace(workspace)}>
+        <ContextMenuItem
+          variant="destructive"
+          disabled={isSwitchingWorkspace}
+          onSelect={() => onRequestRemoveWorkspace(workspace)}
+        >
           <Trash2 />
           Remove workspace
         </ContextMenuItem>
@@ -371,6 +378,7 @@ export function WorkspaceRail({
                 className="size-10 text-destructive hover:text-destructive"
                 aria-label={`Finish removing ${removal.workspace.workspaceName}`}
                 title={`Finish removing ${removal.workspace.workspaceName}`}
+                disabled={isSwitchingWorkspace}
                 onClick={() => setLifecycleRequest({ action: "recovery", removal })}
               >
                 <TriangleAlert className="size-5" />
@@ -384,6 +392,7 @@ export function WorkspaceRail({
               className="size-10"
               aria-label="Open repository"
               title="Open repository"
+              disabled={isSwitchingWorkspace}
               onClick={onOpenRepositoryModal}
             >
               <Plus className="size-5" />
