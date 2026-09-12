@@ -2,7 +2,7 @@ import type { RepoConfig, WorkspaceRecord } from "@openducktor/contracts";
 import { pathStartsWith } from "@openducktor/path-support";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
-import { HostValidationError } from "../../effect/host-errors";
+import { HostValidationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
@@ -11,6 +11,7 @@ import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspa
 
 export type WorkspaceWorktreeInventoryError =
   | GitPortError
+  | HostOperationErrorAggregate
   | HostValidationError
   | TaskStoreError
   | WorkspaceSettingsError;
@@ -82,10 +83,13 @@ export const collectWorkspaceTaskWorktreePaths = (
       const canonical = yield* Effect.either(
         dependencies.gitPort.canonicalizePath(worktree.worktreePath),
       );
-      const comparison = normalizePathForComparison(
-        canonical._tag === "Right" ? canonical.right : worktree.worktreePath,
-      );
-      inventoryPaths.set(comparison, worktree.worktreePath);
+      let registeredWorktreePath = worktree.worktreePath;
+      if (canonical._tag === "Right") {
+        registeredWorktreePath = canonical.right;
+      } else if (yield* dependencies.settingsConfig.pathExists(worktree.worktreePath)) {
+        return yield* Effect.fail(canonical.left);
+      }
+      inventoryPaths.set(normalizePathForComparison(registeredWorktreePath), worktree.worktreePath);
     }
     const repoPathComparison = normalizePathForComparison(repoPath);
     const seen = new Set<string>();

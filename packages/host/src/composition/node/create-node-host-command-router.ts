@@ -122,6 +122,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
   const workspaceAdmissionService = createWorkspaceAdmissionService({
+    settingsConfig,
     workspaceSettingsService,
   });
   const gitProviderService = createGitProviderService({

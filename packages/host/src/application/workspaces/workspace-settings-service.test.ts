@@ -891,7 +891,34 @@ describe("createWorkspaceSettingsService", () => {
     );
 
     expect(record).toEqual(storedRemoval);
-    expect(settingsConfig.writtenConfigs).toEqual([]);
+    expect(settingsConfig.writtenConfigs).toHaveLength(1);
+    expect(settingsConfig.writtenConfigs[0]?.workspaces["repo-a"]?.removal).toEqual(storedRemoval);
+  });
+  test("moves the active selection when removal starts", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo-a",
+        workspaceOrder: ["repo-a", "repo-b"],
+        workspaces: {
+          "repo-a": repoConfig("repo-a", "/repos/a"),
+          "repo-b": repoConfig("repo-b", "/repos/b"),
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    await Effect.runPromise(
+      service.beginWorkspaceRemoval({
+        workspaceId: "repo-a",
+        expectedRepoPath: "/repos/a",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    const catalog = await Effect.runPromise(service.getWorkspaceCatalog());
+    expect(catalog.openWorkspaces.map((workspace) => workspace.isActive)).toEqual([true]);
+    expect(catalog.openWorkspaces[0]?.workspaceId).toBe("repo-b");
+    expect(catalog.incompleteRemovals).toHaveLength(1);
   });
   test("rejects close, reopen, and select while removal is incomplete", async () => {
     const settingsConfig = createFakeSettingsConfig({

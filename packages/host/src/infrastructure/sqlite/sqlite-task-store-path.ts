@@ -29,7 +29,7 @@ const validateSqliteTaskStoreWorkspaceId = (
 export const sqliteTaskStoreDirectoryPath = (configDir: string, workspaceId: string): string =>
   path.join(configDir, "task-stores", workspaceId);
 
-export const resolveSqliteTaskStoreDirectory = ({
+const resolveSqliteTaskStoreDirectory = ({
   configDir,
   workspaceId,
 }: ResolveSqliteTaskStoreDatabasePathInput): Effect.Effect<
