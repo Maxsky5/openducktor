@@ -863,6 +863,7 @@ describe("use-workspace-operations", () => {
 
   test("preserves current repo branch state when workspace selection fails", async () => {
     const setActiveRepo = mock(() => {});
+    workspaceHost.workspaceList = mock(async () => [workspace("/repo-old", true)]);
     const clearTaskData = mock(() => {});
     const clearActiveTaskStoreCheck = mock(() => {});
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => {
@@ -1259,6 +1260,7 @@ describe("use-workspace-operations", () => {
 
   test("marks branch sync degraded and throttles repeated probe failure toasts", async () => {
     const setActiveRepo = mock(() => {});
+    workspaceHost.workspaceList = mock(async () => [workspace("/repo-a", true)]);
     let probeFailureCount = 0;
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
@@ -1352,6 +1354,7 @@ describe("use-workspace-operations", () => {
 
   test("clears degraded branch sync state after a successful probe", async () => {
     const setActiveRepo = mock(() => {});
+    workspaceHost.workspaceList = mock(async () => [workspace("/repo-a", true)]);
     let shouldFailProbe = true;
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
@@ -1406,6 +1409,7 @@ describe("use-workspace-operations", () => {
 
   test("marks branch sync degraded when refresh after branch identity change fails", async () => {
     const setActiveRepo = mock(() => {});
+    workspaceHost.workspaceList = mock(async () => [workspace("/repo-a", true)]);
     let currentBranchCallCount = 0;
     let branchesCallCount = 0;
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
@@ -1476,6 +1480,7 @@ describe("use-workspace-operations", () => {
 
   test("clears branch cache and degraded state on active repository change", async () => {
     const setActiveRepo = mock(() => {});
+    workspaceHost.workspaceList = mock(async () => [workspace("/repo-a", true)]);
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
     const gitGetCurrentBranch = mock(async () => {

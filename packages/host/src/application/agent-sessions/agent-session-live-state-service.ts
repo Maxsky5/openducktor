@@ -333,8 +333,9 @@ export const createAgentSessionLiveStateService = ({
         return acceptedMessage;
       }),
     ),
-    updateSessionModel: (input) =>
+    updateSessionModel: withStartAdmission((input) =>
       runControl(input, (adapter) => adapter.updateSessionModel(input)),
+    ),
     stopSession: (input) => runControl(input, (adapter) => adapter.stopSession(input)),
     releaseSession: (input) => runControl(input, (adapter) => adapter.releaseSession(input)),
     registerRuntimeAdapter: lifecycle.registerRuntimeAdapter,
