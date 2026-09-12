@@ -12,16 +12,15 @@ const readPreservedAttachmentParts = (input: {
   metadata?: SessionMessageMetadata;
   matchedQueuedSend?: QueuedUserMessageSend | null;
 }): AttachmentDisplayPart[] => {
-  const preservedById = new Map<string, AttachmentDisplayPart>();
-  for (const part of [
-    ...(input.metadata?.displayParts?.filter(
+  const metadataAttachments =
+    input.metadata?.displayParts?.filter(
       (part): part is AttachmentDisplayPart => part.kind === "attachment",
-    ) ?? []),
-    ...(input.matchedQueuedSend?.attachmentParts ?? []),
-  ]) {
-    preservedById.set(part.attachment.id, part);
+    ) ?? [];
+  if (metadataAttachments.length > 0) {
+    return metadataAttachments;
   }
-  return [...preservedById.values()];
+
+  return input.matchedQueuedSend?.attachmentParts ?? [];
 };
 
 export const buildVisibleUserMessage = (input: {
