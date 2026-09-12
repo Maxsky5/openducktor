@@ -721,9 +721,9 @@ export class CodexAppServerAdapter
       workingDirectory: input.workingDirectory,
       allowUnmaterialized: session !== undefined,
     });
-    const todos = codexTodosFromThreadRead(response);
-    // Event-owned todos win if a live update arrived during the history read.
-    return this.runtimeEvents.latestTodos(input.externalSessionId) ?? todos;
+    const historyTodos = codexTodosFromThreadRead(response);
+    const latestLiveTodos = this.runtimeEvents.latestTodos(input.externalSessionId);
+    return latestLiveTodos ?? historyTodos;
   }
 
   async resolveSessionParent(input: SessionRef): Promise<string | null> {
