@@ -24,3 +24,4 @@ packages/openducktor-mcp/tsconfig.tsbuildinfo
 .husky/_/
 # Added by code-review-graph
 .code-review-graph/
+.pixel/
