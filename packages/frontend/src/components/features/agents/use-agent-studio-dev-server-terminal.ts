@@ -1,20 +1,22 @@
-import { FitAddon } from "@xterm/addon-fit";
-import { type ITerminalOptions, Terminal } from "@xterm/xterm";
+import type { FitAddon } from "@xterm/addon-fit";
+import type { ITerminalOptions, Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
+import { createTerminalBinding } from "@/features/terminals/shared-terminal-binding";
 import {
   createTerminalOptions,
   createTerminalTheme,
 } from "@/features/terminals/terminal-xterm-options";
 
 export type TerminalBinding = {
-  terminal: Pick<Terminal, "clear" | "dispose" | "loadAddon" | "open" | "options" | "reset"> & {
+  dispose(): void;
+  terminal: Pick<Terminal, "clear" | "loadAddon" | "open" | "options" | "reset"> & {
     attachCustomKeyEventHandler?(handler: (event: KeyboardEvent) => boolean): void;
     getSelection?(): string;
     hasSelection?(): boolean;
     write(data: string, callback?: () => void): void;
   };
-  fitAddon: Pick<FitAddon, "dispose" | "fit">;
+  fitAddon: Pick<FitAddon, "fit">;
 };
 
 export type CreateTerminalBinding = (
@@ -49,12 +51,9 @@ type UseDevServerTerminalRenderingArgs = TerminalRenderController & {
 };
 
 export const defaultCreateTerminalBinding: CreateTerminalBinding = (container, options) => {
-  const terminal = new Terminal(options);
-  const fitAddon = new FitAddon();
-  terminal.loadAddon(fitAddon);
-  terminal.open(container);
-  fitAddon.fit();
-  return { terminal, fitAddon };
+  const binding = createTerminalBinding(container, options);
+  binding.fitAddon.fit();
+  return binding;
 };
 
 const terminalOptions = (container: HTMLElement): ITerminalOptions =>
@@ -177,8 +176,7 @@ const disposeTerminalBinding = (
   renderQueueRef: { current: Promise<void> | null },
   renderGenerationRef: { current: number },
 ): void => {
-  bindingRef.current?.terminal.dispose();
-  bindingRef.current?.fitAddon.dispose();
+  bindingRef.current?.dispose();
   bindingRef.current = null;
   resetTerminalRenderQueue(renderedStateRef, renderQueueRef, renderGenerationRef);
 };
@@ -274,8 +272,7 @@ export const useDevServerTerminalBinding = ({
 
     terminalObserversCleanupRef.current?.();
     terminalObserversCleanupRef.current = null;
-    bindingRef.current?.terminal.dispose();
-    bindingRef.current?.fitAddon.dispose();
+    bindingRef.current?.dispose();
     bindingRef.current = null;
 
     const binding = createTerminalBinding(container, terminalOptions(container));

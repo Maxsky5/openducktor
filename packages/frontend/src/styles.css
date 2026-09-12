@@ -712,6 +712,15 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   stroke-width: var(--odt-border-ray-stroke-width);
 }
 
+.odt-terminal-links .xterm-screen.xterm-cursor-pointer {
+  cursor: text;
+}
+
+.odt-terminal-links.odt-terminal-link-pointer .xterm,
+.odt-terminal-links.odt-terminal-link-pointer .xterm-screen.xterm-cursor-pointer {
+  cursor: pointer;
+}
+
 .kanban-active-session-content {
   position: relative;
   z-index: 1;

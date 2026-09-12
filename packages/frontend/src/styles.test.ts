@@ -26,4 +26,18 @@ describe("global styles", () => {
     expect(styles).toContain("::view-transition-new(onboarding-stage-content)");
     expect(styles).not.toContain("@keyframes onboarding-stage-enter");
   });
+
+  test("sets the xterm cursor for plain and modified link hover", () => {
+    const styles = readStyles();
+    const textCursor = styles.match(
+      /\.odt-terminal-links \.xterm-screen\.xterm-cursor-pointer\s*\{([^}]*)\}/,
+    )?.[1];
+    const linkCursor = styles.match(
+      /\.odt-terminal-links\.odt-terminal-link-pointer \.xterm,\s*\.odt-terminal-links\.odt-terminal-link-pointer \.xterm-screen\.xterm-cursor-pointer\s*\{([^}]*)\}/,
+    )?.[1];
+
+    expect(textCursor).toContain("cursor: text");
+    expect(linkCursor).toContain("cursor: pointer");
+    expect(styles).not.toContain(".odt-terminal-links .xterm.xterm-cursor-pointer");
+  });
 });
