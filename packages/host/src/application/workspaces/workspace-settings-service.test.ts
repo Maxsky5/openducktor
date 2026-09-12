@@ -13,6 +13,7 @@ import { Effect } from "effect";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { HostOperationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import { createWorkspaceOwnershipLock } from "./workspace-ownership-lock";
 import { createWorkspaceSettingsService as createEffectWorkspaceSettingsService } from "./workspace-settings-service";
 
 const createWorkspaceSettingsService = (
@@ -313,6 +314,53 @@ describe("createWorkspaceSettingsService", () => {
       theme: "dark",
       system: { preferredOpenInToolId: "zed" },
     });
+  });
+
+  test("waits for the ownership lock before adding a workspace", async () => {
+    const ownershipLock = createWorkspaceOwnershipLock();
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig(),
+      existingPaths: new Set(["/repos/added", "/repos/added/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig, ownershipLock);
+    let release!: () => void;
+    let acquired!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const lockAcquired = new Promise<void>((resolve) => {
+      acquired = resolve;
+    });
+    const lockHolder = Effect.runPromise(
+      ownershipLock.runExclusive(
+        Effect.promise(async () => {
+          acquired();
+          await held;
+        }),
+      ),
+    );
+    await lockAcquired;
+
+    let addCompleted = false;
+    const add = Effect.runPromise(
+      service.addWorkspace({
+        workspaceId: "added",
+        workspaceName: "Added",
+        repoPath: "/repos/added",
+        defaultRuntimeKind: "opencode",
+      }),
+    ).then(() => {
+      addCompleted = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(addCompleted).toBe(false);
+    expect(settingsConfig.writtenConfigs).toHaveLength(0);
+
+    release();
+    await lockHolder;
+    await add;
+    expect(addCompleted).toBe(true);
+    expect(settingsConfig.writtenConfigs).toHaveLength(1);
   });
 
   test("full settings saves set and clear the system preference", async () => {

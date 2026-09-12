@@ -25,6 +25,10 @@ import type {
   WorkspaceActivityPort,
 } from "./workspace-activity-inspector";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
+import {
+  createWorkspaceOwnershipLock,
+  type WorkspaceOwnershipLock,
+} from "./workspace-ownership-lock";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 import {
   collectWorkspaceTaskWorktreePaths,
@@ -84,6 +88,7 @@ type CreateWorkspaceLifecycleServiceInput = {
     GitPort,
     "canonicalizePath" | "isRegisteredWorktree" | "listWorktrees" | "removeWorktree"
   >;
+  ownershipLock?: WorkspaceOwnershipLock;
   settingsConfig: SettingsConfigPort;
   storage: WorkspaceStoragePort;
   taskStore: Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
@@ -115,13 +120,14 @@ export const createWorkspaceLifecycleService = ({
   activity,
   admission,
   gitPort,
+  ownershipLock,
   settingsConfig,
   storage,
   taskStore,
   workspaceSettingsService,
   worktreeFiles,
 }: CreateWorkspaceLifecycleServiceInput): WorkspaceLifecycleService => {
-  const removalSemaphore = Effect.unsafeMakeSemaphore(1);
+  const runOwnedExclusively = (ownershipLock ?? createWorkspaceOwnershipLock()).runExclusive;
 
   const requireTarget = (workspaceId: string, expectedRepoPath: string) =>
     Effect.gen(function* () {
@@ -442,7 +448,7 @@ export const createWorkspaceLifecycleService = ({
       });
     },
     removeWorkspace(input) {
-      return removalSemaphore.withPermits(1)(
+      return runOwnedExclusively(
         Effect.gen(function* () {
           const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
           return yield* runUnderReservation(

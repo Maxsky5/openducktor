@@ -553,4 +553,59 @@ describe("workspace worktree inventory", () => {
 
     expect(paths).toEqual(["/base/task-1"]);
   });
+
+  test("rejects a candidate that contains a session claim of another workspace", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: (input) =>
+        Effect.succeed(input.repoPath === "/repos/ws" ? [task("task-1")] : [task("other-task")]),
+      listAgentSessionsForTasks: (input) =>
+        Effect.succeed(
+          input.repoPath === "/repos/other"
+            ? [agentSessions("other-task", "/base/task-1/nested-worktree")]
+            : [],
+        ),
+      workspaceCatalog: {
+        ...catalog(),
+        openWorkspaces: [workspaceRecord({ effectiveWorktreeBasePath: "/elsewhere" })],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("it contains a path that another workspace claims");
+    expect(error.message).toContain("/base/task-1");
+  });
+
+  test("rejects a candidate inside a session claim of another workspace", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: (input) =>
+        Effect.succeed(input.repoPath === "/repos/ws" ? [task("task-1")] : [task("other-task")]),
+      listAgentSessionsForTasks: (input) =>
+        Effect.succeed(
+          input.repoPath === "/repos/other" ? [agentSessions("other-task", "/base")] : [],
+        ),
+      workspaceCatalog: {
+        ...catalog(),
+        openWorkspaces: [workspaceRecord({ effectiveWorktreeBasePath: "/elsewhere" })],
+      },
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+      ),
+    );
+
+    expect(error.message).toContain("it is inside a path that another workspace claims");
+  });
 });

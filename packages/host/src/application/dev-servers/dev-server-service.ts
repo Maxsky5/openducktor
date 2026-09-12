@@ -360,10 +360,10 @@ export const createDevServerService = ({
     start(input) {
       return Effect.gen(function* () {
         const { repoPath, taskId } = input;
-        const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
         return yield* withWorkStartLease(
-          repoConfig.repoPath,
+          repoPath,
           Effect.gen(function* () {
+            const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
             if (repoConfig.devServers.length === 0) {
               return yield* Effect.fail(
                 new HostValidationError({

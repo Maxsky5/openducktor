@@ -286,6 +286,31 @@ describe("createDevServerService", () => {
       ]),
     );
   });
+  test("reads repository settings inside the work-start lease", async () => {
+    const events: string[] = [];
+    const { processPort } = createProcessPort();
+    const service = createDevServerService({
+      withWorkStartLease: (repoPath, effect) =>
+        Effect.gen(function* () {
+          events.push(`lease-open:${repoPath}`);
+          const result = yield* effect;
+          events.push("lease-close");
+          return result;
+        }),
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+      workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+        getRepoConfigByRepoPath(repoPath: string) {
+          events.push(`config-read:${repoPath}`);
+          return Effect.succeed(repoConfig());
+        },
+      }),
+    });
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+
+    expect(events).toEqual(["lease-open:/repo", "config-read:/repo", "lease-close"]);
+  });
   test("trims buffered terminal output to the chunk limit", async () => {
     const processPort: DevServerProcessPort = {
       start(input) {

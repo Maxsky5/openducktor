@@ -162,6 +162,22 @@ export const collectWorkspaceTaskWorktreePaths = (
       }
       return undefined;
     };
+    const findRelatedWorkspaceClaim = (
+      comparison: string,
+    ): "equal" | "contains" | "inside" | undefined => {
+      for (const claim of otherWorkspaceClaims) {
+        if (claim === comparison) {
+          return "equal";
+        }
+        if (pathStartsWith(claim, comparison)) {
+          return "contains";
+        }
+        if (pathStartsWith(comparison, claim)) {
+          return "inside";
+        }
+      }
+      return undefined;
+    };
 
     const candidates = new Map<string, { path: string; taskId: string | null }>();
     if (pendingWorktreePath !== null) {
@@ -239,10 +255,17 @@ export const collectWorkspaceTaskWorktreePaths = (
           }),
         );
       }
-      if (otherWorkspaceClaims.has(canonicalComparison)) {
+      const relatedClaim = findRelatedWorkspaceClaim(canonicalComparison);
+      if (relatedClaim !== undefined) {
+        const claimDescription =
+          relatedClaim === "equal"
+            ? "another workspace also claims it"
+            : relatedClaim === "contains"
+              ? "it contains a path that another workspace claims"
+              : "it is inside a path that another workspace claims";
         return yield* Effect.fail(
           new HostValidationError({
-            message: `Cannot remove ${canonicalPath}: another workspace also claims it. Remove it manually, or retry without removing task worktrees.`,
+            message: `Cannot remove ${canonicalPath}: ${claimDescription}. Remove it manually, or retry without removing task worktrees.`,
             field: "worktreePath",
             details: { repoPath, taskId: candidate.taskId, worktreePath: canonicalPath },
           }),
@@ -300,7 +323,7 @@ export const collectWorkspaceTaskWorktreePaths = (
       ) {
         continue;
       }
-      if (otherWorkspaceClaims.has(normalized)) {
+      if (findRelatedWorkspaceClaim(normalized) !== undefined) {
         continue;
       }
       if (!(yield* dependencies.settingsConfig.pathExists(worktreePath))) {
