@@ -664,7 +664,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
   test("releases through the host lifecycle without re-entering its coordinator", async () => {
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
-      assertWorkspaceAdmitsWork: () => Effect.void,
+      withWorkStartLease: (_repoPath, effect) => effect,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
       publish: (event) => events.push(event),
@@ -789,7 +789,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
-      assertWorkspaceAdmitsWork: () => Effect.void,
+      withWorkStartLease: (_repoPath, effect) => effect,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
       publish: (event) => events.push(event),
@@ -1322,7 +1322,7 @@ for (const action of ["stop", "release", "runtime"] as const) {
   test(`publishes settled image output before ${action} removes the session`, async () => {
     const events: AgentSessionLiveEnvelope[] = [];
     const service = createAgentSessionLiveStateService({
-      assertWorkspaceAdmitsWork: () => Effect.void,
+      withWorkStartLease: (_repoPath, effect) => effect,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
       publish: (event) => events.push(event),

@@ -16,9 +16,9 @@ import { createTaskWorkflowSessionControlService as createControlService } from 
 type ControlServiceInput = Parameters<typeof createControlService>[0];
 type TestControlServiceInput = Omit<
   ControlServiceInput,
-  "assertWorkspaceAdmitsWork" | "taskSessionStart" | "tasks"
+  "withWorkStartLease" | "taskSessionStart" | "tasks"
 > & {
-  assertWorkspaceAdmitsWork?: ControlServiceInput["assertWorkspaceAdmitsWork"];
+  withWorkStartLease?: ControlServiceInput["withWorkStartLease"];
   taskSessionStart?: ControlServiceInput["taskSessionStart"];
   tasks: Omit<ControlServiceInput["tasks"], "transitionTask"> &
     Partial<Pick<ControlServiceInput["tasks"], "transitionTask">>;
@@ -31,7 +31,7 @@ const createTaskWorkflowSessionControlService = (input: TestControlServiceInput)
       complete: () => Effect.dieMessage("unexpected task session completion"),
     },
     ...input,
-    assertWorkspaceAdmitsWork: input.assertWorkspaceAdmitsWork ?? (() => Effect.void),
+    withWorkStartLease: input.withWorkStartLease ?? ((_repoPath, effect) => effect),
     tasks: {
       transitionTask: () => Effect.dieMessage("unexpected task transition"),
       ...input.tasks,
@@ -186,7 +186,7 @@ describe("createTaskWorkflowSessionControlService", () => {
     const prepared: string[] = [];
     const service = createTaskWorkflowSessionControlService({
       ...createControlDeps(),
-      assertWorkspaceAdmitsWork: () =>
+      withWorkStartLease: () =>
         Effect.fail(
           new HostValidationError({
             message: "Workspace is closed: /repo. Reopen it before using it.",

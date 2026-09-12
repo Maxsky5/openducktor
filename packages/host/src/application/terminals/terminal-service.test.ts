@@ -104,10 +104,15 @@ const makeService = async (
   assertWorkspaceAdmitsWork: (
     repoPath: string,
   ) => Effect.Effect<void, HostValidationErrorAggregate> = () => Effect.void,
+  withWorkStartLease: Parameters<typeof createTerminalService>[0]["withWorkStartLease"] = (
+    _repoPath,
+    effect,
+  ) => effect,
 ) => {
   const titleSettlement = makeTitleSettlementScheduler();
   const serviceInput: Parameters<typeof createTerminalService>[0] = {
     assertWorkspaceAdmitsWork,
+    withWorkStartLease,
     filesystem: filesystemPort,
     ptyPort: pty.port,
     resolveLaunchEnvironment: createTerminalLaunchEnvironment({
@@ -129,20 +134,23 @@ const makeService = async (
 describe("TerminalService", () => {
   test("rejects task terminal creation and input for a blocked workspace", async () => {
     let blocked = true;
+    const blockedError = () =>
+      new HostValidationError({
+        message: "Workspace is closed: ws. Reopen it before using it.",
+        field: "workspaceId",
+      });
     const assertWorkspaceAdmitsWork = (_repoPath: string) =>
-      blocked
-        ? Effect.fail(
-            new HostValidationError({
-              message: "Workspace is closed: ws. Reopen it before using it.",
-              field: "workspaceId",
-            }),
-          )
-        : Effect.void;
+      blocked ? Effect.fail(blockedError()) : Effect.void;
+    const withWorkStartLease: Parameters<typeof createTerminalService>[0]["withWorkStartLease"] = (
+      repoPath,
+      effect,
+    ) => assertWorkspaceAdmitsWork(repoPath).pipe(Effect.zipRight(effect));
     const { service, pty } = await makeService(
       makePty(),
       undefined,
       undefined,
       assertWorkspaceAdmitsWork,
+      withWorkStartLease,
     );
 
     await expect(

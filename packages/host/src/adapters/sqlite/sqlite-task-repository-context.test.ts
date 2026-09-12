@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { sql } from "drizzle-orm";
-import { Deferred, Effect, Fiber, TestClock, TestContext } from "effect";
+import { Deferred, Effect, Fiber, Option, TestClock, TestContext } from "effect";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createSqliteTaskRepositoryContextManager } from "./sqlite-task-repository-context";
 import { openSqliteTaskStoreConnection } from "./sqlite-task-store-connection";
@@ -366,6 +366,77 @@ test("keeps the connection slot when a workspace close fails", async () => {
   }
   const disposeResult = await Effect.runPromise(Effect.either(manager.dispose()));
   expect(disposeResult._tag).toBe("Left");
+});
+
+test("waits for an in-flight operation before closing a workspace", async () => {
+  const { manager } = await createHarness();
+
+  try {
+    const { closeExit, operationExit } = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const operation = yield* Effect.fork(
+          manager.withDatabase("/repos/alpha", "test.hold-lease", () =>
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(entered);
+        const close = yield* Effect.fork(manager.closeWorkspace("alpha"));
+        yield* Effect.sleep("20 millis");
+        const closeExitBeforeRelease = yield* Fiber.poll(close);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(operation);
+        yield* Fiber.join(close);
+        return { closeExit: closeExitBeforeRelease, operationExit: yield* Fiber.poll(operation) };
+      }),
+    );
+
+    expect(Option.isNone(closeExit)).toBe(true);
+    expect(Option.isSome(operationExit)).toBe(true);
+  } finally {
+    await Effect.runPromise(manager.dispose());
+  }
+});
+
+test("rejects new operations while a workspace close drains", async () => {
+  const { manager } = await createHarness();
+
+  try {
+    const { rejected, reopened } = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const operation = yield* Effect.fork(
+          manager.withDatabase("/repos/alpha", "test.hold-lease", () =>
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(entered);
+        const close = yield* Effect.fork(manager.closeWorkspace("alpha"));
+        yield* Effect.yieldNow();
+        yield* Effect.yieldNow();
+        const rejected = yield* Effect.either(
+          manager.withDatabase("/repos/alpha", "test.during-close", () => Effect.void),
+        );
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(operation);
+        yield* Fiber.join(close);
+        const reopened = yield* manager.withDatabase("/repos/alpha", "test.reopened", () =>
+          Effect.succeed("ok"),
+        );
+        return { rejected, reopened };
+      }),
+    );
+
+    expect(rejected._tag).toBe("Left");
+    if (rejected._tag === "Left") {
+      expect(rejected.left.message).toContain("is closing");
+    }
+    expect(reopened).toBe("ok");
+  } finally {
+    await Effect.runPromise(manager.dispose());
+  }
 });
 
 test("reports close failures from every retained database during disposal", async () => {

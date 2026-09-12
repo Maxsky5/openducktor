@@ -858,7 +858,7 @@ describe("createWorkspaceSettingsService", () => {
     );
 
     expect(record.removeTaskWorktrees).toBe(false);
-    expect(record.phase).toBe("attachments");
+    expect(record.phase).toBe("task_store");
     expect(record.lastFailure).toBeNull();
     expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal).toEqual(record);
   });

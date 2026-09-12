@@ -1,5 +1,6 @@
 import type { BrowserWindow } from "electron";
 import electron from "electron";
+import { createContextMenuClaimTracker } from "./context-menu-claim";
 import {
   createApplicationMenuTemplate,
   createContextMenuTemplate,
@@ -8,16 +9,11 @@ import {
 
 const { Menu } = electron;
 
-const CONTEXT_MENU_CLAIM_WINDOW_MS = 250;
-
-let lastContextMenuClaimedAt = 0;
+const contextMenuClaims = createContextMenuClaimTracker();
 
 export const markContextMenuClaimed = (): void => {
-  lastContextMenuClaimedAt = Date.now();
+  contextMenuClaims.claim();
 };
-
-const wasContextMenuClaimed = (): boolean =>
-  Date.now() - lastContextMenuClaimedAt < CONTEXT_MENU_CLAIM_WINDOW_MS;
 
 export const installApplicationMenu = (input: MainMenuInput): void => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(createApplicationMenuTemplate(input)));
@@ -28,11 +24,12 @@ export const registerWindowContextMenu = (
   { isDevelopment }: MainMenuInput,
 ): void => {
   window.webContents.on("context-menu", () => {
-    if (wasContextMenuClaimed()) {
+    const eventAt = Date.now();
+    if (contextMenuClaims.shouldSuppressEvent(eventAt)) {
       return;
     }
     setTimeout(() => {
-      if (window.isDestroyed() || wasContextMenuClaimed()) {
+      if (window.isDestroyed() || contextMenuClaims.claimArrivedAfter(eventAt)) {
         return;
       }
       Menu.buildFromTemplate(createContextMenuTemplate(isDevelopment)).popup({ window });

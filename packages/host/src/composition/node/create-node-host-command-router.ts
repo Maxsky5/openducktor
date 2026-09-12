@@ -133,7 +133,8 @@ export const assembleNodeEffectHostCommandRouter = (
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const taskAssetServiceInput: Parameters<typeof createNodeTaskAssetServices>[0] = {
     assertWorkspaceAdmitted: workspaceAdmissionService.assertTaskStoreAccess,
-    isWorkspaceBlocked: workspaceAdmissionService.isWorkspaceBlocked,
+    isWorkspaceRemovalPending: workspaceAdmissionService.isWorkspaceRemovalPending,
+    withAdministrativeAccess: workspaceAdmissionService.withAdministrativeAccess,
     onBackgroundFailure,
     processEnv,
     workspaceSettingsService,
@@ -145,7 +146,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
     adapterRegistry: liveSessionAdapterRegistry,
-    assertWorkspaceAdmitsWork: workspaceAdmissionService.assertWorkspaceAdmitsWork,
+    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
     faultLog: createLiveSessionFaultLogger(lifecycleLogger),
     publish: createLiveSessionPublisher(eventBus),
   });
@@ -261,13 +262,14 @@ export const assembleNodeEffectHostCommandRouter = (
   const terminalService = Effect.runSync(
     createTerminalService({
       assertWorkspaceAdmitsWork: workspaceAdmissionService.assertWorkspaceAdmitsWork,
+      withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
       filesystem,
       ptyPort: terminalPty,
       resolveLaunchEnvironment: createTerminalLaunchEnvironment({ processEnv }),
     }),
   );
   const devServerServiceInput: Parameters<typeof createDevServerService>[0] = {
-    assertWorkspaceAdmitsWork: workspaceAdmissionService.assertWorkspaceAdmitsWork,
+    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
     processPort: devServerProcesses,
     taskWorktreeService,
     workspaceSettingsService,
@@ -302,6 +304,7 @@ export const assembleNodeEffectHostCommandRouter = (
     createNodeTaskSessionServices({
       taskServiceInput: {
         assertWorkspaceAdmitsWork: workspaceAdmissionService.assertWorkspaceAdmitsWork,
+        withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
         devServerService,
         terminalService,
         gitPort: git,
@@ -343,7 +346,7 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceSettingsService,
   });
   const runtimeOrchestratorWithEffectiveRegistry = createRuntimeOrchestratorService({
-    assertWorkspaceAdmitsWork: workspaceAdmissionService.assertWorkspaceAdmitsWork,
+    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
     gitPort: git,
     runtimeDefinitionsService,
     runtimeRegistry: effectiveRuntimeRegistry,

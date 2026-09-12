@@ -73,9 +73,10 @@ export type DevServerStopAllResult = {
 };
 
 export type CreateDevServerServiceInput = {
-  assertWorkspaceAdmitsWork: (
+  withWorkStartLease<A, E, R>(
     repoPath: string,
-  ) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | HostOperationErrorAggregate | HostValidationErrorAggregate, R>;
   eventBus?: HostEventBusPort;
   processPort?: DevServerProcessPort;
   taskWorktreeService?: TaskWorktreeService;

@@ -409,22 +409,23 @@ export function useWorkspaceSelectionOperations({
   );
 
   const runLifecycleAction = useCallback(
-    async (
-      run: () => Promise<void>,
-      success: () => { title: string; description: string },
+    async <T>(
+      run: () => Promise<T>,
+      success: (result: T) => { title: string; description: string },
     ): Promise<void> => {
       workspaceSwitchVersionRef.current += 1;
       workspaceReorderVersionRef.current += 1;
       setIsSwitchingWorkspace(true);
       try {
+        let result: T;
         try {
-          await run();
+          result = await run();
         } catch (cause) {
           await refreshWorkspaceCachesAfterMutation().catch(() => undefined);
           throw cause;
         }
         await refreshWorkspaceCachesAfterMutation();
-        const { title, description } = success();
+        const { title, description } = success(result);
         toast.success(title, { description });
       } finally {
         setIsSwitchingWorkspace(false);
@@ -452,27 +453,25 @@ export function useWorkspaceSelectionOperations({
   );
 
   const removeWorkspace = useCallback(
-    (input: WorkspaceRemovalInput): Promise<void> => {
-      let removedWorktreeCount = 0;
-      return runLifecycleAction(
+    (input: WorkspaceRemovalInput): Promise<void> =>
+      runLifecycleAction(
         async () => {
           const result = await hostClient.workspaceRemove(input);
-          removedWorktreeCount = result.removedWorktrees.length;
           applyLifecycleCatalog(result.catalog);
           dropWorkspaceQueries(queryClient, {
             repoPath: input.expectedRepoPath,
             workspaceId: input.workspaceId,
           });
+          return result.removedWorktrees.length;
         },
-        () => ({
+        (removedWorktreeCount) => ({
           title: "Workspace removed",
           description:
             removedWorktreeCount > 0
               ? `Removed ${removedWorktreeCount} task worktree(s). The repository and its branches remain.`
               : "The repository and its branches remain.",
         }),
-      );
-    },
+      ),
     [applyLifecycleCatalog, hostClient, queryClient, runLifecycleAction],
   );
 

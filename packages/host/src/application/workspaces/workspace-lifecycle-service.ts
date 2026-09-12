@@ -69,6 +69,7 @@ type CreateWorkspaceLifecycleServiceInput = {
   activity: WorkspaceActivityPort;
   admission: Pick<
     WorkspaceAdmissionService,
+    | "awaitWorkStarts"
     | "blockWorkspace"
     | "forgetWorkspace"
     | "releaseReservation"
@@ -134,6 +135,7 @@ export const createWorkspaceLifecycleService = ({
 
   const assertNoBlockingActivity = (repoPath: string) =>
     Effect.gen(function* () {
+      yield* admission.awaitWorkStarts(repoPath);
       const blockers = yield* activity.inspect(repoPath);
       if (blockers.length > 0) {
         return yield* Effect.fail(
@@ -276,24 +278,6 @@ export const createWorkspaceLifecycleService = ({
           removedComparisons.add(normalizePathForComparison(worktreePath));
           yield* persistProgress(input.workspaceId, "worktrees", removedWorktrees, null);
         }
-        phase = "attachments";
-        yield* persistProgress(input.workspaceId, phase, removedWorktrees, null);
-      }
-
-      if (phase === "attachments") {
-        const assetsResult = yield* Effect.either(
-          storage.removeWorkspaceTaskAssets(input.workspaceId),
-        );
-        if (assetsResult._tag === "Left") {
-          return yield* failRemovalPhase(
-            input.workspaceId,
-            "attachments",
-            removedWorktrees,
-            undefined,
-            `Failed to remove workspace task attachments: ${assetsResult.left.message}. Retry removal to continue.`,
-            assetsResult.left,
-          );
-        }
         phase = "task_store";
         yield* persistProgress(input.workspaceId, phase, removedWorktrees, null);
       }
@@ -310,6 +294,24 @@ export const createWorkspaceLifecycleService = ({
             undefined,
             `Failed to remove the workspace task store: ${storeResult.left.message}. The workspace stays frozen. Retry removal to continue.`,
             storeResult.left,
+          );
+        }
+        phase = "attachments";
+        yield* persistProgress(input.workspaceId, phase, removedWorktrees, null);
+      }
+
+      if (phase === "attachments") {
+        const assetsResult = yield* Effect.either(
+          storage.removeWorkspaceTaskAssets(input.workspaceId),
+        );
+        if (assetsResult._tag === "Left") {
+          return yield* failRemovalPhase(
+            input.workspaceId,
+            "attachments",
+            removedWorktrees,
+            undefined,
+            `Failed to remove workspace task attachments: ${assetsResult.left.message}. Retry removal to continue.`,
+            assetsResult.left,
           );
         }
       }

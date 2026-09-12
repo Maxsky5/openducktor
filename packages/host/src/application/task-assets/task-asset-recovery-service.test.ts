@@ -17,7 +17,8 @@ describe("task asset recovery service", () => {
     const restored: string[] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
-      isWorkspaceBlocked: () => false,
+      isWorkspaceRemovalPending: () => false,
+      withAdministrativeAccess: (_workspaceId, effect) => effect,
       filePort: {
         durableExists: () => Effect.succeed(false),
         listQuarantines: () => Effect.succeed([updateQuarantine]),
@@ -61,7 +62,8 @@ describe("task asset recovery service", () => {
     const restored: string[] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
-      isWorkspaceBlocked: () => false,
+      isWorkspaceRemovalPending: () => false,
+      withAdministrativeAccess: (_workspaceId, effect) => effect,
       filePort: {
         durableExists: () => Effect.succeed(false),
         listQuarantines: () => Effect.succeed([updateQuarantine, deleteQuarantine]),
@@ -95,7 +97,8 @@ describe("task asset recovery service", () => {
     const removed: string[][] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
-      isWorkspaceBlocked: () => false,
+      isWorkspaceRemovalPending: () => false,
+      withAdministrativeAccess: (_workspaceId, effect) => effect,
       filePort: {
         durableExists: () => Effect.succeed(true),
         listQuarantines: () => Effect.succeed([createQuarantine]),
@@ -132,7 +135,8 @@ describe("task asset recovery service", () => {
     const removed: string[][] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
-      isWorkspaceBlocked: () => false,
+      isWorkspaceRemovalPending: () => false,
+      withAdministrativeAccess: (_workspaceId, effect) => effect,
       filePort: {
         durableExists: () => Effect.succeed(true),
         listQuarantines: () => Effect.succeed([createQuarantine]),
@@ -167,7 +171,8 @@ describe("task asset recovery service", () => {
     };
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
-      isWorkspaceBlocked: () => false,
+      isWorkspaceRemovalPending: () => false,
+      withAdministrativeAccess: (_workspaceId, effect) => effect,
       filePort: {
         durableExists: () => Effect.die("Committed create recovery must not inspect files."),
         listQuarantines: () => Effect.succeed([createQuarantine]),
@@ -198,5 +203,69 @@ describe("task asset recovery service", () => {
 
     expect(await Effect.runPromise(service.startupSweep())).toBe(1);
     expect(purged).toEqual([createQuarantine.id]);
+  });
+
+  test("skips a quarantine whose workspace removal is pending", async () => {
+    const purged: string[] = [];
+    const service = createTaskAssetRecoveryService({
+      isWorkspaceRemovalPending: (workspaceId) => workspaceId === updateQuarantine.workspaceId,
+      withAdministrativeAccess: (_workspaceId, effect) => effect,
+      filePort: {
+        durableExists: () => Effect.succeed(false),
+        listQuarantines: () => Effect.succeed([updateQuarantine]),
+        removeDurable: () => Effect.void,
+        restoreQuarantine: () => Effect.void,
+        purgeQuarantine: (id) => Effect.sync(() => purged.push(id)),
+      },
+      registry: {
+        listAssets: () => Effect.succeed([]),
+        taskExists: () => Effect.succeed(false),
+      },
+      taskStore: { deleteTask: () => Effect.succeed(true) },
+      resolveRepoPath: () => Effect.die("A pending removal must not resolve its repo path."),
+    });
+
+    expect(await Effect.runPromise(service.startupSweep())).toBe(1);
+    expect(purged).toEqual([]);
+  });
+
+  test("reconciles a blocked workspace under administrative access", async () => {
+    const restored: string[] = [];
+    const administrativeWorkspaces: string[] = [];
+    const service = createTaskAssetRecoveryService({
+      isWorkspaceRemovalPending: () => false,
+      withAdministrativeAccess: (workspaceId, effect) => {
+        administrativeWorkspaces.push(workspaceId);
+        return effect;
+      },
+      filePort: {
+        durableExists: () => Effect.succeed(false),
+        listQuarantines: () => Effect.succeed([updateQuarantine]),
+        removeDurable: () => Effect.void,
+        restoreQuarantine: (id) => Effect.sync(() => restored.push(id)),
+        purgeQuarantine: () => Effect.void,
+      },
+      registry: {
+        listAssets: () =>
+          Effect.succeed(
+            updateQuarantine.assetIds.map((id) => ({
+              id,
+              taskId: updateQuarantine.taskId,
+              scope: "description" as const,
+              originalName: `${id}.png`,
+              mediaType: "image/png",
+              byteSize: 1,
+              createdAt: new Date(0),
+            })),
+          ),
+        taskExists: () => Effect.succeed(true),
+      },
+      taskStore: { deleteTask: () => Effect.succeed(true) },
+      resolveRepoPath: () => Effect.succeed("/repo"),
+    });
+
+    expect(await Effect.runPromise(service.startupSweep())).toBe(1);
+    expect(restored).toEqual([updateQuarantine.id]);
+    expect(administrativeWorkspaces).toEqual([updateQuarantine.workspaceId]);
   });
 });

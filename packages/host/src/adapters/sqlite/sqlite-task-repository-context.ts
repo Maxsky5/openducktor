@@ -3,6 +3,7 @@ import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import {
   HostOperationError,
   type HostOperationErrorAggregate,
+  HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
@@ -91,6 +92,18 @@ const invalidAdmissionReleaseError = () =>
     message: "The SQLite task store released an operation without an active admission lease.",
   });
 
+const workspaceClosingError = (workspaceId: string) =>
+  new HostValidationError({
+    field: "workspaceId",
+    message: `The task store for workspace ${workspaceId} is closing. Retry after the lifecycle operation finishes.`,
+  });
+
+type WorkspaceLeaseState = {
+  activeLeases: number;
+  closing: boolean;
+  drained: Deferred.Deferred<void> | null;
+};
+
 const createAdmissionGate = (): AdmissionGate => {
   let accepting = true;
   let activeLeases = 0;
@@ -145,6 +158,38 @@ export const createSqliteTaskRepositoryContextManager = ({
 }: CreateSqliteTaskRepositoryContextManagerInput): SqliteTaskRepositoryContextManager => {
   const admission = createAdmissionGate();
   const slots = new Map<string, SqliteTaskStoreConnectionSlot>();
+  const workspaceLeases = new Map<string, WorkspaceLeaseState>();
+
+  const getWorkspaceLeaseState = (workspaceId: string): WorkspaceLeaseState => {
+    const current = workspaceLeases.get(workspaceId);
+    if (current) return current;
+    const state: WorkspaceLeaseState = { activeLeases: 0, closing: false, drained: null };
+    workspaceLeases.set(workspaceId, state);
+    return state;
+  };
+
+  const acquireWorkspaceLease = (workspaceId: string) =>
+    Effect.suspend(() => {
+      const state = getWorkspaceLeaseState(workspaceId);
+      if (state.closing) {
+        return Effect.fail(workspaceClosingError(workspaceId));
+      }
+      state.activeLeases += 1;
+      return Effect.void;
+    });
+
+  const releaseWorkspaceLease = (workspaceId: string) =>
+    Effect.suspend(() => {
+      const state = workspaceLeases.get(workspaceId);
+      if (!state || state.activeLeases === 0) {
+        return Effect.die(invalidAdmissionReleaseError());
+      }
+      state.activeLeases -= 1;
+      if (state.activeLeases > 0 || !state.drained) {
+        return Effect.void;
+      }
+      return Deferred.succeed(state.drained, undefined).pipe(Effect.asVoid);
+    });
 
   const resolveStorage = (repoPath: string) =>
     Effect.gen(function* () {
@@ -169,28 +214,43 @@ export const createSqliteTaskRepositoryContextManager = ({
     admission.withLease(() =>
       Effect.gen(function* () {
         const storage = yield* resolveStorage(repoPath);
-        if (assertWorkspaceAdmitted) {
-          yield* assertWorkspaceAdmitted({
-            operation,
-            repoPath: storage.repoPath,
-            workspaceId: storage.workspaceId,
-          });
-        }
-        const slot = getSlot(storage.workspaceId, storage.databasePath);
-        return yield* slot
-          .run((session) => use({ ...storage, session }))
-          .pipe(
-            Effect.mapError((cause) =>
-              mapSqliteTaskStoreAdapterError(operation, storage.databasePath, cause),
-            ),
-          );
+        return yield* Effect.acquireUseRelease(
+          acquireWorkspaceLease(storage.workspaceId),
+          () =>
+            Effect.gen(function* () {
+              if (assertWorkspaceAdmitted) {
+                yield* assertWorkspaceAdmitted({
+                  operation,
+                  repoPath: storage.repoPath,
+                  workspaceId: storage.workspaceId,
+                });
+              }
+              const slot = getSlot(storage.workspaceId, storage.databasePath);
+              return yield* slot
+                .run((session) => use({ ...storage, session }))
+                .pipe(
+                  Effect.mapError((cause) =>
+                    mapSqliteTaskStoreAdapterError(operation, storage.databasePath, cause),
+                  ),
+                );
+            }),
+          () => releaseWorkspaceLease(storage.workspaceId),
+        );
       }),
     );
 
   const closeWorkspace = (workspaceId: string) =>
     Effect.gen(function* () {
+      const state = getWorkspaceLeaseState(workspaceId);
+      state.closing = true;
+      if (state.activeLeases > 0) {
+        const waiter = state.drained ?? (yield* Deferred.make<void>());
+        state.drained = waiter;
+        yield* Deferred.await(waiter);
+      }
       const slot = slots.get(workspaceId);
       if (!slot) {
+        workspaceLeases.delete(workspaceId);
         return;
       }
       const result = yield* Effect.either(slot.shutdown());
@@ -203,6 +263,7 @@ export const createSqliteTaskRepositoryContextManager = ({
         });
       }
       slots.delete(workspaceId);
+      workspaceLeases.delete(workspaceId);
     });
 
   const dispose = () =>

@@ -14,13 +14,13 @@ import { createRuntimeOrchestratorService as createEffectRuntimeOrchestratorServ
 type RuntimeOrchestratorInput = Parameters<typeof createEffectRuntimeOrchestratorService>[0];
 
 export const createRuntimeOrchestratorService = (
-  input: Omit<RuntimeOrchestratorInput, "assertWorkspaceAdmitsWork"> & {
-    assertWorkspaceAdmitsWork?: RuntimeOrchestratorInput["assertWorkspaceAdmitsWork"];
+  input: Omit<RuntimeOrchestratorInput, "withWorkStartLease"> & {
+    withWorkStartLease?: RuntimeOrchestratorInput["withWorkStartLease"];
   },
 ) =>
   createEffectRuntimeOrchestratorService({
     ...input,
-    assertWorkspaceAdmitsWork: input.assertWorkspaceAdmitsWork ?? (() => Effect.void),
+    withWorkStartLease: input.withWorkStartLease ?? ((_repoPath, effect) => effect),
   });
 
 export const createGitPort = (

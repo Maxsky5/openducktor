@@ -25,6 +25,7 @@ import {
 } from "../../effect/host-errors";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { HostShutdownStep } from "../host-lifecycle";
+import { createRemoveWorkspaceTaskStore } from "./remove-workspace-task-store";
 
 export type NodeTaskAssetServices = {
   startupSweep: () => Effect.Effect<void, TaskStoreError>;
@@ -41,9 +42,10 @@ export type NodeTaskAssetServices = {
 export const createNodeTaskAssetServices = ({
   assertWorkspaceAdmitted,
   configuredTaskStore,
-  isWorkspaceBlocked,
+  isWorkspaceRemovalPending,
   onBackgroundFailure,
   processEnv,
+  withAdministrativeAccess,
   workspaceSettingsService,
 }: {
   assertWorkspaceAdmitted: (input: {
@@ -52,9 +54,13 @@ export const createNodeTaskAssetServices = ({
     workspaceId: string;
   }) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
   configuredTaskStore?: TaskStorePort;
-  isWorkspaceBlocked: (workspaceId: string) => boolean;
+  isWorkspaceRemovalPending: (workspaceId: string) => boolean;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv: NodeJS.ProcessEnv;
+  withAdministrativeAccess: <A, E, R>(
+    workspaceId: string,
+    effect: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E, R>;
   workspaceSettingsService: WorkspaceSettingsService;
 }): NodeTaskAssetServices => {
   const resolveWorkspaceIdForRepoPath = (repoPath: string) =>
@@ -88,13 +94,14 @@ export const createNodeTaskAssetServices = ({
   });
   const taskAssetRecoveryService = createTaskAssetRecoveryService({
     filePort,
-    isWorkspaceBlocked,
+    isWorkspaceRemovalPending,
     registry,
     resolveRepoPath: (workspaceId) =>
       workspaceSettingsService
         .getRepoConfig(workspaceId)
         .pipe(Effect.map((repoConfig) => repoConfig.repoPath)),
     taskStore: inner,
+    withAdministrativeAccess,
   });
   return {
     startupSweep: () =>
@@ -116,10 +123,11 @@ export const createNodeTaskAssetServices = ({
       resolveWorkspaceIdForRepoPath,
     }),
     removeWorkspaceTaskAssets: (workspaceId) => filePort.removeWorkspaceData({ workspaceId }),
-    removeWorkspaceTaskStore: (workspaceId) =>
-      Effect.gen(function* () {
-        yield* contextManager.closeWorkspace(workspaceId);
-        yield* Effect.tryPromise({
+    removeWorkspaceTaskStore: createRemoveWorkspaceTaskStore({
+      closeWorkspace: (workspaceId) => contextManager.closeWorkspace(workspaceId),
+      configuredTaskStore,
+      removeDirectory: (workspaceId) =>
+        Effect.tryPromise({
           try: () =>
             rm(sqliteTaskStoreDirectoryPath(configDir, workspaceId), {
               force: true,
@@ -131,7 +139,7 @@ export const createNodeTaskAssetServices = ({
               message: `Failed to remove the task store directory for workspace ${workspaceId}.`,
               cause,
             }),
-        });
-      }),
+        }),
+    }),
   };
 };

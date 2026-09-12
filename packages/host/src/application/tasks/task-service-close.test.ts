@@ -33,14 +33,19 @@ import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 
 const run = <A>(effect: Effect.Effect<A, unknown>): Promise<A> => Effect.runPromise(effect);
 
-type TaskServiceInput = Omit<CreateTaskServiceInput, "assertWorkspaceAdmitsWork"> & {
+type TaskServiceInput = Omit<
+  CreateTaskServiceInput,
+  "assertWorkspaceAdmitsWork" | "withWorkStartLease"
+> & {
   assertWorkspaceAdmitsWork?: CreateTaskServiceInput["assertWorkspaceAdmitsWork"];
+  withWorkStartLease?: CreateTaskServiceInput["withWorkStartLease"];
 };
 
 const createTaskService = (input: TaskServiceInput) =>
   createProductionTaskService({
     ...input,
     assertWorkspaceAdmitsWork: input.assertWorkspaceAdmitsWork ?? (() => Effect.void),
+    withWorkStartLease: input.withWorkStartLease ?? ((_repoPath, effect) => effect),
     terminalService:
       input.terminalService ??
       ({
