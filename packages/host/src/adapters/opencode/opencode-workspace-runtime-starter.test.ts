@@ -247,7 +247,7 @@ const createFakeOpenCode = async (
   await writeFile(
     scriptPath,
     `import { spawn } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { renameSync, writeFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
 if (args[0] !== "serve") {
@@ -264,13 +264,15 @@ const configCapturePath = ${JSON.stringify(options.configCapturePath ?? null)};
 const environmentCapturePath = ${JSON.stringify(options.environmentCapturePath ?? null)};
 const exitAfterMs = ${JSON.stringify(options.exitAfterMs ?? null)};
 if (configCapturePath) {
-  writeFileSync(configCapturePath, process.env.OPENCODE_CONFIG_CONTENT ?? "");
+  writeFileSync(configCapturePath + ".tmp", process.env.OPENCODE_CONFIG_CONTENT ?? "");
+  renameSync(configCapturePath + ".tmp", configCapturePath);
 }
 if (environmentCapturePath) {
-  writeFileSync(environmentCapturePath, JSON.stringify({
+  writeFileSync(environmentCapturePath + ".tmp", JSON.stringify({
     password: process.env.OPENCODE_SERVER_PASSWORD ?? null,
     username: process.env.OPENCODE_SERVER_USERNAME ?? null,
   }));
+  renameSync(environmentCapturePath + ".tmp", environmentCapturePath);
 }
 if (childPidPath) {
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], {
