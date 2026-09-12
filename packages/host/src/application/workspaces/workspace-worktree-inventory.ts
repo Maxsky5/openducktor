@@ -46,6 +46,7 @@ const canonicalizeExistingPath = <E>(
 export const collectWorkspaceTaskWorktreePaths = (
   dependencies: WorkspaceWorktreeInventoryDependencies,
   repoConfig: RepoConfig,
+  pendingWorktreePath: string | null = null,
 ) =>
   Effect.gen(function* () {
     const { repoPath, workspaceId } = repoConfig;
@@ -74,22 +75,26 @@ export const collectWorkspaceTaskWorktreePaths = (
       catalog.incompleteRemovals.map((removal) => removal.workspace.workspaceId),
     );
     const managedBaseComparison = normalizePathForComparison(managedBaseForComparison);
-    const otherWorkspacePaths = new Set<string>();
+    const otherWorkspacePaths: { workspaceId: string; comparison: string }[] = [];
     const overlappingBaseWorkspaces: {
       workspace: WorkspaceRecord;
       baseComparison: string;
     }[] = [];
     for (const workspace of otherWorkspaces) {
-      otherWorkspacePaths.add(normalizePathForComparison(workspace.repoPath));
-      otherWorkspacePaths.add(
-        normalizePathForComparison(
+      otherWorkspacePaths.push({
+        workspaceId: workspace.workspaceId,
+        comparison: normalizePathForComparison(workspace.repoPath),
+      });
+      otherWorkspacePaths.push({
+        workspaceId: workspace.workspaceId,
+        comparison: normalizePathForComparison(
           yield* canonicalizeExistingPath(
             dependencies,
             dependencies.gitPort.canonicalizePath(workspace.repoPath),
             workspace.repoPath,
           ),
         ),
-      );
+      });
       const otherBasePath = workspace.effectiveWorktreeBasePath;
       if (otherBasePath === null) {
         continue;
@@ -139,7 +144,32 @@ export const collectWorkspaceTaskWorktreePaths = (
         ? new Set<string>()
         : yield* collectWorkspaceClaims(dependencies, claimSourceWorkspaces);
 
-    const candidates = new Map<string, { path: string; taskId: string }>();
+    const isOtherWorkspacePath = (comparison: string): boolean =>
+      otherWorkspacePaths.some((entry) => entry.comparison === comparison);
+    const findRelatedOtherWorkspacePath = (
+      comparison: string,
+    ): { workspaceId: string; relation: "contains" | "inside" } | undefined => {
+      for (const entry of otherWorkspacePaths) {
+        if (entry.comparison === comparison) {
+          continue;
+        }
+        if (pathStartsWith(entry.comparison, comparison)) {
+          return { workspaceId: entry.workspaceId, relation: "contains" };
+        }
+        if (pathStartsWith(comparison, entry.comparison)) {
+          return { workspaceId: entry.workspaceId, relation: "inside" };
+        }
+      }
+      return undefined;
+    };
+
+    const candidates = new Map<string, { path: string; taskId: string | null }>();
+    if (pendingWorktreePath !== null) {
+      candidates.set(normalizePathForComparison(pendingWorktreePath), {
+        path: pendingWorktreePath,
+        taskId: null,
+      });
+    }
     for (const task of tasks) {
       const canonicalPath = dependencies.settingsConfig.join(managedWorktreeBasePath, task.id);
       candidates.set(normalizePathForComparison(canonicalPath), {
@@ -178,10 +208,7 @@ export const collectWorkspaceTaskWorktreePaths = (
     const worktreePaths: string[] = [];
 
     for (const [candidateComparison, candidate] of candidates) {
-      if (
-        candidateComparison === repoPathComparison ||
-        otherWorkspacePaths.has(candidateComparison)
-      ) {
+      if (candidateComparison === repoPathComparison || isOtherWorkspacePath(candidateComparison)) {
         continue;
       }
       if (!(yield* dependencies.settingsConfig.pathExists(candidate.path))) {
@@ -189,10 +216,7 @@ export const collectWorkspaceTaskWorktreePaths = (
       }
       const canonicalPath = yield* dependencies.gitPort.canonicalizePath(candidate.path);
       const canonicalComparison = normalizePathForComparison(canonicalPath);
-      if (
-        canonicalComparison === repoPathComparison ||
-        otherWorkspacePaths.has(canonicalComparison)
-      ) {
+      if (canonicalComparison === repoPathComparison || isOtherWorkspacePath(canonicalComparison)) {
         continue;
       }
       if (seen.has(canonicalComparison)) {
@@ -224,7 +248,29 @@ export const collectWorkspaceTaskWorktreePaths = (
           }),
         );
       }
-      if (!inventoryPaths.has(canonicalComparison)) {
+      const nestedOtherWorkspacePath = findRelatedOtherWorkspacePath(canonicalComparison);
+      if (nestedOtherWorkspacePath) {
+        const relationDescription =
+          nestedOtherWorkspacePath.relation === "contains"
+            ? "it contains the repository of"
+            : "it is inside the repository of";
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Cannot remove ${canonicalPath}: ${relationDescription} workspace ${nestedOtherWorkspacePath.workspaceId}. Move that repository or change the worktree base first, or retry without removing task worktrees.`,
+            field: "worktreePath",
+            details: {
+              repoPath,
+              taskId: candidate.taskId,
+              worktreePath: canonicalPath,
+              overlappingWorkspaceId: nestedOtherWorkspacePath.workspaceId,
+            },
+          }),
+        );
+      }
+      const isPendingWorktreePath =
+        pendingWorktreePath !== null &&
+        normalizePathForComparison(pendingWorktreePath) === canonicalComparison;
+      if (!isPendingWorktreePath && !inventoryPaths.has(canonicalComparison)) {
         return yield* Effect.fail(
           new HostValidationError({
             message: `Cannot establish that ${canonicalPath} is a registered worktree of ${repoPath}. Remove it manually, or retry without removing task worktrees.`,
@@ -247,7 +293,11 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (!pathStartsWith(normalized, managedBaseForComparison)) {
         continue;
       }
-      if (normalized === repoPathComparison || otherWorkspacePaths.has(normalized)) {
+      if (
+        normalized === repoPathComparison ||
+        isOtherWorkspacePath(normalized) ||
+        findRelatedOtherWorkspacePath(normalized) !== undefined
+      ) {
         continue;
       }
       if (otherWorkspaceClaims.has(normalized)) {

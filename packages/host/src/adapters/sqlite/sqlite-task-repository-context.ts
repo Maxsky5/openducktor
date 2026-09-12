@@ -1,4 +1,4 @@
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, FiberId } from "effect";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import {
   HostOperationError,
@@ -258,9 +258,10 @@ export const createSqliteTaskRepositoryContextManager = ({
       const state = getWorkspaceLeaseState(workspaceId);
       state.closing = true;
       if (state.activeLeases > 0) {
-        const waiter = state.drained ?? (yield* Deferred.make<void>());
-        state.drained = waiter;
-        yield* Deferred.await(waiter);
+        if (!state.drained) {
+          state.drained = Deferred.unsafeMake<void>(FiberId.none);
+        }
+        yield* Deferred.await(state.drained);
       }
       const slot = slots.get(workspaceId);
       if (!slot) {

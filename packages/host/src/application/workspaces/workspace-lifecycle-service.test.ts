@@ -8,8 +8,9 @@ import {
   type TaskAgentSessions,
   type WorkspaceCatalog,
   type WorkspaceRemovalRecord,
+  workspaceRecordSchema,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { GitPort } from "../../ports/git-port";
@@ -1066,7 +1067,112 @@ describe("workspace lifecycle service", () => {
           removeTaskWorktrees: true,
         }),
       ),
-    ).rejects.toThrow("Delete that directory manually");
+    ).rejects.toThrow("delete that directory manually");
+  });
+
+  test("removeWorkspace fails before deletion when a journaled pending worktree contains another workspace repository", async () => {
+    const deletionCalls: string[] = [];
+    const service = createService({
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      beginWorkspaceRemoval: () =>
+        Effect.succeed({
+          record: removalRecord({
+            phase: "worktrees",
+            pendingWorktreePath: "/managed/ws/task-1",
+          }),
+          repoConfig: repoConfig(),
+        }),
+      getWorkspaceCatalog: () =>
+        Effect.succeed(
+          catalog({
+            openWorkspaces: [
+              workspaceRecordSchema.parse({
+                workspaceId: "other",
+                workspaceName: "Other",
+                repoPath: "/managed/ws/task-1/nested-repo",
+                isActive: false,
+                hasConfig: true,
+                configuredWorktreeBasePath: null,
+                defaultWorktreeBasePath: null,
+                effectiveWorktreeBasePath: null,
+              }),
+            ],
+          }),
+        ),
+      listWorktrees: () => Effect.succeed([]),
+      pathExists: (path) => Effect.succeed(path === "/managed/ws/task-1"),
+      removeWorktree: () =>
+        Effect.sync(() => {
+          deletionCalls.push("removeWorktree");
+        }),
+      removePathIfPresent: () =>
+        Effect.sync(() => {
+          deletionCalls.push("removePathIfPresent");
+        }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: true,
+        }),
+      ),
+    ).rejects.toThrow("it contains the repository of workspace other");
+    expect(deletionCalls).toEqual([]);
+  });
+
+  test("removeWorkspace serializes concurrent removals for different workspaces", async () => {
+    const events: string[] = [];
+    let awaitFirst: Effect.Effect<void> = Effect.void;
+    let releaseFirst: Effect.Effect<void> = Effect.void;
+    const service = createService({
+      beginWorkspaceRemoval: (input) =>
+        input.workspaceId === "ws"
+          ? Effect.gen(function* () {
+              events.push("first-started");
+              yield* awaitFirst;
+              events.push("first-released");
+              return { record: removalRecord({ phase: "task_store" }), repoConfig: repoConfig() };
+            })
+          : Effect.sync(() => {
+              events.push("second-started");
+              return { record: removalRecord({ phase: "task_store" }), repoConfig: repoConfig() };
+            }),
+    });
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const gate = yield* Deferred.make<void>();
+        awaitFirst = Deferred.await(gate);
+        releaseFirst = Deferred.succeed(gate, undefined);
+        const first = yield* Effect.fork(
+          service.removeWorkspace({
+            workspaceId: "ws",
+            expectedRepoPath: "/repos/ws",
+            removeTaskWorktrees: false,
+          }),
+        );
+        yield* Effect.yieldNow();
+        const second = yield* Effect.fork(
+          service.removeWorkspace({
+            workspaceId: "ws-2",
+            expectedRepoPath: "/repos/ws",
+            removeTaskWorktrees: false,
+          }),
+        );
+        for (let index = 0; index < 5; index += 1) {
+          yield* Effect.yieldNow();
+        }
+        expect(events).toEqual(["first-started"]);
+        yield* releaseFirst;
+        yield* Fiber.join(first);
+        yield* Fiber.join(second);
+      }),
+    );
+
+    expect(events).toEqual(["first-started", "first-released", "second-started"]);
   });
 
   test("reopens a workspace through settings and clears its admission block", async () => {
