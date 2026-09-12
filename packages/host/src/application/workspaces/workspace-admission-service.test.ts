@@ -219,6 +219,60 @@ describe("workspace admission service", () => {
     ).rejects.toThrow("Cannot resolve the repository path /repos/missing.");
   });
 
+  test("drains work starts when the repository path cannot be canonicalized", async () => {
+    const admission = createAdmission(catalog(), () =>
+      Effect.fail(
+        new HostOperationError({
+          operation: "git.canonicalizePath",
+          message: "Failed to canonicalize /repos/missing.",
+        }),
+      ),
+    );
+
+    await expect(
+      Effect.runPromise(admission.awaitWorkStarts("/repos/missing")),
+    ).resolves.toBeUndefined();
+  });
+
+  test("drains an active work start when the repository path disappears", async () => {
+    let canonicalizeCalls = 0;
+    const admission = createAdmission(catalog(), (path) => {
+      canonicalizeCalls += 1;
+      if (canonicalizeCalls === 1) {
+        return Effect.succeed(path);
+      }
+      return Effect.fail(
+        new HostOperationError({
+          operation: "git.canonicalizePath",
+          message: `Failed to canonicalize ${path}.`,
+        }),
+      );
+    });
+
+    const waited = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/repos/open",
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(entered);
+        const waitForStarts = yield* Effect.fork(admission.awaitWorkStarts("/repos/open"));
+        yield* Effect.sleep("20 millis");
+        const beforeRelease = yield* Fiber.poll(waitForStarts);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        yield* Fiber.join(waitForStarts);
+        return beforeRelease;
+      }),
+    );
+
+    expect(Option.isNone(waited)).toBe(true);
+  });
+
   test("reserves a workspace and rejects a second reservation", async () => {
     const admission = createAdmission(catalog());
 

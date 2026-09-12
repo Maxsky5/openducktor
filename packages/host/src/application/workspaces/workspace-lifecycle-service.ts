@@ -310,12 +310,16 @@ export const createWorkspaceLifecycleService = ({
           storage.removeWorkspaceTaskStore(input.workspaceId),
         );
         if (storeResult._tag === "Left") {
+          const retryHint =
+            storeResult.left.operation === "sqliteTaskRepository.closeWorkspace"
+              ? "Restart OpenDucktor, then retry removal."
+              : "Retry removal to continue.";
           return yield* failRemovalPhase(
             input.workspaceId,
             "task_store",
             removedWorktrees,
             undefined,
-            `Failed to remove the workspace task store: ${storeResult.left.message}. The workspace stays frozen. Retry removal to continue.`,
+            `Failed to remove the workspace task store: ${storeResult.left.message}. The workspace stays frozen. ${retryHint}`,
             storeResult.left,
           );
         }
