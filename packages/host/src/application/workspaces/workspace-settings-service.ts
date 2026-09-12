@@ -5,6 +5,7 @@ import {
   repoConfigSchema,
   settingsSnapshotSaveInputSchema,
   themePreferenceSchema,
+  type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
@@ -35,6 +36,16 @@ import {
 } from "./workspace-settings-model";
 
 export type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
+
+const assertNoIncompleteRemoval = (workspaceId: string, repoConfig: RepoConfig) =>
+  repoConfig.removal
+    ? Effect.fail(
+        new HostValidationError({
+          message: `Workspace removal is incomplete for ${workspaceId}. Finish the removal before changing repository settings.`,
+          field: "workspaceId",
+        }),
+      )
+    : Effect.void;
 
 const createUnserializedWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
@@ -247,6 +258,7 @@ const createUnserializedWorkspaceSettingsService = (
             cause,
           }),
       });
+      yield* assertNoIncompleteRemoval(workspaceId, existing);
       const nextRepoConfig = yield* validateAndNormalizeRepoConfig(
         settingsConfig,
         buildMergedRepoConfig(workspaceId, existing, update, false),
@@ -279,6 +291,7 @@ const createUnserializedWorkspaceSettingsService = (
             cause,
           }),
       });
+      yield* assertNoIncompleteRemoval(workspaceId, existing);
       const nextRepoConfig = yield* validateAndNormalizeRepoConfig(
         settingsConfig,
         buildMergedRepoConfig(workspaceId, existing, settings, true),

@@ -222,6 +222,7 @@ export function WorkspaceRemoveDialog({
       }),
     () => onOpenChange(false),
   );
+  const choiceLocked = submit.error !== null;
 
   return (
     <LifecycleDialog
@@ -254,7 +255,7 @@ export function WorkspaceRemoveDialog({
           id="remove-task-worktrees"
           className="mt-0.5"
           checked={removeTaskWorktrees}
-          disabled={submit.submitting}
+          disabled={submit.submitting || choiceLocked}
           onCheckedChange={(checked) => setRemoveTaskWorktrees(checked === true)}
         />
         <div className="flex min-w-0 flex-col gap-1">
@@ -297,6 +298,7 @@ export function WorkspaceRemovalRecoveryDialog({
       }),
     () => onOpenChange(false),
   );
+  const choiceLocked = submit.error !== null;
 
   return (
     <LifecycleDialog
@@ -336,7 +338,7 @@ export function WorkspaceRemovalRecoveryDialog({
             id="recovery-remove-task-worktrees"
             className="mt-0.5"
             checked={removeTaskWorktrees}
-            disabled={submit.submitting}
+            disabled={submit.submitting || choiceLocked}
             onCheckedChange={(checked) => setRemoveTaskWorktrees(checked === true)}
           />
           <div className="flex min-w-0 flex-col gap-1">
