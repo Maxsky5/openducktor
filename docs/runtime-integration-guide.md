@@ -128,7 +128,7 @@ If `attachmentSupport` is absent, the runtime did not provide model attachment d
 
 An attachment part has an ID, local path, name, kind, and optional MIME type. In a browser, the frontend asks the host to stage the `File`, then sends the staged path.
 
-The adapter owns native encoding. Encode each attachment in the runtime's native prompt form. Keep the staged path in the encoded part so a later history read can restore the local preview.
+Encode each attachment in the runtime's native prompt form. Keep the staged path in the encoded part so a later history read can restore the local preview.
 
 A prompt cannot mix a slash command and attachments because a slash command uses a separate native call.
 

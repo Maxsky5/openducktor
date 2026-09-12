@@ -16,11 +16,22 @@ const readPreservedAttachmentParts = (input: {
     input.metadata?.displayParts?.filter(
       (part): part is AttachmentDisplayPart => part.kind === "attachment",
     ) ?? [];
-  if (metadataAttachments.length > 0) {
+  const queuedAttachments = input.matchedQueuedSend?.attachmentParts ?? [];
+  if (metadataAttachments.length === 0) {
+    return queuedAttachments;
+  }
+  if (queuedAttachments.length === 0) {
     return metadataAttachments;
   }
 
-  return input.matchedQueuedSend?.attachmentParts ?? [];
+  const mergedAttachments = metadataAttachments.map((metadataAttachment, index) => {
+    const queuedAttachment = queuedAttachments[index];
+    if (!queuedAttachment || metadataAttachment.attachment.localPreviewAvailable !== false) {
+      return metadataAttachment;
+    }
+    return queuedAttachment;
+  });
+  return [...mergedAttachments, ...queuedAttachments.slice(metadataAttachments.length)];
 };
 
 export const buildVisibleUserMessage = (input: {

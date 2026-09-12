@@ -521,6 +521,58 @@ describe("message-normalizers", () => {
     ]);
   });
 
+  test("keeps a runtime source path when the preserved attachment has no local preview", () => {
+    const runtimeParts = normalizeUserMessageDisplayParts(
+      parseOpencodeParts([
+        {
+          id: "image-data-source-1",
+          sessionID: "session-1",
+          messageID: "message-1",
+          type: "file",
+          mime: "image/png",
+          filename: "image.png",
+          url: "data:image/png;base64,aGVsbG8=",
+          source: {
+            type: "file",
+            path: "/var/folders/example/staged-image.png",
+            text: {
+              value: "/var/folders/example/staged-image.png",
+              start: 0,
+              end: 37,
+            },
+          },
+        },
+      ]),
+    );
+
+    expect(
+      mergePreservedAttachmentDisplayParts(runtimeParts, [
+        {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-image-1",
+            path: "image.png",
+            name: "image.png",
+            kind: "image",
+            mime: "image/png",
+            localPreviewAvailable: false,
+          },
+        },
+      ]),
+    ).toEqual([
+      {
+        kind: "attachment",
+        attachment: {
+          id: "image-data-source-1",
+          path: "/var/folders/example/staged-image.png",
+          name: "image.png",
+          kind: "image",
+          mime: "image/png",
+        },
+      },
+    ]);
+  });
+
   test("normalizes only supported media file attachments without inline source text", () => {
     const parts: OpenCodeProtocolObject[] = [
       {

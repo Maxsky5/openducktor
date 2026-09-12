@@ -243,6 +243,12 @@ export const mergePreservedAttachmentDisplayParts = (
 
     const preservedPath = preservedAttachment.attachment.path;
     const preservedLocalPreviewAvailable = preservedAttachment.attachment.localPreviewAvailable;
+    if (
+      preservedLocalPreviewAvailable === false &&
+      runtimeAttachment.localPreviewAvailable !== false
+    ) {
+      return part;
+    }
     const mergedAttachment = {
       ...runtimeAttachment,
       path: preservedPath,

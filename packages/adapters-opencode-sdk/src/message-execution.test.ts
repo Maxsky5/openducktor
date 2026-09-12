@@ -664,6 +664,46 @@ describe("message-execution", () => {
     });
   });
 
+  test("resolves relative attachment paths into the native source metadata", async () => {
+    const { session, promptAsync } = createSession();
+
+    await sendUserMessage({
+      session,
+      request: {
+        externalSessionId: "session-1",
+        parts: [
+          {
+            kind: "attachment",
+            attachment: {
+              id: "attachment-relative-1",
+              path: "uploads/photo.png",
+              name: "photo.png",
+              kind: "image",
+              mime: "image/png",
+            },
+          },
+        ],
+      },
+      tools: {},
+    });
+
+    const promptRequest:
+      | { parts?: Array<{ type: string; url?: string; source?: unknown }> }
+      | undefined = promptAsync.mock.calls[0]?.[0];
+    const attachmentPart = promptRequest?.parts?.find((part) => part.type === "file");
+    expect(attachmentPart).toBeDefined();
+    expect(attachmentPart?.url).toBe("file:///repo/uploads/photo.png");
+    expect(attachmentPart?.source).toEqual({
+      type: "file",
+      path: "/repo/uploads/photo.png",
+      text: {
+        value: "/repo/uploads/photo.png",
+        start: 0,
+        end: 23,
+      },
+    });
+  });
+
   test("encodes file URLs for special characters and relative paths", async () => {
     const { session, promptAsync } = createSession();
 

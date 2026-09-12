@@ -1458,6 +1458,95 @@ describe("event-stream", () => {
     ]);
   });
 
+  test("recovers queued staged paths when live metadata holds a partial attachment list", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [
+        makeUserMessageUpdatedEvent({
+          messageId: "msg-attachment-partial-pair-1",
+          text: "Describe both screenshots",
+          createdAt: Date.parse("2026-02-22T12:00:02.000Z"),
+        }),
+        {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: "part-pair-file-1",
+              sessionID: "external-session-1",
+              messageID: "msg-attachment-partial-pair-1",
+              type: "file",
+              mime: "image/png",
+              filename: "Screenshot-2026-03-17-at-12.04.45.png",
+              url: "data:image/png;base64,aGVsbG8=",
+            },
+          },
+        } satisfies OpenCodeProtocolObject,
+        {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: "part-pair-file-2",
+              sessionID: "external-session-1",
+              messageID: "msg-attachment-partial-pair-1",
+              type: "file",
+              mime: "image/png",
+              filename: "Second-2026-03-17-at-12.05.00.png",
+              url: "data:image/png;base64,d29ybGQ=",
+            },
+          },
+        } satisfies OpenCodeProtocolObject,
+      ],
+      (nextSessionRecord) => {
+        nextSessionRecord.messageRoleById.set("msg-attachment-partial-pair-1", "user");
+        nextSessionRecord.pendingQueuedUserMessages.push({
+          messageId: "msg-attachment-partial-pair-1",
+          signature: buildQueuedRequestSignature(
+            [
+              { kind: "text", text: "Describe both screenshots" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+              SECOND_IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] satisfies AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentIdentitySignature: buildQueuedRequestAttachmentIdentitySignature(
+            [
+              { kind: "text", text: "Describe both screenshots" },
+              IMAGE_ATTACHMENT_DISPLAY_PART,
+              SECOND_IMAGE_ATTACHMENT_DISPLAY_PART,
+            ] satisfies AgentUserMessagePart[],
+            undefined,
+          ),
+          attachmentParts: [IMAGE_ATTACHMENT_DISPLAY_PART, SECOND_IMAGE_ATTACHMENT_DISPLAY_PART],
+        });
+      },
+    );
+
+    expect(sessionRecord.pendingQueuedUserMessages).toHaveLength(0);
+    const userMessages = emitted.filter((event) => event.type === "user_message");
+    const userMessage = userMessages.at(-1);
+    if (userMessage?.type !== "user_message") {
+      throw new Error("Expected user_message event");
+    }
+    const attachmentParts = userMessage.parts.filter((part) => part.kind === "attachment");
+    expect(attachmentParts).toEqual([
+      expect.objectContaining({
+        attachment: expect.objectContaining({ path: "/tmp/local-screenshot.png" }),
+      }),
+      expect.objectContaining({
+        attachment: expect.objectContaining({ path: "/tmp/local-second-screenshot.png" }),
+      }),
+    ]);
+
+    const metadata = sessionRecord.messageMetadataById.get("msg-attachment-partial-pair-1");
+    const metadataAttachmentPaths =
+      metadata?.displayParts?.flatMap((part) =>
+        part.kind === "attachment" ? [part.attachment.path] : [],
+      ) ?? [];
+    expect(metadataAttachmentPaths).toEqual([
+      "/tmp/local-screenshot.png",
+      "/tmp/local-second-screenshot.png",
+    ]);
+  });
+
   test("matches queued attachment sends when the runtime fills user parts through message.part.updated", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession(
       [
