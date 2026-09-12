@@ -272,6 +272,11 @@ describe("use-workspace-selection-operations", () => {
       workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
     );
     workspaceHost.workspaceReorder = workspaceReorder;
+    workspaceHost.workspaceList = mock(async () => [
+      workspace("/repo-a", true),
+      workspace("/repo-b"),
+      workspace("/repo-c"),
+    ]);
 
     const harness = createSelectionHarness({
       activeRepo: "/repo-a",
@@ -320,6 +325,11 @@ describe("use-workspace-selection-operations", () => {
       return secondReorder.promise;
     });
     workspaceHost.workspaceReorder = workspaceReorder;
+    workspaceHost.workspaceList = mock(async () => [
+      workspace("/repo-a", true),
+      workspace("/repo-b"),
+      workspace("/repo-c"),
+    ]);
 
     const harness = createSelectionHarness({
       activeRepo: "/repo-a",
@@ -376,6 +386,11 @@ describe("use-workspace-selection-operations", () => {
   test("reorders workspaces optimistically before the host confirms the new order", async () => {
     const reorderDeferred = createDeferred<ReturnType<typeof workspace>[]>();
     workspaceHost.workspaceReorder = mock(async () => reorderDeferred.promise);
+    workspaceHost.workspaceList = mock(async () => [
+      workspace("/repo-a", true),
+      workspace("/repo-b"),
+      workspace("/repo-c"),
+    ]);
 
     const harness = createSelectionHarness({
       activeRepo: "/repo-a",
@@ -423,6 +438,7 @@ describe("use-workspace-selection-operations", () => {
 
   test("preserves the current active workspace during refresh when no record is marked active", async () => {
     let latestActiveWorkspace: ActiveWorkspace | null = createActiveWorkspace("/repo-old");
+    workspaceHost.workspaceList = mock(async () => [workspace("/repo-old"), workspace("/repo-b")]);
     const harness = createSelectionHarness({
       activeWorkspace: latestActiveWorkspace,
       setActiveWorkspace: (workspace) => {
