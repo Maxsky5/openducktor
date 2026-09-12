@@ -2693,7 +2693,7 @@ describe("createTaskService task mutations and reset", () => {
     await expect(
       Effect.runPromise(
         createTaskService({
-          assertWorkspaceAdmitsWork: () =>
+          withWorkStartLease: () =>
             Effect.fail(
               new HostValidationError({
                 message: "Workspace is closed: /repos/closed. Reopen it before using it.",

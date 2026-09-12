@@ -94,11 +94,16 @@ const createTaskStoreDouble = (
 
 const noActivity: WorkspaceActivityPort = {
   inspect: () => Effect.succeed([]),
+  releaseWorkspaceSessions: () => Effect.void,
 };
 
 const activityWith = (
   blockers: Array<{ kind: "agent-session" | "dev-server" | "terminal"; label: string }>,
-): WorkspaceActivityPort => ({ inspect: () => Effect.succeed(blockers) });
+  releaseWorkspaceSessions: WorkspaceActivityPort["releaseWorkspaceSessions"] = () => Effect.void,
+): WorkspaceActivityPort => ({
+  inspect: () => Effect.succeed(blockers),
+  releaseWorkspaceSessions,
+});
 
 const createAdmissionDouble = (): Pick<
   WorkspaceAdmissionService,
@@ -141,6 +146,7 @@ const createService = ({
   removeWorkspaceRegistration = () => Effect.succeed(catalog()),
   removeWorkspaceTaskAssets = () => Effect.void,
   removeWorkspaceTaskStore = () => Effect.void,
+  assertPermanentRemovalSupported = () => Effect.void,
   taskStore = createTaskStoreDouble(),
   listWorktrees = () => Effect.succeed([]),
   isRegisteredWorktree = () => Effect.succeed(true),
@@ -169,6 +175,7 @@ const createService = ({
   removeWorkspaceRegistration?: () => Effect.Effect<WorkspaceCatalog, never>;
   removeWorkspaceTaskAssets?: WorkspaceStoragePort["removeWorkspaceTaskAssets"];
   removeWorkspaceTaskStore?: WorkspaceStoragePort["removeWorkspaceTaskStore"];
+  assertPermanentRemovalSupported?: WorkspaceStoragePort["assertPermanentRemovalSupported"];
   taskStore?: TaskStoreDouble;
   listWorktrees?: GitPort["listWorktrees"];
   isRegisteredWorktree?: () => Effect.Effect<boolean, never>;
@@ -178,6 +185,7 @@ const createService = ({
   resolvedPathKind?: "descendant" | "outside";
 } = {}) => {
   const storage: WorkspaceStoragePort = {
+    assertPermanentRemovalSupported,
     removeWorkspaceTaskAssets,
     removeWorkspaceTaskStore,
   };
@@ -273,7 +281,7 @@ describe("workspace lifecycle service", () => {
     const inspect = mock(() => Effect.succeed([]));
     const expected = catalog();
     const service = createService({
-      activity: { inspect },
+      activity: { inspect, releaseWorkspaceSessions: () => Effect.void },
       getRepoConfig: () => Effect.succeed(repoConfig({ closed: true })),
       getWorkspaceCatalog: () => Effect.succeed(expected),
     });
@@ -371,6 +379,102 @@ describe("workspace lifecycle service", () => {
       ),
     ).rejects.toThrow("dev server for task-1 is running");
     expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
+  });
+
+  test("removeWorkspace rejects a configured task store before journaling and worktree removal", async () => {
+    const beginWorkspaceRemoval = mock(() => Effect.succeed(removalRecord({ phase: "worktrees" })));
+    const removeWorktree = mock(() => Effect.void);
+    const service = createService({
+      assertPermanentRemovalSupported: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "workspace.removeTaskStore",
+            message:
+              "Cannot remove the task store for workspace ws. Permanent removal is not supported with a configured task store.",
+          }),
+        ),
+      beginWorkspaceRemoval,
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/task-1", worktreePath: "/managed/ws/task-1" }]),
+      removeWorktree,
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: true,
+        }),
+      ),
+    ).rejects.toThrow("Permanent removal is not supported with a configured task store.");
+    expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
+    expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
+  test("removeWorkspace releases live sessions before it deletes task data", async () => {
+    const events: string[] = [];
+    const service = createService({
+      activity: activityWith([], (_repoPath) =>
+        Effect.sync(() => {
+          events.push("release-sessions");
+        }),
+      ),
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/task-1", worktreePath: "/managed/ws/task-1" }]),
+      removeWorktree: (_repoPath, worktreePath) =>
+        Effect.sync(() => {
+          events.push(`remove-worktree:${worktreePath}`);
+        }),
+      removeWorkspaceTaskStore: () =>
+        Effect.sync(() => {
+          events.push("remove-store");
+        }),
+    });
+
+    await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    expect(events).toEqual([
+      "release-sessions",
+      "remove-worktree:/managed/ws/task-1",
+      "remove-store",
+    ]);
+  });
+
+  test("removeWorkspace releases live sessions when it resumes an incomplete removal", async () => {
+    const events: string[] = [];
+    const service = createService({
+      getRepoConfig: () =>
+        Effect.succeed(repoConfig({ removal: removalRecord({ phase: "task_store" }) })),
+      beginWorkspaceRemoval: () => Effect.succeed(removalRecord({ phase: "task_store" })),
+      activity: activityWith([], (_repoPath) =>
+        Effect.sync(() => {
+          events.push("release-sessions");
+        }),
+      ),
+      removeWorkspaceTaskStore: () =>
+        Effect.sync(() => {
+          events.push("remove-store");
+        }),
+    });
+
+    await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(events).toEqual(["release-sessions", "remove-store"]);
   });
 
   test("removeWorkspace removes verified task and historical session worktrees", async () => {
@@ -673,6 +777,7 @@ describe("workspace lifecycle service", () => {
           calls.push("inspect");
           return Effect.succeed([]);
         },
+        releaseWorkspaceSessions: () => Effect.void,
       },
       admission: {
         ...createAdmissionDouble(),
