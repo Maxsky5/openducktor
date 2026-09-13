@@ -6,6 +6,7 @@ import {
 } from "../../ports/generated-image-file-port";
 import { Context, Effect, Layer } from "effect";
 import { createLocalAttachmentAdapter } from "../../adapters/attachments/local-attachment-adapter";
+import { createNodeWorkspaceHostOwnership } from "../../adapters/node/workspace-host-ownership-adapter";
 import {
   type CodexAppServerTransportRegistry,
   createCodexAppServerTransportRegistry,
@@ -60,6 +61,10 @@ import {
   ToolDiscoveryPortTag,
 } from "../../ports/tool-discovery-port";
 import { type WorktreeFilePort, WorktreeFilePortTag } from "../../ports/worktree-file-port";
+import {
+  type WorkspaceHostOwnershipPort,
+  WorkspaceHostOwnershipPortTag,
+} from "../../ports/workspace-host-ownership-port";
 import { guardDevServerStart } from "./user-path-start-guard";
 
 export type NodeHostDefaultPorts = {
@@ -82,6 +87,7 @@ export type NodeHostDefaultPorts = {
   toolDiscovery: ToolDiscoveryPort;
   terminalPty: TerminalPtyPort;
   worktreeFiles: WorktreeFilePort;
+  workspaceHostOwnership: WorkspaceHostOwnershipPort;
 };
 
 type CodexAppServer = CodexAppServerPort & CodexSessionHistoryPort;
@@ -120,6 +126,7 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
     toolDiscovery: ToolDiscoveryPort;
     providedToolPaths: Partial<Record<ToolDiscoveryId, string>>;
     worktreeFiles: WorktreeFilePort;
+    workspaceHostOwnership: WorkspaceHostOwnershipPort;
   }>;
 
 export class NodeHostDefaultPortsTag extends Context.Tag("@openducktor/host/NodeHostDefaultPorts")<
@@ -141,7 +148,8 @@ export type NodeHostDefaultPortServices =
   | SystemCommandPortTag
   | ToolDiscoveryPortTag
   | TerminalPtyPortTag
-  | WorktreeFilePortTag;
+  | WorktreeFilePortTag
+  | WorkspaceHostOwnershipPortTag;
 
 const makeNodeHostDefaultPorts = (
   input: CreateNodeHostDefaultPortsInput,
@@ -265,6 +273,8 @@ const makeNodeHostDefaultPorts = (
           toolDiscovery,
           terminalPty: input.terminalPty,
           worktreeFiles: input.worktreeFiles ?? createWorktreeFileAdapter(),
+          workspaceHostOwnership:
+            input.workspaceHostOwnership ?? createNodeWorkspaceHostOwnership({ processEnv }),
         };
       },
       catch: (cause) => cause,
@@ -292,6 +302,7 @@ const makeNodeHostDefaultPortContext = (
         Context.add(ToolDiscoveryPortTag, ports.toolDiscovery),
         Context.add(TerminalPtyPortTag, ports.terminalPty),
         Context.add(WorktreeFilePortTag, ports.worktreeFiles),
+        Context.add(WorkspaceHostOwnershipPortTag, ports.workspaceHostOwnership),
       ),
     ),
   );

@@ -6,6 +6,7 @@ import {
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { WorkspaceHostOwnershipPort } from "../../ports/workspace-host-ownership-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
 export type WorkspaceBlockReason = "closed" | "removal";
@@ -67,11 +68,16 @@ export type WorkspaceAdmissionService = {
 };
 
 export const createWorkspaceAdmissionService = ({
+  hostOwnership,
   settingsConfig,
   workspaceSettingsService,
 }: {
+  hostOwnership: Pick<WorkspaceHostOwnershipPort, "claimWorkspace">;
   settingsConfig: Pick<SettingsConfigPort, "canonicalizePath">;
-  workspaceSettingsService: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
+  workspaceSettingsService: Pick<
+    WorkspaceSettingsService,
+    "getRepoConfigByRepoPath" | "getWorkspaceCatalog"
+  >;
 }): WorkspaceAdmissionService => {
   const blockedByWorkspaceId = new Map<string, BlockedWorkspace>();
   const reservationsByWorkspaceId = new Map<string, WorkspaceReservation>();
@@ -129,6 +135,33 @@ export const createWorkspaceAdmissionService = ({
           ),
         );
 
+  const claimWorkspace = (workspaceId: string): Effect.Effect<void, HostValidationErrorAggregate> =>
+    hostOwnership.claimWorkspace(workspaceId).pipe(
+      Effect.mapError(
+        (cause) =>
+          new HostValidationError({
+            message: cause.message,
+            field: "workspaceId",
+            cause,
+          }),
+      ),
+    );
+
+  const claimWorkspaceForRepoPath = (
+    repoPath: string,
+  ): Effect.Effect<void, HostValidationErrorAggregate> =>
+    workspaceSettingsService.getRepoConfigByRepoPath(repoPath).pipe(
+      Effect.mapError(
+        (cause) =>
+          new HostValidationError({
+            message: cause.message,
+            field: "repoPath",
+            cause,
+          }),
+      ),
+      Effect.flatMap((repoConfig) => claimWorkspace(repoConfig.workspaceId)),
+    );
+
   const assertTaskStoreAccess: WorkspaceAdmissionService["assertTaskStoreAccess"] = (input) =>
     ensureInitialized().pipe(
       Effect.flatMap(() => FiberRef.get(administrativeWorkspaceIds)),
@@ -156,6 +189,7 @@ export const createWorkspaceAdmissionService = ({
         }
         return Effect.void;
       }),
+      Effect.zipRight(claimWorkspace(input.workspaceId)),
     );
 
   const canonicalRepoPathKey = (
@@ -193,7 +227,11 @@ export const createWorkspaceAdmissionService = ({
 
   const assertWorkspaceAdmitsWork: WorkspaceAdmissionService["assertWorkspaceAdmitsWork"] = (
     repoPath,
-  ) => canonicalRepoPathKey(repoPath).pipe(Effect.flatMap(assertCanonicalWorkspaceAdmitsWork));
+  ) =>
+    canonicalRepoPathKey(repoPath).pipe(
+      Effect.flatMap(assertCanonicalWorkspaceAdmitsWork),
+      Effect.zipRight(claimWorkspaceForRepoPath(repoPath)),
+    );
 
   const acquireWorkStart = (key: string): Effect.Effect<void> =>
     Effect.suspend(() => {
@@ -241,10 +279,17 @@ export const createWorkspaceAdmissionService = ({
           canonicalRepoPathKey(repoPath).pipe(
             Effect.flatMap((key) =>
               key === arrivalKey
-                ? Effect.zipRight(assertCanonicalWorkspaceAdmitsWork(key), effect)
+                ? assertCanonicalWorkspaceAdmitsWork(key).pipe(
+                    Effect.zipRight(claimWorkspaceForRepoPath(repoPath)),
+                    Effect.zipRight(effect),
+                  )
                 : Effect.acquireUseRelease(
                     acquireWorkStart(key),
-                    () => Effect.zipRight(assertCanonicalWorkspaceAdmitsWork(key), effect),
+                    () =>
+                      assertCanonicalWorkspaceAdmitsWork(key).pipe(
+                        Effect.zipRight(claimWorkspaceForRepoPath(repoPath)),
+                        Effect.zipRight(effect),
+                      ),
                     () => releaseWorkStart(key),
                   ),
             ),

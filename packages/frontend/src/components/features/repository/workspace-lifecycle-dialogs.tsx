@@ -222,7 +222,7 @@ export function WorkspaceRemoveDialog({
   onOpenChange,
   returnFocusRef,
 }: WorkspaceLifecycleDialogProps): ReactElement {
-  const { removeWorkspace } = useWorkspaceState();
+  const { incompleteRemovals, removeWorkspace } = useWorkspaceState();
   const [removeTaskWorktrees, setRemoveTaskWorktrees] = useState(false);
   const submit = useLifecycleSubmit(
     () =>
@@ -233,7 +233,9 @@ export function WorkspaceRemoveDialog({
       }),
     () => onOpenChange(false),
   );
-  const choiceLocked = submit.error !== null;
+  const choiceLocked = incompleteRemovals.some(
+    (removal) => removal.workspace.workspaceId === workspace.workspaceId,
+  );
 
   return (
     <LifecycleDialog

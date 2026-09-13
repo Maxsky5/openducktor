@@ -190,9 +190,9 @@ describe("workspace lifecycle dialogs", () => {
     );
   });
 
-  test("locks the worktree choice after a failed removal attempt", async () => {
+  test("allows a different worktree choice after a preflight failure", async () => {
     removeWorkspace.mockImplementationOnce(async () => {
-      throw new Error("disk failure");
+      throw new Error("Cannot classify a task worktree");
     });
     renderDialog(<WorkspaceRemoveDialog workspace={workspace} onOpenChange={() => {}} />);
 
@@ -200,7 +200,8 @@ describe("workspace lifecycle dialogs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove workspace" }));
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
-    expect(screen.getByRole("checkbox").hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("checkbox").hasAttribute("disabled")).toBe(false);
+    fireEvent.click(screen.getByRole("checkbox"));
 
     fireEvent.click(screen.getByRole("button", { name: "Remove workspace" }));
 
@@ -208,8 +209,30 @@ describe("workspace lifecycle dialogs", () => {
       expect(removeWorkspace).toHaveBeenLastCalledWith({
         workspaceId: "alpha",
         expectedRepoPath: "/projects/alpha",
-        removeTaskWorktrees: true,
+        removeTaskWorktrees: false,
       }),
     );
+  });
+
+  test("locks the worktree choice after durable removal starts", () => {
+    workspaceState.incompleteRemovals = [
+      {
+        workspace,
+        record: {
+          version: 1,
+          operationId: "op-1",
+          removeTaskWorktrees: true,
+          phase: "worktrees",
+          removedWorktrees: [],
+          pendingWorktreePath: null,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          lastFailure: "worktree removal failed",
+        },
+      },
+    ];
+
+    renderDialog(<WorkspaceRemoveDialog workspace={workspace} onOpenChange={() => {}} />);
+
+    expect(screen.getByRole("checkbox").hasAttribute("disabled")).toBe(true);
   });
 });

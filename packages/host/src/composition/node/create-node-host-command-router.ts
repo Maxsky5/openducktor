@@ -121,6 +121,7 @@ export const assembleNodeEffectHostCommandRouter = (
     terminalPty,
     toolDiscovery,
     worktreeFiles,
+    workspaceHostOwnership,
   } = defaultPorts;
   const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
   const workspaceOwnershipLock = createWorkspaceOwnershipLock();
@@ -129,6 +130,7 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceOwnershipLock,
   );
   const workspaceAdmissionService = createWorkspaceAdmissionService({
+    hostOwnership: workspaceHostOwnership,
     settingsConfig,
     workspaceSettingsService,
   });
@@ -304,6 +306,7 @@ export const assembleNodeEffectHostCommandRouter = (
     }),
     admission: workspaceAdmissionService,
     gitPort: git,
+    hostOwnership: workspaceHostOwnership,
     ownershipLock: workspaceOwnershipLock,
     settingsConfig,
     storage: {
@@ -397,6 +400,7 @@ export const assembleNodeEffectHostCommandRouter = (
     taskAssetStagingService,
     taskSyncService,
     terminalService,
+    workspaceHostOwnership,
   });
   const router = createEffectHostCommandRouter({
     initialize: () =>

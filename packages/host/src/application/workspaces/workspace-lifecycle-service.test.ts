@@ -25,6 +25,7 @@ import {
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { WorkspaceActivityPort } from "../../ports/workspace-activity-port";
 import type { WorkspaceStoragePort } from "../../ports/workspace-storage-port";
+import type { WorkspaceHostOwnershipPort } from "../../ports/workspace-host-ownership-port";
 import {
   createWorkspaceOwnershipLock,
   type WorkspaceOwnershipLock,
@@ -165,6 +166,7 @@ const createService = ({
   pathExists = () => Effect.succeed(true),
   resolvedPathKind = "descendant" as const,
   ownershipLock = createWorkspaceOwnershipLock(),
+  hostOwnership = { claimWorkspace: () => Effect.void },
 }: {
   activity?: WorkspaceActivityPort;
   admission?: ReturnType<typeof createAdmissionDouble>;
@@ -197,6 +199,7 @@ const createService = ({
   pathExists?: (path: string) => Effect.Effect<boolean, never>;
   resolvedPathKind?: "descendant" | "outside";
   ownershipLock?: WorkspaceOwnershipLock;
+  hostOwnership?: Pick<WorkspaceHostOwnershipPort, "claimWorkspace">;
 } = {}) => {
   const storage: WorkspaceStoragePort = {
     assertPermanentRemovalSupported,
@@ -213,6 +216,7 @@ const createService = ({
       listWorktrees,
       removeWorktree,
     }),
+    hostOwnership,
     ownershipLock,
     settingsConfig: createSettingsConfigTestDouble({
       canonicalizePath,
@@ -403,6 +407,38 @@ describe("workspace lifecycle service", () => {
     expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
   });
 
+  test("removeWorkspace rejects another host owner before journaling or deletion", async () => {
+    const beginWorkspaceRemoval = mock(() =>
+      Effect.succeed({ record: removalRecord(), repoConfig: repoConfig() }),
+    );
+    const removeWorkspaceTaskStore = mock(() => Effect.void);
+    const service = createService({
+      beginWorkspaceRemoval,
+      hostOwnership: {
+        claimWorkspace: () =>
+          Effect.fail(
+            new HostValidationError({
+              field: "workspaceId",
+              message: "Workspace ws is in use by another OpenDucktor host process (321).",
+            }),
+          ),
+      },
+      removeWorkspaceTaskStore,
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: false,
+        }),
+      ),
+    ).rejects.toThrow("Workspace ws is in use by another OpenDucktor host process");
+    expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
+    expect(removeWorkspaceTaskStore).not.toHaveBeenCalled();
+  });
+
   test("removeWorkspace rejects a configured task store before journaling and worktree removal", async () => {
     const beginWorkspaceRemoval = mock(() =>
       Effect.succeed({ record: removalRecord({ phase: "worktrees" }), repoConfig: repoConfig() }),
@@ -535,11 +571,17 @@ describe("workspace lifecycle service", () => {
     expect(result.removedWorktrees).toEqual(["/managed/ws/task-1", "/custom/worktrees/task-1"]);
   });
 
-  test("removeWorkspace uses the journaled repository config for worktree removal", async () => {
+  test("removeWorkspace uses the recorded repository config during recovery", async () => {
     const removed: string[] = [];
     const service = createService({
       taskStore: createTaskStoreDouble([taskCard("task-1")]),
-      getRepoConfig: () => Effect.succeed(repoConfig({ worktreeBasePath: "/old-base" })),
+      getRepoConfig: () =>
+        Effect.succeed(
+          repoConfig({
+            worktreeBasePath: "/new-base",
+            removal: removalRecord({ phase: "worktrees" }),
+          }),
+        ),
       beginWorkspaceRemoval: () =>
         Effect.succeed({
           record: removalRecord({ phase: "worktrees" }),
@@ -696,9 +738,44 @@ describe("workspace lifecycle service", () => {
     expect(releaseWorkspaceRuntimes).toHaveBeenCalledWith("/repos/ws");
   });
 
-  test("removeWorkspace journals an inventory failure", async () => {
+  test("removeWorkspace rejects an initial inventory failure before journaling", async () => {
+    const progress: Array<{ phase: string; lastFailure: string | null }> = [];
+    const beginWorkspaceRemoval = mock(() =>
+      Effect.succeed({ record: removalRecord(), repoConfig: repoConfig() }),
+    );
+    const service = createService({
+      beginWorkspaceRemoval,
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      listWorktrees: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "test.listWorktrees",
+            message: "git worktree list failed",
+          }),
+        ),
+      recordWorkspaceRemovalProgress: (input) =>
+        Effect.sync(() => {
+          progress.push({ phase: input.phase, lastFailure: input.lastFailure });
+        }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: true,
+        }),
+      ),
+    ).rejects.toThrow("git worktree list failed");
+    expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
+    expect(progress).toEqual([]);
+  });
+
+  test("removeWorkspace journals a recovery inventory failure", async () => {
     const progress: Array<{ phase: string; lastFailure: string | null }> = [];
     const service = createService({
+      getRepoConfig: () => Effect.succeed(repoConfig({ removal: removalRecord() })),
       taskStore: createTaskStoreDouble([taskCard("task-1")]),
       listWorktrees: () =>
         Effect.fail(
@@ -1001,14 +1078,16 @@ describe("workspace lifecycle service", () => {
   test("removeWorkspace resumes a journaled pending worktree that git already unregistered", async () => {
     const removedPaths: string[] = [];
     let pendingExists = true;
+    const removal = removalRecord({
+      phase: "worktrees",
+      pendingWorktreePath: "/managed/ws/task-1",
+    });
     const service = createService({
       taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      getRepoConfig: () => Effect.succeed(repoConfig({ removal })),
       beginWorkspaceRemoval: () =>
         Effect.succeed({
-          record: removalRecord({
-            phase: "worktrees",
-            pendingWorktreePath: "/managed/ws/task-1",
-          }),
+          record: removal,
           repoConfig: repoConfig(),
         }),
       listWorktrees: () => Effect.succeed([]),
@@ -1044,14 +1123,16 @@ describe("workspace lifecycle service", () => {
   });
 
   test("removeWorkspace reports a journaled pending worktree cleanup that keeps failing", async () => {
+    const removal = removalRecord({
+      phase: "worktrees",
+      pendingWorktreePath: "/managed/ws/task-1",
+    });
     const service = createService({
       taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      getRepoConfig: () => Effect.succeed(repoConfig({ removal })),
       beginWorkspaceRemoval: () =>
         Effect.succeed({
-          record: removalRecord({
-            phase: "worktrees",
-            pendingWorktreePath: "/managed/ws/task-1",
-          }),
+          record: removal,
           repoConfig: repoConfig(),
         }),
       listWorktrees: () => Effect.succeed([]),
