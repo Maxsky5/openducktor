@@ -43,7 +43,7 @@ export const withSerializedConfigWrites = (
     saveRepoSettings: (workspaceId, settings) =>
       serialize(service.saveRepoSettings(workspaceId, settings)),
     updateRepoHooks: (workspaceId, hooks) => serialize(service.updateRepoHooks(workspaceId, hooks)),
-    saveSettingsSnapshot: (snapshot) => serialize(service.saveSettingsSnapshot(snapshot)),
+    saveSettingsSnapshot: (snapshot) => serializeOwned(service.saveSettingsSnapshot(snapshot)),
     updateAgentModelFavorites: (favorites) =>
       serialize(service.updateAgentModelFavorites(favorites)),
     setTheme: (theme) => serialize(service.setTheme(theme)),

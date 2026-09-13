@@ -363,6 +363,46 @@ describe("createWorkspaceSettingsService", () => {
     expect(settingsConfig.writtenConfigs).toHaveLength(1);
   });
 
+  test("waits for the ownership lock before saving a settings snapshot", async () => {
+    const ownershipLock = createWorkspaceOwnershipLock();
+    const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
+    const service = createWorkspaceSettingsService(settingsConfig, ownershipLock);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+    let release!: () => void;
+    let acquired!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const lockAcquired = new Promise<void>((resolve) => {
+      acquired = resolve;
+    });
+    const lockHolder = Effect.runPromise(
+      ownershipLock.runExclusive(
+        Effect.promise(async () => {
+          acquired();
+          await held;
+        }),
+      ),
+    );
+    await lockAcquired;
+
+    let saveCompleted = false;
+    const save = Effect.runPromise(
+      service.saveSettingsSnapshot({ ...snapshot, system: { preferredOpenInToolId: "zed" } }),
+    ).then(() => {
+      saveCompleted = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(saveCompleted).toBe(false);
+    expect(settingsConfig.writtenConfigs).toHaveLength(0);
+
+    release();
+    await lockHolder;
+    await save;
+    expect(saveCompleted).toBe(true);
+    expect(settingsConfig.writtenConfigs).toHaveLength(1);
+  });
+
   test("full settings saves set and clear the system preference", async () => {
     const settingsConfig = createFakeSettingsConfig({ config: globalConfig() });
     const service = createWorkspaceSettingsService(settingsConfig);
