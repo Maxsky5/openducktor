@@ -6,7 +6,10 @@ import {
 } from "../../ports/generated-image-file-port";
 import { Context, Effect, Layer } from "effect";
 import { createLocalAttachmentAdapter } from "../../adapters/attachments/local-attachment-adapter";
-import { createNodeWorkspaceHostOwnership } from "../../adapters/node/workspace-host-ownership-adapter";
+import {
+  createNodeWorkspaceHostOwnership,
+  createNodeWorkspaceOwnershipLock,
+} from "../../adapters/node/workspace-host-ownership-adapter";
 import {
   type CodexAppServerTransportRegistry,
   createCodexAppServerTransportRegistry,
@@ -26,6 +29,7 @@ import {
   type ToolDiscoveryPathOptions,
 } from "../../adapters/system/tool-discovery";
 import { createRuntimeConfigInitializer } from "../../application/runtimes/runtime-config-initializer";
+import type { WorkspaceOwnershipLock } from "../../application/workspaces/workspace-ownership-lock";
 import { toHostOperationError } from "../../effect/host-errors";
 import { createProcessEnvironment } from "../../infrastructure/process/process-environment";
 import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
@@ -77,6 +81,7 @@ export type NodeHostDefaultPorts = {
   terminalPty: TerminalPtyPort;
   worktreeFiles: WorktreeFilePort;
   workspaceHostOwnership: WorkspaceHostOwnershipPort;
+  workspaceOwnershipLock: WorkspaceOwnershipLock;
 };
 
 type CodexAppServer = CodexAppServerPort & CodexSessionHistoryPort;
@@ -114,6 +119,7 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
     providedToolPaths: Partial<Record<ToolDiscoveryId, string>>;
     worktreeFiles: WorktreeFilePort;
     workspaceHostOwnership: WorkspaceHostOwnershipPort;
+    workspaceOwnershipLock: WorkspaceOwnershipLock;
   }>;
 
 export class NodeHostDefaultPortsTag extends Context.Tag("@openducktor/host/NodeHostDefaultPorts")<
@@ -174,10 +180,13 @@ const makeNodeHostDefaultPorts = (
     const runtimeHealth =
       input.runtimeHealth ??
       createRuntimeHealthProbe(systemCommands, toolDiscovery, runtimeExecutableProbes);
+    const workspaceOwnershipLock =
+      input.workspaceOwnershipLock ?? createNodeWorkspaceOwnershipLock({ processEnv });
     const settingsConfig =
       input.settingsConfig ??
       createSettingsConfigAdapter({
         environment: processEnv,
+        initializationLock: workspaceOwnershipLock,
         initializeConfig: createRuntimeConfigInitializer(toolDiscovery),
       });
     const defaultCodexAppServer = createCodexAppServerTransportRegistry();
@@ -219,6 +228,7 @@ const makeNodeHostDefaultPorts = (
       worktreeFiles: input.worktreeFiles ?? createWorktreeFileAdapter(),
       workspaceHostOwnership:
         input.workspaceHostOwnership ?? createNodeWorkspaceHostOwnership({ processEnv }),
+      workspaceOwnershipLock,
     };
   });
 

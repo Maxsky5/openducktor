@@ -1122,6 +1122,40 @@ describe("workspace lifecycle service", () => {
     expect(result.removedWorktrees).toEqual(["/managed/ws/task-1"]);
   });
 
+  test("removeWorkspace unregisters a missing journaled worktree that Git still lists", async () => {
+    const removedWorktrees: string[] = [];
+    const removal = removalRecord({
+      phase: "worktrees",
+      pendingWorktreePath: "/managed/ws/task-1",
+    });
+    const service = createService({
+      getRepoConfig: () => Effect.succeed(repoConfig({ removal })),
+      beginWorkspaceRemoval: () =>
+        Effect.succeed({
+          record: removal,
+          repoConfig: repoConfig(),
+        }),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/task-1", worktreePath: "/managed/ws/task-1" }]),
+      pathExists: () => Effect.succeed(false),
+      removeWorktree: (_repoPath, worktreePath) =>
+        Effect.sync(() => {
+          removedWorktrees.push(worktreePath);
+        }),
+    });
+
+    const result = await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    expect(removedWorktrees).toEqual(["/managed/ws/task-1"]);
+    expect(result.removedWorktrees).toEqual(["/managed/ws/task-1"]);
+  });
+
   test("removeWorkspace reports a journaled pending worktree cleanup that keeps failing", async () => {
     const removal = removalRecord({
       phase: "worktrees",

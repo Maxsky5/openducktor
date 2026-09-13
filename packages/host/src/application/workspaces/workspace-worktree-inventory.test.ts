@@ -186,6 +186,29 @@ describe("workspace worktree inventory", () => {
     expect(paths).toEqual([]);
   });
 
+  test("keeps a missing pending worktree when Git still registers it", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) =>
+        path === "/managed/ws/task-1"
+          ? Effect.fail(
+              new HostOperationError({
+                operation: "git.canonicalizePath",
+                message: "Failed to canonicalize /managed/ws/task-1.",
+              }),
+            )
+          : Effect.succeed(path),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/task-1", worktreePath: "/managed/ws/task-1" }]),
+      pathExists: () => Effect.succeed(false),
+    });
+
+    const paths = await Effect.runPromise(
+      collectWorkspaceTaskWorktreePaths(dependencies, repoConfig(), "/managed/ws/task-1"),
+    );
+
+    expect(paths).toEqual(["/managed/ws/task-1"]);
+  });
+
   test("classifies an orphan worktree under a symlinked managed base", async () => {
     const dependencies = createDependencies({
       canonicalizePath: (path) => Effect.succeed(path),

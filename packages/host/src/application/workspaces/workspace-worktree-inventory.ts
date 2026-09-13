@@ -230,6 +230,16 @@ export const collectWorkspaceTaskWorktreePaths = (
         continue;
       }
       if (!(yield* dependencies.settingsConfig.pathExists(candidate.path))) {
+        if (
+          pendingWorktreePath !== null &&
+          candidateComparison === normalizePathForComparison(pendingWorktreePath)
+        ) {
+          const registeredPath = inventoryPaths.get(candidateComparison);
+          if (registeredPath !== undefined) {
+            seen.add(candidateComparison);
+            worktreePaths.push(registeredPath);
+          }
+        }
         continue;
       }
       const canonicalPath = yield* dependencies.gitPort.canonicalizePath(candidate.path);

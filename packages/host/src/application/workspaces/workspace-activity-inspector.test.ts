@@ -41,12 +41,14 @@ const runtime = (runtimeId: string): RuntimeInstanceSummary => ({
 });
 
 const createInspector = ({
+  onReleaseDevServers,
   onRelease,
   onStopRuntime,
   runtimes = [],
   sessions = [],
   stopRuntimeError,
 }: {
+  onReleaseDevServers?: (repoPath: string) => void;
   onRelease?: (externalSessionId: string) => void;
   onStopRuntime?: (runtimeId: string) => void;
   runtimes?: RuntimeInstanceSummary[];
@@ -63,6 +65,10 @@ const createInspector = ({
     },
     devServerService: {
       inspectWorkspaceActivity: () => Effect.succeed({ activeTaskIds: [] }),
+      releaseWorkspace: ({ repoPath }) =>
+        Effect.sync(() => {
+          onReleaseDevServers?.(repoPath);
+        }),
     },
     runtimeRegistry: {
       listRuntimesByRepo: () => Effect.succeed(runtimes),
@@ -107,14 +113,17 @@ describe("workspace activity inspector", () => {
   });
 
   test("stops every runtime for the workspace", async () => {
+    const releasedDevServers: string[] = [];
     const stopped: string[] = [];
     const inspector = createInspector({
+      onReleaseDevServers: (repoPath) => releasedDevServers.push(repoPath),
       runtimes: [runtime("runtime-1"), runtime("runtime-2")],
       onStopRuntime: (runtimeId) => stopped.push(runtimeId),
     });
 
     await Effect.runPromise(inspector.releaseWorkspaceRuntimes("/repo"));
 
+    expect(releasedDevServers).toEqual(["/repo"]);
     expect(stopped).toEqual(["runtime-1", "runtime-2"]);
   });
 

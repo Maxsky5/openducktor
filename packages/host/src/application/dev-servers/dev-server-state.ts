@@ -8,6 +8,8 @@ import {
   type HostEventEnvelope,
   type RepoConfig,
 } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
 import type { DevServerProcessHandle } from "../../ports/dev-server-process-port";
 import type { DevServerWorkspaceActivity } from "./dev-server-service-types";
 
@@ -76,6 +78,24 @@ export const inspectDevServerWorkspaceActivity = (
   }
   return { activeTaskIds };
 };
+
+export const releaseDevServerWorkspaceState = (
+  groups: Map<string, Map<string, DevServerGroupRuntime>>,
+  repoPath: string,
+) =>
+  Effect.gen(function* () {
+    const activity = inspectDevServerWorkspaceActivity(groups, repoPath);
+    if (activity.activeTaskIds.length > 0) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field: "repoPath",
+          message: `Cannot release dev server state for ${repoPath} while a dev server is active. Stop the dev server and retry.`,
+          details: { repoPath, activeTaskIds: activity.activeTaskIds },
+        }),
+      );
+    }
+    groups.delete(repoPath);
+  });
 
 export const buildGroupState = (
   repoConfig: RepoConfig,

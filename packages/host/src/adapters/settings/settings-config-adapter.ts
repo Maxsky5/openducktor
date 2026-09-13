@@ -21,6 +21,7 @@ import {
 } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
+import type { WorkspaceOwnershipLock } from "../../application/workspaces/workspace-ownership-lock";
 
 const USER_SETTINGS_FILENAME = "config.json";
 const missingConfigFileErrorSchema = z.object({ code: z.literal("ENOENT") }).passthrough();
@@ -57,12 +58,18 @@ const repoId = (repoPath: string): string => {
 export type CreateSettingsConfigAdapterInput = {
   configPath?: string;
   environment?: NodeJS.ProcessEnv;
+  initializationLock?: WorkspaceOwnershipLock;
   initializeConfig?: (
     legacyConfig: PersistedGlobalConfigV2 | null,
   ) => Effect.Effect<LoadedGlobalConfig, SettingsConfigError>;
 };
 
 type SettingsInitializationFlight = Deferred.Deferred<LoadedGlobalConfig, SettingsConfigError>;
+
+type PersistedConfigState =
+  | { readonly _tag: "missing" }
+  | { readonly _tag: "current"; readonly config: LoadedGlobalConfig }
+  | { readonly _tag: "legacy"; readonly config: PersistedGlobalConfigV2 };
 
 const makeSettingsInitializationFlight = (): SettingsInitializationFlight =>
   Deferred.unsafeMake(FiberId.none);
@@ -120,6 +127,7 @@ const persistGlobalConfig = (resolvedConfigPath: string, baseDir: string, config
 export const createSettingsConfigAdapter = ({
   configPath,
   environment,
+  initializationLock,
   initializeConfig,
 }: CreateSettingsConfigAdapterInput = {}): SettingsConfigPort => {
   const resolvedConfigPath =
@@ -127,17 +135,130 @@ export const createSettingsConfigAdapter = ({
   const baseDir = path.dirname(resolvedConfigPath);
   let initializationFlight: SettingsInitializationFlight | null = null;
 
-  const completeInitialization = (
-    legacyConfig: PersistedGlobalConfigV2 | null,
-    flight: SettingsInitializationFlight,
-    initializer: NonNullable<CreateSettingsConfigAdapterInput["initializeConfig"]>,
-  ) =>
+  const readPersistedConfig = (): Effect.Effect<PersistedConfigState, SettingsConfigError> =>
     Effect.gen(function* () {
-      const exit = yield* Effect.exit(
-        initializer(legacyConfig).pipe(
-          Effect.tap((config) => persistGlobalConfig(resolvedConfigPath, baseDir, config)),
+      const payload = yield* Effect.tryPromise({
+        try: () => readFile(resolvedConfigPath, "utf8"),
+        catch: (cause) =>
+          toHostOperationError(cause, "settingsConfig.readConfig", { path: resolvedConfigPath }),
+      }).pipe(
+        Effect.catchTag("HostOperationError", (error) => {
+          if (missingConfigFileErrorSchema.safeParse(error.cause).success) {
+            return Effect.succeed(null);
+          }
+
+          return Effect.fail(error);
+        }),
+      );
+      if (payload === null) {
+        return { _tag: "missing" } as const;
+      }
+
+      const parsedPayload = yield* Effect.try({
+        try: () => parseJson(payload),
+        catch: (cause) =>
+          cause instanceof HostValidationError
+            ? new HostValidationError({
+                message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
+                cause,
+                details: { path: resolvedConfigPath },
+              })
+            : toHostOperationError(cause, "settingsConfig.parseConfig", {
+                path: resolvedConfigPath,
+              }),
+      }).pipe(
+        Effect.mapError((error) =>
+          error instanceof HostValidationError
+            ? error
+            : new HostOperationError({
+                operation: "settingsConfig.parseConfig",
+                message: `Failed parsing config file ${resolvedConfigPath}: ${error.message}`,
+                cause: error,
+                details: { path: resolvedConfigPath },
+              }),
         ),
       );
+      const version = yield* Effect.try({
+        try: () => readPersistedGlobalConfigVersion(parsedPayload),
+        catch: (cause) =>
+          cause instanceof HostValidationError
+            ? new HostValidationError({
+                message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
+                cause,
+                details: { path: resolvedConfigPath },
+              })
+            : toHostOperationError(cause, "settingsConfig.readConfigVersion", {
+                path: resolvedConfigPath,
+              }),
+      });
+      if (version === 4) {
+        const config = yield* Effect.try({
+          try: () => parsePersistedGlobalConfig(parsedPayload),
+          catch: (cause) =>
+            cause instanceof HostValidationError
+              ? new HostValidationError({
+                  message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
+                  cause,
+                  details: { path: resolvedConfigPath },
+                })
+              : toHostOperationError(cause, "settingsConfig.parseConfig", {
+                  path: resolvedConfigPath,
+                }),
+        });
+        return { _tag: "current", config } as const;
+      }
+      if (version === 3) {
+        const config = yield* Effect.try({
+          try: () => upgradePersistedGlobalConfigV3(parsePersistedGlobalConfigV3(parsedPayload)),
+          catch: (cause) =>
+            cause instanceof HostValidationError
+              ? new HostValidationError({
+                  message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
+                  cause,
+                  details: { path: resolvedConfigPath },
+                })
+              : toHostOperationError(cause, "settingsConfig.parseConfig", {
+                  path: resolvedConfigPath,
+                }),
+        });
+        return { _tag: "current", config } as const;
+      }
+
+      const config = yield* Effect.try({
+        try: () => parsePersistedGlobalConfigV2(parsedPayload),
+        catch: (cause) =>
+          cause instanceof HostValidationError
+            ? new HostValidationError({
+                message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
+                cause,
+                details: { path: resolvedConfigPath },
+              })
+            : toHostOperationError(cause, "settingsConfig.parseLegacyConfig", {
+                path: resolvedConfigPath,
+              }),
+      });
+      return { _tag: "legacy", config } as const;
+    });
+
+  const completeInitialization = (
+    flight: SettingsInitializationFlight,
+    initializer: NonNullable<CreateSettingsConfigAdapterInput["initializeConfig"]>,
+  ) => {
+    const initialize = Effect.gen(function* () {
+      const persisted = yield* readPersistedConfig();
+      if (persisted._tag === "current") {
+        return persisted.config;
+      }
+      const config = yield* initializer(persisted._tag === "legacy" ? persisted.config : null);
+      yield* persistGlobalConfig(resolvedConfigPath, baseDir, config);
+      return config;
+    });
+    const guardedInitialization = initializationLock
+      ? initializationLock.runExclusive(initialize)
+      : initialize;
+
+    return Effect.gen(function* () {
+      const exit = yield* Effect.exit(guardedInitialization);
       yield* Deferred.done(flight, exit);
     }).pipe(
       Effect.ensuring(
@@ -148,8 +269,9 @@ export const createSettingsConfigAdapter = ({
         }),
       ),
     );
+  };
 
-  const initializeOnce = (legacyConfig: PersistedGlobalConfigV2 | null) => {
+  const initializeOnce = () => {
     if (!initializeConfig) {
       return Effect.fail(
         new HostValidationError({
@@ -170,9 +292,7 @@ export const createSettingsConfigAdapter = ({
           return { created: true as const, flight };
         });
         if (reservation.created) {
-          yield* Effect.forkDaemon(
-            completeInitialization(legacyConfig, reservation.flight, initializer),
-          );
+          yield* Effect.forkDaemon(completeInitialization(reservation.flight, initializer));
         }
         return yield* restore(Deferred.await(reservation.flight));
       }),
@@ -182,105 +302,11 @@ export const createSettingsConfigAdapter = ({
   return {
     readConfig() {
       return Effect.gen(function* () {
-        const payload = yield* Effect.tryPromise({
-          try: () => readFile(resolvedConfigPath, "utf8"),
-          catch: (cause) =>
-            toHostOperationError(cause, "settingsConfig.readConfig", { path: resolvedConfigPath }),
-        }).pipe(
-          Effect.catchTag("HostOperationError", (error) => {
-            if (missingConfigFileErrorSchema.safeParse(error.cause).success) {
-              return Effect.succeed(null);
-            }
-
-            return Effect.fail(error);
-          }),
-        );
-        if (payload === null) {
-          return initializeConfig ? yield* initializeOnce(null) : null;
+        const persisted = yield* readPersistedConfig();
+        if (persisted._tag === "current") {
+          return persisted.config;
         }
-
-        const parsedPayload = yield* Effect.try({
-          try: () => parseJson(payload),
-          catch: (cause) =>
-            cause instanceof HostValidationError
-              ? new HostValidationError({
-                  message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
-                  cause,
-                  details: { path: resolvedConfigPath },
-                })
-              : toHostOperationError(cause, "settingsConfig.parseConfig", {
-                  path: resolvedConfigPath,
-                }),
-        }).pipe(
-          Effect.mapError((error) =>
-            error instanceof HostValidationError
-              ? error
-              : new HostOperationError({
-                  operation: "settingsConfig.parseConfig",
-                  message: `Failed parsing config file ${resolvedConfigPath}: ${error.message}`,
-                  cause: error,
-                  details: { path: resolvedConfigPath },
-                }),
-          ),
-        );
-        const version = yield* Effect.try({
-          try: () => readPersistedGlobalConfigVersion(parsedPayload),
-          catch: (cause) =>
-            cause instanceof HostValidationError
-              ? new HostValidationError({
-                  message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
-                  cause,
-                  details: { path: resolvedConfigPath },
-                })
-              : toHostOperationError(cause, "settingsConfig.readConfigVersion", {
-                  path: resolvedConfigPath,
-                }),
-        });
-        if (version === 4) {
-          return yield* Effect.try({
-            try: () => parsePersistedGlobalConfig(parsedPayload),
-            catch: (cause) =>
-              cause instanceof HostValidationError
-                ? new HostValidationError({
-                    message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
-                    cause,
-                    details: { path: resolvedConfigPath },
-                  })
-                : toHostOperationError(cause, "settingsConfig.parseConfig", {
-                    path: resolvedConfigPath,
-                  }),
-          });
-        }
-        if (version === 3) {
-          return yield* Effect.try({
-            try: () => upgradePersistedGlobalConfigV3(parsePersistedGlobalConfigV3(parsedPayload)),
-            catch: (cause) =>
-              cause instanceof HostValidationError
-                ? new HostValidationError({
-                    message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
-                    cause,
-                    details: { path: resolvedConfigPath },
-                  })
-                : toHostOperationError(cause, "settingsConfig.parseConfig", {
-                    path: resolvedConfigPath,
-                  }),
-          });
-        }
-
-        const legacyConfig = yield* Effect.try({
-          try: () => parsePersistedGlobalConfigV2(parsedPayload),
-          catch: (cause) =>
-            cause instanceof HostValidationError
-              ? new HostValidationError({
-                  message: `Invalid config file ${resolvedConfigPath}: ${cause.message}`,
-                  cause,
-                  details: { path: resolvedConfigPath },
-                })
-              : toHostOperationError(cause, "settingsConfig.parseLegacyConfig", {
-                  path: resolvedConfigPath,
-                }),
-        });
-        return yield* initializeOnce(legacyConfig);
+        return initializeConfig ? yield* initializeOnce() : null;
       });
     },
     writeConfig(config: GlobalConfig) {

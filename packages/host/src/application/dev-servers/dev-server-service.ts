@@ -39,6 +39,7 @@ import {
   type DevServerGroupRuntime,
   inspectDevServerWorkspaceActivity,
   nowIso,
+  releaseDevServerWorkspaceState,
   scriptHasLiveProcess,
   startTerminalRun,
   syncGroupState,
@@ -459,6 +460,9 @@ export const createDevServerService = ({
   };
   const disposableService: DisposableDevServerService = {
     ...service,
+    releaseWorkspace(input) {
+      return releaseDevServerWorkspaceState(groups, input.repoPath);
+    },
     stopAll() {
       return Effect.gen(function* () {
         const errors: string[] = [];
