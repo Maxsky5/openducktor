@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { z } from "zod";
 import type { WorkspaceLifecycleService } from "../../application/workspaces/workspace-lifecycle-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -87,11 +86,6 @@ export const createWorkspaceLifecycleCommandHandlers = (
           cause: parsed.error,
         });
       }
-      return lifecycleService.removeWorkspace(parsed.data).pipe(
-        Effect.map(({ catalog, result }) => ({
-          catalog,
-          removedWorktrees: result.removedWorktrees,
-        })),
-      );
+      return lifecycleService.removeWorkspace(parsed.data);
     },
   }) satisfies HostCommandHandlerDefinitions;

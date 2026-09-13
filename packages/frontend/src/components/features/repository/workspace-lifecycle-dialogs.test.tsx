@@ -98,7 +98,7 @@ describe("workspace lifecycle dialogs", () => {
     expect(
       screen.getByText(/The following items are deleted and cannot be recovered:/),
     ).toBeTruthy();
-    const worktreeDescription = screen.getByText(/When checked, task worktrees are deleted/);
+    const worktreeDescription = screen.getByText(/Leave this unchecked to keep task worktrees/);
     expect(worktreeDescription).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Remove workspace" }));
@@ -116,10 +116,9 @@ describe("workspace lifecycle dialogs", () => {
     renderDialog(<WorkspaceRemoveDialog workspace={workspace} onOpenChange={() => {}} />);
 
     const descriptionText =
-      "When checked, task worktrees are deleted with their local files, including uncommitted and untracked changes. Local branches and committed history remain.";
+      "Leave this unchecked to keep task worktrees and their files. If checked, OpenDucktor deletes them with uncommitted and untracked changes. Local branches and committed history remain.";
     fireEvent.click(screen.getByRole("checkbox"));
     expect(screen.getByText(descriptionText)).toBeTruthy();
-    expect(screen.queryByText(/Leave unchecked/)).toBe(null);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove workspace" }));
 
@@ -132,13 +131,13 @@ describe("workspace lifecycle dialogs", () => {
     );
   });
 
-  test("lets the recovery dialog finish removal without task worktrees", async () => {
+  test("keeps the recorded worktree choice when retrying removal", async () => {
     const removal: IncompleteWorkspaceRemoval = {
       workspace,
       record: {
         version: 1,
         operationId: "op-1",
-        removeTaskWorktrees: true,
+        removeTaskWorktrees: false,
         phase: "worktrees",
         removedWorktrees: [],
         pendingWorktreePath: null,
@@ -148,9 +147,8 @@ describe("workspace lifecycle dialogs", () => {
     };
     renderDialog(<WorkspaceRemovalRecoveryDialog removal={removal} onOpenChange={() => {}} />);
 
-    expect(screen.getByText(/Task worktrees are part of this removal./)).toBeTruthy();
-    fireEvent.click(screen.getByRole("checkbox"));
     expect(screen.getByText(/Task worktrees are kept./)).toBeTruthy();
+    expect(screen.queryByRole("checkbox")).toBe(null);
 
     fireEvent.click(screen.getByRole("button", { name: "Retry removal" }));
 
@@ -234,42 +232,6 @@ describe("workspace lifecycle dialogs", () => {
     expect(screen.getByRole("checkbox").hasAttribute("disabled")).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove workspace" }));
-
-    await waitFor(() =>
-      expect(removeWorkspace).toHaveBeenLastCalledWith({
-        workspaceId: "alpha",
-        expectedRepoPath: "/projects/alpha",
-        removeTaskWorktrees: true,
-      }),
-    );
-  });
-
-  test("locks the worktree choice after a failed recovery retry", async () => {
-    const removal: IncompleteWorkspaceRemoval = {
-      workspace,
-      record: {
-        version: 1,
-        operationId: "op-1",
-        removeTaskWorktrees: false,
-        phase: "worktrees",
-        removedWorktrees: [],
-        pendingWorktreePath: null,
-        startedAt: "2026-01-01T00:00:00.000Z",
-        lastFailure: null,
-      },
-    };
-    removeWorkspace.mockImplementationOnce(async () => {
-      throw new Error("disk failure");
-    });
-    renderDialog(<WorkspaceRemovalRecoveryDialog removal={removal} onOpenChange={() => {}} />);
-
-    fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Retry removal" }));
-
-    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
-    expect(screen.getByRole("checkbox").hasAttribute("disabled")).toBe(true);
-
-    fireEvent.click(screen.getByRole("button", { name: "Retry removal" }));
 
     await waitFor(() =>
       expect(removeWorkspace).toHaveBeenLastCalledWith({

@@ -1,8 +1,8 @@
 import type {
   RepoConfig,
   WorkspaceCatalog,
+  WorkspaceRemovalCommandResult,
   WorkspaceRemovalPhase,
-  WorkspaceRemovalResult,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
@@ -25,10 +25,7 @@ import type {
   WorkspaceActivityPort,
 } from "./workspace-activity-inspector";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
-import {
-  createWorkspaceOwnershipLock,
-  type WorkspaceOwnershipLock,
-} from "./workspace-ownership-lock";
+import type { WorkspaceOwnershipLock } from "./workspace-ownership-lock";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 import {
   collectWorkspaceTaskWorktreePaths,
@@ -66,10 +63,7 @@ export type WorkspaceLifecycleService = {
     workspaceId: string;
     expectedRepoPath: string;
     removeTaskWorktrees: boolean;
-  }): Effect.Effect<
-    { catalog: WorkspaceCatalog; result: WorkspaceRemovalResult },
-    WorkspaceLifecycleError
-  >;
+  }): Effect.Effect<WorkspaceRemovalCommandResult, WorkspaceLifecycleError>;
 };
 
 type CreateWorkspaceLifecycleServiceInput = {
@@ -88,7 +82,7 @@ type CreateWorkspaceLifecycleServiceInput = {
     GitPort,
     "canonicalizePath" | "isRegisteredWorktree" | "listWorktrees" | "removeWorktree"
   >;
-  ownershipLock?: WorkspaceOwnershipLock;
+  ownershipLock: WorkspaceOwnershipLock;
   settingsConfig: SettingsConfigPort;
   storage: WorkspaceStoragePort;
   taskStore: Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
@@ -127,7 +121,7 @@ export const createWorkspaceLifecycleService = ({
   workspaceSettingsService,
   worktreeFiles,
 }: CreateWorkspaceLifecycleServiceInput): WorkspaceLifecycleService => {
-  const runOwnedExclusively = (ownershipLock ?? createWorkspaceOwnershipLock()).runExclusive;
+  const runOwnedExclusively = ownershipLock.runExclusive;
 
   const requireTarget = (workspaceId: string, expectedRepoPath: string) =>
     Effect.gen(function* () {
@@ -382,7 +376,7 @@ export const createWorkspaceLifecycleService = ({
       ) {
         yield* admission.awaitWorkStarts(journaledRepoConfig.repoPath);
       }
-      return { catalog, result: { removedWorktrees } };
+      return { catalog, removedWorktrees };
     });
 
   const runUnderReservation = <A, E, R>(

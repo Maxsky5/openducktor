@@ -634,7 +634,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "workspaceRemovalCommandResultSchema",
   "workspaceRemovalPhaseSchema",
   "workspaceRemovalRecordSchema",
-  "workspaceRemovalResultSchema",
   "workspaceRepoConfigInputSchema",
   "workspaceRepoHooksInputSchema",
   "workspaceRepoSettingsInputSchema",

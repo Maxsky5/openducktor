@@ -166,7 +166,7 @@ const createService = ({
   canonicalizePath = (path: string) => Effect.succeed(path),
   pathExists = () => Effect.succeed(true),
   resolvedPathKind = "descendant" as const,
-  ownershipLock,
+  ownershipLock = createWorkspaceOwnershipLock(),
 }: {
   activity?: WorkspaceActivityPort;
   admission?: ReturnType<typeof createAdmissionDouble>;
@@ -214,6 +214,7 @@ const createService = ({
       listWorktrees,
       removeWorktree,
     }),
+    ownershipLock,
     settingsConfig: createSettingsConfigTestDouble({
       canonicalizePath,
       defaultWorktreeBasePath: (workspaceId) => `/managed/${workspaceId}`,
@@ -246,9 +247,6 @@ const createService = ({
       resolveWorktreePath: (_repoPath, worktreePath) => worktreePath,
     }),
   };
-  if (ownershipLock !== undefined) {
-    serviceInput.ownershipLock = ownershipLock;
-  }
   return createWorkspaceLifecycleService(serviceInput);
 };
 
@@ -346,7 +344,7 @@ describe("workspace lifecycle service", () => {
         }),
     });
 
-    const { result } = await Effect.runPromise(
+    const result = await Effect.runPromise(
       service.removeWorkspace({
         workspaceId: "ws",
         expectedRepoPath: "/repos/ws",
@@ -523,7 +521,7 @@ describe("workspace lifecycle service", () => {
         }),
     });
 
-    const { result } = await Effect.runPromise(
+    const result = await Effect.runPromise(
       service.removeWorkspace({
         workspaceId: "ws",
         expectedRepoPath: "/repos/ws",
@@ -601,7 +599,7 @@ describe("workspace lifecycle service", () => {
         }),
     });
 
-    const { result } = await Effect.runPromise(
+    const result = await Effect.runPromise(
       service.removeWorkspace({
         workspaceId: "ws",
         expectedRepoPath: "/repos/ws",
@@ -707,7 +705,7 @@ describe("workspace lifecycle service", () => {
         Effect.succeed([{ branch: "odt/task-1", worktreePath: "/managed/ws/task-1" }]),
     });
 
-    const { result } = await Effect.runPromise(
+    const result = await Effect.runPromise(
       service.removeWorkspace({
         workspaceId: "ws",
         expectedRepoPath: "/repos/ws",
@@ -1104,7 +1102,7 @@ describe("workspace lifecycle service", () => {
     );
 
     expect(removedPaths).toEqual(["/managed/ws/task-1"]);
-    expect(result.result.removedWorktrees).toEqual(["/managed/ws/task-1"]);
+    expect(result.removedWorktrees).toEqual(["/managed/ws/task-1"]);
   });
 
   test("removeWorkspace reports a journaled pending worktree cleanup that keeps failing", async () => {

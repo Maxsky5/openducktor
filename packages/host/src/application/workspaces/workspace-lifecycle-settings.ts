@@ -84,31 +84,17 @@ const nextRemovalRecord = (
   existing: WorkspaceRemovalRecord | undefined,
   removeTaskWorktrees: boolean,
 ): WorkspaceRemovalRecord => {
-  if (!existing) {
-    return {
-      version: 1,
-      operationId: globalThis.crypto.randomUUID(),
-      removeTaskWorktrees,
-      phase: removeTaskWorktrees ? "worktrees" : "task_store",
-      removedWorktrees: [],
-      pendingWorktreePath: null,
-      startedAt: new Date().toISOString(),
-      lastFailure: null,
-    };
-  }
-  const canChangeChoice =
-    existing.phase === "worktrees" &&
-    existing.removedWorktrees.length === 0 &&
-    existing.pendingWorktreePath === null &&
-    existing.removeTaskWorktrees !== removeTaskWorktrees;
-  if (!canChangeChoice) {
+  if (existing) {
     return existing;
   }
   return {
-    ...existing,
+    version: 1,
+    operationId: globalThis.crypto.randomUUID(),
     removeTaskWorktrees,
     phase: removeTaskWorktrees ? "worktrees" : "task_store",
+    removedWorktrees: [],
     pendingWorktreePath: null,
+    startedAt: new Date().toISOString(),
     lastFailure: null,
   };
 };
