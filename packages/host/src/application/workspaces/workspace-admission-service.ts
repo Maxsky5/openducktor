@@ -1,4 +1,4 @@
-import { Deferred, Effect, FiberId } from "effect";
+import { Deferred, Effect, FiberId, FiberRef } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import {
   HostOperationError,
@@ -76,7 +76,7 @@ export const createWorkspaceAdmissionService = ({
   const blockedByWorkspaceId = new Map<string, BlockedWorkspace>();
   const reservationsByWorkspaceId = new Map<string, WorkspaceReservation>();
   const workStartsByRepoPath = new Map<string, WorkStartState>();
-  const administrativeWorkspaceIds = new Set<string>();
+  const administrativeWorkspaceIds = FiberRef.unsafeMake<ReadonlySet<string>>(new Set());
   let initialized = false;
 
   const replaceBlocked = (nextBlocked: BlockedWorkspace[]): void => {
@@ -131,8 +131,9 @@ export const createWorkspaceAdmissionService = ({
 
   const assertTaskStoreAccess: WorkspaceAdmissionService["assertTaskStoreAccess"] = (input) =>
     ensureInitialized().pipe(
-      Effect.flatMap(() => {
-        if (administrativeWorkspaceIds.has(input.workspaceId)) {
+      Effect.flatMap(() => FiberRef.get(administrativeWorkspaceIds)),
+      Effect.flatMap((administrativeIds) => {
+        if (administrativeIds.has(input.workspaceId)) {
           return Effect.void;
         }
         const reservation = reservationsByWorkspaceId.get(input.workspaceId);
@@ -307,26 +308,18 @@ export const createWorkspaceAdmissionService = ({
           }
           blockedByWorkspaceId.delete(input.workspaceId);
           reservationsByWorkspaceId.delete(input.workspaceId);
-          administrativeWorkspaceIds.delete(input.workspaceId);
           return Effect.succeed(true);
         });
       }),
     withAdministrativeAccess: (workspaceIds, effect) => {
-      const ids = [...new Set(workspaceIds)];
-      return Effect.acquireUseRelease(
-        Effect.sync(() => {
-          for (const workspaceId of ids) {
-            administrativeWorkspaceIds.add(workspaceId);
-          }
-        }),
-        () => effect,
-        () =>
-          Effect.sync(() => {
-            for (const workspaceId of ids) {
-              administrativeWorkspaceIds.delete(workspaceId);
-            }
-          }),
-      );
+      return Effect.gen(function* () {
+        const currentIds = yield* FiberRef.get(administrativeWorkspaceIds);
+        const nextIds = new Set(currentIds);
+        for (const workspaceId of workspaceIds) {
+          nextIds.add(workspaceId);
+        }
+        return yield* effect.pipe(Effect.locally(administrativeWorkspaceIds, nextIds));
+      });
     },
   };
 };

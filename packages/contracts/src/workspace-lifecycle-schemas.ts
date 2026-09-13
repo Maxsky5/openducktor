@@ -38,12 +38,8 @@ export const workspacePathResolutionSchema = z.discriminatedUnion("kind", [
 ]);
 export type WorkspacePathResolution = z.infer<typeof workspacePathResolutionSchema>;
 
-export const workspaceRemovalResultSchema = z.object({
-  removedWorktrees: z.array(z.string()),
-});
-export type WorkspaceRemovalResult = z.infer<typeof workspaceRemovalResultSchema>;
-
-export const workspaceRemovalCommandResultSchema = workspaceRemovalResultSchema.extend({
+export const workspaceRemovalCommandResultSchema = z.object({
   catalog: workspaceCatalogSchema,
+  removedWorktrees: z.array(z.string()),
 });
 export type WorkspaceRemovalCommandResult = z.infer<typeof workspaceRemovalCommandResultSchema>;

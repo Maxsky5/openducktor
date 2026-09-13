@@ -144,6 +144,54 @@ describe("workspace admission service", () => {
     ).resolves.toBeUndefined();
   });
 
+  test("keeps administrative task store access local to its fiber", async () => {
+    const admission = createAdmission(
+      catalog({
+        incompleteRemovals: [
+          {
+            workspace: workspaceRecord("removing-ws", "/repos/removing"),
+            record: {
+              version: 1,
+              operationId: "op-1",
+              phase: "attachments",
+              removeTaskWorktrees: false,
+              removedWorktrees: [],
+              pendingWorktreePath: null,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        ],
+      }),
+    );
+    const ordinaryAccess = admission.assertTaskStoreAccess({
+      operation: "sqliteTaskRepository.updateTask",
+      repoPath: "/repos/removing",
+      workspaceId: "removing-ws",
+    });
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const administrativeFiber = yield* admission
+          .withAdministrativeAccess(
+            ["removing-ws"],
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          )
+          .pipe(Effect.fork);
+
+        yield* Deferred.await(entered);
+        const ordinaryResult = yield* Effect.either(ordinaryAccess);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(administrativeFiber);
+        return ordinaryResult;
+      }),
+    );
+
+    expect(result._tag).toBe("Left");
+  });
+
   test("blocks process starts by repository path for blocked workspaces", async () => {
     const admission = createAdmission(
       catalog({ closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")] }),

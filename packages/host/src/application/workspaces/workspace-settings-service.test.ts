@@ -1061,7 +1061,7 @@ describe("createWorkspaceSettingsService", () => {
     });
     expect(await Effect.runPromise(service.listWorkspaces())).toEqual([]);
   });
-  test("lets the worktree choice change before any worktree is removed", async () => {
+  test("keeps the worktree choice before any worktree is removed", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({
         workspaceOrder: ["repo-a"],
@@ -1092,9 +1092,9 @@ describe("createWorkspaceSettingsService", () => {
       }),
     );
 
-    expect(record.removeTaskWorktrees).toBe(false);
-    expect(record.phase).toBe("task_store");
-    expect(record.lastFailure).toBeNull();
+    expect(record.removeTaskWorktrees).toBe(true);
+    expect(record.phase).toBe("worktrees");
+    expect(record.lastFailure).toBe("Cannot classify registered worktree(s).");
     expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal).toEqual(record);
   });
   test("keeps the worktree choice after a worktree is removed", async () => {

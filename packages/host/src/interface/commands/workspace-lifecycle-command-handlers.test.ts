@@ -36,7 +36,7 @@ describe("createWorkspaceLifecycleCommandHandlers", () => {
     > = {
       closeWorkspace: () => Effect.succeed(catalog),
       reopenWorkspace: () => Effect.succeed(catalog),
-      removeWorkspace: () => Effect.succeed({ catalog, result: { removedWorktrees: [] } }),
+      removeWorkspace: () => Effect.succeed({ catalog, removedWorktrees: [] }),
     };
     const router = createRouter({
       handlers: createWorkspaceLifecycleCommandHandlers(settingsService, lifecycleService),
@@ -65,7 +65,7 @@ describe("createWorkspaceLifecycleCommandHandlers", () => {
         reopenInputs.push(input);
         return Effect.succeed(catalog);
       },
-      removeWorkspace: () => Effect.succeed({ catalog, result: { removedWorktrees: [] } }),
+      removeWorkspace: () => Effect.succeed({ catalog, removedWorktrees: [] }),
     };
     const router = createRouter({
       handlers: createWorkspaceLifecycleCommandHandlers(settingsService, lifecycleService),
@@ -87,7 +87,7 @@ describe("createWorkspaceLifecycleCommandHandlers", () => {
     expect(reopenInputs).toEqual([{ workspaceId: "repo", expectedRepoPath: "/repo" }]);
   });
 
-  test("routes remove and maps the removal result", async () => {
+  test("routes remove with the expected target", async () => {
     const removeInputs: Array<{
       workspaceId: string;
       expectedRepoPath: string;
@@ -102,7 +102,7 @@ describe("createWorkspaceLifecycleCommandHandlers", () => {
       reopenWorkspace: () => Effect.succeed(catalog),
       removeWorkspace: (input) => {
         removeInputs.push(input);
-        return Effect.succeed({ catalog, result: { removedWorktrees: ["/worktrees/task-1"] } });
+        return Effect.succeed({ catalog, removedWorktrees: ["/worktrees/task-1"] });
       },
     };
     const router = createRouter({
