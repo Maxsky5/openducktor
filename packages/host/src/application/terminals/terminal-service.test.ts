@@ -12,10 +12,7 @@ import {
   type TerminalPtyPort,
 } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
-import {
-  HostValidationError,
-  type HostValidationErrorAggregate,
-} from "../../effect/host-errors";
+import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
 import { createTerminalService } from "./terminal-service";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 
@@ -50,20 +47,14 @@ const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
             return hasChildProcesses;
           }),
         write: (data) =>
-          Effect.sync(() =>
-            operations.push(`write:${new TextDecoder().decode(data)}`),
-          ),
-        resize: (grid) =>
-          Effect.sync(() =>
-            operations.push(`resize:${grid.columns}x${grid.rows}`),
-          ),
+          Effect.sync(() => operations.push(`write:${new TextDecoder().decode(data)}`)),
+        resize: (grid) => Effect.sync(() => operations.push(`resize:${grid.columns}x${grid.rows}`)),
         pauseOutput: () => Effect.sync(() => operations.push("pause")),
         resumeOutput: () => Effect.sync(() => operations.push("resume")),
         terminate: () =>
           Effect.suspend(() => {
             if (terminateFails || terminateFailuresRemaining > 0) {
-              if (terminateFailuresRemaining > 0)
-                terminateFailuresRemaining -= 1;
+              if (terminateFailuresRemaining > 0) terminateFailuresRemaining -= 1;
               return Effect.fail(
                 new TerminalPtyError({
                   code: "operation_failed",
@@ -81,8 +72,7 @@ const makePty = (supportsOutputPause = true, hasChildProcesses = true) => {
     port,
     operations,
     emit: (data: Uint8Array) => handlers?.onOutput(data),
-    exit: (exitCode: number | null = 0) =>
-      handlers?.onExit({ exitCode, signal: null }),
+    exit: (exitCode: number | null = 0) => handlers?.onExit({ exitCode, signal: null }),
     fail: (failure: TerminalPtyError) => handlers?.onFailure(failure),
     failTerminate: () => {
       terminateFails = true;
@@ -208,9 +198,7 @@ describe("TerminalService", () => {
     );
     blocked = true;
     await expect(
-      Effect.runPromise(
-        service.write(created.ref.terminalId, new TextEncoder().encode("ls")),
-      ),
+      Effect.runPromise(service.write(created.ref.terminalId, new TextEncoder().encode("ls"))),
     ).rejects.toThrow("Workspace is closed");
     expect(pty.operations).not.toContain("write:ls");
   });
@@ -245,9 +233,7 @@ describe("TerminalService", () => {
   });
 
   test("inspects workspace activity without touching the filesystem", async () => {
-    const canonicalize = mock((path: string) =>
-      Effect.succeed(`/canonical${path}`),
-    );
+    const canonicalize = mock((path: string) => Effect.succeed(`/canonical${path}`));
     const { service } = await makeService(makePty(true, true), undefined, {
       ...filesystem,
       canonicalize,
@@ -279,9 +265,7 @@ describe("TerminalService", () => {
     );
 
     await expect(
-      Effect.runPromise(
-        idle.service.inspectWorkspaceActivity("/canonical/repo"),
-      ),
+      Effect.runPromise(idle.service.inspectWorkspaceActivity("/canonical/repo")),
     ).resolves.toEqual({
       activeTerminalIds: [],
       unknownTerminalIds: ["terminal-1"],
@@ -298,9 +282,7 @@ describe("TerminalService", () => {
     );
 
     await expect(
-      Effect.runPromise(
-        busy.service.inspectWorkspaceActivity("/canonical/repo"),
-      ),
+      Effect.runPromise(busy.service.inspectWorkspaceActivity("/canonical/repo")),
     ).resolves.toEqual({
       activeTerminalIds: ["terminal-1"],
       unknownTerminalIds: [],
@@ -309,9 +291,7 @@ describe("TerminalService", () => {
 
   test("retains PTY failure details for live attachments and attachments after exit", async () => {
     const { service, pty } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     const live: TerminalServerMessage[] = [];
     const attach = (attachmentId: string, events: TerminalServerMessage[]) =>
       Effect.runPromise(
@@ -353,39 +333,24 @@ describe("TerminalService", () => {
   });
   test("creates a taskless terminal and keeps its canonical initial directory immutable", async () => {
     const { service, pty } = await makeService();
-    const created = await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    const created = await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     expect(created.summary.label).toBe("/canonical/repo");
     await Effect.runPromise(
-      service.write(
-        created.ref.terminalId,
-        new TextEncoder().encode("cd /tmp\n"),
-      ),
+      service.write(created.ref.terminalId, new TextEncoder().encode("cd /tmp\n")),
     );
-    const listed = await Effect.runPromise(
-      service.list({ kind: "unassociated" }),
-    );
+    const listed = await Effect.runPromise(service.list({ kind: "unassociated" }));
     expect(listed.terminals[0]?.initialWorkingDir).toBe("/canonical/repo");
     expect(pty.operations).toContain("write:cd /tmp\n");
   });
 
   test("lists the latest terminal title without changing the initial directory", async () => {
     const { service, pty, settleTitles } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
 
-    pty.emit(
-      new TextEncoder().encode(
-        "\u001b]0;user@host:~/projects/openducktor\u0007",
-      ),
-    );
+    pty.emit(new TextEncoder().encode("\u001b]0;user@host:~/projects/openducktor\u0007"));
     settleTitles();
 
-    const listed = await Effect.runPromise(
-      service.list({ kind: "unassociated" }),
-    );
+    const listed = await Effect.runPromise(service.list({ kind: "unassociated" }));
     expect(listed.terminals[0]).toMatchObject({
       label: "~/projects/openducktor",
       initialWorkingDir: "/canonical/repo",
@@ -395,17 +360,13 @@ describe("TerminalService", () => {
     pty.emit(new TextEncoder().encode("run dev\u001b\\"));
     settleTitles();
 
-    const updated = await Effect.runPromise(
-      service.list({ kind: "unassociated" }),
-    );
+    const updated = await Effect.runPromise(service.list({ kind: "unassociated" }));
     expect(updated.terminals[0]?.label).toBe("pnpm run dev");
   });
 
   test("publishes the current title on attach and later title changes as metadata", async () => {
     const { service, pty, settleTitles } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     pty.emit(new TextEncoder().encode("\u001b]0;user@host:~/repo\u0007"));
     settleTitles();
     const events: unknown[] = [];
@@ -430,9 +391,7 @@ describe("TerminalService", () => {
 
   test("publishes only the settled title for a fast shell command", async () => {
     const { service, pty, settleTitles } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     const events: Array<{ type: string; title?: string }> = [];
 
     await Effect.runPromise(
@@ -456,9 +415,7 @@ describe("TerminalService", () => {
 
   test("cancels an unsettled title when the terminal closes", async () => {
     const { service, pty, settleTitles } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     const events: Array<{ type: string }> = [];
     await Effect.runPromise(
       service.attach({
@@ -470,9 +427,7 @@ describe("TerminalService", () => {
     );
 
     pty.emit(new TextEncoder().encode("\u001b]2;pnpm run dev\u0007"));
-    await Effect.runPromise(
-      service.close({ terminalId: "terminal-1", confirmTerminate: true }),
-    );
+    await Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true }));
     settleTitles();
 
     expect(events.some((event) => event.type === "title")).toBe(false);
@@ -517,9 +472,7 @@ describe("TerminalService", () => {
 
   test("preserves input and resize barriers", async () => {
     const { service, pty } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     await Effect.runPromise(
       Effect.all(
         [
@@ -530,18 +483,12 @@ describe("TerminalService", () => {
         { concurrency: "unbounded" },
       ),
     );
-    expect(pty.operations).toEqual([
-      "write:first",
-      "resize:120x40",
-      "write:second",
-    ]);
+    expect(pty.operations).toEqual(["write:first", "resize:120x40", "write:second"]);
   });
 
   test("reports an exact replay gap before the retained tail", async () => {
     const { service, pty } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     pty.emit(new Uint8Array(TERMINAL_LIMITS.replayBytes + 1));
     const eventTypes: string[] = [];
     await Effect.runPromise(
@@ -559,9 +506,7 @@ describe("TerminalService", () => {
 
   test("rejects an attachment position beyond published output", async () => {
     const { service } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     await expect(
       Effect.runPromise(
         service.attach({
@@ -576,9 +521,7 @@ describe("TerminalService", () => {
 
   test("rolls back an attachment when its initial sink throws", async () => {
     const { service, pty } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     let sinkCalls = 0;
 
     await expect(
@@ -601,9 +544,7 @@ describe("TerminalService", () => {
 
   test("isolates a stale attachment while continuing output delivery", async () => {
     const { service, pty } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     let staleSinkShouldThrow = false;
     const healthyEvents: string[] = [];
 
@@ -643,14 +584,8 @@ describe("TerminalService", () => {
         return filesystem.stat(path);
       },
     };
-    const { service } = await makeService(
-      makePty(),
-      () => "terminal-1",
-      countingFilesystem,
-    );
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    const { service } = await makeService(makePty(), () => "terminal-1", countingFilesystem);
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     const callsAfterCreate = statCalls;
     await Effect.runPromise(service.list({ kind: "all" }));
     expect(statCalls).toBe(callsAfterCreate);
@@ -658,9 +593,7 @@ describe("TerminalService", () => {
 
   test("does not advance pending output until ACK and pauses at the hard bound", async () => {
     const { service, pty } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     await Effect.runPromise(
       service.attach({
         terminalId: "terminal-1",
@@ -673,20 +606,14 @@ describe("TerminalService", () => {
     await Bun.sleep(0);
     expect(pty.operations).toContain("pause");
     await Effect.runPromise(
-      service.acknowledge(
-        "terminal-1",
-        "a",
-        TERMINAL_LIMITS.pendingOutputBytes,
-      ),
+      service.acknowledge("terminal-1", "a", TERMINAL_LIMITS.pendingOutputBytes),
     );
     expect(pty.operations).toContain("resume");
   });
 
   test("resumes output when the pressure-causing attachment detaches", async () => {
     const { service, pty } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     await Effect.runPromise(
       service.attach({
         terminalId: "terminal-1",
@@ -715,9 +642,7 @@ describe("TerminalService", () => {
 
   test("resumes output when a failed sink removes the last attachment", async () => {
     const { service, pty, settleTitles } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     await Effect.runPromise(
       service.attach({
         terminalId: "terminal-1",
@@ -728,15 +653,9 @@ describe("TerminalService", () => {
         },
       }),
     );
-    const titleSequence = new TextEncoder().encode(
-      "\u001b]2;pnpm run dev\u0007",
-    );
+    const titleSequence = new TextEncoder().encode("\u001b]2;pnpm run dev\u0007");
     pty.emit(titleSequence);
-    pty.emit(
-      new Uint8Array(
-        TERMINAL_LIMITS.pendingOutputBytes - titleSequence.byteLength,
-      ),
-    );
+    pty.emit(new Uint8Array(TERMINAL_LIMITS.pendingOutputBytes - titleSequence.byteLength));
     await Bun.sleep(0);
     expect(pty.operations).toEqual(["pause"]);
 
@@ -748,13 +667,8 @@ describe("TerminalService", () => {
 
   test("terminates with overflow when output pause is unsupported", async () => {
     let id = 0;
-    const { service, pty } = await makeService(
-      makePty(false),
-      () => `terminal-${++id}`,
-    );
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    const { service, pty } = await makeService(makePty(false), () => `terminal-${++id}`);
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     const events: string[] = [];
     await Effect.runPromise(
       service.attach({
@@ -782,19 +696,13 @@ describe("TerminalService", () => {
 
   test("requires confirmation and keeps close failures retryable", async () => {
     const { service, pty } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     await expect(
-      Effect.runPromise(
-        service.close({ terminalId: "terminal-1", confirmTerminate: false }),
-      ),
+      Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: false })),
     ).rejects.toThrow();
     pty.failTerminate();
     await expect(
-      Effect.runPromise(
-        service.close({ terminalId: "terminal-1", confirmTerminate: true }),
-      ),
+      Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true })),
     ).rejects.toThrow();
     const listed = await Effect.runPromise(service.list({ kind: "all" }));
     expect(listed.terminals[0]?.lifecycle).toBe("close_failed");
@@ -802,26 +710,17 @@ describe("TerminalService", () => {
 
   test("closes an idle shell without confirmation", async () => {
     const { service, pty } = await makeService(makePty(true, false));
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
 
-    await Effect.runPromise(
-      service.close({ terminalId: "terminal-1", confirmTerminate: false }),
-    );
+    await Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: false }));
 
-    expect(
-      (await Effect.runPromise(service.list({ kind: "all" }))).terminals,
-    ).toEqual([]);
+    expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
     expect(pty.operations).toEqual(["inspect-children", "terminate"]);
   });
 
   test("scopes task cleanup by repository and forgets attached terminals", async () => {
     let terminalId = 0;
-    const { service } = await makeService(
-      makePty(true, false),
-      () => `terminal-${++terminalId}`,
-    );
+    const { service } = await makeService(makePty(true, false), () => `terminal-${++terminalId}`);
     await Effect.runPromise(
       service.create({
         workingDir: "/repo-a",
@@ -882,9 +781,7 @@ describe("TerminalService", () => {
     const canonicalFilesystem: FilesystemPort = {
       ...filesystem,
       canonicalize: (path) =>
-        Effect.succeed(
-          path === "/repo-link" || path === "/repo" ? "/repo" : path,
-        ),
+        Effect.succeed(path === "/repo-link" || path === "/repo" ? "/repo" : path),
     };
     const { service } = await makeService(
       makePty(true, false),
@@ -904,9 +801,7 @@ describe("TerminalService", () => {
     });
     expect(
       (
-        await Effect.runPromise(
-          service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" }),
-        )
+        await Effect.runPromise(service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" }))
       ).terminals.map((terminal) => terminal.terminalId),
     ).toEqual(["terminal-1"]);
 
@@ -920,57 +815,39 @@ describe("TerminalService", () => {
     );
 
     expect(
-      (
-        await Effect.runPromise(
-          service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" }),
-        )
-      ).terminals,
+      (await Effect.runPromise(service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" })))
+        .terminals,
     ).toEqual([]);
   });
 
   test("removes a close-failed session after its PTY cleanup retry succeeds", async () => {
     const { service, pty } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     pty.failNextTerminate();
 
     await expect(
-      Effect.runPromise(
-        service.close({ terminalId: "terminal-1", confirmTerminate: true }),
-      ),
+      Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true })),
     ).rejects.toThrow();
-    expect(
-      (await Effect.runPromise(service.list({ kind: "all" }))).terminals[0]
-        ?.lifecycle,
-    ).toBe("close_failed");
-
-    await Effect.runPromise(
-      service.close({ terminalId: "terminal-1", confirmTerminate: true }),
+    expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals[0]?.lifecycle).toBe(
+      "close_failed",
     );
 
-    expect(
-      (await Effect.runPromise(service.list({ kind: "all" }))).terminals,
-    ).toEqual([]);
+    await Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true }));
+
+    expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
     expect(pty.operations).toContain("terminate");
   });
 
   test("keeps tracking titles while a failed close remains retryable", async () => {
     const { service, pty, settleTitles } = await makeService();
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     pty.failNextTerminate();
 
     await expect(
-      Effect.runPromise(
-        service.close({ terminalId: "terminal-1", confirmTerminate: true }),
-      ),
+      Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true })),
     ).rejects.toThrow();
 
-    pty.emit(
-      new TextEncoder().encode("\u001b]0;user@host:~/still-running\u0007"),
-    );
+    pty.emit(new TextEncoder().encode("\u001b]0;user@host:~/still-running\u0007"));
     settleTitles();
 
     const listed = await Effect.runPromise(service.list({ kind: "all" }));
@@ -979,12 +856,8 @@ describe("TerminalService", () => {
       lifecycle: "close_failed",
     });
 
-    await Effect.runPromise(
-      service.close({ terminalId: "terminal-1", confirmTerminate: true }),
-    );
-    expect(
-      (await Effect.runPromise(service.list({ kind: "all" }))).terminals,
-    ).toEqual([]);
+    await Effect.runPromise(service.close({ terminalId: "terminal-1", confirmTerminate: true }));
+    expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
   });
 
   test("terminates independent sessions concurrently during host shutdown", async () => {
@@ -1009,16 +882,9 @@ describe("TerminalService", () => {
             await terminationsReleased;
           }),
       });
-    const { service } = await makeService(
-      pty,
-      () => `terminal-${++terminalId}`,
-    );
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
-    await Effect.runPromise(
-      service.create({ workingDir: "/repo", context: {} }),
-    );
+    const { service } = await makeService(pty, () => `terminal-${++terminalId}`);
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
+    await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
 
     const disposing = Effect.runPromise(service.dispose());
     try {
@@ -1048,11 +914,7 @@ describe("TerminalService", () => {
           return `/canonical${path}`;
         }),
     };
-    const { service, pty } = await makeService(
-      makePty(),
-      () => "terminal-1",
-      delayedFilesystem,
-    );
+    const { service, pty } = await makeService(makePty(), () => "terminal-1", delayedFilesystem);
 
     const creating = Effect.runPromise(
       service.create({
@@ -1073,9 +935,7 @@ describe("TerminalService", () => {
     await disposing;
 
     expect(pty.operations).toContain("terminate");
-    expect(
-      (await Effect.runPromise(service.list({ kind: "all" }))).terminals,
-    ).toEqual([]);
+    expect((await Effect.runPromise(service.list({ kind: "all" }))).terminals).toEqual([]);
   });
 
   test("reserves task capacity across concurrent terminal creation", async () => {
@@ -1093,8 +953,7 @@ describe("TerminalService", () => {
       canonicalize: (path) =>
         Effect.promise(async () => {
           canonicalizeCount += 1;
-          if (canonicalizeCount === TERMINAL_LIMITS.livePerTask)
-            reportAllCanonicalizing();
+          if (canonicalizeCount === TERMINAL_LIMITS.livePerTask) reportAllCanonicalizing();
           await canonicalizeReleased;
           return `/canonical${path}`;
         }),
@@ -1106,17 +965,15 @@ describe("TerminalService", () => {
       delayedFilesystem,
     );
 
-    const creations = Array.from(
-      { length: TERMINAL_LIMITS.livePerTask + 1 },
-      () =>
-        Effect.runPromise(
-          Effect.either(
-            service.create({
-              workingDir: "/repo",
-              context: { repoPath: "/repo", taskId: "task-1" },
-            }),
-          ),
+    const creations = Array.from({ length: TERMINAL_LIMITS.livePerTask + 1 }, () =>
+      Effect.runPromise(
+        Effect.either(
+          service.create({
+            workingDir: "/repo",
+            context: { repoPath: "/repo", taskId: "task-1" },
+          }),
         ),
+      ),
     );
     await allCanonicalizing;
     releaseCanonicalize();
@@ -1202,11 +1059,8 @@ describe("TerminalService", () => {
     await creating;
     await cleanupAcquired;
     expect(
-      (
-        await Effect.runPromise(
-          service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" }),
-        )
-      ).terminals,
+      (await Effect.runPromise(service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" })))
+        .terminals,
     ).toEqual([]);
 
     shouldDelayCanonicalize = false;
