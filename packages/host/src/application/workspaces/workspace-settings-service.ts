@@ -24,6 +24,7 @@ import {
   withSerializedConfigWrites,
 } from "./workspace-settings-serializer";
 import {
+  assertNoIncompleteRemoval,
   buildMergedRepoConfig,
   ensureRepoPathAvailable,
   findRepoConfigByRepoPath,
@@ -38,16 +39,6 @@ import {
 } from "./workspace-settings-model";
 
 export type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
-
-const assertNoIncompleteRemoval = (workspaceId: string, repoConfig: RepoConfig) =>
-  repoConfig.removal
-    ? Effect.fail(
-        new HostValidationError({
-          message: `Workspace removal is incomplete for ${workspaceId}. Finish the removal before changing repository settings.`,
-          field: "workspaceId",
-        }),
-      )
-    : Effect.void;
 
 const createUnserializedWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,

@@ -27,6 +27,8 @@ test("the task card opens and closes the real detail sheet without leaving chat"
     isSwitchingBranch: false,
     branchSyncDegraded: false,
     workspaces: [],
+    closedWorkspaces: [],
+    incompleteRemovals: [],
     branches: [],
     activeBranch: null,
     activeWorkspace: {
@@ -43,6 +45,12 @@ test("the task card opens and closes the real detail sheet without leaving chat"
     },
     addWorkspace: async () => {},
     selectWorkspace: async () => {},
+    closeWorkspace: async () => {},
+    removeWorkspace: async () => {},
+    reopenWorkspace: async () => {},
+    resolveWorkspacePath: async () => {
+      throw new Error("Unexpected path resolution");
+    },
     reorderWorkspaces: async () => {},
     refreshBranches: async () => {},
     switchBranch: async () => {},
