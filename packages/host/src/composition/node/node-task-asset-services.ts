@@ -19,13 +19,18 @@ import {
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
 import type { OpenDucktorConfigDir } from "../../config/openducktor-config-dir";
 import type { TaskAssetError } from "../../effect/task-asset-error";
-import { sqliteTaskStoreDirectoryPath } from "../../infrastructure/sqlite/sqlite-task-store-path";
+import {
+  sqliteTaskStoreDirectoryPath,
+  TASK_STORE_DATABASE_FILENAME,
+} from "../../infrastructure/sqlite/sqlite-task-store-path";
 import {
   HostOperationError,
   type HostOperationErrorAggregate,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { WorkspaceStoragePort } from "../../ports/workspace-storage-port";
 import type { HostShutdownStep } from "../host-lifecycle";
 import {
   createAssertPermanentRemovalSupported,
@@ -47,6 +52,7 @@ export type NodeTaskAssetServices = {
   assertPermanentRemovalSupported: (
     workspaceId: string,
   ) => Effect.Effect<void, HostOperationErrorAggregate>;
+  workspaceTaskStoreExists: WorkspaceStoragePort["workspaceTaskStoreExists"];
 };
 
 export const createNodeTaskAssetServices = ({
@@ -56,6 +62,7 @@ export const createNodeTaskAssetServices = ({
   isWorkspaceRemovalPending,
   onBackgroundFailure,
   processEnv,
+  settingsConfig,
   withAdministrativeAccess,
   workspaceSettingsService,
 }: {
@@ -69,6 +76,7 @@ export const createNodeTaskAssetServices = ({
   isWorkspaceRemovalPending: (workspaceId: string) => boolean;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv: NodeJS.ProcessEnv;
+  settingsConfig: SettingsConfigPort;
   withAdministrativeAccess: <A, E, R>(
     workspaceIds: readonly string[],
     effect: Effect.Effect<A, E, R>,
@@ -168,6 +176,13 @@ export const createNodeTaskAssetServices = ({
       resolveWorkspaceIdForRepoPath,
     }),
     removeWorkspaceTaskAssets: (workspaceId) => filePort.removeWorkspaceData({ workspaceId }),
+    workspaceTaskStoreExists: (workspaceId) =>
+      settingsConfig.pathExists(
+        settingsConfig.join(
+          sqliteTaskStoreDirectoryPath(configDir.root, workspaceId),
+          TASK_STORE_DATABASE_FILENAME,
+        ),
+      ),
     removeWorkspaceTaskStore: createRemoveWorkspaceTaskStore({
       closeWorkspace: (workspaceId) => contextManager.closeWorkspace(workspaceId),
       configuredTaskStore,

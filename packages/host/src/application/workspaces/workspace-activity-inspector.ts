@@ -1,20 +1,13 @@
 import { Effect } from "effect";
-import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
+import type {
+  WorkspaceActivityBlocker,
+  WorkspaceActivityPort,
+} from "../../ports/workspace-activity-port";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { DevServerService } from "../dev-servers/dev-server-service-types";
 import type { TerminalService } from "../terminals/terminal-service";
-
-export type WorkspaceActivityBlocker = {
-  kind: "agent-session" | "dev-server" | "terminal";
-  label: string;
-};
-
-export type WorkspaceActivityPort = {
-  inspect(repoPath: string): Effect.Effect<WorkspaceActivityBlocker[], HostOperationErrorAggregate>;
-  releaseWorkspaceSessions(repoPath: string): Effect.Effect<void, HostOperationErrorAggregate>;
-  releaseWorkspaceRuntimes(repoPath: string): Effect.Effect<void, HostOperationErrorAggregate>;
-};
 
 const toHostOperationError = (operation: string, message: string, cause: unknown) =>
   new HostOperationError({

@@ -56,19 +56,6 @@ export function useRepoSettingsOperations({
   const queryClient = useQueryClient();
   const settingsSnapshotQueryKey = settingsSnapshotQueryOptions().queryKey;
 
-  const syncWorkspaceListRecord = useCallback(
-    (workspace: WorkspaceRecord): void => {
-      queryClient.setQueryData(
-        workspaceQueryKeys.list(),
-        (current: WorkspaceRecord[] | undefined) =>
-          current?.map((entry) =>
-            entry.workspaceId === workspace.workspaceId ? workspace : entry,
-          ) ?? current,
-      );
-    },
-    [queryClient],
-  );
-
   const toConfigDefault = useCallback(
     (role: keyof RepoSettingsInput["agentDefaults"], entry: RepoAgentDefaultInput | null) => {
       return normalizeRepoAgentDefaultForSave(role, entry);
@@ -143,17 +130,9 @@ export function useRepoSettingsOperations({
         queryKey: settingsSnapshotQueryKey,
         exact: true,
       });
-      syncWorkspaceListRecord(workspace);
       applyWorkspaceRecord(workspace);
     },
-    [
-      activeWorkspace,
-      applyWorkspaceRecord,
-      queryClient,
-      settingsSnapshotQueryKey,
-      syncWorkspaceListRecord,
-      toConfigDefault,
-    ],
+    [activeWorkspace, applyWorkspaceRecord, queryClient, settingsSnapshotQueryKey, toConfigDefault],
   );
 
   const loadSettingsSnapshot = useCallback(async (): Promise<SettingsSnapshot> => {
@@ -194,7 +173,6 @@ export function useRepoSettingsOperations({
           queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
         });
       }
-      queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
       const savedActiveWorkspace = workspaces.find((workspace) => workspace.isActive);
       if (changes.kanbanDoneVisibleDaysChanged) {

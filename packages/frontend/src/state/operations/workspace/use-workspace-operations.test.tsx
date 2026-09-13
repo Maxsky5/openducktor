@@ -10,21 +10,24 @@ import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
+import type { host } from "../shared/host";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
 enableReactActEnvironment();
 
 type WorkspaceHostClient = NonNullable<Parameters<typeof useWorkspaceOperations>[0]["hostClient"]>;
 type SettingsSnapshotHostClient = NonNullable<Parameters<typeof settingsSnapshotQueryOptions>[0]>;
-type WorkspaceIntegrationHostClient = WorkspaceHostClient & SettingsSnapshotHostClient;
+type WorkspaceIntegrationHostClient = WorkspaceHostClient &
+  SettingsSnapshotHostClient &
+  Pick<typeof host, "workspaceList">;
 
-const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient =>
-  ({
+const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient => {
+  const client: WorkspaceIntegrationHostClient = {
     workspaceList: async () => [],
     workspaceAdd: async (input) => workspace(input.repoPath),
     workspaceSelect: async (repoPath: string) => workspace(repoPath, true),
     workspaceCatalogGet: async () => ({
-      openWorkspaces: [],
+      openWorkspaces: await client.workspaceList(),
       closedWorkspaces: [],
       incompleteRemovals: [],
       onboardingCompleted: false,
@@ -65,7 +68,9 @@ const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient =>
     gitSwitchBranch: async () => {
       throw new Error("gitSwitchBranch not configured");
     },
-  }) satisfies WorkspaceIntegrationHostClient;
+  };
+  return client;
+};
 
 let workspaceHost = createWorkspaceHostClient();
 
@@ -962,8 +967,18 @@ describe("use-workspace-operations", () => {
 
   test("keeps switched repo active when workspace refresh fails after a successful switch", async () => {
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-a", true));
-    const workspaceList = mock(async (): Promise<WorkspaceRecord[]> => {
-      throw new Error("workspace list failed");
+    let catalogReadCount = 0;
+    const workspaceCatalogGet = mock(async () => {
+      catalogReadCount += 1;
+      if (catalogReadCount === 1) {
+        return {
+          openWorkspaces: [workspace("/repo-old", true), workspace("/repo-a", false)],
+          closedWorkspaces: [],
+          incompleteRemovals: [],
+          onboardingCompleted: true,
+        };
+      }
+      throw new Error("workspace catalog failed");
     });
     const gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -983,11 +998,11 @@ describe("use-workspace-operations", () => {
     ]);
 
     const originalWorkspaceSelect = workspaceHost.workspaceSelect;
-    const originalWorkspaceList = workspaceHost.workspaceList;
+    const originalWorkspaceCatalogGet = workspaceHost.workspaceCatalogGet;
     const originalGitGetCurrentBranch = workspaceHost.gitGetCurrentBranch;
     const originalGitGetBranches = workspaceHost.gitGetBranches;
     workspaceHost.workspaceSelect = workspaceSelect;
-    workspaceHost.workspaceList = workspaceList;
+    workspaceHost.workspaceCatalogGet = workspaceCatalogGet;
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
     workspaceHost.gitGetBranches = gitGetBranches;
 
@@ -1009,19 +1024,9 @@ describe("use-workspace-operations", () => {
       });
       const { refreshBranches } = value;
       const previousRepoRef = useRef(activeWorkspace?.repoPath ?? null);
-      const hasSeededWorkspacesRef = useRef(false);
 
       latest = value;
       latestActiveRepo = activeWorkspace?.repoPath ?? null;
-
-      useEffect(() => {
-        if (hasSeededWorkspacesRef.current) {
-          return;
-        }
-
-        hasSeededWorkspacesRef.current = true;
-        value.applyWorkspaceRecords([workspace("/repo-old", true), workspace("/repo-a", false)]);
-      }, [value]);
 
       useEffect(() => {
         const activeRepo = activeWorkspace?.repoPath ?? null;
@@ -1066,7 +1071,7 @@ describe("use-workspace-operations", () => {
       expect(gitGetCurrentBranch).toHaveBeenCalledWith("/repo-a");
       expect(gitGetBranches).toHaveBeenCalledWith("/repo-a");
       expect(toastError).toHaveBeenCalledWith("Repository switched, but workspace refresh failed", {
-        description: "workspace list failed",
+        description: "workspace catalog failed",
       });
 
       if (!latest) {
@@ -1097,7 +1102,7 @@ describe("use-workspace-operations", () => {
     } finally {
       unmount();
       workspaceHost.workspaceSelect = originalWorkspaceSelect;
-      workspaceHost.workspaceList = originalWorkspaceList;
+      workspaceHost.workspaceCatalogGet = originalWorkspaceCatalogGet;
       workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
       workspaceHost.gitGetBranches = originalGitGetBranches;
       toastError.mockRestore();

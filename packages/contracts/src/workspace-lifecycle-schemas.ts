@@ -1,6 +1,24 @@
 import { z } from "zod";
 import { workspaceRecordSchema } from "./git-schemas";
 
+const requiredWorkspaceInputStringSchema = z.string().trim().min(1);
+
+export const workspaceLifecycleTargetInputSchema = z.object({
+  workspaceId: requiredWorkspaceInputStringSchema,
+  expectedRepoPath: requiredWorkspaceInputStringSchema,
+});
+export type WorkspaceLifecycleTargetInput = z.infer<typeof workspaceLifecycleTargetInputSchema>;
+
+export const workspaceRemovalInputSchema = workspaceLifecycleTargetInputSchema.extend({
+  removeTaskWorktrees: z.boolean(),
+});
+export type WorkspaceRemovalInput = z.infer<typeof workspaceRemovalInputSchema>;
+
+export const workspaceResolvePathInputSchema = z.object({
+  repoPath: requiredWorkspaceInputStringSchema,
+});
+export type WorkspaceResolvePathInput = z.infer<typeof workspaceResolvePathInputSchema>;
+
 export const workspaceRemovalPhaseSchema = z.enum(["worktrees", "attachments", "task_store"]);
 export type WorkspaceRemovalPhase = z.infer<typeof workspaceRemovalPhaseSchema>;
 

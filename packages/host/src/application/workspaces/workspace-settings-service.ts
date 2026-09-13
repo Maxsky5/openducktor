@@ -414,7 +414,7 @@ const createUnserializedWorkspaceSettingsService = (
 
 export const createWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
-  ownershipLock?: WorkspaceOwnershipLock,
+  ownershipLock: WorkspaceOwnershipLock,
 ): WorkspaceSettingsService =>
   withSerializedConfigWrites(
     createUnserializedWorkspaceSettingsService(settingsConfig),

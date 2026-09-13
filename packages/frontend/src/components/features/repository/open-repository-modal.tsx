@@ -18,12 +18,16 @@ type OpenRepositoryModalProps = {
   open: boolean;
   canClose: boolean;
   onOpenChange: (open: boolean) => void;
+  isLoadingWorkspaces?: boolean;
+  workspaceLoadError?: Error | null;
 };
 
 export function OpenRepositoryModal({
   open,
   canClose,
   onOpenChange,
+  isLoadingWorkspaces = false,
+  workspaceLoadError = null,
 }: OpenRepositoryModalProps): ReactElement {
   const {
     workspaces,
@@ -103,9 +107,13 @@ export function OpenRepositoryModal({
             <h3 id="closed-workspaces-title" className="text-sm font-semibold text-foreground">
               Closed workspaces
             </h3>
-            {closedWorkspaces.length === 0 ? (
+            {isLoadingWorkspaces && closedWorkspaces.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Loading closed workspaces...</p>
+            ) : null}
+            {!isLoadingWorkspaces && closedWorkspaces.length === 0 && !workspaceLoadError ? (
               <p className="text-sm text-muted-foreground">No closed workspaces</p>
-            ) : (
+            ) : null}
+            {closedWorkspaces.length > 0 ? (
               <div className="grid gap-2 sm:grid-cols-2">
                 {closedWorkspaces.map((workspace) => (
                   <Button
@@ -125,7 +133,12 @@ export function OpenRepositoryModal({
                   </Button>
                 ))}
               </div>
-            )}
+            ) : null}
+            {workspaceLoadError ? (
+              <p className="text-sm text-destructive" role="alert">
+                Closed workspaces could not be loaded: {workspaceLoadError.message}
+              </p>
+            ) : null}
             {selectionError ? (
               <p className="text-sm text-destructive" role="alert">
                 {selectionError}

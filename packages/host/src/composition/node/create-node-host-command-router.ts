@@ -139,6 +139,7 @@ export const assembleNodeEffectHostCommandRouter = (
     isWorkspaceRemovalPending: workspaceAdmissionService.isWorkspaceRemovalPending,
     onBackgroundFailure,
     processEnv,
+    settingsConfig,
     withAdministrativeAccess: workspaceAdmissionService.withAdministrativeAccess,
     workspaceSettingsService,
   });
@@ -307,6 +308,7 @@ export const assembleNodeEffectHostCommandRouter = (
     settingsConfig,
     storage: {
       assertPermanentRemovalSupported: assets.assertPermanentRemovalSupported,
+      workspaceTaskStoreExists: assets.workspaceTaskStoreExists,
       removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
       removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
     },

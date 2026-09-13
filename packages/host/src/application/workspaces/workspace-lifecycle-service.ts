@@ -1,12 +1,13 @@
 import type {
   RepoConfig,
   WorkspaceCatalog,
+  WorkspaceLifecycleTargetInput,
   WorkspaceRemovalCommandResult,
+  WorkspaceRemovalInput,
   WorkspaceRemovalPhase,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
-import type { TaskAssetError } from "../../effect/task-asset-error";
 import {
   errorMessage,
   HostOperationError,
@@ -18,12 +19,13 @@ import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { SettingsConfigPort, SettingsConfigError } from "../../ports/settings-config-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
-import { removeWorktreeAndFilesystemPath } from "../git/worktree-removal";
-import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
 import type {
   WorkspaceActivityBlocker,
   WorkspaceActivityPort,
-} from "./workspace-activity-inspector";
+} from "../../ports/workspace-activity-port";
+import type { WorkspaceStoragePort } from "../../ports/workspace-storage-port";
+import { removeWorktreeAndFilesystemPath } from "../git/worktree-removal";
+import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { WorkspaceOwnershipLock } from "./workspace-ownership-lock";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
@@ -42,28 +44,16 @@ export type WorkspaceLifecycleError =
   | WorkspaceSettingsError
   | WorkspaceWorktreeInventoryError;
 
-export type WorkspaceStoragePort = {
-  assertPermanentRemovalSupported(
-    workspaceId: string,
-  ): Effect.Effect<void, HostOperationErrorAggregate>;
-  removeWorkspaceTaskAssets(workspaceId: string): Effect.Effect<void, TaskAssetError>;
-  removeWorkspaceTaskStore(workspaceId: string): Effect.Effect<void, HostOperationErrorAggregate>;
-};
-
 export type WorkspaceLifecycleService = {
-  closeWorkspace(input: {
-    workspaceId: string;
-    expectedRepoPath: string;
-  }): Effect.Effect<WorkspaceCatalog, WorkspaceLifecycleError>;
-  reopenWorkspace(input: {
-    workspaceId: string;
-    expectedRepoPath: string;
-  }): Effect.Effect<WorkspaceCatalog, WorkspaceLifecycleError>;
-  removeWorkspace(input: {
-    workspaceId: string;
-    expectedRepoPath: string;
-    removeTaskWorktrees: boolean;
-  }): Effect.Effect<WorkspaceRemovalCommandResult, WorkspaceLifecycleError>;
+  closeWorkspace(
+    input: WorkspaceLifecycleTargetInput,
+  ): Effect.Effect<WorkspaceCatalog, WorkspaceLifecycleError>;
+  reopenWorkspace(
+    input: WorkspaceLifecycleTargetInput,
+  ): Effect.Effect<WorkspaceCatalog, WorkspaceLifecycleError>;
+  removeWorkspace(
+    input: WorkspaceRemovalInput,
+  ): Effect.Effect<WorkspaceRemovalCommandResult, WorkspaceLifecycleError>;
 };
 
 type CreateWorkspaceLifecycleServiceInput = {
@@ -200,14 +190,7 @@ export const createWorkspaceLifecycleService = ({
       );
     });
 
-  const executeRemoval = (
-    input: {
-      workspaceId: string;
-      expectedRepoPath: string;
-      removeTaskWorktrees: boolean;
-    },
-    repoConfig: RepoConfig,
-  ) =>
+  const executeRemoval = (input: WorkspaceRemovalInput, repoConfig: RepoConfig) =>
     Effect.gen(function* () {
       yield* storage.assertPermanentRemovalSupported(input.workspaceId);
       if (!repoConfig.removal) {
@@ -250,7 +233,13 @@ export const createWorkspaceLifecycleService = ({
               ...catalog.incompleteRemovals.map((removal) => removal.workspace.workspaceId),
             ],
             collectWorkspaceTaskWorktreePaths(
-              { gitPort, settingsConfig, taskStore, workspaceSettingsService },
+              {
+                gitPort,
+                settingsConfig,
+                taskStore,
+                workspaceSettingsService,
+                workspaceTaskStoreExists: storage.workspaceTaskStoreExists,
+              },
               journaledRepoConfig,
               pendingWorktreePath,
             ),

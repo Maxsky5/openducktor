@@ -17,8 +17,9 @@ import { createWorkspaceOwnershipLock } from "./workspace-ownership-lock";
 import { createWorkspaceSettingsService as createEffectWorkspaceSettingsService } from "./workspace-settings-service";
 
 const createWorkspaceSettingsService = (
-  ...args: Parameters<typeof createEffectWorkspaceSettingsService>
-) => createEffectWorkspaceSettingsService(...args);
+  settingsConfig: SettingsConfigPort,
+  ownershipLock = createWorkspaceOwnershipLock(),
+) => createEffectWorkspaceSettingsService(settingsConfig, ownershipLock);
 type FakeSettingsConfigPort = SettingsConfigPort & {
   writtenConfigs: GlobalConfig[];
 };

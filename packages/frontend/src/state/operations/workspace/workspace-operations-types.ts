@@ -27,7 +27,6 @@ export type WorkspaceSelectionOperationsHostClient = Pick<
   | "workspaceAdd"
   | "workspaceCatalogGet"
   | "workspaceClose"
-  | "workspaceList"
   | "workspaceRemove"
   | "workspaceReopen"
   | "workspaceReorder"

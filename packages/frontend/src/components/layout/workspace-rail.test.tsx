@@ -201,6 +201,9 @@ describe("WorkspaceRail", () => {
         removeTaskWorktrees: true,
       }),
     );
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Open repository" })),
+    );
   });
 
   test("keeps buttons interactive-looking while a workspace switch is pending", () => {
