@@ -329,9 +329,12 @@ export function useWorkspaceSelectionOperations({
     applyWorkspaceRecords(data);
   }, [applyWorkspaceRecords, hostClient, queryClient]);
 
-  const refreshWorkspaceCachesAfterMutation = useCallback(async (): Promise<void> => {
-    await markWorkspaceCachesChanged(queryClient);
-  }, [queryClient]);
+  const refreshWorkspaceCachesAfterMutation = useCallback(
+    async (options?: { throwOnError?: boolean }): Promise<void> => {
+      await markWorkspaceCachesChanged(queryClient, options);
+    },
+    [queryClient],
+  );
 
   const addWorkspace = useCallback(
     async (input: WorkspaceSelectionOperationsInput): Promise<void> => {
@@ -350,7 +353,13 @@ export function useWorkspaceSelectionOperations({
       }
       const workspace = await hostClient.workspaceAdd(workspaceInput);
       applyWorkspaceRecord(workspace);
-      await refreshWorkspaceCachesAfterMutation();
+      try {
+        await refreshWorkspaceCachesAfterMutation({ throwOnError: true });
+      } catch (refreshCause) {
+        toast.error("Workspace refresh failed", {
+          description: errorMessage(refreshCause),
+        });
+      }
       toast.success("Repository added", {
         description: workspace.repoPath,
       });
@@ -422,7 +431,7 @@ export function useWorkspaceSelectionOperations({
           result = await run();
         } catch (cause) {
           try {
-            await refreshWorkspaceCachesAfterMutation();
+            await refreshWorkspaceCachesAfterMutation({ throwOnError: true });
           } catch (refreshCause) {
             toast.error("Workspace refresh failed", {
               description: errorMessage(refreshCause),
@@ -431,7 +440,7 @@ export function useWorkspaceSelectionOperations({
           throw cause;
         }
         try {
-          await refreshWorkspaceCachesAfterMutation();
+          await refreshWorkspaceCachesAfterMutation({ throwOnError: true });
         } catch (refreshCause) {
           toast.error("Workspace refresh failed", {
             description: errorMessage(refreshCause),

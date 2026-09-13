@@ -164,6 +164,7 @@ describe("use-workspace-selection-operations", () => {
       if (listCalls === 1) return [];
       throw new Error("Workspace refresh failed");
     });
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
     const harness = createSelectionHarness({
       activeRepo: null,
       setActiveRepo,
@@ -186,8 +187,12 @@ describe("use-workspace-selection-operations", () => {
 
       expect(harness.getLatest().workspaces).toEqual([addedWorkspace]);
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-new");
+      expect(toastError).toHaveBeenCalledWith("Workspace refresh failed", {
+        description: "Workspace refresh failed",
+      });
     } finally {
       await harness.unmount();
+      toastError.mockRestore();
     }
   });
 
@@ -655,6 +660,66 @@ describe("use-workspace-selection-operations", () => {
       });
       expect(toastSuccess).toHaveBeenCalledWith("Workspace removed", {
         description: "Removed 1 task worktree(s). The repository and its branches remain.",
+      });
+    } finally {
+      await harness.unmount();
+      toastError.mockRestore();
+      toastSuccess.mockRestore();
+    }
+  });
+
+  test("reports a workspace refresh failure from the real query invalidation", async () => {
+    workspaceHost.workspaceRemove = mock(async () => ({
+      catalog: {
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+        onboardingCompleted: true,
+      },
+      removedWorktrees: [],
+    }));
+    let catalogCalls = 0;
+    workspaceHost.workspaceCatalogGet = mock(async () => {
+      catalogCalls += 1;
+      if (catalogCalls === 1) {
+        return {
+          openWorkspaces: [workspace("/repo", true)],
+          closedWorkspaces: [],
+          incompleteRemovals: [],
+          onboardingCompleted: true,
+        };
+      }
+      throw new Error("catalog refresh failed");
+    });
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+    const toastError = spyOn(toast, "error").mockImplementation(() => "");
+    const toastSuccess = spyOn(toast, "success").mockImplementation(() => "");
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => !state.isLoadingWorkspaces);
+
+      await expect(
+        harness.run((value) =>
+          value.removeWorkspace({
+            workspaceId: "repo",
+            expectedRepoPath: "/repo",
+            removeTaskWorktrees: false,
+          }),
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(toastError).toHaveBeenCalledWith("Workspace refresh failed", {
+        description: "catalog refresh failed",
+      });
+      expect(toastSuccess).toHaveBeenCalledWith("Workspace removed", {
+        description: "The repository and its branches remain.",
       });
     } finally {
       await harness.unmount();
