@@ -1,9 +1,12 @@
 import {
   agentSessionLiveSnapshotSchema,
+  RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentSessionLiveSnapshot,
+  type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import { createWorkspaceActivityInspector } from "./workspace-activity-inspector";
 
 const snapshot = (
@@ -25,12 +28,30 @@ const snapshot = (
     contextUsage: null,
   });
 
+const runtime = (runtimeId: string): RuntimeInstanceSummary => ({
+  kind: "opencode",
+  runtimeId,
+  repoPath: "/repo",
+  taskId: null,
+  role: "workspace",
+  workingDirectory: "/repo",
+  runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
+  startedAt: "2026-01-01T00:00:00.000Z",
+  descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+});
+
 const createInspector = ({
-  sessions = [],
   onRelease,
+  onStopRuntime,
+  runtimes = [],
+  sessions = [],
+  stopRuntimeError,
 }: {
-  sessions?: AgentSessionLiveSnapshot[];
   onRelease?: (externalSessionId: string) => void;
+  onStopRuntime?: (runtimeId: string) => void;
+  runtimes?: RuntimeInstanceSummary[];
+  sessions?: AgentSessionLiveSnapshot[];
+  stopRuntimeError?: HostOperationError;
 } = {}) =>
   createWorkspaceActivityInspector({
     agentSessionLiveStateService: {
@@ -42,6 +63,13 @@ const createInspector = ({
     },
     devServerService: {
       inspectWorkspaceActivity: () => Effect.succeed({ activeTaskIds: [] }),
+    },
+    runtimeRegistry: {
+      listRuntimesByRepo: () => Effect.succeed(runtimes),
+      stopRuntime: (runtimeId) => {
+        onStopRuntime?.(runtimeId);
+        return stopRuntimeError ? Effect.fail(stopRuntimeError) : Effect.succeed(true);
+      },
     },
     terminalService: {
       inspectWorkspaceActivity: () =>
@@ -76,5 +104,33 @@ describe("workspace activity inspector", () => {
     await Effect.runPromise(inspector.releaseWorkspaceSessions("/repo"));
 
     expect(released).toEqual(["s1", "s2"]);
+  });
+
+  test("stops every runtime for the workspace", async () => {
+    const stopped: string[] = [];
+    const inspector = createInspector({
+      runtimes: [runtime("runtime-1"), runtime("runtime-2")],
+      onStopRuntime: (runtimeId) => stopped.push(runtimeId),
+    });
+
+    await Effect.runPromise(inspector.releaseWorkspaceRuntimes("/repo"));
+
+    expect(stopped).toEqual(["runtime-1", "runtime-2"]);
+  });
+
+  test("fails with the runtime id when a runtime stop fails", async () => {
+    const inspector = createInspector({
+      runtimes: [runtime("runtime-1")],
+      stopRuntimeError: new HostOperationError({
+        operation: "test.stopRuntime",
+        message: "runtime is stuck",
+      }),
+    });
+
+    const error = await Effect.runPromise(Effect.flip(inspector.releaseWorkspaceRuntimes("/repo")));
+
+    expect(error.message).toContain("runtime-1");
+    expect(error.message).toContain("/repo");
+    expect(error.message).toContain("Retry removal");
   });
 });

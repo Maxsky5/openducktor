@@ -222,6 +222,7 @@ export const createWorkspaceLifecycleService = ({
         yield* admission.awaitWorkStarts(repoConfig.repoPath);
       }
       yield* activity.releaseWorkspaceSessions(repoConfig.repoPath);
+      yield* activity.releaseWorkspaceRuntimes(repoConfig.repoPath);
       const { record: startedRecord, repoConfig: journaledRepoConfig } =
         yield* workspaceSettingsService.beginWorkspaceRemoval({
           workspaceId: input.workspaceId,

@@ -117,6 +117,31 @@ describe("task asset workspace admission", () => {
     expect(resolved).toBe(2);
   });
 
+  test("rejects staging when the workspace resolves to a different repository", async () => {
+    let resolved = 0;
+    let staged = false;
+    const guarded = withTaskAssetWorkspaceAdmission({
+      admission: createAdmissionDouble({}),
+      resolveRepoPath: () => {
+        resolved += 1;
+        return resolved === 1 ? Effect.succeed("/repos/a") : Effect.succeed("/repos/b");
+      },
+      service: createStagingDouble({
+        stage: () =>
+          Effect.sync(() => {
+            staged = true;
+            return stageResult;
+          }),
+      }),
+    });
+
+    const error = await Effect.runPromise(Effect.flip(guarded.stage(stageInput)));
+
+    expect(error.message).toContain("changed while the upload was in progress");
+    expect(staged).toBe(false);
+    expect(resolved).toBe(2);
+  });
+
   test("rejects staging when the workspace admission fails", async () => {
     let staged = false;
     const guarded = withTaskAssetWorkspaceAdmission({

@@ -102,14 +102,17 @@ const createTaskStoreDouble = (
 const noActivity: WorkspaceActivityPort = {
   inspect: () => Effect.succeed([]),
   releaseWorkspaceSessions: () => Effect.void,
+  releaseWorkspaceRuntimes: () => Effect.void,
 };
 
 const activityWith = (
   blockers: Array<{ kind: "agent-session" | "dev-server" | "terminal"; label: string }>,
   releaseWorkspaceSessions: WorkspaceActivityPort["releaseWorkspaceSessions"] = () => Effect.void,
+  releaseWorkspaceRuntimes: WorkspaceActivityPort["releaseWorkspaceRuntimes"] = () => Effect.void,
 ): WorkspaceActivityPort => ({
   inspect: () => Effect.succeed(blockers),
   releaseWorkspaceSessions,
+  releaseWorkspaceRuntimes,
 });
 
 const createAdmissionDouble = (): Pick<
@@ -298,7 +301,11 @@ describe("workspace lifecycle service", () => {
     const inspect = mock(() => Effect.succeed([]));
     const expected = catalog();
     const service = createService({
-      activity: { inspect, releaseWorkspaceSessions: () => Effect.void },
+      activity: {
+        inspect,
+        releaseWorkspaceSessions: () => Effect.void,
+        releaseWorkspaceRuntimes: () => Effect.void,
+      },
       getRepoConfig: () => Effect.succeed(repoConfig({ closed: true })),
       getWorkspaceCatalog: () => Effect.succeed(expected),
     });
@@ -629,6 +636,67 @@ describe("workspace lifecycle service", () => {
     );
 
     expect(removeWorkspaceTaskAssets).toHaveBeenCalled();
+  });
+
+  test("removeWorkspace releases workspace runtimes after sessions and before the removal record", async () => {
+    const calls: string[] = [];
+    const service = createService({
+      activity: {
+        inspect: () => Effect.succeed([]),
+        releaseWorkspaceSessions: () =>
+          Effect.sync(() => {
+            calls.push("sessions");
+          }),
+        releaseWorkspaceRuntimes: (repoPath) =>
+          Effect.sync(() => {
+            calls.push(`runtimes:${repoPath}`);
+          }),
+      },
+      beginWorkspaceRemoval: (input) => {
+        calls.push("beginRemoval");
+        return Effect.succeed({
+          record: removalRecord({
+            removeTaskWorktrees: input.removeTaskWorktrees,
+            phase: "task_store",
+          }),
+          repoConfig: repoConfig(),
+        });
+      },
+    });
+
+    await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(calls).toEqual(["sessions", "runtimes:/repos/ws", "beginRemoval"]);
+  });
+
+  test("removeWorkspace releases workspace runtimes on a resumed removal", async () => {
+    const releaseWorkspaceRuntimes = mock((_repoPath: string) => Effect.void);
+    const service = createService({
+      activity: { ...noActivity, releaseWorkspaceRuntimes },
+      getRepoConfig: () =>
+        Effect.succeed(repoConfig({ removal: removalRecord({ phase: "attachments" }) })),
+      beginWorkspaceRemoval: () =>
+        Effect.succeed({
+          record: removalRecord({ phase: "attachments" }),
+          repoConfig: repoConfig(),
+        }),
+    });
+
+    await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    expect(releaseWorkspaceRuntimes).toHaveBeenCalledWith("/repos/ws");
   });
 
   test("matches inventory paths after canonicalization", async () => {
@@ -1252,6 +1320,7 @@ describe("workspace lifecycle service", () => {
           return Effect.succeed([]);
         },
         releaseWorkspaceSessions: () => Effect.void,
+        releaseWorkspaceRuntimes: () => Effect.void,
       },
       admission: {
         ...createAdmissionDouble(),
