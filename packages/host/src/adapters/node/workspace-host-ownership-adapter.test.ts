@@ -4,7 +4,10 @@ import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
-import { createNodeWorkspaceHostOwnership } from "./workspace-host-ownership-adapter";
+import {
+  createNodeWorkspaceHostOwnership,
+  createNodeWorkspaceOwnershipLock,
+} from "./workspace-host-ownership-adapter";
 
 const ownerPathFor = (configDir: string, workspaceId: string): string =>
   path.join(
@@ -14,6 +17,67 @@ const ownerPathFor = (configDir: string, workspaceId: string): string =>
   );
 
 describe("node workspace host ownership", () => {
+  test("prevents workspace path ownership changes across host processes", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
+    const hostRoot = path.resolve(import.meta.dir, "../../..");
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "-e",
+        `import { Effect } from "effect";
+import { createNodeWorkspaceOwnershipLock } from "./src/adapters/node/workspace-host-ownership-adapter.ts";
+const ownershipLock = createNodeWorkspaceOwnershipLock();
+await Effect.runPromise(ownershipLock.runExclusive(
+  Effect.sync(() => console.log("locked")).pipe(Effect.zipRight(Effect.never)),
+));`,
+      ],
+      cwd: hostRoot,
+      env: { ...process.env, OPENDUCKTOR_CONFIG_DIR: configDir },
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    try {
+      const reader = child.stdout.getReader();
+      const firstOutput = await reader.read();
+      expect(new TextDecoder().decode(firstOutput.value)).toContain("locked");
+
+      const ownershipLock = createNodeWorkspaceOwnershipLock({
+        processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir },
+      });
+      await expect(Effect.runPromise(ownershipLock.runExclusive(Effect.void))).rejects.toThrow(
+        "Another OpenDucktor host owns the workspace path lock",
+      );
+    } finally {
+      child.kill();
+      await child.exited;
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
+  test("releases workspace path ownership after the protected effect fails", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
+    const ownershipLock = createNodeWorkspaceOwnershipLock({
+      processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir },
+    });
+
+    try {
+      const result = await Effect.runPromise(
+        ownershipLock.runExclusive(Effect.fail("expected failure")).pipe(Effect.either),
+      );
+      expect(result._tag).toBe("Left");
+      if (result._tag === "Left") {
+        expect(result.left).toBe("expected failure");
+      }
+      await expect(
+        Effect.runPromise(ownershipLock.runExclusive(Effect.void)),
+      ).resolves.toBeUndefined();
+    } finally {
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
   test("rejects a workspace claimed by another live process", async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
     const hostRoot = path.resolve(import.meta.dir, "../../..");
@@ -85,6 +149,59 @@ setInterval(() => {}, 60_000);`,
         processIsAlive: () => false,
         processStartedAtMs: async () => {
           throw new Error("A dead owner must not need a start-time probe.");
+        },
+      },
+    );
+
+    try {
+      await expect(
+        Effect.runPromise(ownership.claimWorkspace(workspaceId)),
+      ).resolves.toBeUndefined();
+      await expect(Effect.runPromise(ownership.releaseAll())).resolves.toBeUndefined();
+    } finally {
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
+  test("reports a fresh claim whose owner record is missing", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
+    const workspaceId = "workspace-1";
+    const ownerPath = ownerPathFor(configDir, workspaceId);
+    await mkdir(`${ownerPath}.lock`, { recursive: true });
+    const ownership = createNodeWorkspaceHostOwnership({
+      processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir },
+    });
+
+    try {
+      await expect(Effect.runPromise(ownership.claimWorkspace(workspaceId))).rejects.toThrow(
+        `stopped while publishing ownership for workspace ${workspaceId}. Wait 30 seconds and retry`,
+      );
+    } finally {
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
+  test("recovers a stale claim whose owner record is missing", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
+    const workspaceId = "workspace-1";
+    const ownerPath = ownerPathFor(configDir, workspaceId);
+    const lockPath = `${ownerPath}.lock`;
+    await mkdir(lockPath, { recursive: true });
+    const staleTime = new Date(Date.now() - 31_000);
+    await utimes(lockPath, staleTime, staleTime);
+    const ownership = createNodeWorkspaceHostOwnership(
+      { processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir } },
+      {
+        identity: {
+          instanceId: "00000000-0000-4000-8000-000000000002",
+          processId: 41_002,
+          startedAtMs: 2_000,
+        },
+        processIsAlive: () => {
+          throw new Error("A missing owner record must not need a process probe.");
+        },
+        processStartedAtMs: async () => {
+          throw new Error("A missing owner record must not need a start-time probe.");
         },
       },
     );

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import { lock as acquireFileLock } from "proper-lockfile";
 import { z } from "zod";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
@@ -17,6 +17,7 @@ import {
 } from "../../infrastructure/process/process-start-time";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 import type { WorkspaceHostOwnershipPort } from "../../ports/workspace-host-ownership-port";
+import type { WorkspaceOwnershipLock } from "../../application/workspaces/workspace-ownership-lock";
 
 const OWNER_LOCK_STALE_MS = 7 * 24 * 60 * 60 * 1_000;
 const DEAD_OWNER_LOCK_STALE_MS = 30_000;
@@ -88,6 +89,20 @@ const readOwner = async (ownerPath: string, workspaceId: string): Promise<Worksp
   return result.data;
 };
 
+const readOwnerIfPresent = async (
+  ownerPath: string,
+  workspaceId: string,
+): Promise<WorkspaceHostOwner | null> => {
+  try {
+    return await readOwner(ownerPath, workspaceId);
+  } catch (cause) {
+    if (cause instanceof HostOperationError && errorCode(cause.cause) === "ENOENT") {
+      return null;
+    }
+    throw cause;
+  }
+};
+
 const ownerIsAlive = async (
   owner: WorkspaceHostOwner,
   dependencies: WorkspaceHostOwnershipDependencies,
@@ -114,6 +129,21 @@ const acquireLock = (ownerPath: string, stale: number) =>
     retries: 0,
     stale,
     update: Math.min(60_000, stale / 3),
+  });
+
+const recoveryError = (
+  workspaceId: string,
+  ownerPath: string,
+  owner: WorkspaceHostOwner | null,
+  cause: unknown,
+) =>
+  new HostOperationError({
+    operation: "workspaceHostOwnership.recover",
+    message: owner
+      ? `The previous OpenDucktor host for workspace ${workspaceId} stopped recently. Wait 30 seconds and retry.`
+      : `An OpenDucktor host stopped while publishing ownership for workspace ${workspaceId}. Wait 30 seconds and retry.`,
+    cause,
+    details: { owner, ownerPath, workspaceId },
   });
 
 const mapClaimError = (
@@ -161,8 +191,8 @@ export const createNodeWorkspaceHostOwnership = (
             if (errorCode(cause) !== "ELOCKED") {
               throw cause;
             }
-            const existingOwner = await readOwner(ownerPath, workspaceId);
-            if (await ownerIsAlive(existingOwner, dependencies)) {
+            const existingOwner = await readOwnerIfPresent(ownerPath, workspaceId);
+            if (existingOwner && (await ownerIsAlive(existingOwner, dependencies))) {
               throw new HostValidationError({
                 message: `Workspace ${workspaceId} is in use by another OpenDucktor host process (${existingOwner.processId}). Close that OpenDucktor instance and retry.`,
                 field: "workspaceId",
@@ -173,12 +203,7 @@ export const createNodeWorkspaceHostOwnership = (
               release = await acquireLock(ownerPath, DEAD_OWNER_LOCK_STALE_MS);
             } catch (staleCause) {
               if (errorCode(staleCause) === "ELOCKED") {
-                throw new HostOperationError({
-                  operation: "workspaceHostOwnership.recover",
-                  message: `The previous OpenDucktor host for workspace ${workspaceId} stopped recently. Wait 30 seconds and retry.`,
-                  cause: staleCause,
-                  details: { owner: existingOwner, ownerPath, workspaceId },
-                });
+                throw recoveryError(workspaceId, ownerPath, existingOwner, staleCause);
               }
               throw staleCause;
             }
@@ -246,6 +271,65 @@ export const createNodeWorkspaceHostOwnership = (
             );
           }
         }),
+      ),
+  };
+};
+
+export const createNodeWorkspaceOwnershipLock = ({
+  processEnv = process.env,
+}: {
+  processEnv?: NodeJS.ProcessEnv;
+} = {}): WorkspaceOwnershipLock => {
+  const ownersRoot = path.join(resolveOpenDucktorBaseDir(processEnv), "workspace-host-owners");
+  const lockTarget = path.join(ownersRoot, "path-ownership");
+  const semaphore = Effect.runSync(Effect.makeSemaphore(1));
+
+  const acquire = Effect.tryPromise({
+    try: async () => {
+      await mkdir(ownersRoot, { recursive: true });
+      return acquireLock(lockTarget, DEAD_OWNER_LOCK_STALE_MS);
+    },
+    catch: (cause) =>
+      errorCode(cause) === "ELOCKED"
+        ? new HostValidationError({
+            message:
+              "Another OpenDucktor host owns the workspace path lock, or it stopped in the past 30 seconds. Wait 30 seconds and retry.",
+            cause,
+          })
+        : new HostOperationError({
+            operation: "workspaceOwnershipLock.acquire",
+            message: "Failed to lock workspace path ownership. Retry the operation.",
+            cause,
+            details: { lockTarget },
+          }),
+  });
+
+  const releaseLock = (release: () => Promise<void>) =>
+    Effect.tryPromise({
+      try: release,
+      catch: (cause) =>
+        new HostOperationError({
+          operation: "workspaceOwnershipLock.release",
+          message: "Failed to release the workspace path ownership lock. Restart OpenDucktor.",
+          cause,
+          details: { lockTarget },
+        }),
+    });
+
+  return {
+    runExclusive: (effect) =>
+      semaphore.withPermits(1)(
+        Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const release = yield* acquire;
+            const exit = yield* Effect.exit(restore(effect));
+            yield* releaseLock(release);
+            return yield* Exit.matchEffect(exit, {
+              onFailure: Effect.failCause,
+              onSuccess: Effect.succeed,
+            });
+          }),
+        ),
       ),
   };
 };
