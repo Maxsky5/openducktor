@@ -39,7 +39,7 @@ import { createTaskWorktreeService } from "../../application/tasks/worktrees/tas
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
 import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
-import { createWorkspaceOwnershipLock } from "../../application/workspaces/workspace-ownership-lock";
+import { createNodeWorkspaceOwnershipLock } from "../../adapters/node/workspace-host-ownership-adapter";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
@@ -124,7 +124,7 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceHostOwnership,
   } = defaultPorts;
   const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
-  const workspaceOwnershipLock = createWorkspaceOwnershipLock();
+  const workspaceOwnershipLock = createNodeWorkspaceOwnershipLock({ processEnv });
   const workspaceSettingsService = createWorkspaceSettingsService(
     settingsConfig,
     workspaceOwnershipLock,

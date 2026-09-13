@@ -1,6 +1,9 @@
 import { type AgentModelFavorite, isSameAgentModelFavorite } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { WorkspaceOwnershipLock } from "./workspace-ownership-lock";
+import type {
+  WorkspaceOwnershipLock,
+  WorkspaceOwnershipLockError,
+} from "./workspace-ownership-lock";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
 export const areAgentModelFavoritesEqual = (
@@ -16,7 +19,9 @@ export const withSerializedConfigWrites = (
 ): WorkspaceSettingsService => {
   const semaphore = Effect.unsafeMakeSemaphore(1);
   const serialize = semaphore.withPermits(1);
-  const serializeOwned = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  const serializeOwned = <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | WorkspaceOwnershipLockError, R> =>
     ownershipLock.runExclusive(serialize(effect));
 
   return {
