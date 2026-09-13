@@ -478,6 +478,40 @@ describe("createDevServerService", () => {
       ],
     });
   });
+  test("releases inactive workspace state", async () => {
+    const { service, starts } = createServiceWithMutableConfig();
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+    starts[0]?.onExit({ pid: 400, exitCode: 7, signal: null, error: null });
+    await Effect.runPromise(service.releaseWorkspace({ repoPath: "/canonical/repo" }));
+
+    await expect(
+      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toMatchObject({
+      scripts: [
+        {
+          scriptId: "web",
+          status: "stopped",
+          runIdentity: null,
+          exitCode: null,
+          lastError: null,
+          bufferedTerminalChunks: [],
+        },
+      ],
+    });
+  });
+  test("keeps workspace state while a dev server is active", async () => {
+    const { service } = createServiceWithMutableConfig();
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+
+    await expect(
+      Effect.runPromise(service.releaseWorkspace({ repoPath: "/canonical/repo" })),
+    ).rejects.toThrow("Stop the dev server and retry");
+    await expect(
+      Effect.runPromise(service.inspectWorkspaceActivity({ repoPath: "/canonical/repo" })),
+    ).resolves.toEqual({ activeTaskIds: ["task-1"] });
+  });
   test("reports the started command when stopping scripts after repository settings change", async () => {
     const { config, service } = createServiceWithMutableConfig();
 

@@ -49,6 +49,7 @@ export type DevServerService = {
 };
 
 export type DisposableDevServerService = DevServerService & {
+  releaseWorkspace(input: { repoPath: string }): Effect.Effect<void, DevServerServiceError>;
   stopAll(): Effect.Effect<DevServerStopAllResult, DevServerServiceError>;
 };
 

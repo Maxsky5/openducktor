@@ -8,6 +8,10 @@ import {
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
 import { HostValidationError } from "../../effect/host-errors";
+import {
+  createWorkspaceOwnershipLock,
+  type WorkspaceOwnershipLock,
+} from "../../application/workspaces/workspace-ownership-lock";
 import { createSettingsConfigAdapter } from "./settings-config-adapter";
 
 const withTempConfig = async (run: (configPath: string) => Promise<void>): Promise<void> => {
@@ -123,11 +127,91 @@ describe("settings config adapter initialization", () => {
 
       const config = await Effect.runPromise(adapter.readConfig({ initialize: false }));
 
-      expect(config?.version).toBe(3);
+      expect(config?.version).toBe(4);
       expect(config?.agentRuntimes.codex).toMatchObject({ enabled: true, executablePath: "" });
       expect(config?.agentRuntimes.opencode.enabled).toBe(false);
       expect(calls).toBe(0);
       expect(await readFile(configPath, "utf8")).toBe(payload);
+    });
+  });
+
+  test("rechecks legacy config after acquiring the shared initialization lock", async () => {
+    await withTempConfig(async (configPath) => {
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          version: 2,
+          agentRuntimes: {
+            opencode: { enabled: true },
+            codex: { enabled: false },
+            claude: { enabled: false },
+          },
+        }),
+      );
+      const baseLock = createWorkspaceOwnershipLock();
+      let lockAttempts = 0;
+      let secondLockAttempted!: () => void;
+      const secondLockAttempt = new Promise<void>((resolve) => {
+        secondLockAttempted = resolve;
+      });
+      const initializationLock: WorkspaceOwnershipLock = {
+        runExclusive: (effect) =>
+          Effect.sync(() => {
+            lockAttempts += 1;
+            if (lockAttempts === 2) {
+              secondLockAttempted();
+            }
+          }).pipe(Effect.zipRight(baseLock.runExclusive(effect))),
+      };
+      let releaseFirst!: () => void;
+      let firstStarted!: () => void;
+      const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const firstStart = new Promise<void>((resolve) => {
+        firstStarted = resolve;
+      });
+      const upgrade = (legacy: Parameters<typeof upgradePersistedGlobalConfigV2>[0]) =>
+        upgradePersistedGlobalConfigV2(legacy, {
+          opencode: "/tools/opencode",
+          codex: "",
+          claude: "",
+        });
+      const firstAdapter = createSettingsConfigAdapter({
+        configPath,
+        initializationLock,
+        initializeConfig: (legacy) =>
+          legacy
+            ? Effect.promise(async () => {
+                firstStarted();
+                await firstGate;
+                return { ...upgrade(legacy), theme: "dark" as const };
+              })
+            : Effect.die("Expected legacy config"),
+      });
+      let secondInitializerCalls = 0;
+      const secondAdapter = createSettingsConfigAdapter({
+        configPath,
+        initializationLock,
+        initializeConfig: (legacy) => {
+          secondInitializerCalls += 1;
+          return legacy
+            ? Effect.succeed({ ...upgrade(legacy), theme: "light" as const })
+            : Effect.die("Expected legacy config");
+        },
+      });
+
+      const firstRead = Effect.runPromise(firstAdapter.readConfig());
+      await firstStart;
+      const secondRead = Effect.runPromise(secondAdapter.readConfig());
+      await secondLockAttempt;
+      releaseFirst();
+      const [firstConfig, secondConfig] = await Promise.all([firstRead, secondRead]);
+
+      expect(secondInitializerCalls).toBe(0);
+      expect(firstConfig?.theme).toBe("dark");
+      expect(secondConfig?.theme).toBe("dark");
+      expect(JSON.parse(await readFile(configPath, "utf8")).theme).toBe("dark");
     });
   });
 

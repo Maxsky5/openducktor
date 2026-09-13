@@ -6,7 +6,7 @@ import type {
   WorkspaceActivityPort,
 } from "../../ports/workspace-activity-port";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
-import type { DevServerService } from "../dev-servers/dev-server-service-types";
+import type { DisposableDevServerService } from "../dev-servers/dev-server-service-types";
 import type { TerminalService } from "../terminals/terminal-service";
 
 const toHostOperationError = (operation: string, message: string, cause: unknown) =>
@@ -23,7 +23,10 @@ export const createWorkspaceActivityInspector = ({
   terminalService,
 }: {
   agentSessionLiveStateService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">;
-  devServerService: Pick<DevServerService, "inspectWorkspaceActivity">;
+  devServerService: Pick<
+    DisposableDevServerService,
+    "inspectWorkspaceActivity" | "releaseWorkspace"
+  >;
   runtimeRegistry: Pick<RuntimeRegistryPort, "listRuntimesByRepo" | "stopRuntime">;
   terminalService: Pick<TerminalService, "inspectWorkspaceActivity">;
 }): WorkspaceActivityPort => ({
@@ -123,6 +126,17 @@ export const createWorkspaceActivityInspector = ({
     }),
   releaseWorkspaceRuntimes: (repoPath) =>
     Effect.gen(function* () {
+      yield* devServerService
+        .releaseWorkspace({ repoPath })
+        .pipe(
+          Effect.mapError((cause) =>
+            toHostOperationError(
+              "workspace.releaseDevServers",
+              `Failed to release dev server state for ${repoPath}. Stop the running work and retry removal.`,
+              cause,
+            ),
+          ),
+        );
       const runtimes = yield* runtimeRegistry.listRuntimesByRepo({ repoPath });
       for (const runtime of runtimes) {
         yield* runtimeRegistry
