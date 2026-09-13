@@ -129,6 +129,11 @@ export const assembleNodeEffectHostCommandRouter = (
     settingsConfig,
     workspaceOwnershipLock,
   );
+  const ownedWorkspaceSettingsService = createWorkspaceSettingsService(
+    settingsConfig,
+    workspaceOwnershipLock,
+    "already-held",
+  );
   const workspaceAdmissionService = createWorkspaceAdmissionService({
     hostOwnership: workspaceHostOwnership,
     settingsConfig,
@@ -316,7 +321,7 @@ export const assembleNodeEffectHostCommandRouter = (
       removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
     },
     taskStore,
-    workspaceSettingsService,
+    workspaceSettingsService: ownedWorkspaceSettingsService,
     worktreeFiles,
   });
   const taskActivityGuard = createRuntimeTaskActivityGuard({
