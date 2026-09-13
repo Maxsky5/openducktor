@@ -24,6 +24,10 @@ import type {
   WorkspaceActivityPort,
 } from "../../ports/workspace-activity-port";
 import type { WorkspaceStoragePort } from "../../ports/workspace-storage-port";
+import type {
+  WorkspaceHostOwnershipError,
+  WorkspaceHostOwnershipPort,
+} from "../../ports/workspace-host-ownership-port";
 import { removeWorktreeAndFilesystemPath } from "../git/worktree-removal";
 import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
@@ -41,6 +45,7 @@ export type WorkspaceLifecycleError =
   | SettingsConfigError
   | TaskStoreError
   | WorktreeFileError
+  | WorkspaceHostOwnershipError
   | WorkspaceSettingsError
   | WorkspaceWorktreeInventoryError;
 
@@ -72,6 +77,7 @@ type CreateWorkspaceLifecycleServiceInput = {
     GitPort,
     "canonicalizePath" | "isRegisteredWorktree" | "listWorktrees" | "removeWorktree"
   >;
+  hostOwnership: Pick<WorkspaceHostOwnershipPort, "claimWorkspace">;
   ownershipLock: WorkspaceOwnershipLock;
   settingsConfig: SettingsConfigPort;
   storage: WorkspaceStoragePort;
@@ -104,6 +110,7 @@ export const createWorkspaceLifecycleService = ({
   activity,
   admission,
   gitPort,
+  hostOwnership,
   ownershipLock,
   settingsConfig,
   storage,
@@ -141,6 +148,32 @@ export const createWorkspaceLifecycleService = ({
           }),
         );
       }
+    });
+
+  const collectWorktreePaths = (
+    input: WorkspaceRemovalInput,
+    repoConfig: RepoConfig,
+    pendingWorktreePath: string | null,
+  ) =>
+    Effect.gen(function* () {
+      const catalog = yield* workspaceSettingsService.getWorkspaceCatalog();
+      return yield* admission.withAdministrativeAccess(
+        [
+          input.workspaceId,
+          ...catalog.incompleteRemovals.map((removal) => removal.workspace.workspaceId),
+        ],
+        collectWorkspaceTaskWorktreePaths(
+          {
+            gitPort,
+            settingsConfig,
+            taskStore,
+            workspaceSettingsService,
+            workspaceTaskStoreExists: storage.workspaceTaskStoreExists,
+          },
+          repoConfig,
+          pendingWorktreePath,
+        ),
+      );
     });
 
   const persistProgress = (
@@ -200,6 +233,10 @@ export const createWorkspaceLifecycleService = ({
       }
       yield* activity.releaseWorkspaceSessions(repoConfig.repoPath);
       yield* activity.releaseWorkspaceRuntimes(repoConfig.repoPath);
+      const preflightWorktreePaths =
+        !repoConfig.removal && input.removeTaskWorktrees
+          ? yield* collectWorktreePaths(input, repoConfig, null)
+          : null;
       const { record: startedRecord, repoConfig: journaledRepoConfig } =
         yield* workspaceSettingsService.beginWorkspaceRemoval({
           workspaceId: input.workspaceId,
@@ -225,37 +262,23 @@ export const createWorkspaceLifecycleService = ({
           removedWorktrees.map((path) => normalizePathForComparison(path)),
         );
         const pendingWorktreePath = startedRecord.pendingWorktreePath;
-        const catalog = yield* workspaceSettingsService.getWorkspaceCatalog();
-        const inventoryResult = yield* Effect.either(
-          admission.withAdministrativeAccess(
-            [
-              input.workspaceId,
-              ...catalog.incompleteRemovals.map((removal) => removal.workspace.workspaceId),
-            ],
-            collectWorkspaceTaskWorktreePaths(
-              {
-                gitPort,
-                settingsConfig,
-                taskStore,
-                workspaceSettingsService,
-                workspaceTaskStoreExists: storage.workspaceTaskStoreExists,
-              },
-              journaledRepoConfig,
-              pendingWorktreePath,
-            ),
-          ),
-        );
-        if (inventoryResult._tag === "Left") {
-          return yield* failRemovalPhase(
-            input.workspaceId,
-            "worktrees",
-            removedWorktrees,
-            undefined,
-            errorMessage(inventoryResult.left),
-            inventoryResult.left,
+        let worktreePaths = preflightWorktreePaths;
+        if (worktreePaths === null) {
+          const inventoryResult = yield* Effect.either(
+            collectWorktreePaths(input, journaledRepoConfig, pendingWorktreePath),
           );
+          if (inventoryResult._tag === "Left") {
+            return yield* failRemovalPhase(
+              input.workspaceId,
+              "worktrees",
+              removedWorktrees,
+              undefined,
+              errorMessage(inventoryResult.left),
+              inventoryResult.left,
+            );
+          }
+          worktreePaths = inventoryResult.right;
         }
-        const worktreePaths = inventoryResult.right;
         if (
           pendingWorktreePath !== null &&
           !worktreePaths.some(
@@ -376,8 +399,10 @@ export const createWorkspaceLifecycleService = ({
     },
     use: () => Effect.Effect<A, E, R>,
   ) =>
-    Effect.acquireUseRelease(admission.reserveWorkspace(input), use, () =>
-      Effect.sync(() => admission.releaseReservation(input.workspaceId)),
+    Effect.acquireUseRelease(
+      admission.reserveWorkspace(input),
+      () => hostOwnership.claimWorkspace(input.workspaceId).pipe(Effect.zipRight(use())),
+      () => Effect.sync(() => admission.releaseReservation(input.workspaceId)),
     );
 
   return {

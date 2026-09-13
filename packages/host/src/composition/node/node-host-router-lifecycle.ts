@@ -11,6 +11,7 @@ import type { DisposableDevServerService } from "../../application/dev-servers/d
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
+import type { WorkspaceHostOwnershipPort } from "../../ports/workspace-host-ownership-port";
 import {
   createStopDevServersStep,
   createStopMcpHostBridgeStep,
@@ -38,6 +39,7 @@ export const createNodeHostRouterLifecycle = ({
   taskAssetStagingService,
   taskSyncService,
   terminalService,
+  workspaceHostOwnership,
 }: {
   assets: { taskStoreConnectionShutdownStep: HostShutdownStep };
   devServerService: DisposableDevServerService;
@@ -49,6 +51,7 @@ export const createNodeHostRouterLifecycle = ({
   taskAssetStagingService: Pick<TaskAssetStagingService, "shutdownCleanup">;
   taskSyncService: Pick<TaskSyncService, "startPullRequestSyncLoop"> | null;
   terminalService: TerminalService;
+  workspaceHostOwnership: Pick<WorkspaceHostOwnershipPort, "releaseAll">;
 }): NodeHostRouterLifecycle => {
   let pullRequestSyncLoop: TaskSyncLoopHandle | null = null;
   let taskAssetStagingSwept = false;
@@ -123,6 +126,7 @@ export const createNodeHostRouterLifecycle = ({
                   ),
               },
               assets.taskStoreConnectionShutdownStep,
+              { label: "workspace host ownership", run: workspaceHostOwnership.releaseAll },
             ],
             lifecycleLogger,
           ),

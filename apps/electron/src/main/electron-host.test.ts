@@ -51,6 +51,10 @@ const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRoute
       PATH: "/usr/bin:/bin",
     },
     runtimeDistribution: testRuntimeDistribution,
+    workspaceHostOwnership: {
+      claimWorkspace: () => Effect.void,
+      releaseAll: () => Effect.void,
+    },
     ...input,
   });
 
@@ -138,6 +142,19 @@ const createSettingsConfig = (config: GlobalConfig | null = null): SettingsConfi
   pathExists: () => Effect.succeed(true),
   join: (...paths) => paths.join("/").replaceAll(/\/+/g, "/"),
 });
+
+const createConfiguredSettingsConfig = (): SettingsConfigPort =>
+  createSettingsConfig(
+    globalConfig({
+      agentRuntimes: {
+        opencode: { enabled: true, executablePath: "/usr/bin/opencode" },
+        codex: { enabled: false, executablePath: "/usr/bin/codex" },
+        claude: { enabled: false, executablePath: "/usr/bin/claude" },
+      },
+      workspaces: { repo: repoConfig() },
+      workspaceOrder: ["repo"],
+    }),
+  );
 
 const createGit = (): GitPort => ({
   canonicalizePath: (path) => Effect.succeed(path),
@@ -831,7 +848,7 @@ describe("createElectronHostCommandRouter", () => {
             failureKind: null,
           }),
       },
-      settingsConfig: createSettingsConfig(),
+      settingsConfig: createConfiguredSettingsConfig(),
     });
 
     await expect(router.invoke("runtime_definitions_list", {})).resolves.toMatchObject([
@@ -986,7 +1003,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
+      settingsConfig: createConfiguredSettingsConfig(),
     });
 
     await expect(router.invoke("git_get_branches", { repoPath: "/repo" })).resolves.toEqual([
@@ -1227,7 +1244,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
+      settingsConfig: createConfiguredSettingsConfig(),
       taskStore: createTaskStore(),
     });
 
@@ -1358,7 +1375,7 @@ describe("createElectronHostCommandRouter", () => {
       git: createGit(),
       openInTools: createOpenInTools(),
       runtimeRegistry: sessionRuntimeRegistry,
-      settingsConfig: createSettingsConfig(),
+      settingsConfig: createConfiguredSettingsConfig(),
       taskStore: {
         ...sessionTaskStore,
         getTaskMetadata: () =>
@@ -1519,7 +1536,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
+      settingsConfig: createConfiguredSettingsConfig(),
       taskStore: {
         ...pullRequestTaskStore,
         getTask: (input) =>
@@ -2412,7 +2429,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
+      settingsConfig: createConfiguredSettingsConfig(),
       taskStore: {
         ...createTaskStore(),
         listTasks: () =>

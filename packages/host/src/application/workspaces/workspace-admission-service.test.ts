@@ -1,5 +1,9 @@
-import { describe, expect, test } from "bun:test";
-import type { WorkspaceCatalog, WorkspaceRecord } from "@openducktor/contracts";
+import { describe, expect, mock, test } from "bun:test";
+import {
+  repoConfigSchema,
+  type WorkspaceCatalog,
+  type WorkspaceRecord,
+} from "@openducktor/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
@@ -32,10 +36,23 @@ const createAdmission = (
   workspaceCatalog: WorkspaceCatalog,
   canonicalizePath: (path: string) => Effect.Effect<string, HostOperationErrorAggregate> = (path) =>
     Effect.succeed(path),
+  claimWorkspace: (workspaceId: string) => Effect.Effect<void, HostOperationErrorAggregate> = () =>
+    Effect.void,
 ) =>
   createWorkspaceAdmissionService({
+    hostOwnership: { claimWorkspace },
     settingsConfig: { canonicalizePath },
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+      getRepoConfigByRepoPath: (repoPath) =>
+        Effect.succeed(
+          repoConfigSchema.parse({
+            workspaceId: repoPath.split("/").at(-1) ?? "workspace",
+            workspaceName: repoPath,
+            repoPath,
+            defaultRuntimeKind: "opencode",
+            agentStudioState: { openTaskIds: [] },
+          }),
+        ),
       getWorkspaceCatalog: () => Effect.succeed(workspaceCatalog),
     }),
   });
@@ -203,6 +220,45 @@ describe("workspace admission service", () => {
     await expect(
       Effect.runPromise(admission.assertWorkspaceAdmitsWork("/repos/open")),
     ).resolves.toBeUndefined();
+  });
+
+  test("claims cross-process ownership before a work start", async () => {
+    const events: string[] = [];
+    const admission = createAdmission(
+      catalog(),
+      (path) => Effect.succeed(path),
+      mock((workspaceId) =>
+        Effect.sync(() => {
+          events.push(`claim:${workspaceId}`);
+        }),
+      ),
+    );
+
+    await Effect.runPromise(
+      admission.withWorkStartLease(
+        "/repos/open",
+        Effect.sync(() => {
+          events.push("start");
+        }),
+      ),
+    );
+
+    expect(events).toEqual(["claim:open", "start"]);
+  });
+
+  test("claims cross-process ownership before task store access", async () => {
+    const claimWorkspace = mock((_workspaceId: string) => Effect.void);
+    const admission = createAdmission(catalog(), (path) => Effect.succeed(path), claimWorkspace);
+
+    await Effect.runPromise(
+      admission.assertTaskStoreAccess({
+        operation: "sqliteTaskRepository.listTasks",
+        repoPath: "/repos/open",
+        workspaceId: "open",
+      }),
+    );
+
+    expect(claimWorkspace).toHaveBeenCalledWith("open");
   });
 
   test("matches a work start by the canonical repository path", async () => {
