@@ -1,4 +1,5 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
+import type { host } from "../shared/host";
 import type { WorkspaceOperationsHostClient } from "./workspace-operations-types";
 
 export const workspace = (repoPath: string, isActive = false): WorkspaceRecord => ({
@@ -13,50 +14,55 @@ export const workspace = (repoPath: string, isActive = false): WorkspaceRecord =
   effectiveWorktreeBasePath: "/tmp/default-worktrees",
 });
 
-export const createWorkspaceHostClient = (): WorkspaceOperationsHostClient => ({
-  workspaceList: async () => [],
-  workspaceAdd: async (input) => workspace(input.repoPath),
-  workspaceSelect: async (workspaceId: string) => workspace(`/${workspaceId}`, true),
-  workspaceCatalogGet: async () => ({
-    openWorkspaces: [],
-    closedWorkspaces: [],
-    incompleteRemovals: [],
-    onboardingCompleted: false,
-  }),
-  workspaceClose: async (_workspaceId: string, repoPath: string) => ({
-    openWorkspaces: [],
-    closedWorkspaces: [workspace(repoPath)],
-    incompleteRemovals: [],
-    onboardingCompleted: true,
-  }),
-  workspaceReopen: async (_workspaceId: string, repoPath: string) => ({
-    openWorkspaces: [workspace(repoPath, true)],
-    closedWorkspaces: [],
-    incompleteRemovals: [],
-    onboardingCompleted: true,
-  }),
-  workspaceRemove: async () => ({
-    catalog: {
+type WorkspaceTestHostClient = WorkspaceOperationsHostClient & Pick<typeof host, "workspaceList">;
+
+export const createWorkspaceHostClient = (): WorkspaceTestHostClient => {
+  const client: WorkspaceTestHostClient = {
+    workspaceList: async () => [],
+    workspaceAdd: async (input) => workspace(input.repoPath),
+    workspaceSelect: async (workspaceId: string) => workspace(`/${workspaceId}`, true),
+    workspaceCatalogGet: async () => ({
+      openWorkspaces: await client.workspaceList(),
+      closedWorkspaces: [],
+      incompleteRemovals: [],
+      onboardingCompleted: false,
+    }),
+    workspaceClose: async (_workspaceId: string, repoPath: string) => ({
       openWorkspaces: [],
+      closedWorkspaces: [workspace(repoPath)],
+      incompleteRemovals: [],
+      onboardingCompleted: true,
+    }),
+    workspaceReopen: async (_workspaceId: string, repoPath: string) => ({
+      openWorkspaces: [workspace(repoPath, true)],
       closedWorkspaces: [],
       incompleteRemovals: [],
       onboardingCompleted: true,
+    }),
+    workspaceRemove: async () => ({
+      catalog: {
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+        onboardingCompleted: true,
+      },
+      removedWorktrees: [],
+    }),
+    workspaceResolvePath: async () => ({ kind: "new" }),
+    workspaceReorder: async (workspaceOrder: string[]) =>
+      workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
+    gitGetCurrentBranch: async () => {
+      throw new Error("gitGetCurrentBranch not configured");
     },
-    removedWorktrees: [],
-  }),
-  workspaceResolvePath: async () => ({ kind: "new" }),
-  workspaceReorder: async (workspaceOrder: string[]) =>
-    workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
-  gitGetCurrentBranch: async () => {
-    throw new Error("gitGetCurrentBranch not configured");
-  },
-  gitGetBranches: async () => {
-    throw new Error("gitGetBranches not configured");
-  },
-  gitSwitchBranch: async () => {
-    throw new Error("gitSwitchBranch not configured");
-  },
-});
+    gitGetBranches: async () => {
+      throw new Error("gitGetBranches not configured");
+    },
+    gitSwitchBranch: async () => {
+      throw new Error("gitSwitchBranch not configured");
+    },
+  };
+  return client;
+};
 
 export const flush = async (): Promise<void> => {
   await Promise.resolve();

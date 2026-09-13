@@ -1,6 +1,6 @@
 import type { IncompleteWorkspaceRemoval, WorkspaceRecord } from "@openducktor/contracts";
 import { EyeOff, type LucideIcon, Loader2, RotateCcw, Trash2 } from "lucide-react";
-import { type ReactElement, type ReactNode, useState } from "react";
+import { type ReactElement, type ReactNode, type RefObject, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -92,6 +92,7 @@ type LifecycleDialogProps = {
   error: string | null;
   onCancel: () => void;
   onConfirm: () => void;
+  returnFocusRef: RefObject<HTMLElement | null> | undefined;
   children: ReactNode;
 };
 
@@ -106,6 +107,7 @@ function LifecycleDialog({
   error,
   onCancel,
   onConfirm,
+  returnFocusRef,
   children,
 }: LifecycleDialogProps): ReactElement {
   return (
@@ -123,6 +125,11 @@ function LifecycleDialog({
         }}
         onPointerDownOutside={(event) => {
           if (submitting) event.preventDefault();
+        }}
+        onCloseAutoFocus={(event) => {
+          if (!returnFocusRef?.current) return;
+          event.preventDefault();
+          returnFocusRef.current.focus();
         }}
       >
         <DialogHeader>
@@ -166,11 +173,13 @@ function LifecycleDialog({
 type WorkspaceLifecycleDialogProps = {
   workspace: WorkspaceRecord;
   onOpenChange: (open: boolean) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 };
 
 export function WorkspaceCloseDialog({
   workspace,
   onOpenChange,
+  returnFocusRef,
 }: WorkspaceLifecycleDialogProps): ReactElement {
   const { closeWorkspace } = useWorkspaceState();
   const submit = useLifecycleSubmit(
@@ -193,6 +202,7 @@ export function WorkspaceCloseDialog({
       error={submit.error}
       onCancel={() => onOpenChange(false)}
       onConfirm={() => void submit.confirm()}
+      returnFocusRef={returnFocusRef}
     >
       <WorkspaceIdentityCard workspace={workspace} />
       <LifecycleNotice tone="info" className="mt-3">
@@ -210,6 +220,7 @@ export function WorkspaceCloseDialog({
 export function WorkspaceRemoveDialog({
   workspace,
   onOpenChange,
+  returnFocusRef,
 }: WorkspaceLifecycleDialogProps): ReactElement {
   const { removeWorkspace } = useWorkspaceState();
   const [removeTaskWorktrees, setRemoveTaskWorktrees] = useState(false);
@@ -236,6 +247,7 @@ export function WorkspaceRemoveDialog({
       error={submit.error}
       onCancel={() => onOpenChange(false)}
       onConfirm={() => void submit.confirm()}
+      returnFocusRef={returnFocusRef}
     >
       <WorkspaceIdentityCard workspace={workspace} />
       <LifecycleNotice tone="destructive" className="mt-3">
@@ -276,9 +288,11 @@ export function WorkspaceRemoveDialog({
 export function WorkspaceRemovalRecoveryDialog({
   removal,
   onOpenChange,
+  returnFocusRef,
 }: {
   removal: IncompleteWorkspaceRemoval;
   onOpenChange: (open: boolean) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }): ReactElement {
   const { removeWorkspace } = useWorkspaceState();
   const submit = useLifecycleSubmit(
@@ -303,6 +317,7 @@ export function WorkspaceRemovalRecoveryDialog({
       error={submit.error}
       onCancel={() => onOpenChange(false)}
       onConfirm={() => void submit.confirm()}
+      returnFocusRef={returnFocusRef}
     >
       <WorkspaceIdentityCard workspace={removal.workspace} />
       <LifecycleNotice tone="warning" className="mt-3">

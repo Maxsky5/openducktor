@@ -231,6 +231,7 @@ export function WorkspaceRail({
     [workspaces],
   );
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const openRepositoryButtonRef = useRef<HTMLButtonElement>(null);
   const suppressedSelectionWorkspaceIdRef = useRef<string | null>(null);
   const selectionSuppressionFrameRef = useRef<number | null>(null);
   const activeDragWorkspace = activeWorkspaceId
@@ -366,6 +367,7 @@ export function WorkspaceRail({
           ))}
 
           <Button
+            ref={openRepositoryButtonRef}
             type="button"
             size="icon"
             variant="ghost"
@@ -382,6 +384,7 @@ export function WorkspaceRail({
       {lifecycleRequest?.action === "close" ? (
         <WorkspaceCloseDialog
           workspace={lifecycleRequest.workspace}
+          returnFocusRef={openRepositoryButtonRef}
           onOpenChange={(open) => {
             if (!open) setLifecycleRequest(null);
           }}
@@ -390,6 +393,7 @@ export function WorkspaceRail({
       {lifecycleRequest?.action === "remove" ? (
         <WorkspaceRemoveDialog
           workspace={lifecycleRequest.workspace}
+          returnFocusRef={openRepositoryButtonRef}
           onOpenChange={(open) => {
             if (!open) setLifecycleRequest(null);
           }}
@@ -403,6 +407,7 @@ export function WorkspaceRail({
                 removal.workspace.workspaceId === lifecycleRequest.removal.workspace.workspaceId,
             ) ?? lifecycleRequest.removal
           }
+          returnFocusRef={openRepositoryButtonRef}
           onOpenChange={(open) => {
             if (!open) setLifecycleRequest(null);
           }}

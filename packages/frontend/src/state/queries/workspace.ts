@@ -14,7 +14,6 @@ import { host } from "../operations/host";
 
 type SettingsSnapshotQueryHost = Pick<typeof host, "workspaceGetSettingsSnapshot">;
 type RepoConfigQueryHost = Pick<typeof host, "workspaceGetRepoConfig">;
-type WorkspaceListQueryHost = Pick<typeof host, "workspaceList">;
 type WorkspaceCatalogQueryHost = Pick<typeof host, "workspaceCatalogGet">;
 type WorkspaceRecordUpdate =
   | WorkspaceRecord[]
@@ -29,7 +28,6 @@ export const workspaceQueryKeys = {
   settingsSnapshot: () => [...workspaceQueryKeys.all, "settings-snapshot"] as const,
   repoConfig: (workspaceId: string) =>
     [...workspaceQueryKeys.all, "repo-config", workspaceId] as const,
-  list: () => [...workspaceQueryKeys.all, "list"] as const,
   catalog: () => [...workspaceQueryKeys.all, "catalog"] as const,
 };
 
@@ -102,13 +100,6 @@ export const repoConfigQueryOptions = (
     staleTime: REPO_CONFIG_STALE_TIME_MS,
   });
 
-export const workspaceListQueryOptions = (hostClient: WorkspaceListQueryHost = host) =>
-  queryOptions({
-    queryKey: workspaceQueryKeys.list(),
-    queryFn: (): Promise<WorkspaceRecord[]> => hostClient.workspaceList(),
-    staleTime: WORKSPACE_LIST_STALE_TIME_MS,
-  });
-
 export const workspaceCatalogQueryOptions = (hostClient: WorkspaceCatalogQueryHost = host) =>
   queryOptions({
     queryKey: workspaceQueryKeys.catalog(),
@@ -129,32 +120,29 @@ export const loadRepoConfigFromQuery = (
 ): Promise<RepoConfig> =>
   queryClient.ensureQueryData(repoConfigQueryOptions(workspaceId, hostClient));
 
-export const loadWorkspaceListFromQuery = (
-  queryClient: QueryClient,
-  hostClient?: WorkspaceListQueryHost,
-): Promise<WorkspaceRecord[]> => queryClient.fetchQuery(workspaceListQueryOptions(hostClient));
-
 export const loadWorkspaceCatalogFromQuery = (
   queryClient: QueryClient,
   hostClient?: WorkspaceCatalogQueryHost,
 ): Promise<WorkspaceCatalog> => queryClient.fetchQuery(workspaceCatalogQueryOptions(hostClient));
 
-export const writeWorkspaceListToQuery = (
+export const updateWorkspaceCatalogOpenWorkspaces = (
   queryClient: QueryClient,
   recordsOrUpdater: WorkspaceRecordUpdate,
 ): void => {
   void queryClient.cancelQueries(
     {
-      queryKey: workspaceQueryKeys.list(),
+      queryKey: workspaceQueryKeys.catalog(),
       exact: true,
     },
     { revert: false },
   );
-  if (Array.isArray(recordsOrUpdater)) {
-    queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), recordsOrUpdater);
-    return;
-  }
-  queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), recordsOrUpdater);
+  queryClient.setQueryData<WorkspaceCatalog>(workspaceQueryKeys.catalog(), (current) => {
+    if (!current) return current;
+    const openWorkspaces = Array.isArray(recordsOrUpdater)
+      ? recordsOrUpdater
+      : recordsOrUpdater(current.openWorkspaces);
+    return { ...current, openWorkspaces };
+  });
 };
 
 export const writeWorkspaceCatalogToQuery = (
@@ -176,12 +164,6 @@ export const markWorkspaceCachesChanged = async (
   options: { throwOnError?: boolean } = {},
 ): Promise<void> => {
   const invalidateOptions = { throwOnError: options.throwOnError ?? false };
-  await queryClient.invalidateQueries(
-    {
-      queryKey: workspaceQueryKeys.list(),
-    },
-    invalidateOptions,
-  );
   await queryClient.invalidateQueries(
     {
       queryKey: workspaceQueryKeys.catalog(),

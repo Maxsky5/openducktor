@@ -10,6 +10,7 @@ import {
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
+import type { WorkspaceStoragePort } from "../../ports/workspace-storage-port";
 import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 
@@ -24,6 +25,7 @@ export type WorkspaceWorktreeInventoryDependencies = {
   gitPort: Pick<GitPort, "canonicalizePath" | "listWorktrees">;
   settingsConfig: SettingsConfigPort;
   taskStore: Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
+  workspaceTaskStoreExists: WorkspaceStoragePort["workspaceTaskStoreExists"];
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
 };
 
@@ -365,6 +367,9 @@ const collectWorkspaceClaims = (
         );
       });
     for (const workspace of workspaces) {
+      if (!(yield* dependencies.workspaceTaskStoreExists(workspace.workspaceId))) {
+        continue;
+      }
       const tasks = yield* dependencies.taskStore.listTasks({ repoPath: workspace.repoPath });
       if (tasks.length === 0) {
         continue;

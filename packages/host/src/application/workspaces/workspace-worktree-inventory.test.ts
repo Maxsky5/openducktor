@@ -100,6 +100,7 @@ const createDependencies = ({
   settingsCanonicalizePath = (path) => Effect.succeed(path),
   listTasks = () => Effect.succeed([]),
   listAgentSessionsForTasks = () => Effect.succeed([]),
+  workspaceTaskStoreExists = () => Effect.succeed(true),
   workspaceCatalog = catalog(),
 }: {
   canonicalizePath: (path: string) => Effect.Effect<string, HostOperationErrorAggregate>;
@@ -111,6 +112,7 @@ const createDependencies = ({
     repoPath: string;
     taskIds: string[];
   }) => Effect.Effect<TaskAgentSessions[], never>;
+  workspaceTaskStoreExists?: (workspaceId: string) => Effect.Effect<boolean, never>;
   workspaceCatalog?: WorkspaceCatalog;
 }) => ({
   gitPort: createGitPortTestDouble({
@@ -131,6 +133,7 @@ const createDependencies = ({
     listTasks,
     listAgentSessionsForTasks,
   } satisfies Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">,
+  workspaceTaskStoreExists,
   workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
     getWorkspaceCatalog: () => Effect.succeed(workspaceCatalog),
   }),
@@ -482,6 +485,31 @@ describe("workspace worktree inventory", () => {
             "attachments",
           ),
         ],
+      },
+    });
+
+    const paths = await Effect.runPromise(
+      collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+    );
+
+    expect(paths).toEqual(["/base/task-1"]);
+    expect(listedRepos).toEqual(["/repos/ws"]);
+  });
+
+  test("does not open another workspace when its task store is absent", async () => {
+    const listedRepos: string[] = [];
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
+      pathExists: () => Effect.succeed(true),
+      listTasks: (input) => {
+        listedRepos.push(input.repoPath);
+        return Effect.succeed(input.repoPath === "/repos/ws" ? [task("task-1")] : []);
+      },
+      workspaceTaskStoreExists: () => Effect.succeed(false),
+      workspaceCatalog: {
+        ...catalog(),
+        openWorkspaces: [workspaceRecord({ effectiveWorktreeBasePath: "/elsewhere" })],
       },
     });
 

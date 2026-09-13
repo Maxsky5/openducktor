@@ -12,12 +12,12 @@ export const areAgentModelFavoritesEqual = (
 
 export const withSerializedConfigWrites = (
   service: WorkspaceSettingsService,
-  ownershipLock?: WorkspaceOwnershipLock,
+  ownershipLock: WorkspaceOwnershipLock,
 ): WorkspaceSettingsService => {
   const semaphore = Effect.unsafeMakeSemaphore(1);
   const serialize = semaphore.withPermits(1);
   const serializeOwned = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    ownershipLock ? ownershipLock.runExclusive(serialize(effect)) : serialize(effect);
+    ownershipLock.runExclusive(serialize(effect));
 
   return {
     ...service,

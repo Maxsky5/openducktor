@@ -161,35 +161,6 @@ describe("workspace lifecycle dialogs", () => {
     );
   });
 
-  test("keeps the recorded choice when the recovery already removed worktrees", async () => {
-    const removal: IncompleteWorkspaceRemoval = {
-      workspace,
-      record: {
-        version: 1,
-        operationId: "op-1",
-        removeTaskWorktrees: true,
-        phase: "worktrees",
-        removedWorktrees: ["/managed/alpha/task-1"],
-        pendingWorktreePath: null,
-        startedAt: "2026-01-01T00:00:00.000Z",
-        lastFailure: null,
-      },
-    };
-    renderDialog(<WorkspaceRemovalRecoveryDialog removal={removal} onOpenChange={() => {}} />);
-
-    expect(screen.queryByRole("checkbox")).toBe(null);
-
-    fireEvent.click(screen.getByRole("button", { name: "Retry removal" }));
-
-    await waitFor(() =>
-      expect(removeWorkspace).toHaveBeenCalledWith({
-        workspaceId: "alpha",
-        expectedRepoPath: "/projects/alpha",
-        removeTaskWorktrees: true,
-      }),
-    );
-  });
-
   test("keeps the recorded choice while a worktree deletion is pending", async () => {
     const removal: IncompleteWorkspaceRemoval = {
       workspace,

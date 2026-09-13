@@ -76,6 +76,35 @@ function SeedFilesystemDirectory(): ReactNode {
 }
 
 describe("OpenRepositoryModal", () => {
+  test("shows workspace loading and errors instead of an empty closed list", () => {
+    const { rerender } = render(
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
+          <OpenRepositoryModal open canClose onOpenChange={() => {}} isLoadingWorkspaces />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    expect(screen.getByText("Loading closed workspaces...")).toBeTruthy();
+    expect(screen.queryByText("No closed workspaces")).toBeNull();
+
+    rerender(
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
+          <OpenRepositoryModal
+            open
+            canClose
+            onOpenChange={() => {}}
+            workspaceLoadError={new Error("settings unavailable")}
+          />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain("settings unavailable");
+    expect(screen.queryByText("No closed workspaces")).toBeNull();
+  });
+
   test("resets repository creation fields when the modal reopens", async () => {
     const onOpenChange = mock((_open: boolean) => {});
     const workspaceState = createWorkspaceStateValue();
