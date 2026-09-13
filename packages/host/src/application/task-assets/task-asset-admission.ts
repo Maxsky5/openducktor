@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import type { HostValidationErrorAggregate } from "../../effect/host-errors";
 import { TaskAssetError, taskAssetValidationError } from "../../effect/task-asset-error";
 import type { TaskAssetStagingService } from "./task-asset-staging-service";
@@ -35,8 +36,21 @@ export const withTaskAssetWorkspaceAdmission = ({
           .withWorkStartLease(
             repoPath,
             admission.assertWorkspaceAdmitsWork(repoPath).pipe(
-              Effect.zipRight(resolveRepoPath(input.workspaceId)),
-              Effect.flatMap(() => service.stage(input)),
+              Effect.zipRight(
+                resolveRepoPath(input.workspaceId).pipe(
+                  Effect.mapError((cause) => taskAssetValidationError(messageOf(cause))),
+                  Effect.flatMap((currentRepoPath) =>
+                    normalizePathForComparison(currentRepoPath) ===
+                    normalizePathForComparison(repoPath)
+                      ? service.stage(input)
+                      : Effect.fail(
+                          taskAssetValidationError(
+                            `Workspace ${input.workspaceId} changed while the upload was in progress. Reload workspaces and retry the upload.`,
+                          ),
+                        ),
+                  ),
+                ),
+              ),
             ),
           )
           .pipe(Effect.mapError(toTaskAssetError)),

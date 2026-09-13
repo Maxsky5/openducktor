@@ -290,6 +290,7 @@ export const assembleNodeEffectHostCommandRouter = (
     activity: createWorkspaceActivityInspector({
       agentSessionLiveStateService,
       devServerService,
+      runtimeRegistry: effectiveRuntimeRegistry,
       terminalService,
     }),
     admission: workspaceAdmissionService,

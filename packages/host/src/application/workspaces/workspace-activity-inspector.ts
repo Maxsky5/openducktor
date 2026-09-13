@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { DevServerService } from "../dev-servers/dev-server-service-types";
 import type { TerminalService } from "../terminals/terminal-service";
@@ -12,6 +13,7 @@ export type WorkspaceActivityBlocker = {
 export type WorkspaceActivityPort = {
   inspect(repoPath: string): Effect.Effect<WorkspaceActivityBlocker[], HostOperationErrorAggregate>;
   releaseWorkspaceSessions(repoPath: string): Effect.Effect<void, HostOperationErrorAggregate>;
+  releaseWorkspaceRuntimes(repoPath: string): Effect.Effect<void, HostOperationErrorAggregate>;
 };
 
 const toHostOperationError = (operation: string, message: string, cause: unknown) =>
@@ -24,10 +26,12 @@ const toHostOperationError = (operation: string, message: string, cause: unknown
 export const createWorkspaceActivityInspector = ({
   agentSessionLiveStateService,
   devServerService,
+  runtimeRegistry,
   terminalService,
 }: {
   agentSessionLiveStateService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">;
   devServerService: Pick<DevServerService, "inspectWorkspaceActivity">;
+  runtimeRegistry: Pick<RuntimeRegistryPort, "listRuntimesByRepo" | "stopRuntime">;
   terminalService: Pick<TerminalService, "inspectWorkspaceActivity">;
 }): WorkspaceActivityPort => ({
   inspect: (repoPath) =>
@@ -118,6 +122,23 @@ export const createWorkspaceActivityInspector = ({
               toHostOperationError(
                 "workspace.releaseAgentSessions",
                 `Failed to release agent session ${session.ref.externalSessionId} for ${repoPath}. Retry removal.`,
+                cause,
+              ),
+            ),
+          );
+      }
+    }),
+  releaseWorkspaceRuntimes: (repoPath) =>
+    Effect.gen(function* () {
+      const runtimes = yield* runtimeRegistry.listRuntimesByRepo({ repoPath });
+      for (const runtime of runtimes) {
+        yield* runtimeRegistry
+          .stopRuntime(runtime.runtimeId)
+          .pipe(
+            Effect.mapError((cause) =>
+              toHostOperationError(
+                "workspace.releaseWorkspaceRuntimes",
+                `Failed to stop the workspace runtime ${runtime.runtimeId} for ${repoPath}. Retry removal.`,
                 cause,
               ),
             ),
