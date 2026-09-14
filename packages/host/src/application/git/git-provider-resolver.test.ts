@@ -108,7 +108,6 @@ const repoConfig = (providerConfig?: { id: string; enabled: boolean }) =>
     workspaceId: "repo",
     workspaceName: "Repo",
     repoPath: "/repo",
-    defaultRuntimeKind: "opencode",
     git: providerConfig ? { provider: providerConfig } : {},
   });
 

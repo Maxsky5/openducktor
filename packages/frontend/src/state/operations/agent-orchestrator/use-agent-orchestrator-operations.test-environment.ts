@@ -20,7 +20,6 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     workspaceId: "repo",
     workspaceName: "Repo",
     repoPath: "/tmp/repo",
-    defaultRuntimeKind: "opencode",
     branchPrefix: "odt",
     defaultTargetBranch: { remote: "origin", branch: "main" },
     git: {},

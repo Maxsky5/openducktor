@@ -82,7 +82,6 @@ describe("model-selection-preferences", () => {
           modelId: "gpt-5",
         },
         defaultSelection,
-        defaultRuntimeKind: "opencode",
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       }),
     ).toBe("codex");
@@ -92,7 +91,6 @@ describe("model-selection-preferences", () => {
         selectedSessionModel: null,
         draftSelection: null,
         defaultSelection,
-        defaultRuntimeKind: "codex",
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       }),
     ).toBe("opencode");
@@ -102,7 +100,6 @@ describe("model-selection-preferences", () => {
         selectedSessionModel: null,
         draftSelection: null,
         defaultSelection: null,
-        defaultRuntimeKind: "codex",
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       }),
     ).toBeNull();
@@ -118,7 +115,6 @@ describe("model-selection-preferences", () => {
         },
         draftSelection: null,
         defaultSelection: null,
-        defaultRuntimeKind: "opencode",
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       }),
     ).toBe("codex");
@@ -136,7 +132,6 @@ describe("model-selection-preferences", () => {
           providerId: "openai",
           modelId: "gpt-5",
         },
-        defaultRuntimeKind: "codex",
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       }),
     ).toBe("opencode");
@@ -150,10 +145,9 @@ describe("model-selection-preferences", () => {
           providerId: "openai",
           modelId: "gpt-5",
         },
-        defaultRuntimeKind: "opencode",
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       }),
-    ).toBe("opencode");
+    ).toBeNull();
 
     expect(
       resolveChatComposerSelectedRuntimeKind({
@@ -164,7 +158,6 @@ describe("model-selection-preferences", () => {
           modelId: "gpt-5",
         },
         defaultSelection: null,
-        defaultRuntimeKind: "codex",
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       }),
     ).toBeNull();

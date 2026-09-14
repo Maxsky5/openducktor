@@ -651,7 +651,6 @@ const createConfig = (): GlobalConfig =>
         workspaceId: "repo",
         workspaceName: "Repo",
         repoPath: "/canonical/repo",
-        defaultRuntimeKind: "codex",
         worktreeCopyPaths: [".env"],
       },
     },

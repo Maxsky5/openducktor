@@ -332,9 +332,9 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   selectedFile: null,
   onSelectFile: () => {},
   repoSettings: {
-    defaultRuntimeKind: "opencode",
     worktreeBasePath: "",
     branchPrefix: "codex/",
+    defaultModel: null,
     defaultTargetBranch: { remote: "origin", branch: "main" },
     preStartHooks: [],
     postCompleteHooks: [],

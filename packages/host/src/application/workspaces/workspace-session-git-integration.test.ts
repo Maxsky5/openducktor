@@ -91,7 +91,6 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       workspaceId: "fairnest",
       workspaceName: "Test",
       repoPath,
-      defaultRuntimeKind: "opencode",
       defaultTargetBranch: { remote: null, branch: "main" },
       branchPrefix: "odt",
       worktreeBasePath: path.join(root, "worktrees"),

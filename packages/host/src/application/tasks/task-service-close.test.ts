@@ -85,7 +85,6 @@ const repoConfig: RepoConfig = {
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   worktreeBasePath: "/worktrees/repo",
-  defaultRuntimeKind: "opencode",
   git: {},
   hooks: { preStart: [], postComplete: [] },
   devServers: [],

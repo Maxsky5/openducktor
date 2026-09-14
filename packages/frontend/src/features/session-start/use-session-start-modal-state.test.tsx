@@ -171,10 +171,11 @@ const SESSION_START_TEST_RUNTIME_DEFINITIONS: RuntimeDescriptor[] = [
 
 const createRepoSettings = (
   overrides: Partial<RepoSettingsInput["agentDefaults"]> = {},
+  repoOverrides: Partial<RepoSettingsInput> = {},
 ): RepoSettingsInput => ({
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "codex/",
+  defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
   preStartHooks: [],
   postCompleteHooks: [],
@@ -199,6 +200,7 @@ const createRepoSettings = (
     qa: null,
     ...overrides,
   },
+  ...repoOverrides,
 });
 
 const createReadyRuntimeHealthMap = (runtimeDefinitions: RuntimeDescriptor[]) => {
@@ -275,7 +277,6 @@ const createBuildRepoSettingsForRuntime = (runtimeKind: RuntimeKind): RepoSettin
       profileId: "spec-agent",
     },
   }),
-  defaultRuntimeKind: runtimeKind,
 });
 
 const createExistingSessionWithModel = ({
@@ -957,14 +958,25 @@ describe("useSessionStartModalState", () => {
   test("falls back to repo default runtime when role runtime is missing", async () => {
     const harness = createHookHarness(
       createBaseProps({
-        repoSettings: createRepoSettings({
-          spec: {
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "spec-agent",
+        repoSettings: createRepoSettings(
+          {
+            spec: {
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "high",
+              profileId: "spec-agent",
+            },
           },
-        }),
+          {
+            defaultModel: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "",
+              profileId: "",
+            },
+          },
+        ),
       }),
     );
 
@@ -1709,7 +1721,6 @@ describe("useSessionStartModalState", () => {
         runtimeDefinitions: [FORK_RUNTIME_DESCRIPTOR],
         repoSettings: {
           ...createRepoSettings(),
-          defaultRuntimeKind: FORK_RUNTIME_KIND,
         },
       }),
     );

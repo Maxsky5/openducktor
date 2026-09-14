@@ -96,16 +96,17 @@ export const clearRoleDefault = (
   [role]: null,
 });
 
-export const selectedModelKeyForRole = (
-  agentDefaults: RepoAgentDefaultsInput,
-  role: RepoDefaultRole,
-): string => {
-  const value = agentDefaults[role];
+export const selectedModelKey = (value: { providerId: string; modelId: string } | null): string => {
   if (!value?.providerId || !value.modelId) {
     return "";
   }
   return `${value.providerId}/${value.modelId}`;
 };
+
+export const selectedModelKeyForRole = (
+  agentDefaults: RepoAgentDefaultsInput,
+  role: RepoDefaultRole,
+): string => selectedModelKey(agentDefaults[role] ?? null);
 
 export const findCatalogModel = (
   catalog: AgentModelCatalog | null,
@@ -118,12 +119,11 @@ export const findCatalogModel = (
   );
 };
 
-export const toRoleVariantOptions = (
+export const toVariantOptionsForModelKey = (
   catalog: AgentModelCatalog | null,
-  agentDefaults: RepoAgentDefaultsInput,
-  role: RepoDefaultRole,
+  modelKey: string,
 ): ComboboxOption[] => {
-  const model = findCatalogModel(catalog, selectedModelKeyForRole(agentDefaults, role));
+  const model = findCatalogModel(catalog, modelKey);
   if (!model) {
     return [];
   }
@@ -132,6 +132,13 @@ export const toRoleVariantOptions = (
     label: variant,
   }));
 };
+
+export const toRoleVariantOptions = (
+  catalog: AgentModelCatalog | null,
+  agentDefaults: RepoAgentDefaultsInput,
+  role: RepoDefaultRole,
+): ComboboxOption[] =>
+  toVariantOptionsForModelKey(catalog, selectedModelKeyForRole(agentDefaults, role));
 
 export const getMissingRequiredRoleLabels = (agentDefaults: RepoAgentDefaultsInput): string[] => {
   return ROLE_DEFAULTS.reduce<string[]>((labels, { role, label }) => {
@@ -158,7 +165,9 @@ export const resolveRepoAgentDefaultRuntimeKind = ({
   role: RepoDefaultRole;
 }): RuntimeKind | null => {
   const requestedRuntimeKind =
-    selectedRepoConfig.agentDefaults[role]?.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind;
+    selectedRepoConfig.agentDefaults[role]?.runtimeKind ??
+    selectedRepoConfig.defaultModel?.runtimeKind ??
+    null;
 
   return resolveRuntimeKindSelection({
     runtimeDefinitions,

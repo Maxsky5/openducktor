@@ -12,13 +12,16 @@ import type {
 } from "@/features/session-start";
 import {
   coerceVisibleSelectionToCatalog,
-  pickDefaultVisibleSelectionForCatalog,
-  roleDefaultSelectionFor,
+  defaultSessionSelectionFor,
 } from "@/features/session-start/session-start-selection";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import { gitProviderReadError, pullRequestHealthError } from "@/lib/git-provider-health";
-import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
+import {
+  MISSING_BUILD_TARGET_ERROR,
+  missingSessionDefaultModelError,
+  unavailableSessionDefaultModelError,
+} from "@/lib/session-start-errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
 import { loadRepoConfigFromQuery, toRepoSettingsInput } from "@/state/queries/workspace";
@@ -151,32 +154,22 @@ const resolveAutopilotSelection = async ({
 
   const repoConfig = await loadRepoConfigFromQuery(queryClient, activeWorkspace.workspaceId);
   const repoSettings = toRepoSettingsInput(repoConfig);
-  const savedDefaultSelection = roleDefaultSelectionFor(repoSettings, role);
-  const runtimeKind = savedDefaultSelection?.runtimeKind ?? repoSettings.defaultRuntimeKind;
+  const savedDefaultSelection = defaultSessionSelectionFor(repoSettings, role);
+  if (!savedDefaultSelection) {
+    throw new Error(missingSessionDefaultModelError(role));
+  }
+
+  const runtimeKind = savedDefaultSelection.runtimeKind;
   const catalog = await loadRepoRuntimeCatalog({
     repoPath: activeWorkspace.repoPath,
     runtimeKind,
   });
-
-  if (savedDefaultSelection) {
-    const validatedSelection = coerceVisibleSelectionToCatalog(catalog, savedDefaultSelection);
-    if (!validatedSelection) {
-      throw new Error(
-        `Saved default ${ROLE_LABELS[role]} model is not available for runtime ${runtimeKind}.`,
-      );
-    }
-
-    return validatedSelection;
+  const validatedSelection = coerceVisibleSelectionToCatalog(catalog, savedDefaultSelection);
+  if (!validatedSelection) {
+    throw new Error(unavailableSessionDefaultModelError({ role, runtimeKind }));
   }
 
-  const catalogDefaultSelection = pickDefaultVisibleSelectionForCatalog(catalog);
-  if (!catalogDefaultSelection) {
-    throw new Error(
-      `No default ${ROLE_LABELS[role]} model is available for runtime ${runtimeKind}.`,
-    );
-  }
-
-  return catalogDefaultSelection;
+  return validatedSelection;
 };
 
 const isSkippableAutopilotError = (action: AutopilotActionDefinition, cause: unknown): boolean => {

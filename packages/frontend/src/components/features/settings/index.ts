@@ -8,8 +8,10 @@ export {
   ROLE_DEFAULTS,
   resolvePromptOverrideFallbackTemplate,
   resolveRepoAgentDefaultRuntimeKind,
+  selectedModelKey,
   selectedModelKeyForRole,
   togglePromptOverrideEnabled,
   toRoleVariantOptions,
+  toVariantOptionsForModelKey,
   updatePromptOverrideTemplate,
 } from "./settings-modal-model";

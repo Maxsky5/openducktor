@@ -1,7 +1,7 @@
 import type { RuntimeDescriptor, RuntimeKind, SettingsRepoConfig } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ReactElement } from "react";
-import { AgentRuntimeCombobox, toPrimaryAgentOptions } from "@/components/features/agents";
+import { toPrimaryAgentOptions } from "@/components/features/agents";
 import {
   ModelPicker,
   type ModelPickerFavoriteState,
@@ -19,12 +19,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import {
-  findRuntimeDefinition,
-  resolveRuntimeKindSelection,
-  toAgentRuntimeOptions,
-} from "@/lib/agent-runtime";
+import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
+import { RepositoryDefaultModelBlock } from "./settings-repository-default-model";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
 
 type RepositoryAgentsSectionProps = {
@@ -51,6 +48,11 @@ type RepositoryAgentsSectionProps = {
     value: string,
   ) => void;
   onClearSelectedRepoAgentDefault: (role: "spec" | "planner" | "build" | "qa") => void;
+  onUpdateSelectedRepoDefaultModel: (
+    field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
+    value: string,
+  ) => void;
+  onClearSelectedRepoDefaultModel: () => void;
 };
 
 type RepositoryAgentRoleViewModel = {
@@ -160,6 +162,8 @@ export function RepositoryAgentsSection({
   onUpdateSelectedRepoConfig,
   onUpdateSelectedRepoAgentDefault,
   onClearSelectedRepoAgentDefault,
+  onUpdateSelectedRepoDefaultModel,
+  onClearSelectedRepoDefaultModel,
 }: RepositoryAgentsSectionProps): ReactElement {
   const { isLoadingRuntimeDefinitions, isLoadingCatalog, isLoadingSettings, isSaving } =
     loadingState;
@@ -171,7 +175,6 @@ export function RepositoryAgentsSection({
     );
   }
 
-  const runtimeOptions = toAgentRuntimeOptions(availableRuntimeDefinitions);
   const modelPickerRuntimes: ModelPickerRuntime[] = availableRuntimeDefinitions.map(
     (descriptor) => {
       const resource = catalogResources.find(
@@ -192,14 +195,8 @@ export function RepositoryAgentsSection({
       };
     },
   );
-  const runtimeDropdownClassName = "sm:min-w-[18rem]";
   const agentDropdownClassName = "sm:min-w-[18rem]";
   const variantDropdownClassName = "sm:min-w-[16rem]";
-  const selectedDefaultRuntimeKind =
-    resolveRuntimeKindSelection({
-      runtimeDefinitions: availableRuntimeDefinitions,
-      requestedRuntimeKind: selectedRepoConfig.defaultRuntimeKind,
-    }) ?? "";
   const missingRoleLabels = findMissingRoleLabels({
     selectedRepoConfig,
     runtimeDefinitions: availableRuntimeDefinitions,
@@ -207,31 +204,23 @@ export function RepositoryAgentsSection({
 
   return (
     <div className="grid gap-4 p-4">
+      <RepositoryDefaultModelBlock
+        selectedRepoConfig={selectedRepoConfig}
+        availableRuntimeDefinitions={availableRuntimeDefinitions}
+        catalogResources={catalogResources}
+        favoriteState={favoriteState}
+        loadingState={{ isLoadingCatalog, isLoadingSettings, isSaving }}
+        getCatalogForRuntime={getCatalogForRuntime}
+        isCatalogLoadingForRuntime={isCatalogLoadingForRuntime}
+        onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
+        onUpdateSelectedRepoDefaultModel={onUpdateSelectedRepoDefaultModel}
+        onClearSelectedRepoDefaultModel={onClearSelectedRepoDefaultModel}
+      />
+
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-foreground">Agent Defaults (Per Role)</h3>
         <p className="text-xs text-muted-foreground">
           Defaults are applied when starting sessions in this repository.
-        </p>
-      </div>
-
-      <div className="grid gap-2 rounded-md border border-border bg-card p-3 md:max-w-sm">
-        <div className="grid gap-1">
-          <Label className="text-xs">Default Agent Runtime</Label>
-          <AgentRuntimeCombobox
-            value={selectedDefaultRuntimeKind}
-            runtimeOptions={runtimeOptions}
-            disabled={isSaving || isLoadingRuntimeDefinitions || runtimeOptions.length === 0}
-            className={runtimeDropdownClassName}
-            onValueChange={(defaultRuntimeKind) =>
-              onUpdateSelectedRepoConfig((repoConfig) => ({
-                ...repoConfig,
-                defaultRuntimeKind,
-              }))
-            }
-          />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Used when a role does not define its own runtime.
         </p>
       </div>
 

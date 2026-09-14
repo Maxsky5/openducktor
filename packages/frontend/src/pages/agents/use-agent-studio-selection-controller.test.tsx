@@ -119,9 +119,15 @@ const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 const activeWorkspaceId = "workspace-1";
 const workspaceRepoPath = "/repo";
 const repoSettings: RepoSettingsInput = {
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "",
+  defaultModel: {
+    runtimeKind: "opencode",
+    providerId: "openai",
+    modelId: "gpt-5",
+    variant: "",
+    profileId: "",
+  },
   defaultTargetBranch: { remote: "origin", branch: "main" },
   preStartHooks: [],
   postCompleteHooks: [],
@@ -748,7 +754,13 @@ describe("useAgentStudioSelectionController", () => {
         workspaceRepoPath,
         repoSettings: {
           ...repoSettings,
-          defaultRuntimeKind: "codex",
+          defaultModel: {
+            runtimeKind: "codex",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "",
+            profileId: "",
+          },
         },
         tasks: [task],
         sessions: [],

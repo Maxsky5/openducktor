@@ -242,9 +242,15 @@ const MODEL_SELECTION = {
 };
 
 const REPO_SETTINGS = {
-  defaultRuntimeKind: "opencode" as const,
   worktreeBasePath: "",
   branchPrefix: "codex/",
+  defaultModel: {
+    runtimeKind: "opencode",
+    providerId: "openai",
+    modelId: "gpt-5",
+    variant: "",
+    profileId: "",
+  },
   defaultTargetBranch: { remote: "origin", branch: "main" },
   preStartHooks: [],
   postCompleteHooks: [],
@@ -404,7 +410,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         workspaceId: "repo",
         workspaceName: "Repo",
         repoPath: "/repo",
-        defaultRuntimeKind: "opencode",
         branchPrefix: "codex/",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
@@ -710,7 +715,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("handleCreateSession keeps the current runtime but uses the target role model default", async () => {
+  test("handleCreateSession keeps the current runtime and uses the repository Default Model", async () => {
     const currentSelection = {
       runtimeKind: "opencode" as const,
       providerId: "anthropic",
@@ -775,7 +780,6 @@ describe("useAgentStudioSessionStartFlow", () => {
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
-      profileId: "planner",
     });
 
     await harness.unmount();

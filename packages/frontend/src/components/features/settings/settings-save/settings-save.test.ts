@@ -14,7 +14,13 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   workspaceId: "repo-a",
   workspaceName: "Repo A",
   repoPath: "/repo-a",
-  defaultRuntimeKind: "opencode",
+  defaultModel: {
+    runtimeKind: "opencode",
+    providerId: "openai",
+    modelId: "gpt-5",
+    variant: " high ",
+    profileId: " build ",
+  },
   worktreeBasePath: "  /tmp/worktrees  ",
   branchPrefix: "  ",
   defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -166,7 +172,13 @@ describe("settings save transforms", () => {
   test("prepares repo config and removes incomplete agent defaults", () => {
     const saveReady = prepareRepoConfigForSave(createRepoConfig());
 
-    expect(saveReady.defaultRuntimeKind).toBe("opencode");
+    expect(saveReady.defaultModel).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "build",
+    });
     expect(saveReady.branchPrefix).toBe("odt");
     expect(saveReady.defaultTargetBranch).toEqual({ remote: "origin", branch: "main" });
     expect(saveReady.worktreeBasePath).toBe("/tmp/worktrees");
@@ -223,6 +235,36 @@ describe("settings save transforms", () => {
     ).toThrow(
       "Specification agent default runtime kind is required when provider and model are configured.",
     );
+  });
+
+  test("drops a default model without provider or model", () => {
+    const saveReady = prepareRepoConfigForSave({
+      ...createRepoConfig(),
+      defaultModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "   ",
+        variant: "",
+        profileId: "",
+      },
+    });
+
+    expect(saveReady.defaultModel).toBeUndefined();
+  });
+
+  test("rejects a default model without runtime kind", () => {
+    expect(() =>
+      prepareRepoConfigForSave({
+        ...createRepoConfig(),
+        // @ts-expect-error This negative test verifies that a configured Default Model requires a runtime kind.
+        defaultModel: {
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "",
+          profileId: "",
+        },
+      }),
+    ).toThrow("Default Model runtime kind is required when provider and model are configured.");
   });
 
   test("prepares autopilot settings in canonical event order", () => {

@@ -16,7 +16,6 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: "/worktrees",
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -80,9 +79,9 @@ describe("useAgentStudioRepoSettings", () => {
 
     expect(hostClient.workspaceGetRepoConfig).toHaveBeenCalledWith("workspace-repo");
     expect(harness.getLatest().repoSettings).toEqual({
-      defaultRuntimeKind: "opencode",
       worktreeBasePath: "/worktrees",
       branchPrefix: "codex/",
+      defaultModel: null,
       defaultTargetBranch: { remote: "origin", branch: "main" },
       preStartHooks: [],
       postCompleteHooks: [],

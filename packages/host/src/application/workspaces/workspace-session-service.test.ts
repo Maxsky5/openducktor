@@ -67,7 +67,6 @@ describe("host-owned Workspace Session lifecycle", () => {
       workspaceId: "fairnest",
       workspaceName: "Fairnest",
       repoPath: database.repoPath,
-      defaultRuntimeKind: "opencode",
       branchPrefix: "odt",
       worktreeCopyPaths: [".env"],
       hooks: { preStart: ["setup --local"], postComplete: [] },

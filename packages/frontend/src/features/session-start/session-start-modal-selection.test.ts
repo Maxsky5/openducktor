@@ -38,9 +38,9 @@ const CATALOG: AgentModelCatalog = {
 };
 
 const REPO_SETTINGS: RepoSettingsInput = {
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "codex/",
+  defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
   preStartHooks: [],
   postCompleteHooks: [],

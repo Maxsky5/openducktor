@@ -139,6 +139,8 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateRepoPromptOverrides: () => {},
   updateSelectedRepoAgentDefault: () => {},
   clearSelectedRepoAgentDefault: () => {},
+  updateSelectedRepoDefaultModel: () => {},
+  clearSelectedRepoDefaultModel: () => {},
   submit: async () => true,
 });
 
@@ -150,7 +152,6 @@ describe("settings modal content", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
-          defaultRuntimeKind: "opencode",
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
@@ -214,7 +215,6 @@ describe("settings modal content", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
-          defaultRuntimeKind: "opencode",
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
@@ -281,7 +281,6 @@ describe("settings modal content", () => {
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
       branchPrefix: "odt",
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: {

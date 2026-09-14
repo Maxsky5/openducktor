@@ -294,7 +294,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/tmp/repo",
-      defaultRuntimeKind: "opencode" as const,
       branchPrefix: "obp",
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: {},

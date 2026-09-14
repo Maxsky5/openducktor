@@ -22,9 +22,15 @@ const createSnapshot = (): SettingsSnapshot =>
         workspaceId: "repo",
         workspaceName: "Repo",
         repoPath: "/repo",
-        defaultRuntimeKind: "codex",
         worktreeBasePath: undefined,
         branchPrefix: "odt",
+        defaultModel: {
+          runtimeKind: "codex",
+          providerId: "codex",
+          modelId: "gpt-5.4",
+          variant: "medium",
+          profileId: "",
+        },
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
         hooks: { preStart: [], postComplete: [] },
@@ -53,7 +59,7 @@ describe("settings runtime availability validation", () => {
 
     expect(validation.errorsByWorkspaceId).toEqual({
       repo: [
-        'Default agent runtime "Codex" is disabled.',
+        'Default Model runtime "Codex" is disabled.',
         'Builder agent runtime "Codex" is disabled.',
       ],
     });

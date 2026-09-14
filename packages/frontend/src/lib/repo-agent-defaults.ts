@@ -35,15 +35,18 @@ export const repoAgentDefaultRuntimeKindError = (role: RepoAgentDefaultRole): st
   return `${REPO_AGENT_DEFAULT_LABELS[role]} agent default runtime kind is required when provider and model are configured.`;
 };
 
+export const REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR =
+  "Default Model runtime kind is required when provider and model are configured.";
+
 export const resolveConfiguredAgentRuntimeKind = (
   repoSettings: RepoSettingsInput | null,
   role: RepoAgentDefaultRole,
 ): RuntimeKind | null =>
-  repoSettings?.agentDefaults[role]?.runtimeKind ?? repoSettings?.defaultRuntimeKind ?? null;
+  repoSettings?.agentDefaults[role]?.runtimeKind ?? repoSettings?.defaultModel?.runtimeKind ?? null;
 
-export const normalizeRepoAgentDefaultForSave = (
-  role: RepoAgentDefaultRole,
+const normalizeRepoModelDefaultForSave = (
   entry: RepoAgentDefaultDraft | null | undefined,
+  runtimeKindError: string,
 ): NormalizedRepoAgentDefault | undefined => {
   if (!entry) {
     return undefined;
@@ -56,7 +59,7 @@ export const normalizeRepoAgentDefaultForSave = (
   }
 
   if (!entry.runtimeKind) {
-    throw new Error(repoAgentDefaultRuntimeKindError(role));
+    throw new Error(runtimeKindError);
   }
 
   const variant = trimNonEmpty(entry.variant);
@@ -75,3 +78,14 @@ export const normalizeRepoAgentDefaultForSave = (
   }
   return selection;
 };
+
+export const normalizeRepoAgentDefaultForSave = (
+  role: RepoAgentDefaultRole,
+  entry: RepoAgentDefaultDraft | null | undefined,
+): NormalizedRepoAgentDefault | undefined =>
+  normalizeRepoModelDefaultForSave(entry, repoAgentDefaultRuntimeKindError(role));
+
+export const normalizeRepoDefaultModelForSave = (
+  entry: RepoAgentDefaultDraft | null | undefined,
+): NormalizedRepoAgentDefault | undefined =>
+  normalizeRepoModelDefaultForSave(entry, REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR);

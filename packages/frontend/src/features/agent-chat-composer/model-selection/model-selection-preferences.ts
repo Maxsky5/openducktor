@@ -24,20 +24,17 @@ export const resolveChatComposerSelectedRuntimeKind = ({
   selectedSessionModel,
   draftSelection,
   defaultSelection,
-  defaultRuntimeKind,
   runtimeDefinitions,
 }: {
   selectedSessionModel: AgentModelSelection | null;
   draftSelection: AgentModelSelection | null;
   defaultSelection: AgentModelSelection | null;
-  defaultRuntimeKind: RuntimeKind | null | undefined;
   runtimeDefinitions: RuntimeDescriptor[];
 }): RuntimeKind | null => {
   return (
     selectedSessionModel?.runtimeKind ??
     availableRuntimeKindFor(runtimeDefinitions, draftSelection?.runtimeKind) ??
     availableRuntimeKindFor(runtimeDefinitions, defaultSelection?.runtimeKind) ??
-    availableRuntimeKindFor(runtimeDefinitions, defaultRuntimeKind) ??
     null
   );
 };

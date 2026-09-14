@@ -7,9 +7,9 @@ import {
 } from "./repo-agent-defaults";
 
 const createRepoSettings = (overrides: Partial<RepoSettingsInput> = {}): RepoSettingsInput => ({
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "",
+  defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
   preStartHooks: [],
   postCompleteHooks: [],
@@ -47,11 +47,17 @@ describe("repo-agent-defaults", () => {
     ).toBe("codex");
   });
 
-  test("returns the configured runtime kind without availability fallback", () => {
+  test("falls back to the repository default model runtime kind", () => {
     expect(
       resolveConfiguredAgentRuntimeKind(
         createRepoSettings({
-          defaultRuntimeKind: "codex",
+          defaultModel: {
+            runtimeKind: "codex",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "",
+            profileId: "",
+          },
         }),
         "qa",
       ),

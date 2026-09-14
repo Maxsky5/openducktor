@@ -31,8 +31,12 @@ describe("useDelegationOperations", () => {
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
       branchPrefix: "obp",
+      defaultModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      },
       defaultTargetBranch: { remote: "origin", branch: "main" },
       git: {},
       hooks: { preStart: [], postComplete: [] },

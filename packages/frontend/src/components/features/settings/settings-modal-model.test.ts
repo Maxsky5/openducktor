@@ -64,7 +64,13 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
+  defaultModel: {
+    runtimeKind: "opencode",
+    providerId: "openai",
+    modelId: "gpt-5",
+    variant: "",
+    profileId: "",
+  },
   worktreeBasePath: undefined,
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -188,7 +194,6 @@ describe("settings-modal-model", () => {
     expect(
       resolveRepoAgentDefaultRuntimeKind({
         selectedRepoConfig: createRepoConfig({
-          defaultRuntimeKind: "opencode",
           agentDefaults: {
             spec: undefined,
             planner: undefined,
@@ -206,7 +211,6 @@ describe("settings-modal-model", () => {
     expect(
       getNeededCatalogRuntimeKinds(
         createRepoConfig({
-          defaultRuntimeKind: "opencode",
           agentDefaults: {
             spec: {
               runtimeKind: "opencode",
@@ -239,7 +243,6 @@ describe("settings-modal-model", () => {
     expect(
       getNeededCatalogRuntimeKinds(
         createRepoConfig({
-          defaultRuntimeKind: "opencode",
           agentDefaults: {
             spec: {
               runtimeKind: "opencode",

@@ -19,7 +19,6 @@ const createRepoConfig = (agentStudioState: WorkspaceAgentStudioState): RepoConf
   workspaceId: "repo-a",
   workspaceName: "Repo A",
   repoPath: "/repo-a",
-  defaultRuntimeKind: "opencode",
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},

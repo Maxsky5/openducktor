@@ -183,6 +183,24 @@ export const useSettingsModalDirtyDraftActions = ({
     [draftActions, runDirtyAction],
   );
 
+  const updateSelectedRepoDefaultModel = useCallback(
+    (
+      field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
+      value: string,
+    ): void => {
+      runDirtyAction("repoSettings", () => {
+        draftActions.updateSelectedRepoDefaultModel(field, value);
+      });
+    },
+    [draftActions, runDirtyAction],
+  );
+
+  const clearSelectedRepoDefaultModel = useCallback((): void => {
+    runDirtyAction("repoSettings", () => {
+      draftActions.clearSelectedRepoDefaultModel();
+    });
+  }, [draftActions, runDirtyAction]);
+
   return {
     updateCustomAgentRoles,
     updateSelectedRepoConfig,
@@ -200,5 +218,7 @@ export const useSettingsModalDirtyDraftActions = ({
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
+    updateSelectedRepoDefaultModel,
+    clearSelectedRepoDefaultModel,
   };
 };

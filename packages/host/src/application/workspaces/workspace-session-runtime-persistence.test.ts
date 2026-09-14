@@ -148,7 +148,6 @@ describe("Workspace Session persistence through the shared command module", () =
               workspaceId: "fairnest",
               workspaceName: "Fairnest",
               repoPath: database.repoPath,
-              defaultRuntimeKind: "opencode",
             }),
           ),
       },
@@ -548,7 +547,6 @@ describe("Workspace Session persistence through the shared command module", () =
       workspaceId: "fairnest",
       workspaceName: "Fairnest",
       repoPath: database.repoPath,
-      defaultRuntimeKind: "opencode",
     });
     const workspace = createWorkspaceSessionService({
       operationGate: h.operationGate,

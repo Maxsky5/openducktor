@@ -195,7 +195,6 @@ const createRepoConfig = (): Awaited<ReturnType<typeof host.workspaceGetRepoConf
   workspaceId: "repo-a",
   workspaceName: "repo-a",
   repoPath: "/repo-a",
-  defaultRuntimeKind: "opencode" as const,
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
@@ -222,9 +221,9 @@ const createRepoConfig = (): Awaited<ReturnType<typeof host.workspaceGetRepoConf
 });
 
 const inputFixture: RepoSettingsInput = {
-  defaultRuntimeKind: "opencode" as const,
   worktreeBasePath: "  /tmp/worktrees  ",
   branchPrefix: "  codex/  ",
+  defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "  develop  " },
   preStartHooks: ["echo pre"],
   postCompleteHooks: ["echo post"],
@@ -422,9 +421,9 @@ describe("use-repo-settings-operations", () => {
 
       expect(workspaceGetRepoConfig).toHaveBeenCalledWith("repo-a");
       expect(loaded).toEqual({
-        defaultRuntimeKind: "opencode" as const,
         worktreeBasePath: "",
         branchPrefix: "codex/",
+        defaultModel: null,
         defaultTargetBranch: { remote: "origin", branch: "main" },
         preStartHooks: ["a"],
         postCompleteHooks: ["b"],
@@ -496,7 +495,6 @@ describe("use-repo-settings-operations", () => {
       await harness.getLatest().saveRepoSettings(input);
 
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {
-        defaultRuntimeKind: "opencode" as const,
         worktreeBasePath: "/tmp/worktrees",
         branchPrefix: "codex/",
         defaultTargetBranch: { remote: "origin", branch: "develop" },
@@ -591,7 +589,6 @@ describe("use-repo-settings-operations", () => {
       });
 
       expect(workspaceSaveRepoSettings).toHaveBeenCalledWith("repo-a", {
-        defaultRuntimeKind: "opencode" as const,
         worktreeBasePath: "/tmp/worktrees",
         branchPrefix: "codex/",
         defaultTargetBranch: { remote: "origin", branch: "develop" },
@@ -1337,7 +1334,6 @@ describe("use-repo-settings-operations", () => {
           workspaceId: "repo-a",
           workspaceName: "repo-a",
           repoPath: "/repo-a",
-          defaultRuntimeKind: "opencode" as const,
           worktreeBasePath: "/tmp/worktrees",
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },

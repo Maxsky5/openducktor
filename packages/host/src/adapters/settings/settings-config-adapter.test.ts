@@ -149,7 +149,6 @@ describe("settings config adapter initialization", () => {
               workspaceId: "repo",
               workspaceName: "Repo",
               repoPath: "/repo",
-              defaultRuntimeKind: "opencode",
               git: {
                 providers: {
                   github: {

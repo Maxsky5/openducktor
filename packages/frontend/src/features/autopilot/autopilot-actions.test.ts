@@ -71,7 +71,6 @@ const createRepoConfig = (): RepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: undefined,
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -649,6 +648,34 @@ describe("autopilot feature helpers", () => {
     ).rejects.toThrow("catalog failed");
 
     expect(args.loadTaskSessionRecords).not.toHaveBeenCalled();
+    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
+  });
+
+  test("fails with a named error when no session default model is configured", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-QA-NO-DEFAULT", status: "ai_review" }));
+    args.queryClient.setQueryData(repoConfigQueryOptions("repo").queryKey, {
+      ...createRepoConfig(),
+      defaultModel: undefined,
+      agentDefaults: { spec: undefined, planner: undefined, build: undefined, qa: undefined },
+    });
+
+    await expect(executeAutopilotAction({ ...args, actionId: "startQa" })).rejects.toThrow(
+      "No model is configured for the QA session. Set a QA default or the repository Default Model in Settings > Repositories > Agents.",
+    );
+    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
+  });
+
+  test("fails with a named error when the configured default model is unavailable", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-QA-UNAVAILABLE", status: "ai_review" }));
+    args.queryClient.setQueryData(repoConfigQueryOptions("repo").queryKey, {
+      ...createRepoConfig(),
+      defaultModel: { runtimeKind: "opencode", providerId: "openai", modelId: "missing-model" },
+      agentDefaults: { spec: undefined, planner: undefined, build: undefined, qa: undefined },
+    });
+
+    await expect(executeAutopilotAction({ ...args, actionId: "startQa" })).rejects.toThrow(
+      "The saved QA default or repository Default Model is not available for runtime opencode. Update it in Settings > Repositories > Agents.",
+    );
     expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
   });
 

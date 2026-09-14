@@ -99,7 +99,6 @@ function renderCreation(
             workspaceName: "A",
             repoPath: "/repo",
             branchPrefix: "odt",
-            defaultRuntimeKind: "opencode",
           }),
         gitGetBranches: async () => [
           { name: "main", isRemote: false, isCurrent: true, worktreePath: "/repo" },

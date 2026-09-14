@@ -234,3 +234,121 @@ test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
     }
   },
 );
+
+test("prefills the creation picker from the repository Default Model when its catalog is ready", async () => {
+  const catalog: AgentModelCatalog = {
+    models: [
+      {
+        id: "openai/gpt-5",
+        providerId: "openai",
+        modelId: "gpt-5",
+        modelName: "GPT 5",
+        providerName: "OpenAI",
+        variants: ["low"],
+      },
+    ],
+    defaultModelsByProvider: {},
+  };
+  const definitions: RuntimeDefinitionsContextValue = {
+    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+    isLoadingRuntimeSettings: false,
+    runtimeSettingsError: null,
+    hasRuntimeSettingsSnapshot: true,
+    refreshRuntimeSettings: async () => {},
+    loadRepoRuntimeCatalog: async () => catalog,
+    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+    loadRepoRuntimeSkills: async () => ({ skills: [] }),
+    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
+    loadRepoRuntimeFileSearch: async () => [],
+  };
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryProvider useIsolatedClient>
+      <RuntimeDefinitionsContext value={definitions}>{children}</RuntimeDefinitionsContext>
+    </QueryProvider>
+  );
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+    }),
+  );
+  const harness = createHookHarness(
+    () =>
+      useWorkspaceSessionModelPicker("/repo", undefined, {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      }),
+    undefined,
+    { wrapper },
+  );
+  try {
+    await harness.mount();
+    await harness.waitFor((state) => state.selection?.modelId === "gpt-5", 2000);
+
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "low",
+    });
+  } finally {
+    await harness.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("does not prefill the creation picker when the Default Model runtime is unavailable", async () => {
+  const definitions: RuntimeDefinitionsContextValue = {
+    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+    isLoadingRuntimeSettings: false,
+    runtimeSettingsError: null,
+    hasRuntimeSettingsSnapshot: true,
+    refreshRuntimeSettings: async () => {},
+    loadRepoRuntimeCatalog: async () => {
+      throw new Error("Catalog load must not run for an unavailable runtime.");
+    },
+    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+    loadRepoRuntimeSkills: async () => ({ skills: [] }),
+    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
+    loadRepoRuntimeFileSearch: async () => [],
+  };
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryProvider useIsolatedClient>
+      <RuntimeDefinitionsContext value={definitions}>{children}</RuntimeDefinitionsContext>
+    </QueryProvider>
+  );
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+    }),
+  );
+  const harness = createHookHarness(
+    () =>
+      useWorkspaceSessionModelPicker("/repo", undefined, {
+        runtimeKind: "claude",
+        providerId: "openai",
+        modelId: "gpt-5",
+      }),
+    undefined,
+    { wrapper },
+  );
+  try {
+    await harness.mount();
+    await harness.waitFor((state) => state.isLoading === false, 2000);
+
+    expect(harness.getLatest().selection).toBeNull();
+  } finally {
+    await harness.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});

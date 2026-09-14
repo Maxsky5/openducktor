@@ -25,7 +25,6 @@ const repoConfig = (workspaceId: string, repoPath: string): RepoConfig => ({
   workspaceId,
   workspaceName: workspaceId,
   repoPath,
-  defaultRuntimeKind: "opencode",
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
@@ -455,7 +454,6 @@ describe("createWorkspaceSettingsService", () => {
         workspaceId: "repo-b",
         workspaceName: "Repo B",
         repoPath: "/repos/b",
-        defaultRuntimeKind: "codex",
       }),
     );
     const addedRepoConfig = await Effect.runPromise(service.getRepoConfig("repo-b"));
@@ -466,7 +464,7 @@ describe("createWorkspaceSettingsService", () => {
       repoPath: "/canonical/b",
       isActive: true,
     });
-    expect(addedRepoConfig.defaultRuntimeKind).toBe("codex");
+    expect(addedRepoConfig.defaultModel).toBeUndefined();
     expect(selected).toMatchObject({
       workspaceId: "repo-a",
       isActive: true,
