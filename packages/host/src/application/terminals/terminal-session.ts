@@ -6,6 +6,7 @@ import type { TerminalTitleTracker } from "./terminal-title-tracker";
 
 export type TerminalSession = {
   summary: TerminalSummary;
+  workspaceRepoPath: string | null;
   resources: TerminalSessionResources;
   output: TerminalSessionOutput;
   operations: Effect.Semaphore;
@@ -48,14 +49,17 @@ export const createTerminalSession = ({
   operations,
   replayByteLimit,
   shell,
+  workspaceRepoPath,
 }: {
   summary: TerminalSummary;
   titleTracker: TerminalTitleTracker;
   operations: Effect.Semaphore;
   replayByteLimit: number;
   shell: string;
+  workspaceRepoPath: string | null;
 }): TerminalSession => ({
   summary,
+  workspaceRepoPath,
   resources: new TerminalSessionResources(shell, titleTracker),
   output: new TerminalSessionOutput(summary.terminalId, replayByteLimit),
   operations,

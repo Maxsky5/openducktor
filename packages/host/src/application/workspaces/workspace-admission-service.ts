@@ -10,6 +10,7 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { GitPort } from "../../ports/git-port";
 import type { WorkspaceHostOwnershipPort } from "../../ports/workspace-host-ownership-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
+import { createWorkspaceRepoResolver } from "./workspace-repo-resolver";
 
 export type WorkspaceBlockReason = "closed" | "removal";
 
@@ -48,6 +49,9 @@ export type WorkspaceAdmissionService = {
     workspaceId: string;
   }): Effect.Effect<void, HostValidationErrorAggregate>;
   assertWorkspaceAdmitsWork(repoPath: string): Effect.Effect<void, HostValidationErrorAggregate>;
+  resolveWorkspaceRepoPath(
+    workingDirectory: string,
+  ): Effect.Effect<string | null, HostValidationErrorAggregate>;
   awaitWorkStarts(repoPath: string): Effect.Effect<void, HostValidationErrorAggregate>;
   withWorkStartLease<A, E, R>(
     repoPath: string,
@@ -76,7 +80,10 @@ export const createWorkspaceAdmissionService = ({
   settingsConfig,
   workspaceSettingsService,
 }: {
-  gitPort: Pick<GitPort, "isRegisteredWorktree" | "shareGitCommonDirectory">;
+  gitPort: Pick<
+    GitPort,
+    "isGitRepository" | "isRegisteredWorktree" | "listWorktrees" | "shareGitCommonDirectory"
+  >;
   hostOwnership: Pick<WorkspaceHostOwnershipPort, "claimWorkspace">;
   settingsConfig: Pick<SettingsConfigPort, "canonicalizePath">;
   workspaceSettingsService: Pick<
@@ -89,6 +96,10 @@ export const createWorkspaceAdmissionService = ({
   const workStartsByRepoPath = new Map<string, WorkStartState>();
   const administrativeWorkspaceIds = FiberRef.unsafeMake<ReadonlySet<string>>(new Set());
   let initialized = false;
+  const resolveWorkspaceRepoPath = createWorkspaceRepoResolver({
+    gitPort,
+    workspaceSettingsService,
+  });
 
   const replaceBlocked = (nextBlocked: BlockedWorkspace[]): void => {
     blockedByWorkspaceId.clear();
@@ -305,7 +316,10 @@ export const createWorkspaceAdmissionService = ({
 
   const acquireWorkStart = (key: string): Effect.Effect<void> =>
     Effect.suspend(() => {
-      const state = workStartsByRepoPath.get(key) ?? { active: 0, drained: null };
+      const state = workStartsByRepoPath.get(key) ?? {
+        active: 0,
+        drained: null,
+      };
       state.active += 1;
       workStartsByRepoPath.set(key, state);
       return Effect.void;
@@ -405,6 +419,7 @@ export const createWorkspaceAdmissionService = ({
     },
     assertTaskStoreAccess,
     assertWorkspaceAdmitsWork,
+    resolveWorkspaceRepoPath,
     awaitWorkStarts,
     withWorkStartLease,
     blockWorkspace: (input) => {

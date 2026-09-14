@@ -307,6 +307,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const terminalService = Effect.runSync(
     createTerminalService({
       assertWorkspaceAdmitsWork: workspaceAdmissionService.assertWorkspaceAdmitsWork,
+      resolveWorkspaceRepoPath: workspaceAdmissionService.resolveWorkspaceRepoPath,
       withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
       filesystem,
       ptyPort: terminalPty,

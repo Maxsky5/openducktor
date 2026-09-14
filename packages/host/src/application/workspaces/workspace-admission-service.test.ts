@@ -68,9 +68,11 @@ const createAdmission = (
   },
   gitPort: Pick<
     GitPort,
-    "isRegisteredWorktree" | "shareGitCommonDirectory"
+    "isGitRepository" | "isRegisteredWorktree" | "listWorktrees" | "shareGitCommonDirectory"
   > = createGitPortTestDouble({
+    isGitRepository: () => Effect.succeed(false),
     isRegisteredWorktree: () => Effect.succeed(false),
+    listWorktrees: () => Effect.succeed([]),
     shareGitCommonDirectory: () => Effect.succeed(false),
   }),
 ) =>
@@ -93,6 +95,29 @@ const createAdmission = (
   });
 
 describe("workspace admission service", () => {
+  test("resolves a workspace from a registered worktree", async () => {
+    const admission = createAdmission(
+      catalog({ openWorkspaces: [workspaceRecord("ws", "/repos/ws")] }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+        isRegisteredWorktree: () => Effect.succeed(true),
+        listWorktrees: () =>
+          Effect.succeed([
+            { branch: "main", worktreePath: "/repos/ws" },
+            { branch: "task", worktreePath: "/worktrees/task" },
+          ]),
+        shareGitCommonDirectory: () => Effect.succeed(true),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.resolveWorkspaceRepoPath("/worktrees/task/src")),
+    ).resolves.toBe("/repos/ws");
+  });
+
   test("loads closed and incomplete removal workspaces", async () => {
     const admission = createAdmission(
       catalog({
@@ -153,7 +178,11 @@ describe("workspace admission service", () => {
     ]) {
       await expect(
         Effect.runPromise(
-          admission.assertTaskStoreAccess({ operation, repoPath: "/repos/ws", workspaceId: "ws" }),
+          admission.assertTaskStoreAccess({
+            operation,
+            repoPath: "/repos/ws",
+            workspaceId: "ws",
+          }),
         ),
       ).rejects.toThrow("Workspace is closed: ws");
     }
@@ -189,7 +218,9 @@ describe("workspace admission service", () => {
 
   test("blocks task store writes for closed workspaces but allows reads", async () => {
     const admission = createAdmission(
-      catalog({ closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")] }),
+      catalog({
+        closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")],
+      }),
     );
 
     await expect(
@@ -308,7 +339,9 @@ describe("workspace admission service", () => {
 
   test("blocks process starts by repository path for blocked workspaces", async () => {
     const admission = createAdmission(
-      catalog({ closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")] }),
+      catalog({
+        closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")],
+      }),
     );
 
     await expect(
@@ -718,7 +751,12 @@ describe("workspace admission service", () => {
         const admittedWhenDrained = yield* Effect.exit(
           admission.assertWorkspaceAdmitsWork("/repos/open"),
         );
-        return { admittedWhenDrained, admittedWhileActive, whenDrained, whileActive };
+        return {
+          admittedWhenDrained,
+          admittedWhileActive,
+          whenDrained,
+          whileActive,
+        };
       }),
     );
 
@@ -767,7 +805,9 @@ describe("workspace admission service", () => {
 
   test("releases the work start lease when the workspace is blocked", async () => {
     const admission = createAdmission(
-      catalog({ closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")] }),
+      catalog({
+        closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")],
+      }),
     );
 
     const error = await Effect.runPromise(

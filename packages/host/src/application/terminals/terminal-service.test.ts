@@ -132,11 +132,15 @@ const makeService = async (
     _repoPath,
     effect,
   ) => effect,
+  resolveWorkspaceRepoPath: Parameters<
+    typeof createTerminalService
+  >[0]["resolveWorkspaceRepoPath"] = () => Effect.succeed(null),
 ) => {
   const titleSettlement = makeTitleSettlementScheduler();
   const shellPath = await resolveFakeShellPath();
   const serviceInput: Parameters<typeof createTerminalService>[0] = {
     assertWorkspaceAdmitsWork,
+    resolveWorkspaceRepoPath,
     withWorkStartLease,
     filesystem: filesystemPort,
     ptyPort: pty.port,
@@ -230,6 +234,33 @@ describe("TerminalService", () => {
     );
 
     expect(events.slice(0, 2)).toEqual(["lease:/repo:/repo", "canonicalize:/repo"]);
+  });
+
+  test("protects a taskless terminal that starts in a workspace worktree", async () => {
+    const events: string[] = [];
+    const { service } = await makeService(
+      makePty(true, true),
+      undefined,
+      undefined,
+      (repoPath) =>
+        repoPath === "/repo" ? Effect.void : Effect.die(`unexpected repo: ${repoPath}`),
+      (repoPath, effect, workingDirectory) => {
+        events.push(`lease:${repoPath}:${workingDirectory}`);
+        return effect;
+      },
+      () => Effect.succeed("/repo"),
+    );
+
+    await Effect.runPromise(service.create({ workingDir: "/worktree", context: {} }));
+
+    expect(events).toEqual(["lease:/repo:/worktree"]);
+    await expect(Effect.runPromise(service.inspectWorkspaceActivity("/repo"))).resolves.toEqual({
+      activeTerminalIds: ["terminal-1"],
+      unknownTerminalIds: [],
+    });
+    await expect(
+      Effect.runPromise(service.write("terminal-1", new TextEncoder().encode("ls"))),
+    ).resolves.toBeUndefined();
   });
 
   test("inspects workspace activity without touching the filesystem", async () => {
