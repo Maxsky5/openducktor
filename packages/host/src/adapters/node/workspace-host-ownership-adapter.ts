@@ -249,6 +249,13 @@ export const createNodeWorkspaceHostOwnership = (
 
   return {
     claimWorkspace,
+    releaseWorkspace: (workspaceId) =>
+      semaphore.withPermits(1)(
+        Effect.suspend(() => {
+          const claim = claims.get(workspaceId);
+          return claim ? releaseClaim(workspaceId, claim) : Effect.void;
+        }),
+      ),
     releaseAll: () =>
       semaphore.withPermits(1)(
         Effect.gen(function* () {

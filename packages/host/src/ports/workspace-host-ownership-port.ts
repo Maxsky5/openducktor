@@ -10,6 +10,7 @@ export type WorkspaceHostOwnershipError =
 
 export type WorkspaceHostOwnershipPort = {
   claimWorkspace(workspaceId: string): Effect.Effect<void, WorkspaceHostOwnershipError>;
+  releaseWorkspace(workspaceId: string): Effect.Effect<void, HostOperationErrorAggregate>;
   releaseAll(): Effect.Effect<void, HostOperationErrorAggregate>;
 };
 

@@ -29,6 +29,7 @@ import type {
   WorkspaceHostOwnershipPort,
 } from "../../ports/workspace-host-ownership-port";
 import { removeWorktreeAndFilesystemPath } from "../git/worktree-removal";
+import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrator-service";
 import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { WorkspaceOwnershipLock } from "./workspace-ownership-lock";
@@ -77,8 +78,9 @@ type CreateWorkspaceLifecycleServiceInput = {
     GitPort,
     "canonicalizePath" | "isRegisteredWorktree" | "listWorktrees" | "removeWorktree"
   >;
-  hostOwnership: Pick<WorkspaceHostOwnershipPort, "claimWorkspace">;
+  hostOwnership: Pick<WorkspaceHostOwnershipPort, "claimWorkspace" | "releaseWorkspace">;
   ownershipLock: WorkspaceOwnershipLock;
+  runtimeOrchestrator: Pick<RuntimeOrchestratorService, "clearRepoRuntimeStartupStatuses">;
   settingsConfig: SettingsConfigPort;
   storage: WorkspaceStoragePort;
   taskStore: Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
@@ -112,6 +114,7 @@ export const createWorkspaceLifecycleService = ({
   gitPort,
   hostOwnership,
   ownershipLock,
+  runtimeOrchestrator,
   settingsConfig,
   storage,
   taskStore,
@@ -388,6 +391,8 @@ export const createWorkspaceLifecycleService = ({
       ) {
         yield* admission.awaitWorkStarts(journaledRepoConfig.repoPath);
       }
+      yield* runtimeOrchestrator.clearRepoRuntimeStartupStatuses(journaledRepoConfig.repoPath);
+      yield* hostOwnership.releaseWorkspace(input.workspaceId);
       return { catalog, removedWorktrees };
     });
 
