@@ -343,6 +343,7 @@ export const assembleNodeEffectHostCommandRouter = (
       removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
     },
     taskStore,
+    workspaceSessionStore: assets.workspaceSessionStore,
     workspaceSettingsService: ownedWorkspaceSettingsService,
     worktreeFiles,
   });

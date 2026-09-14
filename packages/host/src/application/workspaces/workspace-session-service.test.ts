@@ -1099,6 +1099,28 @@ describe("host-owned Workspace Session lifecycle", () => {
     ).rejects.toThrow("active draft");
   });
 
+  test("checks workspace admission before saving a draft model", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    h.state.blockMutationAdmission = true;
+
+    await expect(
+      Effect.runPromise(
+        h.service.setDraftModel({
+          ...ref,
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "new-provider",
+            modelId: "new-model",
+          },
+        }),
+      ),
+    ).rejects.toThrow("Workspace is closed: fairnest");
+
+    expect(await Effect.runPromise(h.service.get(ref))).toEqual(session);
+  });
+
   test("restore rejects an invalid directory without changing archive state", async () => {
     const h = setup();
     const { session } = await Effect.runPromise(h.service.create(input()));
