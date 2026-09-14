@@ -26,6 +26,7 @@ import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { WorkspaceActivityPort } from "../../ports/workspace-activity-port";
 import type { WorkspaceStoragePort } from "../../ports/workspace-storage-port";
 import type { WorkspaceHostOwnershipPort } from "../../ports/workspace-host-ownership-port";
+import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import {
   createWorkspaceOwnershipLock,
   type WorkspaceOwnershipLock,
@@ -171,6 +172,7 @@ const createService = ({
     releaseWorkspace: () => Effect.void,
   },
   clearRepoRuntimeStartupStatuses = () => Effect.void,
+  listWorkspaceSessions = () => Effect.succeed([]),
 }: {
   activity?: WorkspaceActivityPort;
   admission?: ReturnType<typeof createAdmissionDouble>;
@@ -205,6 +207,7 @@ const createService = ({
   ownershipLock?: WorkspaceOwnershipLock;
   hostOwnership?: Pick<WorkspaceHostOwnershipPort, "claimWorkspace" | "releaseWorkspace">;
   clearRepoRuntimeStartupStatuses?: (repoPath: string) => Effect.Effect<void>;
+  listWorkspaceSessions?: WorkspaceSessionStorePort["listAll"];
 } = {}) => {
   const storage: WorkspaceStoragePort = {
     assertPermanentRemovalSupported,
@@ -234,6 +237,7 @@ const createService = ({
     }),
     storage,
     taskStore,
+    workspaceSessionStore: { listAll: listWorkspaceSessions },
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
       getRepoConfig,
       getWorkspaceCatalog,

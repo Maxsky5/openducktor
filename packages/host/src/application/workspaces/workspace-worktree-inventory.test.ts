@@ -9,12 +9,14 @@ import {
   type TaskCard,
   type WorkspaceCatalog,
   type WorkspaceRecord,
+  type WorkspaceSession,
   workspaceRecordSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
@@ -93,6 +95,25 @@ const agentSessions = (taskId: string, workingDirectory: string): TaskAgentSessi
   ],
 });
 
+const workspaceSession = (workingDirectory: string): WorkspaceSession => ({
+  id: "workspace-session-1",
+  runtimeKind: "opencode",
+  externalSessionId: null,
+  executionTarget: {
+    kind: "local_worktree",
+    workingDirectory,
+    branchName: "odt/workspace-session-1",
+    worktreeState: "present",
+  },
+  roleSnapshot: null,
+  selectedModel: null,
+  generatedTitle: null,
+  manualTitle: null,
+  createdAt: 1,
+  updatedAt: 1,
+  archivedAt: null,
+});
+
 const createDependencies = ({
   canonicalizePath,
   listWorktrees,
@@ -100,6 +121,7 @@ const createDependencies = ({
   settingsCanonicalizePath = (path) => Effect.succeed(path),
   listTasks = () => Effect.succeed([]),
   listAgentSessionsForTasks = () => Effect.succeed([]),
+  listWorkspaceSessions = () => Effect.succeed([]),
   workspaceTaskStoreExists = () => Effect.succeed(true),
   workspaceCatalog = catalog(),
 }: {
@@ -112,6 +134,7 @@ const createDependencies = ({
     repoPath: string;
     taskIds: string[];
   }) => Effect.Effect<TaskAgentSessions[], never>;
+  listWorkspaceSessions?: WorkspaceSessionStorePort["listAll"];
   workspaceTaskStoreExists?: (workspaceId: string) => Effect.Effect<boolean, never>;
   workspaceCatalog?: WorkspaceCatalog;
 }) => ({
@@ -133,6 +156,7 @@ const createDependencies = ({
     listTasks,
     listAgentSessionsForTasks,
   } satisfies Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">,
+  workspaceSessionStore: { listAll: listWorkspaceSessions },
   workspaceTaskStoreExists,
   workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
     getWorkspaceCatalog: () => Effect.succeed(workspaceCatalog),
@@ -308,6 +332,22 @@ describe("workspace worktree inventory", () => {
     );
 
     expect(paths).toEqual([]);
+  });
+
+  test("includes present Workspace Session worktrees", async () => {
+    const worktreePath = "/base/workspace-sessions/session-1";
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/workspace-session-1", worktreePath }]),
+      pathExists: () => Effect.succeed(true),
+      listWorkspaceSessions: () => Effect.succeed([workspaceSession(worktreePath)]),
+    });
+
+    const paths = await Effect.runPromise(
+      collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+    );
+
+    expect(paths).toEqual([worktreePath]);
   });
 
   test("rejects a candidate claimed by another workspace on the shared base", async () => {

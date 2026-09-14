@@ -233,16 +233,19 @@ export const createWorkspaceSessionService = (
     ) =>
       operationGate.run(
         input,
-        Effect.gen(function* () {
-          const { ref, session } = yield* recordFor(input);
-          if (session.externalSessionId !== null || session.archivedAt !== null) {
-            return yield* new HostValidationError({
-              field: "sessionId",
-              message: "Only an active draft can change its saved model.",
-            });
-          }
-          return yield* store.setSelectedModel({ ...ref, selectedModel: input.selectedModel });
-        }),
+        withMutationAdmission(
+          input.workspaceId,
+          Effect.gen(function* () {
+            const { ref, session } = yield* recordFor(input);
+            if (session.externalSessionId !== null || session.archivedAt !== null) {
+              return yield* new HostValidationError({
+                field: "sessionId",
+                message: "Only an active draft can change its saved model.",
+              });
+            }
+            return yield* store.setSelectedModel({ ...ref, selectedModel: input.selectedModel });
+          }),
+        ),
       ),
     rename: (input: WorkspaceSessionRefInput & { manualTitle: string | null }) =>
       withMutationAdmission(

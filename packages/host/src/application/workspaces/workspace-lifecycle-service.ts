@@ -28,6 +28,7 @@ import type {
   WorkspaceHostOwnershipError,
   WorkspaceHostOwnershipPort,
 } from "../../ports/workspace-host-ownership-port";
+import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import { removeWorktreeAndFilesystemPath } from "../git/worktree-removal";
 import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrator-service";
 import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
@@ -84,6 +85,7 @@ type CreateWorkspaceLifecycleServiceInput = {
   settingsConfig: SettingsConfigPort;
   storage: WorkspaceStoragePort;
   taskStore: Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
+  workspaceSessionStore: Pick<WorkspaceSessionStorePort, "listAll">;
   workspaceSettingsService: Pick<
     WorkspaceSettingsService,
     | "beginWorkspaceRemoval"
@@ -118,6 +120,7 @@ export const createWorkspaceLifecycleService = ({
   settingsConfig,
   storage,
   taskStore,
+  workspaceSessionStore,
   workspaceSettingsService,
   worktreeFiles,
 }: CreateWorkspaceLifecycleServiceInput): WorkspaceLifecycleService => {
@@ -170,6 +173,7 @@ export const createWorkspaceLifecycleService = ({
             gitPort,
             settingsConfig,
             taskStore,
+            workspaceSessionStore,
             workspaceSettingsService,
             workspaceTaskStoreExists: storage.workspaceTaskStoreExists,
           },

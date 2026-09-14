@@ -1,4 +1,4 @@
-import type { RepoConfig, WorkspaceRecord } from "@openducktor/contracts";
+import type { RepoConfig, WorkspaceRecord, WorkspaceSession } from "@openducktor/contracts";
 import { pathStartsWith } from "@openducktor/path-support";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
@@ -10,6 +10,7 @@ import {
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
+import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { WorkspaceStoragePort } from "../../ports/workspace-storage-port";
 import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
@@ -25,9 +26,17 @@ export type WorkspaceWorktreeInventoryDependencies = {
   gitPort: Pick<GitPort, "canonicalizePath" | "listWorktrees">;
   settingsConfig: SettingsConfigPort;
   taskStore: Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
+  workspaceSessionStore: Pick<WorkspaceSessionStorePort, "listAll">;
   workspaceTaskStoreExists: WorkspaceStoragePort["workspaceTaskStoreExists"];
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
 };
+
+const presentWorkspaceSessionWorktreePaths = (sessions: WorkspaceSession[]): string[] =>
+  sessions.flatMap(({ executionTarget }) =>
+    executionTarget.kind === "local_worktree" && executionTarget.worktreeState === "present"
+      ? [executionTarget.workingDirectory]
+      : [],
+  );
 
 const canonicalizeExistingPath = <E>(
   dependencies: Pick<WorkspaceWorktreeInventoryDependencies, "settingsConfig">,
@@ -58,6 +67,9 @@ export const collectWorkspaceTaskWorktreePaths = (
       taskIds.length === 0
         ? []
         : yield* dependencies.taskStore.listAgentSessionsForTasks({ repoPath, taskIds });
+    const workspaceSessionWorktreePaths = presentWorkspaceSessionWorktreePaths(
+      yield* dependencies.workspaceSessionStore.listAll({ repoPath, workspaceId }),
+    );
     const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
       dependencies.settingsConfig,
       repoConfig,
@@ -272,6 +284,12 @@ export const collectWorkspaceTaskWorktreePaths = (
         }
       }
     }
+    for (const workingDirectory of workspaceSessionWorktreePaths) {
+      candidates.set(normalizePathForComparison(workingDirectory), {
+        path: workingDirectory,
+        taskId: null,
+      });
+    }
 
     const inventory = yield* dependencies.gitPort.listWorktrees(repoPath);
     const inventoryPaths = new Map<string, string>();
@@ -405,6 +423,15 @@ const collectWorkspaceClaims = (
     for (const workspace of workspaces) {
       if (!(yield* dependencies.workspaceTaskStoreExists(workspace.workspaceId))) {
         continue;
+      }
+      const workspaceSessionWorktreePaths = presentWorkspaceSessionWorktreePaths(
+        yield* dependencies.workspaceSessionStore.listAll({
+          repoPath: workspace.repoPath,
+          workspaceId: workspace.workspaceId,
+        }),
+      );
+      for (const worktreePath of workspaceSessionWorktreePaths) {
+        yield* addClaim(worktreePath);
       }
       const tasks = yield* dependencies.taskStore.listTasks({ repoPath: workspace.repoPath });
       if (tasks.length === 0) {
