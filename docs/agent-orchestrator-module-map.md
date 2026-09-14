@@ -257,7 +257,7 @@ Owns start, reuse, fork, send, stop, model update, pending-input replies, and wo
 
 The shared send handler checks a typed accepted-message failure before ordinary send recovery. It upserts the native message once and adds a scoped failure notice. It completes the send action without restoring the accepted draft or resetting running state and pending input. Both task and workspace actions use this handler. Runtime-service conversion checks the exact session reference and preserves accepted model fields.
 
-Before sending to a stopped workspace session, the shared send handler resumes the same native session. It checks repository continuity and retains newer live activity and pending input. A failed resume sends no message. Stopped task sessions still require their task workflow action.
+Before sending to a stopped repository or workflow session, the shared send handler resumes the same native session. It rejects an unbound session because that session has no repository or workflow scope. It checks repository continuity and retains newer live activity and pending input. For a workflow session, the host verifies that the task owns the session before it resumes it. A failed resume sends no message.
 
 Rules:
 
