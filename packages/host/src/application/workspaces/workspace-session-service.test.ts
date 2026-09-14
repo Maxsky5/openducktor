@@ -372,6 +372,19 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.starts[0]?.systemPrompt).toBe("");
   });
 
+  test("rejects creation before preparing a worktree when the workspace is blocked", async () => {
+    const h = setup();
+    h.state.blockMutationAdmission = true;
+
+    await expect(Effect.runPromise(h.service.create(worktreeInput()))).rejects.toThrow(
+      "Workspace is closed",
+    );
+
+    expect(h.calls).toEqual([]);
+    expect(h.paths.size).toBe(0);
+    expect(h.branches.size).toBe(0);
+  });
+
   test("worktree creation uses committed HEAD and Workspace setup before runtime startup", async () => {
     const h = setup();
     h.state.changed = true;

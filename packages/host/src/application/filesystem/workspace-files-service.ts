@@ -44,6 +44,7 @@ export type WorkspaceFilesAdmission = {
   withWorkStartLease<A, E, R>(
     repoPath: string,
     effect: Effect.Effect<A, E, R>,
+    workingDirectory?: string,
   ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
 };
 
@@ -57,7 +58,7 @@ export const withWorkspaceFilesAdmission = (
       .resolveRepoPath(input.workspaceId)
       .pipe(
         Effect.flatMap((repoPath) =>
-          admission.withWorkStartLease(repoPath, service.writeTextFile(input)),
+          admission.withWorkStartLease(repoPath, service.writeTextFile(input), input.rootPath),
         ),
       ),
 });

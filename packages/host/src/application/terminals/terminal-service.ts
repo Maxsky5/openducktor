@@ -73,6 +73,7 @@ type CreateTerminalServiceInput = {
   withWorkStartLease<A, E, R>(
     repoPath: string,
     effect: Effect.Effect<A, E, R>,
+    workingDirectory?: string,
   ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
   filesystem: FilesystemPort;
   ptyPort: TerminalPtyPort;
@@ -175,6 +176,7 @@ export const createTerminalService = ({
                       const context = yield* canonicalizeContext(rawContext, "create");
                       return yield* startTerminal(context);
                     }),
+                    input.workingDir,
                   ).pipe(
                     Effect.mapError((cause) =>
                       cause instanceof TerminalServiceError

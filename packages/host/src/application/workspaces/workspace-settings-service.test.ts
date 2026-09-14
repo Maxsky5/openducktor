@@ -1099,7 +1099,7 @@ describe("createWorkspaceSettingsService", () => {
     });
     expect(await Effect.runPromise(service.listWorkspaces())).toEqual([]);
   });
-  test("keeps the worktree choice before any worktree is removed", async () => {
+  test("rejects a changed worktree choice after removal starts", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({
         workspaceOrder: ["repo-a"],
@@ -1122,18 +1122,17 @@ describe("createWorkspaceSettingsService", () => {
     });
     const service = createWorkspaceSettingsService(settingsConfig);
 
-    const { record } = await Effect.runPromise(
-      service.beginWorkspaceRemoval({
-        workspaceId: "repo-a",
-        expectedRepoPath: "/repos/a",
-        removeTaskWorktrees: false,
-      }),
-    );
+    await expect(
+      Effect.runPromise(
+        service.beginWorkspaceRemoval({
+          workspaceId: "repo-a",
+          expectedRepoPath: "/repos/a",
+          removeTaskWorktrees: false,
+        }),
+      ),
+    ).rejects.toThrow("Retry with the recorded choice");
 
-    expect(record.removeTaskWorktrees).toBe(true);
-    expect(record.phase).toBe("worktrees");
-    expect(record.lastFailure).toBe("Cannot classify registered worktree(s).");
-    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal).toEqual(record);
+    expect(settingsConfig.writtenConfigs).toHaveLength(0);
   });
   test("keeps the worktree choice after a worktree is removed", async () => {
     const storedRemoval = {
@@ -1160,7 +1159,7 @@ describe("createWorkspaceSettingsService", () => {
       service.beginWorkspaceRemoval({
         workspaceId: "repo-a",
         expectedRepoPath: "/repos/a",
-        removeTaskWorktrees: false,
+        removeTaskWorktrees: true,
       }),
     );
 
@@ -1230,7 +1229,7 @@ describe("createWorkspaceSettingsService", () => {
       settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal?.pendingWorktreePath,
     ).toBeNull();
   });
-  test("keeps the worktree choice while a worktree deletion is pending", async () => {
+  test("rejects a changed worktree choice while a deletion is pending", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({
         workspaceOrder: ["repo-a"],
@@ -1253,17 +1252,15 @@ describe("createWorkspaceSettingsService", () => {
     });
     const service = createWorkspaceSettingsService(settingsConfig);
 
-    const { record } = await Effect.runPromise(
-      service.beginWorkspaceRemoval({
-        workspaceId: "repo-a",
-        expectedRepoPath: "/repos/a",
-        removeTaskWorktrees: false,
-      }),
-    );
-
-    expect(record.removeTaskWorktrees).toBe(true);
-    expect(record.phase).toBe("worktrees");
-    expect(record.pendingWorktreePath).toBe("/managed/repo-a/task-1");
+    await expect(
+      Effect.runPromise(
+        service.beginWorkspaceRemoval({
+          workspaceId: "repo-a",
+          expectedRepoPath: "/repos/a",
+          removeTaskWorktrees: false,
+        }),
+      ),
+    ).rejects.toThrow("Retry with the recorded choice");
   });
   test("moves the active selection when removal starts", async () => {
     const settingsConfig = createFakeSettingsConfig({

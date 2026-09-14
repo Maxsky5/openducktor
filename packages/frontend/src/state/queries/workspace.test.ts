@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
-import { dropWorkspaceQueries } from "./workspace";
+import { dropWorkspaceQueries, markWorkspaceCachesChanged, workspaceQueryKeys } from "./workspace";
 
 describe("dropWorkspaceQueries", () => {
   test("removes all workspace ID session queries and keeps other workspaces", async () => {
@@ -44,5 +44,37 @@ describe("dropWorkspaceQueries", () => {
     await read;
 
     expect(queryClient.getQueryData(key)).toBeUndefined();
+  });
+});
+
+describe("markWorkspaceCachesChanged", () => {
+  test("runs both invalidations and removes stale settings when the catalog refresh fails", async () => {
+    const queryClient = new QueryClient();
+    const invalidations: Array<{ queryKey: readonly unknown[]; throwOnError: boolean }> = [];
+    queryClient.invalidateQueries = mock(async (filters, options) => {
+      invalidations.push({
+        queryKey: filters.queryKey ?? [],
+        throwOnError: options?.throwOnError ?? false,
+      });
+      if (filters.queryKey?.[1] === "catalog") {
+        throw new Error("catalog refresh failed");
+      }
+    });
+    const removeQueries = mock(queryClient.removeQueries.bind(queryClient));
+    queryClient.removeQueries = removeQueries;
+
+    await expect(markWorkspaceCachesChanged(queryClient, { throwOnError: true })).rejects.toThrow(
+      "catalog refresh failed",
+    );
+
+    expect(invalidations).toEqual([
+      { queryKey: workspaceQueryKeys.catalog(), throwOnError: true },
+      { queryKey: workspaceQueryKeys.settingsSnapshot(), throwOnError: true },
+    ]);
+    expect(removeQueries).toHaveBeenCalledWith({
+      queryKey: workspaceQueryKeys.settingsSnapshot(),
+      exact: true,
+      type: "inactive",
+    });
   });
 });

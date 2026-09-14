@@ -98,52 +98,57 @@ export const createWorkspaceSessionService = (
         });
         const sessionId = crypto.randomUUID();
         const config = yield* settings.getRepoConfig(input.workspaceId);
-        const roles =
-          input.customAgentRoleId === null ? [] : yield* settings.listCustomAgentRoles();
-        const role = roles.find((candidate) => candidate.id === input.customAgentRoleId);
-        if (input.customAgentRoleId !== null && !role) {
-          return yield* Effect.fail(
-            new HostResourceError({
-              resource: input.customAgentRoleId,
-              operation: "workspaceSession.create",
-              message:
-                "The selected Custom Agent Role no longer exists. Select another Role or No Role.",
-            }),
-          );
-        }
-        const roleSnapshot = role ? { ...role } : null;
-        const repoPath = yield* git.canonicalizePath(config.repoPath);
-        return yield* withWorkspaceSessionTarget(
-          dependencies,
-          {
-            worktree: input.worktree,
-            repoConfig: { ...config, repoPath },
-            location: input.location,
-          },
-          (executionTarget, retainTarget) =>
-            Effect.gen(function* () {
-              const now = yield* Clock.currentTimeMillis;
-              const session: WorkspaceSession = {
-                id: sessionId,
-                runtimeKind: input.runtimeKind,
-                externalSessionId: null,
-                executionTarget,
-                roleSnapshot,
-                selectedModel: input.selectedModel,
-                generatedTitle: null,
-                manualTitle,
-                createdAt: now,
-                updatedAt: now,
-                archivedAt: null,
-              };
-              const saved = yield* store.create({
-                workspaceId: input.workspaceId,
-                repoPath,
-                session,
-              });
-              retainTarget();
-              return { session: saved } satisfies WorkspaceSessionCreateResult;
-            }),
+        return yield* dependencies.withWorkStartLease(
+          config.repoPath,
+          Effect.gen(function* () {
+            const roles =
+              input.customAgentRoleId === null ? [] : yield* settings.listCustomAgentRoles();
+            const role = roles.find((candidate) => candidate.id === input.customAgentRoleId);
+            if (input.customAgentRoleId !== null && !role) {
+              return yield* Effect.fail(
+                new HostResourceError({
+                  resource: input.customAgentRoleId,
+                  operation: "workspaceSession.create",
+                  message:
+                    "The selected Custom Agent Role no longer exists. Select another Role or No Role.",
+                }),
+              );
+            }
+            const roleSnapshot = role ? { ...role } : null;
+            const repoPath = yield* git.canonicalizePath(config.repoPath);
+            return yield* withWorkspaceSessionTarget(
+              dependencies,
+              {
+                worktree: input.worktree,
+                repoConfig: { ...config, repoPath },
+                location: input.location,
+              },
+              (executionTarget, retainTarget) =>
+                Effect.gen(function* () {
+                  const now = yield* Clock.currentTimeMillis;
+                  const session: WorkspaceSession = {
+                    id: sessionId,
+                    runtimeKind: input.runtimeKind,
+                    externalSessionId: null,
+                    executionTarget,
+                    roleSnapshot,
+                    selectedModel: input.selectedModel,
+                    generatedTitle: null,
+                    manualTitle,
+                    createdAt: now,
+                    updatedAt: now,
+                    archivedAt: null,
+                  };
+                  const saved = yield* store.create({
+                    workspaceId: input.workspaceId,
+                    repoPath,
+                    session,
+                  });
+                  retainTarget();
+                  return { session: saved } satisfies WorkspaceSessionCreateResult;
+                }),
+            );
+          }),
         );
       }),
     start: (input: WorkspaceSessionRefInput) =>

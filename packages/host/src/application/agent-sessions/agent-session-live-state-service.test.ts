@@ -162,6 +162,36 @@ describe("createAgentSessionLiveStateService", () => {
     expect(failure.message).toBe("Workspace is closed: /closed-repo. Reopen it before using it.");
   });
 
+  test("passes the session working directory to workspace admission", async () => {
+    let target: string | undefined;
+    const withWorkStartLease: CreateAgentSessionLiveStateServiceInput["withWorkStartLease"] = (
+      _repoPath,
+      _effect,
+      workingDirectory,
+    ) => {
+      target = workingDirectory;
+      return Effect.fail(
+        new HostValidationError({
+          message: "Working directory does not belong to this workspace.",
+          field: "workingDirectory",
+        }),
+      );
+    };
+    const { service } = createHarness(withWorkStartLease);
+
+    await expectHostFailure(
+      service.startSession({
+        repoPath: "/repo-a",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-b",
+        sessionScope: { kind: "repository" },
+        systemPrompt: "Work.",
+      }),
+    );
+
+    expect(target).toBe("/repo-b");
+  });
+
   test("resets the published collection after a failed detach read and a replacement registration", async () => {
     const { service, events } = createHarness();
     const old = {

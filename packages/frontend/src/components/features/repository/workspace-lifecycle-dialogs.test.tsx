@@ -190,7 +190,7 @@ describe("workspace lifecycle dialogs", () => {
     );
   });
 
-  test("allows a different worktree choice after a preflight failure", async () => {
+  test("locks the submitted worktree choice after a failed removal", async () => {
     removeWorkspace.mockImplementationOnce(async () => {
       throw new Error("Cannot classify a task worktree");
     });
@@ -200,7 +200,7 @@ describe("workspace lifecycle dialogs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove workspace" }));
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
-    expect(screen.getByRole("checkbox").hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("checkbox").hasAttribute("disabled")).toBe(true);
     fireEvent.click(screen.getByRole("checkbox"));
 
     fireEvent.click(screen.getByRole("button", { name: "Remove workspace" }));
@@ -209,7 +209,7 @@ describe("workspace lifecycle dialogs", () => {
       expect(removeWorkspace).toHaveBeenLastCalledWith({
         workspaceId: "alpha",
         expectedRepoPath: "/projects/alpha",
-        removeTaskWorktrees: false,
+        removeTaskWorktrees: true,
       }),
     );
   });

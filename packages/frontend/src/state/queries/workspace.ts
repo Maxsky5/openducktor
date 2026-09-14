@@ -146,21 +146,28 @@ export const markWorkspaceCachesChanged = async (
   options: { throwOnError?: boolean } = {},
 ): Promise<void> => {
   const invalidateOptions = { throwOnError: options.throwOnError ?? false };
-  await queryClient.invalidateQueries(
-    {
-      queryKey: workspaceQueryKeys.catalog(),
-    },
-    invalidateOptions,
-  );
-  await queryClient.invalidateQueries({
-    queryKey: workspaceQueryKeys.settingsSnapshot(),
-    exact: true,
-  });
+  const invalidations = await Promise.allSettled([
+    queryClient.invalidateQueries(
+      {
+        queryKey: workspaceQueryKeys.catalog(),
+      },
+      invalidateOptions,
+    ),
+    queryClient.invalidateQueries(
+      {
+        queryKey: workspaceQueryKeys.settingsSnapshot(),
+        exact: true,
+      },
+      invalidateOptions,
+    ),
+  ]);
   queryClient.removeQueries({
     queryKey: workspaceQueryKeys.settingsSnapshot(),
     exact: true,
     type: "inactive",
   });
+  const failure = invalidations.find((result) => result.status === "rejected");
+  if (failure) throw failure.reason;
 };
 
 const workspaceConfigQueryKeyMatches = (

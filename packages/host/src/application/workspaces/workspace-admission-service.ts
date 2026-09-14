@@ -7,6 +7,7 @@ import {
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { GitPort } from "../../ports/git-port";
 import type { WorkspaceHostOwnershipPort } from "../../ports/workspace-host-ownership-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
@@ -51,6 +52,7 @@ export type WorkspaceAdmissionService = {
   withWorkStartLease<A, E, R>(
     repoPath: string,
     effect: Effect.Effect<A, E, R>,
+    workingDirectory?: string,
   ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
   blockWorkspace(input: {
     reason: WorkspaceBlockReason;
@@ -69,10 +71,12 @@ export type WorkspaceAdmissionService = {
 };
 
 export const createWorkspaceAdmissionService = ({
+  gitPort,
   hostOwnership,
   settingsConfig,
   workspaceSettingsService,
 }: {
+  gitPort: Pick<GitPort, "isRegisteredWorktree" | "shareGitCommonDirectory">;
   hostOwnership: Pick<WorkspaceHostOwnershipPort, "claimWorkspace">;
   settingsConfig: Pick<SettingsConfigPort, "canonicalizePath">;
   workspaceSettingsService: Pick<
@@ -239,6 +243,43 @@ export const createWorkspaceAdmissionService = ({
       ),
     );
 
+  const assertWorkspaceTarget = (
+    repoPath: string,
+    repoPathKey: string,
+    workingDirectory: string,
+  ): Effect.Effect<void, HostValidationErrorAggregate> =>
+    Effect.gen(function* () {
+      if (normalizePathForComparison(workingDirectory) === normalizePathForComparison(repoPath)) {
+        return;
+      }
+      const mapCheckError = (cause: unknown) =>
+        new HostValidationError({
+          message: `Cannot verify the working directory ${workingDirectory}. Check the path and retry.`,
+          field: "workingDirectory",
+          cause,
+        });
+      const canonicalWorkingDirectory = yield* settingsConfig
+        .canonicalizePath(workingDirectory)
+        .pipe(Effect.mapError(mapCheckError));
+      if (normalizePathForComparison(canonicalWorkingDirectory) === repoPathKey) {
+        return;
+      }
+      const sharesGitDirectory = yield* gitPort
+        .shareGitCommonDirectory(repoPath, canonicalWorkingDirectory)
+        .pipe(Effect.mapError(mapCheckError));
+      const registered = sharesGitDirectory
+        ? yield* gitPort
+            .isRegisteredWorktree(repoPath, canonicalWorkingDirectory)
+            .pipe(Effect.mapError(mapCheckError))
+        : false;
+      if (!registered) {
+        return yield* new HostValidationError({
+          message: `Working directory ${workingDirectory} is not the repository or a registered worktree of ${repoPath}.`,
+          field: "workingDirectory",
+        });
+      }
+    });
+
   const assertCanonicalWorkspaceAdmitsWork = (
     key: string,
   ): Effect.Effect<void, HostValidationErrorAggregate> =>
@@ -299,7 +340,11 @@ export const createWorkspaceAdmissionService = ({
       return Deferred.await(state.drained);
     });
 
-  const withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"] = (repoPath, effect) =>
+  const withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"] = (
+    repoPath,
+    effect,
+    workingDirectory = repoPath,
+  ) =>
     Effect.gen(function* () {
       const arrivalKey = normalizePathForComparison(repoPath);
       return yield* Effect.acquireUseRelease(
@@ -310,6 +355,7 @@ export const createWorkspaceAdmissionService = ({
               key === arrivalKey
                 ? assertCanonicalWorkspaceAdmitsWork(key).pipe(
                     Effect.zipRight(claimWorkspaceForRepoPath(repoPath)),
+                    Effect.zipRight(assertWorkspaceTarget(repoPath, key, workingDirectory)),
                     Effect.zipRight(effect),
                   )
                 : Effect.acquireUseRelease(
@@ -317,6 +363,7 @@ export const createWorkspaceAdmissionService = ({
                     () =>
                       assertCanonicalWorkspaceAdmitsWork(key).pipe(
                         Effect.zipRight(claimWorkspaceForRepoPath(repoPath)),
+                        Effect.zipRight(assertWorkspaceTarget(repoPath, key, workingDirectory)),
                         Effect.zipRight(effect),
                       ),
                     () => releaseWorkStart(key),
@@ -403,6 +450,7 @@ const TASK_STORE_WRITE_OPERATION =
   /\.(clear|create|delete|promote|record|register|remove|set|transition|update|upsert)/i;
 const WORKSPACE_SESSION_WRITE_OPERATIONS = new Set([
   "workspaceSessionStore.archive",
+  "workspaceSessionStore.bindRuntimeSession",
   "workspaceSessionStore.rename",
   "workspaceSessionStore.restore",
 ]);

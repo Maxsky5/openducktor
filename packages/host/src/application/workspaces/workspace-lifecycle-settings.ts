@@ -225,6 +225,17 @@ export const createWorkspaceLifecycleSettingsMethods = (
       const config = yield* loadGlobalConfig(settingsConfig);
       const repoConfig = yield* requireWorkspace(config, input.workspaceId);
       yield* assertExpectedRepoPath(input.workspaceId, repoConfig, input.expectedRepoPath);
+      if (
+        repoConfig.removal &&
+        repoConfig.removal.removeTaskWorktrees !== input.removeTaskWorktrees
+      ) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Workspace removal already started with removeTaskWorktrees set to ${repoConfig.removal.removeTaskWorktrees}. Retry with the recorded choice.`,
+            field: "removeTaskWorktrees",
+          }),
+        );
+      }
 
       const removal = nextRemovalRecord(repoConfig.removal, input.removeTaskWorktrees);
       const journaledRepoConfig = { ...repoConfig, removal };
