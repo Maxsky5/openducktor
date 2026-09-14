@@ -180,6 +180,72 @@ export const collectWorkspaceTaskWorktreePaths = (
       }
       return undefined;
     };
+    const assertNoRelatedWorkspaceOwnership = (
+      comparison: string,
+      worktreePath: string,
+      taskId: string | null,
+    ) =>
+      Effect.gen(function* () {
+        const containingBase = overlappingBaseWorkspaces.find((entry) =>
+          pathStartsWith(entry.baseComparison, comparison),
+        );
+        if (containingBase) {
+          return yield* Effect.fail(
+            new HostValidationError({
+              message: `Cannot remove ${worktreePath}: it contains the worktree base of workspace ${containingBase.workspace.workspaceId}. Change that base first, or retry without removing task worktrees.`,
+              field: "worktreePath",
+              details: {
+                repoPath,
+                taskId,
+                worktreePath,
+                overlappingWorkspaceId: containingBase.workspace.workspaceId,
+              },
+            }),
+          );
+        }
+        const relatedClaim = findRelatedWorkspaceClaim(comparison);
+        if (relatedClaim !== undefined) {
+          let claimDescription: string;
+          switch (relatedClaim) {
+            case "equal":
+              claimDescription = "another workspace also claims it";
+              break;
+            case "contains":
+              claimDescription = "it contains a path that another workspace claims";
+              break;
+            case "inside":
+              claimDescription = "it is inside a path that another workspace claims";
+              break;
+          }
+          return yield* Effect.fail(
+            new HostValidationError({
+              message: `Cannot remove ${worktreePath}: ${claimDescription}. Remove it manually, or retry without removing task worktrees.`,
+              field: "worktreePath",
+              details: { repoPath, taskId, worktreePath },
+            }),
+          );
+        }
+        const nestedOtherWorkspacePath = findRelatedOtherWorkspacePath(comparison);
+        if (!nestedOtherWorkspacePath) {
+          return;
+        }
+        const relationDescription =
+          nestedOtherWorkspacePath.relation === "contains"
+            ? "it contains the repository of"
+            : "it is inside the repository of";
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Cannot remove ${worktreePath}: ${relationDescription} workspace ${nestedOtherWorkspacePath.workspaceId}. Move that repository or change the worktree base first, or retry without removing task worktrees.`,
+            field: "worktreePath",
+            details: {
+              repoPath,
+              taskId,
+              worktreePath,
+              overlappingWorkspaceId: nestedOtherWorkspacePath.workspaceId,
+            },
+          }),
+        );
+      });
 
     const candidates = new Map<string, { path: string; taskId: string | null }>();
     if (pendingWorktreePath !== null) {
@@ -229,6 +295,11 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (candidateComparison === repoPathComparison || isOtherWorkspacePath(candidateComparison)) {
         continue;
       }
+      yield* assertNoRelatedWorkspaceOwnership(
+        candidateComparison,
+        candidate.path,
+        candidate.taskId,
+      );
       if (!(yield* dependencies.settingsConfig.pathExists(candidate.path))) {
         if (
           pendingWorktreePath !== null &&
@@ -250,56 +321,11 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (seen.has(canonicalComparison)) {
         continue;
       }
-      const containingBase = overlappingBaseWorkspaces.find((entry) =>
-        pathStartsWith(entry.baseComparison, canonicalComparison),
-      );
-      if (containingBase) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Cannot remove ${canonicalPath}: it contains the worktree base of workspace ${containingBase.workspace.workspaceId}. Change that base first, or retry without removing task worktrees.`,
-            field: "worktreePath",
-            details: {
-              repoPath,
-              taskId: candidate.taskId,
-              worktreePath: canonicalPath,
-              overlappingWorkspaceId: containingBase.workspace.workspaceId,
-            },
-          }),
-        );
-      }
-      const relatedClaim = findRelatedWorkspaceClaim(canonicalComparison);
-      if (relatedClaim !== undefined) {
-        const claimDescription =
-          relatedClaim === "equal"
-            ? "another workspace also claims it"
-            : relatedClaim === "contains"
-              ? "it contains a path that another workspace claims"
-              : "it is inside a path that another workspace claims";
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Cannot remove ${canonicalPath}: ${claimDescription}. Remove it manually, or retry without removing task worktrees.`,
-            field: "worktreePath",
-            details: { repoPath, taskId: candidate.taskId, worktreePath: canonicalPath },
-          }),
-        );
-      }
-      const nestedOtherWorkspacePath = findRelatedOtherWorkspacePath(canonicalComparison);
-      if (nestedOtherWorkspacePath) {
-        const relationDescription =
-          nestedOtherWorkspacePath.relation === "contains"
-            ? "it contains the repository of"
-            : "it is inside the repository of";
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Cannot remove ${canonicalPath}: ${relationDescription} workspace ${nestedOtherWorkspacePath.workspaceId}. Move that repository or change the worktree base first, or retry without removing task worktrees.`,
-            field: "worktreePath",
-            details: {
-              repoPath,
-              taskId: candidate.taskId,
-              worktreePath: canonicalPath,
-              overlappingWorkspaceId: nestedOtherWorkspacePath.workspaceId,
-            },
-          }),
+      if (canonicalComparison !== candidateComparison) {
+        yield* assertNoRelatedWorkspaceOwnership(
+          canonicalComparison,
+          canonicalPath,
+          candidate.taskId,
         );
       }
       const isPendingWorktreePath =

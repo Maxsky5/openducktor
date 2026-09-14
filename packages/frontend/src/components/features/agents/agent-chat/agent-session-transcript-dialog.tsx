@@ -18,6 +18,7 @@ import { useSessionTranscriptSurfaceModel } from "./readonly-transcript/use-sess
 
 type AgentSessionTranscriptDialogProps = {
   preview: UseTaskExecutionFilePreviewControllerResult;
+  workspaceId: string | null;
   workspaceRepoPath: string | null;
   target: AgentSessionTranscriptTarget | null;
   open: boolean;
@@ -29,6 +30,7 @@ type AgentSessionTranscriptDialogProps = {
 
 type AgentSessionTranscriptDialogContentProps = {
   preview: UseTaskExecutionFilePreviewControllerResult;
+  workspaceId: string | null;
   workspaceRepoPath: string | null;
   target: AgentSessionTranscriptTarget;
   title: string;
@@ -38,6 +40,7 @@ type AgentSessionTranscriptDialogContentProps = {
 
 export function AgentSessionTranscriptDialog({
   preview,
+  workspaceId,
   workspaceRepoPath,
   target,
   open,
@@ -59,6 +62,7 @@ export function AgentSessionTranscriptDialog({
         {target ? (
           <AgentSessionTranscriptDialogContent
             preview={preview}
+            workspaceId={workspaceId}
             workspaceRepoPath={workspaceRepoPath}
             target={target}
             title={title}
@@ -94,6 +98,7 @@ function AgentSessionTranscriptDialogLoading({
 
 function AgentSessionTranscriptDialogContent({
   preview,
+  workspaceId,
   workspaceRepoPath,
   target,
   title,
@@ -145,11 +150,12 @@ function AgentSessionTranscriptDialogContent({
             <AgentChatSurface model={model} />
           </ChatFileLinkProvider>
         </div>
-        {hasPreview ? (
+        {hasPreview && workspaceId ? (
           <DiffWorkerProvider>
             <div className="absolute inset-0 min-h-0 bg-background">
               <TaskExecutionSelectedFilePreview
                 key={preview.model.previewSessionKey}
+                workspaceId={workspaceId}
                 model={preview.model}
                 onFileSaved={() => {
                   if (workspaceRepoPath && target.sessionScope?.kind === "workflow")

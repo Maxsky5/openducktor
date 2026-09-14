@@ -341,14 +341,16 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     [rightPanelBridge],
   );
   const selectedFilePreviewContent = useMemo(
-    () => (
-      <TaskExecutionSelectedFilePreview
-        key={taskExecutionSelectedFilePreviewModel.previewSessionKey}
-        model={taskExecutionSelectedFilePreviewModel}
-        onFileSaved={refreshWorktreeAfterFileSave}
-      />
-    ),
-    [refreshWorktreeAfterFileSave, taskExecutionSelectedFilePreviewModel],
+    () =>
+      activeWorkspace ? (
+        <TaskExecutionSelectedFilePreview
+          key={taskExecutionSelectedFilePreviewModel.previewSessionKey}
+          workspaceId={activeWorkspace.workspaceId}
+          model={taskExecutionSelectedFilePreviewModel}
+          onFileSaved={refreshWorktreeAfterFileSave}
+        />
+      ) : null,
+    [activeWorkspace, refreshWorktreeAfterFileSave, taskExecutionSelectedFilePreviewModel],
   );
   const workspaceContent = useMemo(
     () => (

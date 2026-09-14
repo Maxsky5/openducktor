@@ -1,3 +1,4 @@
+import type { RepoConfig } from "@openducktor/contracts";
 import { Deferred, Effect, FiberId, FiberRef } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import {
@@ -76,7 +77,7 @@ export const createWorkspaceAdmissionService = ({
   settingsConfig: Pick<SettingsConfigPort, "canonicalizePath">;
   workspaceSettingsService: Pick<
     WorkspaceSettingsService,
-    "getRepoConfigByRepoPath" | "getWorkspaceCatalog"
+    "getRepoConfig" | "getRepoConfigByRepoPath" | "getWorkspaceCatalog"
   >;
 }): WorkspaceAdmissionService => {
   const blockedByWorkspaceId = new Map<string, BlockedWorkspace>();
@@ -147,6 +148,26 @@ export const createWorkspaceAdmissionService = ({
       ),
     );
 
+  const persistedBlock = (repoConfig: RepoConfig): BlockedWorkspace | undefined => {
+    let reason: WorkspaceBlockReason | undefined;
+    if (repoConfig.removal) {
+      reason = "removal";
+    } else if (repoConfig.closed) {
+      reason = "closed";
+    }
+    if (!reason) {
+      blockedByWorkspaceId.delete(repoConfig.workspaceId);
+      return undefined;
+    }
+    const blocked = {
+      reason,
+      repoPath: repoConfig.repoPath,
+      workspaceId: repoConfig.workspaceId,
+    } satisfies BlockedWorkspace;
+    blockedByWorkspaceId.set(repoConfig.workspaceId, blocked);
+    return blocked;
+  };
+
   const claimWorkspaceForRepoPath = (
     repoPath: string,
   ): Effect.Effect<void, HostValidationErrorAggregate> =>
@@ -159,38 +180,49 @@ export const createWorkspaceAdmissionService = ({
             cause,
           }),
       ),
-      Effect.flatMap((repoConfig) => claimWorkspace(repoConfig.workspaceId)),
+      Effect.flatMap((repoConfig) => {
+        const blocked = persistedBlock(repoConfig);
+        return blocked
+          ? Effect.fail(blockedWorkspaceError(blocked))
+          : claimWorkspace(repoConfig.workspaceId);
+      }),
     );
 
   const assertTaskStoreAccess: WorkspaceAdmissionService["assertTaskStoreAccess"] = (input) =>
-    ensureInitialized().pipe(
-      Effect.flatMap(() => FiberRef.get(administrativeWorkspaceIds)),
-      Effect.flatMap((administrativeIds) => {
-        if (administrativeIds.has(input.workspaceId)) {
-          return Effect.void;
+    Effect.gen(function* () {
+      yield* ensureInitialized();
+      const administrativeIds = yield* FiberRef.get(administrativeWorkspaceIds);
+      if (administrativeIds.has(input.workspaceId)) {
+        return;
+      }
+      const reservation = reservationsByWorkspaceId.get(input.workspaceId);
+      if (reservation) {
+        if (
+          reservation.operation === "remove" ||
+          reservation.operation === "reopen" ||
+          isTaskStoreWriteOperation(input.operation)
+        ) {
+          return yield* Effect.fail(reservedWorkspaceError(reservation));
         }
-        const reservation = reservationsByWorkspaceId.get(input.workspaceId);
-        if (reservation) {
-          if (
-            reservation.operation === "remove" ||
-            reservation.operation === "reopen" ||
-            isTaskStoreWriteOperation(input.operation)
-          ) {
-            return Effect.fail(reservedWorkspaceError(reservation));
-          }
-          return Effect.void;
-        }
-        const blocked = blockedByWorkspaceId.get(input.workspaceId);
-        if (!blocked) {
-          return Effect.void;
-        }
+      }
+      const repoConfig = yield* workspaceSettingsService.getRepoConfig(input.workspaceId).pipe(
+        Effect.mapError(
+          (cause) =>
+            new HostValidationError({
+              message: cause.message,
+              field: "workspaceId",
+              cause,
+            }),
+        ),
+      );
+      const blocked = persistedBlock(repoConfig);
+      if (blocked) {
         if (blocked.reason === "removal" || isTaskStoreWriteOperation(input.operation)) {
-          return Effect.fail(blockedWorkspaceError(blocked));
+          return yield* Effect.fail(blockedWorkspaceError(blocked));
         }
-        return Effect.void;
-      }),
-      Effect.zipRight(claimWorkspace(input.workspaceId)),
-    );
+      }
+      yield* claimWorkspace(input.workspaceId);
+    });
 
   const canonicalRepoPathKey = (
     repoPath: string,
@@ -218,10 +250,7 @@ export const createWorkspaceAdmissionService = ({
         if (reservation) {
           return Effect.fail(reservedWorkspaceError(reservation));
         }
-        const blocked = [...blockedByWorkspaceId.values()].find(
-          (candidate) => normalizePathForComparison(candidate.repoPath) === key,
-        );
-        return blocked ? Effect.fail(blockedWorkspaceError(blocked)) : Effect.void;
+        return Effect.void;
       }),
     );
 
@@ -372,9 +401,14 @@ export const createWorkspaceAdmissionService = ({
 // Adapter operation names. Only these change stored task data.
 const TASK_STORE_WRITE_OPERATION =
   /\.(clear|create|delete|promote|record|register|remove|set|transition|update|upsert)/i;
+const WORKSPACE_SESSION_WRITE_OPERATIONS = new Set([
+  "workspaceSessionStore.archive",
+  "workspaceSessionStore.rename",
+  "workspaceSessionStore.restore",
+]);
 
 const isTaskStoreWriteOperation = (operation: string): boolean =>
-  TASK_STORE_WRITE_OPERATION.test(operation);
+  WORKSPACE_SESSION_WRITE_OPERATIONS.has(operation) || TASK_STORE_WRITE_OPERATION.test(operation);
 
 const blockedWorkspaceError = (blocked: BlockedWorkspace): HostValidationError => {
   if (blocked.reason === "removal") {

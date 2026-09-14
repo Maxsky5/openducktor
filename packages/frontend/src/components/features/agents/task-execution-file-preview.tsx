@@ -476,6 +476,7 @@ function resolveFilePreviewPresentation({
 }
 
 export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelectedFilePreview({
+  workspaceId,
   model: {
     selectedFile,
     previewSessionKey,
@@ -488,6 +489,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   },
   onFileSaved,
 }: {
+  workspaceId: string;
   model: TaskExecutionSelectedFilePreviewModel;
   onFileSaved(): void;
 }): ReactElement | null {
@@ -524,6 +526,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const readyTextResult =
     readyCurrentSnapshot?.result.kind === "text" ? readyCurrentSnapshot.result : null;
   const editor = useTaskExecutionFileEditor({
+    workspaceId,
     selectedFile,
     readyResult: readyTextResult,
     onFileSaved,

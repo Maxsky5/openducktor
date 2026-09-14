@@ -165,6 +165,7 @@ for (const departure of ["close", "same-task", "task", "repository"] as const) {
         }
         expect(h.write).toHaveBeenCalledTimes(1);
         expect(h.write).toHaveBeenCalledWith({
+          workspaceId: "workspace",
           rootPath: "/repo/a",
           relativePath: "src/file.ts",
           contents: "Local draft",

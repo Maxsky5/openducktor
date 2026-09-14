@@ -474,7 +474,7 @@ export function useWorkspaceSelectionOperations({
         async () => {
           const result = await hostClient.workspaceRemove(input);
           applyLifecycleCatalog(result.catalog);
-          dropWorkspaceQueries(queryClient, {
+          await dropWorkspaceQueries(queryClient, {
             repoPath: input.expectedRepoPath,
             workspaceId: input.workspaceId,
           });

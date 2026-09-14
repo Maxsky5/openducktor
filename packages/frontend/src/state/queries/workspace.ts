@@ -169,6 +169,13 @@ const workspaceConfigQueryKeyMatches = (
 ): boolean =>
   queryKey[0] === "workspace" && queryKey[1] === "repo-config" && queryKey[2] === workspaceId;
 
+const workspaceSessionQueryKeyMatches = (
+  queryKey: readonly unknown[],
+  workspaceId: string,
+): boolean =>
+  (queryKey[0] === "workspace-sessions" || queryKey[0] === "workspace-session-archive-preview") &&
+  queryKey[1] === workspaceId;
+
 const repoScopedQueryKeyMatches = (queryKey: readonly unknown[], repoPath: string): boolean => {
   const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
   return queryKey.some(
@@ -176,13 +183,14 @@ const repoScopedQueryKeyMatches = (queryKey: readonly unknown[], repoPath: strin
   );
 };
 
-export const dropWorkspaceQueries = (
+export const dropWorkspaceQueries = async (
   queryClient: QueryClient,
   identity: { repoPath: string; workspaceId: string },
-): void => {
+): Promise<void> => {
   const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean =>
     workspaceConfigQueryKeyMatches(query.queryKey, identity.workspaceId) ||
+    workspaceSessionQueryKeyMatches(query.queryKey, identity.workspaceId) ||
     repoScopedQueryKeyMatches(query.queryKey, identity.repoPath);
-  void queryClient.cancelQueries({ predicate: matchesRemovedWorkspace }, { revert: false });
+  await queryClient.cancelQueries({ predicate: matchesRemovedWorkspace }, { revert: false });
   queryClient.removeQueries({ predicate: matchesRemovedWorkspace });
 };

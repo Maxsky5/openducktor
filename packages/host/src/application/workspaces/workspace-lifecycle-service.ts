@@ -407,54 +407,58 @@ export const createWorkspaceLifecycleService = ({
 
   return {
     closeWorkspace(input) {
-      return Effect.gen(function* () {
-        const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-        if (repoConfig.closed) {
-          return yield* workspaceSettingsService.getWorkspaceCatalog();
-        }
-        return yield* runUnderReservation(
-          {
-            operation: "close",
-            repoPath: repoConfig.repoPath,
-            workspaceId: input.workspaceId,
-          },
-          () =>
-            Effect.gen(function* () {
-              yield* assertNoBlockingActivity(repoConfig.repoPath);
-              const catalog = yield* workspaceSettingsService.closeWorkspace(
-                input.workspaceId,
-                input.expectedRepoPath,
-              );
-              admission.blockWorkspace({
-                reason: "closed",
-                repoPath: repoConfig.repoPath,
-                workspaceId: input.workspaceId,
-              });
-              return catalog;
-            }),
-        );
-      });
+      return runOwnedExclusively(
+        Effect.gen(function* () {
+          const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
+          if (repoConfig.closed) {
+            return yield* workspaceSettingsService.getWorkspaceCatalog();
+          }
+          return yield* runUnderReservation(
+            {
+              operation: "close",
+              repoPath: repoConfig.repoPath,
+              workspaceId: input.workspaceId,
+            },
+            () =>
+              Effect.gen(function* () {
+                yield* assertNoBlockingActivity(repoConfig.repoPath);
+                const catalog = yield* workspaceSettingsService.closeWorkspace(
+                  input.workspaceId,
+                  input.expectedRepoPath,
+                );
+                admission.blockWorkspace({
+                  reason: "closed",
+                  repoPath: repoConfig.repoPath,
+                  workspaceId: input.workspaceId,
+                });
+                return catalog;
+              }),
+          );
+        }),
+      );
     },
     reopenWorkspace(input) {
-      return Effect.gen(function* () {
-        const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-        return yield* runUnderReservation(
-          {
-            operation: "reopen",
-            repoPath: repoConfig.repoPath,
-            workspaceId: input.workspaceId,
-          },
-          () =>
-            Effect.gen(function* () {
-              const catalog = yield* workspaceSettingsService.reopenWorkspace(
-                input.workspaceId,
-                input.expectedRepoPath,
-              );
-              admission.unblockWorkspace(input.workspaceId);
-              return catalog;
-            }),
-        );
-      });
+      return runOwnedExclusively(
+        Effect.gen(function* () {
+          const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
+          return yield* runUnderReservation(
+            {
+              operation: "reopen",
+              repoPath: repoConfig.repoPath,
+              workspaceId: input.workspaceId,
+            },
+            () =>
+              Effect.gen(function* () {
+                const catalog = yield* workspaceSettingsService.reopenWorkspace(
+                  input.workspaceId,
+                  input.expectedRepoPath,
+                );
+                admission.unblockWorkspace(input.workspaceId);
+                return catalog;
+              }),
+          );
+        }),
+      );
     },
     removeWorkspace(input) {
       return runOwnedExclusively(

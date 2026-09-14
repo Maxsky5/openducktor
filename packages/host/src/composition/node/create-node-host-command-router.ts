@@ -5,6 +5,7 @@ import {
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
@@ -21,7 +22,10 @@ import { createLocalAttachmentService } from "../../application/attachments/loca
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import { createFilesystemService } from "../../application/filesystem/filesystem-service";
-import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
+import {
+  createWorkspaceFilesService,
+  withWorkspaceFilesAdmission,
+} from "../../application/filesystem/workspace-files-service";
 import { createWorkspaceActivityInspector } from "../../application/workspaces/workspace-activity-inspector";
 import { createWorkspaceLifecycleService } from "../../application/workspaces/workspace-lifecycle-service";
 import { createGitService } from "../../application/git/git-service";
@@ -173,7 +177,24 @@ export const assembleNodeEffectHostCommandRouter = (
     publish: createLiveSessionPublisher(eventBus),
   });
   const filesystemService = createFilesystemService(filesystem);
-  const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
+  const workspaceFilesService = withWorkspaceFilesAdmission(
+    createWorkspaceFilesService(filesystem, git),
+    {
+      resolveRepoPath: (workspaceId) =>
+        workspaceSettingsService.getRepoConfig(workspaceId).pipe(
+          Effect.map((repoConfig) => repoConfig.repoPath),
+          Effect.mapError(
+            (cause) =>
+              new HostValidationError({
+                message: cause.message,
+                field: "workspaceId",
+                cause,
+              }),
+          ),
+        ),
+      withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
+    },
+  );
   const gitService = withGitWorkspaceAdmission(
     createGitService({ gitPort: git, settingsConfig, worktreeFiles }),
     workspaceAdmissionService,
@@ -392,6 +413,7 @@ export const assembleNodeEffectHostCommandRouter = (
     settingsConfig,
     worktreeFiles,
     systemCommands,
+    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
   });
   const hostRouterLifecycle = createNodeHostRouterLifecycle({
     assets,
