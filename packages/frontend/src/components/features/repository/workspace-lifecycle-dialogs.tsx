@@ -226,14 +226,12 @@ export function WorkspaceRemoveDialog({
   const [removeTaskWorktrees, setRemoveTaskWorktrees] = useState(false);
   const [choiceSubmitted, setChoiceSubmitted] = useState(false);
   const submit = useLifecycleSubmit(
-    () => {
-      setChoiceSubmitted(true);
-      return removeWorkspace({
+    () =>
+      removeWorkspace({
         workspaceId: workspace.workspaceId,
         expectedRepoPath: workspace.repoPath,
         removeTaskWorktrees,
-      });
-    },
+      }),
     () => onOpenChange(false),
   );
   const choiceLocked =
@@ -251,7 +249,10 @@ export function WorkspaceRemoveDialog({
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
-      onConfirm={() => void submit.confirm()}
+      onConfirm={() => {
+        setChoiceSubmitted(true);
+        void submit.confirm();
+      }}
       returnFocusRef={returnFocusRef}
     >
       <WorkspaceIdentityCard workspace={workspace} />
