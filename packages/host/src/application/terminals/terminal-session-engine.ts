@@ -84,9 +84,9 @@ export const createTerminalSessionEngine = ({
       pruneExited();
       return [...sessions.values()].filter(isLiveTerminal).length;
     },
-    getContext: (terminalId: string): TerminalContext | null => {
+    getWorkspaceRepoPath: (terminalId: string): string | null => {
       pruneExited();
-      return sessions.get(terminalId)?.summary.context ?? null;
+      return sessions.get(terminalId)?.workspaceRepoPath ?? null;
     },
     countLiveForContext: (context: TerminalContext): number => {
       pruneExited();
@@ -105,11 +105,10 @@ export const createTerminalSessionEngine = ({
         const activeTerminalIds: string[] = [];
         const unknownTerminalIds: string[] = [];
         for (const session of sessions.values()) {
-          const context = session.summary.context;
-          if (!isLiveTerminal(session) || !("taskId" in context)) {
+          if (!isLiveTerminal(session) || session.workspaceRepoPath === null) {
             continue;
           }
-          if (normalizePathForComparison(context.repoPath) !== normalizedRepoPath) {
+          if (normalizePathForComparison(session.workspaceRepoPath) !== normalizedRepoPath) {
             continue;
           }
           const handle = session.resources.handle;
@@ -133,6 +132,7 @@ export const createTerminalSessionEngine = ({
     start: (
       summary: TerminalSummary,
       plan: TerminalPtyLaunchPlan,
+      workspaceRepoPath: string | null,
     ): Effect.Effect<TerminalSummary, TerminalServiceError> =>
       Effect.gen(function* () {
         let session: TerminalSession;
@@ -146,6 +146,7 @@ export const createTerminalSessionEngine = ({
           operations: yield* Effect.makeSemaphore(1),
           replayByteLimit: TERMINAL_LIMITS.replayBytes,
           shell: plan.shell,
+          workspaceRepoPath,
         });
         sessions.set(summary.terminalId, session);
         const handleResult = yield* Effect.either(
@@ -195,7 +196,10 @@ export const createTerminalSessionEngine = ({
           (filter.kind === "unassociated" && !("taskId" in session.summary.context)) ||
           (filter.kind === "task" &&
             terminalContextKey(session.summary.context) ===
-              terminalContextKey({ repoPath: filter.repoPath, taskId: filter.taskId }));
+              terminalContextKey({
+                repoPath: filter.repoPath,
+                taskId: filter.taskId,
+              }));
         return matches ? [{ ...session.summary, context: { ...session.summary.context } }] : [];
       });
     },

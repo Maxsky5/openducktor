@@ -44,6 +44,7 @@ const makeSession = async () => {
     operations: await Effect.runPromise(Effect.makeSemaphore(1)),
     replayByteLimit: 1024,
     shell: "/bin/zsh",
+    workspaceRepoPath: null,
   });
   return { session, disposeCalls: () => disposeCalls };
 };

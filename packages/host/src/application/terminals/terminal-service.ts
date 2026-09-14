@@ -70,6 +70,9 @@ type CreateTerminalServiceInput = {
   assertWorkspaceAdmitsWork: (
     repoPath: string,
   ) => Effect.Effect<void, HostValidationErrorAggregate>;
+  resolveWorkspaceRepoPath: (
+    workingDirectory: string,
+  ) => Effect.Effect<string | null, HostValidationErrorAggregate>;
   withWorkStartLease<A, E, R>(
     repoPath: string,
     effect: Effect.Effect<A, E, R>,
@@ -86,6 +89,7 @@ type CreateTerminalServiceInput = {
 
 export const createTerminalService = ({
   assertWorkspaceAdmitsWork,
+  resolveWorkspaceRepoPath,
   withWorkStartLease,
   filesystem,
   ptyPort,
@@ -97,7 +101,10 @@ export const createTerminalService = ({
 }: CreateTerminalServiceInput): Effect.Effect<TerminalService> =>
   Effect.sync(() => {
     const hostInstanceId = hostInstanceIdFactory();
-    const engineInput: Parameters<typeof createTerminalSessionEngine>[0] = { now, ptyPort };
+    const engineInput: Parameters<typeof createTerminalSessionEngine>[0] = {
+      now,
+      ptyPort,
+    };
     if (scheduleTitleSettlement) {
       engineInput.scheduleTitleSettlement = scheduleTitleSettlement;
     }
@@ -141,6 +148,20 @@ export const createTerminalService = ({
       canonicalizeRepositoryPath(scope.repoPath, "close_by_task").pipe(
         Effect.map((repoPath) => ({ repoPath, taskIds: scope.taskIds })),
       );
+    const mapCreateWorkspaceError =
+      (
+        workingDir: string,
+      ): ((cause: HostValidationErrorAggregate | TerminalServiceError) => TerminalServiceError) =>
+      (cause) =>
+        cause instanceof TerminalServiceError
+          ? cause
+          : new TerminalServiceError({
+              code: "invalid_input",
+              operation: "create",
+              message: cause.message,
+              cause,
+              workingDir,
+            });
 
     const service: TerminalService = {
       hostInstanceId,
@@ -152,7 +173,10 @@ export const createTerminalService = ({
             (reservation) =>
               Effect.gen(function* () {
                 const rawContext = input.context;
-                const startTerminal = (context: TerminalContext) =>
+                const startTerminal = (
+                  context: TerminalContext,
+                  workspaceRepoPath: string | null,
+                ) =>
                   Effect.gen(function* () {
                     yield* reservation.bind(context);
                     const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
@@ -166,7 +190,7 @@ export const createTerminalService = ({
                       lifecycle: "starting",
                       exit: null,
                     };
-                    const started = yield* engine.start(summary, plan);
+                    const started = yield* engine.start(summary, plan, workspaceRepoPath);
                     return { ref: { terminalId }, summary: started };
                   });
                 if ("taskId" in rawContext) {
@@ -174,25 +198,20 @@ export const createTerminalService = ({
                     rawContext.repoPath,
                     Effect.gen(function* () {
                       const context = yield* canonicalizeContext(rawContext, "create");
-                      return yield* startTerminal(context);
+                      return yield* startTerminal(context, context.repoPath);
                     }),
                     input.workingDir,
-                  ).pipe(
-                    Effect.mapError((cause) =>
-                      cause instanceof TerminalServiceError
-                        ? cause
-                        : new TerminalServiceError({
-                            code: "invalid_input",
-                            operation: "create",
-                            message: cause.message,
-                            cause,
-                            workingDir: rawContext.repoPath,
-                          }),
-                    ),
-                  );
+                  ).pipe(Effect.mapError(mapCreateWorkspaceError(rawContext.repoPath)));
                 }
-                const context = yield* canonicalizeContext(rawContext, "create");
-                return yield* startTerminal(context);
+                const workspaceRepoPath = yield* resolveWorkspaceRepoPath(input.workingDir).pipe(
+                  Effect.mapError(mapCreateWorkspaceError(input.workingDir)),
+                );
+                const start = startTerminal(rawContext, workspaceRepoPath);
+                return workspaceRepoPath === null
+                  ? yield* start
+                  : yield* withWorkStartLease(workspaceRepoPath, start, input.workingDir).pipe(
+                      Effect.mapError(mapCreateWorkspaceError(input.workingDir)),
+                    );
               }),
             (reservation) => Effect.sync(() => reservation.release()),
           );
@@ -219,9 +238,9 @@ export const createTerminalService = ({
       attach: engine.attach,
       write: (terminalId, data) =>
         Effect.gen(function* () {
-          const context = engine.getContext(terminalId);
-          if (context && "taskId" in context) {
-            yield* assertWorkspaceAdmitsWork(context.repoPath).pipe(
+          const workspaceRepoPath = engine.getWorkspaceRepoPath(terminalId);
+          if (workspaceRepoPath) {
+            yield* assertWorkspaceAdmitsWork(workspaceRepoPath).pipe(
               Effect.mapError(
                 (cause) =>
                   new TerminalServiceError({
@@ -230,7 +249,7 @@ export const createTerminalService = ({
                     message: cause.message,
                     cause,
                     terminalId,
-                    workingDir: context.repoPath,
+                    workingDir: workspaceRepoPath,
                   }),
               ),
             );
