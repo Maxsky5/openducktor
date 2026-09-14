@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   repoConfigSchema,
+  type RepoConfig,
   type WorkspaceCatalog,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
@@ -38,21 +39,43 @@ const createAdmission = (
     Effect.succeed(path),
   claimWorkspace: (workspaceId: string) => Effect.Effect<void, HostOperationErrorAggregate> = () =>
     Effect.void,
+  getRepoConfig: (workspaceId: string) => Effect.Effect<RepoConfig, never> = (workspaceId) => {
+    const removal = workspaceCatalog.incompleteRemovals.find(
+      (entry) => entry.workspace.workspaceId === workspaceId,
+    );
+    const workspace = [
+      ...workspaceCatalog.openWorkspaces,
+      ...workspaceCatalog.closedWorkspaces,
+      ...workspaceCatalog.incompleteRemovals.map((entry) => entry.workspace),
+    ].find((entry) => entry.workspaceId === workspaceId);
+    return Effect.succeed(
+      repoConfigSchema.parse({
+        workspaceId,
+        workspaceName: workspaceId,
+        repoPath: workspace?.repoPath ?? `/repos/${workspaceId}`,
+        defaultRuntimeKind: "opencode",
+        agentStudioState: { openTaskIds: [] },
+        closed: workspaceCatalog.closedWorkspaces.some(
+          (entry) => entry.workspaceId === workspaceId,
+        ),
+        removal: removal?.record,
+      }),
+    );
+  },
 ) =>
   createWorkspaceAdmissionService({
     hostOwnership: { claimWorkspace },
     settingsConfig: { canonicalizePath },
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
-      getRepoConfigByRepoPath: (repoPath) =>
-        Effect.succeed(
-          repoConfigSchema.parse({
-            workspaceId: repoPath.split("/").at(-1) ?? "workspace",
-            workspaceName: repoPath,
-            repoPath,
-            defaultRuntimeKind: "opencode",
-            agentStudioState: { openTaskIds: [] },
-          }),
-        ),
+      getRepoConfig,
+      getRepoConfigByRepoPath: (repoPath) => {
+        const workspace = [
+          ...workspaceCatalog.openWorkspaces,
+          ...workspaceCatalog.closedWorkspaces,
+          ...workspaceCatalog.incompleteRemovals.map((entry) => entry.workspace),
+        ].find((entry) => entry.repoPath === repoPath);
+        return getRepoConfig(workspace?.workspaceId ?? repoPath.split("/").at(-1) ?? "workspace");
+      },
       getWorkspaceCatalog: () => Effect.succeed(workspaceCatalog),
     }),
   });
@@ -88,6 +111,67 @@ describe("workspace admission service", () => {
     expect(admission.isWorkspaceRemovalPending("closed-ws")).toBe(false);
     expect(admission.isWorkspaceRemovalPending("removing-ws")).toBe(true);
     expect(admission.isWorkspaceRemovalPending("open-ws")).toBe(false);
+  });
+
+  test("uses current persisted lifecycle state after initialization", async () => {
+    let current = repoConfigSchema.parse({
+      workspaceId: "ws",
+      workspaceName: "Workspace",
+      repoPath: "/repos/ws",
+      defaultRuntimeKind: "opencode",
+      agentStudioState: { openTaskIds: [] },
+    });
+    const admission = createAdmission(
+      catalog({ openWorkspaces: [workspaceRecord("ws", "/repos/ws")] }),
+      undefined,
+      undefined,
+      () => Effect.succeed(current),
+    );
+    await Effect.runPromise(admission.initialize());
+
+    current = repoConfigSchema.parse({ ...current, closed: true });
+    await expect(
+      Effect.runPromise(admission.withWorkStartLease("/repos/ws", Effect.void)),
+    ).rejects.toThrow("Workspace is closed: ws");
+    for (const operation of [
+      "workspaceSessionStore.rename",
+      "workspaceSessionStore.archive",
+      "workspaceSessionStore.restore",
+    ]) {
+      await expect(
+        Effect.runPromise(
+          admission.assertTaskStoreAccess({ operation, repoPath: "/repos/ws", workspaceId: "ws" }),
+        ),
+      ).rejects.toThrow("Workspace is closed: ws");
+    }
+
+    current = repoConfigSchema.parse({ ...current, closed: false });
+    await expect(
+      Effect.runPromise(admission.withWorkStartLease("/repos/ws", Effect.void)),
+    ).resolves.toBeUndefined();
+
+    current = repoConfigSchema.parse({
+      ...current,
+      removal: {
+        version: 1,
+        operationId: "op-1",
+        phase: "task_store",
+        removeTaskWorktrees: false,
+        removedWorktrees: [],
+        pendingWorktreePath: null,
+        startedAt: "2026-01-01T00:00:00.000Z",
+        lastFailure: null,
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        admission.assertTaskStoreAccess({
+          operation: "sqliteTaskRepository.listTasks",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).rejects.toThrow("Workspace removal is incomplete for ws");
   });
 
   test("blocks task store writes for closed workspaces but allows reads", async () => {
@@ -533,7 +617,16 @@ describe("workspace admission service", () => {
   });
 
   test("keeps the workspace blocked until active work starts finish", async () => {
-    const admission = createAdmission(catalog());
+    let current = repoConfigSchema.parse({
+      workspaceId: "open",
+      workspaceName: "Open",
+      repoPath: "/repos/open",
+      defaultRuntimeKind: "opencode",
+      agentStudioState: { openTaskIds: [] },
+    });
+    const admission = createAdmission(catalog(), undefined, undefined, () =>
+      Effect.succeed(current),
+    );
     await Effect.runPromise(admission.initialize());
 
     const result = await Effect.runPromise(
@@ -547,6 +640,19 @@ describe("workspace admission service", () => {
           ),
         );
         yield* Deferred.await(entered);
+        current = repoConfigSchema.parse({
+          ...current,
+          removal: {
+            version: 1,
+            operationId: "op-1",
+            phase: "task_store",
+            removeTaskWorktrees: false,
+            removedWorktrees: [],
+            pendingWorktreePath: null,
+            startedAt: "2026-01-01T00:00:00.000Z",
+            lastFailure: null,
+          },
+        });
         admission.blockWorkspace({
           reason: "removal",
           repoPath: "/repos/open",
@@ -565,6 +671,7 @@ describe("workspace admission service", () => {
           repoPath: "/repos/open",
           workspaceId: "open",
         });
+        current = repoConfigSchema.parse({ ...current, removal: undefined });
         const admittedWhenDrained = yield* Effect.exit(
           admission.assertWorkspaceAdmitsWork("/repos/open"),
         );

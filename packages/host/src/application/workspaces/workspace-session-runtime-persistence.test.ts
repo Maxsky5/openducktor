@@ -554,6 +554,7 @@ describe("Workspace Session persistence through the shared command module", () =
     });
     const workspace = createWorkspaceSessionService({
       operationGate: h.operationGate,
+      withWorkStartLease: (_repoPath, effect) => effect,
       store: h.store,
       settings: {
         getRepoConfig: () => Effect.succeed(config),

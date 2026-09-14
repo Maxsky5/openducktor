@@ -254,6 +254,54 @@ const createService = ({
 };
 
 describe("workspace lifecycle service", () => {
+  const expectActionToWaitForOwnershipLock = async (
+    action: (
+      service: ReturnType<typeof createWorkspaceLifecycleService>,
+    ) => Effect.Effect<unknown, unknown>,
+  ): Promise<void> => {
+    const ownershipLock = createWorkspaceOwnershipLock();
+    const service = createService({ ownershipLock });
+    let release!: () => void;
+    let acquired!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const lockAcquired = new Promise<void>((resolve) => {
+      acquired = resolve;
+    });
+    const lockHolder = Effect.runPromise(
+      ownershipLock.runExclusive(
+        Effect.promise(async () => {
+          acquired();
+          await held;
+        }),
+      ),
+    );
+    await lockAcquired;
+
+    let completed = false;
+    const result = Effect.runPromise(action(service)).then(() => {
+      completed = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(completed).toBe(false);
+
+    release();
+    await lockHolder;
+    await result;
+    expect(completed).toBe(true);
+  };
+
+  test("closeWorkspace waits for the shared ownership lock", () =>
+    expectActionToWaitForOwnershipLock((service) =>
+      service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+    ));
+
+  test("reopenWorkspace waits for the shared ownership lock", () =>
+    expectActionToWaitForOwnershipLock((service) =>
+      service.reopenWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+    ));
+
   test("closeWorkspace rejects while work is running and does not persist", async () => {
     const closeWorkspace = mock(() => Effect.succeed(catalog()));
     const blockWorkspace = mock(() => {});

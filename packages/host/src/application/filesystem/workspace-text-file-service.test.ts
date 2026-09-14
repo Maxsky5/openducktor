@@ -62,6 +62,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const saved = await Effect.runPromise(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: "after\n",
@@ -90,6 +91,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const saved = await Effect.runPromise(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: loaded.contents.replace("before", "after"),
@@ -118,6 +120,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const saved = await Effect.runPromise(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents,
@@ -144,6 +147,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const failure = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: "draft",
@@ -200,6 +204,7 @@ describe("createWorkspaceTextFileService", () => {
 
       const failure = await writeFailure(
         service.writeTextFile({
+          workspaceId: "ws",
           rootPath,
           relativePath: "file.txt",
           contents: "draft",
@@ -257,6 +262,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const failure = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "nested/file.txt",
         contents: "draft",
@@ -283,6 +289,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const oversized = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: "a".repeat(MAX_WORKSPACE_TEXT_FILE_BYTES + 1),
@@ -291,6 +298,7 @@ describe("createWorkspaceTextFileService", () => {
     );
     const binary = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: "a\0b",
@@ -299,6 +307,7 @@ describe("createWorkspaceTextFileService", () => {
     );
     const lateBinary = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: `${"a".repeat(8192)}\0b`,
@@ -327,6 +336,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const failure = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: "\ud800",
@@ -353,6 +363,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const error = await writeError(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: "\ud800".repeat(MAX_WORKSPACE_TEXT_FILE_BYTES + 1),
@@ -383,6 +394,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const failure = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: "draft",
@@ -410,6 +422,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const unlisted = await writeFailure(
       unlistedService.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "missing.txt",
         contents: "draft",
@@ -418,6 +431,7 @@ describe("createWorkspaceTextFileService", () => {
     );
     const escapingError = await writeError(
       linkedService.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "link.txt",
         contents: "draft",
@@ -443,6 +457,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const traversal = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "../outside.txt",
         contents: "draft",
@@ -451,6 +466,7 @@ describe("createWorkspaceTextFileService", () => {
     );
     const absolute = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: path.join(rootPath, "absolute.txt"),
         contents: "draft",
@@ -459,6 +475,7 @@ describe("createWorkspaceTextFileService", () => {
     );
     const directory = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "directory",
         contents: "draft",
@@ -489,6 +506,7 @@ describe("createWorkspaceTextFileService", () => {
       );
       const failure = await writeFailure(
         service.writeTextFile({
+          workspaceId: "ws",
           rootPath,
           relativePath: "file.txt",
           contents: "draft",
@@ -517,6 +535,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const failure = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: "draft",
@@ -555,6 +574,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const failure = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: "draft",
@@ -593,6 +613,7 @@ describe("createWorkspaceTextFileService", () => {
 
     const failure = await writeFailure(
       service.writeTextFile({
+        workspaceId: "ws",
         rootPath,
         relativePath: "file.txt",
         contents: "draft",

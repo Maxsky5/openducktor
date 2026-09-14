@@ -14,7 +14,7 @@ import {
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
@@ -83,6 +83,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       failDelete: false,
       failArchive: false,
       failRestore: false,
+      blockMutationAdmission: false,
       partialCreate: false,
       changed: false,
       collision: false,
@@ -100,6 +101,15 @@ describe("host-owned Workspace Session lifecycle", () => {
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
       operationGate: createWorkspaceSessionOperationGate(),
+      withWorkStartLease: (_repoPath, effect) =>
+        state.blockMutationAdmission
+          ? Effect.fail(
+              new HostValidationError({
+                field: "workspaceId",
+                message: "Workspace is closed: fairnest",
+              }),
+            )
+          : effect,
       store: {
         ...store,
         archive: (request) =>
@@ -1152,6 +1162,21 @@ describe("host-owned Workspace Session lifecycle", () => {
     const callsBefore = h.calls.length;
     expect(await Effect.runPromise(h.service.restore(ref))).toEqual(restored);
     expect(h.calls).toHaveLength(callsBefore);
+  });
+
+  test("checks workspace admission before archive worktree removal", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    h.state.blockMutationAdmission = true;
+    const callsBefore = [...h.calls];
+
+    await expect(
+      Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: true })),
+    ).rejects.toThrow("Workspace is closed: fairnest");
+
+    expect(h.calls).toEqual(callsBefore);
+    expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
   });
 
   test.each(["failCleanup", "failDelete", "failArchive"] as const)(

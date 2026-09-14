@@ -112,6 +112,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
     const service = createWorkspaceSessionService({
       operationGate: createWorkspaceSessionOperationGate(),
+      withWorkStartLease: (_repoPath, effect) => effect,
       ...targetDependencies,
       store,
       settings: {
