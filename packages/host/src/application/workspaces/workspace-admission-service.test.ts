@@ -7,7 +7,11 @@ import {
 } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
-import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
+import type { GitPort } from "../../ports/git-port";
+import {
+  createGitPortTestDouble,
+  createWorkspaceSettingsServiceTestDouble,
+} from "../../test-support/service-test-doubles";
 import { createWorkspaceAdmissionService } from "./workspace-admission-service";
 
 const workspaceRecord = (
@@ -62,8 +66,16 @@ const createAdmission = (
       }),
     );
   },
+  gitPort: Pick<
+    GitPort,
+    "isRegisteredWorktree" | "shareGitCommonDirectory"
+  > = createGitPortTestDouble({
+    isRegisteredWorktree: () => Effect.succeed(false),
+    shareGitCommonDirectory: () => Effect.succeed(false),
+  }),
 ) =>
   createWorkspaceAdmissionService({
+    gitPort,
     hostOwnership: { claimWorkspace },
     settingsConfig: { canonicalizePath },
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
@@ -136,6 +148,7 @@ describe("workspace admission service", () => {
     for (const operation of [
       "workspaceSessionStore.rename",
       "workspaceSessionStore.archive",
+      "workspaceSessionStore.bindRuntimeSession",
       "workspaceSessionStore.restore",
     ]) {
       await expect(
@@ -304,6 +317,36 @@ describe("workspace admission service", () => {
     await expect(
       Effect.runPromise(admission.assertWorkspaceAdmitsWork("/repos/open")),
     ).resolves.toBeUndefined();
+  });
+
+  test("accepts only the repository or one of its registered worktrees", async () => {
+    const operation = mock(() => {});
+    const gitPort = createGitPortTestDouble({
+      shareGitCommonDirectory: (_repoPath, workingDirectory) =>
+        Effect.succeed(workingDirectory === "/worktrees/ws"),
+      isRegisteredWorktree: (_repoPath, workingDirectory) =>
+        Effect.succeed(workingDirectory === "/worktrees/ws"),
+    });
+    const admission = createAdmission(
+      catalog({ openWorkspaces: [workspaceRecord("ws", "/repos/ws")] }),
+      undefined,
+      undefined,
+      undefined,
+      gitPort,
+    );
+
+    await expect(
+      Effect.runPromise(
+        admission.withWorkStartLease("/repos/ws", Effect.sync(operation), "/repos/other"),
+      ),
+    ).rejects.toThrow("is not the repository or a registered worktree");
+    expect(operation).not.toHaveBeenCalled();
+
+    await expect(
+      Effect.runPromise(
+        admission.withWorkStartLease("/repos/ws", Effect.succeed("started"), "/worktrees/ws"),
+      ),
+    ).resolves.toBe("started");
   });
 
   test("claims cross-process ownership before a work start", async () => {

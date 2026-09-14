@@ -135,6 +135,7 @@ export const assembleNodeEffectHostCommandRouter = (
     "already-held",
   );
   const workspaceAdmissionService = createWorkspaceAdmissionService({
+    gitPort: git,
     hostOwnership: workspaceHostOwnership,
     settingsConfig,
     workspaceSettingsService,

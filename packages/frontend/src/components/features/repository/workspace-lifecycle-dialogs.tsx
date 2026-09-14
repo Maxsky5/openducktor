@@ -224,18 +224,21 @@ export function WorkspaceRemoveDialog({
 }: WorkspaceLifecycleDialogProps): ReactElement {
   const { incompleteRemovals, removeWorkspace } = useWorkspaceState();
   const [removeTaskWorktrees, setRemoveTaskWorktrees] = useState(false);
+  const [choiceSubmitted, setChoiceSubmitted] = useState(false);
   const submit = useLifecycleSubmit(
-    () =>
-      removeWorkspace({
+    () => {
+      setChoiceSubmitted(true);
+      return removeWorkspace({
         workspaceId: workspace.workspaceId,
         expectedRepoPath: workspace.repoPath,
         removeTaskWorktrees,
-      }),
+      });
+    },
     () => onOpenChange(false),
   );
-  const choiceLocked = incompleteRemovals.some(
-    (removal) => removal.workspace.workspaceId === workspace.workspaceId,
-  );
+  const choiceLocked =
+    choiceSubmitted ||
+    incompleteRemovals.some((removal) => removal.workspace.workspaceId === workspace.workspaceId);
 
   return (
     <LifecycleDialog

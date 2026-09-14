@@ -159,8 +159,10 @@ describe("createWorkspaceFilesService", () => {
           events.push(`resolve:${workspaceId}`);
           return "/repos/ws";
         }),
-      withWorkStartLease: (repoPath, effect) =>
-        Effect.sync(() => events.push(`lease:${repoPath}`)).pipe(Effect.zipRight(effect)),
+      withWorkStartLease: (repoPath, effect, workingDirectory) =>
+        Effect.sync(() => events.push(`lease:${repoPath}:${workingDirectory}`)).pipe(
+          Effect.zipRight(effect),
+        ),
     });
 
     await Effect.runPromise(
@@ -173,7 +175,7 @@ describe("createWorkspaceFilesService", () => {
       }),
     );
 
-    expect(events).toEqual(["resolve:ws", "lease:/repos/ws", "write"]);
+    expect(events).toEqual(["resolve:ws", "lease:/repos/ws:/managed/ws/task-1", "write"]);
   });
 
   test("lists git-tracked files, parent directories, and compatible git status", async () => {
