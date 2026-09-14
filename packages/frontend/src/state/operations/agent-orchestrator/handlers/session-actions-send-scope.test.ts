@@ -78,14 +78,16 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
     },
   );
 
-  test("rejects sends to stopped sessions before runtime or workflow work", async () => {
+  test("rejects sends to stopped unbound sessions before runtime or workflow work", async () => {
     const adapter = new OpencodeSdkAdapter();
     let sendCalls = 0;
     adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
       return acceptedUserMessage(input);
     };
-    const sessionsRef = createSessionsRef([buildSession({ status: "stopped" })]);
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "stopped", sessionAssociation: { kind: "unbound" } }),
+    ]);
     const actions = createSessionActions({
       adapter,
       sessionsRef,
@@ -96,7 +98,9 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
 
     await expect(
       actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
-    ).rejects.toThrow("Cannot send message to stopped session 'session-1'.");
+    ).rejects.toThrow(
+      "Cannot resume session for unbound session 'session-1'; repository or workflow context is required.",
+    );
     expect(sendCalls).toBe(0);
   });
 

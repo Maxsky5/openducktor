@@ -117,10 +117,6 @@ const applyResultLifecycleEvent = (
     outcome: Extract<ClaudeLifecycleEvent, { kind: "result" }>["outcome"];
   },
 ): void => {
-  if (input.outcome === "continuing") {
-    input.session.activity = "running";
-    return;
-  }
   if (input.outcome === "awaiting_sdk_idle") {
     completeActiveSdkUserTurn(input.session);
     const remainingPendingUserTurns = completePendingUserTurn(input.session);

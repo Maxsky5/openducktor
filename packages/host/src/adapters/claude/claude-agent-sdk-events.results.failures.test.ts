@@ -81,7 +81,7 @@ describe("handleClaudeSdkMessage failed results", () => {
     ]);
   });
 
-  test("keeps sessions running when Claude result stops for tool use", () => {
+  test("keeps a tool-use result idle when the later SDK idle event arrives", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.pendingUserTurnCount = 1;
@@ -107,8 +107,9 @@ describe("handleClaudeSdkMessage failed results", () => {
       }),
     });
 
-    expect(session.activity).toBe("running");
-    expect(events.map((event) => event.type)).toEqual([]);
+    expect(session.activity).toBe("idle");
+    expect(session.pendingUserTurnCount).toBe(0);
+    expect(events.map((event) => event.type)).toEqual(["session_idle"]);
 
     handleClaudeSdkMessage({
       ...commonInput,
@@ -122,8 +123,8 @@ describe("handleClaudeSdkMessage failed results", () => {
       }),
     });
 
-    expect(session.activity).toBe("running");
-    expect(session.pendingUserTurnCount).toBe(1);
-    expect(events.map((event) => event.type)).toEqual([]);
+    expect(session.activity).toBe("idle");
+    expect(session.pendingUserTurnCount).toBe(0);
+    expect(events.map((event) => event.type)).toEqual(["session_idle"]);
   });
 });

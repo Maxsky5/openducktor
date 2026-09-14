@@ -36,11 +36,7 @@ export const failedClaudeResultText = (message: ClaudeResultLike): string => {
   return `Claude Agent SDK result failed: ${readClaudeResultTerminalReason(message) ?? String(message.subtype)}`;
 };
 
-export type ClaudeResultLifecycleOutcome =
-  | "completed"
-  | "failed"
-  | "continuing"
-  | "awaiting_sdk_idle";
+export type ClaudeResultLifecycleOutcome = "completed" | "failed" | "awaiting_sdk_idle";
 
 const readClaudeResultTerminalReason = (message: ClaudeResultLike): string | undefined => {
   const terminalReason = "terminal_reason" in message ? message.terminal_reason : undefined;
@@ -81,12 +77,6 @@ export const lifecycleOutcomeForClaudeResult = (
   const terminalReason = readClaudeResultTerminalReason(message);
   if (terminalReason === "tool_deferred") {
     return "awaiting_sdk_idle";
-  }
-  if (terminalReason === "background_requested") {
-    return "completed";
-  }
-  if (readClaudeResultStopReason(message) === "tool_use") {
-    return "continuing";
   }
   return "completed";
 };
