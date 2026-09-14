@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Effect } from "effect";
 import {
   createProcessEnvironment,
   normalizeProcessEnvironment,
@@ -10,6 +11,12 @@ import {
 } from "./process-environment";
 
 const testIfPosixShellIsAvailable = process.platform === "win32" ? test.skip : test;
+
+const resolveProcessEnvironment = async (
+  input: Parameters<typeof createProcessEnvironment>[0],
+): Promise<NodeJS.ProcessEnv> =>
+  (await Effect.runPromise(createProcessEnvironment(input))).environment;
+const loginShellPath = (pathValue: string) => () => Effect.succeed(pathValue);
 
 const writeFakeLoginShell = async (shellPath: string, pathValue: string): Promise<void> => {
   await writeFile(
@@ -20,28 +27,28 @@ const writeFakeLoginShell = async (shellPath: string, pathValue: string): Promis
 };
 
 describe("createProcessEnvironment", () => {
-  test("merges the macOS login shell PATH before the inherited GUI PATH", () => {
-    const env = createProcessEnvironment({
+  test("merges the macOS login shell PATH before the inherited GUI PATH", async () => {
+    const env = await resolveProcessEnvironment({
       baseEnv: { PATH: "/usr/bin:/bin" },
       platform: "darwin",
-      readLoginShellPath: () => "/opt/homebrew/bin:/usr/bin",
+      readLoginShellPath: loginShellPath("/opt/homebrew/bin:/usr/bin"),
     });
 
     expect(env.PATH?.split(":")).toEqual(["/opt/homebrew/bin", "/usr/bin", "/bin"]);
   });
 
-  test("merges the Linux login shell PATH before the inherited GUI PATH", () => {
-    const env = createProcessEnvironment({
+  test("merges the Linux login shell PATH before the inherited GUI PATH", async () => {
+    const env = await resolveProcessEnvironment({
       baseEnv: { PATH: "/usr/bin:/bin" },
       platform: "linux",
-      readLoginShellPath: () => "/home/dev/.local/bin:/usr/bin",
+      readLoginShellPath: loginShellPath("/home/dev/.local/bin:/usr/bin"),
     });
 
     expect(env.PATH?.split(":")).toEqual(["/home/dev/.local/bin", "/usr/bin", "/bin"]);
   });
 
-  test("does not read a login shell PATH on Windows", () => {
-    const env = createProcessEnvironment({
+  test("does not read a login shell PATH on Windows", async () => {
+    const env = await resolveProcessEnvironment({
       baseEnv: { Path: "C:\\Windows\\System32" },
       platform: "win32",
       readLoginShellPath: () => {
@@ -52,26 +59,26 @@ describe("createProcessEnvironment", () => {
     expect(env.Path).toBe("C:\\Windows\\System32");
   });
 
-  test("does not mutate the caller environment object", () => {
+  test("does not mutate the caller environment object", async () => {
     const baseEnv: NodeJS.ProcessEnv = { PATH: "/usr/bin:/bin" };
 
-    const env = createProcessEnvironment({
+    const env = await resolveProcessEnvironment({
       baseEnv,
       platform: "darwin",
-      readLoginShellPath: () => "/opt/homebrew/bin",
+      readLoginShellPath: loginShellPath("/opt/homebrew/bin"),
     });
 
     expect(baseEnv.PATH).toBe("/usr/bin:/bin");
     expect(env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/bin");
   });
 
-  test("normalizes Windows PATH casing without losing explicit PATH overrides", () => {
+  test("normalizes Windows PATH casing without losing explicit PATH overrides", async () => {
     const baseEnv: NodeJS.ProcessEnv = {
       Path: "C:\\Windows\\System32",
       PATH: "C:\\Tools\\bin",
     };
 
-    const env = createProcessEnvironment({
+    const env = await resolveProcessEnvironment({
       baseEnv,
       platform: "win32",
       readLoginShellPath: () => {
@@ -90,11 +97,11 @@ describe("createProcessEnvironment", () => {
     try {
       await writeFakeLoginShell(shellPath, "/opt/account:/usr/bin");
 
-      const env = createProcessEnvironment({
+      const env = await resolveProcessEnvironment({
         baseEnv: { SHELL: "/bin/bash", PATH: "/usr/bin:/bin" },
         platform: "darwin",
         readUserShell: () => shellPath,
-        readLoginShellPath: () => null,
+        readLoginShellPath: loginShellPath("/usr/bin:/bin"),
       });
 
       expect(env.SHELL).toBe(shellPath);
@@ -103,15 +110,21 @@ describe("createProcessEnvironment", () => {
     }
   });
 
-  test("keeps the inherited SHELL when no absolute login shell resolves", () => {
-    const env = createProcessEnvironment({
-      baseEnv: { SHELL: "bash", PATH: "/usr/bin:/bin" },
-      platform: "linux",
-      readUserShell: () => null,
-      readLoginShellPath: () => null,
-    });
+  test("reports an unusable shell instead of keeping the inherited PATH", async () => {
+    const resolution = await Effect.runPromise(
+      createProcessEnvironment({
+        baseEnv: { SHELL: "bash", PATH: "/usr/bin:/bin" },
+        platform: "linux",
+        readUserShell: () => null,
+      }),
+    );
 
-    expect(env.SHELL).toBe("bash");
+    expect(resolution.error).toMatchObject({
+      _tag: "ProcessEnvironmentError",
+      reason: "shell_unavailable",
+      shell: "bash",
+    });
+    expect(resolution.environment).toEqual({ SHELL: "bash" });
   });
 
   testIfPosixShellIsAvailable(
@@ -125,11 +138,11 @@ describe("createProcessEnvironment", () => {
         await chmod(accountShellPath, 0o644);
         await writeFakeLoginShell(configuredShellPath, "/opt/configured:/usr/bin");
 
-        const env = createProcessEnvironment({
+        const env = await resolveProcessEnvironment({
           baseEnv: { SHELL: configuredShellPath, PATH: "/usr/bin:/bin" },
           platform: "linux",
           readUserShell: () => accountShellPath,
-          readLoginShellPath: () => null,
+          readLoginShellPath: loginShellPath("/usr/bin:/bin"),
         });
 
         expect(env.SHELL).toBe(configuredShellPath);
@@ -147,11 +160,11 @@ describe("createProcessEnvironment", () => {
       await writeFakeLoginShell(accountShellPath, "/opt/account:/usr/bin");
       await writeFakeLoginShell(configuredShellPath, "/opt/configured:/usr/bin");
 
-      const env = createProcessEnvironment({
+      const env = await resolveProcessEnvironment({
         baseEnv: { SHELL: configuredShellPath, PATH: "/usr/bin:/bin" },
         platform: "linux",
         readUserShell: () => accountShellPath,
-        readLoginShellPath: () => null,
+        readLoginShellPath: loginShellPath("/usr/bin:/bin"),
       });
 
       expect(env.SHELL).toBe(configuredShellPath);
@@ -166,11 +179,11 @@ describe("createProcessEnvironment", () => {
     try {
       await writeFakeLoginShell(configuredShellPath, "/opt/configured:/usr/bin");
 
-      const env = createProcessEnvironment({
+      const env = await resolveProcessEnvironment({
         baseEnv: { SHELL: configuredShellPath, PATH: "/usr/bin:/bin" },
         platform: "linux",
         readUserShell: () => path.join(root, "missing-shell"),
-        readLoginShellPath: () => null,
+        readLoginShellPath: loginShellPath("/usr/bin:/bin"),
       });
 
       expect(env.SHELL).toBe(configuredShellPath);
@@ -189,7 +202,7 @@ describe("createProcessEnvironment", () => {
         await writeFakeLoginShell(accountShellPath, "/opt/account:/usr/bin");
         await writeFakeLoginShell(configuredShellPath, "/opt/configured:/usr/bin");
 
-        const env = createProcessEnvironment({
+        const env = await resolveProcessEnvironment({
           baseEnv: { SHELL: configuredShellPath, PATH: "/usr/bin:/bin" },
           platform: "darwin",
           readUserShell: () => accountShellPath,
@@ -210,13 +223,120 @@ describe("createProcessEnvironment", () => {
       try {
         await writeFakeLoginShell(shellPath, "/opt/bin:/usr/bin");
 
-        const env = createProcessEnvironment({
+        const env = await resolveProcessEnvironment({
           baseEnv: { SHELL: shellPath, PATH: "/usr/bin:/bin" },
           platform: "darwin",
           readUserShell: () => null,
         });
 
         expect(env.PATH?.split(":")).toEqual(["/opt/bin", "/usr/bin", "/bin"]);
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
+
+  testIfPosixShellIsAvailable(
+    "matches the PATH from an interactive login fixture shell",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "odt-interactive-login-shell-"));
+      const shellPath = path.join(root, "fixture-shell");
+      try {
+        await writeFile(path.join(root, ".zshrc"), 'export PATH="/fixture/zshrc-only:$PATH"\n');
+        await writeFile(
+          shellPath,
+          '#!/bin/sh\ncase "$1" in *i*) . "$HOME/.zshrc" ;; esac\nexec /bin/sh -c "$2"\n',
+        );
+        await chmod(shellPath, 0o755);
+        const baseEnv = {
+          HOME: root,
+          PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+          USER: "fixture",
+        };
+        const expectedProcess = Bun.spawn([shellPath, "-ilc", 'printf "%s" "$PATH"'], {
+          env: { ...baseEnv, SHELL: shellPath, TERM: "dumb" },
+          stdout: "pipe",
+        });
+        const expectedPath = await new Response(expectedProcess.stdout).text();
+        expect(await expectedProcess.exited).toBe(0);
+
+        const resolution = await Effect.runPromise(
+          createProcessEnvironment({
+            baseEnv,
+            platform: "darwin",
+            readUserShell: () => shellPath,
+          }),
+        );
+
+        expect(resolution.error).toBeNull();
+        expect(resolution.environment.PATH).toBe(expectedPath);
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
+
+  testIfPosixShellIsAvailable(
+    "returns a typed diagnostic and removes the GUI PATH when the probe exits non-zero",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "odt-failed-login-shell-"));
+      const shellPath = path.join(root, "fixture-shell");
+      try {
+        await writeFile(shellPath, "#!/bin/sh\nexit 17\n");
+        await chmod(shellPath, 0o755);
+
+        const resolution = await Effect.runPromise(
+          createProcessEnvironment({
+            baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
+            platform: "linux",
+            readUserShell: () => shellPath,
+          }),
+        );
+
+        expect(resolution.error).toMatchObject({
+          _tag: "ProcessEnvironmentError",
+          reason: "unexpected_exit",
+          shell: shellPath,
+        });
+        expect(resolution.error?.message).toContain("exit code 17");
+        expect(resolution.environment.PATH).toBeUndefined();
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
+
+  testIfPosixShellIsAvailable(
+    "times out asynchronously with an actionable typed diagnostic",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "odt-timeout-login-shell-"));
+      const shellPath = path.join(root, "fixture-shell");
+      try {
+        await writeFile(shellPath, "#!/bin/sh\nsleep 1\n");
+        await chmod(shellPath, 0o755);
+        let eventLoopAdvanced = false;
+        const resolutionPromise = Effect.runPromise(
+          createProcessEnvironment({
+            baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
+            loginShellTimeoutMs: 30,
+            platform: "linux",
+            readUserShell: () => shellPath,
+          }),
+        );
+        setTimeout(() => {
+          eventLoopAdvanced = true;
+        }, 0);
+
+        const resolution = await resolutionPromise;
+
+        expect(eventLoopAdvanced).toBe(true);
+        expect(resolution.error).toMatchObject({
+          _tag: "ProcessEnvironmentError",
+          reason: "timed_out",
+          shell: shellPath,
+        });
+        expect(resolution.error?.message).toContain("wait for input");
+        expect(resolution.environment.PATH).toBeUndefined();
       } finally {
         await rm(root, { force: true, recursive: true });
       }

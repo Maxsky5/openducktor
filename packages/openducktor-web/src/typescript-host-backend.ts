@@ -1007,7 +1007,7 @@ export const startTypescriptHostBackendEffect = ({
       terminalPty: createBunPtyPort(),
     };
     if (processEnv) {
-      routerInput.processEnv = processEnv;
+      routerInput.processEnvironmentInput = { baseEnv: processEnv };
     }
     if (providedToolPaths) {
       routerInput.providedToolPaths = providedToolPaths;

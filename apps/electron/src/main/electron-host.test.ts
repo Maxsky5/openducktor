@@ -20,6 +20,7 @@ import {
   type HostEventBusPort,
   type LocalAttachmentPort,
   type OpenInToolsPort,
+  ProcessEnvironmentError,
   type RuntimeHealthPort,
   type RuntimeRegistryPort,
   type RuntimeWorkspaceStarterPort,
@@ -980,6 +981,44 @@ describe("createElectronHostCommandRouter", () => {
     );
   });
 
+  test("shows a PATH probe failure in dev server start output", async () => {
+    const diagnostic = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
+    const router = await createElectronHostCommandRouter({
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      processEnvironmentError: diagnostic,
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          workspaces: {
+            repo: repoConfig({
+              devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
+            }),
+          },
+          workspaceOrder: ["repo"],
+        }),
+      ),
+    });
+
+    await expect(
+      router.invoke("dev_server_start", { repoPath: "/repo", taskId: "task-1" }),
+    ).rejects.toThrow(diagnostic.message);
+    const state = await router.invoke("dev_server_get_state", {
+      repoPath: "/repo",
+      taskId: "task-1",
+    });
+
+    expect(state.scripts[0]).toMatchObject({ status: "failed", lastError: diagnostic.message });
+    expect(state.scripts[0]?.bufferedTerminalChunks.map((chunk) => chunk.data)).toContain(
+      `${diagnostic.message}\r\n`,
+    );
+  });
+
   test("registers migrated read-only git host commands", async () => {
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -1197,10 +1236,17 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("registers migrated diagnostics host commands", async () => {
+    const processEnvironmentError = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
+      processEnvironmentError,
       runtimeHealth: createRuntimeHealth(),
       settingsConfig: createSettingsConfig(),
       systemCommands: createSystemCommands(),
@@ -1213,6 +1259,7 @@ describe("createElectronHostCommandRouter", () => {
         { kind: "codex", ok: false, enabled: false },
         { kind: "claude", ok: false, enabled: false },
       ],
+      errors: [processEnvironmentError.message],
     });
     await expect(router.invoke("task_store_check", { repoPath: "/repo" })).resolves.toMatchObject({
       taskStoreOk: false,

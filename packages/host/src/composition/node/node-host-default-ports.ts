@@ -26,7 +26,11 @@ import {
 } from "../../adapters/system/tool-discovery";
 import { createRuntimeConfigInitializer } from "../../application/runtimes/runtime-config-initializer";
 import { toHostOperationError } from "../../effect/host-errors";
-import { createProcessEnvironment } from "../../infrastructure/process/process-environment";
+import {
+  type CreateProcessEnvironmentInput,
+  createProcessEnvironment,
+  type ProcessEnvironmentError,
+} from "../../infrastructure/process/process-environment";
 import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
 import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
 import {
@@ -63,6 +67,7 @@ export type NodeHostDefaultPorts = {
   localAttachments: LocalAttachmentPort;
   openInTools: OpenInToolsPort;
   processEnv: NodeJS.ProcessEnv;
+  processEnvironmentError: ProcessEnvironmentError | null;
   runtimeDistribution: HostRuntimeDistribution;
   runtimeExecutableProbes: RuntimeExecutableProbesByKind;
   runtimeHealth: RuntimeHealthPort;
@@ -100,6 +105,8 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
     localAttachments: LocalAttachmentPort;
     openInTools: OpenInToolsPort;
     processEnv: NodeJS.ProcessEnv;
+    processEnvironmentError: ProcessEnvironmentError | null;
+    processEnvironmentInput: CreateProcessEnvironmentInput;
     runtimeExecutableProbes: RuntimeExecutableProbesByKind;
     runtimeHealth: RuntimeHealthPort;
     settingsConfig: SettingsConfigPort;
@@ -133,89 +140,107 @@ export type NodeHostDefaultPortServices =
 const makeNodeHostDefaultPorts = (
   input: CreateNodeHostDefaultPortsInput,
   imageWorkers: GeneratedImageWorkers,
-): Effect.Effect<NodeHostDefaultPorts> =>
-  Effect.sync(() => {
-    const processEnv = input.processEnv ?? createProcessEnvironment();
-    const systemCommands = input.systemCommands ?? createSystemCommandRunner({ env: processEnv });
-    const bundledToolBinDirs =
-      input.runtimeDistribution.mode === "artifact" && input.runtimeDistribution.bundledToolBinDirs
-        ? input.runtimeDistribution.bundledToolBinDirs
-        : undefined;
-    const toolDiscoveryOptions: ToolDiscoveryPathOptions = {};
-    if (input.providedToolPaths) {
-      toolDiscoveryOptions.providedToolPaths = input.providedToolPaths;
-    }
-    if (bundledToolBinDirs) {
-      toolDiscoveryOptions.bundledToolBinDirs = bundledToolBinDirs;
-    }
-    const toolDiscovery =
-      input.toolDiscovery ??
-      createToolDiscoveryAdapter({
-        env: processEnv,
-        options: toolDiscoveryOptions,
-        systemCommands,
-      });
-    const runtimeExecutableProbeInput: Parameters<typeof createRuntimeExecutableProbes>[0] = {
-      processEnv,
-    };
-    if (input.clientVersion) {
-      runtimeExecutableProbeInput.clientVersion = input.clientVersion;
-    }
-    const runtimeExecutableProbes =
-      input.runtimeExecutableProbes ?? createRuntimeExecutableProbes(runtimeExecutableProbeInput);
-    const runtimeHealth =
-      input.runtimeHealth ??
-      createRuntimeHealthProbe(systemCommands, toolDiscovery, runtimeExecutableProbes);
-    const settingsConfig =
-      input.settingsConfig ??
-      createSettingsConfigAdapter({
-        environment: processEnv,
-        initializeConfig: createRuntimeConfigInitializer(toolDiscovery),
-      });
-    const defaultCodexAppServer = createCodexAppServerTransportRegistry();
-    const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
-    const codexTransportRegistry =
-      input.codexAppServerTransportRegistry ?? input.codexAppServer ?? defaultCodexAppServer;
-
-    return {
-      imageWorkers,
-      codexAppServer,
-      codexTransportRegistry,
-      devServerProcesses: input.devServerProcesses ?? createDevServerProcessAdapter({ processEnv }),
-      filesystem: input.filesystem ?? createFilesystemAdapter(),
-      git:
-        input.git ??
-        createGitCliAdapter({
+) =>
+  Effect.gen(function* () {
+    const processEnvironment = input.processEnv
+      ? {
+          environment: input.processEnv,
+          error: input.processEnvironmentError ?? null,
+        }
+      : yield* createProcessEnvironment(input.processEnvironmentInput);
+    const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
+    return yield* Effect.try({
+      try: () => {
+        const systemCommands =
+          input.systemCommands ?? createSystemCommandRunner({ env: processEnv });
+        const bundledToolBinDirs =
+          input.runtimeDistribution.mode === "artifact" &&
+          input.runtimeDistribution.bundledToolBinDirs
+            ? input.runtimeDistribution.bundledToolBinDirs
+            : undefined;
+        const toolDiscoveryOptions: ToolDiscoveryPathOptions = {};
+        if (input.providedToolPaths) {
+          toolDiscoveryOptions.providedToolPaths = input.providedToolPaths;
+        }
+        if (bundledToolBinDirs) {
+          toolDiscoveryOptions.bundledToolBinDirs = bundledToolBinDirs;
+        }
+        const toolDiscovery =
+          input.toolDiscovery ??
+          createToolDiscoveryAdapter({
+            env: processEnv,
+            options: toolDiscoveryOptions,
+            systemCommands,
+          });
+        const runtimeExecutableProbeInput: Parameters<typeof createRuntimeExecutableProbes>[0] = {
           processEnv,
-          resolveCommand: () =>
-            toolDiscovery.resolveToolPath("git").pipe(
-              Effect.mapError((cause) =>
-                toHostOperationError(cause, "git.resolveCommand", {
-                  toolId: "git",
-                }),
-              ),
-            ),
-        }),
-      generatedImageFiles:
-        input.generatedImageFiles ?? createGeneratedImageFileAdapter(imageWorkers),
-      localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
-      openInTools: input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
-      processEnv,
-      runtimeDistribution: input.runtimeDistribution,
-      runtimeExecutableProbes,
-      runtimeHealth,
-      settingsConfig,
-      systemCommands,
-      toolDiscovery,
-      terminalPty: input.terminalPty,
-      worktreeFiles: input.worktreeFiles ?? createWorktreeFileAdapter(),
-    };
+        };
+        if (input.clientVersion) {
+          runtimeExecutableProbeInput.clientVersion = input.clientVersion;
+        }
+        const runtimeExecutableProbes =
+          input.runtimeExecutableProbes ??
+          createRuntimeExecutableProbes(runtimeExecutableProbeInput);
+        const runtimeHealth =
+          input.runtimeHealth ??
+          createRuntimeHealthProbe(systemCommands, toolDiscovery, runtimeExecutableProbes);
+        const settingsConfig =
+          input.settingsConfig ??
+          createSettingsConfigAdapter({
+            environment: processEnv,
+            initializeConfig: createRuntimeConfigInitializer(toolDiscovery),
+          });
+        const defaultCodexAppServer = createCodexAppServerTransportRegistry();
+        const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
+        const codexTransportRegistry =
+          input.codexAppServerTransportRegistry ?? input.codexAppServer ?? defaultCodexAppServer;
+
+        return {
+          imageWorkers,
+          codexAppServer,
+          codexTransportRegistry,
+          devServerProcesses:
+            input.devServerProcesses ??
+            createDevServerProcessAdapter({ processEnv, processEnvironmentError }),
+          filesystem: input.filesystem ?? createFilesystemAdapter(),
+          git:
+            input.git ??
+            createGitCliAdapter({
+              processEnv,
+              resolveCommand: () =>
+                toolDiscovery.resolveToolPath("git").pipe(
+                  Effect.mapError((cause) =>
+                    toHostOperationError(cause, "git.resolveCommand", {
+                      toolId: "git",
+                    }),
+                  ),
+                ),
+            }),
+          generatedImageFiles:
+            input.generatedImageFiles ?? createGeneratedImageFileAdapter(imageWorkers),
+          localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
+          openInTools:
+            input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
+          processEnv,
+          processEnvironmentError,
+          runtimeDistribution: input.runtimeDistribution,
+          runtimeExecutableProbes,
+          runtimeHealth,
+          settingsConfig,
+          systemCommands,
+          toolDiscovery,
+          terminalPty: input.terminalPty,
+          worktreeFiles: input.worktreeFiles ?? createWorktreeFileAdapter(),
+        };
+      },
+      catch: (cause) => cause,
+    });
   });
 
 const makeNodeHostDefaultPortContext = (
   input: CreateNodeHostDefaultPortsInput,
   imageWorkers: GeneratedImageWorkers,
-): Effect.Effect<Context.Context<NodeHostDefaultPortServices>> =>
+) =>
   makeNodeHostDefaultPorts(input, imageWorkers).pipe(
     Effect.map((ports) =>
       Context.empty().pipe(
@@ -240,8 +265,7 @@ const makeNodeHostDefaultPortContext = (
 const createNodeHostDefaultPortsLayer = (
   input: CreateNodeHostDefaultPortsInput,
   imageWorkers: GeneratedImageWorkers,
-): Layer.Layer<NodeHostDefaultPortServices> =>
-  Layer.effectContext(makeNodeHostDefaultPortContext(input, imageWorkers));
+) => Layer.effectContext(makeNodeHostDefaultPortContext(input, imageWorkers));
 
 const createNodeHostDefaultPortsEffect: Effect.Effect<
   NodeHostDefaultPorts,
@@ -254,9 +278,7 @@ const createNodeHostDefaultPortsEffect: Effect.Effect<
 export const createNodeHostDefaultPorts = (
   input: CreateNodeHostDefaultPortsInput,
   imageWorkers: GeneratedImageWorkers,
-): NodeHostDefaultPorts =>
-  Effect.runSync(
-    createNodeHostDefaultPortsEffect.pipe(
-      Effect.provide(createNodeHostDefaultPortsLayer(input, imageWorkers)),
-    ),
+) =>
+  createNodeHostDefaultPortsEffect.pipe(
+    Effect.provide(createNodeHostDefaultPortsLayer(input, imageWorkers)),
   );
