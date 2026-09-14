@@ -323,6 +323,14 @@ export const assembleNodeEffectHostCommandRouter = (
     devServerServiceInput.eventBus = eventBus;
   }
   const devServerService = createDevServerService(devServerServiceInput);
+  const runtimeOrchestratorWithEffectiveRegistry = createRuntimeOrchestratorService({
+    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
+    gitPort: git,
+    runtimeDefinitionsService,
+    runtimeRegistry: effectiveRuntimeRegistry,
+    taskReader: taskStore,
+    logger: lifecycleLogger,
+  });
   const workspaceLifecycleService = createWorkspaceLifecycleService({
     activity: createWorkspaceActivityInspector({
       agentSessionLiveStateService,
@@ -334,6 +342,7 @@ export const assembleNodeEffectHostCommandRouter = (
     gitPort: git,
     hostOwnership: workspaceHostOwnership,
     ownershipLock: workspaceOwnershipLock,
+    runtimeOrchestrator: runtimeOrchestratorWithEffectiveRegistry,
     settingsConfig,
     storage: {
       assertPermanentRemovalSupported: assets.assertPermanentRemovalSupported,
@@ -395,14 +404,6 @@ export const assembleNodeEffectHostCommandRouter = (
     bridgeService: odtMcpBridgeService,
     discoveryPath: resolveMcpBridgeDiscoveryPath(input.mcpBridgeDiscoveryMode, processEnv),
     workspaceSettingsService,
-  });
-  const runtimeOrchestratorWithEffectiveRegistry = createRuntimeOrchestratorService({
-    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
-    gitPort: git,
-    runtimeDefinitionsService,
-    runtimeRegistry: effectiveRuntimeRegistry,
-    taskReader: taskStore,
-    logger: lifecycleLogger,
   });
   const workspaceSessionService = createWorkspaceSessionService({
     operationGate: workspaceSessions.operationGate,

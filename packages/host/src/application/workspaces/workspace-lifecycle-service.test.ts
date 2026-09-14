@@ -166,7 +166,11 @@ const createService = ({
   pathExists = () => Effect.succeed(true),
   resolvedPathKind = "descendant" as const,
   ownershipLock = createWorkspaceOwnershipLock(),
-  hostOwnership = { claimWorkspace: () => Effect.void },
+  hostOwnership = {
+    claimWorkspace: () => Effect.void,
+    releaseWorkspace: () => Effect.void,
+  },
+  clearRepoRuntimeStartupStatuses = () => Effect.void,
 }: {
   activity?: WorkspaceActivityPort;
   admission?: ReturnType<typeof createAdmissionDouble>;
@@ -199,7 +203,8 @@ const createService = ({
   pathExists?: (path: string) => Effect.Effect<boolean, never>;
   resolvedPathKind?: "descendant" | "outside";
   ownershipLock?: WorkspaceOwnershipLock;
-  hostOwnership?: Pick<WorkspaceHostOwnershipPort, "claimWorkspace">;
+  hostOwnership?: Pick<WorkspaceHostOwnershipPort, "claimWorkspace" | "releaseWorkspace">;
+  clearRepoRuntimeStartupStatuses?: (repoPath: string) => Effect.Effect<void>;
 } = {}) => {
   const storage: WorkspaceStoragePort = {
     assertPermanentRemovalSupported,
@@ -218,6 +223,7 @@ const createService = ({
     }),
     hostOwnership,
     ownershipLock,
+    runtimeOrchestrator: { clearRepoRuntimeStartupStatuses },
     settingsConfig: createSettingsConfigTestDouble({
       canonicalizePath,
       defaultWorktreeBasePath: (workspaceId) => `/managed/${workspaceId}`,
@@ -393,6 +399,17 @@ describe("workspace lifecycle service", () => {
           calls.push("unregister");
           return catalog();
         }),
+      clearRepoRuntimeStartupStatuses: (repoPath) =>
+        Effect.sync(() => {
+          calls.push(`clearRuntimeStatus:${repoPath}`);
+        }),
+      hostOwnership: {
+        claimWorkspace: () => Effect.void,
+        releaseWorkspace: (workspaceId) =>
+          Effect.sync(() => {
+            calls.push(`releaseOwnership:${workspaceId}`);
+          }),
+      },
     });
 
     const result = await Effect.runPromise(
@@ -403,7 +420,14 @@ describe("workspace lifecycle service", () => {
       }),
     );
 
-    expect(calls).toEqual(["beginRemoval", "removeTaskStore", "removeAssets", "unregister"]);
+    expect(calls).toEqual([
+      "beginRemoval",
+      "removeTaskStore",
+      "removeAssets",
+      "unregister",
+      "clearRuntimeStatus:/repos/ws",
+      "releaseOwnership:ws",
+    ]);
     expect(result.removedWorktrees).toEqual([]);
   });
 
@@ -470,6 +494,7 @@ describe("workspace lifecycle service", () => {
               message: "Workspace ws is in use by another OpenDucktor host process (321).",
             }),
           ),
+        releaseWorkspace: () => Effect.void,
       },
       removeWorkspaceTaskStore,
     });

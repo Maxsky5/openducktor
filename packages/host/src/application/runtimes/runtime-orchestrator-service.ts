@@ -5,6 +5,7 @@ import {
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import {
   errorMessage,
   HostOperationError,
@@ -245,6 +246,16 @@ export const createRuntimeOrchestratorService = ({
       }),
     );
   const service: RuntimeOrchestratorService = {
+    clearRepoRuntimeStartupStatuses(repoPath) {
+      return Effect.sync(() => {
+        const repoPathKey = normalizePathForComparison(repoPath);
+        for (const [key, status] of runtimeStartupStatuses) {
+          if (normalizePathForComparison(status.repoPath) === repoPathKey) {
+            runtimeStartupStatuses.delete(key);
+          }
+        }
+      });
+    },
     agentSessionStop(input) {
       return Effect.gen(function* () {
         const request = input;

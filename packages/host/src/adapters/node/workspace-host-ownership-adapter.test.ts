@@ -119,6 +119,24 @@ setInterval(() => {}, 60_000);`,
     }
   });
 
+  test("releases one workspace for another host", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
+    const options = { processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir } };
+    const first = createNodeWorkspaceHostOwnership(options);
+    const second = createNodeWorkspaceHostOwnership(options);
+
+    try {
+      await Effect.runPromise(first.claimWorkspace("workspace-1"));
+      await Effect.runPromise(first.releaseWorkspace("workspace-1"));
+      await expect(
+        Effect.runPromise(second.claimWorkspace("workspace-1")),
+      ).resolves.toBeUndefined();
+      await Effect.runPromise(second.releaseAll());
+    } finally {
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
   test("recovers a stale claim only after it proves that the owner stopped", async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
     const workspaceId = "workspace-1";

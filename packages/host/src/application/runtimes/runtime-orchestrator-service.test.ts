@@ -225,7 +225,7 @@ describe("createRuntimeOrchestratorService", () => {
     }
   });
 
-  test("reports runtime startup failures as health even when their details mention logging", async () => {
+  test("reports and clears cached runtime startup failures", async () => {
     const startupFailure = new HostOperationError({
       operation: "test.runtime-startup",
       message: "runtime failed to start",
@@ -258,6 +258,14 @@ describe("createRuntimeOrchestratorService", () => {
         stage: "startup_failed",
         detail: "runtime failed to start",
       },
+    });
+    await Effect.runPromise(service.clearRepoRuntimeStartupStatuses("/canonical/repo"));
+    await expect(
+      Effect.runPromise(
+        service.repoRuntimeHealthStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      ),
+    ).resolves.toMatchObject({
+      runtime: { status: "not_started", stage: "idle" },
     });
   });
 
