@@ -1,11 +1,13 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { userInfo } from "node:os";
 import { basename, delimiter, isAbsolute } from "node:path";
+import { Data, Effect } from "effect";
 
 const LOGIN_SHELL_ENV_MARKER_TEXT = "__OPENDUCKTOR_ENV_START__";
 const LOGIN_SHELL_ENV_MARKER = `${LOGIN_SHELL_ENV_MARKER_TEXT}\0`;
 const LOGIN_SHELL_TIMEOUT_MS = 5_000;
+const LOGIN_SHELL_MAX_OUTPUT_BYTES = 1024 * 1024;
 
 const HOST_CONTROL_ENV_NAMES = [
   "ODT_WORKSPACE_ID",
@@ -22,10 +24,36 @@ const HOST_CONTROL_ENV_NAMES = [
 
 export type ReadUserShell = () => string | null;
 
+export type ProcessEnvironmentErrorReason =
+  | "invalid_output"
+  | "output_limit"
+  | "shell_unavailable"
+  | "spawn_failed"
+  | "timed_out"
+  | "unexpected_exit";
+
+export class ProcessEnvironmentError extends Data.TaggedError("ProcessEnvironmentError")<{
+  readonly message: string;
+  readonly reason: ProcessEnvironmentErrorReason;
+  readonly shell: string;
+  readonly cause?: unknown;
+}> {}
+
+export type ProcessEnvironmentResolution = {
+  environment: NodeJS.ProcessEnv;
+  error: ProcessEnvironmentError | null;
+};
+
+export type ReadLoginShellPath = (
+  env: NodeJS.ProcessEnv,
+  shell: string,
+) => Effect.Effect<string, ProcessEnvironmentError>;
+
 export type CreateProcessEnvironmentInput = {
   baseEnv?: NodeJS.ProcessEnv;
+  loginShellTimeoutMs?: number;
   platform?: NodeJS.Platform;
-  readLoginShellPath?: (env: NodeJS.ProcessEnv) => string | null;
+  readLoginShellPath?: ReadLoginShellPath;
   readUserShell?: ReadUserShell;
 };
 
@@ -134,6 +162,14 @@ const setPathEnvironmentValue = (
   env.PATH = value;
 };
 
+const deletePathEnvironmentValue = (env: NodeJS.ProcessEnv, platform: NodeJS.Platform): void => {
+  for (const key of Object.keys(env)) {
+    if ((platform === "win32" && isPathKey(key)) || key === "PATH") {
+      delete env[key];
+    }
+  }
+};
+
 export const accountUserShell = (): string | null => {
   try {
     return userInfo().shell || null;
@@ -179,7 +215,7 @@ const minimalLoginShellEnv = (env: NodeJS.ProcessEnv, shell: string): NodeJS.Pro
   USER: env.USER,
 });
 const buildLoginShellPathProbeArgs = (): string[] => [
-  "-c",
+  "-ilc",
   `printf '${LOGIN_SHELL_ENV_MARKER_TEXT}\\0'; /usr/bin/env -0`,
 ];
 const parsePathFromLoginShellOutput = (stdout: Buffer): string | null => {
@@ -205,34 +241,176 @@ const parsePathFromLoginShellOutput = (stdout: Buffer): string | null => {
   return null;
 };
 
-const readCurrentUserLoginShellPath = (env: NodeJS.ProcessEnv, shell: string): string | null => {
-  const result = spawnSync(shell, buildLoginShellPathProbeArgs(), {
-    argv0: `-${basename(shell)}`,
-    env: minimalLoginShellEnv(env, shell),
-    maxBuffer: 1024 * 1024,
-    stdio: ["ignore", "pipe", "ignore"],
-    timeout: LOGIN_SHELL_TIMEOUT_MS,
+const processEnvironmentError = (
+  shell: string,
+  reason: ProcessEnvironmentErrorReason,
+  message: string,
+  cause?: unknown,
+): ProcessEnvironmentError =>
+  cause === undefined
+    ? new ProcessEnvironmentError({ shell, reason, message })
+    : new ProcessEnvironmentError({ shell, reason, message, cause });
+
+const readCurrentUserLoginShellPath = (
+  env: NodeJS.ProcessEnv,
+  shell: string,
+  timeoutMs: number,
+): Effect.Effect<string, ProcessEnvironmentError> =>
+  Effect.async<string, ProcessEnvironmentError>((resume, signal) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(shell, buildLoginShellPathProbeArgs(), {
+        argv0: `-${basename(shell)}`,
+        env: minimalLoginShellEnv(env, shell),
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    } catch (cause) {
+      resume(
+        Effect.fail(
+          processEnvironmentError(
+            shell,
+            "spawn_failed",
+            `Failed to resolve PATH from interactive login shell ${shell}: the shell could not start. Check that the shell exists and is executable.`,
+            cause,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!child.stdout) {
+      child.kill("SIGTERM");
+      resume(
+        Effect.fail(
+          processEnvironmentError(
+            shell,
+            "spawn_failed",
+            `Failed to resolve PATH from interactive login shell ${shell}: the shell did not expose stdout.`,
+          ),
+        ),
+      );
+      return;
+    }
+
+    const stdoutChunks: Buffer[] = [];
+    let stdoutBytes = 0;
+    let settled = false;
+    const finish = (effect: Effect.Effect<string, ProcessEnvironmentError>): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", abort);
+      child.removeAllListeners("error");
+      child.removeAllListeners("close");
+      child.stdout?.removeAllListeners("data");
+      resume(effect);
+    };
+    const stopChild = (killSignal: NodeJS.Signals = "SIGTERM"): void => {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill(killSignal);
+      }
+    };
+    const abort = (): void => {
+      stopChild();
+      finish(
+        Effect.fail(
+          processEnvironmentError(
+            shell,
+            "spawn_failed",
+            `Failed to resolve PATH from interactive login shell ${shell}: the probe was canceled.`,
+          ),
+        ),
+      );
+    };
+    const timeout = setTimeout(() => {
+      stopChild("SIGKILL");
+      finish(
+        Effect.fail(
+          processEnvironmentError(
+            shell,
+            "timed_out",
+            `Failed to resolve PATH from interactive login shell ${shell}: the probe timed out after ${timeoutMs} ms. Check shell startup files for commands that wait for input.`,
+          ),
+        ),
+      );
+    }, timeoutMs);
+
+    signal.addEventListener("abort", abort, { once: true });
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdoutBytes += chunk.byteLength;
+      if (stdoutBytes > LOGIN_SHELL_MAX_OUTPUT_BYTES) {
+        stopChild("SIGKILL");
+        finish(
+          Effect.fail(
+            processEnvironmentError(
+              shell,
+              "output_limit",
+              `Failed to resolve PATH from interactive login shell ${shell}: startup output exceeded ${LOGIN_SHELL_MAX_OUTPUT_BYTES} bytes. Reduce output from shell startup files.`,
+            ),
+          ),
+        );
+        return;
+      }
+      stdoutChunks.push(chunk);
+    });
+    child.once("error", (cause) => {
+      finish(
+        Effect.fail(
+          processEnvironmentError(
+            shell,
+            "spawn_failed",
+            `Failed to resolve PATH from interactive login shell ${shell}: the shell could not start. Check that the shell exists and is executable.`,
+            cause,
+          ),
+        ),
+      );
+    });
+    child.once("close", (exitCode, exitSignal) => {
+      if (exitCode !== 0) {
+        const reason =
+          exitCode === null ? `signal ${exitSignal ?? "unknown"}` : `exit code ${exitCode}`;
+        finish(
+          Effect.fail(
+            processEnvironmentError(
+              shell,
+              "unexpected_exit",
+              `Failed to resolve PATH from interactive login shell ${shell}: the probe ended with ${reason}. Fix errors in the shell startup files and restart OpenDucktor.`,
+            ),
+          ),
+        );
+        return;
+      }
+
+      const path = parsePathFromLoginShellOutput(Buffer.concat(stdoutChunks));
+      finish(
+        path
+          ? Effect.succeed(path)
+          : Effect.fail(
+              processEnvironmentError(
+                shell,
+                "invalid_output",
+                `Failed to resolve PATH from interactive login shell ${shell}: the probe returned no PATH after the environment marker. Check shell startup output and restart OpenDucktor.`,
+              ),
+            ),
+      );
+    });
   });
-
-  if (result.status !== 0 || !Buffer.isBuffer(result.stdout)) {
-    return null;
-  }
-
-  return parsePathFromLoginShellOutput(result.stdout);
-};
 
 export const createProcessEnvironment = (
   input: CreateProcessEnvironmentInput = {},
-): NodeJS.ProcessEnv => {
+): Effect.Effect<ProcessEnvironmentResolution> => {
   const {
     baseEnv = process.env,
+    loginShellTimeoutMs = LOGIN_SHELL_TIMEOUT_MS,
     platform = process.platform,
     readUserShell = accountUserShell,
     readLoginShellPath,
   } = input;
   const env = normalizeProcessEnvironment(baseEnv, platform);
   if (platform === "win32") {
-    return env;
+    return Effect.succeed({ environment: env, error: null });
   }
 
   const shell = resolveUserLoginShell(env, readUserShell);
@@ -240,23 +418,36 @@ export const createProcessEnvironment = (
     env.SHELL = shell;
   }
 
-  let loginShellPath: string | null = null;
-  if (readLoginShellPath) {
-    loginShellPath = readLoginShellPath(env);
-  } else if (shell) {
-    loginShellPath = readCurrentUserLoginShellPath(env, shell);
-  }
-  if (loginShellPath) {
-    setPathEnvironmentValue(
-      env,
-      mergePathValues(
-        loginShellPath,
-        pathEnvironmentValue(env, platform),
-        pathDelimiterForPlatform(platform),
+  if (!shell) {
+    const shellName = env.SHELL?.trim() || "unknown";
+    deletePathEnvironmentValue(env, platform);
+    return Effect.succeed({
+      environment: env,
+      error: processEnvironmentError(
+        shellName,
+        "shell_unavailable",
+        `Failed to resolve PATH: no executable login shell is available. Check the account login shell or set SHELL to an absolute executable path, then restart OpenDucktor. Current SHELL: ${shellName}.`,
       ),
-      platform,
-    );
+    });
   }
 
-  return env;
+  const inheritedPath = pathEnvironmentValue(env, platform);
+  const loginShellPath = readLoginShellPath
+    ? readLoginShellPath(env, shell)
+    : readCurrentUserLoginShellPath(env, shell, loginShellTimeoutMs);
+  return Effect.either(loginShellPath).pipe(
+    Effect.map((result): ProcessEnvironmentResolution => {
+      if (result._tag === "Left") {
+        deletePathEnvironmentValue(env, platform);
+        return { environment: env, error: result.left };
+      }
+
+      setPathEnvironmentValue(
+        env,
+        mergePathValues(result.right, inheritedPath, pathDelimiterForPlatform(platform)),
+        platform,
+      );
+      return { environment: env, error: null };
+    }),
+  );
 };

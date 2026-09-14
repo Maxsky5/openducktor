@@ -18,7 +18,9 @@ Create, list, close, and path setup use host commands. Input, resize, attach, de
 
 `workingDir` is required. The host makes it canonical, checks that it is an accessible directory, and saves it as `initialWorkingDir`. Later `cd` commands do not change that field.
 
-The host selects the shell, arguments, and clean child environment. The renderer cannot choose an executable, arguments, or environment variables. On Unix, use the login shell from the user account. If it is not available, use the `SHELL` environment variable. Run the shell with `TERM=xterm-256color` and `COLORTERM=truecolor`.
+The host resolves one user environment during startup. On Unix, it runs the account shell as an interactive login shell without a PTY and keeps the resulting `PATH` for the app lifetime. Dev servers, tool discovery, Git, and terminals receive this same snapshot. A failed probe produces a typed startup diagnostic instead of silently using the GUI `PATH`.
+
+The host selects the terminal shell, arguments, and clean child environment. The renderer cannot choose an executable, arguments, or environment variables. On Unix, use the login shell from the user account. If it is not available, use the `SHELL` environment variable. Run the shell with `-l` on the PTY, `TERM=xterm-256color`, and `COLORTERM=truecolor`. Shell startup lines that test for a real tty can change the terminal environment after launch, so their result can differ from the startup snapshot.
 
 A terminal can have no task or have `repoPath` and `taskId`. The host uses this context for lists, limits, and cleanup. It does not restrict file access inside the shell.
 

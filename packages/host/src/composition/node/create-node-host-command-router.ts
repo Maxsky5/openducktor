@@ -75,7 +75,7 @@ import type {
   CreateNodeHostCommandRouterInput,
   EffectNodeHostCommandRouter,
 } from "./node-host-command-router-types";
-import { createNodeHostDefaultPorts } from "./node-host-default-ports";
+import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
@@ -91,7 +91,7 @@ import {
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
-  defaultPorts: ReturnType<typeof createNodeHostDefaultPorts>,
+  defaultPorts: NodeHostDefaultPorts,
   gitProviderResolver: GitProviderResolver,
 ): EffectNodeHostCommandRouter => {
   const {
@@ -113,6 +113,7 @@ export const assembleNodeEffectHostCommandRouter = (
     localAttachments,
     openInTools,
     processEnv,
+    processEnvironmentError,
     runtimeDistribution,
     runtimeExecutableProbes,
     runtimeHealth,
@@ -154,6 +155,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const systemDiagnosticsService = createSystemDiagnosticsService({
+    processEnvironmentErrorMessage: processEnvironmentError?.message ?? null,
     runtimeDefinitionsService,
     runtimeHealth,
     settingsConfig,

@@ -10,7 +10,10 @@ import {
   type ProcessCommandLaunchPlan,
   parseProcessCommandLine,
 } from "../../infrastructure/process/process-command-launch";
-import { sanitizeChildProcessEnvironment } from "../../infrastructure/process/process-environment";
+import {
+  type ProcessEnvironmentError,
+  sanitizeChildProcessEnvironment,
+} from "../../infrastructure/process/process-environment";
 import {
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
@@ -25,6 +28,7 @@ import {
 
 export type CreateDevServerProcessAdapterInput = {
   processEnv?: NodeJS.ProcessEnv;
+  processEnvironmentError?: ProcessEnvironmentError | null;
   startGracePeriodMs?: number;
   stopTimeoutMs?: number;
 };
@@ -50,9 +54,9 @@ const createDevServerCommandLaunch = (
     // Repo dev-server commands are configured as shell command strings so users can
     // keep common scripts such as `cd app && npm run dev` or inline env assignments.
     // Use a non-login shell: the host environment already carries the resolved PATH,
-    // and a login shell can overwrite it from /etc/profile on Linux. Profile-only
-    // variables such as NVM_DIR or JAVA_HOME are not available; command strings must
-    // not depend on them.
+    // and a login shell can overwrite it from /etc/profile on Linux. The host takes
+    // one snapshot for the app lifetime. Startup lines that require a real tty can
+    // still produce a different PATH in an interactive terminal.
     return {
       command: "/bin/sh",
       args: ["-c", command],
@@ -143,12 +147,27 @@ const trackDevServerProcess = ({
 
 export const createDevServerProcessAdapter = ({
   processEnv = process.env,
+  processEnvironmentError = null,
   startGracePeriodMs = DEFAULT_START_GRACE_PERIOD_MS,
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
 }: CreateDevServerProcessAdapterInput = {}): DevServerProcessPort => ({
   start(input: DevServerProcessStartInput) {
     let scope: Parameters<typeof Scope.close>[0] | null = null;
     return Effect.gen(function* () {
+      if (processEnvironmentError) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "devServerProcess.resolveEnvironment",
+            message: processEnvironmentError.message,
+            cause: processEnvironmentError,
+            details: {
+              reason: processEnvironmentError.reason,
+              shell: processEnvironmentError.shell,
+            },
+          }),
+        );
+      }
+
       const { command, cwd, env, onExit, onOutput } = input;
       const commandEnv = sanitizeChildProcessEnvironment(
         { ...processEnv, ...env },

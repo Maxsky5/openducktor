@@ -43,12 +43,18 @@ Use `@openducktor/path-support` to parse a user path. Supply home directory and 
 
 `createNodeHostDefaultPorts` builds these values in order:
 
-1. `processEnv` with platform environment rules.
+1. `processEnv` from one asynchronous interactive login shell probe on POSIX, or from platform environment rules on Windows.
 2. `systemCommands` from that environment.
 3. `toolDiscovery` from system commands, environment, shell paths, and distribution paths.
 4. Adapters and services that use `toolDiscovery`.
 
 Electron, the published web package, and web workspace mode use this setup.
+
+The POSIX probe starts the account shell with `-ilc` and a minimal environment. A marker separates startup output from the environment payload. The host puts the resolved shell `PATH` before inherited GUI entries and keeps this snapshot for the app lifetime. Dev servers, tool discovery, Git, and terminals receive the same snapshot.
+
+The probe has no PTY. Shell startup lines that require a real tty can produce a different result in an integrated terminal. Changes to shell startup files take effect after OpenDucktor restarts.
+
+If the host cannot find an executable login shell, or the probe cannot start, exits with an error, returns invalid output, exceeds the output limit, or times out, the host records a `ProcessEnvironmentError` and removes the inherited GUI `PATH` from the shared environment. System diagnostics show the error. A dev server start also shows the error and does not start the command.
 
 ## Search order
 
@@ -93,7 +99,7 @@ A descriptor can list exact files that do not fit a directory search. Codex uses
 `PATH` is the last built-in source. `SystemCommandPort.resolveCommandPath` applies platform rules:
 
 - POSIX accepts an executable regular file.
-- POSIX startup puts the login shell `PATH` before inherited GUI entries.
+- POSIX startup puts the interactive login shell `PATH` before inherited GUI entries.
 - Windows uses `PATHEXT` and accepts executable types such as `.exe`, `.cmd`, and `.bat`.
 - No platform accepts a directory as a command.
 

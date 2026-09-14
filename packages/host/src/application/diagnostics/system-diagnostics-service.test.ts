@@ -10,6 +10,7 @@ import { Effect } from "effect";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
+import { ProcessEnvironmentError } from "../../infrastructure/process/process-environment";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
@@ -327,6 +328,27 @@ describe("createSystemDiagnosticsService", () => {
     expect(check.gitOk).toBe(false);
     expect(check.gitVersion).toBeNull();
     expect(check.errors).toEqual(["Failed reading git --version from git."]);
+  });
+  test("runtimeCheck includes the startup PATH diagnostic", async () => {
+    const processEnvironmentError = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
+    const service = createSystemDiagnosticsServiceForTest({
+      processEnvironmentErrorMessage: processEnvironmentError.message,
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort(),
+      toolDiscovery: createToolDiscoveryPort(),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await Effect.runPromise(service.runtimeCheck(true));
+
+    expect(check.errors).toContain(processEnvironmentError.message);
   });
   test("taskStoreCheck delegates active repo store readiness through the task store", async () => {
     const blockingHealth: RepoStoreHealth = {
