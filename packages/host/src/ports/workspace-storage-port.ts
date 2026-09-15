@@ -12,6 +12,7 @@ export type WorkspaceStoragePort = {
   workspaceTaskStoreExists(
     workspaceId: string,
   ): Effect.Effect<boolean, HostPathAccessErrorAggregate>;
+  closeWorkspaceTaskStore(workspaceId: string): Effect.Effect<void, HostOperationErrorAggregate>;
   removeWorkspaceTaskAssets(workspaceId: string): Effect.Effect<void, TaskAssetError>;
   removeWorkspaceTaskStore(workspaceId: string): Effect.Effect<void, HostOperationErrorAggregate>;
 };

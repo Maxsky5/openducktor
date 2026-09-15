@@ -348,6 +348,7 @@ export const assembleNodeEffectHostCommandRouter = (
     settingsConfig,
     storage: {
       assertPermanentRemovalSupported: assets.assertPermanentRemovalSupported,
+      closeWorkspaceTaskStore: assets.closeWorkspaceTaskStore,
       workspaceTaskStoreExists: assets.workspaceTaskStoreExists,
       removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
       removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
@@ -410,6 +411,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const workspaceSessionService = createWorkspaceSessionService({
     operationGate: workspaceSessions.operationGate,
+    ownershipLock: workspaceOwnershipLock,
     store: assets.workspaceSessionStore,
     settings: workspaceSettingsService,
     runtime: runtimeOrchestratorWithEffectiveRegistry,

@@ -338,6 +338,23 @@ describe("createDevServerService", () => {
     expect(chunks[0]).toMatchObject({ sequence: 6, data: "line-5\r\n" });
     expect(chunks.at(-1)).toMatchObject({ sequence: 2005, data: "line-2004\r\n" });
   });
+  test("checks the task worktree before starting scripts", async () => {
+    const leaseTargets: Array<string | undefined> = [];
+    const { processPort } = createProcessPort();
+    const service = createDevServerService({
+      withWorkStartLease: (_repoPath, effect, workingDirectory) => {
+        leaseTargets.push(workingDirectory);
+        return effect;
+      },
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+      workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
+    });
+
+    await Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" }));
+
+    expect(leaseTargets).toEqual(["/worktrees/task-1"]);
+  });
   test("trims buffered terminal output to the byte limit", async () => {
     const halfLimitChunk = "x".repeat(256 * 1024);
     const processPort: DevServerProcessPort = {

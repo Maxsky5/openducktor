@@ -155,6 +155,7 @@ const createService = ({
     }),
   recordWorkspaceRemovalProgress = () => Effect.void,
   removeWorkspaceRegistration = () => Effect.succeed(catalog()),
+  closeWorkspaceTaskStore = () => Effect.void,
   removeWorkspaceTaskAssets = () => Effect.void,
   removeWorkspaceTaskStore = () => Effect.void,
   assertPermanentRemovalSupported = () => Effect.void,
@@ -193,6 +194,7 @@ const createService = ({
     pendingWorktreePath: string | null | undefined;
   }) => Effect.Effect<void, never>;
   removeWorkspaceRegistration?: () => Effect.Effect<WorkspaceCatalog, never>;
+  closeWorkspaceTaskStore?: WorkspaceStoragePort["closeWorkspaceTaskStore"];
   removeWorkspaceTaskAssets?: WorkspaceStoragePort["removeWorkspaceTaskAssets"];
   removeWorkspaceTaskStore?: WorkspaceStoragePort["removeWorkspaceTaskStore"];
   assertPermanentRemovalSupported?: WorkspaceStoragePort["assertPermanentRemovalSupported"];
@@ -211,6 +213,7 @@ const createService = ({
 } = {}) => {
   const storage: WorkspaceStoragePort = {
     assertPermanentRemovalSupported,
+    closeWorkspaceTaskStore,
     workspaceTaskStoreExists: () => Effect.succeed(true),
     removeWorkspaceTaskAssets,
     removeWorkspaceTaskStore,
@@ -351,8 +354,14 @@ describe("workspace lifecycle service", () => {
         calls.push("release");
       }),
     );
+    const closeWorkspaceTaskStore = mock(() =>
+      Effect.sync(() => {
+        calls.push("close-task-store");
+      }),
+    );
     const service = createService({
       admission: { ...createAdmissionDouble(), blockWorkspace },
+      closeWorkspaceTaskStore,
       closeWorkspace,
       hostOwnership: {
         claimWorkspace: () => Effect.void,
@@ -372,7 +381,32 @@ describe("workspace lifecycle service", () => {
       workspaceId: "ws",
     });
     expect(releaseWorkspace).toHaveBeenCalledWith("ws");
-    expect(calls).toEqual(["close", "block", "release"]);
+    expect(closeWorkspaceTaskStore).toHaveBeenCalledWith("ws");
+    expect(calls).toEqual(["close", "block", "close-task-store", "release"]);
+  });
+
+  test("closeWorkspace keeps ownership when the task store cannot close", async () => {
+    const releaseWorkspace = mock(() => Effect.void);
+    const service = createService({
+      closeWorkspaceTaskStore: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "sqliteTaskRepository.closeWorkspace",
+            message: "task store close failed",
+          }),
+        ),
+      hostOwnership: {
+        claimWorkspace: () => Effect.void,
+        releaseWorkspace,
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      ),
+    ).rejects.toThrow("task store close failed");
+    expect(releaseWorkspace).not.toHaveBeenCalled();
   });
 
   test("closeWorkspace keeps the closed block when ownership release fails", async () => {
@@ -405,6 +439,7 @@ describe("workspace lifecycle service", () => {
 
   test("closeWorkspace returns the catalog for an already closed workspace without inspection", async () => {
     const inspect = mock(() => Effect.succeed([]));
+    const closeWorkspaceTaskStore = mock(() => Effect.void);
     const releaseWorkspace = mock(() => Effect.void);
     const expected = catalog();
     const service = createService({
@@ -413,6 +448,7 @@ describe("workspace lifecycle service", () => {
         releaseWorkspaceSessions: () => Effect.void,
         releaseWorkspaceRuntimes: () => Effect.void,
       },
+      closeWorkspaceTaskStore,
       getRepoConfig: () => Effect.succeed(repoConfig({ closed: true })),
       getWorkspaceCatalog: () => Effect.succeed(expected),
       hostOwnership: {
@@ -427,6 +463,7 @@ describe("workspace lifecycle service", () => {
 
     expect(result).toEqual(expected);
     expect(inspect).not.toHaveBeenCalled();
+    expect(closeWorkspaceTaskStore).toHaveBeenCalledWith("ws");
     expect(releaseWorkspace).toHaveBeenCalledWith("ws");
   });
 

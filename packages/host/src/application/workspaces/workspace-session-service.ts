@@ -21,6 +21,7 @@ import type { AgentSessionLiveStateService } from "../agent-sessions/agent-sessi
 import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrator-service";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
+import type { WorkspaceOwnershipLock } from "./workspace-ownership-lock";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
   validateWorkspaceSessionTarget,
@@ -42,6 +43,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
     AgentSessionLiveStateService,
     "startSession" | "releaseSession" | "read" | "stopSession"
   >;
+  ownershipLock: WorkspaceOwnershipLock;
   withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"];
 };
 
@@ -66,6 +68,13 @@ export const createWorkspaceSessionService = (
     settings
       .getRepoConfig(workspaceId)
       .pipe(Effect.flatMap((config) => dependencies.withWorkStartLease(config.repoPath, effect)));
+  const withArchiveAdmission = <A, E, R>(
+    input: WorkspaceSessionArchiveInput,
+    effect: Effect.Effect<A, E, R>,
+  ) => {
+    const admitted = withMutationAdmission(input.workspaceId, effect);
+    return input.removeWorktree ? dependencies.ownershipLock.runExclusive(admitted) : admitted;
+  };
   return {
     listActive: (workspaceId: string) =>
       scopeFor(workspaceId).pipe(Effect.flatMap(store.listActive)),
@@ -278,8 +287,8 @@ export const createWorkspaceSessionService = (
     archive: (input: WorkspaceSessionArchiveInput) =>
       operationGate.run(
         input,
-        withMutationAdmission(
-          input.workspaceId,
+        withArchiveAdmission(
+          input,
           Effect.gen(function* () {
             const { ref, session } = yield* recordFor(input);
             if (session.archivedAt !== null) return session;

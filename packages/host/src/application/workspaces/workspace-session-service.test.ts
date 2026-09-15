@@ -18,6 +18,10 @@ import { HostOperationError, HostValidationError } from "../../effect/host-error
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
+  createWorkspaceOwnershipLock,
+  type WorkspaceOwnershipLock,
+} from "./workspace-ownership-lock";
+import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
   createWorktreeFilePortTestDouble,
@@ -100,6 +104,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
       operationGate: createWorkspaceSessionOperationGate(),
+      ownershipLock: createWorkspaceOwnershipLock(),
       withWorkStartLease: (_repoPath, effect) =>
         state.blockMutationAdmission
           ? Effect.fail(
@@ -1271,6 +1276,48 @@ describe("host-owned Workspace Session lifecycle", () => {
 
     expect(h.calls).toEqual(callsBefore);
     expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
+  });
+
+  test("holds the ownership lock through archive removal", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    let lockHeld = false;
+    const ownershipLock: WorkspaceOwnershipLock = {
+      runExclusive: (effect) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => {
+            lockHeld = true;
+          }),
+          () => effect,
+          () =>
+            Effect.sync(() => {
+              lockHeld = false;
+            }),
+        ),
+    };
+    const git = h.dependencies.git;
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      ownershipLock,
+      git: {
+        ...git,
+        removeWorktree: (repoPath, worktreePath, force) =>
+          Effect.sync(() => expect(lockHeld).toBe(true)).pipe(
+            Effect.zipRight(git.removeWorktree(repoPath, worktreePath, force)),
+          ),
+      },
+    });
+
+    await Effect.runPromise(
+      service.archive({
+        workspaceId: "fairnest",
+        sessionId: session.id,
+        confirmStop: true,
+        removeWorktree: true,
+      }),
+    );
+    expect(h.calls).toContain("remove-worktree");
+    expect(lockHeld).toBe(false);
   });
 
   test.each(["failCleanup", "failDelete", "failArchive"] as const)(

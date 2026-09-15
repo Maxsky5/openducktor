@@ -45,6 +45,7 @@ export type NodeTaskAssetServices = {
   taskStoreConnectionShutdownStep: HostShutdownStep;
   taskAssetStagingShutdownStep: HostShutdownStep;
   taskStore: TaskStorePort;
+  closeWorkspaceTaskStore: WorkspaceStoragePort["closeWorkspaceTaskStore"];
   removeWorkspaceTaskAssets: (workspaceId: string) => Effect.Effect<void, TaskAssetError>;
   removeWorkspaceTaskStore: (
     workspaceId: string,
@@ -175,6 +176,7 @@ export const createNodeTaskAssetServices = ({
       persistence: configuredTaskStore ? null : registry,
       resolveWorkspaceIdForRepoPath,
     }),
+    closeWorkspaceTaskStore: (workspaceId) => contextManager.closeWorkspace(workspaceId),
     removeWorkspaceTaskAssets: (workspaceId) => filePort.removeWorkspaceData({ workspaceId }),
     workspaceTaskStoreExists: (workspaceId) =>
       settingsConfig.pathExists(
