@@ -95,9 +95,75 @@ const parseSupportedConfigObject = (
   return payload;
 };
 
-export const parsePersistedGlobalConfig = (payload: JSONType): LoadedGlobalConfig => {
+const MAX_REPORTED_CONFIG_ISSUES = 5;
+const MAX_REPORTED_VALUE_LENGTH = 60;
+
+const jsonRecordSchema = z.record(z.string(), z.json());
+const jsonArraySchema = z.array(z.json());
+const jsonScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
+const formatIssuePath = (path: readonly PropertyKey[]): string =>
+  path.length === 0 ? "config" : path.map((segment) => String(segment)).join(".");
+
+const readPathValue = (payload: JSONType, path: readonly PropertyKey[]): JSONType | undefined => {
+  let current: JSONType | undefined = payload;
+  for (const segment of path) {
+    const key = String(segment);
+    const record = jsonRecordSchema.safeParse(current);
+    if (record.success) {
+      current = record.data[key];
+      continue;
+    }
+
+    const array = jsonArraySchema.safeParse(current);
+    if (!array.success) {
+      return undefined;
+    }
+    current = array.data[Number(key)];
+  }
+  return current;
+};
+
+const formatReceivedValue = (value: JSONType | undefined): string => {
+  if (value === undefined) {
+    return " (missing)";
+  }
+
+  const scalar = jsonScalarSchema.safeParse(value);
+  if (!scalar.success) {
+    return "";
+  }
+
+  const serialized = JSON.stringify(scalar.data) ?? String(scalar.data);
+  const text =
+    serialized.length > MAX_REPORTED_VALUE_LENGTH
+      ? `${serialized.slice(0, MAX_REPORTED_VALUE_LENGTH)}...`
+      : serialized;
+  return ` (found ${text})`;
+};
+
+const formatConfigIssue = (issue: z.core.$ZodIssue, payload: JSONType): string =>
+  `${formatIssuePath(issue.path)}: ${issue.message}${formatReceivedValue(
+    readPathValue(payload, issue.path),
+  )}`;
+
+const formatConfigIssues = (error: z.ZodError, payload: JSONType): string => {
+  const reported = error.issues
+    .slice(0, MAX_REPORTED_CONFIG_ISSUES)
+    .map((issue) => formatConfigIssue(issue, payload));
+  const remaining = error.issues.length - MAX_REPORTED_CONFIG_ISSUES;
+  if (remaining > 0) {
+    reported.push(`${remaining} more ${remaining === 1 ? "problem" : "problems"} not shown.`);
+  }
+  return reported.join("\n");
+};
+
+const migratePersistedConfigOrThrow = (
+  payload: JSONType,
+  expectedVersion: 2 | 3,
+): PersistedConfigObject => {
   try {
-    return globalConfigSchema.parse(migratePersistedConfig(parseSupportedConfigObject(payload, 3)));
+    return migratePersistedConfig(parseSupportedConfigObject(payload, expectedVersion));
   } catch (cause) {
     throw new HostValidationError({
       message: cause instanceof Error ? cause.message : String(cause),
@@ -106,18 +172,28 @@ export const parsePersistedGlobalConfig = (payload: JSONType): LoadedGlobalConfi
   }
 };
 
-export const parsePersistedGlobalConfigV2 = (payload: JSONType): PersistedGlobalConfigV2 => {
-  try {
-    return persistedGlobalConfigV2Schema.parse(
-      migratePersistedConfig(parseSupportedConfigObject(payload, 2)),
-    );
-  } catch (cause) {
-    throw new HostValidationError({
-      message: cause instanceof Error ? cause.message : String(cause),
-      cause,
-    });
+const parsePersistedConfig = <Output>(
+  payload: JSONType,
+  expectedVersion: 2 | 3,
+  schema: z.ZodType<Output>,
+): Output => {
+  const migrated = migratePersistedConfigOrThrow(payload, expectedVersion);
+  const parsed = schema.safeParse(migrated);
+  if (parsed.success) {
+    return parsed.data;
   }
+
+  throw new HostValidationError({
+    message: formatConfigIssues(parsed.error, migrated),
+    cause: parsed.error,
+  });
 };
+
+export const parsePersistedGlobalConfig = (payload: JSONType): LoadedGlobalConfig =>
+  parsePersistedConfig(payload, 3, globalConfigSchema);
+
+export const parsePersistedGlobalConfigV2 = (payload: JSONType): PersistedGlobalConfigV2 =>
+  parsePersistedConfig(payload, 2, persistedGlobalConfigV2Schema);
 
 export const readPersistedGlobalConfigVersion = (payload: JSONType): 2 | 3 => {
   if (!isPersistedConfigObject(payload)) {

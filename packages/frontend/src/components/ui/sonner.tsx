@@ -16,7 +16,7 @@ export function Toaster(props: ToasterProps) {
               "group border border-border bg-card/95 text-foreground shadow-xl shadow-foreground/10 backdrop-blur",
             content: "gap-1.5",
             title: "text-sm font-semibold",
-            description: "text-xs text-muted-foreground",
+            description: "whitespace-pre-wrap break-words text-xs text-muted-foreground",
             icon: "text-muted-foreground",
             closeButton:
               "!left-auto !right-3 !top-1/2 !mt-[-12px] !translate-x-0 !translate-y-0 !transform-none size-6 rounded-md border border-border bg-card text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100",

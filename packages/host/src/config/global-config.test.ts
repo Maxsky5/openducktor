@@ -197,4 +197,92 @@ describe("global config", () => {
     expect(upgraded.autopilot.alwaysStartQaReviewsFresh).toBe(true);
     expect(upgraded.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
   });
+
+  test("reports a missing field and its allowed values for a rejected config", () => {
+    expect(() =>
+      parsePersistedGlobalConfig({
+        version: 3,
+        workspaces: {
+          fairnest: {
+            workspaceId: "fairnest",
+            workspaceName: "Fairnest",
+            repoPath: "/repo",
+          },
+        },
+      }),
+    ).toThrow(
+      'workspaces.fairnest.defaultRuntimeKind: Invalid option: expected one of "opencode"|"codex"|"claude" (missing)',
+    );
+  });
+
+  test("lists each rejected config field on its own line without raw issue JSON", () => {
+    let message = "";
+    try {
+      parsePersistedGlobalConfig({
+        version: 3,
+        theme: "blue",
+        workspaces: {
+          fairnest: {
+            workspaceId: "fairnest",
+            workspaceName: "Fairnest",
+            repoPath: "/repo",
+            defaultRuntimeKind: null,
+          },
+          openducktor: {
+            workspaceId: "openducktor",
+            workspaceName: "OpenDucktor",
+            repoPath: "/repo",
+            defaultRuntimeKind: "cursor",
+          },
+        },
+      });
+    } catch (cause) {
+      message = cause instanceof Error ? cause.message : String(cause);
+    }
+
+    const lines = message.split("\n");
+    expect(lines).toContain(
+      'theme: Invalid option: expected one of "system"|"light"|"dark" (found "blue")',
+    );
+    expect(lines).toContain(
+      'workspaces.fairnest.defaultRuntimeKind: Invalid option: expected one of "opencode"|"codex"|"claude" (found null)',
+    );
+    expect(lines).toContain(
+      'workspaces.openducktor.defaultRuntimeKind: Invalid option: expected one of "opencode"|"codex"|"claude" (found "cursor")',
+    );
+    expect(message).not.toContain('"code"');
+  });
+
+  test("caps a long list of rejected config fields", () => {
+    const workspaces = Object.fromEntries(
+      Array.from({ length: 7 }, (_, index) => {
+        const workspaceId = `repo-${index}`;
+        return [
+          workspaceId,
+          {
+            workspaceId,
+            workspaceName: `Repo ${index}`,
+            repoPath: "/repo",
+            defaultRuntimeKind: null,
+          },
+        ];
+      }),
+    );
+
+    let message = "";
+    try {
+      parsePersistedGlobalConfig({ version: 3, workspaces });
+    } catch (cause) {
+      message = cause instanceof Error ? cause.message : String(cause);
+    }
+
+    expect(message.split("\n")).toHaveLength(6);
+    expect(message).toContain("2 more problems not shown.");
+  });
+
+  test("formats version 2 config validation failures the same way", () => {
+    expect(() => parsePersistedGlobalConfigV2({ version: 2, theme: "blue" })).toThrow(
+      'theme: Invalid option: expected one of "system"|"light"|"dark" (found "blue")',
+    );
+  });
 });
