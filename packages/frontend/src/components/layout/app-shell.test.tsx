@@ -36,7 +36,12 @@ import {
 import { platformQueryOptions } from "@/state/queries/system";
 import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
 import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
+import {
+  createDeferred,
+  createSettingsSnapshotFixture,
+  createWorkspaceActivityObserverStub,
+} from "@/test-utils/shared-test-fixtures";
 import type {
   ActiveWorkspace,
   ChecksStateContextValue,
@@ -365,15 +370,19 @@ function AppShellTestEnvironment({
                         <TasksStateContext.Provider value={createTasksState()}>
                           <AgentSessionsContext.Provider value={createAgentSessionsStore("/repo")}>
                             <NotificationContext.Provider value={notificationContextValue}>
-                              <Routes>
-                                <Route element={<AppShell />}>
-                                  <Route path="/kanban" element={<main>Kanban</main>} />
-                                  <Route
-                                    path="/onboarding"
-                                    element={<Navigate to="/kanban" replace />}
-                                  />
-                                </Route>
-                              </Routes>
+                              <WorkspaceActivityContext.Provider
+                                value={createWorkspaceActivityObserverStub()}
+                              >
+                                <Routes>
+                                  <Route element={<AppShell />}>
+                                    <Route path="/kanban" element={<main>Kanban</main>} />
+                                    <Route
+                                      path="/onboarding"
+                                      element={<Navigate to="/kanban" replace />}
+                                    />
+                                  </Route>
+                                </Routes>
+                              </WorkspaceActivityContext.Provider>
                             </NotificationContext.Provider>
                           </AgentSessionsContext.Provider>
                         </TasksStateContext.Provider>

@@ -57,7 +57,13 @@ const isTerminalSessionStatus = (status: AgentSessionState["status"]): boolean =
 export const isSettlingLiveSessionSnapshot = (snapshot: AgentSessionLiveSnapshot): boolean =>
   agentSessionStatusFromActivity(snapshot.activity) === "idle";
 
-const projectObservedSessionActivity = (
+/**
+ * Reconcile an observed runtime status with the status already projected.
+ *
+ * Shared with the workspace rail activity projection so a tile badge and the
+ * Agent Studio session cannot disagree about the same live session.
+ */
+export const projectObservedSessionActivity = (
   current: Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt">,
   observedStatus: AgentSessionState["status"],
   preserveTerminal = true,
