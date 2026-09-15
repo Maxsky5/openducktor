@@ -143,13 +143,7 @@ test("search shows filters while pending and does not invent a count on failure"
 });
 
 test("renders the description as a bounded markdown preview inside the five-line clamp", () => {
-  const description = [
-    "### Context",
-    "",
-    "- Failure: CI run",
-    "",
-    ...Array.from({ length: 200 }, (_, i) => `Trailing detail ${i + 1}`),
-  ].join("\n");
+  const description = ["### Context", "", "- Failure: CI run", "", "b".repeat(4000)].join("\n");
   const html = renderTool("odt_create_task", {
     output: JSON.stringify({ task: { ...task(), description } }),
   });
@@ -158,11 +152,11 @@ test("renders the description as a bounded markdown preview inside the five-line
   expect(preview?.classList.contains("line-clamp-5")).toBe(true);
   expect(preview?.querySelector("h3")?.textContent).toBe("Context");
   expect(preview?.querySelector("li")?.textContent).toBe("Failure: CI run");
-  expect(preview?.textContent).toContain("Trailing detail 1");
-  expect(preview?.textContent).not.toContain("Trailing detail 200");
+  expect(preview?.textContent).toContain("b".repeat(200));
+  expect(preview?.textContent).not.toContain("b".repeat(1000));
   const card = document.querySelector("[data-task-id]");
   expect(card?.innerHTML).not.toContain("### Context");
-  expect(card?.innerHTML).not.toContain("Trailing detail 200");
+  expect(card?.innerHTML).not.toContain("b".repeat(1000));
 });
 
 test("does not claim task creation before completion or after failure", () => {
