@@ -142,6 +142,16 @@ export function WorkspaceSessionCreateDialog({
                 />
               </div>
               <WorkspaceSessionModelFields model={model} disabled={create.isPending} />
+              {repoConfig.isError && (
+                <div role="alert">
+                  <p className="text-sm text-destructive">
+                    The repository Default Model could not load. {errorMessage(repoConfig.error)}
+                  </p>
+                  <Button type="button" variant="ghost" onClick={() => void repoConfig.refetch()}>
+                    Retry default model
+                  </Button>
+                </div>
+              )}
               <div className="grid gap-1.5">
                 <Label id="workspace-session-role">
                   Custom role <span className="font-normal text-muted-foreground">optional</span>
