@@ -6,21 +6,31 @@ import {
   type PublicTaskSummaryTask,
 } from "@openducktor/contracts";
 import type { ZodType } from "zod";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { IssueTypeBadge } from "@/components/features/kanban/issue-type-badge";
 import { PriorityBadge } from "@/components/features/kanban/priority-badge";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { OpenTaskDetailsButton } from "@/components/features/tasks/open-task-details-button";
 import { TaskDetailsSheetPlaceholder } from "@/components/features/task-details/task-details-sheet-placeholder";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { statusBadgeClassName, statusLabel } from "@/lib/task-status-presentation";
+import { cn } from "@/lib/utils";
+import { buildTaskDescriptionPreviewMarkdown } from "./agent-chat-task-description-preview";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { RegularToolMessage } from "./agent-chat-regular-tool-message";
 import { getToolLifecyclePhase } from "./tool-lifecycle";
 
 type TaskTool = "create_task" | "search_tasks";
+
+const TASK_DESCRIPTION_PREVIEW_CLASS_NAME = cn(
+  "line-clamp-5 break-words text-muted-foreground",
+  "prose-headings:text-muted-foreground prose-strong:text-muted-foreground",
+  "prose-em:text-muted-foreground prose-li:text-muted-foreground",
+  "prose-blockquote:text-muted-foreground",
+);
 
 const TaskDetailsSheetViewer = lazy(
   () => import("@/components/features/tasks/task-details-sheet-viewer"),
@@ -71,6 +81,10 @@ const taskSearchSummary = (meta: ToolMeta): string => {
 
 const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const descriptionPreview = useMemo(
+    () => (task.description ? buildTaskDescriptionPreviewMarkdown(task.description) : ""),
+    [task.description],
+  );
   return (
     <>
       <Card className="mb-3 min-w-0 max-w-2xl overflow-hidden" data-task-id={task.id}>
@@ -90,9 +104,11 @@ const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
             </Badge>
           </div>
           {task.description && (
-            <CardDescription className="line-clamp-5 whitespace-pre-wrap break-words">
-              {task.description}
-            </CardDescription>
+            <MarkdownRenderer
+              markdown={descriptionPreview}
+              variant="compact"
+              className={TASK_DESCRIPTION_PREVIEW_CLASS_NAME}
+            />
           )}
           {task.labels.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
