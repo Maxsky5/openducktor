@@ -195,9 +195,6 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     let currentSession = requireLoadedSession(dependencies.readSessionSnapshot, identity);
     const externalSessionId = currentSession.externalSessionId;
     if (currentSession.status === "stopped") {
-      if (currentSession.sessionAssociation?.kind !== "repository") {
-        throw new Error(`Cannot send message to stopped session '${externalSessionId}'.`);
-      }
       const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
       const isRepoStale = createRepoStaleGuard({
         repoPath,

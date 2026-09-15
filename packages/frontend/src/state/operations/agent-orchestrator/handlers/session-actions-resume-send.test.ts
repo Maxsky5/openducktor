@@ -80,6 +80,41 @@ test.each(["opencode", "codex", "claude"] as const)(
   },
 );
 
+test.each(["opencode", "codex", "claude"] as const)(
+  "resumes a stopped %s workflow session before sending",
+  async (runtimeKind) => {
+    const session = buildSession({
+      runtimeKind,
+      status: "stopped",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    });
+    const sessionsRef = createSessionsRef([session]);
+    const calls: string[] = [];
+    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+    adapter.resumeSession = async (input) => {
+      calls.push("resume");
+      expect(input).toEqual({
+        repoPath: "/tmp/repo",
+        runtimeKind,
+        workingDirectory: session.workingDirectory,
+        externalSessionId: session.externalSessionId,
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      });
+      return { ...session, status: "idle" };
+    };
+    adapter.sendUserMessage = async (input) => {
+      calls.push("send");
+      return acceptedUserMessage(input);
+    };
+
+    const actions = createSessionActions({ adapter, sessionsRef });
+    await actions.sendAgentMessage(session, [{ kind: "text", text: "Continue" }]);
+
+    expect(calls).toEqual(["resume", "send"]);
+    expect(getSession(sessionsRef).status).toBe("running");
+  },
+);
+
 test("does not send or erase the stopped state when resume fails", async () => {
   const session = buildSession({ status: "stopped", sessionAssociation: { kind: "repository" } });
   const sessionsRef = createSessionsRef([session]);

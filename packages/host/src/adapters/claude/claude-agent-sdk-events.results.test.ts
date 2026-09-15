@@ -8,7 +8,7 @@ import {
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage result events", () => {
-  test("keeps an active SDK user turn open for non-terminal tool-use results", () => {
+  test("closes the active SDK user turn when the result ends with tool use", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.activeSdkUserTurnCount = 1;
@@ -32,9 +32,14 @@ describe("handleClaudeSdkMessage result events", () => {
       }),
     });
 
-    expect(session.activeSdkUserTurnCount).toBe(1);
-    expect(session.pendingUserTurnCount).toBe(1);
-    expect(session.activity).toBe("running");
+    expect(session.activeSdkUserTurnCount).toBe(0);
+    expect(session.pendingUserTurnCount).toBe(0);
+    expect(session.activity).toBe("idle");
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session_idle",
+      }),
+    );
   });
 
   test("closes the active SDK user turn on terminal results while queued turns remain pending", () => {
