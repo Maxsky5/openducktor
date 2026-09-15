@@ -28,14 +28,25 @@ export const createWorkspaceRepoResolver =
           normalizePathForComparison(workspace.repoPath) === workingDirectoryComparison,
       );
       if (exactWorkspace) return exactWorkspace.repoPath;
-      const baseWorkspace = workspaces.find(
-        (workspace) =>
-          workspace.effectiveWorktreeBasePath !== null &&
-          pathStartsWith(
-            workingDirectoryComparison,
-            normalizePathForComparison(workspace.effectiveWorktreeBasePath),
-          ),
-      );
+      let baseWorkspace: (typeof workspaces)[number] | undefined;
+      let baseLength = -1;
+      for (const workspace of workspaces) {
+        if (workspace.effectiveWorktreeBasePath === null) continue;
+        const basePath = normalizePathForComparison(workspace.effectiveWorktreeBasePath);
+        if (!pathStartsWith(workingDirectoryComparison, basePath)) continue;
+        if (basePath.length > baseLength) {
+          baseWorkspace = workspace;
+          baseLength = basePath.length;
+        } else if (basePath.length === baseLength) {
+          baseWorkspace = undefined;
+        }
+      }
+      if (baseLength >= 0 && !baseWorkspace) {
+        return yield* new HostValidationError({
+          message: `Multiple workspace worktree bases match ${workingDirectory}. Use distinct worktree bases and retry.`,
+          field: "workingDirectory",
+        });
+      }
       if (baseWorkspace) return baseWorkspace.repoPath;
       const worktreePaths = new Set(
         (yield* gitPort.listWorktrees(workingDirectory)).map((worktree) =>
@@ -48,12 +59,13 @@ export const createWorkspaceRepoResolver =
         )?.repoPath ?? null
       );
     }).pipe(
-      Effect.mapError(
-        (cause) =>
-          new HostValidationError({
-            message: `Cannot verify the repository for ${workingDirectory}. Check the path and retry.`,
-            field: "workingDirectory",
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        cause instanceof HostValidationError
+          ? cause
+          : new HostValidationError({
+              message: `Cannot verify the repository for ${workingDirectory}. Check the path and retry.`,
+              field: "workingDirectory",
+              cause,
+            }),
       ),
     );

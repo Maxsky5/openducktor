@@ -357,6 +357,40 @@ describe("host-owned Workspace Session lifecycle", () => {
     },
   );
 
+  test("keeps the workspace lease until it binds the runtime session", async () => {
+    const h = setup();
+    let leaseDepth = 0;
+    let bindLeaseDepth = 0;
+    const store = h.dependencies.store;
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      store: {
+        ...store,
+        bindRuntimeSession: (request) =>
+          Effect.sync(() => {
+            bindLeaseDepth = leaseDepth;
+          }).pipe(Effect.zipRight(store.bindRuntimeSession(request))),
+      },
+      withWorkStartLease: (_repoPath, effect) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => {
+            leaseDepth += 1;
+          }),
+          () => effect,
+          () =>
+            Effect.sync(() => {
+              leaseDepth -= 1;
+            }),
+        ),
+    });
+    const { session } = await Effect.runPromise(service.create(input()));
+
+    await Effect.runPromise(service.start({ workspaceId: "fairnest", sessionId: session.id }));
+
+    expect(bindLeaseDepth).toBe(1);
+    expect(leaseDepth).toBe(0);
+  });
+
   test("No Role supplies no Role prompt and missing Roles fail before resource creation", async () => {
     const h = setup();
     await expect(
