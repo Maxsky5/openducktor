@@ -749,7 +749,8 @@ export function AgentChatComposer({
   }, [attachmentLayoutKey, syncBottomAfterComposerLayoutRef]);
 
   const modelPickerDisabled = isSubmitting || !isInteractionEnabled || isReadOnly;
-  const selectorDisabled = isSelectionCatalogLoading || modelPickerDisabled;
+  const selectorDisabled =
+    isSelectionCatalogLoading || modelPickerDisabled || !model.selectedModelSelection;
 
   const scheduleComposerFocus = useAgentChatComposerFocus({
     composerEditorRef,

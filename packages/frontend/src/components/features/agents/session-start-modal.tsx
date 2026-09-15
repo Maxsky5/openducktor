@@ -508,7 +508,11 @@ const sessionStartAvailability = (model: SessionStartModalModel) => {
       (isSelectionCatalogLoading || !selectedRuntimeKind || !selectedModelSelection)) ||
     (requiresExistingSession && !hasExistingSessionSelection);
   const runtimeProfileDisabled =
-    isStarting || isReuseMode || isSelectionCatalogLoading || runtimeProfileOptions.length === 0;
+    isStarting ||
+    isReuseMode ||
+    isSelectionCatalogLoading ||
+    !selectedModelSelection ||
+    runtimeProfileOptions.length === 0;
   const variantDisabled =
     isStarting ||
     isReuseMode ||
