@@ -50,11 +50,11 @@ Use `@openducktor/path-support` to parse a user path. Supply home directory and 
 
 Electron, the published web package, and web workspace mode use this setup.
 
-The POSIX probe starts the account shell with `-ilc` and a minimal environment. A marker separates startup output from the environment payload. The host puts the resolved shell `PATH` before inherited GUI entries and keeps this snapshot for the app lifetime. Dev servers, tool discovery, Git, and terminals receive the same snapshot.
+The POSIX probe uses a login-style `argv0`, interactive login command flags, and a minimal environment. It uses `-ilc` for common shells and `-ic` for csh and tcsh because those shells reject `-ilc`. A marker separates startup output from the environment payload. The host puts the resolved shell `PATH` before inherited GUI entries and keeps this snapshot for the app lifetime. Dev servers, runtime sessions, tool discovery, Git, and terminals receive the same snapshot. Windows uses its normalized inherited environment and does not run a shell probe.
 
 The probe has no PTY. Shell startup lines that require a real tty can produce a different result in an integrated terminal. Changes to shell startup files take effect after OpenDucktor restarts.
 
-If the host cannot find an executable login shell, or the probe cannot start, exits with an error, returns invalid output, exceeds the output limit, or times out, the host records a `ProcessEnvironmentError` and removes the inherited GUI `PATH` from the shared environment. System diagnostics show the error. A dev server start also shows the error and does not start the command.
+If the host cannot find an executable login shell, or the probe cannot start, exits with an error, returns invalid output, exceeds the output limit, or times out, the host records a `ProcessEnvironmentError` and removes the inherited GUI `PATH` from the shared environment. System diagnostics show the error. Dev server and runtime starts also show the error and do not start a child process.
 
 ## Search order
 

@@ -1019,6 +1019,40 @@ describe("createElectronHostCommandRouter", () => {
     );
   });
 
+  test("blocks every runtime start when the user PATH is unavailable", async () => {
+    const diagnostic = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/tcsh: the probe ended with exit code 1. Fix errors in the shell startup files and restart OpenDucktor.",
+      reason: "unexpected_exit",
+      shell: "/bin/tcsh",
+    });
+    const router = await createElectronHostCommandRouter({
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      processEnvironmentError: diagnostic,
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          agentRuntimes: {
+            opencode: { enabled: true },
+            codex: { enabled: true },
+            claude: { enabled: true },
+          },
+          workspaces: { repo: repoConfig() },
+          workspaceOrder: ["repo"],
+        }),
+      ),
+    });
+
+    for (const runtimeKind of ["claude", "codex", "opencode"] as const) {
+      await expect(
+        router.invoke("runtime_ensure", { runtimeKind, repoPath: "/repo" }),
+      ).rejects.toThrow(
+        `Failed to start ${runtimeKind} runtime because the user PATH is unavailable. ${diagnostic.message}`,
+      );
+    }
+  });
+
   test("registers migrated read-only git host commands", async () => {
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
