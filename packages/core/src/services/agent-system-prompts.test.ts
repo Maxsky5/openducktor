@@ -45,7 +45,7 @@ describe("buildAgentSystemPrompt", () => {
       "Allowed tools for this role:",
       'odt_read_task_assets({"taskId": string, "assetIds": string[]})',
       "Use this exact taskId literal in every task-bound odt_* call: task-42.",
-      'odt_search_tasks({"priority"?: number, "issueType"?: "task"|"feature"|"bug"|"epic", "status"?: string, "title"?: string, "tags"?: string[], "limit"?: number})',
+      'odt_search_tasks({"priority"?: number, "issueType"?: "task"|"feature"|"bug"|"epic", "status"?: "open"|"spec_ready"|"ready_for_dev"|"in_progress"|"blocked"|"ai_review"|"human_review", "title"?: string, "tags"?: string[], "limit"?: number})',
       'odt_create_task({"title": string, "issueType": "task"|"feature"|"bug", "priority": number, "description"?: string, "labels"?: string[], "aiReviewEnabled"?: boolean})',
       "odt_search_tasks and odt_create_task act on the startup workspace, take no taskId, and do not change the session task.",
       "Omit workspaceId from workflow tool calls; workflow sessions use the startup workspace.",
@@ -310,12 +310,12 @@ describe("buildAgentSystemPrompt", () => {
     ["system.role.planner.base", 6, 7, "planner"],
     ["system.role.build.base", 3, 4, "build"],
     ["system.role.qa.base", 3, 4, "qa"],
-    ["kickoff.spec_initial", 3, 4, "spec"],
-    ["kickoff.planner_initial", 3, 4, "planner"],
-    ["kickoff.build_implementation_start", 2, 3, "build"],
-    ["kickoff.build_after_qa_rejected", 2, 3, "build"],
-    ["kickoff.build_after_human_request_changes", 3, 4, "build"],
-    ["kickoff.build_pull_request_generation", 5, 6, "build"],
+    ["kickoff.spec_initial", 4, 5, "spec"],
+    ["kickoff.planner_initial", 4, 5, "planner"],
+    ["kickoff.build_implementation_start", 3, 4, "build"],
+    ["kickoff.build_after_qa_rejected", 3, 4, "build"],
+    ["kickoff.build_after_human_request_changes", 4, 5, "build"],
+    ["kickoff.build_pull_request_generation", 6, 7, "build"],
     ["kickoff.qa_review", 2, 3, "qa"],
   ] as const)(
     "keeps prior overrides and reports the new version for %s",
@@ -420,7 +420,7 @@ describe("kickoff and permission prompts", () => {
       "Validate each rejection finding against the current implementation",
       "preserve required outcomes and design contracts",
       "Conventional Commit before odt_build_completed",
-      "Use taskId task-1 for every odt_* tool call",
+      "Use taskId task-1 for every task-bound odt_* tool call",
     ]);
   });
 
@@ -440,7 +440,7 @@ describe("kickoff and permission prompts", () => {
       "Review the requested changes below plus the current spec, plan, and affected code before editing.",
       "Requested changes from human review:",
       "Update the task summary and rerun the desktop tests.",
-      "Use taskId task-1 for every odt_* tool call.",
+      "Use taskId task-1 for every task-bound odt_* tool call.",
     ]);
   });
 
@@ -575,7 +575,7 @@ describe("kickoff and permission prompts", () => {
     expect(prompt).not.toContain("comparison");
     expect(prompt).not.toContain("origin/release/2026.04");
     expect(prompt).not.toContain("target");
-    expect(result.templates[0]?.builtinVersion).toBe(6);
+    expect(result.templates[0]?.builtinVersion).toBe(7);
   });
 
   test("rejects pull request generation kickoff when target branch context is missing", () => {
@@ -714,7 +714,7 @@ describe("kickoff and permission prompts", () => {
       "If you cannot finish safely, explain the blocker and stop",
       "Do not abort the git operation unless explicitly asked",
       "summarize what you resolved and which checks passed",
-      "Use taskId task-1 for any odt_* tool calls.",
+      "Use taskId task-1 for any task-bound odt_* tool calls.",
     ]);
     expect(prompt).not.toContain("CONFLICT (content)");
   });
@@ -792,7 +792,7 @@ describe("kickoff and permission prompts", () => {
       {
         type: "override_base_version_mismatch",
         templateId: "message.build_rebase_conflict_resolution",
-        builtinVersion: 3,
+        builtinVersion: 4,
         overrideBaseVersion: 2,
       },
     ]);

@@ -6,11 +6,8 @@ import {
   type RepoPromptOverrides,
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
-import {
-  AGENT_ROLE_TOOL_POLICY,
-  type AgentRole,
-  type AgentToolName,
-} from "../types/agent-orchestrator";
+import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "../types/agent-orchestrator";
+import { ODT_TOOL_ARG_SPEC } from "./odt-tool-arg-spec";
 
 export type AgentPromptTaskContext = {
   taskId: string;
@@ -121,22 +118,6 @@ export type BuiltAgentPrompt = {
   templates: ResolvedAgentPromptTemplate[];
   warnings: AgentPromptWarning[];
 };
-
-const TOOL_ARG_SPEC = {
-  odt_create_task: `odt_create_task({"title": string, "issueType": "task"|"feature"|"bug", "priority": number, "description"?: string, "labels"?: string[], "aiReviewEnabled"?: boolean})`,
-  odt_search_tasks: `odt_search_tasks({"priority"?: number, "issueType"?: "task"|"feature"|"bug"|"epic", "status"?: string, "title"?: string, "tags"?: string[], "limit"?: number})`,
-  odt_read_task: `odt_read_task({"taskId": string})`,
-  odt_read_task_assets: `odt_read_task_assets({"taskId": string, "assetIds": string[]})`,
-  odt_read_task_documents: `odt_read_task_documents({"taskId": string, "includeSpec"?: boolean, "includePlan"?: boolean, "includeQaReport"?: boolean})`,
-  odt_set_spec: `odt_set_spec({"taskId": string, "markdown": string})`,
-  odt_set_plan: `odt_set_plan({"taskId": string, "markdown": string})`,
-  odt_build_blocked: `odt_build_blocked({"taskId": string, "reason": string})`,
-  odt_build_resumed: `odt_build_resumed({"taskId": string})`,
-  odt_build_completed: `odt_build_completed({"taskId": string, "summary"?: string})`,
-  odt_set_pull_request: `odt_set_pull_request({"taskId": string, "providerId": "github", "number": number})`,
-  odt_qa_approved: `odt_qa_approved({"taskId": string, "reportMarkdown": string})`,
-  odt_qa_rejected: `odt_qa_rejected({"taskId": string, "reportMarkdown": string})`,
-} satisfies Record<AgentToolName, string>;
 
 const joinPromptBlocks = (...blocks: string[]): string => {
   return blocks
@@ -358,42 +339,42 @@ const AGENT_PROMPT_DEFINITIONS = {
   "kickoff.spec_initial": {
     id: "kickoff.spec_initial",
     purpose: "kickoff",
-    builtinVersion: 4,
+    builtinVersion: 5,
     template:
-      "Write the specification for this task and save it with odt_set_spec. Use taskId {{task.id}} for every odt_* tool call.",
+      "Write the specification for this task and save it with odt_set_spec. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "kickoff.planner_initial": {
     id: "kickoff.planner_initial",
     purpose: "kickoff",
-    builtinVersion: 4,
+    builtinVersion: 5,
     template:
-      "Write the implementation plan for this task and save it with odt_set_plan. Use taskId {{task.id}} for every odt_* tool call.",
+      "Write the implementation plan for this task and save it with odt_set_plan. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "kickoff.build_implementation_start": {
     id: "kickoff.build_implementation_start",
     purpose: "kickoff",
-    builtinVersion: 3,
+    builtinVersion: 4,
     template:
-      "Read the task, available spec and plan, repo guidance, and relevant code. Choose implementation details, work order, and verification while preserving required outcomes and design contracts. Complete the work, fix scope-aligned issues, and create a meaningful Conventional Commit before odt_build_completed when code changed. Use odt_build_blocked for unresolved blockers and odt_build_resumed when work resumes. Use taskId {{task.id}} for every odt_* tool call.",
+      "Read the task, available spec and plan, repo guidance, and relevant code. Choose implementation details, work order, and verification while preserving required outcomes and design contracts. Complete the work, fix scope-aligned issues, and create a meaningful Conventional Commit before odt_build_completed when code changed. Use odt_build_blocked for unresolved blockers and odt_build_resumed when work resumes. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "kickoff.build_after_qa_rejected": {
     id: "kickoff.build_after_qa_rejected",
     purpose: "kickoff",
-    builtinVersion: 3,
+    builtinVersion: 4,
     template:
-      "Read the latest QA report, task, available spec and plan, and affected code. Validate each rejection finding against the current implementation, fix the root causes, and explain any finding the code does not support. Choose the implementation and checks needed to preserve required outcomes and design contracts. Create a meaningful Conventional Commit before odt_build_completed when code changed. Use taskId {{task.id}} for every odt_* tool call.",
+      "Read the latest QA report, task, available spec and plan, and affected code. Validate each rejection finding against the current implementation, fix the root causes, and explain any finding the code does not support. Choose the implementation and checks needed to preserve required outcomes and design contracts. Create a meaningful Conventional Commit before odt_build_completed when code changed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "kickoff.build_after_human_request_changes": {
     id: "kickoff.build_after_human_request_changes",
     purpose: "kickoff",
-    builtinVersion: 4,
+    builtinVersion: 5,
     template:
-      "Review the requested changes below plus the current spec, plan, and affected code before editing.\n\nRequested changes from human review:\n{{humanFeedback}}\n\nComplete the requested changes while preserving required outcomes and design contracts. Choose the implementation and checks needed for the change, and create a meaningful Conventional Commit before odt_build_completed when code changed. Use taskId {{task.id}} for every odt_* tool call.",
+      "Review the requested changes below plus the current spec, plan, and affected code before editing.\n\nRequested changes from human review:\n{{humanFeedback}}\n\nComplete the requested changes while preserving required outcomes and design contracts. Choose the implementation and checks needed for the change, and create a meaningful Conventional Commit before odt_build_completed when code changed. Use taskId {{task.id}} for every task-bound odt_* tool call.",
   },
   "kickoff.build_pull_request_generation": {
     id: "kickoff.build_pull_request_generation",
     purpose: "kickoff",
-    builtinVersion: 6,
+    builtinVersion: 7,
     template: joinPromptBlocks(
       "Publish a review-ready pull request for the current task.",
       lineSection("Pull request base", ["{{git.targetBranch}}"]),
@@ -418,7 +399,7 @@ const AGENT_PROMPT_DEFINITIONS = {
         "Completion criterion: the task references the pull request and every required pull request check passes.",
         "Report the pull request URL and the passed local and pull request checks.",
       ]),
-      "Use taskId {{task.id}} for every odt_* tool call.",
+      "Use taskId {{task.id}} for every task-bound odt_* tool call.",
     ),
   },
   "kickoff.qa_review": {
@@ -431,7 +412,7 @@ const AGENT_PROMPT_DEFINITIONS = {
   "message.build_rebase_conflict_resolution": {
     id: "message.build_rebase_conflict_resolution",
     purpose: "message",
-    builtinVersion: 3,
+    builtinVersion: 4,
     template: joinPromptBlocks(
       "Resolve the conflicts below and finish the interrupted git operation.",
       lineSection("Git context", [
@@ -444,7 +425,7 @@ const AGENT_PROMPT_DEFINITIONS = {
       "Before editing, inspect the live git state and relevant history. Understand the intent of both sides, preserve compatible changes, and avoid unrelated edits.",
       "Make only the changes needed to resolve the conflicts, then run the relevant checks. If you cannot finish safely, explain the blocker and stop. Do not abort the git operation unless explicitly asked.",
       "When finished, summarize what you resolved and which checks passed.",
-      "Use taskId {{task.id}} for any odt_* tool calls.",
+      "Use taskId {{task.id}} for any task-bound odt_* tool calls.",
     ),
   },
   "permission.read_only.reject": {
@@ -497,7 +478,7 @@ const toRoleBaseTemplateId = (role: AgentRole): AgentPromptTemplateId => {
 
 const buildToolListPlaceholder = (role: AgentRole): string => {
   const allowedTools = AGENT_ROLE_TOOL_POLICY[role];
-  return allowedTools.map((tool) => `- ${TOOL_ARG_SPEC[tool]}`).join("\n");
+  return allowedTools.map((tool) => `- ${ODT_TOOL_ARG_SPEC[tool]}`).join("\n");
 };
 
 const buildPlaceholderValues = ({

@@ -103,9 +103,21 @@ describe("odt mcp public task schemas", () => {
     const blockedTools = new Set(ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES);
 
     expect(ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES).toEqual(["odt_get_workspaces"]);
-    expect(ODT_WORKFLOW_AGENT_TOOL_NAMES.slice(0, 2)).toEqual([
+    expect(ODT_MCP_TOOL_NAMES).toEqual([
+      "odt_get_workspaces",
       "odt_create_task",
       "odt_search_tasks",
+      "odt_read_task",
+      "odt_read_task_assets",
+      "odt_read_task_documents",
+      "odt_set_spec",
+      "odt_set_plan",
+      "odt_build_blocked",
+      "odt_build_resumed",
+      "odt_build_completed",
+      "odt_set_pull_request",
+      "odt_qa_approved",
+      "odt_qa_rejected",
     ]);
     expect(allTools).toEqual(new Set([...workflowTools, ...blockedTools]));
     expect(allTools).toEqual(new Set(Object.keys(ODT_TOOL_SCHEMAS)));
