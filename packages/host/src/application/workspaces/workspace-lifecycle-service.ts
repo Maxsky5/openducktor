@@ -51,16 +51,12 @@ export type WorkspaceLifecycleError =
   | WorkspaceSettingsError
   | WorkspaceWorktreeInventoryError;
 
+type WorkspaceCatalogEffect = Effect.Effect<WorkspaceCatalog, WorkspaceLifecycleError>;
+type WorkspaceRemovalEffect = Effect.Effect<WorkspaceRemovalCommandResult, WorkspaceLifecycleError>;
 export type WorkspaceLifecycleService = {
-  closeWorkspace(
-    input: WorkspaceLifecycleTargetInput,
-  ): Effect.Effect<WorkspaceCatalog, WorkspaceLifecycleError>;
-  reopenWorkspace(
-    input: WorkspaceLifecycleTargetInput,
-  ): Effect.Effect<WorkspaceCatalog, WorkspaceLifecycleError>;
-  removeWorkspace(
-    input: WorkspaceRemovalInput,
-  ): Effect.Effect<WorkspaceRemovalCommandResult, WorkspaceLifecycleError>;
+  closeWorkspace(input: WorkspaceLifecycleTargetInput): WorkspaceCatalogEffect;
+  reopenWorkspace(input: WorkspaceLifecycleTargetInput): WorkspaceCatalogEffect;
+  removeWorkspace(input: WorkspaceRemovalInput): WorkspaceRemovalEffect;
 };
 type CreateWorkspaceLifecycleServiceInput = {
   activity: WorkspaceActivityPort;
@@ -427,6 +423,8 @@ export const createWorkspaceLifecycleService = ({
         Effect.gen(function* () {
           const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
           if (repoConfig.closed) {
+            yield* activity.releaseWorkspaceSessions(repoConfig.repoPath);
+            yield* activity.releaseWorkspaceRuntimes(repoConfig.repoPath);
             yield* storage.closeWorkspaceTaskStore(input.workspaceId);
             yield* hostOwnership.releaseWorkspace(input.workspaceId);
             return yield* workspaceSettingsService.getWorkspaceCatalog();
@@ -440,6 +438,8 @@ export const createWorkspaceLifecycleService = ({
             () =>
               Effect.gen(function* () {
                 yield* assertNoBlockingActivity(repoConfig.repoPath);
+                yield* activity.releaseWorkspaceSessions(repoConfig.repoPath);
+                yield* activity.releaseWorkspaceRuntimes(repoConfig.repoPath);
                 const catalog = yield* workspaceSettingsService.closeWorkspace(
                   input.workspaceId,
                   input.expectedRepoPath,

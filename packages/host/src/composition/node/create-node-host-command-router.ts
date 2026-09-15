@@ -200,6 +200,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const gitService = withGitWorkspaceAdmission(
     createGitService({ gitPort: git, settingsConfig, worktreeFiles }),
     workspaceAdmissionService,
+    workspaceOwnershipLock,
   );
   const gitProviderService = createGitProviderService({
     resolver: gitProviderResolver,
@@ -392,6 +393,7 @@ export const assembleNodeEffectHostCommandRouter = (
       },
       canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
       agentSessionLiveStateService,
+      ownershipLock: workspaceOwnershipLock,
       repositoryPolicy: workspaceSessions.persistence,
     });
   const odtMcpBridgeService = createOdtMcpBridgeService({

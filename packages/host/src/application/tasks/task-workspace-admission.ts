@@ -1,11 +1,13 @@
 import { Effect } from "effect";
 import type { HostValidationErrorAggregate } from "../../effect/host-errors";
+import type { WorkspaceOwnershipLock } from "../workspaces/workspace-ownership-lock";
 import type { TaskServiceWithMutationProgress } from "./task-service";
 
 export type WorkspaceAdmission = {
   withWorkStartLease<A, E, R>(
     repoPath: string,
     effect: Effect.Effect<A, E, R>,
+    workingDirectory?: string,
   ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
 };
 
@@ -18,7 +20,6 @@ export const withWorkspaceAdmission = (
     operation: Effect.Effect<A, E, R>,
   ): Effect.Effect<A, E | HostValidationErrorAggregate, R> =>
     admission.withWorkStartLease(repoPath, operation);
-
   return {
     ...service,
     agentSessionDelete: (input) => guard(input.repoPath, service.agentSessionDelete(input)),
@@ -56,3 +57,14 @@ export const withWorkspaceAdmission = (
     upsertPullRequest: (input) => guard(input.repoPath, service.upsertPullRequest(input)),
   };
 };
+
+export const withTaskWorkspaceOwnership = (
+  service: TaskServiceWithMutationProgress,
+  ownershipLock: WorkspaceOwnershipLock,
+): TaskServiceWithMutationProgress => ({
+  ...service,
+  closeTask: (input) => ownershipLock.runExclusive(service.closeTask(input)),
+  deleteTask: (input) => ownershipLock.runExclusive(service.deleteTask(input)),
+  resetImplementation: (input) => ownershipLock.runExclusive(service.resetImplementation(input)),
+  resetTask: (input) => ownershipLock.runExclusive(service.resetTask(input)),
+});

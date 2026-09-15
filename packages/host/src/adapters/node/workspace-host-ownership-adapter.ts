@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Effect, Exit } from "effect";
 import { lock as acquireFileLock } from "proper-lockfile";
@@ -75,16 +75,30 @@ const ownerMismatchError = (workspaceId: string, ownerPath: string, cause?: unkn
     details: { ownerPath, workspaceId },
   });
 
+const unreadableOwnerError = (workspaceId: string, ownerPath: string, cause: unknown) =>
+  new HostOperationError({
+    operation: "workspaceHostOwnership.verify",
+    message: `Cannot read the owner record for workspace ${workspaceId}. Close all OpenDucktor instances, delete ${ownerPath} and ${ownerPath}.lock, then retry.`,
+    cause,
+    details: { ownerPath, workspaceId },
+  });
+
 const readOwner = async (ownerPath: string, workspaceId: string): Promise<WorkspaceHostOwner> => {
   let value: unknown;
   try {
     value = JSON.parse(await readFile(ownerPath, "utf8"));
   } catch (cause) {
-    throw ownerMismatchError(workspaceId, ownerPath, cause);
+    if (errorCode(cause) === "ENOENT") {
+      throw ownerMismatchError(workspaceId, ownerPath, cause);
+    }
+    throw unreadableOwnerError(workspaceId, ownerPath, cause);
   }
   const result = workspaceHostOwnerSchema.safeParse(value);
-  if (!result.success || result.data.workspaceId !== workspaceId) {
-    throw ownerMismatchError(workspaceId, ownerPath, result.success ? undefined : result.error);
+  if (!result.success) {
+    throw unreadableOwnerError(workspaceId, ownerPath, result.error);
+  }
+  if (result.data.workspaceId !== workspaceId) {
+    throw ownerMismatchError(workspaceId, ownerPath);
   }
   return result.data;
 };
@@ -130,6 +144,16 @@ const acquireLock = (ownerPath: string, stale: number) =>
     stale,
     update: Math.min(60_000, stale / 3),
   });
+
+const publishOwner = async (ownerPath: string, owner: WorkspaceHostOwner): Promise<void> => {
+  const publicationPath = `${ownerPath}.${owner.instanceId}.tmp`;
+  try {
+    await writeFile(publicationPath, JSON.stringify(owner), { flag: "wx", mode: 0o600 });
+    await rename(publicationPath, ownerPath);
+  } finally {
+    await rm(publicationPath, { force: true });
+  }
+};
 
 const recoveryError = (
   workspaceId: string,
@@ -223,7 +247,7 @@ export const createNodeWorkspaceHostOwnership = (
             workspaceId,
           });
           try {
-            await writeFile(ownerPath, JSON.stringify(owner), { mode: 0o600 });
+            await publishOwner(ownerPath, owner);
           } catch (cause) {
             await release();
             throw cause;

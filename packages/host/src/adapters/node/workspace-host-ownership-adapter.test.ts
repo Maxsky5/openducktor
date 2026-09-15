@@ -221,6 +221,26 @@ setInterval(() => {}, 60_000);`,
     }
   });
 
+  test("gives manual recovery steps for an unreadable owner record", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
+    const workspaceId = "workspace-1";
+    const ownerPath = ownerPathFor(configDir, workspaceId);
+    await mkdir(path.dirname(ownerPath), { recursive: true });
+    await writeFile(ownerPath, "{");
+    await mkdir(`${ownerPath}.lock`);
+    const ownership = createNodeWorkspaceHostOwnership({
+      processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir },
+    });
+
+    try {
+      await expect(Effect.runPromise(ownership.claimWorkspace(workspaceId))).rejects.toThrow(
+        `Close all OpenDucktor instances, delete ${ownerPath} and ${ownerPath}.lock, then retry`,
+      );
+    } finally {
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
   test("recovers a stale claim whose owner record is missing", async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
     const workspaceId = "workspace-1";

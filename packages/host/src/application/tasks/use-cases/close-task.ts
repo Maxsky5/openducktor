@@ -36,6 +36,7 @@ export const createTaskCloseUseCase = ({
   taskWorktreeService,
   worktreeFiles,
   workspaceSettingsService,
+  withWorkStartLease,
   taskSessionLifecycleCoordinator,
 }: TaskServiceUseCaseInput): Pick<TaskService, "closeTask"> => ({
   closeTask(input) {
@@ -144,6 +145,7 @@ export const createTaskCloseUseCase = ({
           worktreeCleanupOperation: "task_close",
           worktreeFiles,
           worktreePaths,
+          withWorkStartLease,
         });
       });
 

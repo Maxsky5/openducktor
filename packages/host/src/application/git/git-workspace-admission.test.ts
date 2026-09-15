@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
+import {
+  createWorkspaceOwnershipLock,
+  type WorkspaceOwnershipLock,
+} from "../workspaces/workspace-ownership-lock";
 import type { GitService } from "./git-service-types";
 import { type GitWorkspaceAdmission, withGitWorkspaceAdmission } from "./git-workspace-admission";
 
@@ -42,10 +46,7 @@ const createAdmissionDouble = (input: {
     repoPath: string,
     effect: Effect.Effect<A, E, R>,
     workingDirectory?: string,
-  ) => {
-    input.onLease?.(repoPath, workingDirectory);
-    return effect;
-  },
+  ) => Effect.sync(() => input.onLease?.(repoPath, workingDirectory)).pipe(Effect.zipRight(effect)),
 });
 
 describe("git workspace admission", () => {
@@ -67,7 +68,7 @@ describe("git workspace admission", () => {
         events.push(`lease:${repoPath}:${workingDirectory}`);
       },
     });
-    const guarded = withGitWorkspaceAdmission(service, admission);
+    const guarded = withGitWorkspaceAdmission(service, admission, createWorkspaceOwnershipLock());
 
     const result = await Effect.runPromise(
       guarded.switchBranch({ branch: "main", create: false, repoPath: "/repos/a" }),
@@ -90,6 +91,7 @@ describe("git workspace admission", () => {
           if (workingDirectory) targets.push(workingDirectory);
         },
       }),
+      createWorkspaceOwnershipLock(),
     );
 
     await Effect.runPromise(
@@ -120,6 +122,7 @@ describe("git workspace admission", () => {
           leased = true;
         },
       }),
+      createWorkspaceOwnershipLock(),
     );
 
     await Effect.runPromise(guarded.getBranches({ repoPath: "/repos/a" }));
@@ -147,6 +150,7 @@ describe("git workspace admission", () => {
             }),
           ),
       }),
+      createWorkspaceOwnershipLock(),
     );
 
     const error = await Effect.runPromise(
@@ -155,5 +159,41 @@ describe("git workspace admission", () => {
 
     expect(error.message).toContain("Workspace is closed");
     expect(ran).toBe(false);
+  });
+
+  test("holds the ownership lock through worktree validation and removal", async () => {
+    const events: string[] = [];
+    const ownershipLock: WorkspaceOwnershipLock = {
+      runExclusive: (effect) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => events.push("lock")),
+          () => effect,
+          () => Effect.sync(() => events.push("unlock")),
+        ),
+    };
+    const guarded = withGitWorkspaceAdmission(
+      createGitServiceDouble({
+        removeWorktree: () =>
+          Effect.sync(() => {
+            events.push("remove");
+            return { ok: true };
+          }),
+      }),
+      createAdmissionDouble({
+        assertWorkspaceAdmitsWork: () => Effect.sync(() => events.push("admit")),
+        onLease: () => events.push("lease"),
+      }),
+      ownershipLock,
+    );
+
+    await Effect.runPromise(
+      guarded.removeWorktree({
+        repoPath: "/repos/a",
+        worktreePath: "/worktrees/a",
+        force: true,
+      }),
+    );
+
+    expect(events).toEqual(["lock", "lease", "admit", "remove", "unlock"]);
   });
 });
