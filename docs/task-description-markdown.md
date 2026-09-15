@@ -26,6 +26,8 @@ The host read service checks the workspace, task, scope, and asset row before it
 
 The browser route requires the app-session cookie. Electron uses a privileged app protocol. Markdown and SQLite do not store runtime URLs.
 
+The chat task card shows a compact preview of the description. An image in the preview appears as a chip with its alt text. The task details view loads the image.
+
 ## Agent access
 
 A workflow agent calls `odt_read_task_assets({ taskId, assetIds })`. It gets UUIDs from the description's `odt-asset:<assetId>` values.

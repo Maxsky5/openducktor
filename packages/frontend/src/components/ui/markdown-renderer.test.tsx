@@ -445,6 +445,26 @@ describe("rich task description rendering", () => {
     expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
   });
 
+  test("uses a caller-provided image component for a task asset without task context", async () => {
+    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    configureShellBridge({
+      ...createUnavailableShellBridge(),
+      resolveTaskAssetSrc,
+    });
+    const view = render(
+      <MarkdownRenderer
+        markdown="![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000)"
+        components={{
+          img: ({ alt }) => <span data-testid="image-placeholder">{alt}</span>,
+        }}
+      />,
+    );
+
+    expect((await view.findByTestId("image-placeholder")).textContent).toBe("Architecture");
+    expect(view.queryByRole("alert")).toBeNull();
+    expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
+  });
+
   test("does not resolve a forged logical asset ID", async () => {
     const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
     configureShellBridge({

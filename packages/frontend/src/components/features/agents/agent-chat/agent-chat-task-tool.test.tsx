@@ -2,7 +2,10 @@ import { expect, test } from "bun:test";
 import type { PublicTaskSummaryTask } from "@openducktor/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import { createMessageCardElement } from "./agent-chat-message-card-test-harness";
+import {
+  createMessageCardElement,
+  renderMessageCardToHtml,
+} from "./agent-chat-message-card-test-harness";
 
 const task = (id = "task-1"): PublicTaskSummaryTask => ({
   id,
@@ -19,27 +22,28 @@ const task = (id = "task-1"): PublicTaskSummaryTask => ({
   documents: { hasSpec: false, hasPlan: false, hasQaReport: false },
 });
 
-const renderTool = (tool: string, fields: Partial<ToolMeta>): string =>
-  renderToStaticMarkup(
-    createMessageCardElement({
-      message: {
-        id: "m1",
-        role: "tool",
-        content: "",
-        timestamp: "2026-09-08T10:00:00.000Z",
-        meta: {
-          kind: "tool",
-          partId: "p1",
-          callId: "c1",
-          tool,
-          toolType: "generic",
-          status: "completed",
-          ...fields,
-        },
+const createToolElement = (tool: string, fields: Partial<ToolMeta>) =>
+  createMessageCardElement({
+    message: {
+      id: "m1",
+      role: "tool",
+      content: "",
+      timestamp: "2026-09-08T10:00:00.000Z",
+      meta: {
+        kind: "tool",
+        partId: "p1",
+        callId: "c1",
+        tool,
+        toolType: "generic",
+        status: "completed",
+        ...fields,
       },
-      sessionAgentColors: {},
-    }),
-  );
+    },
+    sessionAgentColors: {},
+  });
+
+const renderTool = (tool: string, fields: Partial<ToolMeta>): string =>
+  renderToStaticMarkup(createToolElement(tool, fields));
 
 test("renders create_task through the real message card as a Kanban-style task", () => {
   const html = renderTool("openducktor_odt_create_task", {
@@ -157,6 +161,26 @@ test("renders the description as a bounded markdown preview inside the five-line
   const card = document.querySelector("[data-task-id]");
   expect(card?.innerHTML).not.toContain("### Context");
   expect(card?.innerHTML).not.toContain("b".repeat(1000));
+});
+
+test("renders a task asset image as preview alt text without a task context alert", async () => {
+  const assetId = "550e8400-e29b-41d4-a716-446655440000";
+  const description = [`![Screenshot](odt-asset:${assetId} "shot.png")`, "", "b".repeat(2000)].join(
+    "\n",
+  );
+  const html = await renderMessageCardToHtml(
+    createToolElement("openducktor_odt_create_task", {
+      output: JSON.stringify({ task: { ...task(), description } }),
+    }),
+  );
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .line-clamp-5");
+  expect(preview?.classList.contains("line-clamp-5")).toBe(true);
+  expect(preview?.textContent).toContain("Screenshot");
+  expect(preview?.querySelector("svg.lucide-image")).not.toBeNull();
+  expect(preview?.textContent).not.toContain("b".repeat(1000));
+  expect(html).not.toContain("task context is unavailable");
+  expect(document.querySelector("[data-task-id] img")).toBeNull();
 });
 
 test("does not claim task creation before completion or after failure", () => {

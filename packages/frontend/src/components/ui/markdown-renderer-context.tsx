@@ -126,7 +126,11 @@ export const createTaskDescriptionComponents = ({
       </code>
     );
   },
-  img: ({ alt, className, src, title }) => {
+  img: ({ alt, className, src, title, ...props }) => {
+    const ImageComponent = components.img;
+    if (ImageComponent) {
+      return createElement(ImageComponent, { ...props, alt, className, src, title });
+    }
     if (src?.startsWith(TASK_ASSET_URI_PREFIX)) {
       if (!parseTaskAssetUri(src)) {
         return (
