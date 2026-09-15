@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type {
@@ -63,11 +63,13 @@ const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRoute
 
 const pathFailure = (
   error: ProcessEnvironmentError,
+  baseEnv: NodeJS.ProcessEnv = {},
 ): NonNullable<ElectronHostCommandRouterInput["processEnvironmentInput"]> => ({
   baseEnv: {
     HOME: "/home/dev",
     OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
     PATH: "/usr/bin:/bin",
+    ...baseEnv,
   },
   platform: "linux",
   readLoginShellPath: () => Effect.fail(error),
@@ -773,6 +775,51 @@ describe("createElectronHostCommandRouter", () => {
       theme: "system",
       workspaces: {},
     });
+  });
+
+  test("does not write runtime paths when PATH resolution fails", async () => {
+    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-path-config-"));
+    const configPath = path.join(configDirectory, "config.json");
+    const diagnostic = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
+    try {
+      const router = await createElectronHostCommandRouter({
+        processEnvironmentInput: pathFailure(diagnostic, {
+          OPENDUCKTOR_CONFIG_DIR: configDirectory,
+        }),
+      });
+
+      await expect(router.invoke("workspace_get_settings_snapshot")).rejects.toThrow(
+        diagnostic.message,
+      );
+      await expect(readFile(configPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+
+      const legacyConfig = JSON.stringify({
+        version: 2,
+        agentRuntimes: {
+          opencode: { enabled: true },
+          codex: { enabled: true },
+          claude: { enabled: false },
+        },
+      });
+      await writeFile(configPath, legacyConfig);
+
+      await expect(router.invoke("workspace_get_settings_snapshot")).rejects.toThrow(
+        diagnostic.message,
+      );
+      expect(await readFile(configPath, "utf8")).toBe(legacyConfig);
+
+      await writeFile(configPath, JSON.stringify({ version: 3 }));
+      await expect(router.invoke("workspace_get_settings_snapshot")).resolves.toMatchObject({
+        theme: "light",
+      });
+    } finally {
+      await rm(configDirectory, { force: true, recursive: true });
+    }
   });
 
   test("registers migrated local attachment host commands", async () => {
