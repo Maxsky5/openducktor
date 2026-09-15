@@ -7,6 +7,16 @@ import {
   upgradePersistedGlobalConfigV2,
 } from "./global-config";
 
+const rejectionMessage = (run: () => void): string => {
+  try {
+    run();
+  } catch (cause) {
+    return cause instanceof Error ? cause.message : String(cause);
+  }
+
+  throw new Error("Expected the config to be rejected");
+};
+
 describe("global config", () => {
   test("creates only current version 3 config", () => {
     const config = createDefaultGlobalConfig();
@@ -216,8 +226,7 @@ describe("global config", () => {
   });
 
   test("lists each rejected config field on its own line without raw issue JSON", () => {
-    let message = "";
-    try {
+    const message = rejectionMessage(() =>
       parsePersistedGlobalConfig({
         version: 3,
         theme: "blue",
@@ -235,10 +244,8 @@ describe("global config", () => {
             defaultRuntimeKind: "cursor",
           },
         },
-      });
-    } catch (cause) {
-      message = cause instanceof Error ? cause.message : String(cause);
-    }
+      }),
+    );
 
     const lines = message.split("\n");
     expect(lines).toContain(
@@ -269,12 +276,7 @@ describe("global config", () => {
       }),
     );
 
-    let message = "";
-    try {
-      parsePersistedGlobalConfig({ version: 3, workspaces });
-    } catch (cause) {
-      message = cause instanceof Error ? cause.message : String(cause);
-    }
+    const message = rejectionMessage(() => parsePersistedGlobalConfig({ version: 3, workspaces }));
 
     expect(message.split("\n")).toHaveLength(6);
     expect(message).toContain("2 more problems not shown.");

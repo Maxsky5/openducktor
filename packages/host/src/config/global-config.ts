@@ -96,35 +96,30 @@ const parseSupportedConfigObject = (
   return payload;
 };
 
-const migratePersistedConfigOrThrow = (
+const parsePersistedConfig = <Output>(
   payload: JSONType,
   expectedVersion: 2 | 3,
-): PersistedConfigObject => {
+  schema: z.ZodType<Output>,
+): Output => {
+  let migrated: PersistedConfigObject;
   try {
-    return migratePersistedConfig(parseSupportedConfigObject(payload, expectedVersion));
+    migrated = migratePersistedConfig(parseSupportedConfigObject(payload, expectedVersion));
   } catch (cause) {
     throw new HostValidationError({
       message: cause instanceof Error ? cause.message : String(cause),
       cause,
     });
   }
-};
 
-const parsePersistedConfig = <Output>(
-  payload: JSONType,
-  expectedVersion: 2 | 3,
-  schema: z.ZodType<Output>,
-): Output => {
-  const migrated = migratePersistedConfigOrThrow(payload, expectedVersion);
   const parsed = schema.safeParse(migrated);
-  if (parsed.success) {
-    return parsed.data;
+  if (!parsed.success) {
+    throw new HostValidationError({
+      message: configValidationMessage(parsed.error, migrated),
+      cause: parsed.error,
+    });
   }
 
-  throw new HostValidationError({
-    message: configValidationMessage(parsed.error, migrated),
-    cause: parsed.error,
-  });
+  return parsed.data;
 };
 
 export const parsePersistedGlobalConfig = (payload: JSONType): LoadedGlobalConfig =>

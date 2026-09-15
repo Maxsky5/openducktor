@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { configValidationMessage, type ConfigPayloadValue } from "./config-validation-message";
+import { configValidationMessage, type PayloadValue } from "./config-validation-message";
 
 const schema = z.object({
   theme: z.enum(["light", "dark"]),
   tags: z.array(z.string()).min(1),
 });
 
-const messagesFor = (payload: ConfigPayloadValue): string[] => {
+const messagesFor = (payload: PayloadValue): string[] => {
   const result = schema.safeParse(payload);
   if (result.success) {
     throw new Error("Expected validation failure");
