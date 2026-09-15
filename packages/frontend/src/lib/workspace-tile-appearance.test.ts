@@ -5,6 +5,8 @@ import {
   normalizeHexInput,
   resolveAutomaticTileColors,
   resolveTileColor,
+  ACTIVE_TILE_BORDER_WIDTH_PX,
+  tileColorFaceStyle,
   tileForegroundColor,
   tileLabelSizeClass,
   tileShadeRamp,
@@ -146,19 +148,54 @@ describe("tileForegroundColor", () => {
   });
 });
 
-describe("tileSurfaceStyle", () => {
-  test("uses the opaque color for the active tile", () => {
-    expect(tileSurfaceStyle("#3b82f6", { isActive: true })).toEqual({
+describe("tileColorFaceStyle", () => {
+  test("returns the opaque color with a label color picked by contrast", () => {
+    expect(tileColorFaceStyle("#3b82f6")).toEqual({
       backgroundColor: "#3b82f6",
       color: "#0f172a",
     });
   });
 
-  test("tints the theme card surface for an inactive tile", () => {
+  test("carries no active marker, so a color sample never reads as an active tile", () => {
+    expect(tileColorFaceStyle("#3b82f6")).not.toHaveProperty("outlineColor");
+  });
+});
+
+describe("tileSurfaceStyle", () => {
+  test("uses the opaque color and a wide primary border for the active tile", () => {
+    expect(tileSurfaceStyle("#3b82f6", { isActive: true })).toEqual({
+      backgroundColor: "#3b82f6",
+      color: "#0f172a",
+      outlineWidth: `${ACTIVE_TILE_BORDER_WIDTH_PX}px`,
+      outlineStyle: "solid",
+      outlineColor: "var(--primary)",
+      outlineOffset: `-${ACTIVE_TILE_BORDER_WIDTH_PX}px`,
+    });
+  });
+
+  test("marks the active tile with a border that does not depend on the tile color", () => {
+    const markers = WORKSPACE_TILE_PALETTE.map(
+      (entry) => tileSurfaceStyle(entry.hex, { isActive: true }).outlineColor,
+    );
+
+    expect(new Set(markers)).toEqual(new Set(["var(--primary)"]));
+  });
+
+  test("tints the theme card surface for an inactive tile and leaves it unmarked", () => {
     expect(tileSurfaceStyle("#3b82f6", { isActive: false })).toEqual({
       backgroundColor: "color-mix(in oklab, #3b82f6 22%, var(--card))",
       color: "var(--card-foreground)",
     });
+  });
+
+  test("keeps the active marker when a dimmed neighbor reaches the same intensity", () => {
+    const lightShade = tileShadeRamp("#3b82f6")[0]?.hex ?? "";
+    const activeLight = tileSurfaceStyle(lightShade, { isActive: true });
+    const inactiveDark = tileSurfaceStyle("#06347f", { isActive: false });
+
+    expect(activeLight.outlineColor).toBe("var(--primary)");
+    expect(activeLight.outlineWidth).toBe(`${ACTIVE_TILE_BORDER_WIDTH_PX}px`);
+    expect(inactiveDark).not.toHaveProperty("outlineColor");
   });
 });
 

@@ -58,12 +58,12 @@ const hashWorkspaceId = (workspaceId: string): number => {
   return hash >>> 0;
 };
 
+export type WorkspaceAutomaticTileColors = ReadonlyMap<string, string>;
+
 /**
  * Assigns a palette color to every given workspace id. The set of ids is the only input, so the
  * assignment survives a restart, a rename, a rail reorder, and any other settings change.
  */
-export type WorkspaceAutomaticTileColors = ReadonlyMap<string, string>;
-
 export const resolveAutomaticTileColors = (
   workspaceIds: readonly string[],
 ): WorkspaceAutomaticTileColors => {
@@ -255,20 +255,48 @@ export const tileForegroundColor = (hex: string): string =>
     ? LIGHT_TILE_FOREGROUND
     : DARK_TILE_FOREGROUND;
 
-/**
- * The active face uses the color itself. The inactive face tints the theme card surface with the
- * same color, so exactly one tile reads as active even when neighbors use a similar hue.
- */
 /** Keeps a 3 character abbreviation inside the tile without a cut. */
 export const tileLabelSizeClass = (label: string): string =>
   label.length >= 3 ? "text-[0.625rem]" : "text-xs";
 
+/** The opaque color face, with a label color picked by contrast. Carries no active marker. */
+export const tileColorFaceStyle = (hex: string): CSSProperties => ({
+  backgroundColor: hex,
+  color: tileForegroundColor(hex),
+});
+
+export const ACTIVE_TILE_BORDER_WIDTH_PX = 4;
+
+/**
+ * The wide border that marks the active workspace. Its color is the theme primary accent, so it
+ * never depends on the tile color.
+ *
+ * The border is drawn as an inset outline. That keeps the tile at its layout size, follows the
+ * rounded corners, and leaves the focus ring alone, because the shared button focus state uses a
+ * box shadow. The longhand properties are used because a `var()` value inside the `outline`
+ * shorthand is mis-parsed by the test DOM.
+ */
+const activeTileBorderStyle = (): CSSProperties => ({
+  outlineWidth: `${ACTIVE_TILE_BORDER_WIDTH_PX}px`,
+  outlineStyle: "solid",
+  outlineColor: "var(--primary)",
+  outlineOffset: `-${ACTIVE_TILE_BORDER_WIDTH_PX}px`,
+});
+
+/**
+ * The active face uses the color itself and adds the primary-color border. The inactive face
+ * tints the theme card surface with the same color.
+ *
+ * A user can pick any shade, so the dimmed face of one workspace can reach the intensity of the
+ * full-strength face of another. The border carries the active state on its own, so exactly one
+ * tile reads as active whatever colors the neighbors use.
+ */
 export const tileSurfaceStyle = (
   hex: string,
   { isActive }: { isActive: boolean },
 ): CSSProperties =>
   isActive
-    ? { backgroundColor: hex, color: tileForegroundColor(hex) }
+    ? { ...tileColorFaceStyle(hex), ...activeTileBorderStyle() }
     : {
         backgroundColor: `color-mix(in oklab, ${hex} 22%, var(--card))`,
         color: "var(--card-foreground)",

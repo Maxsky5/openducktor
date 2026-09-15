@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ACTIVE_TILE_BORDER_WIDTH_PX } from "@/lib/workspace-tile-appearance";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceRail } from "./workspace-rail";
@@ -148,6 +149,28 @@ describe("WorkspaceRail", () => {
 
     expect(html).toContain("background-color:#3b82f6");
     expect(html).toContain("background-color:color-mix(in oklab, #f43f5e 22%, var(--card))");
+  });
+
+  test("marks only the active tile with the wide primary border", () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", {
+        workspaceName: "Alpha Repo",
+        tileColor: "#c4dafc",
+        isActive: true,
+      }),
+      workspaceRecord("beta", { workspaceName: "Beta Repo", tileColor: "#06347f" }),
+    ];
+
+    renderRail();
+
+    const activeStyle = screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("style");
+    const inactiveStyle = screen.getByRole("button", { name: "Beta Repo" }).getAttribute("style");
+
+    expect(activeStyle).toContain(`outline-width: ${ACTIVE_TILE_BORDER_WIDTH_PX}px`);
+    expect(activeStyle).toContain("outline-style: solid");
+    expect(activeStyle).toContain("outline-color: var(--primary)");
+    expect(activeStyle).toContain(`outline-offset: -${ACTIVE_TILE_BORDER_WIDTH_PX}px`);
+    expect(inactiveStyle).not.toContain("outline");
   });
 
   test("gives different automatic colors to workspaces without a picked color", () => {

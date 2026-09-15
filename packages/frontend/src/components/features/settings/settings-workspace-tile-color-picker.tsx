@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   WORKSPACE_TILE_PALETTE,
   normalizeHexInput,
+  tileColorFaceStyle,
   tileLabelSizeClass,
   tileShadeRamp,
   tileSurfaceStyle,
@@ -108,7 +109,7 @@ export function WorkspaceTileColorPicker({
         <div className="flex flex-wrap items-center gap-2">
           <TileColorSwatchButton
             label="Automatic"
-            style={tileSurfaceStyle(automaticColor, { isActive: true })}
+            style={tileColorFaceStyle(automaticColor)}
             isSelected={isAutomatic}
             isDisabled={isDisabled}
             onSelect={() => {
@@ -122,7 +123,7 @@ export function WorkspaceTileColorPicker({
             <TileColorSwatchButton
               key={entry.id}
               label={`${entry.label} (${entry.hex})`}
-              style={tileSurfaceStyle(entry.hex, { isActive: true })}
+              style={tileColorFaceStyle(entry.hex)}
               isSelected={!isAutomatic && entry.hex === effectiveColor}
               isDisabled={isDisabled}
               onSelect={() => {
@@ -143,7 +144,7 @@ export function WorkspaceTileColorPicker({
             <TileColorSwatchButton
               key={shade.level}
               label={`Shade ${shade.level} (${shade.hex})`}
-              style={tileSurfaceStyle(shade.hex, { isActive: true })}
+              style={tileColorFaceStyle(shade.hex)}
               isSelected={!isAutomatic && shade.hex === effectiveColor}
               isDisabled={isDisabled}
               onSelect={() => {
