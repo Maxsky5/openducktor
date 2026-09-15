@@ -135,6 +135,22 @@ describe("RepositoryConfigurationSection", () => {
     }
   });
 
+  test("previews the tile once, because every tile now uses the same full-strength color", () => {
+    const { rendered } = renderSection({ abbreviation: "iOS", tileColor: "#f08c00" });
+
+    try {
+      const previews = screen.getAllByTestId("workspace-tile-preview");
+
+      expect(previews).toHaveLength(1);
+      expect(previews[0]?.textContent).toBe("iOS");
+      expect(previews[0]?.getAttribute("style")).toContain("background-color: #f08c00");
+      expect(screen.queryByText("Active")).toBeNull();
+      expect(screen.queryByText("Inactive")).toBeNull();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("marks a selection without relying on color alone and marks nothing for an arbitrary hex", () => {
     const shadeLabels = (): string[] =>
       screen

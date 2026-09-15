@@ -9,7 +9,6 @@ import {
   tileColorFaceStyle,
   tileLabelSizeClass,
   tileShadeRamp,
-  tileSurfaceStyle,
 } from "@/lib/workspace-tile-appearance";
 
 const HEX_ERROR_MESSAGE = "Enter a 6-digit RGB hex value, such as f08c00.";
@@ -192,31 +191,17 @@ export function WorkspaceTileColorPicker({
 
       <div className="grid gap-2">
         <p className="text-sm font-medium text-foreground">Tile preview</p>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "flex size-10 items-center justify-center rounded-lg font-semibold shadow-sm",
-                tileLabelSizeClass(abbreviationPreview),
-              )}
-              style={tileSurfaceStyle(effectiveColor, { isActive: true })}
-            >
-              {abbreviationPreview}
-            </span>
-            <span className="text-xs text-muted-foreground">Active</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "flex size-10 items-center justify-center rounded-lg font-semibold shadow-sm",
-                tileLabelSizeClass(abbreviationPreview),
-              )}
-              style={tileSurfaceStyle(effectiveColor, { isActive: false })}
-            >
-              {abbreviationPreview}
-            </span>
-            <span className="text-xs text-muted-foreground">Inactive</span>
-          </div>
+        <div className="flex items-center gap-2">
+          <span
+            data-testid="workspace-tile-preview"
+            className={cn(
+              "flex size-10 items-center justify-center rounded-lg font-semibold shadow-sm",
+              tileLabelSizeClass(abbreviationPreview),
+            )}
+            style={tileColorFaceStyle(effectiveColor)}
+          >
+            {abbreviationPreview}
+          </span>
         </div>
       </div>
     </div>
