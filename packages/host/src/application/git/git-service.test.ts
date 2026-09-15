@@ -1298,47 +1298,54 @@ describe("createGitService", () => {
       affectedPaths: ["src/main.ts"],
     });
   });
-  test("rejects stale worktree reset snapshots before mutating git", async () => {
-    const service = createGitService(
-      createFakeGitPort({
-        canonicalPaths: { "/repo": "/canonical/repo" },
-        gitRepositories: ["/canonical/repo"],
-        worktreeStatuses: {
-          "/canonical/repo|origin/main|uncommitted": {
-            currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
-            fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
-            fileDiffs: [
-              {
-                file: "src/main.ts",
-                type: "modified",
-                additions: 1,
-                deletions: 1,
-                diff: "@@ -1 +1 @@\n-old\n+new\n",
-              },
-            ],
-            targetAheadBehind: { ahead: 1, behind: 0 },
-            upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
-          },
-        },
+  test.each(["content", "version"])("rejects a stale %s before mutating git", async (change) => {
+    const data: GitWorktreeStatusData = {
+      currentBranch: { name: "main", detached: false },
+      fileStatuses: [{ path: "file.ts", status: "modified", staged: false }],
+      fileDiffs: [
+        { file: "file.ts", type: "modified", additions: 1, deletions: 1, diff: "-old\n+new\n" },
+      ],
+      targetAheadBehind: { ahead: 0, behind: 0 },
+      upstreamAheadBehind: { outcome: "untracked", ahead: 0 },
+    };
+    let resetCalls = 0;
+    const port = createFakeGitPort({
+      canonicalPaths: { "/repo": "/canonical/repo" },
+      gitRepositories: ["/canonical/repo"],
+      worktreeStatuses: { "/canonical/repo|origin/main|uncommitted": data },
+    });
+    const service = createGitService({
+      ...port,
+      resetWorktreeSelection: () =>
+        Effect.sync(() => {
+          resetCalls += 1;
+          return { affectedPaths: ["file.ts"] };
+        }),
+    });
+    const current = await Effect.runPromise(
+      service.getWorktreeStatus({
+        repoPath: "/repo",
+        targetBranch: "origin/main",
+        diffScope: "uncommitted",
       }),
     );
+    if (change === "content") {
+      data.fileDiffs[0] = { ...data.fileDiffs[0]!, diff: "-old\n+NEW\n" };
+    }
     await expect(
       Effect.runPromise(
         service.resetWorktreeSelection({
           repoPath: "/repo",
           targetBranch: "origin/main",
           snapshot: {
-            hashVersion: 1,
-            statusHash: "0000000000000000",
-            diffHash: "0000000000000000",
+            ...current.snapshot,
+            hashVersion: change === "version" ? 2 : current.snapshot.hashVersion,
           },
-          selection: {
-            kind: "file",
-            filePath: "src/main.ts",
-          },
+          selection: { kind: "file", filePath: "file.ts" },
         }),
       ),
     ).rejects.toThrow("Displayed diff is stale. Refresh and try again.");
+    expect(resetCalls).toBe(0);
   });
   test("returns file diffs from an authorized worktree", async () => {
     const service = createGitService(
