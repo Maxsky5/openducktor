@@ -910,11 +910,16 @@ describe("createElectronHostCommandRouter", () => {
 
   test("registers migrated passive dev server state command", async () => {
     const { eventBus, events } = createEventBus();
+    const taskWorktreePath = "/home/dev/.openducktor/worktrees/repo/task-1";
     const router = await createElectronHostCommandRouter({
       devServerProcesses: createDevServerProcesses(),
       eventBus,
       filesystem: createFilesystem(),
-      git: createGit(),
+      git: {
+        ...createGit(),
+        isRegisteredWorktree: (_repoPath, worktreePath) =>
+          Effect.succeed(worktreePath === taskWorktreePath),
+      },
       openInTools: createOpenInTools(),
       settingsConfig: createSettingsConfig(
         globalConfig({
@@ -942,7 +947,7 @@ describe("createElectronHostCommandRouter", () => {
     ).resolves.toMatchObject({
       repoPath: "/repo",
       taskId: "task-1",
-      worktreePath: "/home/dev/.openducktor/worktrees/repo/task-1",
+      worktreePath: taskWorktreePath,
       scripts: [
         {
           scriptId: "web",
@@ -958,7 +963,7 @@ describe("createElectronHostCommandRouter", () => {
         taskId: "task-1",
       }),
     ).resolves.toEqual({
-      workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
+      workingDirectory: taskWorktreePath,
     });
     await expect(
       router.invoke("dev_server_start", {
