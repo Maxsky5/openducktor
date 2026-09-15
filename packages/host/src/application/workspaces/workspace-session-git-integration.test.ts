@@ -27,6 +27,8 @@ import {
 } from "../../interface/router/host-command-router";
 import { createWorkspaceSessionService } from "./workspace-session-service";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
+import { createWorkspaceOwnershipLock } from "./workspace-ownership-lock";
+
 const commitIdentity = [
   "-c",
   "user.name=Workspace Test",
@@ -42,8 +44,6 @@ const runGit = (cwd: string, ...args: string[]) =>
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-import { createWorkspaceOwnershipLock } from "./workspace-ownership-lock";
-import { withWorkspaceSessionTarget } from "./workspace-session-target";
 
 describe("Workspace Session commands with real Git and SQLite", () => {
   let fixtureRoot: string;
