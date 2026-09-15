@@ -167,7 +167,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       worktree: { mode: "from_name", name: "named-chat", branchName: null },
       manualTitle: null,
     };
-    return { router, createInput, starts, events, targetDependencies, config };
+    return { router, createInput, starts, events, targetDependencies };
   };
 
   test.each(["from_name", "from_branch"])(

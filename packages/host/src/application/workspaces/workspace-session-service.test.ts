@@ -440,16 +440,21 @@ describe("host-owned Workspace Session lifecycle", () => {
       Effect.succeed([
         { name: "feature/existing", isCurrent: false, isRemote: false, worktreePath: occupied },
       ]);
-    await expect(
-      Effect.runPromise(
+    const error = await Effect.runPromise(
+      Effect.flip(
         h.service.create({
           ...worktreeInput(),
           worktree: { mode: "from_branch", name: "different-name", branchName: "feature/existing" },
         }),
       ),
-    ).rejects.toThrow(
-      `Branch feature/existing is already checked out at ${occupied}. Choose another branch or use Current checkout.`,
     );
+    expect(hostInvokeFailureFromError(error)).toEqual({
+      kind: "workspace_session_validation",
+      field: "worktree.branchName",
+    });
+    expect(error).toMatchObject({
+      message: `Branch feature/existing is already checked out at ${occupied}. Choose another branch or use Current checkout.`,
+    });
     expect(h.calls).toEqual([]);
     expect([...h.branches]).toEqual(["refs/heads/feature/existing"]);
   });
