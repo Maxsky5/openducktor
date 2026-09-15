@@ -319,15 +319,10 @@ export const collectWorkspaceTaskWorktreePaths = (
         candidate.taskId,
       );
       if (!(yield* dependencies.settingsConfig.pathExists(candidate.path))) {
-        if (
-          pendingWorktreePath !== null &&
-          candidateComparison === normalizePathForComparison(pendingWorktreePath)
-        ) {
-          const registeredPath = inventoryPaths.get(candidateComparison);
-          if (registeredPath !== undefined) {
-            seen.add(candidateComparison);
-            worktreePaths.push(registeredPath);
-          }
+        const registeredPath = inventoryPaths.get(candidateComparison);
+        if (registeredPath !== undefined) {
+          seen.add(candidateComparison);
+          worktreePaths.push(registeredPath);
         }
         continue;
       }

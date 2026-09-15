@@ -13,7 +13,6 @@ import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import { createWorkspaceRepoResolver } from "./workspace-repo-resolver";
 
 export type WorkspaceBlockReason = "closed" | "removal";
-
 export type WorkspaceReservationOperation = "close" | "reopen" | "remove";
 
 type BlockedWorkspace = {
@@ -274,6 +273,13 @@ export const createWorkspaceAdmissionService = ({
         .pipe(Effect.mapError(mapCheckError));
       if (normalizePathForComparison(canonicalWorkingDirectory) === repoPathKey) {
         return;
+      }
+      const ownerRepoPath = yield* resolveWorkspaceRepoPath(canonicalWorkingDirectory);
+      if (ownerRepoPath !== null && normalizePathForComparison(ownerRepoPath) !== repoPathKey) {
+        return yield* new HostValidationError({
+          message: `Working directory ${workingDirectory} belongs to workspace ${ownerRepoPath}, not ${repoPath}.`,
+          field: "workingDirectory",
+        });
       }
       const sharesGitDirectory = yield* gitPort
         .shareGitCommonDirectory(repoPath, canonicalWorkingDirectory)

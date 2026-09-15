@@ -118,6 +118,33 @@ describe("workspace admission service", () => {
     ).resolves.toBe("/repos/ws");
   });
 
+  test("resolves a worktree from its workspace base before its shared Git repository", async () => {
+    const admission = createAdmission(
+      catalog({
+        openWorkspaces: [
+          workspaceRecord("first", "/repos/first"),
+          workspaceRecord("second", "/repos/second"),
+        ],
+      }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+        listWorktrees: () =>
+          Effect.succeed([
+            { branch: "main", worktreePath: "/repos/first" },
+            { branch: "second", worktreePath: "/repos/second" },
+            { branch: "task", worktreePath: "/managed/second/task" },
+          ]),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.resolveWorkspaceRepoPath("/managed/second/task")),
+    ).resolves.toBe("/repos/second");
+  });
+
   test("loads closed and incomplete removal workspaces", async () => {
     const admission = createAdmission(
       catalog({
@@ -355,10 +382,16 @@ describe("workspace admission service", () => {
   test("accepts only the repository or one of its registered worktrees", async () => {
     const operation = mock(() => {});
     const gitPort = createGitPortTestDouble({
+      isGitRepository: (workingDirectory) => Effect.succeed(workingDirectory === "/worktrees/ws"),
       shareGitCommonDirectory: (_repoPath, workingDirectory) =>
         Effect.succeed(workingDirectory === "/worktrees/ws"),
       isRegisteredWorktree: (_repoPath, workingDirectory) =>
         Effect.succeed(workingDirectory === "/worktrees/ws"),
+      listWorktrees: () =>
+        Effect.succeed([
+          { branch: "main", worktreePath: "/repos/ws" },
+          { branch: "task", worktreePath: "/worktrees/ws" },
+        ]),
     });
     const admission = createAdmission(
       catalog({ openWorkspaces: [workspaceRecord("ws", "/repos/ws")] }),
@@ -380,6 +413,43 @@ describe("workspace admission service", () => {
         admission.withWorkStartLease("/repos/ws", Effect.succeed("started"), "/worktrees/ws"),
       ),
     ).resolves.toBe("started");
+  });
+
+  test("rejects a registered worktree owned by another workspace", async () => {
+    const operation = mock(() => {});
+    const admission = createAdmission(
+      catalog({
+        openWorkspaces: [
+          workspaceRecord("first", "/repos/first"),
+          workspaceRecord("second", "/repos/second"),
+        ],
+      }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+        isRegisteredWorktree: () => Effect.succeed(true),
+        listWorktrees: () =>
+          Effect.succeed([
+            { branch: "main", worktreePath: "/repos/first" },
+            { branch: "second", worktreePath: "/repos/second" },
+            { branch: "task", worktreePath: "/managed/second/task" },
+          ]),
+        shareGitCommonDirectory: () => Effect.succeed(true),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        admission.withWorkStartLease(
+          "/repos/first",
+          Effect.sync(operation),
+          "/managed/second/task",
+        ),
+      ),
+    ).rejects.toThrow("belongs to workspace /repos/second, not /repos/first");
+    expect(operation).not.toHaveBeenCalled();
   });
 
   test("claims cross-process ownership before a work start", async () => {
