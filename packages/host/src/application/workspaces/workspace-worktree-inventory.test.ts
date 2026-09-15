@@ -374,7 +374,7 @@ describe("workspace worktree inventory", () => {
     expect(paths).toEqual([worktreePath]);
   });
 
-  test("rejects a candidate claimed by another workspace on the shared base", async () => {
+  test("rejects another workspace on the same worktree base", async () => {
     const dependencies = createDependencies({
       canonicalizePath: (path) => Effect.succeed(path),
       listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
@@ -403,11 +403,10 @@ describe("workspace worktree inventory", () => {
       ),
     );
 
-    expect(error.message).toContain("another workspace also claims it");
-    expect(error.message).toContain("/base/task-1");
+    expect(error.message).toContain("worktree base overlaps workspace other");
   });
 
-  test("rejects a candidate claimed through an aliased workspace base", async () => {
+  test("rejects an aliased overlapping workspace base", async () => {
     const dependencies = createDependencies({
       canonicalizePath: (path) =>
         Effect.succeed(path === "/link-base/task-1" ? "/base/task-1" : path),
@@ -432,10 +431,10 @@ describe("workspace worktree inventory", () => {
       ),
     );
 
-    expect(error.message).toContain("another workspace also claims it");
+    expect(error.message).toContain("worktree base overlaps workspace other");
   });
 
-  test("rejects removal when another workspace on the shared base has an incomplete removal", async () => {
+  test("rejects an overlapping base from an incomplete removal", async () => {
     const listedRepos: string[] = [];
     const dependencies = createDependencies({
       canonicalizePath: (path) => Effect.succeed(path),
@@ -459,11 +458,11 @@ describe("workspace worktree inventory", () => {
       ),
     );
 
-    expect(error.message).toContain("incomplete removal on an overlapping worktree base");
+    expect(error.message).toContain("worktree base overlaps workspace other");
     expect(listedRepos).toEqual(["/repos/ws"]);
   });
 
-  test("rejects removal when a nested workspace base is claimed by a candidate", async () => {
+  test("rejects a workspace base nested at a candidate path", async () => {
     const dependencies = createDependencies({
       canonicalizePath: (path) => Effect.succeed(path),
       listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
@@ -481,11 +480,10 @@ describe("workspace worktree inventory", () => {
       ),
     );
 
-    expect(error.message).toContain("contains the worktree base");
-    expect(error.message).toContain("/base/task-1");
+    expect(error.message).toContain("worktree base overlaps workspace other");
   });
 
-  test("rejects removal when a nested workspace base is deeper than the candidate", async () => {
+  test("rejects a workspace base nested below a candidate path", async () => {
     const dependencies = createDependencies({
       canonicalizePath: (path) => Effect.succeed(path),
       listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
@@ -503,10 +501,10 @@ describe("workspace worktree inventory", () => {
       ),
     );
 
-    expect(error.message).toContain("contains the worktree base");
+    expect(error.message).toContain("worktree base overlaps workspace other");
   });
 
-  test("rejects removal when an incomplete removal has a nested base under the managed base", async () => {
+  test("rejects a nested base from an incomplete removal", async () => {
     const listedRepos: string[] = [];
     const dependencies = createDependencies({
       canonicalizePath: (path) => Effect.succeed(path),
@@ -530,7 +528,7 @@ describe("workspace worktree inventory", () => {
       ),
     );
 
-    expect(error.message).toContain("incomplete removal on an overlapping worktree base");
+    expect(error.message).toContain("worktree base overlaps workspace other");
     expect(listedRepos).toEqual(["/repos/ws"]);
   });
 

@@ -303,32 +303,28 @@ describe("workspace admission service", () => {
     ).rejects.toThrow("Workspace removal is incomplete for ws");
   });
 
-  test("blocks task store writes for closed workspaces but allows reads", async () => {
+  test("blocks all task store access for closed workspaces without claiming them", async () => {
+    const claimWorkspace = mock((_workspaceId: string) => Effect.void);
     const admission = createAdmission(
       catalog({
         closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")],
       }),
+      undefined,
+      claimWorkspace,
     );
 
-    await expect(
-      Effect.runPromise(
-        admission.assertTaskStoreAccess({
-          operation: "sqliteTaskRepository.createTask",
-          repoPath: "/repos/closed",
-          workspaceId: "closed-ws",
-        }),
-      ),
-    ).rejects.toThrow("Workspace is closed: closed-ws");
-
-    await expect(
-      Effect.runPromise(
-        admission.assertTaskStoreAccess({
-          operation: "sqliteTaskRepository.listTasks",
-          repoPath: "/repos/closed",
-          workspaceId: "closed-ws",
-        }),
-      ),
-    ).resolves.toBeUndefined();
+    for (const operation of ["sqliteTaskRepository.createTask", "sqliteTaskRepository.listTasks"]) {
+      await expect(
+        Effect.runPromise(
+          admission.assertTaskStoreAccess({
+            operation,
+            repoPath: "/repos/closed",
+            workspaceId: "closed-ws",
+          }),
+        ),
+      ).rejects.toThrow("Workspace is closed: closed-ws");
+    }
+    expect(claimWorkspace).not.toHaveBeenCalled();
   });
 
   test("blocks all ordinary task store access while removal is incomplete", async () => {
@@ -738,7 +734,7 @@ describe("workspace admission service", () => {
     ).resolves.toBeUndefined();
   });
 
-  test("reservations block process starts and gate task store access by operation", async () => {
+  test("reservations block process starts and all task store access", async () => {
     const admission = createAdmission(catalog());
 
     await Effect.runPromise(
@@ -760,7 +756,7 @@ describe("workspace admission service", () => {
           workspaceId: "ws",
         }),
       ),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow("already in progress for ws");
     await expect(
       Effect.runPromise(
         admission.assertTaskStoreAccess({

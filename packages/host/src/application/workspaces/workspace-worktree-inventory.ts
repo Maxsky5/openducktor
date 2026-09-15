@@ -85,15 +85,8 @@ export const collectWorkspaceTaskWorktreePaths = (
       ...catalog.closedWorkspaces,
       ...catalog.incompleteRemovals.map((removal) => removal.workspace),
     ].filter((workspace) => workspace.workspaceId !== workspaceId);
-    const incompleteRemovalWorkspaceIds = new Set(
-      catalog.incompleteRemovals.map((removal) => removal.workspace.workspaceId),
-    );
     const managedBaseComparison = normalizePathForComparison(managedBaseForComparison);
     const otherWorkspacePaths: { workspaceId: string; comparison: string }[] = [];
-    const overlappingBaseWorkspaces: {
-      workspace: WorkspaceRecord;
-      baseComparison: string;
-    }[] = [];
     for (const workspace of otherWorkspaces) {
       otherWorkspacePaths.push({
         workspaceId: workspace.workspaceId,
@@ -124,26 +117,17 @@ export const collectWorkspaceTaskWorktreePaths = (
         pathStartsWith(otherBaseForComparison, managedBaseComparison) ||
         pathStartsWith(managedBaseComparison, otherBaseForComparison)
       ) {
-        overlappingBaseWorkspaces.push({
-          workspace,
-          baseComparison: otherBaseForComparison,
-        });
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Cannot remove task worktrees under ${managedWorktreeBasePath}: its worktree base overlaps workspace ${workspace.workspaceId}. Change one worktree base, or retry without removing task worktrees.`,
+            field: "worktreePath",
+            details: {
+              repoPath,
+              overlappingWorkspaceId: workspace.workspaceId,
+            },
+          }),
+        );
       }
-    }
-    const unreadableOverlappingBaseRemoval = overlappingBaseWorkspaces.find((entry) =>
-      incompleteRemovalWorkspaceIds.has(entry.workspace.workspaceId),
-    );
-    if (unreadableOverlappingBaseRemoval) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          message: `Cannot check task worktree ownership under ${managedWorktreeBasePath}: workspace ${unreadableOverlappingBaseRemoval.workspace.workspaceId} has an incomplete removal on an overlapping worktree base. Finish that removal first, or retry without removing task worktrees.`,
-          field: "worktreePath",
-          details: {
-            repoPath,
-            overlappingWorkspaceId: unreadableOverlappingBaseRemoval.workspace.workspaceId,
-          },
-        }),
-      );
     }
     const deletedTaskStoreWorkspaceIds = new Set(
       catalog.incompleteRemovals
@@ -198,23 +182,6 @@ export const collectWorkspaceTaskWorktreePaths = (
       taskId: string | null,
     ) =>
       Effect.gen(function* () {
-        const containingBase = overlappingBaseWorkspaces.find((entry) =>
-          pathStartsWith(entry.baseComparison, comparison),
-        );
-        if (containingBase) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              message: `Cannot remove ${worktreePath}: it contains the worktree base of workspace ${containingBase.workspace.workspaceId}. Change that base first, or retry without removing task worktrees.`,
-              field: "worktreePath",
-              details: {
-                repoPath,
-                taskId,
-                worktreePath,
-                overlappingWorkspaceId: containingBase.workspace.workspaceId,
-              },
-            }),
-          );
-        }
         const relatedClaim = findRelatedWorkspaceClaim(comparison);
         if (relatedClaim !== undefined) {
           let claimDescription: string;
