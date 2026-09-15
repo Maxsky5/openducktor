@@ -186,7 +186,7 @@ describe("removeWorktreeAndFilesystemPath", () => {
     });
     await expect(
       removeForcedWorktree(harness, "/real/worktrees/task-1", "/configured/worktrees"),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ filesystemDeletionVerified: false });
     expect(harness.calls).toContain("removePathIfPresent:/real/worktrees/task-1");
   });
   test("preserves an actionable final filesystem cleanup error", async () => {
@@ -237,7 +237,9 @@ describe("removeWorktreeAndFilesystemPath", () => {
       ],
     });
 
-    await expect(removeForcedWorktree(harness, outsidePath)).resolves.toBeUndefined();
+    await expect(removeForcedWorktree(harness, outsidePath)).resolves.toEqual({
+      filesystemDeletionVerified: true,
+    });
     expect(harness.calls).toEqual([
       `isRegisteredWorktree:/repo|${outsidePath}`,
       `removeWorktree:/repo|${outsidePath}|true`,
@@ -259,7 +261,9 @@ describe("removeWorktreeAndFilesystemPath", () => {
       ],
     });
 
-    await expect(removeForcedWorktree(harness, aliasPath)).resolves.toBeUndefined();
+    await expect(removeForcedWorktree(harness, aliasPath)).resolves.toEqual({
+      filesystemDeletionVerified: true,
+    });
     expect(harness.calls).toEqual([
       `isRegisteredWorktree:/repo|${canonicalPath}`,
       `removeWorktree:/repo|${canonicalPath}|true`,
@@ -363,7 +367,9 @@ describe("removeWorktreeAndFilesystemPath", () => {
         cleanupResolution(cleanupPath, "descendant"),
       ],
     });
-    await expect(removeForcedWorktree(harness, cleanupPath)).resolves.toBeUndefined();
+    await expect(removeForcedWorktree(harness, cleanupPath)).resolves.toEqual({
+      filesystemDeletionVerified: true,
+    });
     expect(harness.calls).toContain(`removePathIfPresent:${cleanupPath}`);
   });
   test("accepts reconstructed casing after a managed target is removed", async () => {
@@ -379,7 +385,9 @@ describe("removeWorktreeAndFilesystemPath", () => {
         cleanupResolution(cleanupPath, "descendant", cleanupPath),
       ],
     });
-    await expect(removeForcedWorktree(harness, cleanupPath)).resolves.toBeUndefined();
+    await expect(removeForcedWorktree(harness, cleanupPath)).resolves.toEqual({
+      filesystemDeletionVerified: true,
+    });
     expect(harness.calls).toContain(`removePathIfPresent:${cleanupPath}`);
   });
   test.skipIf(process.platform !== "win32")(
@@ -393,7 +401,7 @@ describe("removeWorktreeAndFilesystemPath", () => {
       });
       await expect(
         removeForcedWorktree(harness, String.raw`C:\Managed\Worktrees\Task-1`),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual({ filesystemDeletionVerified: true });
       expect(harness.calls).toContain(String.raw`removePathIfPresent:c:\managed\worktrees\task-1`);
     },
   );
@@ -422,7 +430,7 @@ describe("removeWorktreeAndFilesystemPath", () => {
     });
     await expect(
       removeForcedWorktree(harness, outsidePath, "/managed/worktrees", "skip"),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ filesystemDeletionVerified: false });
     expect(harness.calls).toContain(`isRegisteredWorktree:/repo|${outsidePath}`);
     expect(harness.calls).not.toContain(`removePathIfPresent:${outsidePath}`);
   });

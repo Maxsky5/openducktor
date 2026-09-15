@@ -1,4 +1,4 @@
-const CONTEXT_MENU_CLAIM_WINDOW_MS = 250;
+export const CONTEXT_MENU_CLAIM_WINDOW_MS = 250;
 
 export type ContextMenuClaimTracker = {
   claim(): void;
