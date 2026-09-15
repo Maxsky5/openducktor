@@ -15,12 +15,12 @@ import {
   HostOperationError,
   HostResourceError,
   HostValidationError,
-  type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrator-service";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
+import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
   validateWorkspaceSessionTarget,
@@ -42,10 +42,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
     AgentSessionLiveStateService,
     "startSession" | "releaseSession" | "read" | "stopSession"
   >;
-  withWorkStartLease<A, E, R>(
-    repoPath: string,
-    effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
+  withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"];
 };
 
 export const createWorkspaceSessionService = (
@@ -295,11 +292,18 @@ export const createWorkspaceSessionService = (
                 });
               }
               const config = yield* settings.getRepoConfig(input.workspaceId);
-              yield* readWorkspaceSessionArchivePreview(
+              const preview = yield* readWorkspaceSessionArchivePreview(
                 dependencies,
                 { ...config, repoPath: ref.repoPath },
                 target,
               );
+              if (preview.worktreeExists) {
+                yield* dependencies.withWorkStartLease(
+                  ref.repoPath,
+                  Effect.void,
+                  target.workingDirectory,
+                );
+              }
             } else if (session.externalSessionId !== null) {
               yield* validateWorkspaceSessionTarget(dependencies, ref.repoPath, target);
             }

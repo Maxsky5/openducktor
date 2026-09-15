@@ -211,13 +211,7 @@ export const createWorkspaceAdmissionService = ({
       }
       const reservation = reservationsByWorkspaceId.get(input.workspaceId);
       if (reservation) {
-        if (
-          reservation.operation === "remove" ||
-          reservation.operation === "reopen" ||
-          isTaskStoreWriteOperation(input.operation)
-        ) {
-          return yield* Effect.fail(reservedWorkspaceError(reservation));
-        }
+        return yield* Effect.fail(reservedWorkspaceError(reservation));
       }
       const repoConfig = yield* workspaceSettingsService.getRepoConfig(input.workspaceId).pipe(
         Effect.mapError(
@@ -231,9 +225,7 @@ export const createWorkspaceAdmissionService = ({
       );
       const blocked = persistedBlock(repoConfig);
       if (blocked) {
-        if (blocked.reason === "removal" || isTaskStoreWriteOperation(input.operation)) {
-          return yield* Effect.fail(blockedWorkspaceError(blocked));
-        }
+        return yield* Effect.fail(blockedWorkspaceError(blocked));
       }
       yield* claimWorkspace(input.workspaceId);
     });
@@ -465,19 +457,6 @@ export const createWorkspaceAdmissionService = ({
     },
   };
 };
-
-// Adapter operation names. Only these change stored task data.
-const TASK_STORE_WRITE_OPERATION =
-  /\.(clear|create|delete|promote|record|register|remove|set|transition|update|upsert)/i;
-const WORKSPACE_SESSION_WRITE_OPERATIONS = new Set([
-  "workspaceSessionStore.archive",
-  "workspaceSessionStore.bindRuntimeSession",
-  "workspaceSessionStore.rename",
-  "workspaceSessionStore.restore",
-]);
-
-const isTaskStoreWriteOperation = (operation: string): boolean =>
-  WORKSPACE_SESSION_WRITE_OPERATIONS.has(operation) || TASK_STORE_WRITE_OPERATION.test(operation);
 
 const blockedWorkspaceError = (blocked: BlockedWorkspace): HostValidationError => {
   if (blocked.reason === "removal") {
