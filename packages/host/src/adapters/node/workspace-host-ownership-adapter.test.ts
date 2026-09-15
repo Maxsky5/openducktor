@@ -137,6 +137,28 @@ setInterval(() => {}, 60_000);`,
     }
   });
 
+  test("keeps a partial ownership release actionable", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
+    const workspaceId = "workspace-1";
+    const ownerPath = ownerPathFor(configDir, workspaceId);
+    const ownership = createNodeWorkspaceHostOwnership({
+      processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir },
+    });
+
+    try {
+      await Effect.runPromise(ownership.claimWorkspace(workspaceId));
+      await writeFile(path.join(`${ownerPath}.lock`, "block-release"), "");
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await expect(Effect.runPromise(ownership.releaseWorkspace(workspaceId))).rejects.toThrow(
+          "Restart OpenDucktor, wait 30 seconds, and retry the removal",
+        );
+      }
+    } finally {
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
   test("recovers a stale claim only after it proves that the owner stopped", async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
     const workspaceId = "workspace-1";

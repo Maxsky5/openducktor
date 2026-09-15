@@ -53,11 +53,16 @@ export const createWorkspaceRepoResolver =
           normalizePathForComparison(worktree.worktreePath),
         ),
       );
-      return (
-        workspaces.find((workspace) =>
-          worktreePaths.has(normalizePathForComparison(workspace.repoPath)),
-        )?.repoPath ?? null
+      const gitWorkspaces = workspaces.filter((workspace) =>
+        worktreePaths.has(normalizePathForComparison(workspace.repoPath)),
       );
+      if (gitWorkspaces.length > 1) {
+        return yield* new HostValidationError({
+          message: `Multiple workspaces share the Git repository for ${workingDirectory}. Use a current workspace worktree base and retry.`,
+          field: "workingDirectory",
+        });
+      }
+      return gitWorkspaces[0]?.repoPath ?? null;
     }).pipe(
       Effect.mapError((cause) =>
         cause instanceof HostValidationError

@@ -146,6 +146,14 @@ const recoveryError = (
     details: { owner, ownerPath, workspaceId },
   });
 
+const releaseRecoveryError = (workspaceId: string, ownerPath: string, cause?: unknown) =>
+  new HostOperationError({
+    operation: "workspaceHostOwnership.release",
+    message: `The workspace ownership release did not finish for ${workspaceId}. Restart OpenDucktor, wait 30 seconds, and retry the removal.`,
+    cause,
+    details: { ownerPath, workspaceId },
+  });
+
 const mapClaimError = (
   cause: unknown,
   workspaceId: string,
@@ -230,21 +238,30 @@ export const createNodeWorkspaceHostOwnership = (
   const releaseClaim = (workspaceId: string, claim: WorkspaceClaim) =>
     Effect.tryPromise({
       try: async () => {
-        const owner = await readOwner(claim.ownerPath, workspaceId);
+        const owner = await readOwnerIfPresent(claim.ownerPath, workspaceId);
+        if (!owner) {
+          throw releaseRecoveryError(workspaceId, claim.ownerPath);
+        }
         if (owner.instanceId !== claim.owner.instanceId) {
           throw ownerMismatchError(workspaceId, claim.ownerPath);
         }
         await rm(claim.ownerPath, { force: true });
-        await claim.release();
+        try {
+          await claim.release();
+        } catch (cause) {
+          throw releaseRecoveryError(workspaceId, claim.ownerPath, cause);
+        }
         claims.delete(workspaceId);
       },
       catch: (cause) =>
-        new HostOperationError({
-          operation: "workspaceHostOwnership.release",
-          message: `Failed to release workspace ${workspaceId} from this OpenDucktor host.`,
-          cause,
-          details: { ownerPath: claim.ownerPath, workspaceId },
-        }),
+        cause instanceof HostOperationError
+          ? cause
+          : new HostOperationError({
+              operation: "workspaceHostOwnership.release",
+              message: `Failed to release workspace ${workspaceId} from this OpenDucktor host.`,
+              cause,
+              details: { ownerPath: claim.ownerPath, workspaceId },
+            }),
     });
 
   return {

@@ -178,6 +178,33 @@ describe("workspace admission service", () => {
     ).rejects.toThrow("Multiple workspace worktree bases match");
   });
 
+  test("rejects multiple workspace roots from the shared Git fallback", async () => {
+    const admission = createAdmission(
+      catalog({
+        openWorkspaces: [
+          workspaceRecord("first", "/repos/first"),
+          workspaceRecord("second", "/repos/second"),
+        ],
+      }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+        listWorktrees: () =>
+          Effect.succeed([
+            { branch: "main", worktreePath: "/repos/first" },
+            { branch: "second", worktreePath: "/repos/second" },
+            { branch: "legacy", worktreePath: "/legacy/task" },
+          ]),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.resolveWorkspaceRepoPath("/legacy/task")),
+    ).rejects.toThrow("Multiple workspaces share the Git repository");
+  });
+
   test("loads closed and incomplete removal workspaces", async () => {
     const admission = createAdmission(
       catalog({
