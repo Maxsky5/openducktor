@@ -165,9 +165,12 @@ test("renders the description as a bounded markdown preview inside the five-line
 
 test("renders a task asset image as preview alt text without a task context alert", async () => {
   const assetId = "550e8400-e29b-41d4-a716-446655440000";
-  const description = [`![Screenshot](odt-asset:${assetId} "shot.png")`, "", "b".repeat(2000)].join(
-    "\n",
-  );
+  const description = [
+    `![Screenshot](odt-asset:${assetId} "shot.png")`,
+    `![](odt-asset:${assetId} "diagram.png")`,
+    "",
+    "b".repeat(2000),
+  ].join("\n");
   const html = await renderMessageCardToHtml(
     createToolElement("openducktor_odt_create_task", {
       output: JSON.stringify({ task: { ...task(), description } }),
@@ -177,9 +180,22 @@ test("renders a task asset image as preview alt text without a task context aler
   const preview = document.querySelector("[data-task-id] .line-clamp-5");
   expect(preview?.classList.contains("line-clamp-5")).toBe(true);
   expect(preview?.textContent).toContain("Screenshot");
+  expect(preview?.textContent).toContain("diagram.png");
   expect(preview?.querySelector("svg.lucide-image")).not.toBeNull();
   expect(preview?.textContent).not.toContain("b".repeat(1000));
   expect(html).not.toContain("task context is unavailable");
+  expect(document.querySelector("[data-task-id] img")).toBeNull();
+});
+
+test("does not load a remote image in the description preview", () => {
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({
+      task: { ...task(), description: "![Architecture](https://example.com/diagram.png)" },
+    }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .line-clamp-5");
+  expect(preview?.textContent).toContain("Architecture");
   expect(document.querySelector("[data-task-id] img")).toBeNull();
 });
 

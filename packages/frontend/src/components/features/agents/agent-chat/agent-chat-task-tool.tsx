@@ -35,7 +35,10 @@ const TASK_DESCRIPTION_PREVIEW_CLASS_NAME = cn(
   "prose-blockquote:text-muted-foreground",
 );
 
-const TaskDescriptionPreviewImage = ({ alt }: ComponentProps<"img"> & ExtraProps): ReactElement => (
+const TaskDescriptionPreviewImage = ({
+  alt,
+  title,
+}: ComponentProps<"img"> & ExtraProps): ReactElement => (
   <span
     className={cn(
       "mx-0.5 inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5",
@@ -43,7 +46,7 @@ const TaskDescriptionPreviewImage = ({ alt }: ComponentProps<"img"> & ExtraProps
     )}
   >
     <ImageIcon aria-hidden="true" className="size-3 shrink-0" />
-    <span className="min-w-0 truncate">{alt?.trim() || "Image"}</span>
+    <span className="min-w-0 truncate">{alt?.trim() || title?.trim() || "Image"}</span>
   </span>
 );
 
