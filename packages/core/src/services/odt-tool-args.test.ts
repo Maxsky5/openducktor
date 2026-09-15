@@ -19,14 +19,13 @@ describe("formatOdtToolArgs", () => {
     (toolName) => {
       const toolArgs = formatOdtToolArgs(toolName);
       const toolSchema = ODT_TOOL_SCHEMAS[toolName];
-      const schemaArgs = Object.keys(toolSchema.shape).filter((name) => name !== "workspaceId");
+      const schemaArgs = Object.entries(toolSchema.shape).filter(
+        ([name]) => name !== "workspaceId",
+      );
 
-      expect(parseArgNames(toolArgs)).toEqual(schemaArgs);
+      expect(parseArgNames(toolArgs)).toEqual(schemaArgs.map(([name]) => name));
 
-      for (const [name, field] of Object.entries(toolSchema.shape)) {
-        if (name === "workspaceId") {
-          continue;
-        }
+      for (const [name, field] of schemaArgs) {
         const optionalMarker = field.safeParse(undefined).success ? "?" : "";
         expect(toolArgs).toContain(`"${name}"${optionalMarker}:`);
       }
