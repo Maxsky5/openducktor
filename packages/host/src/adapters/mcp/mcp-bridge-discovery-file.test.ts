@@ -39,7 +39,7 @@ describe("MCP bridge discovery file", () => {
     ).toBe(
       path.join(
         homedir(),
-        ".openducktor",
+        ".openducktor-dev",
         "runtime",
         "dev-instances",
         "browser-0123456789ab",

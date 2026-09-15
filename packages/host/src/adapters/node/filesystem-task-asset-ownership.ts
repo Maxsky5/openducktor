@@ -6,10 +6,6 @@ import { promisify } from "node:util";
 import { taskAssetIdSchema } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
-import {
-  type OpenDucktorConfigDirScope,
-  resolveOpenDucktorBaseDir,
-} from "../../config/openducktor-config-dir";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 
 const taskAssetFileOwnerSchema = z
@@ -112,10 +108,10 @@ const defaultOwnership = (): TaskAssetFileOwnershipDependencies => ({
 export const createTaskAssetFileOwnership = (
   {
     configDir,
-    configDirScope = "production",
+    removeRecursively,
   }: {
     configDir: string;
-    configDirScope?: OpenDucktorConfigDirScope;
+    removeRecursively: (target: string) => Promise<void>;
   },
   dependencies: TaskAssetFileOwnershipDependencies = defaultOwnership(),
 ) => {
@@ -129,26 +125,6 @@ export const createTaskAssetFileOwnership = (
     `.publishing-${owner.instanceId}-${owner.processId}-${owner.startedAtMs}-${randomUUID()}.json`;
   const quarantineRootFor = (instanceId: string) =>
     path.join(quarantineRoot, "instances", instanceId);
-  const productionConfigDir = path.resolve(resolveOpenDucktorBaseDir("production", {}));
-  const assertRecursiveDeleteAllowed = (target: string): void => {
-    if (configDirScope !== "test") {
-      return;
-    }
-    const relative = path.relative(productionConfigDir, path.resolve(target));
-    const isWithinProductionConfig =
-      relative === "" ||
-      (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
-    if (isWithinProductionConfig) {
-      throw new Error(
-        `Test scope refuses to recursively delete ${target} under the production config directory ${productionConfigDir}.`,
-      );
-    }
-  };
-  const removeRecursively = async (target: string): Promise<void> => {
-    assertRecursiveDeleteAllowed(target);
-    await rm(target, { force: true, recursive: true });
-  };
-
   const parseOwnerPublication = (name: string): TaskAssetFileOwner | null => {
     const match =
       /^\.publishing-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-([1-9]\d*)-(\d+)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/.exec(
@@ -278,7 +254,6 @@ export const createTaskAssetFileOwnership = (
   };
 
   const clearExpiredStaging = async (): Promise<number> => {
-    assertRecursiveDeleteAllowed(stagingRoot);
     const deadOwners = await listDead();
     let removed = 0;
     if (await existingStat(stagingRoot)) {
@@ -310,7 +285,6 @@ export const createTaskAssetFileOwnership = (
   };
 
   const cleanupCurrent = async (): Promise<void> => {
-    assertRecursiveDeleteAllowed(ownedStagingRoot);
     await ensureCurrent();
     await removeRecursively(ownedStagingRoot);
     const quarantineEntries = (await existingStat(ownedQuarantineRoot))

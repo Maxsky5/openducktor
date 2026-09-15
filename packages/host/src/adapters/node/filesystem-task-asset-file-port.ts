@@ -24,6 +24,7 @@ import {
   validateTaskAssetStageContext as validateStageContext,
   validateTaskAssetTaskContext as validateTaskContext,
 } from "./filesystem-task-asset-errors";
+import { createTaskAssetFileSafety } from "./filesystem-task-asset-file-safety";
 import {
   createTaskAssetFileOwnership,
   type TaskAssetFileOwnershipDependencies,
@@ -59,8 +60,13 @@ export const createNodeTaskAssetFilePort = (
   },
   ownership?: TaskAssetFileOwnershipDependencies,
 ): TaskAssetFilePort => {
+  const fileSafety = createTaskAssetFileSafety({ configDir, configDirScope });
+  fileSafety.assertConfigDirAllowed();
   const durableRoot = path.resolve(configDir, "task-assets");
-  const ownerState = createTaskAssetFileOwnership({ configDir, configDirScope }, ownership);
+  const ownerState = createTaskAssetFileOwnership(
+    { configDir, removeRecursively: fileSafety.removeRecursively },
+    ownership,
+  );
   const { ownedQuarantineRoot, ownedStagingRoot, quarantineRoot } = ownerState;
   const stagedPath = (workspaceId: string, assetId: string) =>
     path.join(ownedStagingRoot, workspaceId, assetId);
@@ -70,6 +76,7 @@ export const createNodeTaskAssetFilePort = (
     createTaskAssetQuarantineFiles({
       durableRoot,
       quarantineRoot: root,
+      removeRecursively: fileSafety.removeRecursively,
       reservedDirectoryNames,
     });
   const quarantineFiles = quarantineFilesForRoot(ownedQuarantineRoot, []);
@@ -287,7 +294,7 @@ export const createNodeTaskAssetFilePort = (
                         await mkdir(path.dirname(move.from), { recursive: true });
                         await rename(move.to, move.from);
                       }
-                      await rm(root, { force: true, recursive: true });
+                      await fileSafety.removeRecursively(root);
                     },
                     {
                       operation: input.operation,

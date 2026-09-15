@@ -62,10 +62,12 @@ const validateManifest = (value: JSONType): QuarantineManifest => {
 export const createTaskAssetQuarantineFiles = ({
   durableRoot,
   quarantineRoot,
+  removeRecursively,
   reservedDirectoryNames,
 }: {
   durableRoot: string;
   quarantineRoot: string;
+  removeRecursively: (target: string) => Promise<void>;
   reservedDirectoryNames: readonly string[];
 }) => {
   const root = (quarantineId: string) => path.join(quarantineRoot, quarantineId);
@@ -101,7 +103,7 @@ export const createTaskAssetQuarantineFiles = ({
     for (const entry of entries) {
       const entryPath = path.join(quarantineRoot, entry.name);
       if (entry.name.startsWith(PUBLICATION_PREFIX) && !ACTIVE_PUBLICATIONS.has(entryPath)) {
-        await rm(entryPath, { force: true, recursive: true });
+        await removeRecursively(entryPath);
         continue;
       }
       if (reservedDirectoryNames.includes(entry.name)) {
@@ -121,7 +123,7 @@ export const createTaskAssetQuarantineFiles = ({
       }
       if (!childNames.includes("manifest.json")) {
         if (childNames.length === 0) {
-          await rm(entryPath, { force: true, recursive: true });
+          await removeRecursively(entryPath);
           continue;
         }
         throw new Error(`Task asset quarantine '${entry.name}' has no manifest.`);
@@ -165,7 +167,7 @@ export const createTaskAssetQuarantineFiles = ({
         });
         await rename(publicationRoot, root(manifest.id));
       } catch (cause) {
-        await rm(publicationRoot, { force: true, recursive: true });
+        await removeRecursively(publicationRoot);
         throw cause;
       } finally {
         ACTIVE_PUBLICATIONS.delete(publicationRoot);
@@ -215,7 +217,7 @@ export const createTaskAssetQuarantineFiles = ({
           throw new Error("Neither durable nor quarantined task asset path exists.");
         }
       }
-      await rm(root(manifest.id), { force: true, recursive: true });
+      await removeRecursively(root(manifest.id));
     },
     async purge(quarantineId: string): Promise<void> {
       const quarantinePath = root(quarantineId);
@@ -227,10 +229,10 @@ export const createTaskAssetQuarantineFiles = ({
         if (entry.name === "manifest.json") {
           continue;
         }
-        await rm(path.join(quarantinePath, entry.name), { force: true, recursive: true });
+        await removeRecursively(path.join(quarantinePath, entry.name));
       }
       await rm(manifestPath(quarantineId), { force: true });
-      await rm(quarantinePath, { force: true, recursive: true });
+      await removeRecursively(quarantinePath);
     },
   };
 };

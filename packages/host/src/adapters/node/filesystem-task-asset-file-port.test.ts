@@ -420,20 +420,13 @@ describe("node task asset file port", () => {
     ).resolves.toEqual(Buffer.from([1]));
   });
 
-  test("refuses test-scope recursive cleanup under the production config directory", async () => {
-    const port = createNodeTaskAssetFilePort({
-      configDir: path.join(homedir(), ".openducktor"),
-      configDirScope: "test",
-    });
-
-    const error = await Effect.runPromise(Effect.flip(port.clearStaging()));
-    expect(error).toMatchObject({
-      _tag: "TaskAssetError",
-      failedPhase: "clear_staging",
-      cause: expect.objectContaining({
-        message: expect.stringContaining("Test scope refuses to recursively delete"),
+  test("refuses a test-scoped production config before a file operation can run", () => {
+    expect(() =>
+      createNodeTaskAssetFilePort({
+        configDir: path.join(homedir(), ".openducktor"),
+        configDirScope: "test",
       }),
-    });
+    ).toThrow("Test scope refuses task asset access under the production config directory");
   });
 
   test("keeps crash cleanup bounded across repeated owner generations", async () => {

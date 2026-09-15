@@ -19,6 +19,7 @@ describe("createTaskAssetQuarantineFiles", () => {
     const files = createTaskAssetQuarantineFiles({
       durableRoot: path.join(root, "durable"),
       quarantineRoot,
+      removeRecursively: (target) => rm(target, { force: true, recursive: true }),
       reservedDirectoryNames: [],
     });
 
