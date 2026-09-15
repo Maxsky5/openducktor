@@ -67,7 +67,7 @@ test("renders create_task through the real message card as a Kanban-style task",
   expect(card?.textContent?.indexOf("Add task search shortcut")).toBeLessThan(
     card?.textContent?.indexOf("task-1") ?? -1,
   );
-  expect(card?.querySelector(".line-clamp-5")?.textContent).toBe(task().description);
+  expect(card?.querySelector(".markdown-body")?.textContent).toBe(task().description);
   const openButton = card?.querySelector('button[aria-label="Open task details"]');
   expect(openButton?.textContent).toBe("Open");
   expect(openButton?.querySelector("svg.lucide-square-arrow-out-up-right")).not.toBeNull();
@@ -152,7 +152,7 @@ test("renders the description as a bounded markdown preview inside the five-line
     output: JSON.stringify({ task: { ...task(), description } }),
   });
   const document = new DOMParser().parseFromString(html, "text/html");
-  const preview = document.querySelector("[data-task-id] .line-clamp-5");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
   expect(preview?.classList.contains("line-clamp-5")).toBe(true);
   expect(preview?.querySelector("h3")?.textContent).toBe("Context");
   expect(preview?.querySelector("li")?.textContent).toBe("Failure: CI run");
@@ -177,7 +177,7 @@ test("renders a task asset image as preview alt text without a task context aler
     }),
   );
   const document = new DOMParser().parseFromString(html, "text/html");
-  const preview = document.querySelector("[data-task-id] .line-clamp-5");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
   expect(preview?.classList.contains("line-clamp-5")).toBe(true);
   expect(preview?.textContent).toContain("Screenshot");
   expect(preview?.textContent).toContain("diagram.png");
