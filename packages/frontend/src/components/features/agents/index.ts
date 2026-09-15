@@ -12,7 +12,6 @@ export type {
   AgentChatThreadModel,
 } from "./agent-chat";
 export { AgentChatSurface } from "./agent-chat/agent-chat";
-export { AgentRuntimeCombobox } from "./agent-runtime-combobox";
 export type { AgentRoleOption, AgentStudioHeaderModel } from "./agent-studio-header";
 export type { AgentStudioTaskTab, AgentStudioTaskTabsModel } from "./agent-studio-task-tabs";
 export {

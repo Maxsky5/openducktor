@@ -259,9 +259,9 @@ let currentSessionsFixture: AgentSessionState[] = [
 ];
 
 const createRepoSettingsFixture = (): RepoSettingsInput => ({
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "codex/",
+  defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
   preStartHooks: [],
   postCompleteHooks: [],
@@ -436,7 +436,6 @@ function createRepoConfigFixture(promptOverrides: RepoPromptOverrides = {}): Rep
     workspaceId: "repo",
     workspaceName: "Repo",
     repoPath: "/repo",
-    defaultRuntimeKind: "opencode",
     worktreeBasePath: undefined,
     branchPrefix: "codex/",
     defaultTargetBranch: { remote: "origin", branch: "main" },

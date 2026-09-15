@@ -267,7 +267,6 @@ const createBuildSettingsConfig = (
               workspaceId: "repo",
               workspaceName: "Repo",
               repoPath,
-              defaultRuntimeKind: "opencode",
               worktreeCopyPaths: [],
             },
           },
@@ -312,7 +311,6 @@ const createBuildWorkspaceSettingsService = (
       return Effect.sync(() => {
         return {
           workspaceName: "Repo",
-          defaultRuntimeKind: "opencode",
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},

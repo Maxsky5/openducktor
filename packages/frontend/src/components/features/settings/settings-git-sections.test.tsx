@@ -51,7 +51,6 @@ const baseRepoConfig: SettingsRepoConfig = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: undefined,
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },

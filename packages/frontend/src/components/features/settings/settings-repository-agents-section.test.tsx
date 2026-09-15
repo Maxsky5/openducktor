@@ -26,7 +26,6 @@ const repoConfig: SettingsRepoConfig = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "codex",
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},
@@ -46,6 +45,66 @@ const repoConfig: SettingsRepoConfig = {
 };
 
 describe("RepositoryAgentsSection", () => {
+  test("renders the repository Default Model with the saved selection", () => {
+    const html = renderToStaticMarkup(
+      createElement(RepositoryAgentsSection, {
+        selectedRepoConfig: {
+          ...repoConfig,
+          defaultModel: {
+            runtimeKind: "codex",
+            providerId: "openai",
+            modelId: "o3",
+            variant: "low",
+            profileId: "",
+          },
+        },
+        availableRuntimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
+        catalogResources: [
+          {
+            runtimeKind: "codex",
+            catalog: codexCatalog,
+            isFetching: false,
+            isEnabled: true,
+            error: null,
+            retry: async () => {},
+          },
+        ],
+        favoriteState: {
+          favorites: [],
+          isLoading: false,
+          readError: null,
+          isMutationPending: false,
+          mutationError: null,
+          canMutate: true,
+          toggleFavorite: () => {},
+          retryRead: () => {},
+          retryMutation: () => {},
+        },
+        loadingState: {
+          isLoadingRuntimeDefinitions: false,
+          isLoadingCatalog: false,
+          isLoadingSettings: false,
+          isSaving: false,
+        },
+        runtimeDefinitionsError: null,
+        runtimeAvailabilityErrors: [],
+        getCatalogForRuntime: () => codexCatalog,
+        isCatalogLoadingForRuntime: () => false,
+        onUpdateSelectedRepoConfig: () => {},
+        onUpdateSelectedRepoAgentDefault: () => {},
+        onClearSelectedRepoAgentDefault: () => {},
+        onUpdateSelectedRepoDefaultModel: () => {},
+        onClearSelectedRepoDefaultModel: () => {},
+      }),
+    );
+
+    expect(html).toContain("Default Model");
+    expect(html).toContain(
+      "Used for new chats and for workflow sessions that have no role default.",
+    );
+    expect(html).toContain("o3");
+  });
+
   test("resolves an exact cross-runtime model pair with compatible defaults", () => {
     expect(
       resolveRepoAgentDefaultModelPickerSelection({
@@ -106,12 +165,14 @@ describe("RepositoryAgentsSection", () => {
           isSaving: false,
         },
         runtimeDefinitionsError: null,
-        runtimeAvailabilityErrors: ['Default agent runtime "Codex" is disabled.'],
+        runtimeAvailabilityErrors: ['Default Model runtime "Codex" is disabled.'],
         getCatalogForRuntime: () => codexCatalog,
         isCatalogLoadingForRuntime: () => false,
         onUpdateSelectedRepoConfig: () => {},
         onUpdateSelectedRepoAgentDefault: () => {},
         onClearSelectedRepoAgentDefault: () => {},
+        onUpdateSelectedRepoDefaultModel: () => {},
+        onClearSelectedRepoDefaultModel: () => {},
       }),
     );
 
@@ -119,6 +180,6 @@ describe("RepositoryAgentsSection", () => {
     expect(html).toContain("Runtime does not support agent profiles");
     expect(html).toContain("disabled");
     expect(html).toContain("o3");
-    expect(html).toContain("Default agent runtime &quot;Codex&quot; is disabled.");
+    expect(html).toContain("Default Model runtime &quot;Codex&quot; is disabled.");
   });
 });

@@ -193,6 +193,8 @@ export function SettingsRepositoryContent({
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
+    updateSelectedRepoDefaultModel,
+    clearSelectedRepoDefaultModel,
   } = controller;
   const repositoryAvailabilityNotice = resolveRepositoryAvailabilityNotice({
     repositorySection,
@@ -294,6 +296,8 @@ export function SettingsRepositoryContent({
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
             onUpdateSelectedRepoAgentDefault={updateSelectedRepoAgentDefault}
             onClearSelectedRepoAgentDefault={clearSelectedRepoAgentDefault}
+            onUpdateSelectedRepoDefaultModel={updateSelectedRepoDefaultModel}
+            onClearSelectedRepoDefaultModel={clearSelectedRepoDefaultModel}
           />
         ) : null}
 

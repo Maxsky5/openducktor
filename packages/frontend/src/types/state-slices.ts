@@ -45,7 +45,6 @@ export type WorkspaceSelectionOperationsInput = {
   workspaceId: string;
   workspaceName: string;
   repoPath: string;
-  defaultRuntimeKind?: RuntimeKind;
 };
 
 export type ActiveWorkspace = Pick<WorkspaceRecord, "workspaceId" | "workspaceName" | "repoPath">;
@@ -59,7 +58,7 @@ export type RepoAgentDefaultInput = {
 };
 
 export type RepoSettingsInput = {
-  defaultRuntimeKind: RuntimeKind;
+  defaultModel: RepoAgentDefaultInput | null;
   worktreeBasePath: string;
   branchPrefix: string;
   /** Default branch used for ahead/behind comparison, rebase, and PR creation. */

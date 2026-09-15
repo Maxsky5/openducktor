@@ -10,7 +10,6 @@ const baseRepoConfigInput = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
 };
 
 describe("workspace Agent Studio state schemas", () => {

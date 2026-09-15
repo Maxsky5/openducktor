@@ -1,6 +1,9 @@
 import type { SettingsRepoConfig } from "@openducktor/contracts";
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
-import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
+import {
+  normalizeRepoAgentDefaultForSave,
+  normalizeRepoDefaultModelForSave,
+} from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
 import { preparePromptOverridesForSave } from "./prompt-overrides";
@@ -37,7 +40,7 @@ export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepo
     workspaceId: repo.workspaceId,
     workspaceName: repo.workspaceName.trim(),
     repoPath: repo.repoPath.trim(),
-    defaultRuntimeKind: repo.defaultRuntimeKind,
+    defaultModel: normalizeRepoDefaultModelForSave(repo.defaultModel),
     worktreeBasePath: trimmedNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,
     branchPrefix: trimmedNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),

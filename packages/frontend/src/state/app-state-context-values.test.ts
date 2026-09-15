@@ -44,9 +44,9 @@ describe("app-state-context-values", () => {
       refreshBranches: async () => {},
       switchBranch: async () => {},
       loadRepoSettings: async () => ({
-        defaultRuntimeKind: "opencode" as const,
         worktreeBasePath: "",
         branchPrefix: "odt",
+        defaultModel: null,
         defaultTargetBranch: { remote: "origin", branch: "main" },
         preStartHooks: [],
         postCompleteHooks: [],

@@ -1102,7 +1102,6 @@ describe("HostClient", () => {
               workspaceId: "repo",
               workspaceName: "Repo",
               repoPath: "/repo",
-              defaultRuntimeKind: "opencode",
               branchPrefix: "obp",
               defaultTargetBranch: { remote: "origin", branch: "main" },
               git: {},
@@ -1138,7 +1137,6 @@ describe("HostClient", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
-          defaultRuntimeKind: "opencode",
           agentStudioState: {
             openTaskIds: ["task-1"],
             activeTask: {
@@ -1219,7 +1217,6 @@ describe("HostClient", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
-          defaultRuntimeKind: "opencode",
           branchPrefix: "obp",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},
@@ -1258,7 +1255,6 @@ describe("HostClient", () => {
                 workspaceId: "repo",
                 workspaceName: "Repo",
                 repoPath: "/repo",
-                defaultRuntimeKind: "opencode",
                 branchPrefix: "obp",
                 defaultTargetBranch: { remote: "origin", branch: "main" },
                 git: {},

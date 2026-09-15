@@ -329,7 +329,6 @@ describe("session-start-workflow", () => {
         workspaceId: "workspace-pr",
         workspaceName: "PR workspace",
         repoPath: "/repo",
-        defaultRuntimeKind: "opencode",
         branchPrefix: "odt",
         defaultTargetBranch: {
           remote: "upstream",
@@ -404,7 +403,6 @@ describe("session-start-workflow", () => {
         workspaceId: "workspace-pr",
         workspaceName: "PR workspace",
         repoPath: "/repo",
-        defaultRuntimeKind: "opencode",
         branchPrefix: "odt",
         defaultTargetBranch: {
           remote: "upstream",

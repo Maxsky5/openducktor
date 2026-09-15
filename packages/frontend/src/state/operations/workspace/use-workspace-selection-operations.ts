@@ -299,9 +299,6 @@ export function useWorkspaceSelectionOperations({
         workspaceName: input.workspaceName,
         repoPath: normalizedRepoPath,
       };
-      if (input.defaultRuntimeKind) {
-        workspaceInput.defaultRuntimeKind = input.defaultRuntimeKind;
-      }
       const workspace = await hostClient.workspaceAdd(workspaceInput);
       applyWorkspaceRecord(workspace);
       await refreshWorkspaceCachesAfterMutation();

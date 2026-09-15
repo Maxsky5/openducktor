@@ -278,7 +278,6 @@ export const createRepoSettingsConfigFixture = (
     workspaceId,
     workspaceName: workspaceId,
     repoPath,
-    defaultRuntimeKind: "opencode",
     git: provider === undefined ? {} : { provider },
   });
 

@@ -149,7 +149,6 @@ const createDefaultActiveWorkspace = (activeRepo: string | null) =>
         workspaceName: "Workspace",
         repoPath: activeRepo,
         branchPrefix: "odt",
-        defaultRuntimeKind: "opencode",
         defaultTargetBranch: null,
         defaultBuildProfileId: null,
         defaultBuildProvider: null,

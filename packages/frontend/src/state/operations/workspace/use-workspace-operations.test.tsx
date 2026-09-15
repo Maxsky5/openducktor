@@ -293,7 +293,6 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot =>
           workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
           workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
           repoPath,
-          defaultRuntimeKind: "opencode",
           branchPrefix: "odt",
           defaultTargetBranch: { remote: "origin", branch: "main" },
           git: {},

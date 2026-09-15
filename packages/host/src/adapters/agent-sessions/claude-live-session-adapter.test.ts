@@ -46,7 +46,6 @@ const workingDirectoryDependencies = {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
-          defaultRuntimeKind: "claude",
           worktreeBasePath: "/worktrees/repo",
         }),
       ),

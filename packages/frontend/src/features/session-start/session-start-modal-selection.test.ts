@@ -38,9 +38,9 @@ const CATALOG: AgentModelCatalog = {
 };
 
 const REPO_SETTINGS: RepoSettingsInput = {
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "codex/",
+  defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
   preStartHooks: [],
   postCompleteHooks: [],
@@ -74,6 +74,36 @@ describe("session-start selection adapter", () => {
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
+      profileId: "spec-agent",
+    });
+  });
+
+  test("returns no selection when the workflow default is absent from the catalog", () => {
+    expect(
+      resolveInitialModelSelection({
+        catalog: CATALOG,
+        defaultSelection: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "retired-model",
+        },
+        runtimeKind: "opencode",
+        selectedModel: null,
+      }),
+    ).toBeNull();
+
+    expect(
+      resolveInitialModelSelection({
+        catalog: CATALOG,
+        defaultSelection: null,
+        runtimeKind: "opencode",
+        selectedModel: null,
+      }),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
       profileId: "spec-agent",
     });
   });

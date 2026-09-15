@@ -11,22 +11,20 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { catalogModelOptionValue } from "@/components/features/agents/catalog-select-options";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
+import {
+  pickRepoAgentDefault,
+  type RepoAgentDefaultDraft,
+  type RuntimeBoundModelSelection,
+} from "@/lib/repo-agent-defaults";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 
 type RepoDefaultRole = keyof RepoSettingsInput["agentDefaults"];
-type RepoAgentDefaultLike = {
-  runtimeKind?: RuntimeKind | null;
-  providerId: string;
-  modelId: string;
-  variant?: string | undefined;
-  profileId?: string | undefined;
-};
 type RepoAgentDefaultsInput = {
-  spec?: RepoAgentDefaultLike | null | undefined;
-  planner?: RepoAgentDefaultLike | null | undefined;
-  build?: RepoAgentDefaultLike | null | undefined;
-  qa?: RepoAgentDefaultLike | null | undefined;
+  spec?: RepoAgentDefaultDraft | null | undefined;
+  planner?: RepoAgentDefaultDraft | null | undefined;
+  build?: RepoAgentDefaultDraft | null | undefined;
+  qa?: RepoAgentDefaultDraft | null | undefined;
 };
 
 export const isSettingsInteractionDisabled = ({
@@ -49,16 +47,7 @@ export const ROLE_DEFAULTS: ReadonlyArray<{
 ];
 
 export const ensureDraftAgentDefault = (
-  value:
-    | {
-        runtimeKind?: RuntimeKind | null;
-        providerId: string;
-        modelId: string;
-        variant?: string | undefined;
-        profileId?: string | undefined;
-      }
-    | null
-    | undefined,
+  value: RepoAgentDefaultDraft | null | undefined,
 ): RepoAgentDefaultInput => {
   const draft: RepoAgentDefaultInput = {
     providerId: value?.providerId ?? "",
@@ -88,6 +77,19 @@ export const updateRoleDefault = (
   };
 };
 
+export const updateRepoDefaultModel = (
+  defaultModel: RepoAgentDefaultDraft | null | undefined,
+  field: keyof RepoAgentDefaultInput,
+  value: string,
+): RuntimeBoundModelSelection | null => {
+  const draft = ensureDraftAgentDefault(defaultModel);
+  const runtimeKind = draft.runtimeKind;
+  if (!runtimeKind) {
+    return null;
+  }
+  return { ...draft, runtimeKind, [field]: value };
+};
+
 export const clearRoleDefault = (
   agentDefaults: RepoAgentDefaultsInput,
   role: RepoDefaultRole,
@@ -96,16 +98,17 @@ export const clearRoleDefault = (
   [role]: null,
 });
 
-export const selectedModelKeyForRole = (
-  agentDefaults: RepoAgentDefaultsInput,
-  role: RepoDefaultRole,
-): string => {
-  const value = agentDefaults[role];
+export const selectedModelKey = (value: { providerId: string; modelId: string } | null): string => {
   if (!value?.providerId || !value.modelId) {
     return "";
   }
   return `${value.providerId}/${value.modelId}`;
 };
+
+export const selectedModelKeyForRole = (
+  agentDefaults: RepoAgentDefaultsInput,
+  role: RepoDefaultRole,
+): string => selectedModelKey(agentDefaults[role] ?? null);
 
 export const findCatalogModel = (
   catalog: AgentModelCatalog | null,
@@ -118,12 +121,11 @@ export const findCatalogModel = (
   );
 };
 
-export const toRoleVariantOptions = (
+export const toVariantOptionsForModelKey = (
   catalog: AgentModelCatalog | null,
-  agentDefaults: RepoAgentDefaultsInput,
-  role: RepoDefaultRole,
+  modelKey: string,
 ): ComboboxOption[] => {
-  const model = findCatalogModel(catalog, selectedModelKeyForRole(agentDefaults, role));
+  const model = findCatalogModel(catalog, modelKey);
   if (!model) {
     return [];
   }
@@ -132,6 +134,13 @@ export const toRoleVariantOptions = (
     label: variant,
   }));
 };
+
+export const toRoleVariantOptions = (
+  catalog: AgentModelCatalog | null,
+  agentDefaults: RepoAgentDefaultsInput,
+  role: RepoDefaultRole,
+): ComboboxOption[] =>
+  toVariantOptionsForModelKey(catalog, selectedModelKeyForRole(agentDefaults, role));
 
 export const getMissingRequiredRoleLabels = (agentDefaults: RepoAgentDefaultsInput): string[] => {
   return ROLE_DEFAULTS.reduce<string[]>((labels, { role, label }) => {
@@ -158,7 +167,8 @@ export const resolveRepoAgentDefaultRuntimeKind = ({
   role: RepoDefaultRole;
 }): RuntimeKind | null => {
   const requestedRuntimeKind =
-    selectedRepoConfig.agentDefaults[role]?.runtimeKind ?? selectedRepoConfig.defaultRuntimeKind;
+    pickRepoAgentDefault(selectedRepoConfig.agentDefaults[role], selectedRepoConfig.defaultModel)
+      ?.runtimeKind ?? null;
 
   return resolveRuntimeKindSelection({
     runtimeDefinitions,

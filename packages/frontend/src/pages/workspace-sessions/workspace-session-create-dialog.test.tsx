@@ -7,7 +7,7 @@ import {
   repoConfigSchema,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { HostInvokeError } from "@openducktor/host-client";
+import { HostInvokeError, type HostClient } from "@openducktor/host-client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { act, type ComponentProps } from "react";
@@ -29,6 +29,7 @@ function renderCreation(
   onCreated: () => void = () => {
     throw new Error("Unexpected successful creation");
   },
+  clientOverrides: Partial<HostClient> = {},
 ) {
   const snapshot = createSettingsSnapshotFixture();
   const catalog: AgentModelCatalog = {
@@ -99,7 +100,6 @@ function renderCreation(
             workspaceName: "A",
             repoPath: "/repo",
             branchPrefix: "odt",
-            defaultRuntimeKind: "opencode",
           }),
         gitGetBranches: async () => [
           { name: "main", isRemote: false, isCurrent: true, worktreePath: "/repo" },
@@ -117,6 +117,7 @@ function renderCreation(
           { id: "zeta", name: "Zeta", systemPrompt: "Zeta prompt" },
         ],
         workspaceSessionCreate: create,
+        ...clientOverrides,
       },
     }),
   );
@@ -336,6 +337,44 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
     fireEvent.click(view.getByRole("button", { name: "Close" }));
     expect(requests.length).toBe(1);
     expect(closed).toBe(0);
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("shows the repository Default Model read failure, keeps creation usable and retries", async () => {
+  let readAttempts = 0;
+  const view = renderCreation(
+    async () => {
+      throw new Error("Unexpected creation");
+    },
+    () => {},
+    () => {
+      throw new Error("Unexpected successful creation");
+    },
+    {
+      workspaceGetRepoConfig: async () => {
+        readAttempts += 1;
+        if (readAttempts === 1) throw new Error("Settings file is unreadable.");
+        return repoConfigSchema.parse({
+          workspaceId: "a",
+          workspaceName: "A",
+          repoPath: "/repo",
+          branchPrefix: "odt",
+        });
+      },
+    },
+  );
+  try {
+    const alert = await view.findByRole("alert");
+    expect(alert.textContent).toContain("The repository Default Model could not load.");
+    expect(alert.textContent).toContain("Settings file is unreadable.");
+    expect(readAttempts).toBe(1);
+    await selectModel(view);
+    fireEvent.click(view.getByRole("button", { name: "Retry default model" }));
+    await waitFor(() => expect(view.queryByRole("alert") === null).toBe(true), { timeout: 800 });
+    expect(readAttempts).toBe(2);
   } finally {
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());

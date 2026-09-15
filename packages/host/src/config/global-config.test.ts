@@ -37,7 +37,6 @@ describe("global config", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
-          defaultRuntimeKind: "opencode",
         },
       },
     });
@@ -48,7 +47,6 @@ describe("global config", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
-          defaultRuntimeKind: "opencode",
           git: { providers: {} },
         },
       },
@@ -66,7 +64,6 @@ describe("global config", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
-          defaultRuntimeKind: "opencode",
           git: {
             providers: {
               github: {
@@ -106,7 +103,6 @@ describe("global config", () => {
           workspaceId: "repo",
           workspaceName: "Repo",
           repoPath: "/repo",
-          defaultRuntimeKind: "opencode",
           git: {
             providers: {
               github: {
@@ -137,7 +133,6 @@ describe("global config", () => {
             workspaceId: "repo",
             workspaceName: "Repo",
             repoPath: "/repo",
-            defaultRuntimeKind: "opencode",
             git: {
               provider: { id: "github", enabled: true, autoDetected: false },
               providers: {},
@@ -157,7 +152,6 @@ describe("global config", () => {
             workspaceId: "repo",
             workspaceName: "Repo",
             repoPath: "/repo",
-            defaultRuntimeKind: "opencode",
             git: {
               providers: {
                 github: { enabled: true, autoDetected: false },

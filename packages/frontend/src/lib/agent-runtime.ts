@@ -12,24 +12,11 @@ import {
   runtimeRequiredScopesByRole,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { createElement } from "react";
-import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
-import type { ComboboxOption } from "@/components/ui/combobox";
 import { SESSION_LAUNCH_ACTIONS, sessionLaunchActionIds } from "./session-launch-actions";
 
 export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
 
 const agentRoles: readonly AgentRole[] = agentRoleValues;
-
-export const toAgentRuntimeOptions = (
-  runtimeDefinitions: RuntimeDescriptor[],
-): ComboboxOption[] => {
-  return runtimeDefinitions.map((definition) => ({
-    value: definition.kind,
-    label: definition.label,
-    icon: createElement(AgentRuntimeIcon, { runtimeKind: definition.kind }),
-  }));
-};
 
 export const isRuntimeEnabled = (agentRuntimes: AgentRuntimes, runtimeKind: RuntimeKind): boolean =>
   agentRuntimes[runtimeKind]?.enabled === true;

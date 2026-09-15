@@ -52,7 +52,6 @@ const baseRepoConfigInput = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
 };
 
 const withRuntimeCapabilities = (
@@ -1909,7 +1908,7 @@ describe("runtime schemas", () => {
   });
 
   test("repo config rejects missing runtime-bearing defaults", () => {
-    expect(() =>
+    expect(
       repoConfigSchema.parse({
         workspaceId: "repo",
         workspaceName: "Repo",
@@ -1917,7 +1916,7 @@ describe("runtime schemas", () => {
         branchPrefix: "obp",
         hooks: { preStart: [], postComplete: [] },
       }),
-    ).toThrow();
+    ).toMatchObject({ workspaceId: "repo" });
 
     expect(() =>
       repoConfigSchema.parse({
@@ -1929,6 +1928,18 @@ describe("runtime schemas", () => {
             providerId: "openai",
             modelId: "gpt-5",
           },
+        },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      repoConfigSchema.parse({
+        ...baseRepoConfigInput,
+        branchPrefix: "obp",
+        hooks: { preStart: [], postComplete: [] },
+        defaultModel: {
+          providerId: "openai",
+          modelId: "gpt-5",
         },
       }),
     ).toThrow();

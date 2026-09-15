@@ -8,7 +8,6 @@ import {
   type RepoConfig,
   type RepoDevServerScript,
   type RepoHooks,
-  type RuntimeKind,
   repoConfigSchema,
   repoHooksSchema,
   type SettingsSnapshot,
@@ -33,9 +32,9 @@ import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settin
 
 type RepoConfigDraft = Pick<
   RepoConfig,
-  "defaultRuntimeKind" | "repoPath" | "workspaceId" | "workspaceName"
+  "defaultModel" | "repoPath" | "workspaceId" | "workspaceName"
 > &
-  Partial<Omit<RepoConfig, "defaultRuntimeKind" | "repoPath" | "workspaceId" | "workspaceName">>;
+  Partial<Omit<RepoConfig, "defaultModel" | "repoPath" | "workspaceId" | "workspaceName">>;
 
 export type WorkspaceSettingsError =
   | HostInvariantErrorAggregate
@@ -90,7 +89,6 @@ export type WorkspaceAddInput = {
   repoPath: string;
   workspaceId: string;
   workspaceName: string;
-  defaultRuntimeKind?: RuntimeKind;
 };
 export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
@@ -126,7 +124,6 @@ const normalizeRepoConfigInput = (input: RepoConfigDraft): RepoConfig => {
   const rawBranchPrefix = input.branchPrefix?.trim() || DEFAULT_BRANCH_PREFIX;
   return repoConfigSchema.parse({
     ...input,
-    defaultRuntimeKind: input.defaultRuntimeKind.trim(),
     worktreeBasePath: rawWorktreeBasePath,
     branchPrefix: rawBranchPrefix,
     hooks: input.hooks === undefined ? undefined : normalizeHooks(input.hooks),
@@ -379,7 +376,7 @@ export const buildMergedRepoConfig = (
 ): RepoConfigDraft => ({
   ...existing,
   workspaceId,
-  defaultRuntimeKind: update.defaultRuntimeKind ?? existing.defaultRuntimeKind,
+  defaultModel: update.defaultModel ?? existing.defaultModel,
   worktreeBasePath: update.worktreeBasePath ?? existing.worktreeBasePath,
   branchPrefix: update.branchPrefix ?? existing.branchPrefix,
   defaultTargetBranch: update.defaultTargetBranch ?? existing.defaultTargetBranch,

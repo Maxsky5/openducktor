@@ -35,7 +35,7 @@ import { orderStartModesForDisplay } from "./session-start-display";
 import { useSessionStartModalReuseState } from "./session-start-modal-reuse-state";
 import { useSessionStartModalRuntimeState } from "./session-start-modal-runtime-state";
 import type { SessionStartModalIntent } from "./session-start-modal-types";
-import { roleDefaultSelectionFor } from "./session-start-selection";
+import { defaultSessionSelectionFor } from "./session-start-selection";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 import { useSessionStartModalSelectionState } from "./use-session-start-modal-selection-state";
 
@@ -114,7 +114,7 @@ export function useSessionStartModalState({
     useState<AgentSessionStartMode>("fresh");
   const activeRole = intent?.role ?? null;
   const activeRoleDefaultSelection = useMemo(
-    () => (activeRole ? roleDefaultSelectionFor(repoSettings, activeRole) : null),
+    () => (activeRole ? defaultSessionSelectionFor(repoSettings, activeRole) : null),
     [activeRole, repoSettings],
   );
   const {
@@ -185,8 +185,7 @@ export function useSessionStartModalState({
       const requestedRuntimeKind =
         nextIntent.requestedRuntimeKind ??
         nextIntent.selectedModel?.runtimeKind ??
-        roleDefaultSelectionFor(repoSettings, nextIntent.role)?.runtimeKind ??
-        repoSettings?.defaultRuntimeKind ??
+        defaultSessionSelectionFor(repoSettings, nextIntent.role)?.runtimeKind ??
         null;
       const initialStartState = initializeStartState(nextIntent);
       const initialStartMode = initialStartState.selectedStartMode;
@@ -212,7 +211,7 @@ export function useSessionStartModalState({
       );
       if (initialStartMode === "fresh") {
         initializeSelection(
-          roleDefaultSelectionFor(repoSettings, nextIntent.role),
+          defaultSessionSelectionFor(repoSettings, nextIntent.role),
           initialRuntimeKind,
           nextIntent.selectedModel ?? null,
         );

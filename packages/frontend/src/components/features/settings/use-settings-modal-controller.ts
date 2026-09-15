@@ -159,6 +159,11 @@ export type SettingsModalController = {
     value: string,
   ) => void;
   clearSelectedRepoAgentDefault: (role: "spec" | "planner" | "build" | "qa") => void;
+  updateSelectedRepoDefaultModel: (
+    field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
+    value: string,
+  ) => void;
+  clearSelectedRepoDefaultModel: () => void;
   submit: () => Promise<boolean>;
 };
 
@@ -333,6 +338,8 @@ export const useSettingsModalController = ({
     updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
     updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
     clearSelectedRepoAgentDefault: applyClearSelectedRepoAgentDefault,
+    updateSelectedRepoDefaultModel: applySelectedRepoDefaultModelUpdate,
+    clearSelectedRepoDefaultModel: applyClearSelectedRepoDefaultModel,
   } = useSettingsModalDraftActions({
     selectedWorkspaceId,
     setSnapshotDraft,
@@ -450,6 +457,8 @@ export const useSettingsModalController = ({
       updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
       updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
       clearSelectedRepoAgentDefault: applyClearSelectedRepoAgentDefault,
+      updateSelectedRepoDefaultModel: applySelectedRepoDefaultModelUpdate,
+      clearSelectedRepoDefaultModel: applyClearSelectedRepoDefaultModel,
     }),
     [
       applySelectedRepoConfigUpdate,
@@ -468,6 +477,8 @@ export const useSettingsModalController = ({
       applyRepoPromptOverridesUpdate,
       applySelectedRepoAgentDefaultUpdate,
       applyClearSelectedRepoAgentDefault,
+      applySelectedRepoDefaultModelUpdate,
+      applyClearSelectedRepoDefaultModel,
     ],
   );
   const {
@@ -487,6 +498,8 @@ export const useSettingsModalController = ({
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
+    updateSelectedRepoDefaultModel,
+    clearSelectedRepoDefaultModel,
   } = useSettingsModalDirtyDraftActions({
     clearSaveError,
     markDirty,
@@ -587,6 +600,8 @@ export const useSettingsModalController = ({
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
+    updateSelectedRepoDefaultModel,
+    clearSelectedRepoDefaultModel,
     submit,
   };
 };

@@ -1,23 +1,18 @@
 import type { RuntimeKind } from "@openducktor/contracts";
+import type { AgentModelSelection } from "@openducktor/core";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 export type RepoAgentDefaultRole = "spec" | "planner" | "build" | "qa";
 
-type RepoAgentDefaultDraft = {
+export type RepoAgentDefaultDraft = {
   runtimeKind?: RuntimeKind | null;
   providerId: string;
   modelId: string;
-  variant?: string | null | undefined;
-  profileId?: string | null | undefined;
+  variant?: string | undefined;
+  profileId?: string | undefined;
 };
 
-export type NormalizedRepoAgentDefault = {
-  modelId: string;
-  profileId?: string;
-  providerId: string;
-  runtimeKind: RuntimeKind;
-  variant?: string;
-};
+export type RuntimeBoundModelSelection = AgentModelSelection & { runtimeKind: RuntimeKind };
 
 const REPO_AGENT_DEFAULT_LABELS = {
   spec: "Specification",
@@ -35,16 +30,25 @@ export const repoAgentDefaultRuntimeKindError = (role: RepoAgentDefaultRole): st
   return `${REPO_AGENT_DEFAULT_LABELS[role]} agent default runtime kind is required when provider and model are configured.`;
 };
 
+export const REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR =
+  "Default Model runtime kind is required when provider and model are configured.";
+
+export const pickRepoAgentDefault = <T>(
+  roleDefault: T | null | undefined,
+  defaultModel: T | null | undefined,
+): T | null => roleDefault ?? defaultModel ?? null;
+
 export const resolveConfiguredAgentRuntimeKind = (
   repoSettings: RepoSettingsInput | null,
   role: RepoAgentDefaultRole,
 ): RuntimeKind | null =>
-  repoSettings?.agentDefaults[role]?.runtimeKind ?? repoSettings?.defaultRuntimeKind ?? null;
+  pickRepoAgentDefault(repoSettings?.agentDefaults[role], repoSettings?.defaultModel)
+    ?.runtimeKind ?? null;
 
-export const normalizeRepoAgentDefaultForSave = (
-  role: RepoAgentDefaultRole,
+const normalizeRepoModelDefaultForSave = (
   entry: RepoAgentDefaultDraft | null | undefined,
-): NormalizedRepoAgentDefault | undefined => {
+  runtimeKindError: string,
+): RuntimeBoundModelSelection | undefined => {
   if (!entry) {
     return undefined;
   }
@@ -56,13 +60,13 @@ export const normalizeRepoAgentDefaultForSave = (
   }
 
   if (!entry.runtimeKind) {
-    throw new Error(repoAgentDefaultRuntimeKindError(role));
+    throw new Error(runtimeKindError);
   }
 
   const variant = trimNonEmpty(entry.variant);
   const profileId = trimNonEmpty(entry.profileId);
 
-  const selection: NormalizedRepoAgentDefault = {
+  const selection: RuntimeBoundModelSelection = {
     runtimeKind: entry.runtimeKind,
     providerId,
     modelId,
@@ -75,3 +79,14 @@ export const normalizeRepoAgentDefaultForSave = (
   }
   return selection;
 };
+
+export const normalizeRepoAgentDefaultForSave = (
+  role: RepoAgentDefaultRole,
+  entry: RepoAgentDefaultDraft | null | undefined,
+): RuntimeBoundModelSelection | undefined =>
+  normalizeRepoModelDefaultForSave(entry, repoAgentDefaultRuntimeKindError(role));
+
+export const normalizeRepoDefaultModelForSave = (
+  entry: RepoAgentDefaultDraft | null | undefined,
+): RuntimeBoundModelSelection | undefined =>
+  normalizeRepoModelDefaultForSave(entry, REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR);

@@ -10,11 +10,7 @@ import type {
   ResolvedSessionStartDecision,
   RunSessionStartWorkflow,
 } from "@/features/session-start";
-import {
-  coerceVisibleSelectionToCatalog,
-  pickDefaultVisibleSelectionForCatalog,
-  roleDefaultSelectionFor,
-} from "@/features/session-start/session-start-selection";
+import { resolveRequiredDefaultSessionSelection } from "@/features/session-start/session-start-selection";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import { gitProviderReadError, pullRequestHealthError } from "@/lib/git-provider-health";
@@ -150,33 +146,12 @@ const resolveAutopilotSelection = async ({
   }
 
   const repoConfig = await loadRepoConfigFromQuery(queryClient, activeWorkspace.workspaceId);
-  const repoSettings = toRepoSettingsInput(repoConfig);
-  const savedDefaultSelection = roleDefaultSelectionFor(repoSettings, role);
-  const runtimeKind = savedDefaultSelection?.runtimeKind ?? repoSettings.defaultRuntimeKind;
-  const catalog = await loadRepoRuntimeCatalog({
+  return resolveRequiredDefaultSessionSelection({
+    role,
+    repoSettings: toRepoSettingsInput(repoConfig),
     repoPath: activeWorkspace.repoPath,
-    runtimeKind,
+    loadRepoRuntimeCatalog,
   });
-
-  if (savedDefaultSelection) {
-    const validatedSelection = coerceVisibleSelectionToCatalog(catalog, savedDefaultSelection);
-    if (!validatedSelection) {
-      throw new Error(
-        `Saved default ${ROLE_LABELS[role]} model is not available for runtime ${runtimeKind}.`,
-      );
-    }
-
-    return validatedSelection;
-  }
-
-  const catalogDefaultSelection = pickDefaultVisibleSelectionForCatalog(catalog);
-  if (!catalogDefaultSelection) {
-    throw new Error(
-      `No default ${ROLE_LABELS[role]} model is available for runtime ${runtimeKind}.`,
-    );
-  }
-
-  return catalogDefaultSelection;
 };
 
 const isSkippableAutopilotError = (action: AutopilotActionDefinition, cause: unknown): boolean => {

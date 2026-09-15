@@ -172,9 +172,15 @@ const createHookHarness = (initialProps: HookArgs) => {
 };
 
 const createDefaultRepoSettings = (): RepoSettingsInput => ({
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: ".worktrees",
   branchPrefix: "odt",
+  defaultModel: {
+    runtimeKind: "opencode",
+    providerId: "openai",
+    modelId: "gpt-5",
+    variant: "",
+    profileId: "",
+  },
   defaultTargetBranch: { remote: "origin", branch: "main" },
   preStartHooks: [],
   postCompleteHooks: [],
@@ -192,7 +198,6 @@ const createRepoConfigFixture = (): RepoConfig => ({
   workspaceId: "workspace-1",
   workspaceName: "Workspace",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: undefined,
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },

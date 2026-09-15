@@ -65,7 +65,6 @@ const activeRepoConfig = {
   workspaceId: activeWorkspace.workspaceId,
   workspaceName: activeWorkspace.workspaceName,
   repoPath: activeWorkspace.repoPath,
-  defaultRuntimeKind: "opencode",
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},

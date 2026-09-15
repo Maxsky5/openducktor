@@ -6,7 +6,7 @@ import {
 } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Folder, GitBranch, LoaderCircle } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import { WorkspaceSessionModelFields } from "./workspace-session-model-fields";
 import {
   buildWorkspaceSessionCreateInput,
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { repoDefaultModelSelectionFor } from "@/features/session-start/session-start-selection";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { host } from "@/state/operations/host";
@@ -34,6 +35,7 @@ import {
   customAgentRolesQueryOptions,
   updateWorkspaceSessionQueries,
 } from "@/state/queries/workspace-sessions";
+import { repoConfigQueryOptions, toRepoSettingsInput } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { useMountedRef } from "./use-mounted-ref";
@@ -52,7 +54,17 @@ export function WorkspaceSessionCreateDialog({
 }: WorkspaceSessionCreateDialogProps): ReactElement {
   const queryClient = useQueryClient();
   const roles = useQuery(customAgentRolesQueryOptions());
-  const model = useWorkspaceSessionModelPicker(workspace.repoPath);
+  const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
+  const defaultModelSelection = useMemo(
+    () =>
+      repoConfig.data ? repoDefaultModelSelectionFor(toRepoSettingsInput(repoConfig.data)) : null,
+    [repoConfig.data],
+  );
+  const model = useWorkspaceSessionModelPicker(
+    workspace.repoPath,
+    undefined,
+    defaultModelSelection,
+  );
   const [name, setName] = useState("");
   const [roleId, setRoleId] = useState("none");
   const [location, setLocation] =
@@ -130,6 +142,16 @@ export function WorkspaceSessionCreateDialog({
                 />
               </div>
               <WorkspaceSessionModelFields model={model} disabled={create.isPending} />
+              {repoConfig.isError && (
+                <div role="alert">
+                  <p className="text-sm text-destructive">
+                    The repository Default Model could not load. {errorMessage(repoConfig.error)}
+                  </p>
+                  <Button type="button" variant="ghost" onClick={() => void repoConfig.refetch()}>
+                    Retry default model
+                  </Button>
+                </div>
+              )}
               <div className="grid gap-1.5">
                 <Label id="workspace-session-role">
                   Custom role <span className="font-normal text-muted-foreground">optional</span>

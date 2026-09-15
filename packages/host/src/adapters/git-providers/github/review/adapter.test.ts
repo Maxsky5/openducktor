@@ -28,7 +28,6 @@ const createRepoConfig = ({ githubEnabled = true }: { githubEnabled?: boolean } 
     workspaceId: "repo",
     workspaceName: "Repo",
     repoPath: "/repo",
-    defaultRuntimeKind: "opencode",
     git: {
       provider: {
         id: "github",

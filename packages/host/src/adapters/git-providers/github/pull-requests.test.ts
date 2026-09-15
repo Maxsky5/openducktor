@@ -49,7 +49,6 @@ const repoConfig = repoConfigSchema.parse({
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
   git: {
     provider: {
       id: "github",

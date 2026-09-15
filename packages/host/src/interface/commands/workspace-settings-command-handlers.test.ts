@@ -104,7 +104,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               workspaceId: "repo",
               workspaceName: "repo",
               repoPath: "/repo",
-              defaultRuntimeKind: "opencode" as const,
               branchPrefix: "odt",
               defaultTargetBranch: { remote: "origin", branch: "main" },
               git: {},
@@ -132,7 +131,6 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               workspaceId: "repo",
               workspaceName: "repo",
               repoPath: "/repo",
-              defaultRuntimeKind: "opencode",
               branchPrefix: "odt",
               defaultTargetBranch: { remote: "origin", branch: "main" },
               git: {},
@@ -352,14 +350,12 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
         workspaceId: "repo",
         workspaceName: "repo",
         repoPath: "/repo",
-        defaultRuntimeKind: "claude",
       }),
     ).resolves.toMatchObject({ workspaceId: "repo" });
     expect(addedWorkspaceInputs.at(-1)).toEqual({
       workspaceId: "repo",
       workspaceName: "repo",
       repoPath: "/repo",
-      defaultRuntimeKind: "claude",
     });
     await expect(router.invoke("workspace_select", { workspaceId: "repo" })).resolves.toMatchObject(
       { workspaceId: "repo" },
@@ -661,13 +657,5 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
         state: { openTaskIds: [42] },
       }),
     ).rejects.toThrow("workspace_replace_agent_studio_state state is invalid");
-    await expect(
-      router.invoke("workspace_add", {
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/repo",
-        defaultRuntimeKind: "unknown",
-      }),
-    ).rejects.toThrow("defaultRuntimeKind must be a supported runtime kind.");
   });
 });

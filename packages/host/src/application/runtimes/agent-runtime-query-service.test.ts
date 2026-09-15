@@ -108,7 +108,6 @@ const harness = async (
             workspaceId: "workspace",
             workspaceName: "Workspace",
             repoPath,
-            defaultRuntimeKind: "opencode",
             worktreeBasePath: options.worktreeBasePath,
           }),
         ),

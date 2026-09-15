@@ -171,10 +171,11 @@ const SESSION_START_TEST_RUNTIME_DEFINITIONS: RuntimeDescriptor[] = [
 
 const createRepoSettings = (
   overrides: Partial<RepoSettingsInput["agentDefaults"]> = {},
+  repoOverrides: Partial<RepoSettingsInput> = {},
 ): RepoSettingsInput => ({
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "codex/",
+  defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
   preStartHooks: [],
   postCompleteHooks: [],
@@ -199,6 +200,7 @@ const createRepoSettings = (
     qa: null,
     ...overrides,
   },
+  ...repoOverrides,
 });
 
 const createReadyRuntimeHealthMap = (runtimeDefinitions: RuntimeDescriptor[]) => {
@@ -275,7 +277,6 @@ const createBuildRepoSettingsForRuntime = (runtimeKind: RuntimeKind): RepoSettin
       profileId: "spec-agent",
     },
   }),
-  defaultRuntimeKind: runtimeKind,
 });
 
 const createExistingSessionWithModel = ({
@@ -416,7 +417,7 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
-  test("normalizes stale defaults against the loaded catalog", async () => {
+  test("drops a stale default that is absent from the loaded catalog", async () => {
     const harness = createHookHarness(
       createBaseProps({
         repoSettings: createRepoSettings({
@@ -444,18 +445,12 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    expect(harness.getLatest().selection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "spec-agent",
-    });
+    expect(harness.getLatest().selection).toBeNull();
 
     await harness.unmount();
   });
 
-  test("uses the resolved visible selection as the base after catalog hydration", async () => {
+  test("requires an explicit pick after the catalog rejects the stale default", async () => {
     const catalogDeferred = createDeferred<AgentModelCatalog>();
     const loadCatalog = mock(async () => catalogDeferred.promise);
     const props = createBaseProps({
@@ -489,25 +484,21 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       catalogDeferred.resolve(CATALOG);
     });
-    await harness.waitFor((state) => state.selection?.modelId === "gpt-5");
-
-    expect(harness.getLatest().selection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "spec-agent",
-    });
+    await harness.waitFor((state) => state.selection === null);
 
     await harness.run(() => {
-      harness.getLatest().handleSelectVariant("high");
+      harness.getLatest().handleSelectModelPair({
+        runtimeKind: "opencode",
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+      });
     });
 
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+      variant: "default",
       profileId: "spec-agent",
     });
 
@@ -957,14 +948,25 @@ describe("useSessionStartModalState", () => {
   test("falls back to repo default runtime when role runtime is missing", async () => {
     const harness = createHookHarness(
       createBaseProps({
-        repoSettings: createRepoSettings({
-          spec: {
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "spec-agent",
+        repoSettings: createRepoSettings(
+          {
+            spec: {
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "high",
+              profileId: "spec-agent",
+            },
           },
-        }),
+          {
+            defaultModel: {
+              runtimeKind: "opencode",
+              providerId: "openai",
+              modelId: "gpt-5",
+              variant: "",
+              profileId: "",
+            },
+          },
+        ),
       }),
     );
 
@@ -1709,7 +1711,6 @@ describe("useSessionStartModalState", () => {
         runtimeDefinitions: [FORK_RUNTIME_DESCRIPTOR],
         repoSettings: {
           ...createRepoSettings(),
-          defaultRuntimeKind: FORK_RUNTIME_KIND,
         },
       }),
     );

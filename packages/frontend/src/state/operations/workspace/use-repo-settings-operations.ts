@@ -9,7 +9,10 @@ import type {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { normalizeRepoAgentDefaultForSave } from "@/lib/repo-agent-defaults";
+import {
+  normalizeRepoAgentDefaultForSave,
+  normalizeRepoDefaultModelForSave,
+} from "@/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
@@ -94,6 +97,7 @@ export function useRepoSettingsOperations({
       const plannerDefault = toConfigDefault("planner", input.agentDefaults.planner);
       const buildDefault = toConfigDefault("build", input.agentDefaults.build);
       const qaDefault = toConfigDefault("qa", input.agentDefaults.qa);
+      const defaultModel = normalizeRepoDefaultModelForSave(input.defaultModel);
       const normalizedWorktreeBasePath = input.worktreeBasePath.trim();
       const normalizedBranchPrefix = input.branchPrefix.trim();
       const normalizedTargetBranch = normalizeTargetBranch(input.defaultTargetBranch);
@@ -119,7 +123,7 @@ export function useRepoSettingsOperations({
       }
 
       const workspace = await host.workspaceSaveRepoSettings(workspaceId, {
-        defaultRuntimeKind: input.defaultRuntimeKind,
+        defaultModel,
         worktreeBasePath: normalizedWorktreeBasePath,
         branchPrefix: normalizedBranchPrefix,
         defaultTargetBranch: normalizedTargetBranch,
