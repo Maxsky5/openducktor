@@ -52,6 +52,8 @@ const LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
 const activeWorkspace = {
   workspaceId: "workspace-1",
   workspaceName: "OpenDucktor",
+  abbreviation: null,
+  tileColor: null,
   repoPath: "/repo",
   iconDataUrl: undefined,
   isActive: true,

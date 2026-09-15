@@ -1,4 +1,5 @@
 import type { GitBranch, SettingsRepoConfig } from "@openducktor/contracts";
+import { WORKSPACE_ABBREVIATION_MAX_LENGTH } from "@openducktor/contracts";
 import { FolderOpen } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
@@ -8,10 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
+import {
+  deriveWorkspaceInitials,
+  resolveAutomaticTileColors,
+  resolveTileColor,
+} from "@/lib/workspace-tile-appearance";
 import { resolveFolderPickerInitialPath } from "./settings-repository-configuration-section-model";
+import { WorkspaceTileColorPicker } from "./settings-workspace-tile-color-picker";
 
 type RepositoryConfigurationSectionProps = {
   selectedRepoConfig: SettingsRepoConfig | null;
+  configuredWorkspaceIds: readonly string[];
   selectedRepoEffectiveWorktreeBasePath: string | null;
   selectedRepoBranches: GitBranch[];
   selectedRepoBranchesError: string | null;
@@ -30,6 +38,7 @@ type UpdateSelectedRepoConfig = RepositoryConfigurationSectionProps["onUpdateSel
 
 export function RepositoryConfigurationSection({
   selectedRepoConfig,
+  configuredWorkspaceIds,
   selectedRepoEffectiveWorktreeBasePath,
   selectedRepoBranches,
   selectedRepoBranchesError,
@@ -89,6 +98,7 @@ export function RepositoryConfigurationSection({
         <RepositoryWorkspaceIdentitySection
           isDisabled={isLoadingSettings || isSaving}
           selectedRepoConfig={selectedRepoConfig}
+          configuredWorkspaceIds={configuredWorkspaceIds}
           onPickRepoPath={() => setIsRepoPathPickerOpen(true)}
           onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
         />
@@ -163,14 +173,26 @@ export function RepositoryConfigurationSection({
 function RepositoryWorkspaceIdentitySection({
   isDisabled,
   selectedRepoConfig,
+  configuredWorkspaceIds,
   onPickRepoPath,
   onUpdateSelectedRepoConfig,
 }: {
   isDisabled: boolean;
   selectedRepoConfig: SettingsRepoConfig;
+  configuredWorkspaceIds: readonly string[];
   onPickRepoPath: () => void;
   onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
+  const automaticAbbreviation = deriveWorkspaceInitials(selectedRepoConfig.workspaceName);
+  const pickedTileColor = selectedRepoConfig.tileColor ?? null;
+  const automaticTileColors = resolveAutomaticTileColors(configuredWorkspaceIds);
+  const automaticTileColor = resolveTileColor({
+    workspaceId: selectedRepoConfig.workspaceId,
+    pickedColor: null,
+    automaticColors: automaticTileColors,
+  });
+  const effectiveTileColor = pickedTileColor ?? automaticTileColor;
+
   return (
     <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-4">
       <div className="grid gap-1">
@@ -203,6 +225,43 @@ function RepositoryWorkspaceIdentitySection({
           />
         </div>
       </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="repo-workspace-abbreviation">Abbreviation</Label>
+        <Input
+          id="repo-workspace-abbreviation"
+          className="max-w-24"
+          value={selectedRepoConfig.abbreviation ?? ""}
+          placeholder={automaticAbbreviation}
+          maxLength={WORKSPACE_ABBREVIATION_MAX_LENGTH}
+          disabled={isDisabled}
+          onChange={(event) => {
+            const abbreviation = event.currentTarget.value;
+            onUpdateSelectedRepoConfig((repoConfig) => ({
+              ...repoConfig,
+              abbreviation,
+            }));
+          }}
+        />
+        <p className="text-xs text-muted-foreground">
+          Up to {WORKSPACE_ABBREVIATION_MAX_LENGTH} characters shown on the workspace rail tile.
+          Leave this blank to use the letters from the workspace name.
+        </p>
+      </div>
+
+      <WorkspaceTileColorPicker
+        pickedColor={pickedTileColor}
+        automaticColor={automaticTileColor}
+        effectiveColor={effectiveTileColor}
+        abbreviationPreview={selectedRepoConfig.abbreviation?.trim() || automaticAbbreviation}
+        isDisabled={isDisabled}
+        onChangeTileColor={(nextTileColor) => {
+          onUpdateSelectedRepoConfig((repoConfig) => ({
+            ...repoConfig,
+            tileColor: nextTileColor ?? undefined,
+          }));
+        }}
+      />
 
       <div className="grid gap-2">
         <Label htmlFor="repo-path">Repository path</Label>

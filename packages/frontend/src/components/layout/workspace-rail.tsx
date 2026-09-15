@@ -33,30 +33,16 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  deriveWorkspaceInitials,
+  resolveAutomaticTileColors,
+  resolveTileColor,
+  tileLabelSizeClass,
+  tileSurfaceStyle,
+} from "@/lib/workspace-tile-appearance";
 import { useWorkspaceState } from "@/state/app-state-provider";
 
 const DRAG_DISTANCE_PX = 6;
-
-const deriveWorkspaceInitials = (workspaceName: string): string => {
-  const trimmedName = workspaceName.trim();
-  if (!trimmedName) {
-    return "?";
-  }
-
-  const segments = trimmedName.split(/[^A-Za-z0-9]+/).reduce<string[]>((nextSegments, segment) => {
-    const trimmedSegment = segment.trim();
-    if (trimmedSegment.length > 0) {
-      nextSegments.push(trimmedSegment);
-    }
-    return nextSegments;
-  }, []);
-
-  if (segments.length >= 2) {
-    return `${segments[0]?.[0] ?? ""}${segments[1]?.[0] ?? ""}`.toUpperCase();
-  }
-
-  return trimmedName.slice(0, 2).toUpperCase();
-};
 
 const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
   const pendingFrame = frameRef.current;
@@ -87,15 +73,16 @@ function WorkspaceRailAvatar({ workspace }: { workspace: WorkspaceRecord }): Rea
     );
   }
 
+  const label = workspace.abbreviation ?? deriveWorkspaceInitials(workspace.workspaceName);
+
   return (
-    <span className="text-xs font-semibold uppercase">
-      {deriveWorkspaceInitials(workspace.workspaceName)}
-    </span>
+    <span className={cn("font-semibold leading-none", tileLabelSizeClass(label))}>{label}</span>
   );
 }
 
 type WorkspaceRailButtonShellProps = {
   workspace: WorkspaceRecord;
+  tileColor: string;
   dragListeners?: ReturnType<typeof useSortable>["listeners"];
   shellRef?: RefCallback<HTMLDivElement>;
   style?: CSSProperties;
@@ -112,6 +99,7 @@ type WorkspaceRailButtonShellProps = {
 
 function WorkspaceRailButtonShell({
   workspace,
+  tileColor,
   dragListeners,
   shellRef,
   style,
@@ -140,11 +128,9 @@ function WorkspaceRailButtonShell({
         variant="ghost"
         className={cn(
           "size-10 rounded-lg border-none p-0 shadow-sm transition-none",
-          workspace.isActive
-            ? "bg-primary text-primary-foreground hover:bg-primary"
-            : "bg-card text-foreground hover:bg-card",
           isDragOverlay && "pointer-events-none",
         )}
+        style={tileSurfaceStyle(tileColor, { isActive: workspace.isActive })}
         aria-label={workspace.workspaceName}
         title={workspace.workspaceName}
         aria-disabled={isInteractionDisabled ? true : undefined}
@@ -177,12 +163,14 @@ function WorkspaceRailButtonShell({
 
 function SortableWorkspaceRailButton({
   workspace,
+  tileColor,
   isActiveDrag,
   shouldSuppressSelection,
   isSwitchingWorkspace,
   onSelectWorkspace,
 }: {
   workspace: WorkspaceRecord;
+  tileColor: string;
   isActiveDrag: boolean;
   shouldSuppressSelection: boolean;
   isSwitchingWorkspace: boolean;
@@ -200,6 +188,7 @@ function SortableWorkspaceRailButton({
   return (
     <WorkspaceRailButtonShell
       workspace={workspace}
+      tileColor={tileColor}
       shellRef={setNodeRef}
       dragListeners={isSwitchingWorkspace ? undefined : listeners}
       dragState={{
@@ -226,6 +215,10 @@ export function WorkspaceRail({
   const workspaceIds = useMemo(
     () => workspaces.map((workspace) => workspace.workspaceId),
     [workspaces],
+  );
+  const automaticTileColors = useMemo(
+    () => resolveAutomaticTileColors(workspaceIds),
+    [workspaceIds],
   );
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const suppressedSelectionWorkspaceIdRef = useRef<string | null>(null);
@@ -308,6 +301,11 @@ export function WorkspaceRail({
                   <SortableWorkspaceRailButton
                     key={workspace.workspaceId}
                     workspace={workspace}
+                    tileColor={resolveTileColor({
+                      workspaceId: workspace.workspaceId,
+                      pickedColor: workspace.tileColor,
+                      automaticColors: automaticTileColors,
+                    })}
                     isActiveDrag={activeWorkspaceId === workspace.workspaceId}
                     shouldSuppressSelection={
                       suppressedSelectionWorkspaceIdRef.current === workspace.workspaceId
@@ -331,6 +329,11 @@ export function WorkspaceRail({
               {activeDragWorkspace ? (
                 <WorkspaceRailButtonShell
                   workspace={activeDragWorkspace}
+                  tileColor={resolveTileColor({
+                    workspaceId: activeDragWorkspace.workspaceId,
+                    pickedColor: activeDragWorkspace.tileColor,
+                    automaticColors: automaticTileColors,
+                  })}
                   dragState={{ isOverlay: true }}
                   interactionState={{ isSwitchingWorkspace }}
                 />

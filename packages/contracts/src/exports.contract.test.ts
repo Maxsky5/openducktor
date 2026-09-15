@@ -620,6 +620,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "validatePromptTemplatePlaceholders",
   "validateSpecMarkdown",
   "withMaxUtf16Length",
+  "WORKSPACE_ABBREVIATION_MAX_LENGTH",
   "WORKSPACE_ID_PATTERN",
   "workspaceFileGitStatusSchema",
   "workspaceFileTreeEntrySchema",

@@ -137,6 +137,8 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
           {
             workspaceId: "repo",
             workspaceName: "Repo",
+            abbreviation: null,
+            tileColor: null,
             repoPath: "/repo",
             isActive: true,
             hasConfig: true,
@@ -597,6 +599,8 @@ describe("MCP server tool results", () => {
           {
             workspaceId: "repo",
             workspaceName: "Repo",
+            abbreviation: null,
+            tileColor: null,
             repoPath: "/repo",
             isActive: true,
             hasConfig: true,
@@ -611,6 +615,8 @@ describe("MCP server tool results", () => {
           {
             workspaceId: "repo",
             workspaceName: "Repo",
+            abbreviation: null,
+            tileColor: null,
             repoPath: "/repo",
             isActive: true,
             hasConfig: true,

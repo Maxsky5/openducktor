@@ -41,6 +41,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             return {
               workspaceId: "repo",
               workspaceName: "repo",
+              abbreviation: null,
+              tileColor: null,
               repoPath: "/repo",
               iconDataUrl: null,
               isActive: true,
@@ -65,6 +67,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             return {
               workspaceId: "repo",
               workspaceName: "repo",
+              abbreviation: null,
+              tileColor: null,
               repoPath: "/repo",
               iconDataUrl: null,
               isActive: true,
@@ -157,6 +161,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             return {
               workspaceId: "repo",
               workspaceName: "repo",
+              abbreviation: null,
+              tileColor: null,
               repoPath: "/repo",
               iconDataUrl: null,
               isActive: true,
@@ -181,6 +187,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             return {
               workspaceId: "repo",
               workspaceName: "repo",
+              abbreviation: null,
+              tileColor: null,
               repoPath: "/repo",
               iconDataUrl: null,
               isActive: true,
@@ -205,6 +213,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             return {
               workspaceId: "repo",
               workspaceName: "repo",
+              abbreviation: null,
+              tileColor: null,
               repoPath: "/repo",
               iconDataUrl: null,
               isActive: true,

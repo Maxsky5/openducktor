@@ -217,6 +217,18 @@ describe("settings save transforms", () => {
     });
   });
 
+  test("trims the abbreviation and drops a blank abbreviation and tile color", () => {
+    const trimmed = prepareRepoConfigForSave(
+      createRepoConfig({ abbreviation: " iOS ", tileColor: "#f08c00" }),
+    );
+    expect(trimmed.abbreviation).toBe("iOS");
+    expect(trimmed.tileColor).toBe("#f08c00");
+
+    const cleared = prepareRepoConfigForSave(createRepoConfig({ abbreviation: "   " }));
+    expect(cleared.abbreviation).toBeUndefined();
+    expect(cleared.tileColor).toBeUndefined();
+  });
+
   test("rejects configured agent defaults without runtime kind", () => {
     expect(() =>
       prepareRepoConfigForSave({

@@ -78,6 +78,8 @@ let workspaceRecords: WorkspaceRecord[] = [
   {
     workspaceId: "repo",
     workspaceName: "Repo",
+    abbreviation: null,
+    tileColor: null,
     repoPath: "/repo",
     isActive: true,
     hasConfig: true,
@@ -88,6 +90,8 @@ let workspaceRecords: WorkspaceRecord[] = [
   {
     workspaceId: "repo-two",
     workspaceName: "Repo Two",
+    abbreviation: null,
+    tileColor: null,
     repoPath: "/repo-two",
     isActive: false,
     hasConfig: true,
@@ -228,6 +232,8 @@ describe("useSettingsModalController", () => {
       {
         workspaceId: "repo",
         workspaceName: "Repo",
+        abbreviation: null,
+        tileColor: null,
         repoPath: "/repo",
         isActive: true,
         hasConfig: true,
@@ -238,6 +244,8 @@ describe("useSettingsModalController", () => {
       {
         workspaceId: "repo-two",
         workspaceName: "Repo Two",
+        abbreviation: null,
+        tileColor: null,
         repoPath: "/repo-two",
         isActive: false,
         hasConfig: true,

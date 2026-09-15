@@ -435,6 +435,37 @@ describe("createWorkspaceSettingsService", () => {
     });
     expect(records[1]?.effectiveWorktreeBasePath).toBe("/home/dev/.openducktor/worktrees/repo-a");
   });
+  test("reports the stored abbreviation and tile color and leaves them null when unset", async () => {
+    const service = createWorkspaceSettingsService(
+      createFakeSettingsConfig({
+        config: globalConfig({
+          activeWorkspace: "repo-a",
+          workspaceOrder: ["repo-a", "repo-b"],
+          workspaces: {
+            "repo-a": {
+              ...repoConfig("repo-a", "/repos/a"),
+              abbreviation: "iOS",
+              tileColor: "#f08c00",
+            },
+            "repo-b": repoConfig("repo-b", "/repos/b"),
+          },
+        }),
+      }),
+    );
+
+    const records = await Effect.runPromise(service.listWorkspaces());
+
+    expect(records[0]).toMatchObject({
+      workspaceId: "repo-a",
+      abbreviation: "iOS",
+      tileColor: "#f08c00",
+    });
+    expect(records[1]).toMatchObject({
+      workspaceId: "repo-b",
+      abbreviation: null,
+      tileColor: null,
+    });
+  });
   test("adds, selects, and reorders configured workspaces", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({
@@ -696,6 +727,72 @@ describe("createWorkspaceSettingsService", () => {
     expect(settingsConfig.writtenConfigs[0]?.chat).toEqual(explicitChatSettings);
     expect(settingsConfig.writtenConfigs[0]?.appearance).toEqual(explicitAppearanceSettings);
   });
+  test("persists a workspace abbreviation and tile color through a settings snapshot save", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo",
+        workspaceOrder: ["repo"],
+        workspaces: { repo: repoConfig("repo", "/repos/repo") },
+      }),
+      existingPaths: new Set(["/repos/repo", "/repos/repo/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+    const repoSnapshot = snapshot.workspaces.repo;
+    if (!repoSnapshot) {
+      throw new Error("expected repo workspace snapshot");
+    }
+
+    const records = await Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...snapshot,
+        workspaces: {
+          repo: { ...repoSnapshot, abbreviation: "iOS", tileColor: "#F08C00" },
+        },
+      }),
+    );
+
+    expect(records[0]).toMatchObject({ abbreviation: "iOS", tileColor: "#f08c00" });
+    expect(settingsConfig.writtenConfigs[0]?.workspaces.repo).toMatchObject({
+      abbreviation: "iOS",
+      tileColor: "#f08c00",
+    });
+  });
+
+  test("rejects a stored tile color that is not a 6-digit RGB hex value", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo",
+        workspaceOrder: ["repo"],
+        workspaces: { repo: repoConfig("repo", "/repos/repo") },
+      }),
+      existingPaths: new Set(["/repos/repo", "/repos/repo/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+    const repoSnapshot = snapshot.workspaces.repo;
+    if (!repoSnapshot) {
+      throw new Error("expected repo workspace snapshot");
+    }
+
+    const failure = await Effect.runPromise(
+      Effect.either(
+        service.saveSettingsSnapshot({
+          ...snapshot,
+          workspaces: { repo: { ...repoSnapshot, tileColor: "blue" } },
+        }),
+      ),
+    );
+
+    expect(failure._tag).toBe("Left");
+    if (failure._tag === "Left") {
+      expect(String(failure.left.message)).toContain(
+        "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
+      );
+    }
+    expect(settingsConfig.writtenConfigs).toHaveLength(0);
+  });
+
   test("replaces only the selected workspace Agent Studio state", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({

@@ -119,6 +119,8 @@ export const makeWorkspace = (
 ): WorkspaceRecord => ({
   workspaceId: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
   workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  abbreviation: null,
+  tileColor: null,
   repoPath,
   isActive: true,
   hasConfig: true,

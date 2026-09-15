@@ -39,6 +39,8 @@ export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepo
   return {
     workspaceId: repo.workspaceId,
     workspaceName: repo.workspaceName.trim(),
+    abbreviation: trimmedNonEmpty(repo.abbreviation ?? "") ?? undefined,
+    tileColor: trimmedNonEmpty(repo.tileColor ?? "") ?? undefined,
     repoPath: repo.repoPath.trim(),
     defaultModel: normalizeRepoDefaultModelForSave(repo.defaultModel),
     worktreeBasePath: trimmedNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,

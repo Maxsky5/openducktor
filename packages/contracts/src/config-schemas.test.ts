@@ -296,6 +296,60 @@ describe("config-schemas", () => {
     expect(parsed.defaultModel).toBeUndefined();
   });
 
+  test("leaves the workspace abbreviation and the tile color absent by default", () => {
+    const parsed = repoConfigSchema.parse(baseRepoConfigInput);
+
+    expect(parsed).not.toHaveProperty("abbreviation");
+    expect(parsed).not.toHaveProperty("tileColor");
+  });
+
+  test("clears the workspace abbreviation and the tile color on null", () => {
+    const parsed = repoConfigSchema.parse({
+      ...baseRepoConfigInput,
+      abbreviation: null,
+      tileColor: null,
+    });
+
+    expect(parsed.abbreviation).toBeUndefined();
+    expect(parsed.tileColor).toBeUndefined();
+  });
+
+  test("trims the workspace abbreviation and keeps its letter case", () => {
+    const parsed = repoConfigSchema.parse({
+      ...baseRepoConfigInput,
+      abbreviation: " iOS ",
+    });
+
+    expect(parsed.abbreviation).toBe("iOS");
+  });
+
+  test("rejects an abbreviation that is blank or longer than 3 characters", () => {
+    expect(() => repoConfigSchema.parse({ ...baseRepoConfigInput, abbreviation: "   " })).toThrow(
+      "Abbreviation cannot be blank.",
+    );
+    expect(() =>
+      repoConfigSchema.parse({ ...baseRepoConfigInput, abbreviation: "ABCD" }),
+    ).toThrow();
+  });
+
+  test("normalizes a tile color to lower case", () => {
+    const parsed = repoConfigSchema.parse({
+      ...baseRepoConfigInput,
+      tileColor: "#3B82F6",
+    });
+
+    expect(parsed.tileColor).toBe("#3b82f6");
+  });
+
+  test("names the field and the accepted form for a stored tile color that is not a hex value", () => {
+    expect(() => repoConfigSchema.parse({ ...baseRepoConfigInput, tileColor: "blue" })).toThrow(
+      "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
+    );
+    expect(() => repoConfigSchema.parse({ ...baseRepoConfigInput, tileColor: "3b82f6" })).toThrow(
+      "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
+    );
+  });
+
   test("defaults kanban settings for existing snapshots", () => {
     const parsed = settingsSnapshotSchema.parse({
       theme: "light",

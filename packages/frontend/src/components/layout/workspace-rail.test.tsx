@@ -15,6 +15,8 @@ const workspaceRecord = (
 ): WorkspaceRecord => ({
   workspaceId,
   workspaceName: options.workspaceName ?? workspaceId.toUpperCase(),
+  abbreviation: options.abbreviation ?? null,
+  tileColor: options.tileColor ?? null,
   repoPath: options.repoPath ?? `/${workspaceId}`,
   iconDataUrl: options.iconDataUrl,
   isActive: options.isActive ?? false,
@@ -116,6 +118,52 @@ describe("WorkspaceRail", () => {
     expect(selectWorkspaceMock).toHaveBeenCalledTimes(1);
     expect(selectWorkspaceMock).toHaveBeenCalledWith("beta");
     expect(openRepositoryModal).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows the abbreviation exactly as the user typed it", () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", { workspaceName: "Alpha Repo", abbreviation: "iOS" }),
+      workspaceRecord("beta", { workspaceName: "Beta Repo" }),
+    ];
+
+    const html = renderRailMarkup();
+
+    expect(html).toContain(">iOS<");
+    expect(html).toContain(">BR<");
+    expect(html).toContain('aria-label="Alpha Repo"');
+  });
+
+  test("paints the picked color at full strength on the active tile and tints an inactive tile", () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", {
+        workspaceName: "Alpha Repo",
+        tileColor: "#3b82f6",
+        isActive: true,
+      }),
+      workspaceRecord("beta", { workspaceName: "Beta Repo", tileColor: "#f43f5e" }),
+    ];
+
+    // The test DOM drops a `color-mix` value, so the inactive tint is read from the server render.
+    const html = renderRailMarkup();
+
+    expect(html).toContain("background-color:#3b82f6");
+    expect(html).toContain("background-color:color-mix(in oklab, #f43f5e 22%, var(--card))");
+  });
+
+  test("gives different automatic colors to workspaces without a picked color", () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", { workspaceName: "Alpha Repo", isActive: true }),
+      workspaceRecord("beta", { workspaceName: "Beta Repo", isActive: true }),
+    ];
+
+    renderRail();
+
+    const alphaStyle = screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("style");
+    const betaStyle = screen.getByRole("button", { name: "Beta Repo" }).getAttribute("style");
+
+    expect(alphaStyle).toContain("background-color");
+    expect(betaStyle).toContain("background-color");
+    expect(alphaStyle).not.toBe(betaStyle);
   });
 
   test("keeps buttons interactive-looking while a workspace switch is pending", () => {

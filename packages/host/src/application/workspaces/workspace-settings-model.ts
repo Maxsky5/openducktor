@@ -177,6 +177,8 @@ const workspaceRecordFromRepo = (
   return workspaceRecordSchema.parse({
     workspaceId: repo.workspaceId,
     workspaceName: repo.workspaceName,
+    abbreviation: repo.abbreviation ?? null,
+    tileColor: repo.tileColor ?? null,
     repoPath: repo.repoPath,
     iconDataUrl: null,
     isActive: config.activeWorkspace === workspaceId,

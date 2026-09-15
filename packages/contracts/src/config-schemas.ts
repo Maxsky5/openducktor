@@ -8,6 +8,7 @@ import {
   notificationSettingsSchema,
 } from "./notification-schemas";
 import { repoPromptOverridesSchema } from "./prompt-schemas";
+import { withMaxUtf16Length } from "./string-schemas";
 import { workspaceAgentStudioStateSchema } from "./workspace-agent-studio-state-schemas";
 import { customAgentRoleSchema } from "./workspace-session-schemas";
 
@@ -386,9 +387,29 @@ export const workspaceIdSchema = z
 
 export const workspaceNameSchema = trimmedRequiredString("Workspace name");
 
+export const WORKSPACE_ABBREVIATION_MAX_LENGTH = 3;
+
+const workspaceAbbreviationSchema = withMaxUtf16Length(
+  z.string().trim().min(1, "Abbreviation cannot be blank."),
+  WORKSPACE_ABBREVIATION_MAX_LENGTH,
+);
+
+const WORKSPACE_TILE_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+const workspaceTileColorSchema = z
+  .string()
+  .trim()
+  .regex(
+    WORKSPACE_TILE_COLOR_PATTERN,
+    "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
+  )
+  .transform((value) => value.toLowerCase());
+
 export const repoConfigSchema = z.object({
   workspaceId: workspaceIdSchema,
   workspaceName: workspaceNameSchema,
+  abbreviation: nullableToOptional(workspaceAbbreviationSchema),
+  tileColor: nullableToOptional(workspaceTileColorSchema),
   repoPath: trimmedRequiredString("Repository path"),
   defaultModel: nullableToOptional(agentModelDefaultSchema),
   worktreeBasePath: nullableToOptional(z.string().min(1)),

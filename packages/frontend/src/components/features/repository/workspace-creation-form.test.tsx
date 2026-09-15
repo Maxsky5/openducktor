@@ -127,6 +127,8 @@ const renderForm = ({
           {
             workspaceId: "existing",
             workspaceName: "Existing",
+            abbreviation: null,
+            tileColor: null,
             repoPath: "/repo",
             isActive: true,
             hasConfig: true,
