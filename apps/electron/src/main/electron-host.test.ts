@@ -43,17 +43,36 @@ const testRuntimeDistribution = createArtifactRuntimeDistribution({
   },
 });
 
-const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRouterInput> = {}) =>
-  createProductionElectronHostCommandRouter({
+const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRouterInput> = {}) => {
+  const defaultEnvironment = input.processEnvironmentInput
+    ? {}
+    : {
+        processEnv: {
+          OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
+          PATH: "/usr/bin:/bin",
+        },
+      };
+  return createProductionElectronHostCommandRouter({
     isPackaged: false,
     onBackgroundFailure: () => Effect.void,
-    processEnv: {
-      OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
-      PATH: "/usr/bin:/bin",
-    },
+    ...defaultEnvironment,
     runtimeDistribution: testRuntimeDistribution,
     ...input,
   });
+};
+
+const pathFailure = (
+  error: ProcessEnvironmentError,
+): NonNullable<ElectronHostCommandRouterInput["processEnvironmentInput"]> => ({
+  baseEnv: {
+    HOME: "/home/dev",
+    OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
+    PATH: "/usr/bin:/bin",
+  },
+  platform: "linux",
+  readLoginShellPath: () => Effect.fail(error),
+  readUserShell: () => process.execPath,
+});
 
 const createFilesystem = (): FilesystemPort => ({
   homeDirectory: () => "/home/dev",
@@ -992,7 +1011,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      processEnvironmentError: diagnostic,
+      processEnvironmentInput: pathFailure(diagnostic),
       settingsConfig: createSettingsConfig(
         globalConfig({
           workspaces: {
@@ -1030,7 +1049,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      processEnvironmentError: diagnostic,
+      processEnvironmentInput: pathFailure(diagnostic),
       settingsConfig: createSettingsConfig(
         globalConfig({
           agentRuntimes: {
@@ -1280,7 +1299,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      processEnvironmentError,
+      processEnvironmentInput: pathFailure(processEnvironmentError),
       runtimeHealth: createRuntimeHealth(),
       settingsConfig: createSettingsConfig(),
       systemCommands: createSystemCommands(),

@@ -111,7 +111,7 @@ const versionForResolvedTool = (
         }),
       );
 export const createSystemDiagnosticsService = ({
-  processEnvironmentErrorMessage,
+  pathError,
   runtimeDefinitionsService,
   runtimeHealth,
   settingsConfig,
@@ -119,7 +119,7 @@ export const createSystemDiagnosticsService = ({
   toolDiscovery,
   repoStoreDiagnostics,
 }: {
-  processEnvironmentErrorMessage?: string | null;
+  pathError?: string | null;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
@@ -156,7 +156,7 @@ export const createSystemDiagnosticsService = ({
         },
         { concurrency: "unbounded" },
       );
-      const errors = [processEnvironmentErrorMessage ?? null, gitError].filter(
+      const errors = [pathError ?? null, gitError].filter(
         (error): error is string => error !== null,
       );
       for (const runtime of runtimes) {

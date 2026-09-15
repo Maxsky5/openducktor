@@ -3,7 +3,7 @@ import { accessSync, constants } from "node:fs";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Effect } from "effect";
+import { Effect, Fiber, TestClock, TestContext } from "effect";
 import {
   createProcessEnvironment,
   normalizeProcessEnvironment,
@@ -18,7 +18,7 @@ const executablePath = (paths: string[]): string | null => {
       accessSync(candidate, constants.X_OK);
       return candidate;
     } catch {
-      // Check the next platform path.
+      continue;
     }
   }
   return null;
@@ -369,42 +369,39 @@ describe("createProcessEnvironment", () => {
     },
   );
 
-  testIfPosixShellIsAvailable(
-    "times out asynchronously with an actionable typed diagnostic",
-    async () => {
-      const root = await mkdtemp(path.join(tmpdir(), "odt-timeout-login-shell-"));
-      const shellPath = path.join(root, "fixture-shell");
-      try {
-        await writeFile(shellPath, "#!/bin/sh\nsleep 1\n");
-        await chmod(shellPath, 0o755);
-        let eventLoopAdvanced = false;
-        const resolutionPromise = Effect.runPromise(
-          createProcessEnvironment({
-            baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
-            loginShellTimeoutMs: 30,
-            platform: "linux",
-            readUserShell: () => shellPath,
-          }),
-        );
-        setTimeout(() => {
-          eventLoopAdvanced = true;
-        }, 0);
+  testIfPosixShellIsAvailable("times out without blocking and returns a typed error", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "odt-timeout-login-shell-"));
+    const shellPath = path.join(root, "fixture-shell");
+    try {
+      await writeFile(shellPath, "#!/bin/sh\nsleep 1\n");
+      await chmod(shellPath, 0o755);
+      const resolution = await Effect.runPromise(
+        Effect.gen(function* () {
+          const probe = yield* Effect.fork(
+            createProcessEnvironment({
+              baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
+              loginShellTimeoutMs: 30,
+              platform: "linux",
+              readUserShell: () => shellPath,
+            }),
+          );
+          yield* Effect.yieldNow();
+          yield* TestClock.adjust("30 millis");
+          return yield* Fiber.join(probe);
+        }).pipe(Effect.provide(TestContext.TestContext)),
+      );
 
-        const resolution = await resolutionPromise;
-
-        expect(eventLoopAdvanced).toBe(true);
-        expect(resolution.error).toMatchObject({
-          _tag: "ProcessEnvironmentError",
-          reason: "timed_out",
-          shell: shellPath,
-        });
-        expect(resolution.error?.message).toContain("wait for input");
-        expect(resolution.environment.PATH).toBeUndefined();
-      } finally {
-        await rm(root, { force: true, recursive: true });
-      }
-    },
-  );
+      expect(resolution.error).toMatchObject({
+        _tag: "ProcessEnvironmentError",
+        reason: "timed_out",
+        shell: shellPath,
+      });
+      expect(resolution.error?.message).toContain("wait for input");
+      expect(resolution.environment.PATH).toBeUndefined();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("normalizeProcessEnvironment", () => {

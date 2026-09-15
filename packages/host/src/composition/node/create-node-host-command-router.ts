@@ -155,7 +155,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const systemDiagnosticsService = createSystemDiagnosticsService({
-    processEnvironmentErrorMessage: processEnvironmentError?.message ?? null,
+    pathError: processEnvironmentError?.message ?? null,
     runtimeDefinitionsService,
     runtimeHealth,
     settingsConfig,

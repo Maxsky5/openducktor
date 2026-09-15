@@ -337,7 +337,7 @@ describe("createSystemDiagnosticsService", () => {
       shell: "/bin/zsh",
     });
     const service = createSystemDiagnosticsServiceForTest({
-      processEnvironmentErrorMessage: processEnvironmentError.message,
+      pathError: processEnvironmentError.message,
       runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
