@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import type { HostValidationErrorAggregate } from "../../effect/host-errors";
+import type { WorkspaceOwnershipLock } from "../workspaces/workspace-ownership-lock";
 import type { GitService } from "./git-service-types";
 
 export type GitWorkspaceAdmission = {
@@ -14,6 +15,7 @@ export type GitWorkspaceAdmission = {
 export const withGitWorkspaceAdmission = (
   service: GitService,
   admission: GitWorkspaceAdmission,
+  ownershipLock: WorkspaceOwnershipLock,
 ): GitService => {
   const guard = <A, E, R>(
     repoPath: string,
@@ -37,7 +39,9 @@ export const withGitWorkspaceAdmission = (
     rebaseAbort: (input) => guard(input.repoPath, service.rebaseAbort(input), input.workingDir),
     rebaseBranch: (input) => guard(input.repoPath, service.rebaseBranch(input), input.workingDir),
     removeWorktree: (input) =>
-      guard(input.repoPath, service.removeWorktree(input), input.worktreePath),
+      ownershipLock.runExclusive(
+        guard(input.repoPath, service.removeWorktree(input), input.worktreePath),
+      ),
     resetWorktreeSelection: (input) =>
       guard(input.repoPath, service.resetWorktreeSelection(input), input.workingDir),
     switchBranch: (input) => guard(input.repoPath, service.switchBranch(input)),

@@ -359,7 +359,13 @@ describe("workspace lifecycle service", () => {
         calls.push("close-task-store");
       }),
     );
+    const activity = activityWith(
+      [],
+      () => Effect.sync(() => calls.push("release-sessions")),
+      () => Effect.sync(() => calls.push("release-runtimes")),
+    );
     const service = createService({
+      activity,
       admission: { ...createAdmissionDouble(), blockWorkspace },
       closeWorkspaceTaskStore,
       closeWorkspace,
@@ -382,7 +388,14 @@ describe("workspace lifecycle service", () => {
     });
     expect(releaseWorkspace).toHaveBeenCalledWith("ws");
     expect(closeWorkspaceTaskStore).toHaveBeenCalledWith("ws");
-    expect(calls).toEqual(["close", "block", "close-task-store", "release"]);
+    expect(calls).toEqual([
+      "release-sessions",
+      "release-runtimes",
+      "close",
+      "block",
+      "close-task-store",
+      "release",
+    ]);
   });
 
   test("closeWorkspace keeps ownership when the task store cannot close", async () => {
@@ -438,6 +451,7 @@ describe("workspace lifecycle service", () => {
   });
 
   test("closeWorkspace returns the catalog for an already closed workspace without inspection", async () => {
+    const calls: string[] = [];
     const inspect = mock(() => Effect.succeed([]));
     const closeWorkspaceTaskStore = mock(() => Effect.void);
     const releaseWorkspace = mock(() => Effect.void);
@@ -445,8 +459,8 @@ describe("workspace lifecycle service", () => {
     const service = createService({
       activity: {
         inspect,
-        releaseWorkspaceSessions: () => Effect.void,
-        releaseWorkspaceRuntimes: () => Effect.void,
+        releaseWorkspaceSessions: () => Effect.sync(() => calls.push("release-sessions")),
+        releaseWorkspaceRuntimes: () => Effect.sync(() => calls.push("release-runtimes")),
       },
       closeWorkspaceTaskStore,
       getRepoConfig: () => Effect.succeed(repoConfig({ closed: true })),
@@ -463,6 +477,7 @@ describe("workspace lifecycle service", () => {
 
     expect(result).toEqual(expected);
     expect(inspect).not.toHaveBeenCalled();
+    expect(calls).toEqual(["release-sessions", "release-runtimes"]);
     expect(closeWorkspaceTaskStore).toHaveBeenCalledWith("ws");
     expect(releaseWorkspace).toHaveBeenCalledWith("ws");
   });

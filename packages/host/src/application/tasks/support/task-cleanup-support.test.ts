@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { HostOperationError } from "../../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
+import { createWorktreeFilePortTestDouble } from "../../../test-support/service-test-doubles";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
+  createDirectMergeDevServerService,
   createDirectMergeGitPort,
 } from "../test-support/task-workflow-harness";
-import { appendTaskCleanupProgress } from "./task-cleanup-progress";
+import { appendTaskCleanupProgress, createTaskCleanupProgressState } from "./task-cleanup-progress";
 import {
   collectResetWorktreePaths,
+  runTaskLocalCleanup,
   validateExistingTaskWorktreeCandidate,
 } from "./task-cleanup-support";
 
@@ -74,5 +77,43 @@ describe("task cleanup support", () => {
     );
 
     expect(result).toBe(worktreePath);
+  });
+
+  test("validates all worktree owners before task cleanup removes a checkout", async () => {
+    const worktreePath = "/worktrees/repo/task-1";
+    const calls: unknown[] = [];
+
+    await expect(
+      Effect.runPromise(
+        runTaskLocalCleanup({
+          branchNames: [],
+          devServerService: createDirectMergeDevServerService(calls),
+          gitPort: createDirectMergeGitPort({ calls }),
+          managedWorktreeBasePath: "/worktrees/repo",
+          progress: createTaskCleanupProgressState(),
+          repoPath: "/repo",
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo", worktreePath])),
+          taskIds: ["task-1"],
+          terminalService: {
+            acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
+          },
+          worktreeCleanupOperation: "task_delete",
+          worktreeFiles: createWorktreeFilePortTestDouble({}),
+          worktreePaths: [worktreePath],
+          withWorkStartLease: (_repoPath, effect, workingDirectory) =>
+            workingDirectory === worktreePath
+              ? Effect.fail(
+                  new HostValidationError({
+                    field: "workingDirectory",
+                    message: `${worktreePath} belongs to another workspace.`,
+                  }),
+                )
+              : effect,
+        }).pipe(Effect.scoped),
+      ),
+    ).rejects.toThrow("belongs to another workspace");
+    expect(calls).not.toContainEqual(
+      expect.objectContaining({ type: "removeWorktree", worktreePath }),
+    );
   });
 });
