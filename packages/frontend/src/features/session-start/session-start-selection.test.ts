@@ -232,6 +232,109 @@ describe("required session default selection", () => {
     );
   });
 
+  test("fails when the saved variant is not available for the model", async () => {
+    const settings = createRepoSettings({
+      defaultModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "removed-effort",
+        profileId: "",
+      },
+    });
+    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+
+    await expect(
+      resolveRequiredDefaultSessionSelection({
+        role: "build",
+        repoSettings: settings,
+        repoPath: "/repo",
+        loadRepoRuntimeCatalog,
+      }),
+    ).rejects.toThrow(
+      "The saved Builder default or repository Default Model is not available for runtime opencode. Update it in Settings > Repositories > Agents.",
+    );
+  });
+
+  test("fails when the saved profile is not available for the runtime", async () => {
+    const settings = createRepoSettings({
+      defaultModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "",
+        profileId: "removed-agent",
+      },
+    });
+    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+
+    await expect(
+      resolveRequiredDefaultSessionSelection({
+        role: "build",
+        repoSettings: settings,
+        repoPath: "/repo",
+        loadRepoRuntimeCatalog,
+      }),
+    ).rejects.toThrow(
+      "The saved Builder default or repository Default Model is not available for runtime opencode. Update it in Settings > Repositories > Agents.",
+    );
+  });
+
+  test("fails when the saved profile is hidden", async () => {
+    const catalogWithHiddenProfile: AgentModelCatalog = {
+      ...CATALOG,
+      profiles: [{ name: "build-agent", mode: "primary", hidden: true }],
+    };
+    const settings = createRepoSettings({
+      defaultModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "",
+        profileId: "build-agent",
+      },
+    });
+    const loadRepoRuntimeCatalog = mock(async () => catalogWithHiddenProfile);
+
+    await expect(
+      resolveRequiredDefaultSessionSelection({
+        role: "build",
+        repoSettings: settings,
+        repoPath: "/repo",
+        loadRepoRuntimeCatalog,
+      }),
+    ).rejects.toThrow(
+      "The saved Builder default or repository Default Model is not available for runtime opencode. Update it in Settings > Repositories > Agents.",
+    );
+  });
+
+  test("keeps the first model variant when the saved default has no variant", async () => {
+    const settings = createRepoSettings({
+      defaultModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "",
+        profileId: "",
+      },
+    });
+    const loadRepoRuntimeCatalog = mock(async () => CATALOG);
+
+    await expect(
+      resolveRequiredDefaultSessionSelection({
+        role: "build",
+        repoSettings: settings,
+        repoPath: "/repo",
+        loadRepoRuntimeCatalog,
+      }),
+    ).resolves.toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+    });
+  });
+
   test("fails with the saved default and the catalog cause when the runtime catalog rejects", async () => {
     const settings = createRepoSettings({
       defaultModel: {

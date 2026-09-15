@@ -1,5 +1,5 @@
 import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -64,6 +64,13 @@ export const defaultSessionSelectionFor = (
     repoDefaultModelSelectionFor(repoSettings),
   );
 
+const savedVariantAndProfileAreAvailable = (
+  saved: RuntimeBoundModelSelection,
+  validated: AgentModelSelection,
+): boolean =>
+  (saved.variant === undefined || validated.variant === saved.variant) &&
+  (saved.profileId === undefined || validated.profileId === saved.profileId);
+
 export const resolveRequiredDefaultSessionSelection = async ({
   role,
   repoSettings,
@@ -95,7 +102,10 @@ export const resolveRequiredDefaultSessionSelection = async ({
     );
   }
   const validatedSelection = coerceVisibleSelectionToCatalog(catalog, savedDefaultSelection);
-  if (!validatedSelection) {
+  if (
+    !validatedSelection ||
+    !savedVariantAndProfileAreAvailable(savedDefaultSelection, validatedSelection)
+  ) {
     throw new Error(unavailableSessionDefaultModelError({ role, runtimeKind }));
   }
   return { ...validatedSelection, runtimeKind };

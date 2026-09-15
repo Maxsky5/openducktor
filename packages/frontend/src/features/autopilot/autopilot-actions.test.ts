@@ -161,7 +161,11 @@ const createExecuteArgs = (task: TaskCard) => {
       defaultModelsByProvider: {
         openai: "gpt-5",
       },
-      profiles: [{ id: "planner", label: "Planner", mode: "primary" }],
+      profiles: [
+        { id: "planner", label: "Planner", mode: "primary" },
+        { id: "builder", label: "Builder", mode: "primary" },
+        { id: "qa", label: "QA", mode: "primary" },
+      ],
     })),
     loadRepoRuntimeSlashCommands: mock(async () => ({ commands: [] })),
     loadRepoRuntimeFileSearch: mock(async () => []),
