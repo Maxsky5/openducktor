@@ -677,8 +677,8 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   z-index: 1;
 }
 
-/* The rail active badge matches the Agent activity card glyph, so it carries a
-   soft pulse instead of the ring the Agent Studio task tab draws. */
+/* The rail active badge is a plain colored dot, so it reports work with a soft
+   pulse instead of the ring the Agent Studio task tab draws. */
 @keyframes odt-workspace-rail-status-pulse {
   0%,
   100% {
@@ -689,7 +689,7 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   }
 }
 
-.workspace-rail-status-running-icon {
+.workspace-rail-status-running-dot {
   animation: odt-workspace-rail-status-pulse 1350ms ease-in-out infinite;
 }
 
@@ -755,7 +755,7 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   .onboarding-stage-enter,
   .agent-studio-task-status-running-dot::before,
   .agent-studio-task-status-running-dot::after,
-  .workspace-rail-status-running-icon,
+  .workspace-rail-status-running-dot,
   .odt-border-ray-segment {
     animation: none;
   }

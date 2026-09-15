@@ -1,4 +1,3 @@
-import { Activity, CircleAlert, TriangleAlert } from "lucide-react";
 import type { ReactElement } from "react";
 import type { WorkspaceActivityState } from "@/features/workspace-activity/workspace-activity-state";
 import { cn } from "@/lib/utils";
@@ -19,22 +18,15 @@ export type WorkspaceActivityBadge = {
 };
 
 /**
- * Badge icons, matching the Agent activity card of the sidebar.
+ * Badge fill, matching the session status dots of the workspace sessions page.
  *
- * The error glyph is new, because a failed session is marked by a plain dot
- * inside a workspace today.
+ * The badges carry no glyph, so the tile states are told apart by color, and
+ * the hover text and assistive text of each badge name the state in full.
  */
-const WORKSPACE_ACTIVITY_ICONS = {
-  inputRequired: <CircleAlert className="size-3 text-warning-accent" />,
-  error: <TriangleAlert className="size-3 text-destructive" />,
-  active: <Activity className="workspace-rail-status-running-icon size-3 text-info-accent" />,
-} satisfies Record<WorkspaceActivityBadgeKey, ReactElement>;
-
-/** Badge outline, in the color of the glyph it surrounds. */
-const WORKSPACE_ACTIVITY_BADGE_BORDERS = {
-  inputRequired: "border-warning-accent",
-  error: "border-destructive",
-  active: "border-info-accent",
+const WORKSPACE_ACTIVITY_BADGE_COLORS = {
+  inputRequired: "bg-warning-accent",
+  error: "bg-destructive",
+  active: "workspace-rail-status-running-dot bg-status-running",
 } satisfies Record<WorkspaceActivityBadgeKey, string>;
 
 /** Left to right: input required, then error, then active. */
@@ -69,8 +61,7 @@ export const workspaceActivityBadges = (
  * The strip is absolutely positioned inside the tile button, so it changes no
  * tile size and no rail spacing, and every pointer event still reaches the
  * button. It straddles the top edge of the tile: two thirds of a badge sit over
- * the tile and one third over the gap above it. The badges overlap each other
- * just enough that three of them still fit the 40px tile width.
+ * the tile and one third over the gap above it.
  */
 export function WorkspaceRailActivityBadges({
   badges,
@@ -86,21 +77,18 @@ export function WorkspaceRailActivityBadges({
   return (
     <span
       id={describedById}
-      className="absolute right-0 top-0 inline-flex -translate-y-1/3 items-start -space-x-1"
+      className="absolute right-0 top-0 inline-flex -translate-y-1/3 items-start gap-0.5"
       data-testid="workspace-rail-activity-badges"
     >
       {badges.map((badge) => (
         <span
           key={badge.key}
           className={cn(
-            "inline-flex size-4 items-center justify-center rounded-full border bg-background",
-            WORKSPACE_ACTIVITY_BADGE_BORDERS[badge.key],
+            "size-2.5 shrink-0 rounded-full",
+            WORKSPACE_ACTIVITY_BADGE_COLORS[badge.key],
           )}
           title={badge.label}
         >
-          <span aria-hidden="true" className="inline-flex items-center justify-center">
-            {WORKSPACE_ACTIVITY_ICONS[badge.key]}
-          </span>
           <span className="sr-only">{badge.label}</span>
         </span>
       ))}
