@@ -154,4 +154,20 @@ describe("buildRepositoryAgentControls", () => {
     expect(controls.selectedPickerValue).toBeNull();
     expect(controls.variant.disabled).toBeTrue();
   });
+
+  test("disables the profile control until the saved default has a model", () => {
+    const controls = buildRepositoryAgentControls({
+      value: { ...savedDefault, providerId: "", modelId: "" },
+      runtimeKind: "opencode",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      catalog: opencodeCatalog,
+      isCatalogLoading: false,
+      isSaving: false,
+    });
+
+    expect(controls.selectedPickerValue).toBeNull();
+    expect(controls.profile.options.map((option) => option.value)).toEqual(["build"]);
+    expect(controls.profile.disabled).toBeTrue();
+    expect(controls.profile.placeholder).toBe("Select a model first");
+  });
 });

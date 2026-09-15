@@ -19,9 +19,11 @@ export type RepositoryAgentControls = {
 };
 
 const profilePlaceholderFor = ({
+  hasSelectedModel,
   isCatalogLoading,
   supportsProfiles,
 }: {
+  hasSelectedModel: boolean;
   isCatalogLoading: boolean;
   supportsProfiles: boolean;
 }): string => {
@@ -30,6 +32,9 @@ const profilePlaceholderFor = ({
   }
   if (isCatalogLoading) {
     return "Loading agents…";
+  }
+  if (!hasSelectedModel) {
+    return "Select a model first";
   }
   return "Select agent";
 };
@@ -67,10 +72,16 @@ export const buildRepositoryAgentControls = ({
     profile: {
       options: profileOptions,
       placeholder: profilePlaceholderFor({
+        hasSelectedModel: selectedPickerValue !== null,
         isCatalogLoading,
         supportsProfiles,
       }),
-      disabled: isCatalogLoading || isSaving || !supportsProfiles || profileOptions.length === 0,
+      disabled:
+        isCatalogLoading ||
+        isSaving ||
+        !supportsProfiles ||
+        !selectedPickerValue ||
+        profileOptions.length === 0,
     },
     variant: {
       visible: runtimeDescriptor?.capabilities.optionalSurfaces.supportsVariants === true,

@@ -144,4 +144,21 @@ describe("RepositoryDefaultModelBlock", () => {
     expect(profileControlHtml(html)).toContain("Select agent");
     expect(profileTriggerTag(html)).not.toMatch(/ disabled=""/);
   });
+
+  test("renders the profile control disabled until a model is selected", () => {
+    const html = renderBlock({
+      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      catalog: opencodeCatalog,
+      defaultModel: {
+        runtimeKind: "opencode",
+        providerId: "",
+        modelId: "",
+        variant: "",
+        profileId: "",
+      },
+    });
+
+    expect(profileControlHtml(html)).toContain("Select a model first");
+    expect(profileTriggerTag(html)).toMatch(/ disabled=""/);
+  });
 });
