@@ -457,7 +457,7 @@ test("keeps the connection slot when a workspace close fails", async () => {
   expect(closeResult._tag).toBe("Left");
   if (closeResult._tag === "Left") {
     expect(closeResult.left.message).toBe(
-      "Failed to close the task store for workspace alpha: Failed to close alpha.",
+      "Failed to close the task store for workspace alpha: Failed to close alpha. Restart OpenDucktor before reopening this workspace.",
     );
   }
   const disposeResult = await Effect.runPromise(Effect.either(manager.dispose()));

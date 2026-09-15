@@ -32,7 +32,8 @@ export const withGitWorkspaceAdmission = (
     ...service,
     abortConflict: (input) => guard(input.repoPath, service.abortConflict(input), input.workingDir),
     commitAll: (input) => guard(input.repoPath, service.commitAll(input), input.workingDir),
-    createWorktree: (input) => guard(input.repoPath, service.createWorktree(input)),
+    createWorktree: (input) =>
+      ownershipLock.runExclusive(guard(input.repoPath, service.createWorktree(input))),
     fetchRemote: (input) => guard(input.repoPath, service.fetchRemote(input), input.workingDir),
     pullBranch: (input) => guard(input.repoPath, service.pullBranch(input), input.workingDir),
     pushBranch: (input) => guard(input.repoPath, service.pushBranch(input), input.workingDir),
