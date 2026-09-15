@@ -4,10 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, Chunk, Effect, Exit } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import {
-  createProcessEnvironment,
-  ProcessEnvironmentError,
-} from "../../infrastructure/process/process-environment";
+import { createProcessEnvironment } from "../../infrastructure/process/process-environment";
 import { createDevServerProcessAdapter as createEffectDevServerProcessAdapter } from "./dev-server-process-adapter";
 
 const createDevServerProcessAdapter = (
@@ -227,35 +224,6 @@ setInterval(() => {}, 1000);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
-  });
-
-  test("reports the startup PATH diagnostic before it starts a dev server", async () => {
-    const diagnostic = new ProcessEnvironmentError({
-      message:
-        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
-      reason: "timed_out",
-      shell: "/bin/zsh",
-    });
-    const port = createEffectDevServerProcessAdapter({
-      processEnv: {},
-      processEnvironmentError: diagnostic,
-    });
-
-    const failure = await firstFailure(
-      port.start({
-        command: "should-not-run",
-        cwd: process.cwd(),
-        onExit: () => {},
-        onOutput: () => {},
-      }),
-    );
-
-    expect(failure).toMatchObject({
-      _tag: "HostOperationError",
-      operation: "devServerProcess.resolveEnvironment",
-      message: diagnostic.message,
-      details: { reason: "timed_out", shell: "/bin/zsh" },
-    });
   });
 
   test("passes a PATH entry defined only in .zshrc to dev server commands", async () => {

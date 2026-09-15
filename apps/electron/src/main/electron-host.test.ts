@@ -815,7 +815,7 @@ describe("createElectronHostCommandRouter", () => {
 
       await writeFile(configPath, JSON.stringify({ version: 3 }));
       await expect(router.invoke("workspace_get_settings_snapshot")).resolves.toMatchObject({
-        theme: "light",
+        theme: "system",
       });
     } finally {
       await rm(configDirectory, { force: true, recursive: true });
@@ -1086,6 +1086,45 @@ describe("createElectronHostCommandRouter", () => {
     );
   });
 
+  test("blocks an injected dev server process when the user PATH is unavailable", async () => {
+    const diagnostic = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
+    let startCalls = 0;
+    const devServerProcesses: DevServerProcessPort = {
+      start: () =>
+        Effect.sync(() => {
+          startCalls += 1;
+          throw new Error("Injected dev server process must not start.");
+        }),
+    };
+    const router = await createElectronHostCommandRouter({
+      devServerProcesses,
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      processEnvironmentInput: pathFailure(diagnostic),
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          workspaces: {
+            repo: repoConfig({
+              devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
+            }),
+          },
+          workspaceOrder: ["repo"],
+        }),
+      ),
+    });
+
+    await expect(
+      router.invoke("dev_server_start", { repoPath: "/repo", taskId: "task-1" }),
+    ).rejects.toThrow(diagnostic.message);
+    expect(startCalls).toBe(0);
+  });
+
   test("blocks every runtime start when the user PATH is unavailable", async () => {
     const diagnostic = new ProcessEnvironmentError({
       message:
@@ -1118,6 +1157,45 @@ describe("createElectronHostCommandRouter", () => {
         `Failed to start ${runtimeKind} runtime because the user PATH is unavailable. ${diagnostic.message}`,
       );
     }
+  });
+
+  test("blocks an injected runtime registry when the user PATH is unavailable", async () => {
+    const diagnostic = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
+    let startCalls = 0;
+    const runtimeRegistry = createRuntimeRegistry({
+      workspaceStarter: {
+        startWorkspaceRuntime: () =>
+          Effect.sync(() => {
+            startCalls += 1;
+            throw new Error("Injected runtime registry must not start.");
+          }),
+      },
+    });
+    const router = await createElectronHostCommandRouter({
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      processEnvironmentInput: pathFailure(diagnostic),
+      runtimeRegistry,
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          workspaces: { repo: repoConfig() },
+          workspaceOrder: ["repo"],
+        }),
+      ),
+    });
+
+    await expect(
+      router.invoke("runtime_ensure", { runtimeKind: "opencode", repoPath: "/repo" }),
+    ).rejects.toThrow(
+      `Failed to start opencode runtime because the user PATH is unavailable. ${diagnostic.message}`,
+    );
+    expect(startCalls).toBe(0);
   });
 
   test("registers migrated read-only git host commands", async () => {

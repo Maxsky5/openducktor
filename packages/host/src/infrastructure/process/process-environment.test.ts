@@ -3,7 +3,7 @@ import { accessSync, constants } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Effect, Fiber, TestClock, TestContext } from "effect";
+import { Effect } from "effect";
 import {
   createProcessEnvironment,
   normalizeProcessEnvironment,
@@ -28,6 +28,16 @@ const bashPath = executablePath(["/bin/bash", "/usr/bin/bash"]);
 const cshPath = executablePath(["/bin/tcsh", "/bin/csh", "/usr/bin/tcsh", "/usr/bin/csh"]);
 const testIfBashIsAvailable = bashPath ? test : test.skip;
 const testIfCshIsAvailable = cshPath ? test : test.skip;
+
+const waitFor = async (check: () => boolean, timeoutMs = 1_000): Promise<void> => {
+  const startedAt = Date.now();
+  while (!check()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for the process to stop.");
+    }
+    await Bun.sleep(10);
+  }
+};
 
 const resolveProcessEnvironment = async (
   input: Parameters<typeof createProcessEnvironment>[0],
@@ -371,27 +381,88 @@ describe("createProcessEnvironment", () => {
     },
   );
 
-  testIfPosixShellIsAvailable("times out without blocking and returns a typed error", async () => {
+  testIfPosixShellIsAvailable(
+    "returns a typed diagnostic when the shell output has no PATH",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "odt-invalid-login-shell-"));
+      const shellPath = path.join(root, "fixture-shell");
+      try {
+        await writeFile(shellPath, '#!/bin/sh\nunset PATH\nexec /bin/sh -c "$2"\n');
+        await chmod(shellPath, 0o755);
+
+        const resolution = await Effect.runPromise(
+          createProcessEnvironment({
+            baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
+            platform: "linux",
+            readUserShell: () => shellPath,
+          }),
+        );
+
+        expect(resolution.error).toMatchObject({
+          _tag: "ProcessEnvironmentError",
+          reason: "invalid_output",
+          shell: shellPath,
+        });
+        expect(resolution.environment.PATH).toBeUndefined();
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
+
+  testIfPosixShellIsAvailable(
+    "returns a typed diagnostic when shell startup output is too large",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "odt-large-login-shell-"));
+      const shellPath = path.join(root, "fixture-shell");
+      try {
+        await writeFile(
+          shellPath,
+          '#!/bin/sh\ni=0\nwhile [ "$i" -lt 1025 ]; do\n  printf \'%1024s\' x\n  i=$((i + 1))\ndone\nexec /bin/sh -c "$2"\n',
+        );
+        await chmod(shellPath, 0o755);
+
+        const resolution = await Effect.runPromise(
+          createProcessEnvironment({
+            baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
+            platform: "linux",
+            readUserShell: () => shellPath,
+          }),
+        );
+
+        expect(resolution.error).toMatchObject({
+          _tag: "ProcessEnvironmentError",
+          reason: "output_limit",
+          shell: shellPath,
+        });
+        expect(resolution.environment.PATH).toBeUndefined();
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
+
+  testIfPosixShellIsAvailable("times out and stops child jobs", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "odt-timeout-login-shell-"));
     const shellPath = path.join(root, "fixture-shell");
+    const childPidPath = path.join(root, "child.pid");
+    let childPid: number | null = null;
     try {
-      await writeFile(shellPath, "#!/bin/sh\nsleep 1\n");
+      await writeFile(
+        shellPath,
+        '#!/bin/sh\nsleep 5 &\nprintf \'%s\' "$!" > "$HOME/child.pid"\nsleep 5\n',
+      );
       await chmod(shellPath, 0o755);
       const resolution = await Effect.runPromise(
-        Effect.gen(function* () {
-          const probe = yield* Effect.fork(
-            createProcessEnvironment({
-              baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
-              loginShellTimeoutMs: 30,
-              platform: "linux",
-              readUserShell: () => shellPath,
-            }),
-          );
-          yield* Effect.yieldNow();
-          yield* TestClock.adjust("30 millis");
-          return yield* Fiber.join(probe);
-        }).pipe(Effect.provide(TestContext.TestContext)),
+        createProcessEnvironment({
+          baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
+          loginShellTimeoutMs: 500,
+          platform: "linux",
+          readUserShell: () => shellPath,
+        }),
       );
+      const stoppedPid = Number(await readFile(childPidPath, "utf8"));
+      childPid = stoppedPid;
 
       expect(resolution.error).toMatchObject({
         _tag: "ProcessEnvironmentError",
@@ -400,7 +471,11 @@ describe("createProcessEnvironment", () => {
       });
       expect(resolution.error?.message).toContain("wait for input");
       expect(resolution.environment.PATH).toBeUndefined();
+      await waitFor(() => !processIsAlive(stoppedPid));
     } finally {
+      if (childPid && processIsAlive(childPid)) {
+        process.kill(childPid, "SIGKILL");
+      }
       await rm(root, { force: true, recursive: true });
     }
   });
