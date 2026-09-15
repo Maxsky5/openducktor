@@ -29,33 +29,40 @@ const resultSchema = z.object({
   taskState: z.enum(["deleted", "present"]),
 }) satisfies z.ZodType<TestScopeProductionConfigResult>;
 
-test("rejects a test-scoped production root before startup changes task-asset state", async () => {
-  const temporaryHome = await mkdtemp(path.join(tmpdir(), "openducktor-production-guard-"));
-  roots.push(temporaryHome);
-  const environment: NodeJS.ProcessEnv = { ...process.env, HOME: temporaryHome };
-  delete environment.OPENDUCKTOR_CONFIG_DIR;
-  const child = Bun.spawn({
-    cmd: [
-      process.execPath,
-      fileURLToPath(
-        new URL("./test-support/test-scope-production-config-fixture.ts", import.meta.url),
-      ),
-    ],
-    env: environment,
-    stderr: "pipe",
-    stdout: "pipe",
-  });
-  const [exitCode, stderr, stdout] = await Promise.all([
-    child.exited,
-    new Response(child.stderr).text(),
-    new Response(child.stdout).text(),
-  ]);
+test.each([
+  ["production root", "direct"],
+  ["symlink to the production root", "symlink"],
+] as const)(
+  "rejects a test-scoped %s before startup changes task-asset state",
+  async (_, scenario) => {
+    const temporaryHome = await mkdtemp(path.join(tmpdir(), "openducktor-production-guard-"));
+    roots.push(temporaryHome);
+    const environment: NodeJS.ProcessEnv = { ...process.env, HOME: temporaryHome };
+    delete environment.OPENDUCKTOR_CONFIG_DIR;
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        fileURLToPath(
+          new URL("./test-support/test-scope-production-config-fixture.ts", import.meta.url),
+        ),
+        scenario,
+      ],
+      env: environment,
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    const [exitCode, stderr, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+      new Response(child.stdout).text(),
+    ]);
 
-  expect(exitCode, stderr).toBe(0);
-  const result = resultSchema.parse(JSON.parse(stdout));
-  expect(result.error).toContain(
-    "Test scope refuses task asset access under the production config directory",
-  );
-  expect(result.after).toEqual(result.before);
-  expect(result.taskState).toBe("present");
-});
+    expect(exitCode, stderr).toBe(0);
+    const result = resultSchema.parse(JSON.parse(stdout));
+    expect(result.error).toContain(
+      "Test scope refuses task asset access under the production config directory",
+    );
+    expect(result.after).toEqual(result.before);
+    expect(result.taskState).toBe("present");
+  },
+);

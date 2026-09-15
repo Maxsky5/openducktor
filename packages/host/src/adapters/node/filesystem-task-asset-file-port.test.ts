@@ -420,14 +420,23 @@ describe("node task asset file port", () => {
     ).resolves.toEqual(Buffer.from([1]));
   });
 
-  test("refuses a test-scoped production config before a file operation can run", () => {
-    expect(() =>
-      createNodeTaskAssetFilePort({
-        configDir: path.join(homedir(), ".openducktor"),
-        configDirScope: "test",
-      }),
-    ).toThrow("Test scope refuses task asset access under the production config directory");
-  });
+  test.each([
+    ["production root", path.join(homedir(), ".openducktor"), true],
+    ["production child", path.join(homedir(), ".openducktor", "task-test"), true],
+    ["similar sibling prefix", path.join(homedir(), ".openducktor-copy"), false],
+  ] as const)(
+    "handles the test-scoped %s before a file operation can run",
+    (_, configDir, rejects) => {
+      const createPort = () => createNodeTaskAssetFilePort({ configDir, configDirScope: "test" });
+      if (rejects) {
+        expect(createPort).toThrow(
+          "Test scope refuses task asset access under the production config directory",
+        );
+        return;
+      }
+      expect(createPort).not.toThrow();
+    },
+  );
 
   test("keeps crash cleanup bounded across repeated owner generations", async () => {
     const { aliveProcessIds, configDir, createPort } = await createHarness();

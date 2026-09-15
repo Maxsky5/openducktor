@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
@@ -28,6 +28,12 @@ const assetId = "550e8400-e29b-41d4-a716-446655440000";
 
 const run = async (): Promise<TestScopeProductionConfigResult> => {
   const configDir = path.join(homedir(), ".openducktor");
+  const configScenario = process.argv[2];
+  if (configScenario !== "direct" && configScenario !== "symlink") {
+    throw new Error("Expected a direct or symlink config scenario.");
+  }
+  const configuredConfigDir =
+    configScenario === "symlink" ? path.join(homedir(), ".openducktor-test-link") : configDir;
   const ownersRoot = path.join(configDir, "task-asset-owners");
   const stagingFile = path.join(
     configDir,
@@ -54,6 +60,9 @@ const run = async (): Promise<TestScopeProductionConfigResult> => {
   );
   await writeFile(stagingFile, new Uint8Array([1]));
   await writeFile(durableFile, new Uint8Array([2]));
+  if (configScenario === "symlink") {
+    await symlink(configDir, configuredConfigDir, "dir");
+  }
 
   const readBytes = async (filePath: string): Promise<number[] | null> =>
     readFile(filePath).then(
@@ -88,7 +97,7 @@ const run = async (): Promise<TestScopeProductionConfigResult> => {
           }),
       }),
       onBackgroundFailure: () => Effect.void,
-      processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir },
+      processEnv: { OPENDUCKTOR_CONFIG_DIR: configuredConfigDir },
       workspaceSettingsService: unusedWorkspaceSettingsService,
     });
     await Effect.runPromise(services.startupSweep());

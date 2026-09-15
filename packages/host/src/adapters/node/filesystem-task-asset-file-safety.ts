@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -13,6 +14,28 @@ const isWithinDirectory = (directory: string, target: string): boolean => {
   );
 };
 
+const resolvePathThroughExistingAncestor = (
+  inputPath: string,
+  missingSegments: string[] = [],
+): string => {
+  const absolutePath = path.resolve(inputPath);
+  try {
+    return path.join(realpathSync.native(absolutePath), ...missingSegments);
+  } catch (cause) {
+    if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
+      throw cause;
+    }
+    const parentPath = path.dirname(absolutePath);
+    if (parentPath === absolutePath) {
+      throw cause;
+    }
+    return resolvePathThroughExistingAncestor(parentPath, [
+      path.basename(absolutePath),
+      ...missingSegments,
+    ]);
+  }
+};
+
 export const createTaskAssetFileSafety = ({
   configDir,
   configDirScope,
@@ -20,9 +43,15 @@ export const createTaskAssetFileSafety = ({
   configDir: string;
   configDirScope: OpenDucktorConfigDirScope;
 }) => {
-  const productionConfigDir = path.resolve(resolveOpenDucktorBaseDir("production", {}));
+  const productionConfigDir =
+    configDirScope === "test"
+      ? resolvePathThroughExistingAncestor(resolveOpenDucktorBaseDir("production", {}))
+      : null;
   const assertProductionConfigIsNotUsedByTests = (target: string): void => {
-    if (configDirScope === "test" && isWithinDirectory(productionConfigDir, path.resolve(target))) {
+    if (
+      productionConfigDir !== null &&
+      isWithinDirectory(productionConfigDir, resolvePathThroughExistingAncestor(target))
+    ) {
       throw new Error(
         `Test scope refuses task asset access under the production config directory ${productionConfigDir}.`,
       );
