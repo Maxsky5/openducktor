@@ -5,6 +5,7 @@ import { createSqliteTaskAssetRegistry } from "../../adapters/sqlite/sqlite-task
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import type { WorkspaceHostOwnershipPort } from "../../ports/workspace-host-ownership-port";
 import { createSqliteTaskRepositoryContextManager } from "../../adapters/sqlite/sqlite-task-repository-context";
 import { createTaskAssetAwareTaskStore } from "../../application/task-assets/task-asset-aware-task-store";
 import {
@@ -59,6 +60,7 @@ export type NodeTaskAssetServices = {
 export const createNodeTaskAssetServices = ({
   assertWorkspaceAdmitted,
   configuredTaskStore,
+  hostOwnership,
   isWorkspaceRemovalPending,
   onBackgroundFailure,
   processEnv,
@@ -72,6 +74,7 @@ export const createNodeTaskAssetServices = ({
     workspaceId: string;
   }) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
   configuredTaskStore?: TaskStorePort | undefined;
+  hostOwnership: Pick<WorkspaceHostOwnershipPort, "claimWorkspace" | "releaseWorkspace">;
   isWorkspaceRemovalPending: (workspaceId: string) => boolean;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv: NodeJS.ProcessEnv;
@@ -113,6 +116,7 @@ export const createNodeTaskAssetServices = ({
   });
   const taskAssetRecoveryService = createTaskAssetRecoveryService({
     filePort,
+    hostOwnership,
     isWorkspaceRemovalPending,
     registry,
     resolveRepoPath: (workspaceId) =>

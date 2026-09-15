@@ -5,7 +5,7 @@ import type { WorkspaceOwnershipLock } from "../workspaces/workspace-ownership-l
 import { withTaskWorkspaceOwnership, withWorkspaceAdmission } from "./task-workspace-admission";
 
 describe("task workspace admission", () => {
-  test("holds the ownership lock through destructive task admission", async () => {
+  test("holds the ownership lock through task worktree setup and cleanup", async () => {
     const events: string[] = [];
     const ownershipLock: WorkspaceOwnershipLock = {
       runExclusive: (effect) =>
@@ -17,6 +17,11 @@ describe("task workspace admission", () => {
     };
     const admitted = withWorkspaceAdmission(
       createTaskServiceWithMutationProgressTestDouble({
+        buildStart: () =>
+          Effect.sync(() => {
+            events.push("build-start");
+            return { runtimeKind: "opencode" as const, workingDirectory: "/worktree" };
+          }),
         deleteTask: () =>
           Effect.sync(() => {
             events.push("delete");
@@ -37,7 +42,21 @@ describe("task workspace admission", () => {
     await Effect.runPromise(
       service.deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
     );
+    await Effect.runPromise(
+      service.buildStart({ repoPath: "/repo", taskId: "task-1", runtimeKind: "opencode" }),
+    );
 
-    expect(events).toEqual(["lock", "lease", "delete", "release-lease", "unlock"]);
+    expect(events).toEqual([
+      "lock",
+      "lease",
+      "delete",
+      "release-lease",
+      "unlock",
+      "lock",
+      "lease",
+      "build-start",
+      "release-lease",
+      "unlock",
+    ]);
   });
 });

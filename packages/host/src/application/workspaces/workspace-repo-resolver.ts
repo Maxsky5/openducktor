@@ -28,6 +28,19 @@ export const createWorkspaceRepoResolver =
           normalizePathForComparison(workspace.repoPath) === workingDirectoryComparison,
       );
       if (exactWorkspace) return exactWorkspace.repoPath;
+      let containingWorkspace: (typeof workspaces)[number] | undefined;
+      let containingRootLength = -1;
+      for (const workspace of workspaces) {
+        const root = normalizePathForComparison(workspace.repoPath);
+        if (
+          root.length > containingRootLength &&
+          pathStartsWith(workingDirectoryComparison, root)
+        ) {
+          containingWorkspace = workspace;
+          containingRootLength = root.length;
+        }
+      }
+      if (containingWorkspace) return containingWorkspace.repoPath;
       let baseWorkspace: (typeof workspaces)[number] | undefined;
       let baseLength = -1;
       for (const workspace of workspaces) {

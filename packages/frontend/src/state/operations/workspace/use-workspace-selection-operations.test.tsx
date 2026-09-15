@@ -810,6 +810,34 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
+  test("drops repository-path and workspace-id caches after reopen", async () => {
+    const harness = createSelectionHarness({
+      activeRepo: null,
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [{ id: "stale-task" }],
+      });
+      queryClient.setQueryData(["workspace", "repo-config", "repo"], { workspaceId: "repo" });
+
+      await harness.run((value) =>
+        value.reopenWorkspace({ workspaceId: "repo", expectedRepoPath: "/repo" }),
+      );
+
+      expect(queryClient.getQueryData(taskQueryKeys.repoData("/repo"))).toBeUndefined();
+      expect(queryClient.getQueryData(["workspace", "repo-config", "repo"])).toBeUndefined();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps global and other-workspace caches when the removed workspace id matches a namespace", async () => {
     workspaceHost.workspaceRemove = mock(async () => ({
       catalog: {

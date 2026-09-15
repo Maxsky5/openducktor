@@ -143,6 +143,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const assets = createNodeTaskAssetServices({
     assertWorkspaceAdmitted: workspaceAdmissionService.assertTaskStoreAccess,
     configuredTaskStore,
+    hostOwnership: workspaceHostOwnership,
     isWorkspaceRemovalPending: workspaceAdmissionService.isWorkspaceRemovalPending,
     onBackgroundFailure,
     processEnv,
