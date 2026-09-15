@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { accessSync, constants } from "node:fs";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect, Fiber, TestClock, TestContext } from "effect";
@@ -10,6 +10,7 @@ import {
   pathEnvironmentValue,
   sanitizeChildProcessEnvironment,
 } from "./process-environment";
+import { processIsAlive } from "./process-tree";
 
 const testIfPosixShellIsAvailable = process.platform === "win32" ? test.skip : test;
 const executablePath = (paths: string[]): string | null => {
@@ -37,7 +38,7 @@ const loginShellPath = (pathValue: string) => () => Effect.succeed(pathValue);
 const writeFakeLoginShell = async (shellPath: string, pathValue: string): Promise<void> => {
   await writeFile(
     shellPath,
-    `#!/bin/sh\nprintf 'profile noise\\0__OPENDUCKTOR_ENV_START__\\0USER=max\\0PATH=${pathValue}\\0'\n`,
+    `#!/bin/sh\nprintf 'profile noise\\0'\nexport PATH="${pathValue}"\nexec /bin/sh -c "$2"\n`,
   );
   await chmod(shellPath, 0o755);
 };
@@ -75,6 +76,7 @@ describe("createProcessEnvironment", () => {
     );
 
     expect(resolution).toEqual({
+      status: "ready",
       environment: { Path: "C:\\Windows\\System32" },
       error: null,
     });
@@ -402,6 +404,42 @@ describe("createProcessEnvironment", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  testIfPosixShellIsAvailable(
+    "finishes after the shell exits and stops a background child that inherited stdout",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "odt-background-login-shell-"));
+      const shellPath = path.join(root, "fixture-shell");
+      const childPidPath = path.join(root, "child.pid");
+      let childPid: number | null = null;
+      try {
+        await writeFile(
+          shellPath,
+          `#!/bin/sh\nexport PATH="/fixture/background:$PATH"\nsleep 5 &\nprintf '%s' "$!" > "$HOME/child.pid"\nexec /bin/sh -c "$2"\n`,
+        );
+        await chmod(shellPath, 0o755);
+
+        const resolution = await Effect.runPromise(
+          createProcessEnvironment({
+            baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
+            loginShellTimeoutMs: 1_000,
+            platform: "linux",
+            readUserShell: () => shellPath,
+          }),
+        );
+        childPid = Number(await readFile(childPidPath, "utf8"));
+
+        expect(resolution.error).toBeNull();
+        expect(resolution.environment.PATH?.split(":")[0]).toBe("/fixture/background");
+        expect(processIsAlive(childPid)).toBe(false);
+      } finally {
+        if (childPid && processIsAlive(childPid)) {
+          process.kill(childPid, "SIGKILL");
+        }
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
 });
 
 describe("normalizeProcessEnvironment", () => {

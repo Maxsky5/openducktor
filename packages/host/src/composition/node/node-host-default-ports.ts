@@ -143,6 +143,7 @@ const makeNodeHostDefaultPorts = (
   Effect.gen(function* () {
     const processEnvironment = input.processEnv
       ? {
+          status: "ready" as const,
           environment: input.processEnv,
           error: null,
         }
@@ -183,11 +184,25 @@ const makeNodeHostDefaultPorts = (
         const runtimeHealth =
           input.runtimeHealth ??
           createRuntimeHealthProbe(systemCommands, toolDiscovery, runtimeExecutableProbes);
+        const initializeRuntimeConfig =
+          processEnvironment.status === "ready"
+            ? createRuntimeConfigInitializer(toolDiscovery)
+            : () =>
+                Effect.fail(
+                  toHostOperationError(
+                    processEnvironment.error,
+                    "runtimeConfig.resolveEnvironment",
+                    {
+                      reason: processEnvironment.error.reason,
+                      shell: processEnvironment.error.shell,
+                    },
+                  ),
+                );
         const settingsConfig =
           input.settingsConfig ??
           createSettingsConfigAdapter({
             environment: processEnv,
-            initializeConfig: createRuntimeConfigInitializer(toolDiscovery),
+            initializeConfig: initializeRuntimeConfig,
           });
         const defaultCodexAppServer = createCodexAppServerTransportRegistry();
         const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
