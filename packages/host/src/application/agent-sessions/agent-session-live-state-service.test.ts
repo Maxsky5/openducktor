@@ -1328,6 +1328,64 @@ describe("createAgentSessionLiveStateService", () => {
     expect(continuationInputs).toHaveLength(2);
   });
 
+  test("classifies a missing live runtime as runtime_unavailable", async () => {
+    const { service } = createHarness();
+
+    const failure = await expectHostFailure(
+      service.continueInterruptedTurn({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/missing-session",
+        externalSessionId: "missing-session",
+        sessionScope: { kind: "repository" },
+      }),
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      reason: "runtime_unavailable",
+      operation: "agent-session.continue-interrupted-turn",
+      sessionRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/missing-session",
+        externalSessionId: "missing-session",
+      },
+      nextAction: "Restore or restart the runtime for this session, then retry Resume.",
+    });
+  });
+
+  test("classifies a runtime without session control as unsupported", async () => {
+    const { service } = createHarness();
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        fakeAdapter({
+          runtimeId: "runtime-without-control",
+          runtimeKind: "opencode",
+          snapshots: () => [],
+        }),
+      ),
+    );
+
+    const failure = await expectHostFailure(
+      service.continueInterruptedTurn({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/persisted-session",
+        externalSessionId: "persisted-session",
+        sessionScope: { kind: "repository" },
+      }),
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      reason: "unsupported",
+      operation: "agent-session.continue-interrupted-turn",
+      nextAction:
+        "Use a runtime that supports interrupted-turn resume, or send a new message to start new work.",
+    });
+  });
+
   test("routes unloaded session controls through the repository runtime scope", async () => {
     const { service } = createHarness();
     const calls: Array<{ operation: string; input: unknown }> = [];

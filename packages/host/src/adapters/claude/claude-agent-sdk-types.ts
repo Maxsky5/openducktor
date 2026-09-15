@@ -28,6 +28,7 @@ import type {
   HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { OpenDucktorMcpBridgeConnection } from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
@@ -46,6 +47,7 @@ export type CreateClaudeAgentSdkServiceInput = {
   runtimeDistribution: HostRuntimeDistribution;
   sessionStore?: ClaudeSessionStore;
   settingsConfig: SettingsConfigPort;
+  systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
   now?: () => string;
   randomId?: () => string;

@@ -133,14 +133,21 @@ export const createOpenCodeSessionControlAdapter = ({
         connection.resumeSession(request),
       );
     },
-    continueInterruptedTurn: (input) =>
-      runControlSummary("opencode-live-session.continue-interrupted-turn", () =>
-        connection.continueInterruptedTurn({
-          ...toSessionRef(input),
-          runtimeKind: "opencode",
-          runtimePolicy: { kind: "opencode" },
-          sessionScope: input.sessionScope,
-        }),
+    continueInterruptedTurn: (input) => {
+      const request: Parameters<typeof connection.continueInterruptedTurn>[0] = {
+        ...toSessionRef(input),
+        runtimeKind: "opencode",
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: input.sessionScope,
+      };
+      if (input.model) {
+        request.model = input.model;
+      }
+      if (input.systemPrompt) {
+        request.systemPrompt = input.systemPrompt;
+      }
+      return runControlSummary("opencode-live-session.continue-interrupted-turn", () =>
+        connection.continueInterruptedTurn(request),
       ).pipe(
         Effect.mapError((cause) =>
           toAgentSessionResumeError(
@@ -149,7 +156,8 @@ export const createOpenCodeSessionControlAdapter = ({
             "opencode-live-session.continue-interrupted-turn",
           ),
         ),
-      ),
+      );
+    },
     forkSession: (input) => {
       const request: Parameters<typeof connection.forkSession>[0] = {
         repoPath: input.repoPath,

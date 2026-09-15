@@ -85,6 +85,46 @@ describe("OpenCode live session controls", () => {
     }
   });
 
+  test("forwards the prepared model and system prompt to a continuation", async () => {
+    const harness = createRuntimeHarness();
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    const model = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "medium",
+    };
+
+    try {
+      await Effect.runPromise(
+        prepared.adapter.continueInterruptedTurn({
+          ...ref,
+          externalSessionId: "controlled-session",
+          sessionScope: controlSummary.sessionAssociation,
+          model,
+          systemPrompt: "Keep the stored plan.",
+        }),
+      );
+
+      expect(harness.controlCalls).toContainEqual({
+        operation: "continue",
+        input: expect.objectContaining({
+          externalSessionId: "controlled-session",
+          model,
+          systemPrompt: "Keep the stored plan.",
+        }),
+      });
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
   test("sends to a stored workflow session without live state", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];

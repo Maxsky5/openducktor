@@ -72,6 +72,7 @@ import {
   continueOpencodeInterruptedTurn,
   probeOpencodeInterruptedTurn,
   toOpencodeInterruptedTurnResumeError,
+  toOpencodeSessionNotFoundResumeError,
 } from "./opencode-interrupted-turn";
 import { loadSessionHistory, loadSessionTodos } from "./message-ops";
 import { normalizeModelInput } from "./payload-mappers";
@@ -299,7 +300,18 @@ export class OpencodeSdkAdapter
       this.getRuntimeDefinition(),
       "continue OpenCode turn",
     );
-    await this.resumeSession(input);
+    try {
+      await this.resumeSession(input);
+    } catch (error) {
+      const notFound = toOpencodeSessionNotFoundResumeError(
+        error instanceof Error ? error : null,
+        input.externalSessionId,
+      );
+      if (notFound) {
+        throw notFound;
+      }
+      throw error;
+    }
     const session = requireSession(this.sessions, input.externalSessionId);
 
     let probe: Awaited<ReturnType<typeof probeOpencodeInterruptedTurn>>;
@@ -310,11 +322,17 @@ export class OpencodeSdkAdapter
         externalSessionId: input.externalSessionId,
       });
     } catch (error) {
-      throw interruptedTurnResumeError({
-        reason: "probe_failed",
-        message: `Cannot read the OpenCode turn state for session '${input.externalSessionId}': ${error instanceof Error ? error.message : String(error)}`,
-        cause: error,
-      });
+      throw (
+        toOpencodeSessionNotFoundResumeError(
+          error instanceof Error ? error : null,
+          input.externalSessionId,
+        ) ??
+        interruptedTurnResumeError({
+          reason: "probe_failed",
+          message: `Cannot read the OpenCode turn state for session '${input.externalSessionId}': ${error instanceof Error ? error.message : String(error)}`,
+          cause: error,
+        })
+      );
     }
     if (probe.kind !== "unfinished_turn") {
       throw toOpencodeInterruptedTurnResumeError(probe, input.externalSessionId);
@@ -347,11 +365,17 @@ export class OpencodeSdkAdapter
       if (idleEvent && this.sessions.get(input.externalSessionId) === session) {
         this.emit(input.externalSessionId, idleEvent);
       }
-      throw interruptedTurnResumeError({
-        reason: "continuation_failed",
-        message: `OpenCode could not continue the interrupted turn for session '${input.externalSessionId}': ${error instanceof Error ? error.message : String(error)}`,
-        cause: error,
-      });
+      throw (
+        toOpencodeSessionNotFoundResumeError(
+          error instanceof Error ? error : null,
+          input.externalSessionId,
+        ) ??
+        interruptedTurnResumeError({
+          reason: "continuation_failed",
+          message: `OpenCode could not continue the interrupted turn for session '${input.externalSessionId}': ${error instanceof Error ? error.message : String(error)}`,
+          cause: error,
+        })
+      );
     } finally {
       completeOpencodeUserMessageSend(session);
     }

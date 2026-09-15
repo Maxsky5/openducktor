@@ -28,7 +28,12 @@ import {
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
-import { type HostError, HostInvariantError, HostValidationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostInvariantError,
+  HostResourceError,
+  HostValidationError,
+} from "../../effect/host-errors";
 import type { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import type {
   AgentSessionLiveAdapterChange,
@@ -204,6 +209,40 @@ export const createAgentSessionLiveStateService = ({
     listSnapshots,
   });
 
+  const continuationSessionRef = (
+    input: AgentSessionControlContinueInterruptedTurnInput,
+  ): AgentSessionLiveRef => ({
+    repoPath: input.repoPath,
+    runtimeKind: input.runtimeKind,
+    workingDirectory: input.workingDirectory,
+    externalSessionId: input.externalSessionId,
+  });
+
+  const toContinuationResolutionError = (
+    cause: HostError,
+    input: AgentSessionControlContinueInterruptedTurnInput,
+  ): HostError => {
+    if (cause instanceof HostResourceError && cause.resource === "agent_session_control_adapter") {
+      return new AgentSessionResumeError({
+        reason: "unsupported",
+        sessionRef: continuationSessionRef(input),
+        operation: "agent-session.continue-interrupted-turn",
+        message: cause.message,
+        cause,
+      });
+    }
+    if (cause instanceof HostResourceError && cause.resource === "agent_session_live_adapter") {
+      return new AgentSessionResumeError({
+        reason: "runtime_unavailable",
+        sessionRef: continuationSessionRef(input),
+        operation: "agent-session.continue-interrupted-turn",
+        message: cause.message,
+        cause,
+      });
+    }
+    return cause;
+  };
+
   const runControl = <A>(
     scope: AgentSessionLiveAdapterScope,
     control: (adapter: AgentSessionRuntimeAdapterPort) => Effect.Effect<A, HostError>,
@@ -309,7 +348,9 @@ export const createAgentSessionLiveStateService = ({
     ),
     continueInterruptedTurn: withStartAdmission((input) =>
       Effect.gen(function* () {
-        const adapter = yield* adapterRegistry.resolveControlForScope(input);
+        const adapter = yield* adapterRegistry
+          .resolveControlForScope(input)
+          .pipe(Effect.mapError((cause) => toContinuationResolutionError(cause, input)));
         const continuationKey = [
           adapter.binding.runtimeId,
           input.externalSessionId,
@@ -319,12 +360,7 @@ export const createAgentSessionLiveStateService = ({
           return yield* Effect.fail(
             new AgentSessionResumeError({
               reason: "continuation_in_progress",
-              sessionRef: {
-                repoPath: input.repoPath,
-                runtimeKind: input.runtimeKind,
-                workingDirectory: input.workingDirectory,
-                externalSessionId: input.externalSessionId,
-              },
+              sessionRef: continuationSessionRef(input),
               operation: "agent-session.continue-interrupted-turn",
               message: `Session '${input.externalSessionId}' already has a continuation in progress. Wait for it to settle, then retry Resume.`,
             }),
@@ -334,7 +370,18 @@ export const createAgentSessionLiveStateService = ({
         const summary = yield* adapter
           .continueInterruptedTurn(input)
           .pipe(Effect.ensuring(Effect.sync(() => continuationsInFlight.delete(continuationKey))));
-        yield* lifecycle.requireAttached(adapter.binding);
+        yield* lifecycle.requireAttached(adapter.binding).pipe(
+          Effect.mapError(
+            (cause) =>
+              new AgentSessionResumeError({
+                reason: "runtime_unavailable",
+                sessionRef: continuationSessionRef(input),
+                operation: "agent-session.continue-interrupted-turn",
+                message: cause.message,
+                cause,
+              }),
+          ),
+        );
         return summary;
       }),
     ),

@@ -1,5 +1,5 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
-import { interruptedTurnResumeError } from "@openducktor/core";
+import { type InterruptedTurnResumeError, interruptedTurnResumeError } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import {
   opencodeSessionMessagesPayloadSchema,
@@ -7,7 +7,7 @@ import {
 } from "./opencode-ingress";
 import { toOpencodeSessionStatusMap } from "./live-session-snapshots";
 import { listOpencodeSessionPendingInput } from "./pending-input-ops";
-import { toOpenCodeRequestError } from "./request-errors";
+import { OpenCodeRequestError, toOpenCodeRequestError } from "./request-errors";
 
 type OpencodeSessionMessageEntry = {
   readonly info: ParsedOpencodeMessage["info"];
@@ -139,6 +139,22 @@ export const continueOpencodeInterruptedTurn = async (
     throw toOpenCodeRequestError("prompt session", response.error, response.response);
   }
 };
+
+/**
+ * Classifies a request failure that means the OpenCode session no longer exists.
+ * Returns null for every other failure so the caller keeps its own classification.
+ */
+export const toOpencodeSessionNotFoundResumeError = (
+  cause: Error | null,
+  externalSessionId: string,
+): InterruptedTurnResumeError | null =>
+  cause instanceof OpenCodeRequestError && cause.status === 404
+    ? interruptedTurnResumeError({
+        reason: "session_not_found",
+        message: `OpenCode session '${externalSessionId}' no longer exists on the runtime.`,
+        cause,
+      })
+    : null;
 
 export const toOpencodeInterruptedTurnResumeError = (
   probe: Exclude<OpencodeInterruptedTurnProbe, { kind: "unfinished_turn" }>,

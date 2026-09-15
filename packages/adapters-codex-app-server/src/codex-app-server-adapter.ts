@@ -525,6 +525,12 @@ export class CodexAppServerAdapter
         message: `Codex thread '${input.externalSessionId}' does not match the stored working directory '${input.workingDirectory}'.`,
       });
     }
+    if (thread.status.type === "active" && thread.status.activeFlags.length > 0) {
+      throw interruptedTurnResumeError({
+        reason: "waiting_input",
+        message: `Codex session '${input.externalSessionId}' is waiting for ${thread.status.activeFlags.join(" and ")}.`,
+      });
+    }
     if (thread.status.type === "active" || thread.status.type === "systemError") {
       throw interruptedTurnResumeError({
         reason: "live_turn",

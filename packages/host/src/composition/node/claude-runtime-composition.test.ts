@@ -11,6 +11,7 @@ import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-s
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
+import { createClaudeSystemCommands } from "../../adapters/claude/claude-agent-sdk-system-commands.test-support";
 
 const runtimeExecutableProbe: RuntimeExecutableProbePort = {
   probeExecutable: () => Effect.void,
@@ -111,6 +112,7 @@ const createComposition = (options: {
       mcpLauncher: { kind: "executable", executablePath: process.execPath },
     }),
     settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
+    systemCommands: createClaudeSystemCommands(),
     toolDiscovery: createToolDiscovery(),
     workingDirectoryDependencies,
   };

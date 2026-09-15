@@ -166,6 +166,23 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     expect(methodsOf(calls)).not.toContain("turn/start");
   });
 
+  test.each([
+    ["waitingOnApproval"],
+    ["waitingOnUserInput"],
+    ["waitingOnApproval", "waitingOnUserInput"],
+  ] as const)("classifies active flags %s as waiting input", async (...activeFlags) => {
+    const { adapter, calls } = createContinuationAdapter({
+      threadStatus: { type: "active", activeFlags: [...activeFlags] },
+      latestTurnStatus: "inProgress",
+    });
+
+    await expect(adapter.continueInterruptedTurn(continuationInput())).rejects.toMatchObject({
+      reason: "waiting_input",
+    });
+    expect(methodsOf(calls)).not.toContain("thread/resume");
+    expect(methodsOf(calls)).not.toContain("turn/start");
+  });
+
   test("refuses a completed latest turn without starting a turn", async () => {
     const { adapter, calls } = createContinuationAdapter({
       threadStatus: { type: "idle" },

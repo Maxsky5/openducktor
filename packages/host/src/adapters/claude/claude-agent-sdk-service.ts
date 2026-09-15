@@ -57,6 +57,7 @@ import {
 } from "./claude-agent-sdk-session-policy";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import {
+  assertClaudeContinuationExecutableCompatible,
   checkLiveClaudeContinuationEligibility,
   checkPersistedClaudeContinuationEligibility,
 } from "./claude-agent-sdk-service-continuation";
@@ -131,6 +132,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     return requireClaudeSessionScope(input.sessionScope, "continue interrupted Claude turn").pipe(
       Effect.flatMap((scope) =>
         Effect.gen(this, function* () {
+          yield* assertClaudeContinuationExecutableCompatible(this.input, input);
           const existing = this.sessionStore.get(input.externalSessionId);
           if (existing) {
             yield* checkLiveClaudeContinuationEligibility(existing, input);

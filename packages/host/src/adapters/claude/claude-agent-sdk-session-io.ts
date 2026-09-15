@@ -12,6 +12,7 @@ import {
   scheduleClaudeLiveContextUsageRefresh,
   shouldRefreshClaudeContextUsageForMessage,
 } from "./claude-agent-sdk-context-usage";
+import { isClaudeContinuationAdmission } from "./claude-agent-sdk-continuation-admission";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timestamp";
 import { isClaudeMessageUuid, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
@@ -163,10 +164,11 @@ export const consumeClaudeSession = async (input: {
   emit: ClaudeAgentSdkEventEmitter;
   now: () => string;
   onBackgroundFailure: CreateClaudeAgentSdkServiceInput["onBackgroundFailure"];
+  onContinuationAdmission?: () => void;
   session: ClaudeSession;
   sessionStore: Pick<ClaudeSessionStore, "close" | "get">;
 }): Promise<void> => {
-  const { emit, now, onBackgroundFailure, session, sessionStore } = input;
+  const { emit, now, onBackgroundFailure, onContinuationAdmission, session, sessionStore } = input;
   const isLiveSession = (): boolean => sessionStore.get(session.externalSessionId) === session;
   const closeLiveSession = (): void => {
     if (isLiveSession()) {
@@ -200,6 +202,9 @@ export const consumeClaudeSession = async (input: {
   try {
     for await (const message of session.query) {
       const timestamp = readClaudeSdkMessageTimestamp(message, now);
+      if (onContinuationAdmission && isClaudeContinuationAdmission(message)) {
+        onContinuationAdmission();
+      }
       handleClaudeSdkMessage({
         session,
         message,

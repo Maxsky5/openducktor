@@ -187,6 +187,7 @@ export const assembleNodeEffectHostCommandRouter = (
     runtimeExecutableProbe: runtimeExecutableProbes.claude,
     runtimeDistribution,
     settingsConfig,
+    systemCommands,
     toolDiscovery,
     workingDirectoryDependencies,
     resolveMcpBridgeConnection: (repoPath) =>

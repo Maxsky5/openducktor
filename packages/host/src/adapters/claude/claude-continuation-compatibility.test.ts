@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CLAUDE_INTERRUPTED_TURN_RESUME_MINIMUM_VERSION } from "./claude-continuation-compatibility";
 import { createClaudeHistoryInputProjector } from "./claude-agent-sdk-history-input";
 import { isClaudeMetaStreamMessage } from "./claude-agent-sdk-local-commands";
 import {
@@ -16,7 +17,7 @@ import {
  * the CLI from runtime settings, so the version below pins the artifact this contract was
  * verified against. A version bump fails this test and forces a re-check of the classifier.
  */
-const SUPPORTED_CLAUDE_CLI_VERSION = "2.1.251";
+const SUPPORTED_CLAUDE_CLI_VERSION = CLAUDE_INTERRUPTED_TURN_RESUME_MINIMUM_VERSION;
 
 type ClaudeSdkManifestEntry = {
   binary: string;
