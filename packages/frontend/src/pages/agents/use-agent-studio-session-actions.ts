@@ -1,5 +1,7 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { errorMessage } from "@/lib/errors";
+import { getAgentSessionResumeFailureNotice } from "@/state/agent-runtime-services";
+import { HostInvokeError } from "@openducktor/host-client";
 import type {
   GitBranch,
   GitTargetBranch,
@@ -270,7 +272,9 @@ export function useAgentStudioSessionActions({
     setResumeSessionError(null);
     void continueInterruptedTurn(selectedSessionIdentity)
       .catch((error) => {
-        setResumeSessionError(errorMessage(error));
+        const notice =
+          error instanceof HostInvokeError ? getAgentSessionResumeFailureNotice(error) : null;
+        setResumeSessionError(notice ?? errorMessage(error));
       })
       .finally(() => {
         setIsResumingSession(false);

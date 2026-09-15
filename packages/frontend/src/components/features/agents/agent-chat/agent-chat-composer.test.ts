@@ -205,6 +205,18 @@ describe("AgentChatComposer", () => {
     expect(pending).toContain("disabled");
   });
 
+  test("disables resume while shared interaction is disabled", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: { ...buildModel(), canResumeSession: true, isInteractionEnabled: false },
+      }),
+    );
+
+    expect(html).toContain("Resume");
+    const resumeTagStart = html.lastIndexOf("<button", html.indexOf("Resume"));
+    expect(html.slice(resumeTagStart, html.indexOf(">", resumeTagStart))).toContain('disabled=""');
+  });
+
   test("renders the resume failure notice and hides resume when unavailable", () => {
     const failed = renderToStaticMarkup(
       createElement(AgentChatComposer, {

@@ -121,6 +121,18 @@ const toAcceptedAgentUserMessage = (
   return acceptedMessage;
 };
 
+/**
+ * Turns a typed resume failure into the text the chat shows beside Resume. The host
+ * message names the cause, and the next action names the fix.
+ */
+export const getAgentSessionResumeFailureNotice = (error: HostInvokeError): string | null => {
+  if (error.failure?.kind !== "agent_session_resume") {
+    return null;
+  }
+  const { message, nextAction } = error.failure.agentSessionResumeFailure;
+  return `${message} ${nextAction}`;
+};
+
 export const getAcceptedMessageAfterSendFailure = (
   error: HostInvokeError,
   sessionRef: AgentSessionLiveRef,

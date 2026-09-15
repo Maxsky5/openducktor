@@ -4,6 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { errorMessage } from "@/lib/errors";
+import { getAgentSessionResumeFailureNotice } from "@/state/agent-runtime-services";
+import { HostInvokeError } from "@openducktor/host-client";
 import { resolveAgentStudioSendDraftParts } from "@/pages/agents/session-actions/agent-studio-send-draft";
 import { useAgentSessionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
@@ -105,8 +107,12 @@ export function useWorkspaceSessionChatActions(
   const resumeInterruptedTurn = useCallback(
     (target: Parameters<typeof continueInterruptedTurn>[0]): void => {
       void continueInterruptedTurn(target)
-        .catch((cause: unknown) => {
-          if (mounted.current) setResumeSessionError(errorMessage(cause));
+        .catch((cause) => {
+          if (mounted.current) {
+            const notice =
+              cause instanceof HostInvokeError ? getAgentSessionResumeFailureNotice(cause) : null;
+            setResumeSessionError(notice ?? errorMessage(cause));
+          }
         })
         .finally(() => {
           if (mounted.current) setResumingSession(false);

@@ -4,6 +4,7 @@ import type { AcceptedAgentUserMessage, AgentSessionSummary } from "@openducktor
 import {
   createAgentRuntimeServices,
   getAcceptedMessageAfterSendFailure,
+  getAgentSessionResumeFailureNotice,
 } from "./agent-runtime-services";
 import { HostInvokeError } from "@openducktor/host-client";
 import { host } from "./operations/shared/host";
@@ -26,6 +27,34 @@ const acceptedUserMessage: AcceptedAgentUserMessage = {
   parts: [],
   state: "read",
 };
+
+describe("getAgentSessionResumeFailureNotice", () => {
+  test("names the cause and the next action for a typed resume failure", () => {
+    const error = new HostInvokeError("Continuation failed", {
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "live_turn",
+        sessionRef: {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        },
+        operation: "agent-session.continue-interrupted-turn",
+        message: "Codex session 'session-1' has a live turn.",
+        nextAction: "Wait for the live turn to finish, then retry Resume.",
+      },
+    });
+
+    expect(getAgentSessionResumeFailureNotice(error)).toBe(
+      "Codex session 'session-1' has a live turn. Wait for the live turn to finish, then retry Resume.",
+    );
+  });
+
+  test("ignores other host failures", () => {
+    expect(getAgentSessionResumeFailureNotice(new HostInvokeError("other"))).toBeNull();
+  });
+});
 
 describe("agent runtime services", () => {
   test("acceptance failure conversion requires the exact session reference", () => {

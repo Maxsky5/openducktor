@@ -112,6 +112,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onStopSession,
   canResumeSession,
   isResumingSession,
+  resumeDisabled,
   resumeSessionError,
   onResumeSession,
   showSubmittingState,
@@ -135,6 +136,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onStopSession: AgentChatComposerModel["onStopSession"];
   canResumeSession: boolean;
   isResumingSession: boolean;
+  resumeDisabled: boolean;
   resumeSessionError: string | null;
   onResumeSession: AgentChatComposerModel["onResumeSession"];
   showSubmittingState: boolean;
@@ -228,7 +230,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             size="sm"
             variant="outline"
             className="h-8 gap-1.5 rounded-full px-3 text-xs"
-            disabled={isResumingSession}
+            disabled={isResumingSession || resumeDisabled}
             onClick={onResumeSession}
           >
             {isResumingSession ? (
@@ -474,6 +476,7 @@ function AgentChatComposerFormView({
             onStopSession={onStopSession}
             canResumeSession={canResumeSession}
             isResumingSession={isResumingSession}
+            resumeDisabled={isComposerInputDisabled}
             resumeSessionError={resumeSessionError}
             onResumeSession={onResumeSession}
             showSubmittingState={isSubmitting}
