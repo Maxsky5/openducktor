@@ -183,4 +183,41 @@ describe("useDelegationOperations", () => {
       configureShellBridge(createUnavailableShellBridge());
     }
   });
+
+  test("rejects a delegated build when the Builder default runtime catalog fails", async () => {
+    const buildStart = mock(async () => ({
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    }));
+    const refreshTaskData = mock(async () => undefined);
+    const workspaceGetRepoConfig = mock(async () => createRepoConfig());
+    configureShellBridge(
+      createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
+    );
+    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentModelCatalog> => {
+      throw new Error("Cannot resolve the selected runtime. Start it from the runtime controls.");
+    });
+    const harness = createHookHarness(
+      () =>
+        useDelegationOperations({
+          activeWorkspace,
+          refreshTaskData,
+          loadRepoRuntimeCatalog,
+        }),
+      undefined,
+    );
+
+    try {
+      await harness.mount();
+      await expect(harness.run((operations) => operations.delegateTask("task-1"))).rejects.toThrow(
+        "The saved Builder default or repository Default Model for runtime opencode could not load. Cannot resolve the selected runtime. Start it from the runtime controls. Update the default in Settings > Repositories > Agents.",
+      );
+
+      expect(buildStart).not.toHaveBeenCalled();
+      expect(refreshTaskData).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  });
 });

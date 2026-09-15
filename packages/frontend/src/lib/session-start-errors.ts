@@ -20,3 +20,17 @@ export const unavailableSessionDefaultModelError = ({
   runtimeKind: RuntimeKind;
 }): string =>
   `The saved ${AGENT_ROLE_LABELS[role]} default or repository Default Model is not available for runtime ${runtimeKind}. Update it in ${SETTINGS_REPO_AGENTS_LOCATION}.`;
+
+export const unavailableSessionDefaultCatalogError = ({
+  role,
+  runtimeKind,
+  causeDetail,
+}: {
+  role: AgentRole;
+  runtimeKind: RuntimeKind;
+  causeDetail: string;
+}): string => {
+  const detail = causeDetail.trim();
+  const causeSuffix = detail.length > 0 ? ` ${detail}` : "";
+  return `The saved ${AGENT_ROLE_LABELS[role]} default or repository Default Model for runtime ${runtimeKind} could not load.${causeSuffix} Update the default in ${SETTINGS_REPO_AGENTS_LOCATION}.`;
+};

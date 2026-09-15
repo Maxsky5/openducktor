@@ -1,8 +1,10 @@
 import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import { errorMessage } from "@/lib/errors";
 import {
   missingSessionDefaultModelError,
+  unavailableSessionDefaultCatalogError,
   unavailableSessionDefaultModelError,
 } from "@/lib/session-start-errors";
 import { coerceVisibleSelectionToCatalog } from "@/features/model-selection/model-selection-state";
@@ -81,7 +83,19 @@ export const resolveRequiredDefaultSessionSelection = async ({
   }
 
   const runtimeKind = savedDefaultSelection.runtimeKind;
-  const catalog = await loadRepoRuntimeCatalog({ repoPath, runtimeKind });
+  let catalog: AgentModelCatalog;
+  try {
+    catalog = await loadRepoRuntimeCatalog({ repoPath, runtimeKind });
+  } catch (cause) {
+    throw new Error(
+      unavailableSessionDefaultCatalogError({
+        role,
+        runtimeKind,
+        causeDetail: errorMessage(cause),
+      }),
+      { cause },
+    );
+  }
   const validatedSelection = coerceVisibleSelectionToCatalog(catalog, savedDefaultSelection);
   if (!validatedSelection) {
     throw new Error(unavailableSessionDefaultModelError({ role, runtimeKind }));

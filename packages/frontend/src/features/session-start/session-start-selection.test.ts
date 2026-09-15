@@ -231,4 +231,30 @@ describe("required session default selection", () => {
       "The saved Builder default or repository Default Model is not available for runtime opencode. Update it in Settings > Repositories > Agents.",
     );
   });
+
+  test("fails with the saved default and the catalog cause when the runtime catalog rejects", async () => {
+    const settings = createRepoSettings({
+      defaultModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "",
+        profileId: "",
+      },
+    });
+    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentModelCatalog> => {
+      throw new Error("Cannot resolve the selected runtime. Start it from the runtime controls.");
+    });
+
+    await expect(
+      resolveRequiredDefaultSessionSelection({
+        role: "build",
+        repoSettings: settings,
+        repoPath: "/repo",
+        loadRepoRuntimeCatalog,
+      }),
+    ).rejects.toThrow(
+      "The saved Builder default or repository Default Model for runtime opencode could not load. Cannot resolve the selected runtime. Start it from the runtime controls. Update the default in Settings > Repositories > Agents.",
+    );
+  });
 });

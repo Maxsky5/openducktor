@@ -637,7 +637,9 @@ describe("autopilot feature helpers", () => {
     args.resolveTaskWorktree.mockResolvedValue({
       workingDirectory: "/tmp/repo/current-worktree",
     });
-    args.loadRepoRuntimeCatalog.mockRejectedValue(new Error("catalog failed"));
+    args.loadRepoRuntimeCatalog.mockRejectedValue(
+      new Error("Cannot resolve the selected runtime. Start it from the runtime controls."),
+    );
 
     await expect(
       executeAutopilotAction({
@@ -645,7 +647,9 @@ describe("autopilot feature helpers", () => {
         actionId: "startQa",
         alwaysStartQaReviewsFresh: true,
       }),
-    ).rejects.toThrow("catalog failed");
+    ).rejects.toThrow(
+      "The saved QA default or repository Default Model for runtime opencode could not load. Cannot resolve the selected runtime. Start it from the runtime controls. Update the default in Settings > Repositories > Agents.",
+    );
 
     expect(args.loadTaskSessionRecords).not.toHaveBeenCalled();
     expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
