@@ -29,7 +29,7 @@ import { toHostOperationError } from "../../effect/host-errors";
 import {
   type CreateProcessEnvironmentInput,
   createProcessEnvironment,
-  type ProcessEnvironmentError,
+  type ProcessEnvironmentResolution,
 } from "../../infrastructure/process/process-environment";
 import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
 import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
@@ -55,6 +55,7 @@ import {
   ToolDiscoveryPortTag,
 } from "../../ports/tool-discovery-port";
 import { type WorktreeFilePort, WorktreeFilePortTag } from "../../ports/worktree-file-port";
+import { guardDevServerStart } from "./user-path-start-guard";
 
 export type NodeHostDefaultPorts = {
   imageWorkers: GeneratedImageWorkers;
@@ -66,8 +67,7 @@ export type NodeHostDefaultPorts = {
   generatedImageFiles: GeneratedImageFilePort;
   localAttachments: LocalAttachmentPort;
   openInTools: OpenInToolsPort;
-  processEnv: NodeJS.ProcessEnv;
-  processEnvironmentError: ProcessEnvironmentError | null;
+  processEnvironment: ProcessEnvironmentResolution;
   runtimeDistribution: HostRuntimeDistribution;
   runtimeExecutableProbes: RuntimeExecutableProbesByKind;
   runtimeHealth: RuntimeHealthPort;
@@ -148,7 +148,7 @@ const makeNodeHostDefaultPorts = (
           error: null,
         }
       : yield* createProcessEnvironment(input.processEnvironmentInput);
-    const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
+    const { environment: processEnv } = processEnvironment;
     return yield* Effect.try({
       try: () => {
         const systemCommands =
@@ -213,9 +213,10 @@ const makeNodeHostDefaultPorts = (
           imageWorkers,
           codexAppServer,
           codexTransportRegistry,
-          devServerProcesses:
-            input.devServerProcesses ??
-            createDevServerProcessAdapter({ processEnv, processEnvironmentError }),
+          devServerProcesses: guardDevServerStart(
+            input.devServerProcesses ?? createDevServerProcessAdapter({ processEnv }),
+            processEnvironment,
+          ),
           filesystem: input.filesystem ?? createFilesystemAdapter(),
           git:
             input.git ??
@@ -235,8 +236,7 @@ const makeNodeHostDefaultPorts = (
           localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
           openInTools:
             input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
-          processEnv,
-          processEnvironmentError,
+          processEnvironment,
           runtimeDistribution: input.runtimeDistribution,
           runtimeExecutableProbes,
           runtimeHealth,

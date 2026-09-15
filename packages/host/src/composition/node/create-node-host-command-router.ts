@@ -87,6 +87,7 @@ import {
   resolveClaudeWorkspaceRuntimeMcpBridgeConnection,
   resolveWorkspaceRuntimeMcpBridgeConnection,
 } from "./workspace-runtime-mcp-bridge-connection";
+import { guardRuntimeStart } from "./user-path-start-guard";
 
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 export const assembleNodeEffectHostCommandRouter = (
@@ -112,8 +113,7 @@ export const assembleNodeEffectHostCommandRouter = (
     git,
     localAttachments,
     openInTools,
-    processEnv,
-    processEnvironmentError,
+    processEnvironment,
     runtimeDistribution,
     runtimeExecutableProbes,
     runtimeHealth,
@@ -123,6 +123,7 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     worktreeFiles,
   } = defaultPorts;
+  const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
   const assets = createNodeTaskAssetServices({
     configuredTaskStore,
@@ -210,23 +211,20 @@ export const assembleNodeEffectHostCommandRouter = (
     codexWorkspaceRuntimeStarterInput.clientVersion = clientVersion;
   }
   const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
-  const workspaceStarter = createRuntimeWorkspaceStarterDispatcher(
-    {
-      claude: claudeRuntime.workspaceStarter,
-      codex: createCodexWorkspaceRuntimeStarter(codexWorkspaceRuntimeStarterInput),
-      opencode: createOpenCodeRuntimeComposition({
-        toolDiscovery,
-        settingsConfig,
-        processEnv,
-        runtimeDistribution,
-        liveSessionLifecycle: agentSessionLiveStateService,
-        taskSessionLifecycleCoordinator,
-        resolveMcpBridgeConnection: (runtimeInput) =>
-          resolveRuntimeMcpBridge("opencode", runtimeInput.repoPath),
-      }),
-    },
-    processEnvironmentError,
-  );
+  const workspaceStarter = createRuntimeWorkspaceStarterDispatcher({
+    claude: claudeRuntime.workspaceStarter,
+    codex: createCodexWorkspaceRuntimeStarter(codexWorkspaceRuntimeStarterInput),
+    opencode: createOpenCodeRuntimeComposition({
+      toolDiscovery,
+      settingsConfig,
+      processEnv,
+      runtimeDistribution,
+      liveSessionLifecycle: agentSessionLiveStateService,
+      taskSessionLifecycleCoordinator,
+      resolveMcpBridgeConnection: (runtimeInput) =>
+        resolveRuntimeMcpBridge("opencode", runtimeInput.repoPath),
+    }),
+  });
   const runtimeRegistryInput: Parameters<typeof createRuntimeRegistry>[0] = {
     workspaceStarter,
     hasActiveRuntimeSessions: createRuntimeActiveSessionResolver(agentSessionLiveStateService),
@@ -246,7 +244,10 @@ export const assembleNodeEffectHostCommandRouter = (
       onBackgroundFailure,
     );
   }
-  const effectiveRuntimeRegistry = runtimeRegistry ?? createRuntimeRegistry(runtimeRegistryInput);
+  const effectiveRuntimeRegistry = guardRuntimeStart(
+    runtimeRegistry ?? createRuntimeRegistry(runtimeRegistryInput),
+    processEnvironment,
+  );
   const taskWorktreeService = createTaskWorktreeService({
     settingsConfig,
     workspaceSettingsService,

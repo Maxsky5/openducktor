@@ -10,10 +10,7 @@ import {
   type ProcessCommandLaunchPlan,
   parseProcessCommandLine,
 } from "../../infrastructure/process/process-command-launch";
-import {
-  type ProcessEnvironmentError,
-  sanitizeChildProcessEnvironment,
-} from "../../infrastructure/process/process-environment";
+import { sanitizeChildProcessEnvironment } from "../../infrastructure/process/process-environment";
 import {
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
@@ -28,7 +25,6 @@ import {
 
 export type CreateDevServerProcessAdapterInput = {
   processEnv?: NodeJS.ProcessEnv;
-  processEnvironmentError?: ProcessEnvironmentError | null;
   startGracePeriodMs?: number;
   stopTimeoutMs?: number;
 };
@@ -144,27 +140,12 @@ const trackDevServerProcess = ({
 
 export const createDevServerProcessAdapter = ({
   processEnv = process.env,
-  processEnvironmentError = null,
   startGracePeriodMs = DEFAULT_START_GRACE_PERIOD_MS,
   stopTimeoutMs = DEFAULT_STOP_TIMEOUT_MS,
 }: CreateDevServerProcessAdapterInput = {}): DevServerProcessPort => ({
   start(input: DevServerProcessStartInput) {
     let scope: Parameters<typeof Scope.close>[0] | null = null;
     return Effect.gen(function* () {
-      if (processEnvironmentError) {
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "devServerProcess.resolveEnvironment",
-            message: processEnvironmentError.message,
-            cause: processEnvironmentError,
-            details: {
-              reason: processEnvironmentError.reason,
-              shell: processEnvironmentError.shell,
-            },
-          }),
-        );
-      }
-
       const { command, cwd, env, onExit, onOutput } = input;
       const commandEnv = sanitizeChildProcessEnvironment(
         { ...processEnv, ...env },
