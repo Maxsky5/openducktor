@@ -22,6 +22,7 @@ describe("workspace text file contracts", () => {
     expect(workspaceTextFileWriteResultSchema.parse(textResult)).toEqual(textResult);
     expect(
       workspaceTextFileWriteInputSchema.parse({
+        workspaceId: "ws",
         rootPath: textResult.rootPath,
         relativePath: textResult.relativePath,
         contents: textResult.contents,
@@ -36,6 +37,7 @@ describe("workspace text file contracts", () => {
   test("rejects unknown write input fields", () => {
     expect(
       workspaceTextFileWriteInputSchema.safeParse({
+        workspaceId: "ws",
         rootPath: "/repo",
         relativePath: "README.md",
         contents: "ok",

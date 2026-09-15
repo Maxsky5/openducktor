@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  lstat,
   mkdir,
   mkdtemp,
   readdir,
@@ -12,7 +13,10 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Cause, Effect, Exit } from "effect";
+import { z } from "zod";
 import { createNodeTaskAssetFilePort } from "./filesystem-task-asset-file-port";
+
+const quarantineManifestSchema = z.object({ workspaceId: z.string() });
 
 const roots: string[] = [];
 
@@ -503,5 +507,116 @@ describe("node task asset file port", () => {
       }),
     });
     await expect(readFile(ownedState)).resolves.toEqual(Buffer.from([9]));
+  });
+  test("removes only the target workspace durable, staging, and quarantine data", async () => {
+    const { configDir, port } = await createHarness();
+    const otherWorkspaceId = "openducktor";
+    const otherAssetId = "550e8400-e29b-41d4-a716-446655440001";
+    const otherDurableAssetId = "550e8400-e29b-41d4-a716-446655440002";
+    const pathExists = async (candidate: string): Promise<boolean> => {
+      try {
+        await lstat(candidate);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1]) }));
+    await Effect.runPromise(port.promote({ workspaceId, taskId, assetId, operation: "create" }));
+    await Effect.runPromise(
+      port.stage({
+        workspaceId: otherWorkspaceId,
+        assetId: otherAssetId,
+        bytes: new Uint8Array([2]),
+      }),
+    );
+    await Effect.runPromise(
+      port.promote({
+        workspaceId: otherWorkspaceId,
+        taskId: "task-2",
+        assetId: otherAssetId,
+        operation: "create",
+      }),
+    );
+    await Effect.runPromise(
+      port.stage({
+        workspaceId: otherWorkspaceId,
+        assetId: otherDurableAssetId,
+        bytes: new Uint8Array([3]),
+      }),
+    );
+    await Effect.runPromise(
+      port.promote({
+        workspaceId: otherWorkspaceId,
+        taskId: "task-3",
+        assetId: otherDurableAssetId,
+        operation: "create",
+      }),
+    );
+    await Effect.runPromise(port.quarantineTaskDirectory({ workspaceId, taskId }));
+    await Effect.runPromise(
+      port.quarantineTaskDirectory({ workspaceId: otherWorkspaceId, taskId: "task-2" }),
+    );
+
+    await Effect.runPromise(port.removeWorkspaceData({ workspaceId }));
+
+    expect(await pathExists(path.join(configDir, "task-assets", workspaceId))).toBe(false);
+    expect(
+      await pathExists(
+        path.join(configDir, "task-assets", otherWorkspaceId, "task-3", otherDurableAssetId),
+      ),
+    ).toBe(true);
+
+    const stagingInstances = await readdir(path.join(configDir, "task-asset-staging", "instances"));
+    for (const instanceId of stagingInstances) {
+      expect(
+        await pathExists(
+          path.join(configDir, "task-asset-staging", "instances", instanceId, workspaceId),
+        ),
+      ).toBe(false);
+    }
+    expect(
+      await pathExists(
+        path.join(
+          configDir,
+          "task-asset-staging",
+          "instances",
+          stagingInstances[0] ?? "",
+          otherWorkspaceId,
+          otherAssetId,
+        ),
+      ),
+    ).toBe(true);
+
+    const quarantineWorkspaces: string[] = [];
+    const quarantineInstances = await readdir(
+      path.join(configDir, "task-asset-quarantine", "instances"),
+    );
+    for (const instanceId of quarantineInstances) {
+      const instanceRoot = path.join(configDir, "task-asset-quarantine", "instances", instanceId);
+      for (const quarantineId of await readdir(instanceRoot)) {
+        const manifest = quarantineManifestSchema.parse(
+          JSON.parse(
+            await readFile(path.join(instanceRoot, quarantineId, "manifest.json"), "utf8"),
+          ),
+        );
+        quarantineWorkspaces.push(manifest.workspaceId);
+      }
+    }
+    expect(quarantineWorkspaces).not.toContain(workspaceId);
+    expect(quarantineWorkspaces).toContain(otherWorkspaceId);
+  });
+
+  test("rejects an invalid workspace id for workspace cleanup", async () => {
+    const { port } = await createHarness();
+
+    const error = await Effect.runPromise(
+      Effect.flip(port.removeWorkspaceData({ workspaceId: "Not A Workspace" })),
+    );
+
+    expect(error.cause).toMatchObject({
+      message: "Workspace ID is invalid for task asset cleanup.",
+    });
   });
 });

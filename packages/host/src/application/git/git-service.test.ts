@@ -134,6 +134,9 @@ const createFakeGitPort = ({
     isRegisteredWorktree() {
       return Effect.succeed(false);
     },
+    listWorktrees() {
+      return Effect.dieMessage("unexpected list worktrees");
+    },
     referenceExists() {
       return Effect.succeed(true);
     },
@@ -645,7 +648,7 @@ const createFakeWorktreeFiles = (calls: string[] = []): WorktreeFilePort => ({
 });
 const createConfig = (): GlobalConfig =>
   globalConfigSchema.parse({
-    version: 3,
+    version: 4,
     workspaces: {
       repo: {
         workspaceId: "repo",

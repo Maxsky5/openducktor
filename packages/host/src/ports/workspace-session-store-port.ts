@@ -14,6 +14,7 @@ type Result<A = WorkspaceSession> = Effect.Effect<A, TaskStoreError>;
 
 export type WorkspaceSessionStorePort = {
   get(input: WorkspaceSessionStoreRef): Result;
+  listAll(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
   listActive(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
   listArchived(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
   findByRuntimeSession(

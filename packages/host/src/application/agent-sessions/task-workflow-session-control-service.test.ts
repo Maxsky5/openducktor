@@ -9,15 +9,21 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Exit, Fiber } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createAgentSessionCommandService as createControlService } from "./agent-session-command-service";
 
 type ControlServiceInput = Parameters<typeof createControlService>[0];
 type TestControlServiceInput = Omit<
   ControlServiceInput,
-  "taskSessionStart" | "tasks" | "repositoryPolicy" | "persistTaskModel" | "runtime"
+  | "withWorkStartLease"
+  | "taskSessionStart"
+  | "tasks"
+  | "repositoryPolicy"
+  | "persistTaskModel"
+  | "runtime"
 > & {
+  withWorkStartLease?: ControlServiceInput["withWorkStartLease"];
   runtime: Omit<
     ControlServiceInput["runtime"],
     "loadContext" | "loadSessionDiff" | "replyApproval" | "replyQuestion"
@@ -34,6 +40,7 @@ const createAgentSessionCommandService = (input: TestControlServiceInput) =>
       complete: () => Effect.dieMessage("unexpected task session completion"),
     },
     ...input,
+    withWorkStartLease: input.withWorkStartLease ?? ((_repoPath, effect) => effect),
     runtime: {
       loadContext: () => Effect.dieMessage("unexpected context read"),
       loadSessionDiff: () => Effect.dieMessage("unexpected diff read"),
@@ -213,6 +220,54 @@ const createModelUpdateService = ({
   });
 
 describe("createAgentSessionCommandService", () => {
+  test("rejects a blocked workflow start before preparation or runtime start", async () => {
+    const prepared: string[] = [];
+    const service = createAgentSessionCommandService({
+      ...createControlDeps(),
+      withWorkStartLease: () =>
+        Effect.fail(
+          new HostValidationError({
+            message: "Workspace is closed: /repo. Reopen it before using it.",
+            field: "workspaceId",
+          }),
+        ),
+      runtime: {
+        startSession: () => Effect.dieMessage("unexpected start"),
+        resumeSession: () => Effect.dieMessage("unexpected resume"),
+        forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: () => Effect.dieMessage("unexpected send"),
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () => Effect.dieMessage("unexpected stop"),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      taskSessionStart: {
+        prepare: () => {
+          prepared.push("prepare");
+          return Effect.dieMessage("unexpected prepare");
+        },
+        complete: () => Effect.dieMessage("unexpected complete"),
+      },
+      tasks: {
+        agentSessionsList: () => Effect.dieMessage("unexpected list"),
+        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected model store"),
+      },
+    });
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const result = yield* Effect.either(service.startWorkflowSession(workflowStart));
+          expect(result).toMatchObject({
+            _tag: "Left",
+            left: { message: "Workspace is closed: /repo. Reopen it before using it." },
+          });
+        }),
+      ),
+    );
+    expect(prepared).toEqual([]);
+  });
+
   test("rejects workflow startup while direct merge runs", async () => {
     const deps = createControlDeps();
     const service = createAgentSessionCommandService({

@@ -24,11 +24,13 @@ export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren
   const preview = useTaskExecutionFilePreviewController();
   const { requestContextTransition } = preview;
   const activeWorkspace = useActiveWorkspace();
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [request, setRequest] = useState<OpenAgentSessionTranscriptRequest | null>(null);
   const [contentRequest, setContentRequest] = useState<OpenAgentSessionTranscriptRequest | null>(
     null,
   );
+  const [dialogWorkspaceId, setDialogWorkspaceId] = useState<string | null>(null);
   const contentFrameRef = useRef<number | null>(null);
   const fileSaveHandlerRef = useRef<((repoPath: string, taskId: string) => void) | null>(null);
   const registerFileSaveHandler = useCallback<
@@ -59,6 +61,7 @@ export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren
         cancelContentFrame();
         setContentRequest(null);
         setRequest(nextRequest);
+        setDialogWorkspaceId(activeWorkspaceId);
 
         contentFrameRef.current = globalThis.requestAnimationFrame(() => {
           contentFrameRef.current = globalThis.requestAnimationFrame(() => {
@@ -68,13 +71,14 @@ export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren
         });
       });
     },
-    [cancelContentFrame, requestContextTransition],
+    [activeWorkspaceId, cancelContentFrame, requestContextTransition],
   );
 
   const reset = useCallback(() => {
     cancelContentFrame();
     setContentRequest(null);
     setRequest(null);
+    setDialogWorkspaceId(null);
   }, [cancelContentFrame]);
 
   const closeSessionTranscript = useCallback(() => {
@@ -104,6 +108,7 @@ export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren
       <AgentSessionTranscriptDialog
         preview={preview}
         onFileSaved={onFileSaved}
+        workspaceId={dialogWorkspaceId}
         workspaceRepoPath={workspaceRepoPath}
         target={contentRequest?.target ?? null}
         open={open}

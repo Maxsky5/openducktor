@@ -63,6 +63,7 @@ export const createElectronShellBridge = (): ShellBridge => {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,
     },
+    claimContextMenu: (position) => electronApi.claimContextMenu(position),
     notifications: {
       getCapability: () => electronApi.notifications.getCapability(),
       requestPermission: () => electronApi.notifications.requestPermission(),

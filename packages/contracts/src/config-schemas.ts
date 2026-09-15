@@ -10,6 +10,7 @@ import {
 import { repoPromptOverridesSchema } from "./prompt-schemas";
 import { workspaceAgentStudioStateSchema } from "./workspace-agent-studio-state-schemas";
 import { customAgentRoleSchema } from "./workspace-session-schemas";
+import { workspaceRemovalRecordSchema } from "./workspace-lifecycle-schemas";
 
 export const DEFAULT_BRANCH_PREFIX = "odt";
 export const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -424,10 +425,16 @@ export const repoConfigSchema = z.object({
     qa: undefined,
   }),
   agentStudioState: workspaceAgentStudioStateSchema,
+  closed: z.boolean().optional(),
+  removal: workspaceRemovalRecordSchema.optional(),
 });
 export type RepoConfig = z.infer<typeof repoConfigSchema>;
 
-export const settingsRepoConfigSchema = repoConfigSchema.omit({ agentStudioState: true });
+export const settingsRepoConfigSchema = repoConfigSchema.omit({
+  agentStudioState: true,
+  closed: true,
+  removal: true,
+});
 export type SettingsRepoConfig = z.infer<typeof settingsRepoConfigSchema>;
 
 export const workspaceRepoHooksInputSchema = repoHooksSchema.partial();
@@ -681,6 +688,7 @@ const globalConfigSharedFields = {
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
   workspaceOrder: z.array(workspaceIdSchema).default([]),
   recentWorkspaces: z.array(workspaceIdSchema).default([]),
+  onboardingCompleted: z.boolean().default(false),
 };
 
 export const persistedGlobalConfigV2Schema = z.object({
@@ -690,8 +698,15 @@ export const persistedGlobalConfigV2Schema = z.object({
 });
 export type PersistedGlobalConfigV2 = z.infer<typeof persistedGlobalConfigV2Schema>;
 
-export const globalConfigSchema = z.object({
+export const persistedGlobalConfigV3Schema = z.object({
   version: z.literal(3),
+  ...globalConfigSharedFields,
+  agentRuntimes: agentRuntimesSchema,
+});
+export type PersistedGlobalConfigV3 = z.infer<typeof persistedGlobalConfigV3Schema>;
+
+export const globalConfigSchema = z.object({
+  version: z.literal(4),
   ...globalConfigSharedFields,
   agentRuntimes: agentRuntimesSchema,
 });

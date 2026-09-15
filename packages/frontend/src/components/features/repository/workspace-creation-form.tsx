@@ -1,4 +1,4 @@
-import type { WorkspaceRecord } from "@openducktor/contracts";
+import type { WorkspacePathResolution, WorkspaceRecord } from "@openducktor/contracts";
 import { FolderOpen } from "lucide-react";
 import { type ReactElement, type ReactNode, useMemo, useReducer, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -79,10 +79,13 @@ const reducer = (state: State, action: Action): State => {
 
 type WorkspaceCreationFormProps = {
   workspaces: WorkspaceRecord[];
+  reservedWorkspaceIds?: ReadonlySet<string>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   disabled?: boolean;
   onSubmittingChange?: (submitting: boolean) => void;
   onSuccess?: () => void;
+  resolveRepoPath?: (repoPath: string) => Promise<WorkspacePathResolution>;
+  onReopenClosedWorkspace?: (workspace: WorkspaceRecord) => Promise<void>;
 };
 
 export type WorkspaceCreationController = {
@@ -96,7 +99,7 @@ export type WorkspaceCreationController = {
   error: string | null;
   openPicker: () => void;
   closePicker: () => void;
-  confirmRepo: (repoPath: string) => void;
+  confirmRepo: (repoPath: string) => Promise<void>;
   updateWorkspaceId: (workspaceId: string) => void;
   updateWorkspaceName: (workspaceName: string) => void;
   submit: () => Promise<void>;
@@ -104,10 +107,13 @@ export type WorkspaceCreationController = {
 
 export function useWorkspaceCreation({
   workspaces,
+  reservedWorkspaceIds,
   addWorkspace,
   disabled = false,
   onSubmittingChange,
   onSuccess,
+  resolveRepoPath,
+  onReopenClosedWorkspace,
   initialPickerOpen = false,
 }: WorkspaceCreationFormProps & { initialPickerOpen?: boolean }): WorkspaceCreationController {
   const [state, dispatch] = useReducer(reducer, {
@@ -116,8 +122,12 @@ export function useWorkspaceCreation({
   });
   const submitInFlight = useRef(false);
   const existingIds = useMemo(
-    () => new Set(workspaces.map((workspace) => workspace.workspaceId)),
-    [workspaces],
+    () =>
+      new Set([
+        ...workspaces.map((workspace) => workspace.workspaceId),
+        ...(reservedWorkspaceIds ?? []),
+      ]),
+    [workspaces, reservedWorkspaceIds],
   );
   const duplicateRepo = workspaces.find((workspace) => workspace.repoPath === state.repoPath);
   let validationError: string | null = null;
@@ -133,7 +143,28 @@ export function useWorkspaceCreation({
   }
   const busy = disabled || state.submitting;
 
-  const confirmRepo = (repoPath: string): void => {
+  const confirmRepo = async (repoPath: string): Promise<void> => {
+    if (resolveRepoPath) {
+      const resolution = await resolveRepoPath(repoPath);
+      switch (resolution.kind) {
+        case "removing":
+          throw new Error(
+            `Workspace removal is incomplete for ${resolution.removal.workspace.workspaceName}. Retry removal from the workspace rail.`,
+          );
+        case "closed":
+          if (!onReopenClosedWorkspace) {
+            throw new Error("This form cannot reopen a closed workspace.");
+          }
+          await onReopenClosedWorkspace(resolution.workspace);
+          onSuccess?.();
+          return;
+        case "open":
+          // The draft validation reports the repository as already configured.
+          break;
+        case "new":
+          break;
+      }
+    }
     const workspaceName = deriveWorkspaceNameFromRepoPath(repoPath);
     dispatch({
       type: "repo",

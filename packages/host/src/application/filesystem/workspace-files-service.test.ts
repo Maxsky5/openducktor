@@ -5,7 +5,11 @@ import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { FilesystemPort, FilesystemStats } from "../../ports/filesystem-port";
 import type { GitChangedFile, GitFileStatus, GitPort } from "../../ports/git-port";
-import { createWorkspaceFilesService } from "./workspace-files-service";
+import {
+  createWorkspaceFilesService,
+  type WorkspaceFilesService,
+  withWorkspaceFilesAdmission,
+} from "./workspace-files-service";
 
 type FakeFilesystemInput = {
   canonical?: Record<string, string>;
@@ -130,6 +134,50 @@ const createFakeGitPort = ({
   }) satisfies Parameters<typeof createWorkspaceFilesService>[1] & Pick<GitPort, "getDiff">;
 
 describe("createWorkspaceFilesService", () => {
+  test("runs text file writes inside the workspace admission lease", async () => {
+    const events: string[] = [];
+    const service: WorkspaceFilesService = {
+      listTree: () => Effect.dieMessage("unused"),
+      readTextFile: () => Effect.dieMessage("unused"),
+      writeTextFile: (input) =>
+        Effect.sync(() => {
+          events.push("write");
+          return {
+            kind: "text",
+            rootPath: input.rootPath,
+            relativePath: input.relativePath,
+            contents: input.contents,
+            size: input.contents.length,
+            mtimeMs: 1,
+            revision: "revision-2",
+          };
+        }),
+    };
+    const admitted = withWorkspaceFilesAdmission(service, {
+      resolveRepoPath: (workspaceId) =>
+        Effect.sync(() => {
+          events.push(`resolve:${workspaceId}`);
+          return "/repos/ws";
+        }),
+      withWorkStartLease: (repoPath, effect, workingDirectory) =>
+        Effect.sync(() => events.push(`lease:${repoPath}:${workingDirectory}`)).pipe(
+          Effect.zipRight(effect),
+        ),
+    });
+
+    await Effect.runPromise(
+      admitted.writeTextFile({
+        workspaceId: "ws",
+        rootPath: "/managed/ws/task-1",
+        relativePath: "README.md",
+        contents: "saved",
+        revision: "revision-1",
+      }),
+    );
+
+    expect(events).toEqual(["resolve:ws", "lease:/repos/ws:/managed/ws/task-1", "write"]);
+  });
+
   test("lists git-tracked files, parent directories, and compatible git status", async () => {
     const service = createWorkspaceFilesService(
       createFakeFilesystem({

@@ -9,7 +9,7 @@ import {
   type AgentSessionControlStartInput,
   type WorkspaceSession,
 } from "@openducktor/contracts";
-import { Cause, Deferred, Effect, Exit } from "effect";
+import { Effect } from "effect";
 import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-file-adapter";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
@@ -27,6 +27,7 @@ import {
 } from "../../interface/router/host-command-router";
 import { createWorkspaceSessionService } from "./workspace-session-service";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
+import { createWorkspaceOwnershipLock } from "./workspace-ownership-lock";
 
 const commitIdentity = [
   "-c",
@@ -112,6 +113,8 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
     const service = createWorkspaceSessionService({
       operationGate: createWorkspaceSessionOperationGate(),
+      ownershipLock: createWorkspaceOwnershipLock(),
+      withWorkStartLease: (_repoPath, effect) => effect,
       ...targetDependencies,
       store,
       settings: {
@@ -222,65 +225,6 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       ).rejects.toThrow();
       expect(await h.router.invoke("workspace_session_get", ref)).toEqual(started.session);
       expect(h.events).toHaveLength(4);
-    },
-  );
-
-  test.each(["create", "restore"] as const)(
-    "a failed %s leaves a competing chat's real worktree and files intact",
-    async (operation) => {
-      await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
-      const h = setup();
-      const original = await h.router.invoke("workspace_session_create", h.createInput);
-      const ref = { workspaceId: "fairnest", sessionId: original.session.id };
-      const archived = await h.router.invoke("workspace_session_archive", {
-        ...ref,
-        removeWorktree: true,
-      });
-      const entered = Effect.runSync(Deferred.make<void>());
-      const release = Effect.runSync(Deferred.make<void>());
-      const createWorktree = h.targetDependencies.git.createWorktree;
-      let first = true;
-      h.targetDependencies.git.createWorktree = (...args) =>
-        Effect.gen(function* () {
-          if (first) {
-            first = false;
-            yield* Deferred.succeed(entered, undefined);
-            yield* Deferred.await(release);
-          }
-          yield* createWorktree(...args);
-        });
-      const loser = Effect.runPromiseExit(
-        Effect.tryPromise({
-          try: () =>
-            operation === "create"
-              ? h.router.invoke("workspace_session_create", h.createInput).then(() => undefined)
-              : h.router.invoke("workspace_session_restore", ref).then(() => undefined),
-          catch: (cause) => cause,
-        }),
-      );
-      try {
-        await Effect.runPromise(Deferred.await(entered));
-        const winner = await h.router.invoke("workspace_session_create", h.createInput);
-        const directory = winner.session.executionTarget.workingDirectory;
-        await writeFile(path.join(directory, "owned.txt"), "Keep the winning request's file.");
-        await Effect.runPromise(Deferred.succeed(release, undefined));
-        const failed = await loser;
-        expect(Exit.isFailure(failed)).toBe(true);
-        if (Exit.isFailure(failed))
-          expect(Cause.pretty(failed.cause)).toContain("Git did not confirm worktree creation");
-        expect(await readFile(path.join(directory, "owned.txt"), "utf8")).toBe(
-          "Keep the winning request's file.",
-        );
-        expect(registeredWorktreePaths()).toContain(directory);
-        expect(gitCommand("branch", "--list", "odt/named-chat")).toContain("odt/named-chat");
-        expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
-        expect(
-          await h.router.invoke("workspace_session_list_active", { workspaceId: "fairnest" }),
-        ).toEqual([winner.session]);
-      } finally {
-        await Effect.runPromise(Deferred.succeed(release, undefined));
-        await loser;
-      }
     },
   );
 

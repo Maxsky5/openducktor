@@ -9,13 +9,16 @@ import type {
 } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { type HostError, HostOperationError } from "../../effect/host-errors";
+import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterMutation,
   AgentSessionRuntimeAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
-import { createAgentSessionLiveStateService } from "./agent-session-live-state-service";
+import {
+  createAgentSessionLiveStateService,
+  type CreateAgentSessionLiveStateServiceInput,
+} from "./agent-session-live-state-service";
 
 const sessionRef = (
   externalSessionId: string,
@@ -107,12 +110,15 @@ const mutateRegisteredAdapter = <A>(
     return yield* registration.runMutation(mutation);
   });
 
-const createHarness = () => {
+const createHarness = (
+  withWorkStartLease?: CreateAgentSessionLiveStateServiceInput["withWorkStartLease"],
+) => {
   const events: AgentSessionLiveEnvelope[] = [];
   const faultLogs: string[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const service = createAgentSessionLiveStateService({
     adapterRegistry,
+    withWorkStartLease: withWorkStartLease ?? ((_repoPath, effect) => effect),
     faultLog: (message) => Effect.sync(() => faultLogs.push(message)),
     publish: (event) => events.push(event),
   });
@@ -130,6 +136,62 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
+  test("rejects a session start for a blocked workspace before resolving an adapter", async () => {
+    const withWorkStartLease: CreateAgentSessionLiveStateServiceInput["withWorkStartLease"] = (
+      repoPath,
+      _effect,
+    ) =>
+      Effect.fail(
+        new HostValidationError({
+          message: `Workspace is closed: ${repoPath}. Reopen it before using it.`,
+          field: "workspaceId",
+        }),
+      );
+    const { service } = createHarness(withWorkStartLease);
+
+    const failure = await expectHostFailure(
+      service.startSession({
+        repoPath: "/closed-repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/closed-repo",
+        sessionScope: { kind: "repository" },
+        systemPrompt: "Work.",
+      }),
+    );
+
+    expect(failure.message).toBe("Workspace is closed: /closed-repo. Reopen it before using it.");
+  });
+
+  test("passes the session working directory to workspace admission", async () => {
+    let target: string | undefined;
+    const withWorkStartLease: CreateAgentSessionLiveStateServiceInput["withWorkStartLease"] = (
+      _repoPath,
+      _effect,
+      workingDirectory,
+    ) => {
+      target = workingDirectory;
+      return Effect.fail(
+        new HostValidationError({
+          message: "Working directory does not belong to this workspace.",
+          field: "workingDirectory",
+        }),
+      );
+    };
+    const { service } = createHarness(withWorkStartLease);
+
+    await expectHostFailure(
+      service.startSession({
+        repoPath: "/repo-a",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-b",
+        sessionScope: { kind: "repository" },
+        systemPrompt: "Work.",
+      }),
+    );
+
+    expect(target).toBe("/repo-b");
+  });
+
   test("resets the published collection after a failed detach read and a replacement registration", async () => {
     const { service, events } = createHarness();
     const old = {
@@ -721,6 +783,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault logging failed",
     });
     const service = createAgentSessionLiveStateService({
+      withWorkStartLease: (_repoPath, effect) => effect,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
         Effect.sync(() => {
@@ -764,6 +827,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
+      withWorkStartLease: (_repoPath, effect) => effect,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.fail(logFailure),
       publish: (event) => events.push(event),
@@ -805,6 +869,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault publication failed",
     });
     const service = createAgentSessionLiveStateService({
+      withWorkStartLease: (_repoPath, effect) => effect,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
         Effect.sync(() => {
@@ -845,6 +910,7 @@ describe("createAgentSessionLiveStateService", () => {
     });
     const snapshot = liveSnapshot("session-1");
     const service = createAgentSessionLiveStateService({
+      withWorkStartLease: (_repoPath, effect) => effect,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
       publish: (event) => {
@@ -894,6 +960,7 @@ describe("createAgentSessionLiveStateService", () => {
       message: "fault publication failed",
     });
     const service = createAgentSessionLiveStateService({
+      withWorkStartLease: (_repoPath, effect) => effect,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () =>
         Effect.sync(() => {
@@ -1301,6 +1368,45 @@ describe("createAgentSessionLiveStateService", () => {
       { operation: "stop", input },
       { operation: "release", input },
     ]);
+  });
+
+  test("rejects a session model update for a blocked workspace before resolving an adapter", async () => {
+    const withWorkStartLease: CreateAgentSessionLiveStateServiceInput["withWorkStartLease"] = (
+      repoPath,
+      _effect,
+    ) =>
+      Effect.fail(
+        new HostValidationError({
+          message: `Workspace is closed: ${repoPath}. Reopen it before using it.`,
+          field: "workspaceId",
+        }),
+      );
+    const { service } = createHarness(withWorkStartLease);
+    const adapter = {
+      ...fakeAdapter({
+        runtimeId: "runtime-1",
+        snapshots: () => [],
+      }),
+      supportsSessionControl: true,
+      startSession: () => Effect.dieMessage("unexpected start"),
+      resumeSession: () => Effect.dieMessage("unexpected resume"),
+      forkSession: () => Effect.dieMessage("unexpected fork"),
+      sendUserMessage: () => Effect.dieMessage("unexpected send"),
+      updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+      stopSession: () => Effect.dieMessage("unexpected stop"),
+      releaseSession: () => Effect.dieMessage("unexpected release"),
+    } satisfies AgentSessionRuntimeAdapterPort;
+    await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+
+    const failure = await expectHostFailure(
+      service.updateSessionModel({
+        ...sessionRef("persisted-session"),
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        model: null,
+      }),
+    );
+
+    expect(failure.message).toBe("Workspace is closed: /repo. Reopen it before using it.");
   });
 
   test("fails scoped operations when the workspace has no live runtime", async () => {

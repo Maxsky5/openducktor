@@ -5,6 +5,7 @@ import {
   type TerminalSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import type {
   TerminalGrid,
   TerminalPtyLaunchPlan,
@@ -38,6 +39,11 @@ import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler"
 import { createTerminalTitleTracker } from "./terminal-title-tracker";
 
 export type { TerminalSessionAttachInput } from "./terminal-session-output";
+
+export type TerminalWorkspaceActivity = {
+  activeTerminalIds: string[];
+  unknownTerminalIds: string[];
+};
 
 export const createTerminalSessionEngine = ({
   now,
@@ -78,6 +84,10 @@ export const createTerminalSessionEngine = ({
       pruneExited();
       return [...sessions.values()].filter(isLiveTerminal).length;
     },
+    getWorkspaceRepoPath: (terminalId: string): string | null => {
+      pruneExited();
+      return sessions.get(terminalId)?.workspaceRepoPath ?? null;
+    },
     countLiveForContext: (context: TerminalContext): number => {
       pruneExited();
       return [...sessions.values()].filter(
@@ -86,9 +96,43 @@ export const createTerminalSessionEngine = ({
           terminalContextKey(session.summary.context) === terminalContextKey(context),
       ).length;
     },
+    inspectWorkspaceActivity: (
+      repoPath: string,
+    ): Effect.Effect<TerminalWorkspaceActivity, TerminalServiceError> =>
+      Effect.gen(function* () {
+        pruneExited();
+        const normalizedRepoPath = normalizePathForComparison(repoPath);
+        const activeTerminalIds: string[] = [];
+        const unknownTerminalIds: string[] = [];
+        for (const session of sessions.values()) {
+          if (!isLiveTerminal(session) || session.workspaceRepoPath === null) {
+            continue;
+          }
+          if (normalizePathForComparison(session.workspaceRepoPath) !== normalizedRepoPath) {
+            continue;
+          }
+          const handle = session.resources.handle;
+          if (!handle) {
+            unknownTerminalIds.push(session.summary.terminalId);
+            continue;
+          }
+          const hasChildProcesses = yield* handle
+            .hasChildProcesses()
+            .pipe(Effect.mapError((cause) => terminalOperationFailure(cause, "list")));
+          if (hasChildProcesses) {
+            activeTerminalIds.push(session.summary.terminalId);
+            continue;
+          }
+          // A shell builtin runs with no child process. Without shell integration
+          // the engine cannot prove the shell is idle, so report unknown.
+          unknownTerminalIds.push(session.summary.terminalId);
+        }
+        return { activeTerminalIds, unknownTerminalIds };
+      }),
     start: (
       summary: TerminalSummary,
       plan: TerminalPtyLaunchPlan,
+      workspaceRepoPath: string | null,
     ): Effect.Effect<TerminalSummary, TerminalServiceError> =>
       Effect.gen(function* () {
         let session: TerminalSession;
@@ -102,6 +146,7 @@ export const createTerminalSessionEngine = ({
           operations: yield* Effect.makeSemaphore(1),
           replayByteLimit: TERMINAL_LIMITS.replayBytes,
           shell: plan.shell,
+          workspaceRepoPath,
         });
         sessions.set(summary.terminalId, session);
         const handleResult = yield* Effect.either(
@@ -151,7 +196,10 @@ export const createTerminalSessionEngine = ({
           (filter.kind === "unassociated" && !("taskId" in session.summary.context)) ||
           (filter.kind === "task" &&
             terminalContextKey(session.summary.context) ===
-              terminalContextKey({ repoPath: filter.repoPath, taskId: filter.taskId }));
+              terminalContextKey({
+                repoPath: filter.repoPath,
+                taskId: filter.taskId,
+              }));
         return matches ? [{ ...session.summary, context: { ...session.summary.context } }] : [];
       });
     },

@@ -14,6 +14,7 @@ import {
   terminalPreparePathInputRequestSchema,
 } from "@openducktor/contracts";
 import { Effect, type Scope } from "effect";
+import type { HostValidationErrorAggregate } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { TerminalGrid, TerminalPtyPort } from "../../ports/terminal-pty-port";
 import { createTerminalAdmission } from "./terminal-admission";
@@ -26,6 +27,7 @@ import { TerminalServiceError } from "./terminal-service-error";
 import {
   createTerminalSessionEngine,
   type TerminalSessionAttachInput,
+  type TerminalWorkspaceActivity,
 } from "./terminal-session-engine";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 
@@ -39,6 +41,9 @@ export type TerminalService = {
   readonly hostInstanceId: string;
   create(input: TerminalCreateRequest): Effect.Effect<TerminalCreateResponse, TerminalServiceError>;
   list(filter: TerminalListFilter): Effect.Effect<TerminalListResponse, TerminalServiceError>;
+  inspectWorkspaceActivity(
+    repoPath: string,
+  ): Effect.Effect<TerminalWorkspaceActivity, TerminalServiceError>;
   preparePathInput(
     input: TerminalPreparePathInputRequest,
   ): Effect.Effect<TerminalPreparePathInputResponse, TerminalServiceError>;
@@ -62,6 +67,17 @@ export type TerminalService = {
 };
 
 type CreateTerminalServiceInput = {
+  assertWorkspaceAdmitsWork: (
+    repoPath: string,
+  ) => Effect.Effect<void, HostValidationErrorAggregate>;
+  resolveWorkspaceRepoPath: (
+    workingDirectory: string,
+  ) => Effect.Effect<string | null, HostValidationErrorAggregate>;
+  withWorkStartLease<A, E, R>(
+    repoPath: string,
+    effect: Effect.Effect<A, E, R>,
+    workingDirectory?: string,
+  ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
   filesystem: FilesystemPort;
   ptyPort: TerminalPtyPort;
   resolveLaunchEnvironment: TerminalLaunchEnvironmentPort;
@@ -72,6 +88,9 @@ type CreateTerminalServiceInput = {
 };
 
 export const createTerminalService = ({
+  assertWorkspaceAdmitsWork,
+  resolveWorkspaceRepoPath,
+  withWorkStartLease,
   filesystem,
   ptyPort,
   resolveLaunchEnvironment,
@@ -82,7 +101,10 @@ export const createTerminalService = ({
 }: CreateTerminalServiceInput): Effect.Effect<TerminalService> =>
   Effect.sync(() => {
     const hostInstanceId = hostInstanceIdFactory();
-    const engineInput: Parameters<typeof createTerminalSessionEngine>[0] = { now, ptyPort };
+    const engineInput: Parameters<typeof createTerminalSessionEngine>[0] = {
+      now,
+      ptyPort,
+    };
     if (scheduleTitleSettlement) {
       engineInput.scheduleTitleSettlement = scheduleTitleSettlement;
     }
@@ -126,6 +148,20 @@ export const createTerminalService = ({
       canonicalizeRepositoryPath(scope.repoPath, "close_by_task").pipe(
         Effect.map((repoPath) => ({ repoPath, taskIds: scope.taskIds })),
       );
+    const mapCreateWorkspaceError =
+      (
+        workingDir: string,
+      ): ((cause: HostValidationErrorAggregate | TerminalServiceError) => TerminalServiceError) =>
+      (cause) =>
+        cause instanceof TerminalServiceError
+          ? cause
+          : new TerminalServiceError({
+              code: "invalid_input",
+              operation: "create",
+              message: cause.message,
+              cause,
+              workingDir,
+            });
 
     const service: TerminalService = {
       hostInstanceId,
@@ -136,21 +172,46 @@ export const createTerminalService = ({
             admission.beginCreation(),
             (reservation) =>
               Effect.gen(function* () {
-                const context = yield* canonicalizeContext(input.context, "create");
-                yield* reservation.bind(context);
-                const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
-                const terminalId = idFactory();
-                const summary: TerminalSummary = {
-                  terminalId,
-                  label: plan.cwd,
-                  context,
-                  initialWorkingDir: plan.cwd,
-                  createdAt: now().toISOString(),
-                  lifecycle: "starting",
-                  exit: null,
-                };
-                const started = yield* engine.start(summary, plan);
-                return { ref: { terminalId }, summary: started };
+                const rawContext = input.context;
+                const startTerminal = (
+                  context: TerminalContext,
+                  workspaceRepoPath: string | null,
+                ) =>
+                  Effect.gen(function* () {
+                    yield* reservation.bind(context);
+                    const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
+                    const terminalId = idFactory();
+                    const summary: TerminalSummary = {
+                      terminalId,
+                      label: plan.cwd,
+                      context,
+                      initialWorkingDir: plan.cwd,
+                      createdAt: now().toISOString(),
+                      lifecycle: "starting",
+                      exit: null,
+                    };
+                    const started = yield* engine.start(summary, plan, workspaceRepoPath);
+                    return { ref: { terminalId }, summary: started };
+                  });
+                if ("taskId" in rawContext) {
+                  return yield* withWorkStartLease(
+                    rawContext.repoPath,
+                    Effect.gen(function* () {
+                      const context = yield* canonicalizeContext(rawContext, "create");
+                      return yield* startTerminal(context, context.repoPath);
+                    }),
+                    input.workingDir,
+                  ).pipe(Effect.mapError(mapCreateWorkspaceError(rawContext.repoPath)));
+                }
+                const workspaceRepoPath = yield* resolveWorkspaceRepoPath(input.workingDir).pipe(
+                  Effect.mapError(mapCreateWorkspaceError(input.workingDir)),
+                );
+                const start = startTerminal(rawContext, workspaceRepoPath);
+                return workspaceRepoPath === null
+                  ? yield* start
+                  : yield* withWorkStartLease(workspaceRepoPath, start, input.workingDir).pipe(
+                      Effect.mapError(mapCreateWorkspaceError(input.workingDir)),
+                    );
               }),
             (reservation) => Effect.sync(() => reservation.release()),
           );
@@ -167,6 +228,7 @@ export const createTerminalService = ({
               : filter;
           return { hostInstanceId, terminals: engine.list(canonicalFilter) };
         }),
+      inspectWorkspaceActivity: (repoPath) => engine.inspectWorkspaceActivity(repoPath),
       preparePathInput: (rawInput) =>
         Effect.gen(function* () {
           const input = terminalPreparePathInputRequestSchema.parse(rawInput);
@@ -174,7 +236,26 @@ export const createTerminalService = ({
           return { text };
         }),
       attach: engine.attach,
-      write: engine.write,
+      write: (terminalId, data) =>
+        Effect.gen(function* () {
+          const workspaceRepoPath = engine.getWorkspaceRepoPath(terminalId);
+          if (workspaceRepoPath) {
+            yield* assertWorkspaceAdmitsWork(workspaceRepoPath).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new TerminalServiceError({
+                    code: "invalid_input",
+                    operation: "write",
+                    message: cause.message,
+                    cause,
+                    terminalId,
+                    workingDir: workspaceRepoPath,
+                  }),
+              ),
+            );
+          }
+          yield* engine.write(terminalId, data);
+        }),
       resize: engine.resize,
       acknowledge: engine.acknowledge,
       detach: engine.detach,

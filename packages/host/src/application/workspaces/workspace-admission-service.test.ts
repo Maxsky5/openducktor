@@ -1,0 +1,1009 @@
+import { describe, expect, mock, test } from "bun:test";
+import {
+  repoConfigSchema,
+  type RepoConfig,
+  type WorkspaceCatalog,
+  type WorkspaceRecord,
+} from "@openducktor/contracts";
+import { Deferred, Effect, Fiber, Option } from "effect";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import type { GitPort } from "../../ports/git-port";
+import {
+  createGitPortTestDouble,
+  createWorkspaceSettingsServiceTestDouble,
+} from "../../test-support/service-test-doubles";
+import { createWorkspaceAdmissionService } from "./workspace-admission-service";
+
+const workspaceRecord = (
+  workspaceId: string,
+  repoPath: string,
+  isActive = false,
+): WorkspaceRecord => ({
+  workspaceId,
+  workspaceName: workspaceId,
+  repoPath,
+  isActive,
+  hasConfig: true,
+  configuredWorktreeBasePath: null,
+  defaultWorktreeBasePath: `/managed/${workspaceId}`,
+  effectiveWorktreeBasePath: `/managed/${workspaceId}`,
+});
+
+const catalog = (overrides: Partial<WorkspaceCatalog> = {}): WorkspaceCatalog => ({
+  openWorkspaces: [],
+  closedWorkspaces: [],
+  incompleteRemovals: [],
+  onboardingCompleted: true,
+  ...overrides,
+});
+
+const createAdmission = (
+  workspaceCatalog: WorkspaceCatalog,
+  canonicalizePath: (path: string) => Effect.Effect<string, HostOperationErrorAggregate> = (path) =>
+    Effect.succeed(path),
+  claimWorkspace: (workspaceId: string) => Effect.Effect<void, HostOperationErrorAggregate> = () =>
+    Effect.void,
+  getRepoConfig: (workspaceId: string) => Effect.Effect<RepoConfig, never> = (workspaceId) => {
+    const removal = workspaceCatalog.incompleteRemovals.find(
+      (entry) => entry.workspace.workspaceId === workspaceId,
+    );
+    const workspace = [
+      ...workspaceCatalog.openWorkspaces,
+      ...workspaceCatalog.closedWorkspaces,
+      ...workspaceCatalog.incompleteRemovals.map((entry) => entry.workspace),
+    ].find((entry) => entry.workspaceId === workspaceId);
+    return Effect.succeed(
+      repoConfigSchema.parse({
+        workspaceId,
+        workspaceName: workspaceId,
+        repoPath: workspace?.repoPath ?? `/repos/${workspaceId}`,
+        defaultRuntimeKind: "opencode",
+        agentStudioState: { openTaskIds: [] },
+        closed: workspaceCatalog.closedWorkspaces.some(
+          (entry) => entry.workspaceId === workspaceId,
+        ),
+        removal: removal?.record,
+      }),
+    );
+  },
+  gitPort: Pick<
+    GitPort,
+    "isGitRepository" | "isRegisteredWorktree" | "listWorktrees" | "shareGitCommonDirectory"
+  > = createGitPortTestDouble({
+    isGitRepository: () => Effect.succeed(false),
+    isRegisteredWorktree: () => Effect.succeed(false),
+    listWorktrees: () => Effect.succeed([]),
+    shareGitCommonDirectory: () => Effect.succeed(false),
+  }),
+) =>
+  createWorkspaceAdmissionService({
+    gitPort,
+    hostOwnership: { claimWorkspace },
+    settingsConfig: { canonicalizePath },
+    workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
+      getRepoConfig,
+      getRepoConfigByRepoPath: (repoPath) => {
+        const workspace = [
+          ...workspaceCatalog.openWorkspaces,
+          ...workspaceCatalog.closedWorkspaces,
+          ...workspaceCatalog.incompleteRemovals.map((entry) => entry.workspace),
+        ].find((entry) => entry.repoPath === repoPath);
+        return getRepoConfig(workspace?.workspaceId ?? repoPath.split("/").at(-1) ?? "workspace");
+      },
+      getWorkspaceCatalog: () => Effect.succeed(workspaceCatalog),
+    }),
+  });
+
+describe("workspace admission service", () => {
+  test("resolves a workspace from a registered worktree", async () => {
+    const admission = createAdmission(
+      catalog({ openWorkspaces: [workspaceRecord("ws", "/repos/ws")] }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+        isRegisteredWorktree: () => Effect.succeed(true),
+        listWorktrees: () =>
+          Effect.succeed([
+            { branch: "main", worktreePath: "/repos/ws" },
+            { branch: "task", worktreePath: "/worktrees/task" },
+          ]),
+        shareGitCommonDirectory: () => Effect.succeed(true),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.resolveWorkspaceRepoPath("/worktrees/task/src")),
+    ).resolves.toBe("/repos/ws");
+  });
+
+  test("resolves a worktree from its workspace base before its shared Git repository", async () => {
+    const admission = createAdmission(
+      catalog({
+        openWorkspaces: [
+          {
+            ...workspaceRecord("first", "/repos/first"),
+            effectiveWorktreeBasePath: "/managed",
+          },
+          {
+            ...workspaceRecord("second", "/repos/second"),
+            effectiveWorktreeBasePath: "/managed/second",
+          },
+        ],
+      }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+        listWorktrees: () =>
+          Effect.succeed([
+            { branch: "main", worktreePath: "/repos/first" },
+            { branch: "second", worktreePath: "/repos/second" },
+            { branch: "task", worktreePath: "/managed/second/task" },
+          ]),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.resolveWorkspaceRepoPath("/managed/second/task")),
+    ).resolves.toBe("/repos/second");
+  });
+
+  test("rejects equal matching workspace bases", async () => {
+    const admission = createAdmission(
+      catalog({
+        openWorkspaces: [
+          {
+            ...workspaceRecord("first", "/repos/first"),
+            effectiveWorktreeBasePath: "/managed/shared",
+          },
+          {
+            ...workspaceRecord("second", "/repos/second"),
+            effectiveWorktreeBasePath: "/managed/shared",
+          },
+        ],
+      }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.resolveWorkspaceRepoPath("/managed/shared/task")),
+    ).rejects.toThrow("Multiple workspace worktree bases match");
+  });
+
+  test("rejects multiple workspace roots from the shared Git fallback", async () => {
+    const admission = createAdmission(
+      catalog({
+        openWorkspaces: [
+          workspaceRecord("first", "/repos/first"),
+          workspaceRecord("second", "/repos/second"),
+        ],
+      }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+        listWorktrees: () =>
+          Effect.succeed([
+            { branch: "main", worktreePath: "/repos/first" },
+            { branch: "second", worktreePath: "/repos/second" },
+            { branch: "legacy", worktreePath: "/legacy/task" },
+          ]),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.resolveWorkspaceRepoPath("/legacy/task")),
+    ).rejects.toThrow("Multiple workspaces share the Git repository");
+  });
+
+  test("resolves a directory inside a registered workspace root before shared Git fallback", async () => {
+    const admission = createAdmission(
+      catalog({
+        openWorkspaces: [
+          workspaceRecord("first", "/repos/first"),
+          workspaceRecord("second", "/repos/second"),
+        ],
+      }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+        listWorktrees: () =>
+          Effect.succeed([
+            { branch: "main", worktreePath: "/repos/first" },
+            { branch: "second", worktreePath: "/repos/second" },
+          ]),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.resolveWorkspaceRepoPath("/repos/first/src")),
+    ).resolves.toBe("/repos/first");
+  });
+
+  test("loads closed and incomplete removal workspaces", async () => {
+    const admission = createAdmission(
+      catalog({
+        closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")],
+        incompleteRemovals: [
+          {
+            workspace: workspaceRecord("removing-ws", "/repos/removing"),
+            record: {
+              version: 1,
+              operationId: "op-1",
+              phase: "task_store",
+              removeTaskWorktrees: true,
+              removedWorktrees: [],
+              pendingWorktreePath: null,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        ],
+      }),
+    );
+
+    await Effect.runPromise(admission.initialize());
+
+    expect(admission.isWorkspaceBlocked("closed-ws")).toBe(true);
+    expect(admission.isWorkspaceBlocked("removing-ws")).toBe(true);
+    expect(admission.isWorkspaceBlocked("open-ws")).toBe(false);
+    expect(admission.isWorkspaceRemovalPending("closed-ws")).toBe(false);
+    expect(admission.isWorkspaceRemovalPending("removing-ws")).toBe(true);
+    expect(admission.isWorkspaceRemovalPending("open-ws")).toBe(false);
+  });
+
+  test("uses current persisted lifecycle state after initialization", async () => {
+    let current = repoConfigSchema.parse({
+      workspaceId: "ws",
+      workspaceName: "Workspace",
+      repoPath: "/repos/ws",
+      defaultRuntimeKind: "opencode",
+      agentStudioState: { openTaskIds: [] },
+    });
+    const admission = createAdmission(
+      catalog({ openWorkspaces: [workspaceRecord("ws", "/repos/ws")] }),
+      undefined,
+      undefined,
+      () => Effect.succeed(current),
+    );
+    await Effect.runPromise(admission.initialize());
+
+    current = repoConfigSchema.parse({ ...current, closed: true });
+    await expect(
+      Effect.runPromise(admission.withWorkStartLease("/repos/ws", Effect.void)),
+    ).rejects.toThrow("Workspace is closed: ws");
+    for (const operation of [
+      "workspaceSessionStore.rename",
+      "workspaceSessionStore.archive",
+      "workspaceSessionStore.bindRuntimeSession",
+      "workspaceSessionStore.restore",
+    ]) {
+      await expect(
+        Effect.runPromise(
+          admission.assertTaskStoreAccess({
+            operation,
+            repoPath: "/repos/ws",
+            workspaceId: "ws",
+          }),
+        ),
+      ).rejects.toThrow("Workspace is closed: ws");
+    }
+
+    current = repoConfigSchema.parse({ ...current, closed: false });
+    await expect(
+      Effect.runPromise(admission.withWorkStartLease("/repos/ws", Effect.void)),
+    ).resolves.toBeUndefined();
+
+    current = repoConfigSchema.parse({
+      ...current,
+      removal: {
+        version: 1,
+        operationId: "op-1",
+        phase: "task_store",
+        removeTaskWorktrees: false,
+        removedWorktrees: [],
+        pendingWorktreePath: null,
+        startedAt: "2026-01-01T00:00:00.000Z",
+        lastFailure: null,
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        admission.assertTaskStoreAccess({
+          operation: "sqliteTaskRepository.listTasks",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).rejects.toThrow("Workspace removal is incomplete for ws");
+  });
+
+  test("blocks all task store access for closed workspaces without claiming them", async () => {
+    const claimWorkspace = mock((_workspaceId: string) => Effect.void);
+    const admission = createAdmission(
+      catalog({
+        closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")],
+      }),
+      undefined,
+      claimWorkspace,
+    );
+
+    for (const operation of ["sqliteTaskRepository.createTask", "sqliteTaskRepository.listTasks"]) {
+      await expect(
+        Effect.runPromise(
+          admission.assertTaskStoreAccess({
+            operation,
+            repoPath: "/repos/closed",
+            workspaceId: "closed-ws",
+          }),
+        ),
+      ).rejects.toThrow("Workspace is closed: closed-ws");
+    }
+    expect(claimWorkspace).not.toHaveBeenCalled();
+  });
+
+  test("blocks all ordinary task store access while removal is incomplete", async () => {
+    const admission = createAdmission(
+      catalog({
+        incompleteRemovals: [
+          {
+            workspace: workspaceRecord("removing-ws", "/repos/removing"),
+            record: {
+              version: 1,
+              operationId: "op-1",
+              phase: "attachments",
+              removeTaskWorktrees: false,
+              removedWorktrees: [],
+              pendingWorktreePath: null,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        ],
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        admission.assertTaskStoreAccess({
+          operation: "sqliteTaskRepository.listTasks",
+          repoPath: "/repos/removing",
+          workspaceId: "removing-ws",
+        }),
+      ),
+    ).rejects.toThrow("Workspace removal is incomplete for removing-ws");
+
+    await expect(
+      Effect.runPromise(
+        admission.withAdministrativeAccess(
+          ["removing-ws"],
+          admission.assertTaskStoreAccess({
+            operation: "sqliteTaskRepository.listTasks",
+            repoPath: "/repos/removing",
+            workspaceId: "removing-ws",
+          }),
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  test("keeps administrative task store access local to its fiber", async () => {
+    const admission = createAdmission(
+      catalog({
+        incompleteRemovals: [
+          {
+            workspace: workspaceRecord("removing-ws", "/repos/removing"),
+            record: {
+              version: 1,
+              operationId: "op-1",
+              phase: "attachments",
+              removeTaskWorktrees: false,
+              removedWorktrees: [],
+              pendingWorktreePath: null,
+              startedAt: "2026-01-01T00:00:00.000Z",
+              lastFailure: null,
+            },
+          },
+        ],
+      }),
+    );
+    const ordinaryAccess = admission.assertTaskStoreAccess({
+      operation: "sqliteTaskRepository.updateTask",
+      repoPath: "/repos/removing",
+      workspaceId: "removing-ws",
+    });
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const administrativeFiber = yield* admission
+          .withAdministrativeAccess(
+            ["removing-ws"],
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          )
+          .pipe(Effect.fork);
+
+        yield* Deferred.await(entered);
+        const ordinaryResult = yield* Effect.either(ordinaryAccess);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(administrativeFiber);
+        return ordinaryResult;
+      }),
+    );
+
+    expect(result._tag).toBe("Left");
+  });
+
+  test("blocks process starts by repository path for blocked workspaces", async () => {
+    const admission = createAdmission(
+      catalog({
+        closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")],
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.assertWorkspaceAdmitsWork("/repos/closed")),
+    ).rejects.toThrow("Workspace is closed: closed-ws");
+    await expect(
+      Effect.runPromise(admission.assertWorkspaceAdmitsWork("/repos/open")),
+    ).resolves.toBeUndefined();
+  });
+
+  test("accepts only the repository or one of its registered worktrees", async () => {
+    const operation = mock(() => {});
+    const gitPort = createGitPortTestDouble({
+      isGitRepository: (workingDirectory) => Effect.succeed(workingDirectory === "/worktrees/ws"),
+      shareGitCommonDirectory: (_repoPath, workingDirectory) =>
+        Effect.succeed(workingDirectory === "/worktrees/ws"),
+      isRegisteredWorktree: (_repoPath, workingDirectory) =>
+        Effect.succeed(workingDirectory === "/worktrees/ws"),
+      listWorktrees: () =>
+        Effect.succeed([
+          { branch: "main", worktreePath: "/repos/ws" },
+          { branch: "task", worktreePath: "/worktrees/ws" },
+        ]),
+    });
+    const admission = createAdmission(
+      catalog({ openWorkspaces: [workspaceRecord("ws", "/repos/ws")] }),
+      undefined,
+      undefined,
+      undefined,
+      gitPort,
+    );
+
+    await expect(
+      Effect.runPromise(
+        admission.withWorkStartLease("/repos/ws", Effect.sync(operation), "/repos/other"),
+      ),
+    ).rejects.toThrow("is not the repository or a registered worktree");
+    expect(operation).not.toHaveBeenCalled();
+
+    await expect(
+      Effect.runPromise(
+        admission.withWorkStartLease("/repos/ws", Effect.succeed("started"), "/worktrees/ws"),
+      ),
+    ).resolves.toBe("started");
+  });
+
+  test("rejects a registered worktree owned by another workspace", async () => {
+    const operation = mock(() => {});
+    const admission = createAdmission(
+      catalog({
+        openWorkspaces: [
+          workspaceRecord("first", "/repos/first"),
+          workspaceRecord("second", "/repos/second"),
+        ],
+      }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+        isRegisteredWorktree: () => Effect.succeed(true),
+        listWorktrees: () =>
+          Effect.succeed([
+            { branch: "main", worktreePath: "/repos/first" },
+            { branch: "second", worktreePath: "/repos/second" },
+            { branch: "task", worktreePath: "/managed/second/task" },
+          ]),
+        shareGitCommonDirectory: () => Effect.succeed(true),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        admission.withWorkStartLease(
+          "/repos/first",
+          Effect.sync(operation),
+          "/managed/second/task",
+        ),
+      ),
+    ).rejects.toThrow("belongs to workspace /repos/second, not /repos/first");
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  test("claims cross-process ownership before a work start", async () => {
+    const events: string[] = [];
+    const admission = createAdmission(
+      catalog(),
+      (path) => Effect.succeed(path),
+      mock((workspaceId) =>
+        Effect.sync(() => {
+          events.push(`claim:${workspaceId}`);
+        }),
+      ),
+    );
+
+    await Effect.runPromise(
+      admission.withWorkStartLease(
+        "/repos/open",
+        Effect.sync(() => {
+          events.push("start");
+        }),
+      ),
+    );
+
+    expect(events).toEqual(["claim:open", "start"]);
+  });
+
+  test("claims cross-process ownership before task store access", async () => {
+    const claimWorkspace = mock((_workspaceId: string) => Effect.void);
+    const admission = createAdmission(catalog(), (path) => Effect.succeed(path), claimWorkspace);
+
+    await Effect.runPromise(
+      admission.assertTaskStoreAccess({
+        operation: "sqliteTaskRepository.listTasks",
+        repoPath: "/repos/open",
+        workspaceId: "open",
+      }),
+    );
+
+    expect(claimWorkspace).toHaveBeenCalledWith("open");
+  });
+
+  test("matches a work start by the canonical repository path", async () => {
+    const admission = createAdmission(catalog(), (path) =>
+      Effect.succeed(path === "/alias/open" ? "/repos/open" : path),
+    );
+    await Effect.runPromise(admission.initialize());
+
+    const waited = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/alias/open",
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(entered);
+        const waitForStarts = yield* Effect.fork(admission.awaitWorkStarts("/repos/open"));
+        yield* Effect.sleep("20 millis");
+        const beforeRelease = yield* Fiber.poll(waitForStarts);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        yield* Fiber.join(waitForStarts);
+        return beforeRelease;
+      }),
+    );
+
+    expect(Option.isNone(waited)).toBe(true);
+  });
+
+  test("drains a work start that is still resolving its path", async () => {
+    const observed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const canonicalizeGate = yield* Deferred.make<void>();
+        let canonicalizeCalls = 0;
+        const admission = createAdmission(catalog(), (path) => {
+          canonicalizeCalls += 1;
+          return canonicalizeCalls === 1
+            ? Deferred.await(canonicalizeGate).pipe(Effect.as(path))
+            : Effect.succeed(path);
+        });
+        yield* admission.initialize();
+
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/repos/open",
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Effect.sleep("20 millis");
+        const waitForStarts = yield* Effect.fork(admission.awaitWorkStarts("/repos/open"));
+        yield* Effect.sleep("20 millis");
+        const whileResolving = yield* Fiber.poll(waitForStarts);
+        yield* Deferred.succeed(canonicalizeGate, undefined);
+        yield* Deferred.await(entered);
+        const whileRunning = yield* Fiber.poll(waitForStarts);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        yield* Fiber.join(waitForStarts);
+        return { whileResolving, whileRunning };
+      }),
+    );
+
+    expect(Option.isNone(observed.whileResolving)).toBe(true);
+    expect(Option.isNone(observed.whileRunning)).toBe(true);
+  });
+
+  test("blocks a work start when the canonical path has a reservation", async () => {
+    const admission = createAdmission(catalog(), (path) =>
+      Effect.succeed(path === "/alias/open" ? "/repos/open" : path),
+    );
+    await Effect.runPromise(
+      admission.reserveWorkspace({
+        operation: "close",
+        repoPath: "/repos/open",
+        workspaceId: "open",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.assertWorkspaceAdmitsWork("/alias/open")),
+    ).rejects.toThrow("already in progress for open");
+  });
+
+  test("reports a canonicalization failure for a work start", async () => {
+    const admission = createAdmission(catalog(), () =>
+      Effect.fail(
+        new HostOperationError({
+          operation: "git.canonicalizePath",
+          message: "Failed to canonicalize /repos/missing.",
+        }),
+      ),
+    );
+
+    await expect(
+      Effect.runPromise(admission.assertWorkspaceAdmitsWork("/repos/missing")),
+    ).rejects.toThrow("Cannot resolve the repository path /repos/missing.");
+  });
+
+  test("drains work starts when the repository path cannot be canonicalized", async () => {
+    const admission = createAdmission(catalog(), () =>
+      Effect.fail(
+        new HostOperationError({
+          operation: "git.canonicalizePath",
+          message: "Failed to canonicalize /repos/missing.",
+        }),
+      ),
+    );
+
+    await expect(
+      Effect.runPromise(admission.awaitWorkStarts("/repos/missing")),
+    ).resolves.toBeUndefined();
+  });
+
+  test("drains an active work start when the repository path disappears", async () => {
+    let canonicalizeCalls = 0;
+    const admission = createAdmission(catalog(), (path) => {
+      canonicalizeCalls += 1;
+      if (canonicalizeCalls === 1) {
+        return Effect.succeed(path);
+      }
+      return Effect.fail(
+        new HostOperationError({
+          operation: "git.canonicalizePath",
+          message: `Failed to canonicalize ${path}.`,
+        }),
+      );
+    });
+
+    const waited = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/repos/open",
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(entered);
+        const waitForStarts = yield* Effect.fork(admission.awaitWorkStarts("/repos/open"));
+        yield* Effect.sleep("20 millis");
+        const beforeRelease = yield* Fiber.poll(waitForStarts);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        yield* Fiber.join(waitForStarts);
+        return beforeRelease;
+      }),
+    );
+
+    expect(Option.isNone(waited)).toBe(true);
+  });
+
+  test("reserves a workspace and rejects a second reservation", async () => {
+    const admission = createAdmission(catalog());
+
+    await Effect.runPromise(
+      admission.reserveWorkspace({
+        operation: "close",
+        repoPath: "/repos/ws",
+        workspaceId: "ws",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(
+        admission.reserveWorkspace({
+          operation: "remove",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).rejects.toThrow("already in progress for ws");
+    admission.releaseReservation("ws");
+    await expect(
+      Effect.runPromise(
+        admission.reserveWorkspace({
+          operation: "remove",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  test("reservations block process starts and all task store access", async () => {
+    const admission = createAdmission(catalog());
+
+    await Effect.runPromise(
+      admission.reserveWorkspace({
+        operation: "close",
+        repoPath: "/repos/ws",
+        workspaceId: "ws",
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.assertWorkspaceAdmitsWork("/repos/ws")),
+    ).rejects.toThrow("already in progress for ws");
+    await expect(
+      Effect.runPromise(
+        admission.assertTaskStoreAccess({
+          operation: "sqliteTaskRepository.listTasks",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).rejects.toThrow("already in progress for ws");
+    await expect(
+      Effect.runPromise(
+        admission.assertTaskStoreAccess({
+          operation: "sqliteTaskRepository.updateTask",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).rejects.toThrow("already in progress for ws");
+
+    admission.releaseReservation("ws");
+    await Effect.runPromise(
+      admission.reserveWorkspace({
+        operation: "remove",
+        repoPath: "/repos/ws",
+        workspaceId: "ws",
+      }),
+    );
+    await expect(
+      Effect.runPromise(
+        admission.assertTaskStoreAccess({
+          operation: "sqliteTaskRepository.listTasks",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).rejects.toThrow("already in progress for ws");
+  });
+
+  test("holds a work start lease until the operation finishes", async () => {
+    const admission = createAdmission(catalog());
+    await Effect.runPromise(admission.initialize());
+
+    const { closeExit, releaseExit } = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/repos/open",
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(entered);
+        const waitForStarts = yield* Effect.fork(admission.awaitWorkStarts("/repos/open"));
+        yield* Effect.sleep("20 millis");
+        const waitExitBeforeRelease = yield* Fiber.poll(waitForStarts);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        yield* Fiber.join(waitForStarts);
+        return {
+          closeExit: waitExitBeforeRelease,
+          releaseExit: yield* Fiber.poll(waitForStarts),
+        };
+      }),
+    );
+
+    expect(Option.isNone(closeExit)).toBe(true);
+    expect(Option.isSome(releaseExit)).toBe(true);
+  });
+
+  test("keeps the workspace blocked until active work starts finish", async () => {
+    let current = repoConfigSchema.parse({
+      workspaceId: "open",
+      workspaceName: "Open",
+      repoPath: "/repos/open",
+      defaultRuntimeKind: "opencode",
+      agentStudioState: { openTaskIds: [] },
+    });
+    const admission = createAdmission(catalog(), undefined, undefined, () =>
+      Effect.succeed(current),
+    );
+    await Effect.runPromise(admission.initialize());
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/repos/open",
+            Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(entered);
+        current = repoConfigSchema.parse({
+          ...current,
+          removal: {
+            version: 1,
+            operationId: "op-1",
+            phase: "task_store",
+            removeTaskWorktrees: false,
+            removedWorktrees: [],
+            pendingWorktreePath: null,
+            startedAt: "2026-01-01T00:00:00.000Z",
+            lastFailure: null,
+          },
+        });
+        admission.blockWorkspace({
+          reason: "removal",
+          repoPath: "/repos/open",
+          workspaceId: "open",
+        });
+        const whileActive = yield* admission.forgetWorkspaceWhenDrained({
+          repoPath: "/repos/open",
+          workspaceId: "open",
+        });
+        const admittedWhileActive = yield* Effect.exit(
+          admission.assertWorkspaceAdmitsWork("/repos/open"),
+        );
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        const whenDrained = yield* admission.forgetWorkspaceWhenDrained({
+          repoPath: "/repos/open",
+          workspaceId: "open",
+        });
+        current = repoConfigSchema.parse({ ...current, removal: undefined });
+        const admittedWhenDrained = yield* Effect.exit(
+          admission.assertWorkspaceAdmitsWork("/repos/open"),
+        );
+        return {
+          admittedWhenDrained,
+          admittedWhileActive,
+          whenDrained,
+          whileActive,
+        };
+      }),
+    );
+
+    expect(result.whileActive).toBe(false);
+    expect(result.admittedWhileActive._tag).toBe("Failure");
+    expect(result.whenDrained).toBe(true);
+    expect(result.admittedWhenDrained._tag).toBe("Success");
+  });
+
+  test("keeps the drain waiter when a rejected start arrives during the drain", async () => {
+    const admission = createAdmission(
+      catalog({ openWorkspaces: [workspaceRecord("open", "/repos/open")] }),
+    );
+    await Effect.runPromise(admission.initialize());
+
+    const { rejectedExit } = await Effect.runPromise(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const start = yield* Effect.fork(
+          admission.withWorkStartLease(
+            "/repos/open",
+            Deferred.succeed(started, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+          ),
+        );
+        yield* Deferred.await(started);
+        yield* admission.reserveWorkspace({
+          operation: "close",
+          repoPath: "/repos/open",
+          workspaceId: "open",
+        });
+        const waitForStarts = yield* Effect.fork(admission.awaitWorkStarts("/repos/open"));
+        yield* Effect.sleep("20 millis");
+        const rejectedExit = yield* Effect.exit(
+          admission.withWorkStartLease("/repos/open", Effect.void),
+        );
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(start);
+        yield* Fiber.join(waitForStarts);
+        return { rejectedExit };
+      }),
+    );
+
+    expect(rejectedExit._tag).toBe("Failure");
+  });
+
+  test("releases the work start lease when the workspace is blocked", async () => {
+    const admission = createAdmission(
+      catalog({
+        closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")],
+      }),
+    );
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        admission.withWorkStartLease(
+          "/repos/closed",
+          Effect.dieMessage("a blocked workspace must not start work"),
+        ),
+      ),
+    );
+
+    expect(error.message).toContain("Workspace is closed");
+    await expect(
+      Effect.runPromise(admission.awaitWorkStarts("/repos/closed")),
+    ).resolves.toBeUndefined();
+  });
+
+  test("tracks block and unblock changes after initialization", async () => {
+    const admission = createAdmission(catalog());
+
+    await Effect.runPromise(admission.initialize());
+    admission.blockWorkspace({
+      reason: "closed",
+      repoPath: "/repos/new-closed",
+      workspaceId: "new-closed",
+    });
+    expect(admission.isWorkspaceBlocked("new-closed")).toBe(true);
+
+    admission.unblockWorkspace("new-closed");
+    expect(admission.isWorkspaceBlocked("new-closed")).toBe(false);
+
+    admission.blockWorkspace({
+      reason: "removal",
+      repoPath: "/repos/removed",
+      workspaceId: "removed",
+    });
+    await expect(
+      Effect.runPromise(
+        admission.forgetWorkspaceWhenDrained({
+          repoPath: "/repos/removed",
+          workspaceId: "removed",
+        }),
+      ),
+    ).resolves.toBe(true);
+    expect(admission.isWorkspaceBlocked("removed")).toBe(false);
+  });
+});

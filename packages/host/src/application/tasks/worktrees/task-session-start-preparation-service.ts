@@ -2,7 +2,12 @@ import type { AgentRole, RuntimeKind, TaskCard, TaskStatus } from "@openducktor/
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { buildBranchName } from "../../../domain/task";
-import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
+import {
+  errorMessage,
+  HostOperationError,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
@@ -49,6 +54,14 @@ export type TaskSessionStartPreparationService = ReturnType<
 >;
 
 export type TaskSessionStartPreparationDependencies = {
+  assertWorkspaceAdmitsWork?:
+    | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
+    | undefined;
+  withWorkStartLease<A, E, R>(
+    repoPath: string,
+    effect: Effect.Effect<A, E, R>,
+    workingDirectory?: string,
+  ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
   gitPort?: GitPort;
   taskStore: TaskStorePort;
   settingsConfig?: SettingsConfigPort;
@@ -61,6 +74,8 @@ export type TaskSessionStartPreparationDependencies = {
 };
 
 export const createTaskSessionStartPreparationService = ({
+  assertWorkspaceAdmitsWork,
+  withWorkStartLease,
   gitPort,
   taskStore,
   settingsConfig,
@@ -77,6 +92,9 @@ export const createTaskSessionStartPreparationService = ({
     ): Effect.Effect<PreparedTaskSessionStart, TaskServiceError> {
       return Effect.gen(function* () {
         const { canonicalRepoPath: canonicalInputRepoPath, runtimeKind, taskId, role } = input;
+        if (assertWorkspaceAdmitsWork) {
+          yield* assertWorkspaceAdmitsWork(canonicalInputRepoPath);
+        }
         const dependencies = yield* requireDependencies(() =>
           requireBuildStartDependencies(
             gitPort,
@@ -170,10 +188,9 @@ export const createTaskSessionStartPreparationService = ({
               yield* validateTaskSessionWorkflowAvailable(task, role, canonicalRepoPath);
             }
             const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
-            yield* Effect.scoped(
+            const worktreePreparation = Effect.scoped(
               Effect.gen(function* () {
                 yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([worktreePath]);
-                const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
                 if (exists) {
                   if (!(yield* dependencies.gitPort.isGitRepository(worktreePath))) {
                     return yield* Effect.fail(
@@ -210,6 +227,10 @@ export const createTaskSessionStartPreparationService = ({
                 }
               }),
             );
+            const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
+            yield* exists
+              ? withWorkStartLease(canonicalRepoPath, worktreePreparation, worktreePath)
+              : worktreePreparation;
             yield* dependencies.runtimeRegistry
               .ensureWorkspaceRuntime({
                 runtimeKind: descriptor.kind,

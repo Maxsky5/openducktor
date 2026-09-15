@@ -14,9 +14,13 @@ import {
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
+import {
+  createWorkspaceOwnershipLock,
+  type WorkspaceOwnershipLock,
+} from "./workspace-ownership-lock";
 import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
@@ -83,6 +87,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       failDelete: false,
       failArchive: false,
       failRestore: false,
+      blockMutationAdmission: false,
       partialCreate: false,
       changed: false,
       collision: false,
@@ -100,6 +105,16 @@ describe("host-owned Workspace Session lifecycle", () => {
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
       operationGate: createWorkspaceSessionOperationGate(),
+      ownershipLock: createWorkspaceOwnershipLock(),
+      withWorkStartLease: (_repoPath, effect) =>
+        state.blockMutationAdmission
+          ? Effect.fail(
+              new HostValidationError({
+                field: "workspaceId",
+                message: "Workspace is closed: fairnest",
+              }),
+            )
+          : effect,
       store: {
         ...store,
         archive: (request) =>
@@ -347,6 +362,40 @@ describe("host-owned Workspace Session lifecycle", () => {
     },
   );
 
+  test("keeps the workspace lease until it binds the runtime session", async () => {
+    const h = setup();
+    let leaseDepth = 0;
+    let bindLeaseDepth = 0;
+    const store = h.dependencies.store;
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      store: {
+        ...store,
+        bindRuntimeSession: (request) =>
+          Effect.sync(() => {
+            bindLeaseDepth = leaseDepth;
+          }).pipe(Effect.zipRight(store.bindRuntimeSession(request))),
+      },
+      withWorkStartLease: (_repoPath, effect) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => {
+            leaseDepth += 1;
+          }),
+          () => effect,
+          () =>
+            Effect.sync(() => {
+              leaseDepth -= 1;
+            }),
+        ),
+    });
+    const { session } = await Effect.runPromise(service.create(input()));
+
+    await Effect.runPromise(service.start({ workspaceId: "fairnest", sessionId: session.id }));
+
+    expect(bindLeaseDepth).toBe(1);
+    expect(leaseDepth).toBe(0);
+  });
+
   test("No Role supplies no Role prompt and missing Roles fail before resource creation", async () => {
     const h = setup();
     await expect(
@@ -363,6 +412,19 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.starts[0]?.systemPrompt).toBe("");
   });
 
+  test("rejects creation before preparing a worktree when the workspace is blocked", async () => {
+    const h = setup();
+    h.state.blockMutationAdmission = true;
+
+    await expect(Effect.runPromise(h.service.create(worktreeInput()))).rejects.toThrow(
+      "Workspace is closed",
+    );
+
+    expect(h.calls).toEqual([]);
+    expect(h.paths.size).toBe(0);
+    expect(h.branches.size).toBe(0);
+  });
+
   test("worktree creation uses committed HEAD and Workspace setup before runtime startup", async () => {
     const h = setup();
     h.state.changed = true;
@@ -376,6 +438,25 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.state.createBranch).toBe(true);
     expect(h.state.startPoint).toBe("HEAD");
     expect(h.paths.has(h.state.worktree)).toBe(true);
+  });
+
+  test("holds the ownership lock through worktree creation and persistence", async () => {
+    const h = setup();
+    const ownershipLock: WorkspaceOwnershipLock = {
+      runExclusive: (effect) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => h.calls.push("lock")),
+          () => effect,
+          () => Effect.sync(() => h.calls.push("unlock")),
+        ),
+    };
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      ownershipLock,
+    });
+
+    await Effect.runPromise(service.create(worktreeInput()));
+    expect(h.calls).toEqual(["lock", "worktree", "copy", "hook", "save", "unlock"]);
   });
 
   test("accepts drive-qualified paths from a Windows worktree port", async () => {
@@ -530,18 +611,21 @@ describe("host-owned Workspace Session lifecycle", () => {
             () => Deferred.succeed(release, undefined),
           );
           yield* Deferred.await(entered);
-          const winner = yield* service.create({
-            ...worktreeInput(),
-            worktree: { mode: "from_name", name, branchName: "odt/my-feature" },
-          });
+          const winner = yield* Effect.forkScoped(
+            service.create({
+              ...worktreeInput(),
+              worktree: { mode: "from_name", name, branchName: "odt/my-feature" },
+            }),
+          );
           yield* Deferred.succeed(release, undefined);
           const failed = yield* Fiber.await(loser);
           expect(Exit.isFailure(failed)).toBe(true);
           if (Exit.isFailure(failed)) {
             expect(Cause.pretty(failed.cause)).toContain("Another request created the branch");
           }
-          expect(yield* service.get({ ...ref, sessionId: winner.session.id })).toEqual(
-            winner.session,
+          const created = yield* Fiber.join(winner);
+          expect(yield* service.get({ ...ref, sessionId: created.session.id })).toEqual(
+            created.session,
           );
         }),
       ),
@@ -1076,6 +1160,28 @@ describe("host-owned Workspace Session lifecycle", () => {
     ).rejects.toThrow("active draft");
   });
 
+  test("checks workspace admission before saving a draft model", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    h.state.blockMutationAdmission = true;
+
+    await expect(
+      Effect.runPromise(
+        h.service.setDraftModel({
+          ...ref,
+          selectedModel: {
+            runtimeKind: "opencode",
+            providerId: "new-provider",
+            modelId: "new-model",
+          },
+        }),
+      ),
+    ).rejects.toThrow("Workspace is closed: fairnest");
+
+    expect(await Effect.runPromise(h.service.get(ref))).toEqual(session);
+  });
+
   test("restore rejects an invalid directory without changing archive state", async () => {
     const h = setup();
     const { session } = await Effect.runPromise(h.service.create(input()));
@@ -1152,6 +1258,119 @@ describe("host-owned Workspace Session lifecycle", () => {
     const callsBefore = h.calls.length;
     expect(await Effect.runPromise(h.service.restore(ref))).toEqual(restored);
     expect(h.calls).toHaveLength(callsBefore);
+  });
+
+  test("holds the ownership lock through worktree restore and persistence", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }));
+    h.calls.length = 0;
+    const ownershipLock: WorkspaceOwnershipLock = {
+      runExclusive: (effect) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => h.calls.push("lock")),
+          () => effect,
+          () => Effect.sync(() => h.calls.push("unlock")),
+        ),
+    };
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      ownershipLock,
+      store: {
+        ...h.dependencies.store,
+        restore: (request) =>
+          Effect.sync(() => h.calls.push("restore")).pipe(
+            Effect.zipRight(h.dependencies.store.restore(request)),
+          ),
+      },
+    });
+
+    await Effect.runPromise(service.restore(ref));
+    expect(h.calls).toEqual(["lock", "worktree", "copy", "hook", "restore", "unlock"]);
+  });
+
+  test("checks workspace admission before archive worktree removal", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    h.state.blockMutationAdmission = true;
+    const callsBefore = [...h.calls];
+
+    await expect(
+      Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: true })),
+    ).rejects.toThrow("Workspace is closed: fairnest");
+
+    expect(h.calls).toEqual(callsBefore);
+    expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
+  });
+
+  test("checks saved worktree ownership before archive removal", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    const callsBefore = [...h.calls];
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      withWorkStartLease: (_repoPath, effect, workingDirectory) =>
+        workingDirectory === session.executionTarget.workingDirectory
+          ? Effect.fail(
+              new HostValidationError({
+                field: "workingDirectory",
+                message: "The saved worktree belongs to another workspace.",
+              }),
+            )
+          : effect,
+    });
+
+    await expect(
+      Effect.runPromise(service.archive({ ...ref, confirmStop: true, removeWorktree: true })),
+    ).rejects.toThrow("belongs to another workspace");
+
+    expect(h.calls).toEqual(callsBefore);
+    expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
+  });
+
+  test("holds the ownership lock through archive removal", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    let lockHeld = false;
+    const ownershipLock: WorkspaceOwnershipLock = {
+      runExclusive: (effect) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => {
+            lockHeld = true;
+          }),
+          () => effect,
+          () =>
+            Effect.sync(() => {
+              lockHeld = false;
+            }),
+        ),
+    };
+    const git = h.dependencies.git;
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      ownershipLock,
+      git: {
+        ...git,
+        removeWorktree: (repoPath, worktreePath, force) =>
+          Effect.sync(() => expect(lockHeld).toBe(true)).pipe(
+            Effect.zipRight(git.removeWorktree(repoPath, worktreePath, force)),
+          ),
+      },
+    });
+
+    await Effect.runPromise(
+      service.archive({
+        workspaceId: "fairnest",
+        sessionId: session.id,
+        confirmStop: true,
+        removeWorktree: true,
+      }),
+    );
+    expect(h.calls).toContain("remove-worktree");
+    expect(lockHeld).toBe(false);
   });
 
   test.each(["failCleanup", "failDelete", "failArchive"] as const)(

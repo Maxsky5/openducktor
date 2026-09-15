@@ -12,6 +12,7 @@ import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
+import type { WorkspaceAdmissionService } from "../../workspaces/workspace-admission-service";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import { type TaskCleanupOperation, type TaskCleanupProgressState } from "./task-cleanup-progress";
@@ -345,6 +346,7 @@ export const runTaskLocalCleanup = ({
   worktreeCleanupOperation,
   worktreeFiles,
   worktreePaths,
+  withWorkStartLease,
 }: {
   branchNames: string[];
   devServerService: DevServerService;
@@ -358,6 +360,7 @@ export const runTaskLocalCleanup = ({
   worktreeCleanupOperation: TaskWorktreeCleanupOperation;
   worktreeFiles: WorktreeFilePort | undefined;
   worktreePaths: string[];
+  withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"];
 }) =>
   Effect.gen(function* () {
     if (!terminalService) {
@@ -383,6 +386,9 @@ export const runTaskLocalCleanup = ({
     });
 
     if (cleanupFiles) {
+      for (const worktreePath of worktreePaths) {
+        yield* withWorkStartLease(repoPath, Effect.void, worktreePath);
+      }
       for (const worktreePath of worktreePaths) {
         yield* removeWorktreeAndFilesystemPath(
           {
