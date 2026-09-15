@@ -15,6 +15,7 @@ import {
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import { HostOperationError } from "../../effect/host-errors";
+import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
   createGitPortTestDouble,
@@ -431,6 +432,33 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect([...h.branches]).toEqual(["refs/heads/feature/existing"]);
   });
 
+  test("rejects an already checked-out branch without changing it", async () => {
+    const h = setup();
+    const occupied = "/repos/Fair Nest/other checkout";
+    h.branches.add("refs/heads/feature/existing");
+    h.dependencies.git.listBranches = () =>
+      Effect.succeed([
+        { name: "feature/existing", isCurrent: false, isRemote: false, worktreePath: occupied },
+      ]);
+    const error = await Effect.runPromise(
+      Effect.flip(
+        h.service.create({
+          ...worktreeInput(),
+          worktree: { mode: "from_branch", name: "different-name", branchName: "feature/existing" },
+        }),
+      ),
+    );
+    expect(hostInvokeFailureFromError(error)).toEqual({
+      kind: "workspace_session_validation",
+      field: "worktree.branchName",
+    });
+    expect(error).toMatchObject({
+      message: `Branch feature/existing is already checked out at ${occupied}. Choose another branch or use Current checkout.`,
+    });
+    expect(h.calls).toEqual([]);
+    expect([...h.branches]).toEqual(["refs/heads/feature/existing"]);
+  });
+
   test("keeps uncertain resources when Git does not confirm creation", async () => {
     const h = setup();
     h.state.partialCreate = true;
@@ -653,6 +681,39 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.calls).toEqual([]);
   });
 
+  test.each(["worktree path", "registered worktree", "branch"] as const)(
+    "rejects an existing %s without changing it",
+    async (collision) => {
+      const h = setup();
+      const directory = path.join(
+        database.configDir,
+        "worktrees",
+        "workspace-sessions",
+        "my-feature",
+      );
+      if (collision === "branch") h.branches.add("refs/heads/odt/my-feature");
+      else {
+        h.paths.add(directory);
+        if (collision === "registered worktree") h.registered.add(directory);
+      }
+      const error = await Effect.runPromise(Effect.flip(h.service.create(worktreeInput())));
+      expect(hostInvokeFailureFromError(error)).toEqual({
+        kind: "workspace_session_validation",
+        field: collision === "branch" ? "worktree.branchName" : "worktree.name",
+      });
+      expect(error).toMatchObject({
+        message:
+          collision === "branch"
+            ? "Branch already exists: odt/my-feature. Choose another name or use Existing branch."
+            : `Worktree directory already exists: ${directory}. Choose another name.`,
+      });
+      expect(h.calls).toEqual([]);
+      expect(h.branches.has("refs/heads/odt/my-feature")).toBe(collision === "branch");
+      expect(h.paths.has(directory)).toBe(collision !== "branch");
+      expect(h.registered.has(directory)).toBe(collision === "registered worktree");
+    },
+  );
+
   test.each(["../escape", "/absolute", "bad:name", "", ".hidden"])(
     "rejects invalid worktree name %s before creating resources",
     async (name) => {
@@ -766,6 +827,8 @@ describe("host-owned Workspace Session lifecycle", () => {
       await expect(Effect.runPromise(h.service.start(ref))).rejects.toThrow();
       expect(await Effect.runPromise(h.service.get(ref))).toEqual(session);
       expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
+      expect(h.registered.has(session.executionTarget.workingDirectory)).toBe(true);
+      expect(h.branches.has("refs/heads/odt/my-feature")).toBe(true);
       expect(h.calls.includes("release")).toBe(failure === "failBind");
       h.state[failure] = false;
       const started = await Effect.runPromise(h.service.start(ref));
@@ -1026,6 +1089,34 @@ describe("host-owned Workspace Session lifecycle", () => {
     );
     expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
   });
+
+  test.each(["directory", "branch", "default branch"] as const)(
+    "restore refuses a conflicting or missing %s without changing the archive",
+    async (conflict) => {
+      const h = setup();
+      const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+      const ref = { workspaceId: "fairnest", sessionId: session.id };
+      const archived = await Effect.runPromise(
+        h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }),
+      );
+      const directory = session.executionTarget.workingDirectory;
+      h.calls.length = 0;
+      if (conflict === "directory") h.paths.add(directory);
+      else if (conflict === "branch") h.branches.add("refs/heads/odt/my-feature");
+      else h.dependencies.git.referenceExists = () => Effect.succeed(false);
+      await expect(Effect.runPromise(h.service.restore(ref))).rejects.toThrow(
+        conflict === "directory"
+          ? "Cannot restore into an existing worktree or directory"
+          : conflict === "branch"
+            ? "Cannot restore because branch odt/my-feature already exists"
+            : "Configured default branch origin/main is unavailable",
+      );
+      expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
+      expect(h.calls).toEqual([]);
+      expect(h.paths.has(directory)).toBe(conflict === "directory");
+      expect(h.branches.has("refs/heads/odt/my-feature")).toBe(conflict === "branch");
+    },
+  );
 
   test("removes a dirty worktree only after stopping, and restores the same session from the default branch", async () => {
     const h = setup();
