@@ -682,8 +682,8 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
 .workspace-rail-status-running-dot {
   position: relative;
   display: inline-flex;
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 1rem;
+  height: 1rem;
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
@@ -708,13 +708,13 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
     transparent 74%
   );
   box-shadow:
-    0 0 3px color-mix(in oklch, var(--status-running) 32%, transparent),
-    0 0 6px color-mix(in oklch, var(--status-running) 20%, transparent);
+    0 0 5px color-mix(in oklch, var(--status-running) 32%, transparent),
+    0 0 10px color-mix(in oklch, var(--status-running) 20%, transparent);
   animation: odt-task-tab-status-glow 1350ms ease-in-out infinite;
 }
 
 .workspace-rail-status-running-dot::after {
-  inset: 0.0625rem;
+  inset: 0.125rem;
   border: 1px solid color-mix(in oklch, var(--status-running) 48%, transparent);
   animation: odt-task-tab-status-ring 1350ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
