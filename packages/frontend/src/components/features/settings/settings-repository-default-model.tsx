@@ -1,16 +1,8 @@
 import type { RuntimeDescriptor, RuntimeKind, SettingsRepoConfig } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { type ReactElement, useMemo } from "react";
-import { toPrimaryAgentOptions } from "@/components/features/agents";
-import {
-  type ModelPickerFavoriteState,
-  type ModelPickerValue,
-} from "@/components/features/agents/model-picker";
-import {
-  ensureDraftAgentDefault,
-  selectedModelKey,
-  toVariantOptionsForModelKey,
-} from "@/components/features/settings";
+import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
+import { ensureDraftAgentDefault } from "@/components/features/settings";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
@@ -20,6 +12,7 @@ import {
   resolveRuntimeKindSelection,
 } from "@/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
+import { buildRepositoryAgentControls } from "./settings-repository-agent-controls";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
 import { RepositoryModelPickerField } from "./settings-repository-model-picker-field";
 
@@ -73,20 +66,14 @@ export function RepositoryDefaultModelBlock({
   const catalog = runtimeKind ? getCatalogForRuntime(runtimeKind) : null;
   const isModelPickerCatalogLoading = runtimeKind ? isCatalogLoadingForRuntime(runtimeKind) : false;
   const value = ensureDraftAgentDefault(defaultModel);
-  const selectedPickerValue: ModelPickerValue | null =
-    runtimeKind && value.providerId && value.modelId
-      ? {
-          runtimeKind,
-          providerId: value.providerId,
-          modelId: value.modelId,
-        }
-      : null;
-  const profileOptions = toPrimaryAgentOptions(catalog);
-  const variantOptions = toVariantOptionsForModelKey(catalog, selectedModelKey(value));
-  const supportsProfiles =
-    runtimeDescriptor?.capabilities.optionalSurfaces.supportsProfiles === true;
-  const supportsVariants =
-    runtimeDescriptor?.capabilities.optionalSurfaces.supportsVariants === true;
+  const controls = buildRepositoryAgentControls({
+    value,
+    runtimeKind,
+    runtimeDescriptor,
+    catalog,
+    isCatalogLoading: isModelPickerCatalogLoading,
+    isSaving,
+  });
   const isClearDisabled = isLoadingSettings || isSaving || defaultModel === null;
 
   return (
@@ -117,7 +104,7 @@ export function RepositoryDefaultModelBlock({
         <RepositoryModelPickerField
           runtimeDefinitions={runtimeDefinitions}
           catalogResources={catalogResources}
-          value={selectedPickerValue}
+          value={controls.selectedPickerValue}
           favoriteState={favoriteState}
           isReadOnly={isSaving || isLoadingSettings}
           isLoadingCatalog={isModelPickerCatalogLoading}
@@ -143,35 +130,26 @@ export function RepositoryDefaultModelBlock({
           }}
         />
 
-        {supportsProfiles ? (
-          <div className="grid min-w-0 gap-1">
-            <Label className="text-xs">Agent Profile</Label>
-            <Combobox
-              value={value.profileId}
-              options={profileOptions}
-              placeholder={isModelPickerCatalogLoading ? "Loading agents…" : "Select agent"}
-              disabled={isModelPickerCatalogLoading || isSaving || profileOptions.length === 0}
-              className="sm:min-w-[18rem]"
-              onValueChange={(profileId) =>
-                onUpdateSelectedRepoDefaultModel("profileId", profileId)
-              }
-            />
-          </div>
-        ) : null}
+        <div className="grid min-w-0 gap-1">
+          <Label className="text-xs">Agent Profile</Label>
+          <Combobox
+            value={value.profileId}
+            options={controls.profile.options}
+            placeholder={controls.profile.placeholder}
+            disabled={controls.profile.disabled}
+            className="sm:min-w-[18rem]"
+            onValueChange={(profileId) => onUpdateSelectedRepoDefaultModel("profileId", profileId)}
+          />
+        </div>
 
-        {supportsVariants ? (
+        {controls.variant.visible ? (
           <div className="grid min-w-0 gap-1">
             <Label className="text-xs">Effort</Label>
             <Combobox
               value={value.variant}
-              options={variantOptions}
-              placeholder={variantOptions.length > 0 ? "Select variant" : "No variants for model"}
-              disabled={
-                isModelPickerCatalogLoading ||
-                isSaving ||
-                !selectedPickerValue ||
-                variantOptions.length === 0
-              }
+              options={controls.variant.options}
+              placeholder={controls.variant.placeholder}
+              disabled={controls.variant.disabled}
               className="sm:min-w-[16rem]"
               onValueChange={(variant) => onUpdateSelectedRepoDefaultModel("variant", variant)}
             />
