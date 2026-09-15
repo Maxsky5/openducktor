@@ -499,11 +499,15 @@ export function useWorkspaceSelectionOperations({
             input.workspaceId,
             input.expectedRepoPath,
           );
+          await dropWorkspaceQueries(queryClient, {
+            repoPath: input.expectedRepoPath,
+            workspaceId: input.workspaceId,
+          });
           applyLifecycleCatalog(catalog);
         },
         () => ({ title: "Workspace reopened", description: input.expectedRepoPath }),
       ),
-    [applyLifecycleCatalog, hostClient, runLifecycleAction],
+    [applyLifecycleCatalog, hostClient, queryClient, runLifecycleAction],
   );
 
   const resolveWorkspacePath = useCallback(

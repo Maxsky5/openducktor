@@ -147,6 +147,7 @@ export const assembleNodeEffectHostCommandRouter = (
     configDir,
     assertWorkspaceAdmitted: workspaceAdmissionService.assertTaskStoreAccess,
     configuredTaskStore,
+    hostOwnership: workspaceHostOwnership,
     isWorkspaceRemovalPending: workspaceAdmissionService.isWorkspaceRemovalPending,
     onBackgroundFailure,
     processEnv,

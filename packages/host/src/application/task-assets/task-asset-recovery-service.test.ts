@@ -12,11 +12,17 @@ const updateQuarantine: TaskAssetQuarantine = {
   promotedAssetIds: [],
 };
 
+const hostOwnership = {
+  claimWorkspace: () => Effect.void,
+  releaseWorkspace: () => Effect.void,
+};
+
 describe("task asset recovery service", () => {
   test("restores an interrupted update whose asset rows are still registered", async () => {
     const restored: string[] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
+      hostOwnership,
       isWorkspaceRemovalPending: () => false,
       withAdministrativeAccess: (_workspaceId, effect) => effect,
       filePort: {
@@ -62,6 +68,7 @@ describe("task asset recovery service", () => {
     const restored: string[] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
+      hostOwnership,
       isWorkspaceRemovalPending: () => false,
       withAdministrativeAccess: (_workspaceId, effect) => effect,
       filePort: {
@@ -97,6 +104,7 @@ describe("task asset recovery service", () => {
     const removed: string[][] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
+      hostOwnership,
       isWorkspaceRemovalPending: () => false,
       withAdministrativeAccess: (_workspaceId, effect) => effect,
       filePort: {
@@ -135,6 +143,7 @@ describe("task asset recovery service", () => {
     const removed: string[][] = [];
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
+      hostOwnership,
       isWorkspaceRemovalPending: () => false,
       withAdministrativeAccess: (_workspaceId, effect) => effect,
       filePort: {
@@ -171,6 +180,7 @@ describe("task asset recovery service", () => {
     };
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
+      hostOwnership,
       isWorkspaceRemovalPending: () => false,
       withAdministrativeAccess: (_workspaceId, effect) => effect,
       filePort: {
@@ -208,6 +218,7 @@ describe("task asset recovery service", () => {
   test("skips a quarantine whose workspace removal is pending", async () => {
     const purged: string[] = [];
     const service = createTaskAssetRecoveryService({
+      hostOwnership,
       isWorkspaceRemovalPending: (workspaceId) => workspaceId === updateQuarantine.workspaceId,
       withAdministrativeAccess: (_workspaceId, effect) => effect,
       filePort: {
@@ -232,9 +243,15 @@ describe("task asset recovery service", () => {
   test("reconciles a blocked workspace under administrative access", async () => {
     const restored: string[] = [];
     const administrativeWorkspaces: string[] = [];
+    const events: string[] = [];
     const service = createTaskAssetRecoveryService({
+      hostOwnership: {
+        claimWorkspace: (workspaceId) => Effect.sync(() => events.push(`claim:${workspaceId}`)),
+        releaseWorkspace: (workspaceId) => Effect.sync(() => events.push(`release:${workspaceId}`)),
+      },
       isWorkspaceRemovalPending: () => false,
       withAdministrativeAccess: (workspaceIds, effect) => {
+        events.push("administrative-access");
         administrativeWorkspaces.push(...workspaceIds);
         return effect;
       },
@@ -242,7 +259,11 @@ describe("task asset recovery service", () => {
         durableExists: () => Effect.succeed(false),
         listQuarantines: () => Effect.succeed([updateQuarantine]),
         removeDurable: () => Effect.void,
-        restoreQuarantine: (id) => Effect.sync(() => restored.push(id)),
+        restoreQuarantine: (id) =>
+          Effect.sync(() => {
+            events.push("restore");
+            restored.push(id);
+          }),
         purgeQuarantine: () => Effect.void,
       },
       registry: {
@@ -267,5 +288,11 @@ describe("task asset recovery service", () => {
     expect(await Effect.runPromise(service.startupSweep())).toBe(1);
     expect(restored).toEqual([updateQuarantine.id]);
     expect(administrativeWorkspaces).toEqual([updateQuarantine.workspaceId]);
+    expect(events).toEqual([
+      `claim:${updateQuarantine.workspaceId}`,
+      "administrative-access",
+      "restore",
+      `release:${updateQuarantine.workspaceId}`,
+    ]);
   });
 });

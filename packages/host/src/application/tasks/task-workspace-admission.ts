@@ -63,6 +63,7 @@ export const withTaskWorkspaceOwnership = (
   ownershipLock: WorkspaceOwnershipLock,
 ): TaskServiceWithMutationProgress => ({
   ...service,
+  buildStart: (input) => ownershipLock.runExclusive(service.buildStart(input)),
   closeTask: (input) => ownershipLock.runExclusive(service.closeTask(input)),
   deleteTask: (input) => ownershipLock.runExclusive(service.deleteTask(input)),
   resetImplementation: (input) => ownershipLock.runExclusive(service.resetImplementation(input)),

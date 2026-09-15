@@ -1,8 +1,9 @@
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetFilePort, TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 import type { TaskAssetRegistryPort } from "../../ports/task-asset-registry-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
+import type { WorkspaceHostOwnershipPort } from "../../ports/workspace-host-ownership-port";
 
 type RecoveryFilePort = Pick<
   TaskAssetFilePort,
@@ -17,6 +18,7 @@ export type TaskAssetRecoveryService = {
 
 export const createTaskAssetRecoveryService = ({
   filePort,
+  hostOwnership,
   isWorkspaceRemovalPending,
   registry,
   resolveRepoPath,
@@ -24,6 +26,7 @@ export const createTaskAssetRecoveryService = ({
   withAdministrativeAccess,
 }: {
   filePort: RecoveryFilePort;
+  hostOwnership: Pick<WorkspaceHostOwnershipPort, "claimWorkspace" | "releaseWorkspace">;
   isWorkspaceRemovalPending: (workspaceId: string) => boolean;
   registry: RecoveryRegistryPort;
   resolveRepoPath: (workspaceId: string) => Effect.Effect<string, TaskStoreError>;
@@ -33,6 +36,22 @@ export const createTaskAssetRecoveryService = ({
     effect: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E, R>;
 }): TaskAssetRecoveryService => {
+  const withHostOwnership = <A, E, R>(
+    workspaceId: string,
+    effect: () => Effect.Effect<A, E, R>,
+  ): Effect.Effect<A, E | TaskStoreError, R> =>
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        yield* hostOwnership.claimWorkspace(workspaceId);
+        const exit = yield* Effect.exit(restore(effect()));
+        yield* hostOwnership.releaseWorkspace(workspaceId);
+        return yield* Exit.matchEffect(exit, {
+          onFailure: Effect.failCause,
+          onSuccess: Effect.succeed,
+        });
+      }),
+    );
+
   const reconcileQuarantine = (quarantine: TaskAssetQuarantine) =>
     Effect.gen(function* () {
       const repoPath = yield* resolveRepoPath(quarantine.workspaceId);
@@ -135,9 +154,8 @@ export const createTaskAssetRecoveryService = ({
           if (isWorkspaceRemovalPending(quarantine.workspaceId)) {
             continue;
           }
-          yield* withAdministrativeAccess(
-            [quarantine.workspaceId],
-            reconcileQuarantine(quarantine),
+          yield* withHostOwnership(quarantine.workspaceId, () =>
+            withAdministrativeAccess([quarantine.workspaceId], reconcileQuarantine(quarantine)),
           );
         }
         return quarantines.length;
