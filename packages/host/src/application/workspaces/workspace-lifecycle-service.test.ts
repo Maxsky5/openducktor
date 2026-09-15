@@ -180,7 +180,7 @@ const createService = ({
   getRepoConfig?: () => Effect.Effect<RepoConfig, never>;
   getWorkspaceCatalog?: () => Effect.Effect<WorkspaceCatalog, never>;
   closeWorkspace?: () => Effect.Effect<WorkspaceCatalog, never>;
-  reopenWorkspace?: () => Effect.Effect<WorkspaceCatalog, never>;
+  reopenWorkspace?: () => Effect.Effect<WorkspaceCatalog, HostOperationError>;
   beginWorkspaceRemoval?: (input: {
     workspaceId: string;
     expectedRepoPath: string;
@@ -1651,6 +1651,58 @@ describe("workspace lifecycle service", () => {
     ).resolves.toEqual(expected);
     expect(reopenWorkspace).toHaveBeenCalledWith("ws", "/repos/ws");
     expect(unblockWorkspace).toHaveBeenCalledWith("ws");
+  });
+
+  test("releases a newly claimed workspace when reopen fails", async () => {
+    const calls: string[] = [];
+    const service = createService({
+      hostOwnership: {
+        claimWorkspace: () => Effect.sync(() => calls.push("claim")),
+        releaseWorkspace: () => Effect.sync(() => calls.push("release")),
+      },
+      reopenWorkspace: () =>
+        Effect.sync(() => calls.push("reopen")).pipe(
+          Effect.zipRight(
+            Effect.fail(
+              new HostOperationError({
+                operation: "test.reopen",
+                message: "config write failed",
+              }),
+            ),
+          ),
+        ),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.reopenWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      ),
+    ).rejects.toThrow("config write failed");
+    expect(calls).toEqual(["claim", "reopen", "release"]);
+  });
+
+  test("keeps a workspace closed when its task store cannot close", async () => {
+    const reopenWorkspace = mock(() => Effect.succeed(catalog()));
+    const unblockWorkspace = mock(() => {});
+    const service = createService({
+      admission: { ...createAdmissionDouble(), unblockWorkspace },
+      closeWorkspaceTaskStore: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "sqliteTaskRepository.closeWorkspace",
+            message: "Restart OpenDucktor before reopening this workspace.",
+          }),
+        ),
+      reopenWorkspace,
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.reopenWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      ),
+    ).rejects.toThrow("Restart OpenDucktor");
+    expect(reopenWorkspace).not.toHaveBeenCalled();
+    expect(unblockWorkspace).not.toHaveBeenCalled();
   });
 
   test("reserves the workspace before the activity check and releases after close", async () => {

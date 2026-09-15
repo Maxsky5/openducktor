@@ -196,4 +196,41 @@ describe("git workspace admission", () => {
 
     expect(events).toEqual(["lock", "lease", "admit", "remove", "unlock"]);
   });
+
+  test("holds the ownership lock through worktree creation", async () => {
+    const events: string[] = [];
+    const ownershipLock: WorkspaceOwnershipLock = {
+      runExclusive: (effect) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => events.push("lock")),
+          () => effect,
+          () => Effect.sync(() => events.push("unlock")),
+        ),
+    };
+    const guarded = withGitWorkspaceAdmission(
+      createGitServiceDouble({
+        createWorktree: (input) =>
+          Effect.sync(() => {
+            events.push("create");
+            return { branch: input.branch, worktreePath: input.worktreePath };
+          }),
+      }),
+      createAdmissionDouble({
+        assertWorkspaceAdmitsWork: () => Effect.sync(() => events.push("admit")),
+        onLease: () => events.push("lease"),
+      }),
+      ownershipLock,
+    );
+
+    await Effect.runPromise(
+      guarded.createWorktree({
+        repoPath: "/repos/a",
+        worktreePath: "/worktrees/a",
+        branch: "feature/a",
+        createBranch: true,
+      }),
+    );
+
+    expect(events).toEqual(["lock", "lease", "admit", "create", "unlock"]);
+  });
 });

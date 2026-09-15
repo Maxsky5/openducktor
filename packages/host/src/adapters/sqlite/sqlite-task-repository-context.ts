@@ -272,7 +272,7 @@ export const createSqliteTaskRepositoryContextManager = ({
       if (result._tag === "Left") {
         return yield* new HostOperationError({
           operation: "sqliteTaskRepository.closeWorkspace",
-          message: `Failed to close the task store for workspace ${workspaceId}: ${result.left.message}`,
+          message: `Failed to close the task store for workspace ${workspaceId}: ${result.left.message} Restart OpenDucktor before reopening this workspace.`,
           cause: result.left,
           details: { workspaceId },
         });

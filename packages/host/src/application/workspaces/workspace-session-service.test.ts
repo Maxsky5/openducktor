@@ -440,6 +440,25 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.paths.has(h.state.worktree)).toBe(true);
   });
 
+  test("holds the ownership lock through worktree creation and persistence", async () => {
+    const h = setup();
+    const ownershipLock: WorkspaceOwnershipLock = {
+      runExclusive: (effect) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => h.calls.push("lock")),
+          () => effect,
+          () => Effect.sync(() => h.calls.push("unlock")),
+        ),
+    };
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      ownershipLock,
+    });
+
+    await Effect.runPromise(service.create(worktreeInput()));
+    expect(h.calls).toEqual(["lock", "worktree", "copy", "hook", "save", "unlock"]);
+  });
+
   test("accepts drive-qualified paths from a Windows worktree port", async () => {
     const h = setup();
     h.dependencies.settingsConfig.defaultWorktreeBasePath = () => "C:\\worktrees";
@@ -592,18 +611,21 @@ describe("host-owned Workspace Session lifecycle", () => {
             () => Deferred.succeed(release, undefined),
           );
           yield* Deferred.await(entered);
-          const winner = yield* service.create({
-            ...worktreeInput(),
-            worktree: { mode: "from_name", name, branchName: "odt/my-feature" },
-          });
+          const winner = yield* Effect.forkScoped(
+            service.create({
+              ...worktreeInput(),
+              worktree: { mode: "from_name", name, branchName: "odt/my-feature" },
+            }),
+          );
           yield* Deferred.succeed(release, undefined);
           const failed = yield* Fiber.await(loser);
           expect(Exit.isFailure(failed)).toBe(true);
           if (Exit.isFailure(failed)) {
             expect(Cause.pretty(failed.cause)).toContain("Another request created the branch");
           }
-          expect(yield* service.get({ ...ref, sessionId: winner.session.id })).toEqual(
-            winner.session,
+          const created = yield* Fiber.join(winner);
+          expect(yield* service.get({ ...ref, sessionId: created.session.id })).toEqual(
+            created.session,
           );
         }),
       ),
@@ -1236,6 +1258,36 @@ describe("host-owned Workspace Session lifecycle", () => {
     const callsBefore = h.calls.length;
     expect(await Effect.runPromise(h.service.restore(ref))).toEqual(restored);
     expect(h.calls).toHaveLength(callsBefore);
+  });
+
+  test("holds the ownership lock through worktree restore and persistence", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }));
+    h.calls.length = 0;
+    const ownershipLock: WorkspaceOwnershipLock = {
+      runExclusive: (effect) =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => h.calls.push("lock")),
+          () => effect,
+          () => Effect.sync(() => h.calls.push("unlock")),
+        ),
+    };
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      ownershipLock,
+      store: {
+        ...h.dependencies.store,
+        restore: (request) =>
+          Effect.sync(() => h.calls.push("restore")).pipe(
+            Effect.zipRight(h.dependencies.store.restore(request)),
+          ),
+      },
+    });
+
+    await Effect.runPromise(service.restore(ref));
+    expect(h.calls).toEqual(["lock", "worktree", "copy", "hook", "restore", "unlock"]);
   });
 
   test("checks workspace admission before archive worktree removal", async () => {

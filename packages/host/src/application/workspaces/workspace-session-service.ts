@@ -68,6 +68,10 @@ export const createWorkspaceSessionService = (
     settings
       .getRepoConfig(workspaceId)
       .pipe(Effect.flatMap((config) => dependencies.withWorkStartLease(config.repoPath, effect)));
+  const withWorktreeMutationAdmission = <A, E, R>(
+    workspaceId: string,
+    effect: Effect.Effect<A, E, R>,
+  ) => dependencies.ownershipLock.runExclusive(withMutationAdmission(workspaceId, effect));
   const withArchiveAdmission = <A, E, R>(
     input: WorkspaceSessionArchiveInput,
     effect: Effect.Effect<A, E, R>,
@@ -104,7 +108,7 @@ export const createWorkspaceSessionService = (
         });
         const sessionId = crypto.randomUUID();
         const config = yield* settings.getRepoConfig(input.workspaceId);
-        return yield* dependencies.withWorkStartLease(
+        const creation = dependencies.withWorkStartLease(
           config.repoPath,
           Effect.gen(function* () {
             const roles =
@@ -156,6 +160,9 @@ export const createWorkspaceSessionService = (
             );
           }),
         );
+        return yield* input.location === "local_worktree"
+          ? dependencies.ownershipLock.runExclusive(creation)
+          : creation;
       }),
     start: (input: WorkspaceSessionRefInput) =>
       operationGate.run(
@@ -360,7 +367,7 @@ export const createWorkspaceSessionService = (
     restore: (input: WorkspaceSessionRefInput) =>
       operationGate.run(
         input,
-        withMutationAdmission(
+        withWorktreeMutationAdmission(
           input.workspaceId,
           Effect.gen(function* () {
             const { ref, session } = yield* recordFor(input);

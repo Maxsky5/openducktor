@@ -254,6 +254,7 @@ export type CreateTaskServiceInput = {
   withWorkStartLease<A, E, R>(
     repoPath: string,
     effect: Effect.Effect<A, E, R>,
+    workingDirectory?: string,
   ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
   devServerService?: DevServerService;
   terminalService?: TaskTerminalCleanupPort;

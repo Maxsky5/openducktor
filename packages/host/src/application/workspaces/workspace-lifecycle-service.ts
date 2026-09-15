@@ -34,6 +34,7 @@ import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrato
 import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { WorkspaceOwnershipLock } from "./workspace-ownership-lock";
+import { runWorkspaceLifecycleReservation } from "./workspace-lifecycle-reservation";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 import {
   collectWorkspaceTaskWorktreePaths,
@@ -403,20 +404,6 @@ export const createWorkspaceLifecycleService = ({
       return { catalog, removedWorktrees };
     });
 
-  const runUnderReservation = <A, E, R>(
-    input: {
-      operation: "close" | "reopen" | "remove";
-      repoPath: string;
-      workspaceId: string;
-    },
-    use: () => Effect.Effect<A, E, R>,
-  ) =>
-    Effect.acquireUseRelease(
-      admission.reserveWorkspace(input),
-      () => hostOwnership.claimWorkspace(input.workspaceId).pipe(Effect.zipRight(use())),
-      () => Effect.sync(() => admission.releaseReservation(input.workspaceId)),
-    );
-
   return {
     closeWorkspace(input) {
       return ownershipLock.runExclusive(
@@ -429,7 +416,9 @@ export const createWorkspaceLifecycleService = ({
             yield* hostOwnership.releaseWorkspace(input.workspaceId);
             return yield* workspaceSettingsService.getWorkspaceCatalog();
           }
-          return yield* runUnderReservation(
+          return yield* runWorkspaceLifecycleReservation(
+            admission,
+            hostOwnership,
             {
               operation: "close",
               repoPath: repoConfig.repoPath,
@@ -461,7 +450,9 @@ export const createWorkspaceLifecycleService = ({
       return ownershipLock.runExclusive(
         Effect.gen(function* () {
           const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-          return yield* runUnderReservation(
+          return yield* runWorkspaceLifecycleReservation(
+            admission,
+            hostOwnership,
             {
               operation: "reopen",
               repoPath: repoConfig.repoPath,
@@ -469,6 +460,7 @@ export const createWorkspaceLifecycleService = ({
             },
             () =>
               Effect.gen(function* () {
+                yield* storage.closeWorkspaceTaskStore(input.workspaceId);
                 const catalog = yield* workspaceSettingsService.reopenWorkspace(
                   input.workspaceId,
                   input.expectedRepoPath,
@@ -484,7 +476,9 @@ export const createWorkspaceLifecycleService = ({
       return ownershipLock.runExclusive(
         Effect.gen(function* () {
           const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-          return yield* runUnderReservation(
+          return yield* runWorkspaceLifecycleReservation(
+            admission,
+            hostOwnership,
             {
               operation: "remove",
               repoPath: repoConfig.repoPath,
