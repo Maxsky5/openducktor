@@ -20,4 +20,11 @@ describe("agent orchestrator role policy contract", () => {
       expect(tools).toContain("odt_read_task_assets");
     }
   });
+
+  test("lets every workflow role search and create tasks", () => {
+    for (const tools of Object.values(AGENT_ROLE_TOOL_POLICY)) {
+      expect(tools).toContain("odt_search_tasks");
+      expect(tools).toContain("odt_create_task");
+    }
+  });
 });

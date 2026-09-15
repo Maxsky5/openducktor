@@ -443,6 +443,33 @@ describe("handleCodexServerRequest", () => {
     expect(events).toEqual([]);
   });
 
+  test.each(["odt_create_task", "odt_search_tasks"])(
+    "automatically approves trusted workflow %s for read-only roles",
+    async (toolName) => {
+      const respondServerRequest = mock(async () => {});
+      const pendingInput = new CodexPendingInputState();
+      const events: EmittedAgentEvent[] = [];
+
+      await expect(
+        handleCodexServerRequest(
+          createRequestContext({ events, pendingInput, respondServerRequest }),
+          createSession("spec"),
+          mcpToolApprovalRequest({ id: 37, serverName: "openducktor", toolName }),
+          new Set(),
+        ),
+      ).resolves.toBe(false);
+
+      expect(pendingInput.nativeRequest("runtime-live", "thread-spec", 37)).toBeUndefined();
+      expect(respondServerRequest).toHaveBeenCalledWith(
+        "runtime-live",
+        37,
+        expect.objectContaining({ action: "accept" }),
+        undefined,
+      );
+      expect(events).toEqual([]);
+    },
+  );
+
   test.each(["odt_create_task", "odt_search_tasks", "odt_read_task"])(
     "automatically approves trusted %s for repository sessions",
     async (toolName) => {

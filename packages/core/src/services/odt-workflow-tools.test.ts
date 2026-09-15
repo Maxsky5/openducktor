@@ -59,6 +59,8 @@ describe("odt workflow tools", () => {
     expect(isOdtWorkflowMutationToolName("odt_read_task")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_read_task_assets")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_read_task_documents")).toBe(false);
+    expect(isOdtWorkflowMutationToolName("odt_search_tasks")).toBe(false);
+    expect(isOdtWorkflowMutationToolName("odt_create_task")).toBe(true);
   });
 
   test("resolves trusted workflow tool ids for authorization with exact case-sensitive matching", () => {

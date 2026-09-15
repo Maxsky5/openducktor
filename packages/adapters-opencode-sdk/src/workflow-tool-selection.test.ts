@@ -200,14 +200,14 @@ describe("workflow-tool-selection", () => {
     expect(selection["functions.openducktor_odt_set_plan"]).toBe(false);
     expect(selection.openducktor_odt_build_completed).toBe(false);
     expect(selection["functions.openducktor_odt_build_completed"]).toBe(false);
-    expect(selection.odt_create_task).toBe(false);
-    expect(selection.odt_search_tasks).toBe(false);
+    expect(selection.odt_create_task).toBe(true);
+    expect(selection.odt_search_tasks).toBe(true);
     expect(selection.odt_get_workspaces).toBe(false);
-    expect(selection.openducktor_odt_create_task).toBe(false);
-    expect(selection.openducktor_odt_search_tasks).toBe(false);
+    expect(selection.openducktor_odt_create_task).toBe(true);
+    expect(selection.openducktor_odt_search_tasks).toBe(true);
     expect(selection.openducktor_odt_get_workspaces).toBe(false);
-    expect(selection["functions.openducktor_odt_create_task"]).toBe(false);
-    expect(selection["functions.openducktor_odt_search_tasks"]).toBe(false);
+    expect(selection["functions.openducktor_odt_create_task"]).toBe(true);
+    expect(selection["functions.openducktor_odt_search_tasks"]).toBe(true);
     expect(selection["functions.openducktor_odt_get_workspaces"]).toBe(false);
   });
 
@@ -387,7 +387,7 @@ describe("workflow-tool-selection", () => {
     expect(selection.bash).toBeUndefined();
   });
 
-  test("denies newly discovered public OpenDucktor MCP tools for current workflow roles", async () => {
+  test("allows newly discovered public OpenDucktor MCP task tools for workflow roles", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({
         toolIds: [
@@ -406,13 +406,13 @@ describe("workflow-tool-selection", () => {
 
     expect(selection.openducktor_odt_read_task).toBe(true);
     expect(selection.openducktor_odt_read_task_documents).toBe(true);
-    expect(selection.openducktor_odt_create_task).toBe(false);
+    expect(selection.openducktor_odt_create_task).toBe(true);
     expect(selection.openducktor_odt_get_workspaces).toBe(false);
-    expect(selection["functions.openducktor_odt_search_tasks"]).toBe(false);
+    expect(selection["functions.openducktor_odt_search_tasks"]).toBe(true);
     expect(selection["functions.openducktor_odt_get_workspaces"]).toBe(false);
   });
 
-  test("denies canonical public tool ids when discovery exposes them without a server prefix", async () => {
+  test("allows canonical public task tool ids when discovery exposes them without a server prefix", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({
         toolIds: [
@@ -428,8 +428,8 @@ describe("workflow-tool-selection", () => {
       workingDirectory: "/repo",
     });
 
-    expect(selection.odt_create_task).toBe(false);
-    expect(selection.odt_search_tasks).toBe(false);
+    expect(selection.odt_create_task).toBe(true);
+    expect(selection.odt_search_tasks).toBe(true);
     expect(selection.odt_get_workspaces).toBe(false);
     expect(selection.odt_read_task).toBe(true);
     expect(selection.odt_read_task_documents).toBe(true);

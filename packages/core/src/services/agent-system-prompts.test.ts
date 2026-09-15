@@ -44,7 +44,10 @@ describe("buildAgentSystemPrompt", () => {
       "OpenDucktor workflow tools are native MCP tools.",
       "Allowed tools for this role:",
       'odt_read_task_assets({"taskId": string, "assetIds": string[]})',
-      "Use this exact taskId literal in every odt_* call: task-42.",
+      "Use this exact taskId literal in every task-bound odt_* call: task-42.",
+      'odt_search_tasks({"priority"?: number, "issueType"?: "task"|"feature"|"bug"|"epic", "status"?: string, "title"?: string, "tags"?: string[], "limit"?: number})',
+      'odt_create_task({"title": string, "issueType": "task"|"feature"|"bug", "priority": number, "description"?: string, "labels"?: string[], "aiReviewEnabled"?: boolean})',
+      "odt_search_tasks and odt_create_task act on the startup workspace, take no taskId, and do not change the session task.",
       "Omit workspaceId from workflow tool calls; workflow sessions use the startup workspace.",
       "Start each session by calling odt_read_task with taskId task-42 to load the canonical task summary object, including task fields, qaVerdict, and document presence booleans.",
       "Call odt_read_task_documents only when you need specific document bodies, and request only the sections you need.",
@@ -301,7 +304,7 @@ describe("buildAgentSystemPrompt", () => {
 
   test.each([
     ["system.shared.workflow_guards", 6, 7, "build"],
-    ["system.shared.tool_protocol", 6, 7, "build"],
+    ["system.shared.tool_protocol", 7, 8, "build"],
     ["system.shared.task_context", 3, 4, "build"],
     ["system.role.spec.base", 5, 6, "spec"],
     ["system.role.planner.base", 6, 7, "planner"],

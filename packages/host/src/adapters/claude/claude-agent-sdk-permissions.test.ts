@@ -203,9 +203,9 @@ describe("createClaudeCanUseTool", () => {
     expect(session.pendingApprovals.size).toBe(0);
   });
 
-  test("denies public repository tools in workflow sessions", async () => {
+  test("allows task search and create for read-only workflow roles without an interactive approval", async () => {
     const events: AgentEvent[] = [];
-    const session = createSession("build");
+    const session = createSession();
     const canUseTool = createClaudeCanUseTool({
       session,
       now: () => "2026-06-25T12:00:00.000Z",
@@ -213,22 +213,34 @@ describe("createClaudeCanUseTool", () => {
       emit: (_session, event) => events.push(event),
     });
 
-    await expect(
-      canUseTool(
-        "mcp__openducktor__odt_search_tasks",
-        { query: "task" },
-        {
+    const cases = [
+      { toolName: "mcp__openducktor__odt_search_tasks", toolInput: { status: "open" } },
+      {
+        toolName: "mcp__openducktor__odt_create_task",
+        toolInput: { title: "Follow-up", issueType: "task", priority: 2 },
+      },
+    ];
+    for (const { toolName, toolInput } of cases) {
+      expect(
+        await authorizeClaudeToolUse({
+          session,
+          toolName,
+          toolInput,
+        }),
+      ).toMatchObject({ behavior: "allow", approval: "workflow_role" });
+      await expect(
+        canUseTool(toolName, toolInput, {
           signal: new AbortController().signal,
           toolUseID: "tool-use-1",
           requestId: "sdk-request-1",
-        },
-      ),
-    ).resolves.toEqual({
-      behavior: "deny",
-      decisionClassification: "user_reject",
-      message: "Tool odt_search_tasks is not allowed for build sessions.",
-    });
+        }),
+      ).resolves.toEqual({
+        behavior: "allow",
+        updatedInput: toolInput,
+      });
+    }
     expect(events).toEqual([]);
+    expect(session.pendingApprovals.size).toBe(0);
   });
 
   test("delegates Bash permission decisions for read-only workflow roles", async () => {

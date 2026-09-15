@@ -13,6 +13,7 @@ export const ODT_WORKFLOW_TOOL_NAMES =
   ODT_WORKFLOW_AGENT_TOOL_NAMES satisfies readonly AgentToolName[];
 
 export const ODT_WORKFLOW_READ_TOOL_NAMES = [
+  "odt_search_tasks",
   "odt_read_task",
   "odt_read_task_assets",
   "odt_read_task_documents",

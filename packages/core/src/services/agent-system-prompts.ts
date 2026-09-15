@@ -123,6 +123,8 @@ export type BuiltAgentPrompt = {
 };
 
 const TOOL_ARG_SPEC = {
+  odt_create_task: `odt_create_task({"title": string, "issueType": "task"|"feature"|"bug", "priority": number, "description"?: string, "labels"?: string[], "aiReviewEnabled"?: boolean})`,
+  odt_search_tasks: `odt_search_tasks({"priority"?: number, "issueType"?: "task"|"feature"|"bug"|"epic", "status"?: string, "title"?: string, "tags"?: string[], "limit"?: number})`,
   odt_read_task: `odt_read_task({"taskId": string})`,
   odt_read_task_assets: `odt_read_task_assets({"taskId": string, "assetIds": string[]})`,
   odt_read_task_documents: `odt_read_task_documents({"taskId": string, "includeSpec"?: boolean, "includePlan"?: boolean, "includeQaReport"?: boolean})`,
@@ -190,17 +192,18 @@ const AGENT_PROMPT_DEFINITIONS = {
   "system.shared.tool_protocol": {
     id: "system.shared.tool_protocol",
     purpose: "system",
-    builtinVersion: 7,
+    builtinVersion: 8,
     template: joinPromptBlocks(
       "OpenDucktor workflow tools are native MCP tools.\nCall them directly as tool invocations; do not emit XML wrappers or pseudo-tool payloads.",
       lineSection("Allowed tools for this role", ["{{role.allowedTools}}"]),
       bulletSection("Session task lock", [
-        "Use this exact taskId literal in every odt_* call: {{task.id}}.",
+        "Use this exact taskId literal in every task-bound odt_* call: {{task.id}}.",
         "Never derive taskId from title/slug or rewrite it.",
         "If a tool call fails with task-id mismatch, retry with {{task.id}}.",
       ]),
       bulletSection("Tool and communication protocol", [
-        "Always include taskId in every odt_* tool call.",
+        "Always include taskId in every task-bound odt_* tool call.",
+        "odt_search_tasks and odt_create_task act on the startup workspace, take no taskId, and do not change the session task.",
         "Omit workspaceId from workflow tool calls; workflow sessions use the startup workspace.",
         "Never invent ODT tool names or call ODT workflow tools outside the allowed list. Use available repo research and execution tools within your role permissions.",
         "Start each session by calling odt_read_task with taskId {{task.id}} to load the canonical task summary object, including task fields, qaVerdict, and document presence booleans.",

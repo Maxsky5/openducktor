@@ -4,6 +4,8 @@
   "description": "Local OpenCode runtime connected through the OpenDucktor MCP bridge.",
   "readOnlyRoleBlockedTools": ["edit", "write", "apply_patch", "ast_grep_replace", "lsp_rename"],
   "workflowToolAliasesByCanonical": {
+    "odt_create_task": ["openducktor_odt_create_task", "functions.openducktor_odt_create_task"],
+    "odt_search_tasks": ["openducktor_odt_search_tasks", "functions.openducktor_odt_search_tasks"],
     "odt_read_task": ["openducktor_odt_read_task", "functions.openducktor_odt_read_task"],
     "odt_read_task_assets": [
       "openducktor_odt_read_task_assets",

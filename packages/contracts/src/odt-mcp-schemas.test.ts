@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CreateTaskInputSchema,
   getWorkspacesResultSchema,
   ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES,
   ODT_TOOL_SCHEMAS,
+  ODT_WORKFLOW_AGENT_BLOCKED_TOOL_SCHEMAS,
+  ODT_WORKFLOW_TOOL_SCHEMAS,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
   odtToolErrorPayloadSchema,
   publicTaskSchema,
@@ -99,16 +102,40 @@ describe("odt mcp public task schemas", () => {
     const workflowTools = new Set(ODT_WORKFLOW_AGENT_TOOL_NAMES);
     const blockedTools = new Set(ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES);
 
-    expect(ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES).toEqual([
-      "odt_get_workspaces",
+    expect(ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES).toEqual(["odt_get_workspaces"]);
+    expect(ODT_WORKFLOW_AGENT_TOOL_NAMES.slice(0, 2)).toEqual([
       "odt_create_task",
       "odt_search_tasks",
     ]);
     expect(allTools).toEqual(new Set([...workflowTools, ...blockedTools]));
     expect(allTools).toEqual(new Set(Object.keys(ODT_TOOL_SCHEMAS)));
+    expect(Object.keys(ODT_WORKFLOW_TOOL_SCHEMAS)).toEqual([...ODT_WORKFLOW_AGENT_TOOL_NAMES]);
+    expect(Object.keys(ODT_WORKFLOW_AGENT_BLOCKED_TOOL_SCHEMAS)).toEqual([
+      ...ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
+    ]);
     for (const toolName of workflowTools) {
       expect(blockedTools.has(toolName)).toBe(false);
     }
+  });
+
+  test("public create rejects epic with an explanatory validation message", () => {
+    const result = CreateTaskInputSchema.safeParse({
+      title: "Epic work",
+      issueType: "epic",
+      priority: 2,
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+    expect(result.error.issues).toContainEqual(
+      expect.objectContaining({
+        path: ["issueType"],
+        message:
+          "issueType must be task, feature, or bug. Epic creation is not supported by the public MCP create tool.",
+      }),
+    );
   });
 
   test("read task assets accepts one ordered batch and rejects empty or duplicate ids", () => {

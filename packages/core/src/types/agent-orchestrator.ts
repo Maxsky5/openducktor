@@ -214,12 +214,28 @@ export type AgentSessionStatus = ContractsAgentTranscriptSessionStatus;
 export type AgentRoleToolPolicy = Record<AgentRole, AgentToolName[]>;
 
 export const AGENT_ROLE_TOOL_POLICY = {
-  spec: ["odt_read_task", "odt_read_task_assets", "odt_read_task_documents", "odt_set_spec"],
-  planner: ["odt_read_task", "odt_read_task_assets", "odt_read_task_documents", "odt_set_plan"],
+  spec: [
+    "odt_read_task",
+    "odt_read_task_assets",
+    "odt_read_task_documents",
+    "odt_search_tasks",
+    "odt_create_task",
+    "odt_set_spec",
+  ],
+  planner: [
+    "odt_read_task",
+    "odt_read_task_assets",
+    "odt_read_task_documents",
+    "odt_search_tasks",
+    "odt_create_task",
+    "odt_set_plan",
+  ],
   build: [
     "odt_read_task",
     "odt_read_task_assets",
     "odt_read_task_documents",
+    "odt_search_tasks",
+    "odt_create_task",
     "odt_build_blocked",
     "odt_build_resumed",
     "odt_build_completed",
@@ -229,6 +245,8 @@ export const AGENT_ROLE_TOOL_POLICY = {
     "odt_read_task",
     "odt_read_task_assets",
     "odt_read_task_documents",
+    "odt_search_tasks",
+    "odt_create_task",
     "odt_qa_approved",
     "odt_qa_rejected",
   ],

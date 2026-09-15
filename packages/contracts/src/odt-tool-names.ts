@@ -1,6 +1,8 @@
 export const ODT_WORKSPACE_DISCOVERY_TOOL_NAME = "odt_get_workspaces" as const;
 
 export const ODT_WORKFLOW_AGENT_TOOL_NAMES = [
+  "odt_create_task",
+  "odt_search_tasks",
   "odt_read_task",
   "odt_read_task_assets",
   "odt_read_task_documents",
@@ -14,11 +16,7 @@ export const ODT_WORKFLOW_AGENT_TOOL_NAMES = [
   "odt_qa_rejected",
 ] as const;
 
-export const ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES = [
-  ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
-  "odt_create_task",
-  "odt_search_tasks",
-] as const;
+export const ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES = [ODT_WORKSPACE_DISCOVERY_TOOL_NAME] as const;
 
 export const ODT_MCP_TOOL_NAMES = [
   ...ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,

@@ -482,6 +482,38 @@ describe("MCP server tool results", () => {
     }
   });
 
+  test("odt_create_task rejects epic input before reaching the host", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_create_task",
+        arguments: {
+          title: "Epic work",
+          issueType: "epic",
+          priority: 2,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const textBlock = result.content.find((block) => block.type === "text");
+      if (!textBlock || textBlock.type !== "text") {
+        throw new Error("Expected an MCP text error result.");
+      }
+      expect(textBlock.text).toContain(
+        "Epic creation is not supported by the public MCP create tool.",
+      );
+      expect(bridge.requests).not.toContainEqual(
+        expect.objectContaining({ url: "/invoke/odt_create_task" }),
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
   test("host response schema failures return content tool errors", async () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, { workspaceId: "repo" });

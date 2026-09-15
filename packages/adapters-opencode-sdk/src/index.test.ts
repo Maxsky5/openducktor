@@ -140,12 +140,12 @@ describe("OpencodeSdkAdapter index", () => {
     expect(permissionRules).toContainEqual({
       permission: "odt_create_task",
       pattern: "*",
-      action: "deny",
+      action: "allow",
     });
     expect(permissionRules).toContainEqual({
       permission: "odt_search_tasks",
       pattern: "*",
-      action: "deny",
+      action: "allow",
     });
     expect(permissionRules).toContainEqual({
       permission: "odt_get_workspaces",
