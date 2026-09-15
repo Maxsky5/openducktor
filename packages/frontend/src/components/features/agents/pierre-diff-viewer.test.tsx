@@ -169,7 +169,8 @@ beforeEach(async () => {
           spyOn(actualPierreViewerReact, "useWorkerPool").mockImplementation(() => workerPoolMock),
           spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
             theme: "light",
-            setTheme: () => undefined,
+            themePreference: "light",
+            setThemePreference: () => undefined,
           })),
         ];
 

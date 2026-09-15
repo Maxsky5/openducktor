@@ -1,11 +1,25 @@
-import type { SettingsSnapshot, Theme } from "@openducktor/contracts";
+import type { SettingsSnapshot, Theme, ThemePreference } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, use, useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import {
+  createContext,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { applyThemeToDocument, readDocumentTheme } from "./theme-dom";
+import {
+  readSystemAppearance,
+  resolveThemePreference,
+  subscribeToSystemAppearance,
+} from "./theme-preference";
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -14,35 +28,43 @@ type ThemeProviderProps = {
 
 type ThemeProviderState = {
   theme: Theme;
-  setTheme: (theme: Theme) => void;
+  themePreference: ThemePreference;
+  setThemePreference: (preference: ThemePreference) => void;
 };
 
 type ConfirmedThemeState = {
-  theme: Theme;
+  theme: ThemePreference;
   isRefreshing: boolean;
 };
 
 const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undefined);
 const SETTINGS_SNAPSHOT_QUERY_KEY = settingsSnapshotQueryOptions().queryKey;
-const replaceTheme = (_currentTheme: Theme, nextTheme: Theme): Theme => nextTheme;
+const replaceTheme = (
+  _currentPreference: ThemePreference,
+  nextPreference: ThemePreference,
+): ThemePreference => nextPreference;
 
 export function ThemeProvider({ children, defaultTheme = "light", ...props }: ThemeProviderProps) {
   const queryClient = useQueryClient();
   const { data: settingsSnapshot, fetchStatus } = useQuery(settingsSnapshotQueryOptions());
   const fallbackTheme = useMemo(() => readDocumentTheme(defaultTheme), [defaultTheme]);
   const loadedTheme = settingsSnapshot?.theme ?? fallbackTheme;
-  const [theme, selectOptimisticTheme] = useReducer(replaceTheme, loadedTheme);
-  const persistedThemeRef = useRef(theme);
-  const pendingThemeRef = useRef<Theme | null>(null);
+  const [themePreference, selectOptimisticTheme] = useReducer(replaceTheme, loadedTheme);
+  const [systemAppearance, setSystemAppearance] = useState<Theme>(readSystemAppearance);
+  const persistedThemeRef = useRef(themePreference);
+  const pendingThemeRef = useRef<ThemePreference | null>(null);
   const isPersistingRef = useRef(false);
   const confirmedThemeRef = useRef<ConfirmedThemeState | null>(null);
+  const theme = resolveThemePreference(themePreference, systemAppearance);
+
+  useEffect(() => subscribeToSystemAppearance(setSystemAppearance), []);
 
   useEffect(() => {
     applyThemeToDocument(theme);
   }, [theme]);
 
   const writePersistedThemeToCache = useCallback(
-    (newTheme: Theme): void => {
+    (newTheme: ThemePreference): void => {
       queryClient.setQueryData(
         SETTINGS_SNAPSHOT_QUERY_KEY,
         (current: SettingsSnapshot | undefined) => {
@@ -61,7 +83,7 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
   );
 
   const refreshSettingsSnapshot = useCallback(
-    (confirmedTheme: Theme): void => {
+    (confirmedTheme: ThemePreference): void => {
       const confirmation = confirmedThemeRef.current;
       if (
         confirmation === null ||
@@ -137,7 +159,9 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
         } catch (error) {
           console.error("Failed to persist theme change.", error);
           if (pendingThemeRef.current === null) {
-            applyThemeToDocument(persistedThemeRef.current);
+            applyThemeToDocument(
+              resolveThemePreference(persistedThemeRef.current, readSystemAppearance()),
+            );
             selectOptimisticTheme(persistedThemeRef.current);
             toast.error("Theme change failed", {
               description: errorMessage(error),
@@ -164,17 +188,20 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
     }
   }, [queryClient, refreshSettingsSnapshot, writePersistedThemeToCache]);
 
-  const selectTheme = useCallback(
-    (newTheme: Theme): void => {
-      pendingThemeRef.current = newTheme;
-      applyThemeToDocument(newTheme);
-      selectOptimisticTheme(newTheme);
+  const selectThemePreference = useCallback(
+    (preference: ThemePreference): void => {
+      pendingThemeRef.current = preference;
+      applyThemeToDocument(resolveThemePreference(preference, readSystemAppearance()));
+      selectOptimisticTheme(preference);
       void persistPendingThemes();
     },
     [persistPendingThemes],
   );
 
-  const value = useMemo(() => ({ theme, setTheme: selectTheme }), [selectTheme, theme]);
+  const value = useMemo(
+    () => ({ theme, themePreference, setThemePreference: selectThemePreference }),
+    [selectThemePreference, theme, themePreference],
+  );
 
   return (
     <ThemeProviderContext.Provider {...props} value={value}>

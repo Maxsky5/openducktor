@@ -233,7 +233,8 @@ beforeEach(async () => {
   moduleSpies = [
     spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
       theme: previewTheme,
-      setTheme: () => {},
+      themePreference: previewTheme,
+      setThemePreference: () => {},
     })),
     spyOn(actualPreviewPierre, "EditProvider").mockImplementation(({ children, createEditor }) => {
       editProviderFactories.push(createEditor);

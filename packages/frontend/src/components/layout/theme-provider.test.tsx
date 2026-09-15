@@ -9,7 +9,6 @@ import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import { ThemeToggle } from "./sidebar/theme-toggle";
 import { ThemeProvider, useTheme } from "./theme-provider";
 
 interface QueryClientRefContract {
@@ -19,18 +18,21 @@ interface QueryClientRefContract {
 enableReactActEnvironment();
 
 const ThemeHarness = (): ReactElement => {
-  const { theme, setTheme } = useTheme();
+  const { theme, themePreference, setThemePreference } = useTheme();
 
   return (
     <div>
       <output aria-label="Current theme">{theme}</output>
-      <button type="button" onClick={() => setTheme("dark")}>
+      <output aria-label="Current theme preference">{themePreference}</output>
+      <button type="button" onClick={() => setThemePreference("dark")}>
         Dark
       </button>
-      <button type="button" onClick={() => setTheme("light")}>
+      <button type="button" onClick={() => setThemePreference("light")}>
         Light
       </button>
-      <ThemeToggle />
+      <button type="button" onClick={() => setThemePreference("system")}>
+        System
+      </button>
     </div>
   );
 };
@@ -114,9 +116,7 @@ const flushQueryUpdates = async (): Promise<void> => {
 const expectThemeState = (theme: Theme): void => {
   expect(screen.getByLabelText("Current theme").textContent).toBe(theme);
   expect(document.documentElement.classList.contains(theme)).toBe(true);
-  expect(
-    screen.getByRole("switch", { name: "Toggle dark mode" }).getAttribute("aria-checked"),
-  ).toBe(String(theme === "dark"));
+  expect(screen.getByLabelText("Current theme preference").textContent).toBe(theme);
 };
 
 const expectCachedTheme = (queryClient: QueryClient, theme: Theme): void => {
@@ -125,8 +125,45 @@ const expectCachedTheme = (queryClient: QueryClient, theme: Theme): void => {
   ).toBe(theme);
 };
 
+type FakeMediaQueryList = {
+  matches: boolean;
+  listeners: Set<(event: { matches: boolean }) => void>;
+  addEventListener: (type: string, listener: (event: { matches: boolean }) => void) => void;
+  removeEventListener: (type: string, listener: (event: { matches: boolean }) => void) => void;
+  emit: (matches: boolean) => void;
+};
+
+const originalMatchMedia = globalThis.matchMedia;
+
+const installFakeMatchMedia = (matches: boolean): FakeMediaQueryList => {
+  const query: FakeMediaQueryList = {
+    matches,
+    listeners: new Set(),
+    addEventListener: (_type, listener) => {
+      query.listeners.add(listener);
+    },
+    removeEventListener: (_type, listener) => {
+      query.listeners.delete(listener);
+    },
+    emit: (nextMatches) => {
+      query.matches = nextMatches;
+      for (const listener of query.listeners) {
+        listener({ matches: nextMatches });
+      }
+    },
+  };
+
+  // SAFETY: the test owns this global and replaces the browser media query API with a stub.
+  // biome-ignore lint/suspicious/noExplicitAny: the test replaces a browser global with a stub.
+  (globalThis as any).matchMedia = () => query;
+  return query;
+};
+
 afterEach(() => {
   cleanup();
+  // SAFETY: the test owns this global and restores the value it captured at module load.
+  // biome-ignore lint/suspicious/noExplicitAny: the test restores a browser global.
+  (globalThis as any).matchMedia = originalMatchMedia;
   document.documentElement.classList.remove("light", "dark");
 });
 
@@ -476,6 +513,73 @@ describe("ThemeProvider", () => {
       });
 
       await waitFor(() => expectThemeState("light"), { timeout: 1_000 });
+    } finally {
+      hostBridge.client.setTheme = originalSetTheme;
+    }
+  });
+
+  test("follows the operating system appearance while the system preference is selected", async () => {
+    const setTheme = mock(async () => undefined);
+    const originalSetTheme = hostBridge.client.setTheme;
+    hostBridge.client.setTheme = setTheme;
+    const query = installFakeMatchMedia(true);
+
+    try {
+      renderThemeProvider();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "System" }));
+        await flushQueryUpdates();
+      });
+
+      await waitFor(
+        () => {
+          expect(screen.getByLabelText("Current theme").textContent).toBe("dark");
+          expect(screen.getByLabelText("Current theme preference").textContent).toBe("system");
+          expect(document.documentElement.classList.contains("dark")).toBe(true);
+        },
+        { timeout: 1_000 },
+      );
+      expect(setTheme).toHaveBeenCalledWith("system");
+
+      act(() => {
+        query.emit(false);
+      });
+
+      await waitFor(
+        () => {
+          expect(screen.getByLabelText("Current theme").textContent).toBe("light");
+          expect(screen.getByLabelText("Current theme preference").textContent).toBe("system");
+          expect(document.documentElement.classList.contains("light")).toBe(true);
+        },
+        { timeout: 1_000 },
+      );
+    } finally {
+      hostBridge.client.setTheme = originalSetTheme;
+    }
+  });
+
+  test("keeps an explicit preference when the operating system appearance changes", async () => {
+    const setTheme = mock(async () => undefined);
+    const originalSetTheme = hostBridge.client.setTheme;
+    hostBridge.client.setTheme = setTheme;
+    const query = installFakeMatchMedia(false);
+
+    try {
+      renderThemeProvider();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Light" }));
+        await flushQueryUpdates();
+      });
+      await waitFor(() => expectThemeState("light"), { timeout: 1_000 });
+
+      act(() => {
+        query.emit(true);
+      });
+
+      await flushQueryUpdates();
+      expectThemeState("light");
     } finally {
       hostBridge.client.setTheme = originalSetTheme;
     }

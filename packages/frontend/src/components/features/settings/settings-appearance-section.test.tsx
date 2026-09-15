@@ -3,6 +3,8 @@ import type { AppearanceSettings } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { ThemeProvider } from "@/components/layout/theme-provider";
+import { hostBridge } from "@/lib/host-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { host } from "@/state/operations/host";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
@@ -14,7 +16,11 @@ beforeEach(() => {
 });
 
 function TestProvider({ children }: { children: React.ReactNode }) {
-  return <QueryProvider useIsolatedClient>{children}</QueryProvider>;
+  return (
+    <QueryProvider useIsolatedClient>
+      <ThemeProvider>{children}</ThemeProvider>
+    </QueryProvider>
+  );
 }
 
 const createAppearanceSettings = (
@@ -109,6 +115,59 @@ afterEach(() => {
 });
 
 describe("settings appearance section", () => {
+  test("offers the three theme choices and persists a selection at once", async () => {
+    const setTheme = mock(async () => undefined);
+    const originalSetTheme = hostBridge.client.setTheme;
+    hostBridge.client.setTheme = setTheme;
+
+    try {
+      renderAppearanceSection(createAppearanceSettings());
+
+      const themeTrigger = screen.getByRole("button", { name: "Theme" });
+      expect(
+        screen.getByText(
+          "System default follows the current operating system appearance. Light and Dark keep the chosen appearance on every system.",
+        ),
+      ).toBeDefined();
+
+      await act(async () => {
+        fireEvent.click(themeTrigger);
+      });
+
+      await screen.findByText("Dark");
+      expect(screen.getAllByText("System default").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Light").length).toBeGreaterThanOrEqual(1);
+
+      const themeOptions = document.querySelectorAll("[data-slot='command-item']");
+      expect([...themeOptions].map((option) => option.textContent)).toEqual([
+        "System default",
+        "Light",
+        "Dark",
+      ]);
+      expect(document.querySelector("[data-slot='command-input']:not(.sr-only)")).toBeNull();
+      expect(screen.queryByPlaceholderText("Search theme...")).toBeNull();
+
+      await act(async () => {
+        const options = screen.getAllByText("Dark");
+        const option = options.at(-1);
+        if (!option) {
+          throw new Error("Expected the Dark theme option to be rendered");
+        }
+        fireEvent.click(option);
+      });
+
+      expect(setTheme).toHaveBeenCalledWith("dark");
+    } finally {
+      hostBridge.client.setTheme = originalSetTheme;
+    }
+  });
+
+  test("disables the theme picker while settings interactions are disabled", () => {
+    renderAppearanceSection(createAppearanceSettings(), true);
+
+    expect(screen.getByRole("button", { name: "Theme" }).hasAttribute("disabled")).toBe(true);
+  });
+
   test("renders horizontal scrollbar visibility choices", async () => {
     renderAppearanceSection(createAppearanceSettings());
 

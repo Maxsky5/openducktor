@@ -25,6 +25,7 @@ export const CHAT_HUNK_SEPARATOR_VALUES = [
   "simple",
 ] as const;
 export const HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES = ["system", "show", "hide"] as const;
+export const THEME_PREFERENCE_VALUES = ["system", "light", "dark"] as const;
 export const APP_PLATFORM_VALUES = ["win32", "linux", "darwin"] as const;
 
 const DEFAULT_SOFT_GUARDRAILS = {
@@ -54,7 +55,7 @@ export const DEFAULT_KANBAN_SETTINGS = {
   emptyColumnDisplay: "show",
 } as const;
 export const KANBAN_EMPTY_COLUMN_DISPLAY_VALUES = ["show", "hidden", "collapsed"] as const;
-const DEFAULT_THEME = "light" as const;
+const DEFAULT_THEME_PREFERENCE = "system" as const;
 
 export const CODEX_SANDBOX_MODE_VALUES = [
   "read-only",
@@ -570,8 +571,10 @@ export const createDefaultAutopilotSettings = (): AutopilotSettings =>
   normalizeAutopilotSettings({ alwaysStartQaReviewsFresh: false, rules: [] });
 
 const themeValueSchema = z.enum(["light", "dark"]);
+const themePreferenceValueSchema = z.enum(THEME_PREFERENCE_VALUES);
 
-export const themeSchema = themeValueSchema.default(DEFAULT_THEME);
+export const themePreferenceSchema = themePreferenceValueSchema.default(DEFAULT_THEME_PREFERENCE);
+export type ThemePreference = z.infer<typeof themePreferenceValueSchema>;
 export type Theme = z.infer<typeof themeValueSchema>;
 
 const persistedAgentRuntimesV2Schema = z
@@ -663,7 +666,7 @@ const globalConfigSharedFields = {
     })
     .default([]),
   activeWorkspace: workspaceIdSchema.optional(),
-  theme: themeSchema,
+  theme: themePreferenceSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   general: generalSettingsSchema.default(DEFAULT_GENERAL_SETTINGS),
   appearance: appearanceSettingsSchema.default(DEFAULT_APPEARANCE_SETTINGS),
@@ -698,7 +701,7 @@ export type GlobalConfig = ParsedGlobalConfig;
 export const settingsSnapshotSchema = z.object({
   system: systemSettingsSchema.default({}),
   customAgentRoles: globalConfigSharedFields.customAgentRoles,
-  theme: themeValueSchema,
+  theme: themePreferenceValueSchema,
   git: globalGitConfigSchema.default({ defaultMergeMethod: "merge_commit" }),
   general: generalSettingsSchema.default(DEFAULT_GENERAL_SETTINGS),
   appearance: appearanceSettingsSchema.default(DEFAULT_APPEARANCE_SETTINGS),

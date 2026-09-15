@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { SystemOpenInToolInfo, SystemSettings } from "@openducktor/contracts";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { QueryProvider } from "@/lib/query-provider";
 import { host } from "@/state/operations/host";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
@@ -26,13 +27,15 @@ function Harness({
   const [system, setSystem] = useState(initial);
   return (
     <QueryProvider useIsolatedClient>
-      <SettingsAppearanceSection
-        appearance={{ horizontalScrollbarVisibility: "system" }}
-        onUpdateAppearance={() => {}}
-        system={system}
-        disabled={disabled}
-        onUpdateSystem={setSystem}
-      />
+      <ThemeProvider>
+        <SettingsAppearanceSection
+          appearance={{ horizontalScrollbarVisibility: "system" }}
+          onUpdateAppearance={() => {}}
+          system={system}
+          disabled={disabled}
+          onUpdateSystem={setSystem}
+        />
+      </ThemeProvider>
       <output>{JSON.stringify(system)}</output>
     </QueryProvider>
   );

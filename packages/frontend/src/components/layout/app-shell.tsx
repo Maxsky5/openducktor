@@ -20,7 +20,6 @@ import {
   BranchSwitcher,
   SidebarNavigation,
 } from "@/components/layout/sidebar";
-import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -187,10 +186,6 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
                     activeSessions={agentActivity.activeSessions}
                     waitingForInputSessions={agentActivity.waitingForInputSessions}
                   />
-                </div>
-
-                <div className="flex justify-center px-3 pb-2 pt-1">
-                  <ThemeToggle />
                 </div>
 
                 <div className="border-t border-sidebar-border p-3">

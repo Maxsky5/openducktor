@@ -6,7 +6,7 @@ import {
   isSameAgentModelFavorite,
   repoConfigSchema,
   settingsSnapshotSaveInputSchema,
-  themeSchema,
+  themePreferenceSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
@@ -442,7 +442,7 @@ const createUnserializedWorkspaceSettingsService = (
         try: () =>
           globalConfigSchema.parse({
             ...config,
-            theme: themeSchema.parse(theme),
+            theme: themePreferenceSchema.parse(theme),
           }),
         catch: (cause) =>
           new HostValidationError({

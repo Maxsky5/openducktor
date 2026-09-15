@@ -47,6 +47,7 @@ type ComboboxProps = {
   wrapTriggerLabel?: boolean;
   wrapOptionLabels?: boolean;
   matchAllSearchTerms?: boolean;
+  searchable?: boolean;
 };
 
 type RenderGroup = {
@@ -223,6 +224,7 @@ export function Combobox({
   wrapTriggerLabel,
   wrapOptionLabels,
   matchAllSearchTerms = false,
+  searchable = true,
 }: ComboboxProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -338,11 +340,12 @@ export function Combobox({
         portalContainer={portalContainer}
         className={cn("w-[var(--radix-popover-trigger-width)] p-0", className)}
       >
-        <Command shouldFilter={!matchAllSearchTerms}>
+        <Command shouldFilter={searchable && !matchAllSearchTerms}>
           <CommandInput
+            visuallyHidden={!searchable}
             placeholder={searchPlaceholder}
             value={searchQuery}
-            onValueChange={handleSearchQueryChange}
+            onValueChange={searchable ? handleSearchQueryChange : () => {}}
           />
           <CommandList ref={commandListRef}>
             <CommandEmpty>{emptyText}</CommandEmpty>

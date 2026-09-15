@@ -5,7 +5,7 @@ import {
   repoHooksSchema,
   runtimeKindSchema,
   settingsSnapshotSaveInputSchema,
-  themeSchema,
+  themePreferenceSchema,
   workspaceRepoConfigInputSchema,
   workspaceRepoSettingsInputSchema,
   workspaceAgentStudioStateSchema,
@@ -284,7 +284,7 @@ export const createWorkspaceSettingsCommandHandlers = (
       ),
     set_theme: (args) =>
       workspaceSettingsService.setTheme(
-        themeSchema.parse(requireObjectArgs("set_theme", args, "theme").theme),
+        themePreferenceSchema.parse(requireObjectArgs("set_theme", args, "theme").theme),
       ),
     workspace_update_global_git_config: (args) =>
       workspaceSettingsService.updateGlobalGitConfig(

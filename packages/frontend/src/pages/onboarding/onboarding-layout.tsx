@@ -7,7 +7,7 @@ import {
   useRef,
 } from "react";
 import openducktorMarkUrl from "@/assets/openducktor-mark.svg";
-import { ThemeToggle } from "@/components/layout/sidebar/theme-toggle";
+import { ThemePicker } from "@/components/layout/theme-picker";
 import { getAppVersion } from "@/lib/app-version";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +54,8 @@ type OnboardingLayoutProps = {
   children: ReactNode;
 };
 
+const themeLabelId = "onboarding-theme-label";
+
 export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): ReactElement {
   const currentStageIndex = ONBOARDING_STAGES.findIndex((item) => item.id === stage);
   const scrollContainerRef = useRef<HTMLElement>(null);
@@ -91,7 +93,12 @@ export function OnboardingLayout({ stage, children }: OnboardingLayoutProps): Re
               ) : null}
             </div>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <span id={themeLabelId} className="sr-only">
+              Theme
+            </span>
+            <ThemePicker triggerAriaLabelledBy={themeLabelId} triggerClassName="w-44" />
+          </div>
         </header>
 
         <nav

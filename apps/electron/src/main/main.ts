@@ -10,7 +10,7 @@ import {
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
   settingsSnapshotSchema,
-  themeSchema,
+  themePreferenceSchema,
 } from "@openducktor/contracts";
 import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "@openducktor/frontend/startup-splash/theme";
 import {
@@ -720,7 +720,7 @@ const registerIpcHandlers = (
         if (command === "workspace_get_settings_snapshot") {
           nativeTheme.themeSource = settingsSnapshotSchema.parse(result.value).theme;
         } else if (command === "set_theme") {
-          nativeTheme.themeSource = themeSchema.unwrap().parse(args?.theme);
+          nativeTheme.themeSource = themePreferenceSchema.unwrap().parse(args?.theme);
         }
       }
       return result;

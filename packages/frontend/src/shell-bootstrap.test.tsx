@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type { Theme } from "@openducktor/contracts";
+import type { ThemePreference } from "@openducktor/contracts";
 import {
   createDisabledAppUpdateBridge,
   createUnavailableShellBridge,
@@ -63,7 +63,7 @@ const createTestShellBridge = (): ShellBridge =>
   }) satisfies ShellBridge;
 
 type BootstrapHarnessOptions = {
-  loadSettingsSnapshot?: () => Promise<{ theme: Theme }>;
+  loadSettingsSnapshot?: () => Promise<{ theme: ThemePreference }>;
   configureBridge?: (bridge: ShellBridge) => void;
 };
 
@@ -93,7 +93,7 @@ const createBootstrapHarness = (options: BootstrapHarnessOptions = {}) => {
     }
     return { theme: "dark" as const };
   });
-  const applyTheme = mock((_theme: Theme) => {
+  const applyTheme = mock((_preference: ThemePreference) => {
     events.push("applyTheme");
   });
   const getRootById = mock((rootId: string) => {

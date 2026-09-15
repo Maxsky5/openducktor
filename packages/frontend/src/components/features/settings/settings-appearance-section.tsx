@@ -5,6 +5,7 @@ import {
   type SystemSettings,
 } from "@openducktor/contracts";
 import type { ReactElement } from "react";
+import { ThemePicker } from "@/components/layout/theme-picker";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { SettingsOpenInTool } from "./settings-open-in-tool";
@@ -41,6 +42,8 @@ export function SettingsAppearanceSection({
   disabled,
   onUpdateAppearance,
 }: SettingsAppearanceSectionProps): ReactElement {
+  const themeLabelId = "appearance-theme-label";
+  const themeDescriptionId = "appearance-theme-description";
   const labelId = "appearance-horizontal-scrollbars-label";
   const descriptionId = "appearance-horizontal-scrollbars-description";
   const selectedVisibility = appearance.horizontalScrollbarVisibility;
@@ -66,6 +69,25 @@ export function SettingsAppearanceSection({
         <p className="text-xs text-muted-foreground">
           Choose how OpenDucktor looks and which apps it uses.
         </p>
+      </div>
+
+      <div className="grid gap-3 rounded-md border border-border bg-card p-4 md:grid-cols-[minmax(0,1fr)_16rem] md:items-start">
+        <div className="grid gap-2">
+          <Label id={themeLabelId}>Theme</Label>
+          <p id={themeDescriptionId} className="text-xs text-muted-foreground">
+            System default follows the current operating system appearance. Light and Dark keep the
+            chosen appearance on every system.
+          </p>
+        </div>
+
+        <div>
+          <ThemePicker
+            disabled={disabled}
+            triggerAriaLabelledBy={themeLabelId}
+            triggerAriaDescribedBy={themeDescriptionId}
+            triggerClassName="bg-card"
+          />
+        </div>
       </div>
 
       <SettingsOpenInTool system={system} disabled={disabled} onUpdateSystem={onUpdateSystem} />

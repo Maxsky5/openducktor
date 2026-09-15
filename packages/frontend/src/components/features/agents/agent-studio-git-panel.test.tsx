@@ -295,7 +295,8 @@ describe("AgentStudioGitPanel", () => {
     moduleSpies = [
       spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
         theme: "light",
-        setTheme: () => {},
+        themePreference: "light",
+        setThemePreference: () => {},
       })),
       spyOn(actualBranchSelector, "BranchSelector").mockImplementation(
         ({

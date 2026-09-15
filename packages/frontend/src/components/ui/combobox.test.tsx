@@ -128,6 +128,72 @@ describe("Combobox", () => {
     expect(screen.getByText("TASK-123")).toBeTruthy();
   });
 
+  test("hides the search field and keeps every option when searching is off", async () => {
+    render(
+      <Combobox
+        value="ready"
+        options={[
+          { value: "ready", label: "Ready" },
+          { value: "blocked", label: "Blocked" },
+        ]}
+        searchable={false}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button"));
+    });
+
+    const input = document.querySelector("[data-slot='command-input']");
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Expected the cmdk input to stay mounted for keyboard navigation");
+    }
+    expect(input.className).toContain("sr-only");
+
+    // Typing must not filter a fixed choice list, so both options stay visible.
+    await act(async () => {
+      fireEvent.input(input, { target: { value: "ready" } });
+    });
+
+    expect(screen.getAllByText("Ready").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Blocked")).toBeTruthy();
+  });
+
+  test("selects an option with the keyboard when searching is off", async () => {
+    const onValueChange = mock(() => {});
+
+    render(
+      <Combobox
+        value="ready"
+        options={[
+          { value: "ready", label: "Ready" },
+          { value: "blocked", label: "Blocked" },
+        ]}
+        searchable={false}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button"));
+    });
+
+    const input = document.querySelector("[data-slot='command-input']");
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Expected the cmdk input to stay mounted for keyboard navigation");
+    }
+
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "ArrowDown" });
+    });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter" });
+    });
+
+    expect(onValueChange).toHaveBeenCalledWith("blocked");
+  });
+
   test("does not select a disabled option", async () => {
     const onValueChange = mock(() => {});
 

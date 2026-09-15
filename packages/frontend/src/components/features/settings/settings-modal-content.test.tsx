@@ -10,6 +10,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createQueryClient } from "@/lib/query-client";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { QueryProvider } from "@/lib/query-provider";
 import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
@@ -464,26 +465,31 @@ describe("settings modal content", () => {
       createElement(
         QueryProvider,
         { useIsolatedClient: true },
-        createElement(SettingsModalContent, {
-          section: "appearance",
-          repositorySection: "configuration",
-          globalPromptRoleTab: "shared",
-          repoPromptRoleTab: "shared",
-          selectedReusablePromptId: null,
-          selectedCustomAgentRoleId: null,
-          onSelectedCustomAgentRoleIdChange: () => {},
-          isInteractionDisabled: false,
-          controller,
-          onRepositorySectionChange: () => {},
-          onGlobalPromptRoleTabChange: () => {},
-          onRepoPromptRoleTabChange: () => {},
-          onSelectedReusablePromptIdChange: () => {},
-        }),
+        createElement(
+          ThemeProvider,
+          null,
+          createElement(SettingsModalContent, {
+            section: "appearance",
+            repositorySection: "configuration",
+            globalPromptRoleTab: "shared",
+            repoPromptRoleTab: "shared",
+            selectedReusablePromptId: null,
+            selectedCustomAgentRoleId: null,
+            onSelectedCustomAgentRoleIdChange: () => {},
+            isInteractionDisabled: false,
+            controller,
+            onRepositorySectionChange: () => {},
+            onGlobalPromptRoleTabChange: () => {},
+            onRepoPromptRoleTabChange: () => {},
+            onSelectedReusablePromptIdChange: () => {},
+          }),
+        ),
       ),
     );
 
     expect(html).toContain("Appearance");
     expect(html).toContain("Preferred Open In tool");
+    expect(html).toContain("Theme");
     expect(html).toContain("Horizontal Scrollbars");
     expect(html).toContain("System default");
     expect(html).toContain("Show");

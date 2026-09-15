@@ -53,11 +53,21 @@ describe("OnboardingPage", () => {
       expect(within(header).queryByText("Local delivery workspace")).toBeNull();
       if (appVersion) expect(within(header).getByText(appVersion)).toBeTruthy();
 
-      const themeSwitch = within(header).getByRole("switch", { name: "Toggle dark mode" });
-      fireEvent.click(themeSwitch);
+      const themeTrigger = within(header).getByRole("button", { name: "Theme" });
+      await act(async () => {
+        fireEvent.click(themeTrigger);
+      });
+
+      const darkOption = (await screen.findAllByText("Dark")).at(-1);
+      if (!darkOption) {
+        throw new Error("Expected the Dark theme option to be rendered");
+      }
+      await act(async () => {
+        fireEvent.click(darkOption);
+      });
 
       await waitFor(() => expect(document.documentElement.classList.contains("dark")).toBe(true));
-      expect(themeSwitch.getAttribute("aria-checked")).toBe("true");
+      expect(hostBridge.client.setTheme).toHaveBeenCalledWith("dark");
     } finally {
       hostBridge.client.setTheme = originalSetTheme;
     }

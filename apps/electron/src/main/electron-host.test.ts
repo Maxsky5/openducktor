@@ -750,7 +750,7 @@ describe("createElectronHostCommandRouter", () => {
 
     await expect(router.invoke("workspace_list")).resolves.toEqual([]);
     await expect(router.invoke("workspace_get_settings_snapshot")).resolves.toMatchObject({
-      theme: "light",
+      theme: "system",
       workspaces: {},
     });
   });

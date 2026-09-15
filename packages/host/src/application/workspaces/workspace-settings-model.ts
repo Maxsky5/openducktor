@@ -14,7 +14,7 @@ import {
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
   settingsSnapshotSchema,
-  type Theme,
+  type ThemePreference,
   type WorkspaceRecord,
   type WorkspaceRepoConfigInput,
   type WorkspaceRepoHooksInput,
@@ -83,7 +83,7 @@ export type WorkspaceSettingsService = {
   updateAgentModelFavorites(
     favorites: AgentModelFavorite[],
   ): Effect.Effect<SettingsSnapshot, WorkspaceSettingsError>;
-  setTheme(theme: Theme): Effect.Effect<void, WorkspaceSettingsError>;
+  setTheme(theme: ThemePreference): Effect.Effect<void, WorkspaceSettingsError>;
   updateGlobalGitConfig(git: GlobalGitConfig): Effect.Effect<void, WorkspaceSettingsError>;
 };
 export type WorkspaceAddInput = {

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { AppCrashShell } from "./components/errors/app-crash-shell";
 import { applyThemeToDocument } from "./components/layout/theme-dom";
+import { readSystemAppearance, resolveThemePreference } from "./components/layout/theme-preference";
 import { appQueryClient } from "./lib/query-client";
 import { configureShellBridge } from "./lib/shell-bridge";
 import {
@@ -48,7 +49,8 @@ export const bootstrapOpenDucktorShell = (
     configureBridge: configureShellBridge,
     getRootById: (rootId) => document.getElementById(rootId),
     loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(appQueryClient),
-    applyTheme: applyThemeToDocument,
+    applyTheme: (preference) =>
+      applyThemeToDocument(resolveThemePreference(preference, readSystemAppearance())),
     renderApp: (rootElement) =>
       renderOpenDucktorShellApp(rootElement, options.routerMode ?? DEFAULT_ROUTER_MODE),
     reportSettingsPreloadError: (error) => {

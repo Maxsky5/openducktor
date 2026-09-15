@@ -1,4 +1,4 @@
-import type { Theme } from "@openducktor/contracts";
+import type { ThemePreference } from "@openducktor/contracts";
 import type { ShellBridge } from "./lib/shell-bridge";
 
 const DEFAULT_ROOT_ID = "root";
@@ -14,8 +14,8 @@ export type OpenDucktorShellBootstrapOptions = {
 export type ShellBootstrapDependencies = {
   configureBridge: (bridge: ShellBridge) => void;
   getRootById: (rootId: string) => HTMLElement | null;
-  loadSettingsSnapshot: () => Promise<{ theme: Theme }>;
-  applyTheme: (theme: Theme) => void;
+  loadSettingsSnapshot: () => Promise<{ theme: ThemePreference }>;
+  applyTheme: (preference: ThemePreference) => void;
   renderApp: (rootElement: HTMLElement) => void;
   reportSettingsPreloadError: (cause: unknown) => void;
 };

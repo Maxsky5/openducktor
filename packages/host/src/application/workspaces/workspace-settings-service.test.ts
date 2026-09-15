@@ -215,7 +215,7 @@ describe("createWorkspaceSettingsService", () => {
   test("returns default settings snapshot when config is missing", async () => {
     const service = createWorkspaceSettingsService(createFakeSettingsConfig());
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
-    expect(snapshot.theme).toBe("light");
+    expect(snapshot.theme).toBe("system");
     expect(snapshot.agentRuntimes?.opencode).toEqual({ enabled: false, executablePath: "" });
     expect(snapshot.agentRuntimes?.codex?.enabled).toBe(false);
     expect(snapshot.agentRuntimes?.codex?.executablePath).toBe("");
@@ -803,6 +803,27 @@ describe("createWorkspaceSettingsService", () => {
     expect((await Effect.runPromise(service.getSettingsSnapshot())).notifications).toEqual(
       notifications,
     );
+  });
+  test("persists the system theme preference and keeps an explicit stored choice", async () => {
+    const settingsConfig = createFakeSettingsConfig({ config: globalConfig({ theme: "dark" }) });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    expect((await Effect.runPromise(service.getSettingsSnapshot())).theme).toBe("dark");
+
+    await Effect.runPromise(service.setTheme("system"));
+
+    expect((await Effect.runPromise(service.getSettingsSnapshot())).theme).toBe("system");
+  });
+  test("rejects an unknown theme preference with a validation error", async () => {
+    const service = createWorkspaceSettingsService(
+      createFakeSettingsConfig({ config: globalConfig() }),
+    );
+
+    // SAFETY: the test drives the runtime validation path with a value the type rejects.
+    await expect(
+      // biome-ignore lint/suspicious/noExplicitAny: the test supplies an invalid runtime value.
+      Effect.runPromise(service.setTheme("sepia" as any)),
+    ).rejects.toThrow();
   });
   test("does not let a failed theme write escape through a concurrent settings save", async () => {
     let rejectThemeWrite: ((reason: Error) => void) | undefined;

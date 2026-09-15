@@ -15,8 +15,22 @@ function Command({ className, ...props }: React.ComponentProps<typeof CommandPri
 
 function CommandInput({
   className,
+  visuallyHidden = false,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+}: React.ComponentProps<typeof CommandPrimitive.Input> & { visuallyHidden?: boolean }) {
+  // A visually hidden input keeps cmdk keyboard navigation and the combobox role while the
+  // list shows a fixed set of choices. cmdk routes arrow keys and Enter through the focused
+  // input, so a dropdown without it cannot be driven from the keyboard.
+  if (visuallyHidden) {
+    return (
+      <CommandPrimitive.Input
+        data-slot="command-input"
+        className={cn("sr-only", className)}
+        {...props}
+      />
+    );
+  }
+
   return (
     <div className="flex items-center gap-2 border-b border-border px-3">
       <Search className="size-4 text-muted-foreground" />
