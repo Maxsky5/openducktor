@@ -51,12 +51,9 @@ const createDevServerCommandLaunch = (
   platform: NodeJS.Platform,
 ): ProcessCommandLaunchPlan => {
   if (platform !== "win32") {
-    // Repo dev-server commands are configured as shell command strings so users can
-    // keep common scripts such as `cd app && npm run dev` or inline env assignments.
-    // Use a non-login shell: the host environment already carries the resolved PATH,
-    // and a login shell can overwrite it from /etc/profile on Linux. The host takes
-    // one snapshot for the app lifetime. Startup lines that require a real tty can
-    // still produce a different PATH in an interactive terminal.
+    // Commands can use shell syntax such as `cd app && npm run dev`.
+    // A login shell could replace the host PATH through `/etc/profile`.
+    // The app snapshot can differ from startup code that needs a real tty.
     return {
       command: "/bin/sh",
       args: ["-c", command],

@@ -105,7 +105,6 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
     localAttachments: LocalAttachmentPort;
     openInTools: OpenInToolsPort;
     processEnv: NodeJS.ProcessEnv;
-    processEnvironmentError: ProcessEnvironmentError | null;
     processEnvironmentInput: CreateProcessEnvironmentInput;
     runtimeExecutableProbes: RuntimeExecutableProbesByKind;
     runtimeHealth: RuntimeHealthPort;
@@ -145,7 +144,7 @@ const makeNodeHostDefaultPorts = (
     const processEnvironment = input.processEnv
       ? {
           environment: input.processEnv,
-          error: input.processEnvironmentError ?? null,
+          error: null,
         }
       : yield* createProcessEnvironment(input.processEnvironmentInput);
     const { environment: processEnv, error: processEnvironmentError } = processEnvironment;

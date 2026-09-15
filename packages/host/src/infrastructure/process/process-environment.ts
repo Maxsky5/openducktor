@@ -297,47 +297,33 @@ const readCurrentUserLoginShellPath = (
     const stdoutChunks: Buffer[] = [];
     let stdoutBytes = 0;
     let settled = false;
+    function cleanUp(): void {
+      signal.removeEventListener("abort", abort);
+      child.removeAllListeners("error");
+      child.removeAllListeners("close");
+      child.stdout?.removeAllListeners("data");
+    }
     const finish = (effect: Effect.Effect<string, ProcessEnvironmentError>): void => {
       if (settled) {
         return;
       }
       settled = true;
-      clearTimeout(timeout);
-      signal.removeEventListener("abort", abort);
-      child.removeAllListeners("error");
-      child.removeAllListeners("close");
-      child.stdout?.removeAllListeners("data");
+      cleanUp();
       resume(effect);
     };
-    const stopChild = (killSignal: NodeJS.Signals = "SIGTERM"): void => {
+    const stopChild = (killSignal: NodeJS.Signals): void => {
       if (child.exitCode === null && child.signalCode === null) {
         child.kill(killSignal);
       }
     };
-    const abort = (): void => {
-      stopChild();
-      finish(
-        Effect.fail(
-          processEnvironmentError(
-            shell,
-            "spawn_failed",
-            `Failed to resolve PATH from interactive login shell ${shell}: the probe was canceled.`,
-          ),
-        ),
-      );
-    };
-    const timeout = setTimeout(() => {
+    function abort(): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
       stopChild("SIGKILL");
-      finish(
-        Effect.fail(
-          processEnvironmentError(
-            shell,
-            "timed_out",
-            `Failed to resolve PATH from interactive login shell ${shell}: the probe timed out after ${timeoutMs} ms. Check shell startup files for commands that wait for input.`,
-          ),
-        ),
-      );
-    }, timeoutMs);
+      cleanUp();
+    }
 
     signal.addEventListener("abort", abort, { once: true });
     child.stdout.on("data", (chunk: Buffer) => {
@@ -398,7 +384,17 @@ const readCurrentUserLoginShellPath = (
             ),
       );
     });
-  });
+  }).pipe(
+    Effect.timeoutFail({
+      duration: `${timeoutMs} millis`,
+      onTimeout: () =>
+        processEnvironmentError(
+          shell,
+          "timed_out",
+          `Failed to resolve PATH from interactive login shell ${shell}: the probe timed out after ${timeoutMs} ms. Check shell startup files for commands that wait for input.`,
+        ),
+    }),
+  );
 
 export const createProcessEnvironment = (
   input: CreateProcessEnvironmentInput = {},
