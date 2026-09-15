@@ -14,18 +14,18 @@ export const createTaskAssetFileSafety = ({
   configDirScope: OpenDucktorConfigDirScope;
 }) => {
   const productionRoot =
-    configDirScope === "test" ? realPath(resolveOpenDucktorBaseDir("production", {})) : null;
-  const checkTestPath = (target: string): void => {
-    if (productionRoot !== null && isWithin(productionRoot, realPath(target))) {
+    configDirScope === "test" ? resolveSymlinks(resolveOpenDucktorBaseDir("production", {})) : null;
+  const assertPathAllowed = (target: string): void => {
+    if (productionRoot !== null && isWithin(productionRoot, resolveSymlinks(target))) {
       throw new Error(
         `Test scope refuses task asset access under the production config directory ${productionRoot}.`,
       );
     }
   };
   return {
-    assertConfigDirAllowed: () => checkTestPath(configDir),
+    assertConfigDir: () => assertPathAllowed(configDir),
     removeRecursively: async (target: string): Promise<void> => {
-      checkTestPath(target);
+      assertPathAllowed(target);
       await rm(target, { force: true, recursive: true });
     },
   };
@@ -39,7 +39,7 @@ function isWithin(directory: string, target: string): boolean {
   );
 }
 
-function realPath(target: string, tail: string[] = []): string {
+function resolveSymlinks(target: string, tail: string[] = []): string {
   const fullPath = path.resolve(target);
   try {
     return path.join(realpathSync.native(fullPath), ...tail);
@@ -51,6 +51,6 @@ function realPath(target: string, tail: string[] = []): string {
     if (parent === fullPath) {
       throw cause;
     }
-    return realPath(parent, [path.basename(fullPath), ...tail]);
+    return resolveSymlinks(parent, [path.basename(fullPath), ...tail]);
   }
 }

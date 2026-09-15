@@ -61,7 +61,7 @@ export const createNodeTaskAssetFilePort = (
   ownership?: TaskAssetFileOwnershipDependencies,
 ): TaskAssetFilePort => {
   const fileGuard = createTaskAssetFileSafety({ configDir, configDirScope });
-  fileGuard.assertConfigDirAllowed();
+  fileGuard.assertConfigDir();
   const durableRoot = path.resolve(configDir, "task-assets");
   const ownerState = createTaskAssetFileOwnership(
     { configDir, removeRecursively: fileGuard.removeRecursively },
