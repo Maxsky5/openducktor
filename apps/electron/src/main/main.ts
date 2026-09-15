@@ -49,6 +49,7 @@ import {
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
   type ElectronAppUpdateCheckInput,
+  type ElectronContextMenuPosition,
 } from "../shared/electron-bridge-contract";
 import { ELECTRON_TASK_ASSET_PROTOCOL } from "../shared/electron-task-asset-url";
 import {
@@ -734,9 +735,12 @@ const registerIpcHandlers = (
     },
   });
 
-  ipcMain.on(ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL, () => {
-    markContextMenuClaimed();
-  });
+  ipcMain.on(
+    ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL,
+    (event, position: ElectronContextMenuPosition) => {
+      markContextMenuClaimed({ webContentsId: event.sender.id, ...position });
+    },
+  );
 
   ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url) => {
     await runElectronEffect(openExternalUrlEffect(url));

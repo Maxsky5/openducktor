@@ -1,6 +1,10 @@
 import type { BrowserWindow } from "electron";
 import electron from "electron";
-import { CONTEXT_MENU_CLAIM_WINDOW_MS, createContextMenuClaimTracker } from "./context-menu-claim";
+import {
+  type ContextMenuClaimTarget,
+  CONTEXT_MENU_CLAIM_WINDOW_MS,
+  createContextMenuClaimTracker,
+} from "./context-menu-claim";
 import {
   createApplicationMenuTemplate,
   createContextMenuTemplate,
@@ -11,8 +15,8 @@ const { Menu } = electron;
 
 const contextMenuClaims = createContextMenuClaimTracker();
 
-export const markContextMenuClaimed = (): void => {
-  contextMenuClaims.claim();
+export const markContextMenuClaimed = (target: ContextMenuClaimTarget): void => {
+  contextMenuClaims.claim(target);
 };
 
 export const installApplicationMenu = (input: MainMenuInput): void => {
@@ -23,13 +27,15 @@ export const registerWindowContextMenu = (
   window: BrowserWindow,
   { isDevelopment }: MainMenuInput,
 ): void => {
-  window.webContents.on("context-menu", () => {
-    const eventAt = Date.now();
-    if (contextMenuClaims.shouldSuppressEvent(eventAt)) {
-      return;
-    }
+  window.webContents.on("context-menu", (_event, params) => {
+    const eventId = contextMenuClaims.trackEvent({
+      webContentsId: window.webContents.id,
+      x: params.x,
+      y: params.y,
+    });
     setTimeout(() => {
-      if (window.isDestroyed() || contextMenuClaims.claimArrivedAfter(eventAt)) {
+      const claimed = contextMenuClaims.takeClaim(eventId);
+      if (window.isDestroyed() || claimed) {
         return;
       }
       Menu.buildFromTemplate(createContextMenuTemplate(isDevelopment)).popup({ window });

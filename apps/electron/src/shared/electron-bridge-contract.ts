@@ -43,6 +43,11 @@ export const ELECTRON_HOST_SHUTDOWN_MESSAGE =
 export const ELECTRON_TERMINAL_SEND_CHANNEL = "openducktor:terminal:send";
 export const PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE =
   "application/vnd.pierre.diffs-selections+json" as const;
+
+export type ElectronContextMenuPosition = {
+  x: number;
+  y: number;
+};
 export type EditorClipboardReadType = typeof PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE;
 export const ELECTRON_TERMINAL_DISCONNECT_CHANNEL = "openducktor:terminal:disconnect";
 export const ELECTRON_TERMINAL_EVENT_CHANNEL = "openducktor:terminal:event";
@@ -194,7 +199,7 @@ export type OpenDucktorElectronNotificationApi = {
 
 export type OpenDucktorElectronApi = {
   platform: AppPlatform;
-  claimContextMenu(): void;
+  claimContextMenu(position: ElectronContextMenuPosition): void;
   invoke(
     command: HostCommandName,
     args?: ElectronHostInvokeRequest["args"],

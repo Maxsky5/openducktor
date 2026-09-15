@@ -184,8 +184,8 @@ function SortableWorkspaceRailButton({
     <ContextMenu>
       <ContextMenuTrigger
         className="block"
-        onContextMenu={() => {
-          getShellBridge().claimContextMenu?.();
+        onContextMenu={(event) => {
+          getShellBridge().claimContextMenu?.({ x: event.clientX, y: event.clientY });
         }}
       >
         <WorkspaceRailButtonShell

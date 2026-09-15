@@ -152,8 +152,8 @@ const notifications: OpenDucktorElectronNotificationApi = {
 
 const electronApi: OpenDucktorElectronApi = {
   platform: appPlatformSchema.parse(process.platform),
-  claimContextMenu() {
-    ipcRenderer.send(ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL);
+  claimContextMenu(position) {
+    ipcRenderer.send(ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL, position);
   },
   invoke: invokeHost,
   subscribe(...subscription) {

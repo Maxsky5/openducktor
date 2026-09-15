@@ -1327,17 +1327,20 @@ describe("workspace lifecycle service", () => {
     expect(result.removedWorktrees).toEqual(["/managed/ws/task-1"]);
   });
 
-  test("removeWorkspace keeps a missing journaled worktree pending after Git unregisters it", async () => {
+  test("removeWorkspace keeps a missing journaled worktree pending across retries", async () => {
     const removedWorktrees: string[] = [];
     const progress: Array<{
       lastFailure: string | null;
       pendingWorktreePath: string | null | undefined;
     }> = [];
     const removeWorkspaceRegistration = mock(() => Effect.succeed(catalog()));
+    const removeWorkspaceTaskAssets = mock(() => Effect.void);
+    const removeWorkspaceTaskStore = mock(() => Effect.void);
     const removal = removalRecord({
       phase: "worktrees",
       pendingWorktreePath: "/managed/ws/task-1",
     });
+    let inventoryReads = 0;
     const service = createService({
       getRepoConfig: () => Effect.succeed(repoConfig({ removal })),
       beginWorkspaceRemoval: () =>
@@ -1345,8 +1348,14 @@ describe("workspace lifecycle service", () => {
           record: removal,
           repoConfig: repoConfig(),
         }),
-      listWorktrees: () =>
-        Effect.succeed([{ branch: "odt/task-1", worktreePath: "/managed/ws/task-1" }]),
+      listWorktrees: () => {
+        inventoryReads += 1;
+        return Effect.succeed(
+          inventoryReads === 1
+            ? [{ branch: "odt/task-1", worktreePath: "/managed/ws/task-1" }]
+            : [],
+        );
+      },
       pathExists: () => Effect.succeed(false),
       removeWorktree: (_repoPath, worktreePath) =>
         Effect.sync(() => {
@@ -1360,23 +1369,29 @@ describe("workspace lifecycle service", () => {
           });
         }),
       removeWorkspaceRegistration,
+      removeWorkspaceTaskAssets,
+      removeWorkspaceTaskStore,
     });
 
-    await expect(
+    const removeWorkspace = () =>
       Effect.runPromise(
         service.removeWorkspace({
           workspaceId: "ws",
           expectedRepoPath: "/repos/ws",
           removeTaskWorktrees: true,
         }),
-      ),
-    ).rejects.toThrow("Reconnect its storage and retry");
+      );
+
+    await expect(removeWorkspace()).rejects.toThrow("Reconnect its storage and retry");
+    await expect(removeWorkspace()).rejects.toThrow("Retry with its storage connected");
 
     expect(removedWorktrees).toEqual(["/managed/ws/task-1"]);
     expect(progress.at(-1)).toEqual({
       lastFailure: expect.stringContaining("cannot verify"),
       pendingWorktreePath: undefined,
     });
+    expect(removeWorkspaceTaskAssets).not.toHaveBeenCalled();
+    expect(removeWorkspaceTaskStore).not.toHaveBeenCalled();
     expect(removeWorkspaceRegistration).not.toHaveBeenCalled();
   });
 
