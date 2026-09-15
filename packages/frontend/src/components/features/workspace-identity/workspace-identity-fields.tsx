@@ -75,7 +75,6 @@ export function WorkspaceIdentityFields({
         pickedColor={tileColor}
         automaticColor={automaticTileColor}
         effectiveColor={tileColor ?? automaticTileColor}
-        abbreviationPreview={abbreviation?.trim() || automaticAbbreviation}
         isDisabled={isDisabled}
         onChangeTileColor={onChangeTileColor}
       />

@@ -7,7 +7,6 @@ import {
   WORKSPACE_TILE_PALETTE,
   normalizeHexInput,
   tileColorFaceStyle,
-  tileLabelSizeClass,
   tileShadeRamp,
 } from "@/lib/workspace-tile-appearance";
 
@@ -20,7 +19,6 @@ type WorkspaceTileColorPickerProps = {
   pickedColor: string | null;
   automaticColor: string;
   effectiveColor: string;
-  abbreviationPreview: string;
   isDisabled: boolean;
   onChangeTileColor: (nextTileColor: string | null) => void;
 };
@@ -67,7 +65,6 @@ export function WorkspaceTileColorPicker({
   pickedColor,
   automaticColor,
   effectiveColor,
-  abbreviationPreview,
   isDisabled,
   onChangeTileColor,
 }: WorkspaceTileColorPickerProps): ReactElement {
@@ -187,22 +184,6 @@ export function WorkspaceTileColorPicker({
             {hexError}
           </p>
         ) : null}
-      </div>
-
-      <div className="grid gap-2">
-        <p className="text-sm font-medium text-foreground">Tile preview</p>
-        <div className="flex items-center gap-2">
-          <span
-            data-testid="workspace-tile-preview"
-            className={cn(
-              "flex size-10 items-center justify-center rounded-lg font-semibold shadow-sm",
-              tileLabelSizeClass(abbreviationPreview),
-            )}
-            style={tileColorFaceStyle(effectiveColor)}
-          >
-            {abbreviationPreview}
-          </span>
-        </div>
       </div>
     </div>
   );
