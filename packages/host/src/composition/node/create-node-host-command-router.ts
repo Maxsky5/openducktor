@@ -210,20 +210,23 @@ export const assembleNodeEffectHostCommandRouter = (
     codexWorkspaceRuntimeStarterInput.clientVersion = clientVersion;
   }
   const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
-  const workspaceStarter = createRuntimeWorkspaceStarterDispatcher({
-    claude: claudeRuntime.workspaceStarter,
-    codex: createCodexWorkspaceRuntimeStarter(codexWorkspaceRuntimeStarterInput),
-    opencode: createOpenCodeRuntimeComposition({
-      toolDiscovery,
-      settingsConfig,
-      processEnv,
-      runtimeDistribution,
-      liveSessionLifecycle: agentSessionLiveStateService,
-      taskSessionLifecycleCoordinator,
-      resolveMcpBridgeConnection: (runtimeInput) =>
-        resolveRuntimeMcpBridge("opencode", runtimeInput.repoPath),
-    }),
-  });
+  const workspaceStarter = createRuntimeWorkspaceStarterDispatcher(
+    {
+      claude: claudeRuntime.workspaceStarter,
+      codex: createCodexWorkspaceRuntimeStarter(codexWorkspaceRuntimeStarterInput),
+      opencode: createOpenCodeRuntimeComposition({
+        toolDiscovery,
+        settingsConfig,
+        processEnv,
+        runtimeDistribution,
+        liveSessionLifecycle: agentSessionLiveStateService,
+        taskSessionLifecycleCoordinator,
+        resolveMcpBridgeConnection: (runtimeInput) =>
+          resolveRuntimeMcpBridge("opencode", runtimeInput.repoPath),
+      }),
+    },
+    processEnvironmentError,
+  );
   const runtimeRegistryInput: Parameters<typeof createRuntimeRegistry>[0] = {
     workspaceStarter,
     hasActiveRuntimeSessions: createRuntimeActiveSessionResolver(agentSessionLiveStateService),

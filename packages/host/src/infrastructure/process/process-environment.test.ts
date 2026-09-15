@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { accessSync, constants } from "node:fs";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -11,6 +12,21 @@ import {
 } from "./process-environment";
 
 const testIfPosixShellIsAvailable = process.platform === "win32" ? test.skip : test;
+const executablePath = (paths: string[]): string | null => {
+  for (const candidate of paths) {
+    try {
+      accessSync(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Check the next platform path.
+    }
+  }
+  return null;
+};
+const bashPath = executablePath(["/bin/bash", "/usr/bin/bash"]);
+const cshPath = executablePath(["/bin/tcsh", "/bin/csh", "/usr/bin/tcsh", "/usr/bin/csh"]);
+const testIfBashIsAvailable = bashPath ? test : test.skip;
+const testIfCshIsAvailable = cshPath ? test : test.skip;
 
 const resolveProcessEnvironment = async (
   input: Parameters<typeof createProcessEnvironment>[0],
@@ -48,15 +64,20 @@ describe("createProcessEnvironment", () => {
   });
 
   test("does not read a login shell PATH on Windows", async () => {
-    const env = await resolveProcessEnvironment({
-      baseEnv: { Path: "C:\\Windows\\System32" },
-      platform: "win32",
-      readLoginShellPath: () => {
-        throw new Error("login shell should not be read on Windows");
-      },
-    });
+    const resolution = await Effect.runPromise(
+      createProcessEnvironment({
+        baseEnv: { Path: "C:\\Windows\\System32" },
+        platform: "win32",
+        readLoginShellPath: () => {
+          throw new Error("login shell should not be read on Windows");
+        },
+      }),
+    );
 
-    expect(env.Path).toBe("C:\\Windows\\System32");
+    expect(resolution).toEqual({
+      environment: { Path: "C:\\Windows\\System32" },
+      error: null,
+    });
   });
 
   test("does not mutate the caller environment object", async () => {
@@ -240,12 +261,12 @@ describe("createProcessEnvironment", () => {
     "matches the PATH from an interactive login fixture shell",
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), "odt-interactive-login-shell-"));
-      const shellPath = path.join(root, "fixture-shell");
+      const shellPath = path.join(root, "tcsh");
       try {
         await writeFile(path.join(root, ".zshrc"), 'export PATH="/fixture/zshrc-only:$PATH"\n');
         await writeFile(
           shellPath,
-          '#!/bin/sh\ncase "$1" in *i*) . "$HOME/.zshrc" ;; esac\nexec /bin/sh -c "$2"\n',
+          '#!/bin/sh\ncase "$1" in *l*) exit 64 ;; esac\ncase "$1" in *i*) . "$HOME/.zshrc" ;; esac\nexec /bin/sh -c "$2"\n',
         );
         await chmod(shellPath, 0o755);
         const baseEnv = {
@@ -253,7 +274,8 @@ describe("createProcessEnvironment", () => {
           PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
           USER: "fixture",
         };
-        const expectedProcess = Bun.spawn([shellPath, "-ilc", 'printf "%s" "$PATH"'], {
+        const expectedProcess = Bun.spawn([shellPath, "-ic", 'printf "%s" "$PATH"'], {
+          argv0: `-${path.basename(shellPath)}`,
           env: { ...baseEnv, SHELL: shellPath, TERM: "dumb" },
           stdout: "pipe",
         });
@@ -275,6 +297,47 @@ describe("createProcessEnvironment", () => {
       }
     },
   );
+
+  testIfBashIsAvailable("reads PATH from an interactive Bash login shell", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "odt-bash-login-shell-"));
+    try {
+      await writeFile(
+        path.join(root, ".bash_profile"),
+        'case "$-" in *i*) export PATH="/fixture/bash-interactive:$PATH" ;; esac\n',
+      );
+      const resolution = await Effect.runPromise(
+        createProcessEnvironment({
+          baseEnv: { HOME: root, PATH: "/usr/bin:/bin:/usr/sbin:/sbin", USER: "fixture" },
+          platform: "linux",
+          readUserShell: () => bashPath,
+        }),
+      );
+
+      expect(resolution.error).toBeNull();
+      expect(resolution.environment.PATH?.split(":")[0]).toBe("/fixture/bash-interactive");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  testIfCshIsAvailable("reads PATH from an interactive csh-family login shell", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "odt-csh-login-shell-"));
+    try {
+      await writeFile(path.join(root, ".login"), 'setenv PATH "/fixture/csh-login:$PATH"\n');
+      const resolution = await Effect.runPromise(
+        createProcessEnvironment({
+          baseEnv: { HOME: root, PATH: "/usr/bin:/bin:/usr/sbin:/sbin", USER: "fixture" },
+          platform: "darwin",
+          readUserShell: () => cshPath,
+        }),
+      );
+
+      expect(resolution.error).toBeNull();
+      expect(resolution.environment.PATH?.split(":")[0]).toBe("/fixture/csh-login");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 
   testIfPosixShellIsAvailable(
     "returns a typed diagnostic and removes the GUI PATH when the probe exits non-zero",

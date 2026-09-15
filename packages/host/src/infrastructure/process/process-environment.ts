@@ -214,8 +214,10 @@ const minimalLoginShellEnv = (env: NodeJS.ProcessEnv, shell: string): NodeJS.Pro
   TERM: "dumb",
   USER: env.USER,
 });
-const buildLoginShellPathProbeArgs = (): string[] => [
-  "-ilc",
+const CSH_LOGIN_SHELL_NAMES = new Set(["csh", "tcsh"]);
+const buildLoginShellPathProbeArgs = (shell: string): string[] => [
+  // csh and tcsh reject `-ilc`. The login-style argv0 keeps login mode for them.
+  CSH_LOGIN_SHELL_NAMES.has(basename(shell)) ? "-ic" : "-ilc",
   `printf '${LOGIN_SHELL_ENV_MARKER_TEXT}\\0'; /usr/bin/env -0`,
 ];
 const parsePathFromLoginShellOutput = (stdout: Buffer): string | null => {
@@ -259,7 +261,7 @@ const readCurrentUserLoginShellPath = (
   Effect.async<string, ProcessEnvironmentError>((resume, signal) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(shell, buildLoginShellPathProbeArgs(), {
+      child = spawn(shell, buildLoginShellPathProbeArgs(shell), {
         argv0: `-${basename(shell)}`,
         env: minimalLoginShellEnv(env, shell),
         stdio: ["ignore", "pipe", "ignore"],
