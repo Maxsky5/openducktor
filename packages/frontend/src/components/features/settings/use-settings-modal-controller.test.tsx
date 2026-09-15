@@ -9,6 +9,7 @@ import {
   type RuntimeExecutableCheck,
   type RuntimeKind,
   type SettingsSnapshot,
+  type SettingsSnapshotSaveInput,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
@@ -73,7 +74,7 @@ const loadSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => setting
 
 let refreshChecks = mock(async () => {});
 let saveGlobalGitConfig = mock(async () => {});
-let saveSettingsSnapshot = mock(async () => {});
+let saveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) => {});
 let workspaceRecords: WorkspaceRecord[] = [
   {
     workspaceId: "repo",
@@ -489,6 +490,63 @@ describe("useSettingsModalController", () => {
       pendingValidation.resolve({ runtimes: [] });
       repeatedInitialValidation.resolve({ runtimes: [] });
       host.runtimeExecutablesCheck = originalCheck;
+      await harness.unmount();
+    }
+  });
+
+  test("an abbreviation and a tile color edit reach the settings save payload", async () => {
+    const savedWorkspaces: SettingsSnapshotSaveInput["workspaces"][string][] = [];
+    saveSettingsSnapshot = mock(async (snapshot) => {
+      const repo = snapshot.workspaces.repo;
+      if (repo) {
+        savedWorkspaces.push(repo);
+      }
+    });
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      await harness.run(async (state) => {
+        state.updateSelectedRepoConfig((repoConfig) => ({
+          ...repoConfig,
+          abbreviation: " iOS ",
+          tileColor: "#f08c00",
+        }));
+      });
+
+      expect(harness.getLatest().snapshotDraft?.workspaces.repo?.abbreviation).toBe(" iOS ");
+
+      let didSave = false;
+      await harness.run(async (state) => {
+        didSave = await state.submit();
+      });
+
+      expect(didSave).toBe(true);
+      expect(savedWorkspaces).toHaveLength(1);
+      expect(savedWorkspaces[0]).toMatchObject({ abbreviation: "iOS", tileColor: "#f08c00" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("an unchanged repository does not reach the settings save payload", async () => {
+    saveSettingsSnapshot = mock(async () => {});
+    const harness = createHookHarness(true);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.snapshotDraft !== null);
+
+      let didSave = false;
+      await harness.run(async (state) => {
+        didSave = await state.submit();
+      });
+
+      expect(didSave).toBe(true);
+      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+    } finally {
       await harness.unmount();
     }
   });

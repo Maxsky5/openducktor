@@ -17,6 +17,7 @@ const HEX_ERROR_MESSAGE = "Enter a 6-digit RGB hex value, such as f08c00.";
 const stripHash = (hex: string): string => hex.replace(/^#/, "");
 
 type WorkspaceTileColorPickerProps = {
+  idPrefix: string;
   pickedColor: string | null;
   automaticColor: string;
   effectiveColor: string;
@@ -63,6 +64,7 @@ function TileColorSwatchButton({
 }
 
 export function WorkspaceTileColorPicker({
+  idPrefix,
   pickedColor,
   automaticColor,
   effectiveColor,
@@ -86,6 +88,8 @@ export function WorkspaceTileColorPicker({
 
   const isAutomatic = pickedColor === null;
   const shades = tileShadeRamp(effectiveColor);
+  const hexFieldId = `${idPrefix}-tile-color-hex`;
+  const hexErrorId = `${hexFieldId}-error`;
 
   const applyHexInput = (
     raw: string,
@@ -156,13 +160,13 @@ export function WorkspaceTileColorPicker({
       </div>
 
       <div className="grid gap-2">
-        <Label htmlFor="repo-tile-color-hex">Hex code</Label>
+        <Label htmlFor={hexFieldId}>Hex code</Label>
         <div className="flex items-center gap-2">
           <span aria-hidden="true" className="font-mono text-sm text-muted-foreground">
             #
           </span>
           <Input
-            id="repo-tile-color-hex"
+            id={hexFieldId}
             className="max-w-40 font-mono"
             value={hexInput}
             spellCheck={false}
@@ -170,7 +174,7 @@ export function WorkspaceTileColorPicker({
             maxLength={7}
             disabled={isDisabled}
             aria-invalid={hexError !== null}
-            aria-describedby={hexError ? "repo-tile-color-hex-error" : undefined}
+            aria-describedby={hexError ? hexErrorId : undefined}
             onChange={(event) => {
               applyHexInput(event.currentTarget.value, { reportIncomplete: false });
             }}
@@ -180,7 +184,7 @@ export function WorkspaceTileColorPicker({
           />
         </div>
         {hexError ? (
-          <p id="repo-tile-color-hex-error" role="alert" className="text-xs text-destructive">
+          <p id={hexErrorId} role="alert" className="text-xs text-destructive">
             {hexError}
           </p>
         ) : null}

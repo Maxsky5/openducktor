@@ -89,6 +89,8 @@ const createUnserializedWorkspaceSettingsService = (
         workspaceId: input.workspaceId,
         workspaceName: input.workspaceName,
         repoPath: input.repoPath,
+        abbreviation: input.abbreviation,
+        tileColor: input.tileColor,
       });
       const config = yield* loadGlobalConfig(settingsConfig);
 

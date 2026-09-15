@@ -89,6 +89,8 @@ export type WorkspaceAddInput = {
   repoPath: string;
   workspaceId: string;
   workspaceName: string;
+  abbreviation?: string;
+  tileColor?: string;
 };
 export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {

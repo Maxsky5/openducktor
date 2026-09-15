@@ -284,20 +284,15 @@ const activeTileBorderStyle = (): CSSProperties => ({
 });
 
 /**
- * The active face uses the color itself and adds the primary-color border. The inactive face
- * tints the theme card surface with the same color.
+ * Every tile shows its workspace color at full strength. Only the active tile adds the
+ * primary-color border.
  *
- * A user can pick any shade, so the dimmed face of one workspace can reach the intensity of the
- * full-strength face of another. The border carries the active state on its own, so exactly one
- * tile reads as active whatever colors the neighbors use.
+ * A user can pick any shade, so a dimmed inactive face could reach the intensity of the
+ * full-strength active face of a neighbor. The border carries the active state on its own, so the
+ * color is free to identify the workspace in every state.
  */
 export const tileSurfaceStyle = (
   hex: string,
   { isActive }: { isActive: boolean },
 ): CSSProperties =>
-  isActive
-    ? { ...tileColorFaceStyle(hex), ...activeTileBorderStyle() }
-    : {
-        backgroundColor: `color-mix(in oklab, ${hex} 22%, var(--card))`,
-        color: "var(--card-foreground)",
-      };
+  isActive ? { ...tileColorFaceStyle(hex), ...activeTileBorderStyle() } : tileColorFaceStyle(hex);

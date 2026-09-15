@@ -299,6 +299,12 @@ export function useWorkspaceSelectionOperations({
         workspaceName: input.workspaceName,
         repoPath: normalizedRepoPath,
       };
+      if (input.abbreviation) {
+        workspaceInput.abbreviation = input.abbreviation;
+      }
+      if (input.tileColor) {
+        workspaceInput.tileColor = input.tileColor;
+      }
       const workspace = await hostClient.workspaceAdd(workspaceInput);
       applyWorkspaceRecord(workspace);
       await refreshWorkspaceCachesAfterMutation();

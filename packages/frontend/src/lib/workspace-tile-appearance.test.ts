@@ -181,14 +181,14 @@ describe("tileSurfaceStyle", () => {
     expect(new Set(markers)).toEqual(new Set(["var(--primary)"]));
   });
 
-  test("tints the theme card surface for an inactive tile and leaves it unmarked", () => {
+  test("shows an inactive tile at full strength and leaves it unmarked", () => {
     expect(tileSurfaceStyle("#3b82f6", { isActive: false })).toEqual({
-      backgroundColor: "color-mix(in oklab, #3b82f6 22%, var(--card))",
-      color: "var(--card-foreground)",
+      backgroundColor: "#3b82f6",
+      color: "#0f172a",
     });
   });
 
-  test("keeps the active marker when a dimmed neighbor reaches the same intensity", () => {
+  test("separates the active tile from a neighbor of any intensity through the border alone", () => {
     const lightShade = tileShadeRamp("#3b82f6")[0]?.hex ?? "";
     const activeLight = tileSurfaceStyle(lightShade, { isActive: true });
     const inactiveDark = tileSurfaceStyle("#06347f", { isActive: false });
@@ -196,6 +196,7 @@ describe("tileSurfaceStyle", () => {
     expect(activeLight.outlineColor).toBe("var(--primary)");
     expect(activeLight.outlineWidth).toBe(`${ACTIVE_TILE_BORDER_WIDTH_PX}px`);
     expect(inactiveDark).not.toHaveProperty("outlineColor");
+    expect(inactiveDark.backgroundColor).toBe("#06347f");
   });
 });
 

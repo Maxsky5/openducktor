@@ -367,6 +367,22 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       workspaceName: "repo",
       repoPath: "/repo",
     });
+    await expect(
+      router.invoke("workspace_add", {
+        workspaceId: "repo",
+        workspaceName: "repo",
+        repoPath: "/repo",
+        abbreviation: "iOS",
+        tileColor: "#f08c00",
+      }),
+    ).resolves.toMatchObject({ workspaceId: "repo" });
+    expect(addedWorkspaceInputs.at(-1)).toEqual({
+      workspaceId: "repo",
+      workspaceName: "repo",
+      repoPath: "/repo",
+      abbreviation: "iOS",
+      tileColor: "#f08c00",
+    });
     await expect(router.invoke("workspace_select", { workspaceId: "repo" })).resolves.toMatchObject(
       { workspaceId: "repo" },
     );
@@ -449,6 +465,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     ).resolves.toBeUndefined();
     expect(calls).toEqual([
       "listWorkspaces",
+      "addWorkspace",
       "addWorkspace",
       "selectWorkspace",
       "reorderWorkspaces",

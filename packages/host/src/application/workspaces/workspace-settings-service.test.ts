@@ -507,6 +507,80 @@ describe("createWorkspaceSettingsService", () => {
       recentWorkspaces: ["repo-a", "repo-b"],
     });
   });
+  test("stores an abbreviation and a tile color given at workspace creation", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+        workspaceOrder: ["repo-a"],
+      }),
+      existingPaths: new Set(["/repos/b", "/repos/b/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const added = await Effect.runPromise(
+      service.addWorkspace({
+        workspaceId: "repo-b",
+        workspaceName: "Repo B",
+        repoPath: "/repos/b",
+        abbreviation: " iOS ",
+        tileColor: "#F08C00",
+      }),
+    );
+
+    expect(added).toMatchObject({ abbreviation: "iOS", tileColor: "#f08c00" });
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-b"]).toMatchObject({
+      abbreviation: "iOS",
+      tileColor: "#f08c00",
+    });
+  });
+  test("leaves a new workspace on its automatic abbreviation and color when none is given", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+        workspaceOrder: ["repo-a"],
+      }),
+      existingPaths: new Set(["/repos/b", "/repos/b/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const added = await Effect.runPromise(
+      service.addWorkspace({
+        workspaceId: "repo-b",
+        workspaceName: "Repo B",
+        repoPath: "/repos/b",
+      }),
+    );
+
+    expect(added).toMatchObject({ abbreviation: null, tileColor: null });
+  });
+  test("rejects a tile color given at workspace creation that is not a hex value", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+        workspaceOrder: ["repo-a"],
+      }),
+      existingPaths: new Set(["/repos/b", "/repos/b/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const failure = await Effect.runPromise(
+      Effect.either(
+        service.addWorkspace({
+          workspaceId: "repo-b",
+          workspaceName: "Repo B",
+          repoPath: "/repos/b",
+          tileColor: "blue",
+        }),
+      ),
+    );
+
+    expect(failure._tag).toBe("Left");
+    if (failure._tag === "Left") {
+      expect(String(failure.left.message)).toContain(
+        "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
+      );
+    }
+  });
   test("rejects duplicate workspace repo paths", async () => {
     const service = createWorkspaceSettingsService(
       createFakeSettingsConfig({

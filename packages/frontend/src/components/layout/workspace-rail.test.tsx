@@ -134,7 +134,7 @@ describe("WorkspaceRail", () => {
     expect(html).toContain('aria-label="Alpha Repo"');
   });
 
-  test("paints the picked color at full strength on the active tile and tints an inactive tile", () => {
+  test("paints every tile with its picked color at full strength", () => {
     workspaceState.workspaces = [
       workspaceRecord("alpha", {
         workspaceName: "Alpha Repo",
@@ -144,11 +144,14 @@ describe("WorkspaceRail", () => {
       workspaceRecord("beta", { workspaceName: "Beta Repo", tileColor: "#f43f5e" }),
     ];
 
-    // The test DOM drops a `color-mix` value, so the inactive tint is read from the server render.
-    const html = renderRailMarkup();
+    renderRail();
 
-    expect(html).toContain("background-color:#3b82f6");
-    expect(html).toContain("background-color:color-mix(in oklab, #f43f5e 22%, var(--card))");
+    expect(screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("style")).toContain(
+      "background-color: #3b82f6",
+    );
+    expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("style")).toContain(
+      "background-color: #f43f5e",
+    );
   });
 
   test("marks only the active tile with the wide primary border", () => {
