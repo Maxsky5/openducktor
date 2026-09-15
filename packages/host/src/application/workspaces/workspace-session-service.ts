@@ -226,7 +226,7 @@ export const createWorkspaceSessionService = (
               });
             }),
           );
-        }),
+        }).pipe((effect) => withMutationAdmission(input.workspaceId, effect)),
       ),
     setDraftModel: (
       input: WorkspaceSessionRefInput & { selectedModel: AgentSessionModelSelection },

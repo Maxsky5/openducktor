@@ -122,8 +122,14 @@ describe("workspace admission service", () => {
     const admission = createAdmission(
       catalog({
         openWorkspaces: [
-          workspaceRecord("first", "/repos/first"),
-          workspaceRecord("second", "/repos/second"),
+          {
+            ...workspaceRecord("first", "/repos/first"),
+            effectiveWorktreeBasePath: "/managed",
+          },
+          {
+            ...workspaceRecord("second", "/repos/second"),
+            effectiveWorktreeBasePath: "/managed/second",
+          },
         ],
       }),
       undefined,
@@ -143,6 +149,33 @@ describe("workspace admission service", () => {
     await expect(
       Effect.runPromise(admission.resolveWorkspaceRepoPath("/managed/second/task")),
     ).resolves.toBe("/repos/second");
+  });
+
+  test("rejects equal matching workspace bases", async () => {
+    const admission = createAdmission(
+      catalog({
+        openWorkspaces: [
+          {
+            ...workspaceRecord("first", "/repos/first"),
+            effectiveWorktreeBasePath: "/managed/shared",
+          },
+          {
+            ...workspaceRecord("second", "/repos/second"),
+            effectiveWorktreeBasePath: "/managed/shared",
+          },
+        ],
+      }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(admission.resolveWorkspaceRepoPath("/managed/shared/task")),
+    ).rejects.toThrow("Multiple workspace worktree bases match");
   });
 
   test("loads closed and incomplete removal workspaces", async () => {

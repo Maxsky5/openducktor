@@ -35,11 +35,15 @@ const createAdmissionDouble = (input: {
   assertWorkspaceAdmitsWork?: (
     repoPath: string,
   ) => Effect.Effect<void, HostValidationErrorAggregate>;
-  onLease?: (repoPath: string) => void;
+  onLease?: (repoPath: string, workingDirectory: string | undefined) => void;
 }): GitWorkspaceAdmission => ({
   assertWorkspaceAdmitsWork: input.assertWorkspaceAdmitsWork ?? (() => Effect.void),
-  withWorkStartLease: <A, E, R>(repoPath: string, effect: Effect.Effect<A, E, R>) => {
-    input.onLease?.(repoPath);
+  withWorkStartLease: <A, E, R>(
+    repoPath: string,
+    effect: Effect.Effect<A, E, R>,
+    workingDirectory?: string,
+  ) => {
+    input.onLease?.(repoPath, workingDirectory);
     return effect;
   },
 });
@@ -59,8 +63,8 @@ describe("git workspace admission", () => {
         Effect.sync(() => {
           events.push(`assert:${repoPath}`);
         }),
-      onLease: (repoPath) => {
-        events.push(`lease:${repoPath}`);
+      onLease: (repoPath, workingDirectory) => {
+        events.push(`lease:${repoPath}:${workingDirectory}`);
       },
     });
     const guarded = withGitWorkspaceAdmission(service, admission);
@@ -70,7 +74,40 @@ describe("git workspace admission", () => {
     );
 
     expect(result).toEqual({ name: "main", detached: false, revision: "abc123" });
-    expect(events).toEqual(["lease:/repos/a", "assert:/repos/a", "switchBranch:/repos/a"]);
+    expect(events).toEqual(["lease:/repos/a:/repos/a", "assert:/repos/a", "switchBranch:/repos/a"]);
+  });
+
+  test("passes supplied Git mutation targets to the lease", async () => {
+    const targets: string[] = [];
+    const service = createGitServiceDouble({
+      commitAll: () => Effect.succeed({ outcome: "committed", commitHash: "abc123", output: "" }),
+      removeWorktree: () => Effect.succeed({ ok: true }),
+    });
+    const guarded = withGitWorkspaceAdmission(
+      service,
+      createAdmissionDouble({
+        onLease: (_repoPath, workingDirectory) => {
+          if (workingDirectory) targets.push(workingDirectory);
+        },
+      }),
+    );
+
+    await Effect.runPromise(
+      guarded.commitAll({
+        repoPath: "/repos/a",
+        workingDir: "/worktrees/b",
+        message: "Test",
+      }),
+    );
+    await Effect.runPromise(
+      guarded.removeWorktree({
+        repoPath: "/repos/a",
+        worktreePath: "/worktrees/b",
+        force: false,
+      }),
+    );
+
+    expect(targets).toEqual(["/worktrees/b", "/worktrees/b"]);
   });
 
   test("does not lease a read call", async () => {
