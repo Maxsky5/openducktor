@@ -3,7 +3,7 @@ import {
   TASK_ASSET_URI_PREFIX,
   type TaskAssetRenderContext,
 } from "@openducktor/contracts";
-import { createElement, isValidElement, useEffect, useState } from "react";
+import { createElement, isValidElement, useEffect, useState, type ReactNode } from "react";
 import { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import { splitTaskDescriptionFrontMatter } from "@/components/features/task-description-editor/task-description-front-matter";
 import { errorMessage } from "@/lib/errors";
@@ -17,6 +17,17 @@ export const TASK_DESCRIPTION_URL_TRANSFORM: UrlTransform = (url, _key, node) =>
   }
   return defaultUrlTransform(url);
 };
+
+function TaskAssetAlert({ children }: { children: ReactNode }) {
+  return (
+    <span
+      className="my-2 block rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
+      role="alert"
+    >
+      {children}
+    </span>
+  );
+}
 
 function TaskAssetImage({
   alt,
@@ -68,14 +79,7 @@ function TaskAssetImage({
     );
   }
   if (state.status === "error") {
-    return (
-      <span
-        className="my-2 block rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
-        role="alert"
-      >
-        Image could not be loaded: {state.message}
-      </span>
-    );
+    return <TaskAssetAlert>Image could not be loaded: {state.message}</TaskAssetAlert>;
   }
   return (
     <img
@@ -134,22 +138,14 @@ export const createTaskDescriptionComponents = ({
     if (src?.startsWith(TASK_ASSET_URI_PREFIX)) {
       if (!parseTaskAssetUri(src)) {
         return (
-          <span
-            className="my-2 block rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
-            role="alert"
-          >
+          <TaskAssetAlert>
             Image could not be loaded: the task asset reference is invalid.
-          </span>
+          </TaskAssetAlert>
         );
       }
       if (!taskAssetContext || !resolveTaskAssetSrc) {
         return (
-          <span
-            className="my-2 block rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
-            role="alert"
-          >
-            Image could not be loaded: task context is unavailable.
-          </span>
+          <TaskAssetAlert>Image could not be loaded: task context is unavailable.</TaskAssetAlert>
         );
       }
       return (

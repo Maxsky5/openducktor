@@ -6,10 +6,9 @@ import {
   type PublicTaskSummaryTask,
 } from "@openducktor/contracts";
 import { ImageIcon } from "lucide-react";
-import type { ComponentProps, ReactElement } from "react";
+import { lazy, Suspense, useState, type ComponentProps, type ReactElement } from "react";
 import type { Components, ExtraProps } from "react-markdown";
 import type { ZodType } from "zod";
-import { lazy, Suspense, useMemo, useState } from "react";
 import { IssueTypeBadge } from "@/components/features/kanban/issue-type-badge";
 import { PriorityBadge } from "@/components/features/kanban/priority-badge";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
@@ -103,10 +102,7 @@ const taskSearchSummary = (meta: ToolMeta): string => {
 
 const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const descriptionPreview = useMemo(
-    () => (task.description ? buildTaskDescriptionPreviewMarkdown(task.description) : ""),
-    [task.description],
-  );
+  const descriptionPreview = buildTaskDescriptionPreviewMarkdown(task.description ?? "");
   return (
     <>
       <Card className="mb-3 min-w-0 max-w-2xl overflow-hidden" data-task-id={task.id}>
