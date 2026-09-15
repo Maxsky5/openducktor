@@ -73,6 +73,13 @@ describe("Electron main lifecycle policy", () => {
     ).toBeGreaterThan(windowOpenHandlerIndex);
   });
 
+  test("native context menus wait for the renderer claim window", () => {
+    const source = readRepoFile("apps/electron/src/main/main-menu.ts");
+
+    expect(source).toContain("}, CONTEXT_MENU_CLAIM_WINDOW_MS);");
+    expect(source).not.toContain("}, 50);");
+  });
+
   test("startup starts scheduled app update checks after the main window is created", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 

@@ -124,8 +124,6 @@ export const createWorkspaceLifecycleService = ({
   workspaceSettingsService,
   worktreeFiles,
 }: CreateWorkspaceLifecycleServiceInput): WorkspaceLifecycleService => {
-  const runOwnedExclusively = ownershipLock.runExclusive;
-
   const requireTarget = (workspaceId: string, expectedRepoPath: string) =>
     Effect.gen(function* () {
       const repoConfig = yield* workspaceSettingsService.getRepoConfig(workspaceId);
@@ -206,7 +204,7 @@ export const createWorkspaceLifecycleService = ({
     removedWorktrees: string[],
     failedPath: string | undefined,
     message: string,
-    cause: unknown,
+    cause: unknown = new Error(message),
   ) =>
     Effect.gen(function* () {
       const journalResult = yield* Effect.either(
@@ -252,7 +250,6 @@ export const createWorkspaceLifecycleService = ({
           expectedRepoPath: input.expectedRepoPath,
           removeTaskWorktrees: input.removeTaskWorktrees,
         });
-      const removeTaskWorktrees = startedRecord.removeTaskWorktrees;
       admission.blockWorkspace({
         reason: "removal",
         repoPath: journaledRepoConfig.repoPath,
@@ -262,7 +259,7 @@ export const createWorkspaceLifecycleService = ({
       const removedWorktrees = [...startedRecord.removedWorktrees];
       let phase = startedRecord.phase;
 
-      if (phase === "worktrees" && removeTaskWorktrees) {
+      if (phase === "worktrees" && startedRecord.removeTaskWorktrees) {
         const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
           settingsConfig,
           journaledRepoConfig,
@@ -336,6 +333,15 @@ export const createWorkspaceLifecycleService = ({
               worktreePath,
               `Removed ${removedWorktrees.length} task worktree(s). Failed to remove ${worktreePath}: ${removalResult.left.message}. Retry removal to continue. If it keeps failing, delete that directory manually. Local branches and committed history stay.`,
               removalResult.left,
+            );
+          }
+          if (!removalResult.right.filesystemDeletionVerified) {
+            return yield* failRemovalPhase(
+              input.workspaceId,
+              "worktrees",
+              removedWorktrees,
+              worktreePath,
+              `OpenDucktor cannot verify that ${worktreePath} was deleted because the path was unavailable. Reconnect its storage and retry. If the path was already deleted, create an empty directory at that path and retry.`,
             );
           }
           removedWorktrees.push(worktreePath);
@@ -418,10 +424,11 @@ export const createWorkspaceLifecycleService = ({
 
   return {
     closeWorkspace(input) {
-      return runOwnedExclusively(
+      return ownershipLock.runExclusive(
         Effect.gen(function* () {
           const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
           if (repoConfig.closed) {
+            yield* hostOwnership.releaseWorkspace(input.workspaceId);
             return yield* workspaceSettingsService.getWorkspaceCatalog();
           }
           return yield* runUnderReservation(
@@ -442,6 +449,7 @@ export const createWorkspaceLifecycleService = ({
                   repoPath: repoConfig.repoPath,
                   workspaceId: input.workspaceId,
                 });
+                yield* hostOwnership.releaseWorkspace(input.workspaceId);
                 return catalog;
               }),
           );
@@ -449,7 +457,7 @@ export const createWorkspaceLifecycleService = ({
       );
     },
     reopenWorkspace(input) {
-      return runOwnedExclusively(
+      return ownershipLock.runExclusive(
         Effect.gen(function* () {
           const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
           return yield* runUnderReservation(
@@ -472,7 +480,7 @@ export const createWorkspaceLifecycleService = ({
       );
     },
     removeWorkspace(input) {
-      return runOwnedExclusively(
+      return ownershipLock.runExclusive(
         Effect.gen(function* () {
           const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
           return yield* runUnderReservation(

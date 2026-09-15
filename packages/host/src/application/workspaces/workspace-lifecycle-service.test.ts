@@ -336,11 +336,28 @@ describe("workspace lifecycle service", () => {
 
   test("closeWorkspace delegates and blocks further task work", async () => {
     const expected = catalog();
-    const closeWorkspace = mock(() => Effect.succeed(expected));
-    const blockWorkspace = mock(() => {});
+    const calls: string[] = [];
+    const closeWorkspace = mock(() =>
+      Effect.sync(() => {
+        calls.push("close");
+        return expected;
+      }),
+    );
+    const blockWorkspace = mock(() => {
+      calls.push("block");
+    });
+    const releaseWorkspace = mock(() =>
+      Effect.sync(() => {
+        calls.push("release");
+      }),
+    );
     const service = createService({
       admission: { ...createAdmissionDouble(), blockWorkspace },
       closeWorkspace,
+      hostOwnership: {
+        claimWorkspace: () => Effect.void,
+        releaseWorkspace,
+      },
     });
 
     const result = await Effect.runPromise(
@@ -354,10 +371,41 @@ describe("workspace lifecycle service", () => {
       repoPath: "/repos/ws",
       workspaceId: "ws",
     });
+    expect(releaseWorkspace).toHaveBeenCalledWith("ws");
+    expect(calls).toEqual(["close", "block", "release"]);
+  });
+
+  test("closeWorkspace keeps the closed block when ownership release fails", async () => {
+    const blockWorkspace = mock(() => {});
+    const service = createService({
+      admission: { ...createAdmissionDouble(), blockWorkspace },
+      hostOwnership: {
+        claimWorkspace: () => Effect.void,
+        releaseWorkspace: () =>
+          Effect.fail(
+            new HostOperationError({
+              operation: "workspaceHostOwnership.release",
+              message: "owner lock removal failed",
+            }),
+          ),
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      ),
+    ).rejects.toThrow("owner lock removal failed");
+    expect(blockWorkspace).toHaveBeenCalledWith({
+      reason: "closed",
+      repoPath: "/repos/ws",
+      workspaceId: "ws",
+    });
   });
 
   test("closeWorkspace returns the catalog for an already closed workspace without inspection", async () => {
     const inspect = mock(() => Effect.succeed([]));
+    const releaseWorkspace = mock(() => Effect.void);
     const expected = catalog();
     const service = createService({
       activity: {
@@ -367,6 +415,10 @@ describe("workspace lifecycle service", () => {
       },
       getRepoConfig: () => Effect.succeed(repoConfig({ closed: true })),
       getWorkspaceCatalog: () => Effect.succeed(expected),
+      hostOwnership: {
+        claimWorkspace: () => Effect.void,
+        releaseWorkspace,
+      },
     });
 
     const result = await Effect.runPromise(
@@ -375,6 +427,7 @@ describe("workspace lifecycle service", () => {
 
     expect(result).toEqual(expected);
     expect(inspect).not.toHaveBeenCalled();
+    expect(releaseWorkspace).toHaveBeenCalledWith("ws");
   });
 
   test("removeWorkspace writes the removal record before deleting data", async () => {
@@ -1274,8 +1327,13 @@ describe("workspace lifecycle service", () => {
     expect(result.removedWorktrees).toEqual(["/managed/ws/task-1"]);
   });
 
-  test("removeWorkspace unregisters a missing journaled worktree that Git still lists", async () => {
+  test("removeWorkspace keeps a missing journaled worktree pending after Git unregisters it", async () => {
     const removedWorktrees: string[] = [];
+    const progress: Array<{
+      lastFailure: string | null;
+      pendingWorktreePath: string | null | undefined;
+    }> = [];
+    const removeWorkspaceRegistration = mock(() => Effect.succeed(catalog()));
     const removal = removalRecord({
       phase: "worktrees",
       pendingWorktreePath: "/managed/ws/task-1",
@@ -1294,18 +1352,32 @@ describe("workspace lifecycle service", () => {
         Effect.sync(() => {
           removedWorktrees.push(worktreePath);
         }),
+      recordWorkspaceRemovalProgress: (input) =>
+        Effect.sync(() => {
+          progress.push({
+            lastFailure: input.lastFailure,
+            pendingWorktreePath: input.pendingWorktreePath,
+          });
+        }),
+      removeWorkspaceRegistration,
     });
 
-    const result = await Effect.runPromise(
-      service.removeWorkspace({
-        workspaceId: "ws",
-        expectedRepoPath: "/repos/ws",
-        removeTaskWorktrees: true,
-      }),
-    );
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: true,
+        }),
+      ),
+    ).rejects.toThrow("Reconnect its storage and retry");
 
     expect(removedWorktrees).toEqual(["/managed/ws/task-1"]);
-    expect(result.removedWorktrees).toEqual(["/managed/ws/task-1"]);
+    expect(progress.at(-1)).toEqual({
+      lastFailure: expect.stringContaining("cannot verify"),
+      pendingWorktreePath: undefined,
+    });
+    expect(removeWorkspaceRegistration).not.toHaveBeenCalled();
   });
 
   test("removeWorkspace reports a journaled pending worktree cleanup that keeps failing", async () => {

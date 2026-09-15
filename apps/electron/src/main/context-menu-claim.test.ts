@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createContextMenuClaimTracker } from "./context-menu-claim";
+import { CONTEXT_MENU_CLAIM_WINDOW_MS, createContextMenuClaimTracker } from "./context-menu-claim";
 
 const createClock = () => {
   let current = 0;
@@ -47,6 +47,17 @@ describe("context menu claim tracker", () => {
     expect(tracker.claimArrivedAfter(eventAt)).toBe(true);
     clock.advance(5);
     expect(tracker.shouldSuppressEvent(clock.now())).toBe(false);
+  });
+
+  test("suppresses an event when its claim arrives near the end of the claim window", () => {
+    const clock = createClock();
+    const tracker = createContextMenuClaimTracker(clock.now);
+
+    const eventAt = clock.now();
+    clock.advance(CONTEXT_MENU_CLAIM_WINDOW_MS - 50);
+    tracker.claim();
+
+    expect(tracker.claimArrivedAfter(eventAt)).toBe(true);
   });
 
   test("matches each claim to one event", () => {

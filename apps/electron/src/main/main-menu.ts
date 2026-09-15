@@ -1,6 +1,6 @@
 import type { BrowserWindow } from "electron";
 import electron from "electron";
-import { createContextMenuClaimTracker } from "./context-menu-claim";
+import { CONTEXT_MENU_CLAIM_WINDOW_MS, createContextMenuClaimTracker } from "./context-menu-claim";
 import {
   createApplicationMenuTemplate,
   createContextMenuTemplate,
@@ -33,6 +33,6 @@ export const registerWindowContextMenu = (
         return;
       }
       Menu.buildFromTemplate(createContextMenuTemplate(isDevelopment)).popup({ window });
-    }, 50);
+    }, CONTEXT_MENU_CLAIM_WINDOW_MS);
   });
 };

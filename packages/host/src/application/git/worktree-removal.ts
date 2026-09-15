@@ -141,7 +141,9 @@ export const removeWorktreeAndFilesystemPath = (
       initialCleanup.kind === "outside" &&
       !currentCleanup.targetExists
     ) {
-      return;
+      return {
+        filesystemDeletionVerified: initialCleanup.targetExists,
+      };
     }
     if (removalResult._tag === "Left") {
       const registered = yield* gitPort.isRegisteredWorktree(
@@ -152,7 +154,9 @@ export const removeWorktreeAndFilesystemPath = (
         return yield* Effect.fail(removalResult.left);
       }
       if (input.missingOutsideManagedRootPathPolicy === "skip" && missingOutsideCleanup) {
-        return;
+        return {
+          filesystemDeletionVerified: false,
+        };
       }
       if (initialCleanup.kind === "outside") {
         return yield* Effect.fail(
@@ -167,7 +171,7 @@ export const removeWorktreeAndFilesystemPath = (
     }
     if (!cleanupIdentityIsStable) {
       if (input.missingOutsideManagedRootPathPolicy === "skip" && missingOutsideCleanup) {
-        return;
+        return { filesystemDeletionVerified: false };
       }
       return yield* Effect.fail(
         initialCleanup.kind === "outside" || currentCleanup.kind === "outside"
@@ -190,4 +194,7 @@ export const removeWorktreeAndFilesystemPath = (
           }),
       ),
     );
+    return {
+      filesystemDeletionVerified: initialCleanup.targetExists || currentCleanup.targetExists,
+    };
   });
