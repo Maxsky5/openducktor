@@ -20,6 +20,7 @@ import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { HostShutdownStep } from "../host-lifecycle";
+import type { OpenDucktorConfigDirScope } from "../../config/openducktor-config-dir";
 
 export type NodeTaskAssetServices = {
   workspaceSessionStore: WorkspaceSessionStorePort;
@@ -32,11 +33,13 @@ export type NodeTaskAssetServices = {
 };
 
 export const createNodeTaskAssetServices = ({
+  configDirScope,
   configuredTaskStore,
   onBackgroundFailure,
   processEnv,
   workspaceSettingsService,
 }: {
+  configDirScope: OpenDucktorConfigDirScope;
   configuredTaskStore?: TaskStorePort | undefined;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv: NodeJS.ProcessEnv;
@@ -47,7 +50,8 @@ export const createNodeTaskAssetServices = ({
       .getRepoConfigByRepoPath(repoPath)
       .pipe(Effect.map((repoConfig) => repoConfig.workspaceId));
   const filePort = createNodeTaskAssetFilePort({
-    configDir: resolveOpenDucktorBaseDir(processEnv),
+    configDir: resolveOpenDucktorBaseDir(configDirScope, processEnv),
+    configDirScope,
   });
   const taskAssetStagingService = createTaskAssetStagingService(filePort);
   const contextManager = createSqliteTaskRepositoryContextManager({

@@ -1,5 +1,6 @@
 import {
   createOpenDucktorDailyLogWriter,
+  type OpenDucktorConfigDirScope,
   type OpenDucktorDailyLogWriter,
   type OpenDucktorLogPersistenceError,
 } from "@openducktor/host";
@@ -21,6 +22,7 @@ type LogStream = {
 };
 
 type ElectronMainLoggerInput = {
+  configDirScope?: OpenDucktorConfigDirScope;
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
   stream?: LogStream;
@@ -121,6 +123,7 @@ const formatError = (cause: unknown): string => {
 };
 
 export const createElectronMainLogger = ({
+  configDirScope = "production",
   env = process.env,
   now = () => new Date(),
   stream = process.stderr,
@@ -128,7 +131,12 @@ export const createElectronMainLogger = ({
 }: ElectronMainLoggerInput = {}) =>
   (writer
     ? Effect.succeed(writer)
-    : createOpenDucktorDailyLogWriter({ surface: "electron", environment: env, clock: now })
+    : createOpenDucktorDailyLogWriter({
+        surface: "electron",
+        configDirScope,
+        environment: env,
+        clock: now,
+      })
   ).pipe(
     Effect.map((resolvedWriter): ElectronMainLogger => {
       const log = (

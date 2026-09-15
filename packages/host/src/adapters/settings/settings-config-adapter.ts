@@ -122,7 +122,8 @@ export const createSettingsConfigAdapter = ({
   initializeConfig,
 }: CreateSettingsConfigAdapterInput = {}): SettingsConfigPort => {
   const resolvedConfigPath =
-    configPath ?? path.join(resolveOpenDucktorBaseDir(environment), USER_SETTINGS_FILENAME);
+    configPath ??
+    path.join(resolveOpenDucktorBaseDir("production", environment), USER_SETTINGS_FILENAME);
   const baseDir = path.dirname(resolvedConfigPath);
   let initializationFlight: SettingsInitializationFlight | null = null;
 

@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import {
   mkdir,
   mkdtemp,
@@ -9,7 +11,7 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { Cause, Effect, Exit } from "effect";
 import { createNodeTaskAssetFilePort } from "./filesystem-task-asset-file-port";
@@ -347,6 +349,91 @@ describe("node task asset file port", () => {
     expect(await readdir(path.join(configDir, "task-asset-owners"))).not.toContain(
       "10000000-0000-4000-8000-000000000001.json",
     );
+  });
+
+  test("keeps staging for a live owner when the start-time probe uses local ps output", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
+    roots.push(configDir);
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], {
+      stdio: "ignore",
+    });
+    if (!child.pid) {
+      throw new Error("Expected the child process to have a PID.");
+    }
+
+    const liveInstanceId = "10000000-0000-4000-8000-000000000004";
+    const ownersRoot = path.join(configDir, "task-asset-owners");
+    const liveStagingFile = path.join(
+      configDir,
+      "task-asset-staging",
+      "instances",
+      liveInstanceId,
+      workspaceId,
+      assetId,
+    );
+    await mkdir(ownersRoot, { recursive: true });
+    await mkdir(path.dirname(liveStagingFile), { recursive: true });
+    await writeFile(
+      path.join(ownersRoot, `${liveInstanceId}.json`),
+      JSON.stringify({
+        version: 1,
+        instanceId: liveInstanceId,
+        processId: child.pid,
+        startedAtMs: Date.now(),
+      }),
+    );
+    await writeFile(liveStagingFile, new Uint8Array([1]));
+    const port = createNodeTaskAssetFilePort({ configDir });
+
+    try {
+      expect(await Effect.runPromise(port.clearStaging())).toBe(0);
+      await expect(readFile(liveStagingFile)).resolves.toEqual(Buffer.from([1]));
+    } finally {
+      child.kill();
+      if (child.exitCode === null) {
+        await once(child, "exit");
+      }
+      await Effect.runPromise(port.cleanupCurrentOwner());
+    }
+  }, 1_000);
+
+  test("keeps staging when a live owner's start-time probe fails", async () => {
+    const { aliveProcessIds, configDir, createPort, port, processStartedAtMs } =
+      await createHarness();
+    await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1]) }));
+    processStartedAtMs.delete(10_001);
+    aliveProcessIds.add(10_002);
+    const recoveryPort = createPort("10000000-0000-4000-8000-000000000002", 10_002);
+
+    expect(await Effect.runPromise(recoveryPort.clearStaging())).toBe(0);
+    await expect(
+      readFile(
+        path.join(
+          configDir,
+          "task-asset-staging",
+          "instances",
+          "10000000-0000-4000-8000-000000000001",
+          workspaceId,
+          assetId,
+        ),
+      ),
+    ).resolves.toEqual(Buffer.from([1]));
+  });
+
+  test("refuses test-scope recursive cleanup under the production config directory", async () => {
+    const port = createNodeTaskAssetFilePort({
+      configDir: path.join(homedir(), ".openducktor"),
+      configDirScope: "test",
+    });
+
+    const error = await Effect.runPromise(Effect.flip(port.clearStaging()));
+    expect(error).toMatchObject({
+      _tag: "TaskAssetError",
+      failedPhase: "clear_staging",
+      cause: expect.objectContaining({
+        message: expect.stringContaining("Test scope refuses to recursively delete"),
+      }),
+    });
   });
 
   test("keeps crash cleanup bounded across repeated owner generations", async () => {

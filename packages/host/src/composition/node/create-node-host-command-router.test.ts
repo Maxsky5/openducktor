@@ -83,6 +83,7 @@ const createLogger = () => {
 };
 
 const createFailingRouterInput = (): CreateNodeHostCommandRouterInput => ({
+  configDirScope: "test",
   mcpBridgeDiscoveryMode: "production",
   onBackgroundFailure: () => Effect.void,
   runtimeDistribution: {
@@ -96,6 +97,7 @@ const createFailingRouterInput = (): CreateNodeHostCommandRouterInput => ({
 });
 
 const createAssemblyFailingRouterInput = (): CreateNodeHostCommandRouterInput => ({
+  configDirScope: "test",
   get lifecycleLogger(): HostLifecycleLogger {
     throw new Error("Router assembly failed");
   },
@@ -115,6 +117,7 @@ const createRouter = (input: {
   runtimeRegistry?: RuntimeRegistryPort;
 }) => {
   const routerInput: Parameters<typeof createNodeEffectHostCommandRouter>[0] = {
+    configDirScope: "test",
     lifecycleLogger: input.logger,
     mcpBridgeDiscoveryMode: "production",
     mcpHostBridge: createMcpHostBridge(),
@@ -178,6 +181,7 @@ describe("createNodeEffectHostCommandRouter", () => {
     const { logger } = createLogger();
     const router = Effect.runSync(
       createNodeEffectHostCommandRouter({
+        configDirScope: "test",
         lifecycleLogger: logger,
         mcpBridgeDiscoveryMode: "development",
         onBackgroundFailure: () => Effect.void,

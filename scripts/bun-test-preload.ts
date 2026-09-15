@@ -1,4 +1,13 @@
 import { createRequire } from "node:module";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+const testConfigDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-test-"));
+process.env.OPENDUCKTOR_CONFIG_DIR = testConfigDirectory;
+process.once("beforeExit", () => {
+  void rm(testConfigDirectory, { force: true, recursive: true });
+});
 
 const frontendRequire = createRequire(
   new URL("../packages/frontend/package.json", import.meta.url),

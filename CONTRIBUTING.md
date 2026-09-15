@@ -139,15 +139,15 @@ Example commit messages:
 
 ## Local Data And Config
 
-OpenDucktor resolves its base directory to `~/.openducktor` by default. You can override this with `OPENDUCKTOR_CONFIG_DIR`.
+Packaged Electron uses `~/.openducktor`. Electron and browser development use `~/.openducktor-dev`. Tests use one temporary directory for each Bun test run.
 
-A separate config root such as `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` remains useful when you want to keep contributor settings, task-store databases, and runtime caches apart from your normal app data. It is not required for parallel development because transient profiles and MCP discovery use `runtime/dev-instances/<instanceId>/`.
+`OPENDUCKTOR_CONFIG_DIR` overrides the default in every scope. Parallel development instances still keep transient profiles and MCP discovery under `runtime/dev-instances/<instanceId>/` in the selected config root.
 
 Important paths:
 
-- config file: `$OPENDUCKTOR_CONFIG_DIR/config.json` or `~/.openducktor/config.json`
-- Electron and web lifecycle logs: `$OPENDUCKTOR_CONFIG_DIR/logs/` or `~/.openducktor/logs/` (daily files, retained for 30 local calendar dates)
-- workspace task-store databases: `$OPENDUCKTOR_CONFIG_DIR/task-stores/<workspaceId>/database.sqlite` or `~/.openducktor/task-stores/<workspaceId>/database.sqlite`
+- config file: `<config-root>/config.json`
+- Electron and web lifecycle logs: `<config-root>/logs/` (daily files, retained for 30 local calendar dates)
+- workspace task-store databases: `<config-root>/task-stores/<workspaceId>/database.sqlite`
 
 OpenDucktor uses one SQLite database per configured workspace.
 

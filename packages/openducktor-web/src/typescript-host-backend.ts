@@ -981,6 +981,7 @@ export const startTypescriptHostBackendEffect = ({
       resolveExited = resolve;
     });
     const routerInput: Parameters<typeof createNodeEffectHostCommandRouter>[0] = {
+      configDirScope: "dev",
       eventBus,
       lifecycleLogger: {
         error: logger.error,

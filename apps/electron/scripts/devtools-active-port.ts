@@ -22,7 +22,7 @@ const nodeErrorCode = (cause: unknown): string | null => {
 export const resolveDevToolsActivePortPath = (developmentInstanceId: string): string =>
   path.join(
     resolveElectronProfilePath(
-      resolveOpenDucktorBaseDir(process.env),
+      resolveOpenDucktorBaseDir("dev", process.env),
       "development",
       developmentInstanceId,
     ),

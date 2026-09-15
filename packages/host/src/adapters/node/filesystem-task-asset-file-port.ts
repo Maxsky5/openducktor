@@ -16,6 +16,7 @@ import { taskAssetIdSchema } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
 import { z } from "zod";
 import { TaskAssetError } from "../../application/task-assets/task-asset-error";
+import type { OpenDucktorConfigDirScope } from "../../config/openducktor-config-dir";
 import type { TaskAssetFilePort, TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 import {
   taskAssetFileTryPromise as tryPromise,
@@ -51,13 +52,15 @@ const existingStat = async (target: string) => {
 export const createNodeTaskAssetFilePort = (
   {
     configDir,
+    configDirScope = "production",
   }: {
     configDir: string;
+    configDirScope?: OpenDucktorConfigDirScope;
   },
   ownership?: TaskAssetFileOwnershipDependencies,
 ): TaskAssetFilePort => {
   const durableRoot = path.resolve(configDir, "task-assets");
-  const ownerState = createTaskAssetFileOwnership({ configDir }, ownership);
+  const ownerState = createTaskAssetFileOwnership({ configDir, configDirScope }, ownership);
   const { ownedQuarantineRoot, ownedStagingRoot, quarantineRoot } = ownerState;
   const stagedPath = (workspaceId: string, assetId: string) =>
     path.join(ownedStagingRoot, workspaceId, assetId);

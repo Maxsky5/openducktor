@@ -63,7 +63,7 @@ const resolveDefaultDatabasePath =
   (processEnv: NodeJS.ProcessEnv): ResolveSqliteTaskStorePath =>
   ({ workspaceId }) =>
     resolveSqliteTaskStoreDatabasePath({
-      configDir: resolveOpenDucktorBaseDir(processEnv),
+      configDir: resolveOpenDucktorBaseDir("production", processEnv),
       workspaceId,
     });
 

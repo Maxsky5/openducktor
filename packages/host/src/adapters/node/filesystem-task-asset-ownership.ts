@@ -6,6 +6,10 @@ import { promisify } from "node:util";
 import { taskAssetIdSchema } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
+import {
+  type OpenDucktorConfigDirScope,
+  resolveOpenDucktorBaseDir,
+} from "../../config/openducktor-config-dir";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 
 const taskAssetFileOwnerSchema = z
@@ -53,9 +57,11 @@ const readProcessStartedAtMs = async (processId: number): Promise<number> => {
           { windowsHide: true },
         )
       : await execFileAsync("ps", ["-p", processId.toString(), "-o", "lstart="], {
-          env: { ...process.env, LC_ALL: "C" },
+          env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
         });
-  const startedAtMs = Date.parse(stdout.trim());
+  const startedAtMs = Date.parse(
+    process.platform === "win32" ? stdout.trim() : `${stdout.trim()} UTC`,
+  );
   if (!Number.isFinite(startedAtMs)) {
     throw new Error(`Could not read the start time for process ${processId}.`);
   }
@@ -106,8 +112,10 @@ const defaultOwnership = (): TaskAssetFileOwnershipDependencies => ({
 export const createTaskAssetFileOwnership = (
   {
     configDir,
+    configDirScope = "production",
   }: {
     configDir: string;
+    configDirScope?: OpenDucktorConfigDirScope;
   },
   dependencies: TaskAssetFileOwnershipDependencies = defaultOwnership(),
 ) => {
@@ -121,6 +129,25 @@ export const createTaskAssetFileOwnership = (
     `.publishing-${owner.instanceId}-${owner.processId}-${owner.startedAtMs}-${randomUUID()}.json`;
   const quarantineRootFor = (instanceId: string) =>
     path.join(quarantineRoot, "instances", instanceId);
+  const productionConfigDir = path.resolve(resolveOpenDucktorBaseDir("production", {}));
+  const assertRecursiveDeleteAllowed = (target: string): void => {
+    if (configDirScope !== "test") {
+      return;
+    }
+    const relative = path.relative(productionConfigDir, path.resolve(target));
+    const isWithinProductionConfig =
+      relative === "" ||
+      (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+    if (isWithinProductionConfig) {
+      throw new Error(
+        `Test scope refuses to recursively delete ${target} under the production config directory ${productionConfigDir}.`,
+      );
+    }
+  };
+  const removeRecursively = async (target: string): Promise<void> => {
+    assertRecursiveDeleteAllowed(target);
+    await rm(target, { force: true, recursive: true });
+  };
 
   const parseOwnerPublication = (name: string): TaskAssetFileOwner | null => {
     const match =
@@ -144,11 +171,8 @@ export const createTaskAssetFileOwnership = (
     }
     try {
       return (await dependencies.processStartedAtMs(owner.processId)) > owner.startedAtMs;
-    } catch (cause) {
-      if (!dependencies.processIsAlive(owner.processId)) {
-        return true;
-      }
-      throw cause;
+    } catch {
+      return false;
     }
   };
 
@@ -254,6 +278,7 @@ export const createTaskAssetFileOwnership = (
   };
 
   const clearExpiredStaging = async (): Promise<number> => {
+    assertRecursiveDeleteAllowed(stagingRoot);
     const deadOwners = await listDead();
     let removed = 0;
     if (await existingStat(stagingRoot)) {
@@ -262,14 +287,14 @@ export const createTaskAssetFileOwnership = (
         if (entry.name === "instances") {
           continue;
         }
-        await rm(path.join(stagingRoot, entry.name), { force: true, recursive: true });
+        await removeRecursively(path.join(stagingRoot, entry.name));
         removed += 1;
       }
     }
     for (const owner of deadOwners) {
       const ownerStagingRoot = path.join(stagingRoot, "instances", owner.instanceId);
       if (await existingStat(ownerStagingRoot)) {
-        await rm(ownerStagingRoot, { force: true, recursive: true });
+        await removeRecursively(ownerStagingRoot);
         removed += 1;
       }
       const ownerQuarantineRoot = quarantineRootFor(owner.instanceId);
@@ -277,7 +302,7 @@ export const createTaskAssetFileOwnership = (
         ? await readdir(ownerQuarantineRoot)
         : [];
       if (quarantineEntries.length === 0) {
-        await rm(ownerQuarantineRoot, { force: true, recursive: true });
+        await removeRecursively(ownerQuarantineRoot);
         await rm(ownerMarkerPath(owner.instanceId), { force: true });
       }
     }
@@ -285,13 +310,14 @@ export const createTaskAssetFileOwnership = (
   };
 
   const cleanupCurrent = async (): Promise<void> => {
+    assertRecursiveDeleteAllowed(ownedStagingRoot);
     await ensureCurrent();
-    await rm(ownedStagingRoot, { force: true, recursive: true });
+    await removeRecursively(ownedStagingRoot);
     const quarantineEntries = (await existingStat(ownedQuarantineRoot))
       ? await readdir(ownedQuarantineRoot)
       : [];
     if (quarantineEntries.length === 0) {
-      await rm(ownedQuarantineRoot, { force: true, recursive: true });
+      await removeRecursively(ownedQuarantineRoot);
       await rm(ownerMarkerPath(dependencies.owner.instanceId), { force: true });
     }
   };

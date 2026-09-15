@@ -45,7 +45,7 @@ Environment variables:
 - `ODT_HOST_TOKEN` supplies the token for `ODT_HOST_URL`.
 - `OPENDUCKTOR_CHANNEL=dev` selects development discovery. Leave it unset for production.
 - `OPENDUCKTOR_DEV_INSTANCE` selects the development instance printed by its server.
-- `OPENDUCKTOR_CONFIG_DIR` replaces the default `~/.openducktor` config root.
+- `OPENDUCKTOR_CONFIG_DIR` replaces the production `~/.openducktor` or development `~/.openducktor-dev` config root.
 
 ## Host discovery
 

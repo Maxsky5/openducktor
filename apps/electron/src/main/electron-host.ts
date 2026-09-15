@@ -6,7 +6,7 @@ import {
 } from "@openducktor/host";
 
 type ElectronHostCommandRouterInput<Input> = Input extends CreateNodeHostCommandRouterInput
-  ? Omit<Input, "mcpBridgeDiscoveryMode"> & { isPackaged: boolean }
+  ? Omit<Input, "configDirScope" | "mcpBridgeDiscoveryMode"> & { isPackaged: boolean }
   : never;
 
 export type CreateElectronHostCommandRouterInput =
@@ -22,6 +22,7 @@ const withElectronMcpBridgeDiscoveryMode = (
   const { isPackaged, ...hostInput } = input;
   return {
     ...hostInput,
+    configDirScope: isPackaged ? "production" : "dev",
     mcpBridgeDiscoveryMode: resolveElectronMcpBridgeDiscoveryMode(isPackaged),
   };
 };

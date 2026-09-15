@@ -134,7 +134,9 @@ const reportElectronMainFailure = (cause: unknown): void => {
 };
 const electronMainLogger = await initializeElectronMainLogger({
   exitProcess: (exitCode) => process.exit(exitCode),
-  loggerEffect: createElectronMainLogger(),
+  loggerEffect: createElectronMainLogger({
+    configDirScope: app.isPackaged ? "production" : "dev",
+  }),
   reportFailure: reportElectronMainFailure,
 });
 const electronMainRuntimeBindings = createElectronMainRuntimeBindings(electronMainLogger);

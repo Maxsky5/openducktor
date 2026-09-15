@@ -1,25 +1,49 @@
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { HostValidationError } from "../effect/host-errors";
 import { resolveOpenDucktorBaseDir, resolveUserPath } from "./openducktor-config-dir";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
-const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
+const PRELOAD_CONFIG_DIR = process.env[OPENDUCKTOR_CONFIG_DIR_ENV];
 
 describe("OpenDucktor config directory resolution", () => {
-  test("uses the default config directory under the user home", () => {
-    expect(resolveOpenDucktorBaseDir({})).toBe(path.join(homedir(), DEFAULT_CONFIG_DIR_NAME));
+  test("uses a separate default directory for each scope", () => {
+    expect(resolveOpenDucktorBaseDir("production", {})).toBe(path.join(homedir(), ".openducktor"));
+    expect(resolveOpenDucktorBaseDir("dev", {})).toBe(path.join(homedir(), ".openducktor-dev"));
+    const expectedTestDirectory =
+      PRELOAD_CONFIG_DIR ?? path.join(tmpdir(), `openducktor-test-${process.pid}`);
+    expect(resolveOpenDucktorBaseDir("test")).toBe(expectedTestDirectory);
+    expect(expectedTestDirectory.startsWith(`${tmpdir()}${path.sep}`)).toBe(true);
+  });
+
+  test.each(["production", "dev", "test"] as const)(
+    "uses OPENDUCKTOR_CONFIG_DIR in the %s scope",
+    (scope) => {
+      expect(
+        resolveOpenDucktorBaseDir(scope, {
+          [OPENDUCKTOR_CONFIG_DIR_ENV]: "~/.openducktor-local",
+        }),
+      ).toBe(path.join(homedir(), ".openducktor-local"));
+    },
+  );
+
+  test("returns a test directory when the preload override is absent", () => {
+    expect(resolveOpenDucktorBaseDir("test", {})).toBe(
+      path.join(tmpdir(), `openducktor-test-${process.pid}`),
+    );
   });
 
   test("expands tilde-prefixed configured directories", () => {
     expect(
-      resolveOpenDucktorBaseDir({ [OPENDUCKTOR_CONFIG_DIR_ENV]: "~/.openducktor-local" }),
+      resolveOpenDucktorBaseDir("production", {
+        [OPENDUCKTOR_CONFIG_DIR_ENV]: "~/.openducktor-local",
+      }),
     ).toBe(path.join(homedir(), ".openducktor-local"));
   });
 
   test("trims and unquotes configured directories", () => {
     expect(
-      resolveOpenDucktorBaseDir({
+      resolveOpenDucktorBaseDir("production", {
         [OPENDUCKTOR_CONFIG_DIR_ENV]: `  "~/.openducktor-local"  `,
       }),
     ).toBe(path.join(homedir(), ".openducktor-local"));
@@ -27,19 +51,21 @@ describe("OpenDucktor config directory resolution", () => {
 
   test("preserves non-tilde relative configured directories", () => {
     expect(
-      resolveOpenDucktorBaseDir({ [OPENDUCKTOR_CONFIG_DIR_ENV]: "./.openducktor-local" }),
+      resolveOpenDucktorBaseDir("production", {
+        [OPENDUCKTOR_CONFIG_DIR_ENV]: "./.openducktor-local",
+      }),
     ).toBe("./.openducktor-local");
   });
 
   test("rejects an empty configured directory", () => {
-    expect(() => resolveOpenDucktorBaseDir({ [OPENDUCKTOR_CONFIG_DIR_ENV]: "" })).toThrow(
-      "OPENDUCKTOR_CONFIG_DIR is set but empty",
-    );
+    expect(() =>
+      resolveOpenDucktorBaseDir("production", { [OPENDUCKTOR_CONFIG_DIR_ENV]: "" }),
+    ).toThrow("OPENDUCKTOR_CONFIG_DIR is set but empty");
   });
 
   test("rejects a whitespace-only configured directory with the environment field", () => {
     try {
-      resolveOpenDucktorBaseDir({ [OPENDUCKTOR_CONFIG_DIR_ENV]: "   " });
+      resolveOpenDucktorBaseDir("production", { [OPENDUCKTOR_CONFIG_DIR_ENV]: "   " });
       throw new Error("Expected whitespace-only config dir to fail");
     } catch (error) {
       expect(error).toBeInstanceOf(HostValidationError);
@@ -51,7 +77,7 @@ describe("OpenDucktor config directory resolution", () => {
 
   test("rejects quoted empty configured directories with the environment field", () => {
     try {
-      resolveOpenDucktorBaseDir({ [OPENDUCKTOR_CONFIG_DIR_ENV]: `"   "` });
+      resolveOpenDucktorBaseDir("production", { [OPENDUCKTOR_CONFIG_DIR_ENV]: `"   "` });
       throw new Error("Expected quoted-empty config dir to fail");
     } catch (error) {
       expect(error).toBeInstanceOf(HostValidationError);

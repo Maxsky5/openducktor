@@ -123,7 +123,12 @@ export const createWebLogger = ({
 }: WebLoggerInput = {}) =>
   (writer
     ? Effect.succeed(writer)
-    : createOpenDucktorDailyLogWriter({ surface: "web", environment, clock: now })
+    : createOpenDucktorDailyLogWriter({
+        surface: "web",
+        configDirScope: "dev",
+        environment,
+        clock: now,
+      })
   ).pipe(
     Effect.map((resolvedWriter): WebLogger => {
       const writeLog = (
