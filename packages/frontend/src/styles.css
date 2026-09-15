@@ -677,51 +677,20 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   z-index: 1;
 }
 
-/* Rail-scale variant of the Agent Studio running indicator. Its glow and ring
-   stay inside the badge box so the workspace icon is never covered. */
-.workspace-rail-status-running-dot {
-  position: relative;
-  display: inline-flex;
-  width: 1rem;
-  height: 1rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  isolation: isolate;
-  overflow: visible;
+/* The rail active badge matches the Agent activity card glyph, so it carries a
+   soft pulse instead of the ring the Agent Studio task tab draws. */
+@keyframes odt-workspace-rail-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }
 
-.workspace-rail-status-running-dot::before,
-.workspace-rail-status-running-dot::after {
-  position: absolute;
-  border-radius: 9999px;
-  content: "";
-  pointer-events: none;
-}
-
-.workspace-rail-status-running-dot::before {
-  inset: 0;
-  background: radial-gradient(
-    circle,
-    color-mix(in oklch, var(--status-running) 28%, transparent) 0 44%,
-    color-mix(in oklch, var(--status-running) 14%, transparent) 45% 66%,
-    transparent 74%
-  );
-  box-shadow:
-    0 0 5px color-mix(in oklch, var(--status-running) 32%, transparent),
-    0 0 10px color-mix(in oklch, var(--status-running) 20%, transparent);
-  animation: odt-task-tab-status-glow 1350ms ease-in-out infinite;
-}
-
-.workspace-rail-status-running-dot::after {
-  inset: 0.125rem;
-  border: 1px solid color-mix(in oklch, var(--status-running) 48%, transparent);
-  animation: odt-task-tab-status-ring 1350ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
-}
-
-.workspace-rail-status-running-dot svg {
-  position: relative;
-  z-index: 1;
+.workspace-rail-status-running-icon {
+  animation: odt-workspace-rail-status-pulse 1350ms ease-in-out infinite;
 }
 
 .kanban-active-session-card {
@@ -786,8 +755,7 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   .onboarding-stage-enter,
   .agent-studio-task-status-running-dot::before,
   .agent-studio-task-status-running-dot::after,
-  .workspace-rail-status-running-dot::before,
-  .workspace-rail-status-running-dot::after,
+  .workspace-rail-status-running-icon,
   .odt-border-ray-segment {
     animation: none;
   }

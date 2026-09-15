@@ -1,4 +1,4 @@
-import { Circle, CircleAlert, TriangleAlert } from "lucide-react";
+import { Activity, CircleAlert, TriangleAlert } from "lucide-react";
 import type { ReactElement } from "react";
 import type { WorkspaceActivityState } from "@/features/workspace-activity/workspace-activity-state";
 
@@ -18,18 +18,16 @@ export type WorkspaceActivityBadge = {
 };
 
 /**
- * Badge icons, matching the indicators the Agent Studio task tabs already use.
+ * Badge icons, matching the Agent activity card of the sidebar.
  *
  * The error glyph is new, because a failed session is marked by a plain dot
  * inside a workspace today.
  */
 const WORKSPACE_ACTIVITY_ICONS = {
-  inputRequired: <CircleAlert className="size-4 text-warning-accent" />,
-  error: <TriangleAlert className="size-4 text-destructive" />,
+  inputRequired: <CircleAlert className="size-[0.8rem] text-warning-accent" />,
+  error: <TriangleAlert className="size-[0.8rem] text-destructive" />,
   active: (
-    <span className="workspace-rail-status-running-dot">
-      <Circle className="size-3 fill-status-running text-status-running" />
-    </span>
+    <Activity className="workspace-rail-status-running-icon size-[0.8rem] text-info-accent" />
   ),
 } satisfies Record<WorkspaceActivityBadgeKey, ReactElement>;
 
@@ -64,9 +62,8 @@ export const workspaceActivityBadges = (
  *
  * The strip is absolutely positioned inside the tile button, so it changes no
  * tile size and no rail spacing, and every pointer event still reaches the
- * button. A 16px badge is taller than the 8px band above the 24px avatar box,
- * so the strip overlaps the top of the workspace icon, as a corner badge does.
- * The badges overlap each other just enough that three still fit the 40px tile.
+ * button. It straddles the top edge of the tile, half over the tile and half
+ * over the gap above it, which keeps it clear of the workspace icon.
  */
 export function WorkspaceRailActivityBadges({
   badges,
@@ -82,13 +79,13 @@ export function WorkspaceRailActivityBadges({
   return (
     <span
       id={describedById}
-      className="absolute right-0 top-0 inline-flex items-start -space-x-1"
+      className="absolute right-0 top-0 inline-flex -translate-y-1/2 items-start -space-x-0.5"
       data-testid="workspace-rail-activity-badges"
     >
       {badges.map((badge) => (
         <span
           key={badge.key}
-          className="inline-flex size-4 items-center justify-center rounded-full bg-background"
+          className="inline-flex size-[0.8rem] items-center justify-center rounded-full bg-background"
           title={badge.label}
         >
           <span aria-hidden="true" className="inline-flex items-center justify-center">
