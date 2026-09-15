@@ -73,9 +73,14 @@ describe("Electron main lifecycle policy", () => {
     ).toBeGreaterThan(windowOpenHandlerIndex);
   });
 
-  test("native context menus wait for the renderer claim window", () => {
+  test("native context menus wait for their renderer claim", () => {
     const source = readRepoFile("apps/electron/src/main/main-menu.ts");
 
+    expect(source).toContain('window.webContents.on("context-menu", (_event, params) => {');
+    expect(source).toContain("webContentsId: window.webContents.id");
+    expect(source).toContain("x: params.x");
+    expect(source).toContain("y: params.y");
+    expect(source).toContain("contextMenuClaims.takeClaim(eventId)");
     expect(source).toContain("}, CONTEXT_MENU_CLAIM_WINDOW_MS);");
     expect(source).not.toContain("}, 50);");
   });

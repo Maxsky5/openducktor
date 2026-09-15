@@ -255,10 +255,8 @@ export const createWorkspaceLifecycleService = ({
         repoPath: journaledRepoConfig.repoPath,
         workspaceId: input.workspaceId,
       });
-
       const removedWorktrees = [...startedRecord.removedWorktrees];
       let phase = startedRecord.phase;
-
       if (phase === "worktrees" && startedRecord.removeTaskWorktrees) {
         const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
           settingsConfig,
@@ -267,11 +265,11 @@ export const createWorkspaceLifecycleService = ({
         const removedComparisons = new Set(
           removedWorktrees.map((path) => normalizePathForComparison(path)),
         );
-        const pendingWorktreePath = startedRecord.pendingWorktreePath;
+        const pendingPath = startedRecord.pendingWorktreePath;
         let worktreePaths = preflightWorktreePaths;
         if (worktreePaths === null) {
           const inventoryResult = yield* Effect.either(
-            collectWorktreePaths(input, journaledRepoConfig, pendingWorktreePath),
+            collectWorktreePaths(input, journaledRepoConfig, pendingPath),
           );
           if (inventoryResult._tag === "Left") {
             return yield* failRemovalPhase(
@@ -286,15 +284,18 @@ export const createWorkspaceLifecycleService = ({
           worktreePaths = inventoryResult.right;
         }
         if (
-          pendingWorktreePath !== null &&
+          pendingPath !== null &&
           !worktreePaths.some(
-            (worktreePath) =>
-              normalizePathForComparison(worktreePath) ===
-              normalizePathForComparison(pendingWorktreePath),
-          ) &&
-          !(yield* settingsConfig.pathExists(pendingWorktreePath))
+            (path) => normalizePathForComparison(path) === normalizePathForComparison(pendingPath),
+          )
         ) {
-          yield* persistProgress(input.workspaceId, "worktrees", removedWorktrees, null, null);
+          return yield* failRemovalPhase(
+            input.workspaceId,
+            "worktrees",
+            removedWorktrees,
+            pendingPath,
+            `OpenDucktor cannot verify that ${pendingPath} was deleted. Retry with its storage connected. If the path was already deleted while storage was unavailable, create an empty directory at that path and retry.`,
+          );
         }
         for (const worktreePath of worktreePaths) {
           if (removedComparisons.has(normalizePathForComparison(worktreePath))) {

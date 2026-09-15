@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceRail } from "./workspace-rail";
@@ -122,6 +123,26 @@ describe("WorkspaceRail", () => {
     expect(selectWorkspaceMock).toHaveBeenCalledTimes(1);
     expect(selectWorkspaceMock).toHaveBeenCalledWith("beta");
     expect(openRepositoryModal).toHaveBeenCalledTimes(1);
+  });
+
+  test("claims a workspace context menu at its click position", () => {
+    const previousBridge = getShellBridge();
+    const claimContextMenu = mock(() => {});
+    workspaceState.workspaces = [workspaceRecord("alpha", { workspaceName: "Alpha Repo" })];
+    configureShellBridge({ ...previousBridge, claimContextMenu });
+
+    const view = renderRail();
+    try {
+      fireEvent.contextMenu(screen.getByRole("button", { name: "Alpha Repo" }), {
+        clientX: 12,
+        clientY: 34,
+      });
+
+      expect(claimContextMenu).toHaveBeenCalledWith({ x: 12, y: 34 });
+    } finally {
+      view.unmount();
+      configureShellBridge(previousBridge);
+    }
   });
 
   test("retries an incomplete removal from the rail recovery entry", async () => {

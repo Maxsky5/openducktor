@@ -26,4 +26,11 @@ describe("Electron preload policy", () => {
     );
     expect(source).not.toContain("clipboard.readText");
   });
+
+  test("forwards context menu click positions to the main process", () => {
+    const source = readPreloadSource();
+
+    expect(source).toContain("claimContextMenu(position)");
+    expect(source).toContain("ipcRenderer.send(ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL, position)");
+  });
 });
