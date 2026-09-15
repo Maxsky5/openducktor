@@ -154,13 +154,18 @@ const emitTurnStartErrorLater = (
   });
 };
 
+type CodexTurnStart = {
+  readonly acceptedUserMessage: AcceptedAgentUserMessage | null;
+  readonly turnStartPromise: ReturnType<CodexAppServerClient["turnStart"]> | null;
+};
+
 const runCodexTurn = async (
   context: CodexTurnLifecycleContext,
   externalSessionId: string,
   parts: AgentUserMessagePart[],
   acceptedUserMessage: AcceptedAgentUserMessage | null,
   requestedModel?: AgentModelSelection,
-): Promise<AcceptedAgentUserMessage | null> => {
+): Promise<CodexTurnStart> => {
   const session = context.sessions.get(externalSessionId);
   if (!session) {
     throw new Error(`Unknown Codex session '${externalSessionId}'.`);
@@ -178,7 +183,7 @@ const runCodexTurn = async (
     }
     const accepted = await steerActiveTurn(context, existingActiveTurn, parts, acceptedUserMessage);
     if (accepted) {
-      return accepted;
+      return { acceptedUserMessage: accepted, turnStartPromise: null };
     }
 
     const latestActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
@@ -286,8 +291,7 @@ const runCodexTurn = async (
   if (acceptedUserMessage) {
     context.emitUserMessage(acceptedUserMessage, parts);
   }
-  emitTurnStartErrorLater(context, session, turnStartPromise);
-  return acceptedUserMessage;
+  return { acceptedUserMessage, turnStartPromise };
 };
 
 export const startCodexTurnForSession = async (
@@ -297,27 +301,46 @@ export const startCodexTurnForSession = async (
   acceptedUserMessage: AcceptedAgentUserMessage,
   requestedModel?: AgentModelSelection,
 ): Promise<AcceptedAgentUserMessage> => {
-  const accepted = await runCodexTurn(
+  const started = await runCodexTurn(
     context,
     externalSessionId,
     parts,
     acceptedUserMessage,
     requestedModel,
   );
-  if (!accepted) {
+  if (!started.acceptedUserMessage) {
     throw new Error(`Codex session '${externalSessionId}' did not accept the user message.`);
   }
-  return accepted;
+  const session = context.sessions.get(externalSessionId);
+  if (session && started.turnStartPromise) {
+    emitTurnStartErrorLater(context, session, started.turnStartPromise);
+  }
+  return started.acceptedUserMessage;
 };
 
 /**
  * Starts one native Codex turn with `input: []` so the runtime continues the saved history
- * without creating a user message.
+ * without creating a user message. It awaits the native turn admission, so a rejected
+ * `turn/start` reaches the caller as a typed continuation failure.
  */
 export const startCodexContinuationTurn = async (
   context: CodexTurnLifecycleContext,
   externalSessionId: string,
   requestedModel?: AgentModelSelection,
 ): Promise<void> => {
-  await runCodexTurn(context, externalSessionId, [], null, requestedModel);
+  const session = context.sessions.get(externalSessionId);
+  const started = await runCodexTurn(context, externalSessionId, [], null, requestedModel);
+  if (!started.turnStartPromise) {
+    throw new Error(
+      `Codex session '${externalSessionId}' did not start a native continuation turn.`,
+    );
+  }
+  try {
+    await started.turnStartPromise;
+  } catch (error) {
+    if (session && sessionIsRetained(context, session)) {
+      context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
+    }
+    throw error;
+  }
 };

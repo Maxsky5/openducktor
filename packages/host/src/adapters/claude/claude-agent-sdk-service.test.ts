@@ -1,8 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
-import { HostDependencyError } from "../../effect/host-errors";
+import { HostDependencyError, HostOperationError } from "../../effect/host-errors";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
@@ -1010,5 +1011,68 @@ describe("createClaudeAgentSdkService", () => {
       ).rejects.toThrow(invalid.message);
       expect(session.pendingQuestions.has("question-1")).toBe(true);
     }
+  });
+});
+
+describe("continueInterruptedTurn eligibility", () => {
+  const continuationInput = {
+    repoPath: "/repo/",
+    runtimeKind: "claude" as const,
+    workingDirectory: "/repo/worktree/",
+    externalSessionId: "session-1",
+    runtimePolicy: { kind: "claude" as const },
+    sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+  };
+
+  const resumeFailureReason = async (operation: Effect.Effect<unknown, unknown, never>) => {
+    const failure = await Effect.runPromise(Effect.flip(operation));
+    if (!(failure instanceof HostOperationError)) {
+      throw new Error(`Expected a host operation failure, received: ${String(failure)}`);
+    }
+    if (!(failure.cause instanceof InterruptedTurnResumeError)) {
+      throw new Error(`Expected a typed resume failure, received: ${String(failure.cause)}`);
+    }
+    return failure.cause.reason;
+  };
+
+  test("refuses a restart continuation when the persisted transcript cannot be read", async () => {
+    const service = createService(null);
+
+    await expect(
+      resumeFailureReason(
+        service.continueInterruptedTurn(
+          { ...continuationInput, workingDirectory: "/missing-worktree" },
+          "runtime-claude",
+        ),
+      ),
+    ).resolves.toBe("probe_failed");
+  });
+
+  test("refuses a live continuation that waits for pending input", async () => {
+    const session = createSession({
+      pendingApprovals: new Map([
+        [
+          "approval-1",
+          {
+            event: {
+              type: "approval_required",
+              externalSessionId: "session-1",
+              timestamp: "2026-06-25T20:00:00.000Z",
+              requestId: "approval-1",
+              requestType: "command_execution",
+              title: "Approve Bash",
+              tool: { name: "Bash", input: { command: "cat /etc/passwd" } },
+              mutation: "read_only",
+            },
+            resolve: () => {},
+          },
+        ],
+      ]),
+    });
+    const service = createService(session);
+
+    await expect(
+      resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
+    ).resolves.toBe("waiting_input");
   });
 });

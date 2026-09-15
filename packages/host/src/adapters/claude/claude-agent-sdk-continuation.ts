@@ -1,3 +1,4 @@
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { interruptedTurnResumeError } from "@openducktor/core";
 import { hasActiveClaudeWork } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
@@ -23,6 +24,35 @@ export const assertClaudeContinuationEligible = (
     });
   }
   if (session.lastAssistantTextFinal === true) {
+    throw interruptedTurnResumeError({
+      reason: "completed_turn",
+      message: `Claude session '${externalSessionId}' has a final assistant result.`,
+    });
+  }
+};
+
+const hasFinalAssistantHistory = (message: AgentSessionHistoryMessage): boolean =>
+  message.role === "assistant" &&
+  message.parts.some(
+    (part) => part.kind === "step" && part.phase === "finish" && part.reason === "stop",
+  );
+
+/**
+ * Rejects a continuation that the persisted transcript cannot start. The host uses it
+ * after a restart, when no live session entry exists yet.
+ */
+export const assertClaudePersistedContinuationEligible = (
+  history: readonly AgentSessionHistoryMessage[],
+  externalSessionId: string,
+): void => {
+  const latestUserIndex = history.findLastIndex((message) => message.role === "user");
+  if (latestUserIndex < 0) {
+    throw interruptedTurnResumeError({
+      reason: "ineligible_turn_state",
+      message: `Claude session '${externalSessionId}' has no unfinished user turn to continue.`,
+    });
+  }
+  if (history.slice(latestUserIndex + 1).some(hasFinalAssistantHistory)) {
     throw interruptedTurnResumeError({
       reason: "completed_turn",
       message: `Claude session '${externalSessionId}' has a final assistant result.`,

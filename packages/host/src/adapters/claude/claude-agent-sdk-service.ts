@@ -38,7 +38,6 @@ import {
   flushClaudeLiveContextUsageRefresh,
   loadClaudeSessionContextUsage,
 } from "./claude-agent-sdk-context-usage";
-import { assertClaudeContinuationEligible } from "./claude-agent-sdk-continuation";
 import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
 import {
   prepareClaudeApprovalReply,
@@ -57,6 +56,10 @@ import {
   resumedClaudeSessionLaunch,
 } from "./claude-agent-sdk-session-policy";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
+import {
+  checkLiveClaudeContinuationEligibility,
+  checkPersistedClaudeContinuationEligibility,
+} from "./claude-agent-sdk-service-continuation";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { loadClaudeTodos } from "./claude-agent-sdk-todos";
@@ -130,9 +133,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         Effect.gen(this, function* () {
           const existing = this.sessionStore.get(input.externalSessionId);
           if (existing) {
-            assertClaudeSessionRef(existing, input, "continue interrupted turn");
-            assertClaudeContinuationEligible(existing, input.externalSessionId);
+            yield* checkLiveClaudeContinuationEligibility(existing, input);
             this.sessionStore.close(existing);
+          } else {
+            yield* checkPersistedClaudeContinuationEligibility(input, this.now);
           }
           return yield* this.createSession(
             input,

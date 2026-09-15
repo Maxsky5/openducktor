@@ -1,5 +1,4 @@
 import type { AgentEnginePort } from "@openducktor/core";
-import { errorMessage } from "@/lib/errors";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import { toBoundRuntimeSessionRef } from "../support/session-runtime-ref";
@@ -13,7 +12,8 @@ export type ContinueInterruptedTurnDependencies = {
 /**
  * Starts one native continuation of the latest unfinished turn. The runtime emits the
  * new output through the live session stream, so this call writes no local session state
- * and leaves the composer draft and transcript untouched.
+ * and leaves the composer draft and transcript untouched. A host failure propagates
+ * unchanged so the chat can show its typed reason and next action.
  */
 export const createContinueInterruptedTurn = ({
   workspaceRepoPath,
@@ -25,7 +25,6 @@ export const createContinueInterruptedTurn = ({
     if (!session) {
       return;
     }
-    const externalSessionId = session.externalSessionId;
     const sessionRef = toBoundRuntimeSessionRef(
       requireWorkspaceRepoPath(workspaceRepoPath),
       session,
@@ -37,12 +36,7 @@ export const createContinueInterruptedTurn = ({
     if (session.selectedModel) {
       continuationInput.model = session.selectedModel;
     }
-    try {
-      await adapter.continueInterruptedTurn(continuationInput);
-    } catch (error) {
-      throw new Error(
-        `Failed to continue the interrupted turn for session '${externalSessionId}': ${errorMessage(error)}`,
-      );
-    }
+    // Keep the host failure intact: the chat reads its typed reason and next action.
+    await adapter.continueInterruptedTurn(continuationInput);
   };
 };

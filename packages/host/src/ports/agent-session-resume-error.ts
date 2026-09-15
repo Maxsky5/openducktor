@@ -64,6 +64,9 @@ export const toAgentSessionResumeError = (
   if (cause instanceof AgentSessionResumeError) {
     return cause;
   }
+  if (cause instanceof HostOperationError && cause.cause instanceof InterruptedTurnResumeError) {
+    return toAgentSessionResumeError(cause.cause, sessionRef, operation);
+  }
   if (cause instanceof InterruptedTurnResumeError) {
     // SAFETY: the core reasons are a subset of the wire reasons, so the cast cannot widen.
     const reason = cause.reason as AgentSessionResumeFailureReason;

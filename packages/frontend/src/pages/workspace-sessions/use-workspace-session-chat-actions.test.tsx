@@ -16,6 +16,57 @@ import { createSendAgentMessage } from "@/state/operations/agent-orchestrator/ha
 import { createSessionTurnMetadata } from "@/state/operations/agent-orchestrator/support/session-turn-metadata";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 
+const createWorkspaceSessionRecord = (): WorkspaceSession => ({
+  id: "draft",
+  runtimeKind: "codex",
+  externalSessionId: null,
+  executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
+  selectedModel: null,
+  roleSnapshot: null,
+  generatedTitle: null,
+  manualTitle: null,
+  createdAt: 1000,
+  updatedAt: 1000,
+  archivedAt: null,
+});
+
+const createOperations = (
+  overrides: Pick<AgentOperationsContextValue, "sendAgentMessage" | "continueInterruptedTurn">,
+): AgentOperationsContextValue => ({
+  describeGeneratedImages: async () => {
+    throw new Error("Unexpected image metadata read");
+  },
+  beginGeneratedImageBatch: async () => {
+    throw new Error("Unexpected image batch");
+  },
+  releaseGeneratedImageBatch: async () => {
+    throw new Error("Unexpected image batch release");
+  },
+  readGeneratedImage: async () => {
+    throw new Error("Unexpected image read");
+  },
+  readSessionTodos: async () => {
+    throw new Error("Unexpected todos read");
+  },
+  readSessionHistory: async () => {
+    throw new Error("Unexpected history read");
+  },
+  loadAgentSessionHistory: async () => {
+    throw new Error("Unexpected history load");
+  },
+  loadAgentSessionContext: async () => {
+    throw new Error("Unexpected context read");
+  },
+  startAgentSession: async () => {
+    throw new Error("Unexpected workflow start");
+  },
+  stopAgentSession: async () => {},
+  updateAgentSessionModel: () => {},
+  replyAgentApproval: async () => {},
+  answerAgentQuestion: async () => {},
+  ...overrides,
+});
+
 test.each([
   ["rejected", false],
   ["accepted", false],
@@ -25,19 +76,7 @@ test.each([
   "first send preserves the %s result, already bound=%s",
   async (outcome, alreadyBound) => {
     const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
-    const draftRecord: WorkspaceSession = {
-      id: "draft",
-      runtimeKind: "codex",
-      externalSessionId: null,
-      executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
-      selectedModel: null,
-      roleSnapshot: null,
-      generatedTitle: null,
-      manualTitle: null,
-      createdAt: 1000,
-      updatedAt: 1000,
-      archivedAt: null,
-    };
+    const draftRecord = createWorkspaceSessionRecord();
     const boundRecord = { ...draftRecord, externalSessionId: "native" };
     const store = createAgentSessionsStore("/repo");
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -96,41 +135,10 @@ test.each([
         },
       },
     });
-    const operations: AgentOperationsContextValue = {
-      describeGeneratedImages: async () => {
-        throw new Error("Unexpected image metadata read");
-      },
-      beginGeneratedImageBatch: async () => {
-        throw new Error("Unexpected image batch");
-      },
-      releaseGeneratedImageBatch: async () => {
-        throw new Error("Unexpected image batch release");
-      },
-      readGeneratedImage: async () => {
-        throw new Error("Unexpected image read");
-      },
-      readSessionTodos: async () => {
-        throw new Error("Unexpected todos read");
-      },
-      readSessionHistory: async () => {
-        throw new Error("Unexpected history read");
-      },
-      loadAgentSessionHistory: async () => {
-        throw new Error("Unexpected history load");
-      },
-      loadAgentSessionContext: async () => {
-        throw new Error("Unexpected context read");
-      },
-      startAgentSession: async () => {
-        throw new Error("Unexpected workflow start");
-      },
+    const operations = createOperations({
       sendAgentMessage,
-      stopAgentSession: async () => {},
       continueInterruptedTurn: async () => undefined,
-      updateAgentSessionModel: () => {},
-      replyAgentApproval: async () => {},
-      answerAgentQuestion: async () => {},
-    };
+    });
     configureShellBridge(
       createShellBridgeFixture({
         client: {
@@ -218,3 +226,59 @@ test.each([
     }
   },
 );
+
+test("shows the host reason and next action when a continuation is refused", async () => {
+  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+  const failure = new HostInvokeError("Continuation refused", {
+    kind: "agent_session_resume",
+    agentSessionResumeFailure: {
+      reason: "completed_turn",
+      sessionRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      },
+      operation: "agent-session.continue-interrupted-turn",
+      message: "OpenCode session 'session-1' has a completed latest turn.",
+      nextAction: "Send a new message to start new work.",
+    },
+  });
+  const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const operations = createOperations({
+    sendAgentMessage: async () => {},
+    continueInterruptedTurn: async () => {
+      throw failure;
+    },
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>
+        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+      </AgentSessionsContext>
+    </QueryClientProvider>
+  );
+  const view = renderHook(({ record }) => useWorkspaceSessionChatActions(workspace, record), {
+    wrapper,
+    initialProps: { record: { ...createWorkspaceSessionRecord(), externalSessionId: "native" } },
+  });
+
+  try {
+    await act(async () => {
+      view.result.current.resumeInterruptedTurn({
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      });
+    });
+
+    expect(view.result.current.resumeSessionError).toBe(
+      "OpenCode session 'session-1' has a completed latest turn. Send a new message to start new work.",
+    );
+    expect(view.result.current.isResumingSession).toBe(false);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+  }
+});

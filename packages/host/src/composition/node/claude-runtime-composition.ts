@@ -28,9 +28,10 @@ export type ClaudeRuntimeComposition = {
 
 export type CreateClaudeRuntimeCompositionInput = {
   /**
-   * Turns Claude interrupted-turn resume on or off. Defaults to on.
+   * Turns Claude interrupted-turn resume on or off. The node composition passes the
+   * same value to the runtime descriptor gate, so the UI and the adapter agree.
    */
-  interruptedTurnResumeEnabled?: boolean;
+  interruptedTurnResumeEnabled: boolean;
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
@@ -43,7 +44,7 @@ export type CreateClaudeRuntimeCompositionInput = {
 };
 
 export const createClaudeRuntimeComposition = ({
-  interruptedTurnResumeEnabled = true,
+  interruptedTurnResumeEnabled,
   liveSessionLifecycle,
   onBackgroundFailure,
   processEnv,

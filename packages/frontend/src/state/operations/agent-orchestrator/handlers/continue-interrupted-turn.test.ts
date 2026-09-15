@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { HostInvokeError } from "@openducktor/host-client";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { buildSession } from "./session-actions.test-helpers";
@@ -101,17 +102,30 @@ describe("createContinueInterruptedTurn", () => {
     expect(session.status).toBe("error");
   });
 
-  test("reports the session id when the runtime rejects the continuation", async () => {
+  test("keeps the typed host failure intact when the runtime rejects the continuation", async () => {
+    const failure = new HostInvokeError("Continuation refused", {
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "completed_turn",
+        sessionRef: {
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+          externalSessionId: "session-1",
+        },
+        operation: "agent-session.continue-interrupted-turn",
+        message: "OpenCode session 'session-1' has a completed latest turn.",
+        nextAction: "Send a new message to start new work.",
+      },
+    });
     const { continueInterruptedTurn } = buildDependencies({
       session: buildSession({ status: "error" }),
       continueInterruptedTurn: async () => {
-        throw new Error("continuation refused");
+        throw failure;
       },
     });
 
-    await expect(continueInterruptedTurn(identity)).rejects.toThrow(
-      "Failed to continue the interrupted turn for session 'session-1': continuation refused",
-    );
+    await expect(continueInterruptedTurn(identity)).rejects.toBe(failure);
   });
 
   test("does nothing when the session is not loaded", async () => {

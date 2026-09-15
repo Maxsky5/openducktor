@@ -6,6 +6,7 @@ import {
   type ParsedOpencodeMessage,
 } from "./opencode-ingress";
 import { toOpencodeSessionStatusMap } from "./live-session-snapshots";
+import { listOpencodeSessionPendingInput } from "./pending-input-ops";
 import { toOpenCodeRequestError } from "./request-errors";
 
 type OpencodeSessionMessageEntry = {
@@ -29,6 +30,7 @@ export type OpencodeInterruptedTurnProbe =
   | { readonly kind: "unfinished_turn" }
   | { readonly kind: "completed_turn" }
   | { readonly kind: "live_turn" }
+  | { readonly kind: "waiting_input" }
   | { readonly kind: "no_unfinished_turn" };
 
 export type ProbeOpencodeInterruptedTurnInput = {
@@ -54,7 +56,7 @@ const isLiveStatus = (status: { type: string } | undefined): boolean =>
   status?.type === "busy" || status?.type === "retry";
 
 /**
- * Reads the authoritative OpenCode session status and native message rows.
+ * Reads the authoritative OpenCode session status, pending input, and native message rows.
  * It never inspects display text; completion comes from `time.completed`.
  */
 export const probeOpencodeInterruptedTurn = async (
@@ -69,6 +71,14 @@ export const probeOpencodeInterruptedTurn = async (
   );
   if (isLiveStatus(statuses[input.externalSessionId])) {
     return { kind: "live_turn" };
+  }
+
+  const pendingInput = await listOpencodeSessionPendingInput(input.client, {
+    workingDirectory: input.workingDirectory,
+    externalSessionId: input.externalSessionId,
+  });
+  if (pendingInput.approvals.length > 0 || pendingInput.questions.length > 0) {
+    return { kind: "waiting_input" };
   }
 
   const messages = await readSessionMessages(input);
@@ -144,6 +154,11 @@ export const toOpencodeInterruptedTurnResumeError = (
       return interruptedTurnResumeError({
         reason: "completed_turn",
         message: `OpenCode session '${externalSessionId}' has a completed latest turn.`,
+      });
+    case "waiting_input":
+      return interruptedTurnResumeError({
+        reason: "waiting_input",
+        message: `OpenCode session '${externalSessionId}' is waiting for a pending approval or question.`,
       });
     case "no_unfinished_turn":
       return interruptedTurnResumeError({

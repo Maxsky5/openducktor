@@ -58,16 +58,66 @@ const assistantEntry = (
 const createClient = ({
   status = "idle",
   messages,
+  pendingApproval = false,
+  pendingQuestion = false,
 }: {
   status?: "busy" | "idle" | "retry";
   messages: MessageEntry[];
+  pendingApproval?: boolean;
+  pendingQuestion?: boolean;
 }) => {
   const statusCalls: unknown[] = [];
   const messagesCalls: unknown[] = [];
   const promptCalls: unknown[] = [];
+  const pendingInputCalls: unknown[] = [];
   const baseClient = createOpencodeClient({ baseUrl: "http://127.0.0.1:12345" });
   const client: OpencodeClient = {
     ...baseClient,
+    permission: {
+      ...baseClient.permission,
+      list: async (request) => {
+        pendingInputCalls.push({ method: "permission.list", request });
+        return {
+          data: pendingApproval
+            ? [
+                {
+                  id: "permission-1",
+                  sessionID: "session-1",
+                  permission: "read",
+                  patterns: ["README.md"],
+                  metadata: {},
+                  always: [],
+                },
+              ]
+            : [],
+          error: undefined,
+        };
+      },
+    },
+    question: {
+      ...baseClient.question,
+      list: async (request) => {
+        pendingInputCalls.push({ method: "question.list", request });
+        return {
+          data: pendingQuestion
+            ? [
+                {
+                  id: "question-1",
+                  sessionID: "session-1",
+                  questions: [
+                    {
+                      header: "Confirm",
+                      question: "Continue?",
+                      options: [{ label: "Yes", description: "Continue" }],
+                    },
+                  ],
+                },
+              ]
+            : [],
+          error: undefined,
+        };
+      },
+    },
     session: {
       ...baseClient.session,
       status: async (request) => {
@@ -84,7 +134,7 @@ const createClient = ({
       },
     },
   };
-  return { client, statusCalls, messagesCalls, promptCalls };
+  return { client, statusCalls, messagesCalls, promptCalls, pendingInputCalls };
 };
 
 const probeInput = (client: OpencodeClient) => ({
@@ -156,6 +206,29 @@ describe("opencode interrupted turn continuation", () => {
     });
   });
 
+  test("reports waiting input from the pending approvals of the exact session", async () => {
+    const { client, messagesCalls } = createClient({
+      messages: [userEntry("user-1", 1)],
+      pendingApproval: true,
+    });
+
+    await expect(probeOpencodeInterruptedTurn(probeInput(client))).resolves.toEqual({
+      kind: "waiting_input",
+    });
+    expect(messagesCalls).toHaveLength(0);
+  });
+
+  test("reports waiting input from the pending questions of the exact session", async () => {
+    const { client } = createClient({
+      messages: [userEntry("user-1", 1)],
+      pendingQuestion: true,
+    });
+
+    await expect(probeOpencodeInterruptedTurn(probeInput(client))).resolves.toEqual({
+      kind: "waiting_input",
+    });
+  });
+
   test("maps probe outcomes to typed resume failures", () => {
     expect(toOpencodeInterruptedTurnResumeError({ kind: "live_turn" }, "session-1")).toMatchObject({
       reason: "live_turn",
@@ -163,6 +236,9 @@ describe("opencode interrupted turn continuation", () => {
     expect(
       toOpencodeInterruptedTurnResumeError({ kind: "completed_turn" }, "session-1"),
     ).toMatchObject({ reason: "completed_turn" });
+    expect(
+      toOpencodeInterruptedTurnResumeError({ kind: "waiting_input" }, "session-1"),
+    ).toMatchObject({ reason: "waiting_input" });
     expect(
       toOpencodeInterruptedTurnResumeError({ kind: "no_unfinished_turn" }, "session-1"),
     ).toMatchObject({ reason: "ineligible_turn_state" });

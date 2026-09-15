@@ -180,6 +180,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const resolveRuntimeMcpBridge = (kind: "codex" | "opencode", repoPath: string) =>
     resolveWorkspaceRuntimeMcpBridgeConnection(resolvedMcpHostBridge, kind, repoPath);
   const claudeRuntime = createClaudeRuntimeComposition({
+    interruptedTurnResumeEnabled: claudeInterruptedTurnResumeEnabled,
     liveSessionLifecycle: agentSessionLiveStateService,
     onBackgroundFailure,
     processEnv,

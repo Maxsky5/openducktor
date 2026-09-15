@@ -28,6 +28,7 @@ import {
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
+import { HostInvokeError } from "@openducktor/host-client";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   type AgentSessionFixtureOverrides,
@@ -412,6 +413,46 @@ describe("useAgentStudioSessionActions", () => {
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+  });
+
+  test("shows the host reason and next action when the runtime refuses a continuation", async () => {
+    const failure = new HostInvokeError("Continuation refused", {
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "completed_turn",
+        sessionRef: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        },
+        operation: "agent-session.continue-interrupted-turn",
+        message: "OpenCode session 'session-1' has a completed latest turn.",
+        nextAction: "Send a new message to start new work.",
+      },
+    });
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      ...selectedSessionArgs(),
+      continueInterruptedTurn: async () => {
+        throw failure;
+      },
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.onResumeSession();
+      });
+      await harness.waitFor(() => harness.getLatest().resumeSessionError !== null);
+
+      expect(harness.getLatest().resumeSessionError).toBe(
+        "OpenCode session 'session-1' has a completed latest turn. Send a new message to start new work.",
+      );
+      expect(harness.getLatest().isResumingSession).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("prepares a message-first session target without starting or sending", async () => {
