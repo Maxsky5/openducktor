@@ -4,7 +4,7 @@ import type { ModelPickerValue } from "@/components/features/agents/model-picker
 import { resolveModelSelectionForPair } from "@/features/model-selection/model-selection-state";
 import type { ensureDraftAgentDefault } from "./settings-modal-model";
 
-export type RepoAgentDefaultDraft = {
+export type SelectedRepoAgentDefault = {
   runtimeKind: RuntimeKind;
   providerId: string;
   modelId: string;
@@ -22,7 +22,7 @@ export const resolveRepoAgentDefaultModelPickerSelection = ({
   currentRuntimeKind: RuntimeKind | null;
   targetCatalog: AgentModelCatalog;
   value: ModelPickerValue;
-}): RepoAgentDefaultDraft | null => {
+}): SelectedRepoAgentDefault | null => {
   let currentSelection: AgentModelSelection | null = null;
   if (currentValue && currentRuntimeKind) {
     currentSelection = {

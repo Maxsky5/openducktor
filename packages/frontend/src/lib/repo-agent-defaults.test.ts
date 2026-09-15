@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { RepoSettingsInput } from "@/types/state-slices";
+import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import {
   normalizeRepoAgentDefaultForSave,
+  pickRepoAgentDefault,
   repoAgentDefaultRuntimeKindError,
   resolveConfiguredAgentRuntimeKind,
 } from "./repo-agent-defaults";
@@ -25,6 +26,27 @@ const createRepoSettings = (overrides: Partial<RepoSettingsInput> = {}): RepoSet
 });
 
 describe("repo-agent-defaults", () => {
+  test("picks the role default before the repository default model", () => {
+    const roleDefault: RepoAgentDefaultInput = {
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "",
+      profileId: "",
+    };
+    const defaultModel: RepoAgentDefaultInput = {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5.1",
+      variant: "",
+      profileId: "",
+    };
+
+    expect(pickRepoAgentDefault(roleDefault, defaultModel)).toBe(roleDefault);
+    expect(pickRepoAgentDefault(null, defaultModel)).toBe(defaultModel);
+    expect(pickRepoAgentDefault(undefined, null)).toBeNull();
+  });
+
   test("resolves role runtime kind before repository default runtime kind", () => {
     expect(
       resolveConfiguredAgentRuntimeKind(

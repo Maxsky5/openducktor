@@ -2,6 +2,7 @@ import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openduckto
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
+import { pickRepoAgentDefault } from "@/lib/repo-agent-defaults";
 import {
   missingSessionDefaultModelError,
   unavailableSessionDefaultCatalogError,
@@ -64,7 +65,10 @@ export const defaultSessionSelectionFor = (
   repoSettings: RepoSettingsInput | null,
   role: AgentRole,
 ): RuntimeBoundModelSelection | null =>
-  roleDefaultSelectionFor(repoSettings, role) ?? repoDefaultModelSelectionFor(repoSettings);
+  pickRepoAgentDefault(
+    roleDefaultSelectionFor(repoSettings, role),
+    repoDefaultModelSelectionFor(repoSettings),
+  );
 
 export const resolveRequiredDefaultSessionSelection = async ({
   role,

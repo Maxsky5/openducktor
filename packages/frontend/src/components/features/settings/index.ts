@@ -14,4 +14,5 @@ export {
   toRoleVariantOptions,
   toVariantOptionsForModelKey,
   updatePromptOverrideTemplate,
+  updateRepoDefaultModel,
 } from "./settings-modal-model";

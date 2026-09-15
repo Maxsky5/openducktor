@@ -80,7 +80,6 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},

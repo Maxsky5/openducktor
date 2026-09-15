@@ -11,6 +11,7 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { catalogModelOptionValue } from "@/components/features/agents/catalog-select-options";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
+import { pickRepoAgentDefault } from "@/lib/repo-agent-defaults";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 
@@ -86,6 +87,19 @@ export const updateRoleDefault = (
       [field]: value,
     },
   };
+};
+
+export const updateRepoDefaultModel = (
+  defaultModel: Parameters<typeof ensureDraftAgentDefault>[0],
+  field: keyof RepoAgentDefaultInput,
+  value: string,
+): (RepoAgentDefaultInput & { runtimeKind: RuntimeKind }) | null => {
+  const draft = ensureDraftAgentDefault(defaultModel);
+  const runtimeKind = draft.runtimeKind;
+  if (!runtimeKind) {
+    return null;
+  }
+  return { ...draft, runtimeKind, [field]: value };
 };
 
 export const clearRoleDefault = (
@@ -165,9 +179,8 @@ export const resolveRepoAgentDefaultRuntimeKind = ({
   role: RepoDefaultRole;
 }): RuntimeKind | null => {
   const requestedRuntimeKind =
-    selectedRepoConfig.agentDefaults[role]?.runtimeKind ??
-    selectedRepoConfig.defaultModel?.runtimeKind ??
-    null;
+    pickRepoAgentDefault(selectedRepoConfig.agentDefaults[role], selectedRepoConfig.defaultModel)
+      ?.runtimeKind ?? null;
 
   return resolveRuntimeKindSelection({
     runtimeDefinitions,

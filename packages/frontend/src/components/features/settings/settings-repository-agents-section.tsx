@@ -3,12 +3,8 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import type { ReactElement } from "react";
 import { toPrimaryAgentOptions } from "@/components/features/agents";
 import {
-  ModelPicker,
   type ModelPickerFavoriteState,
-  type ModelPickerRuntime,
   type ModelPickerValue,
-  toModelPickerCatalogResource,
-  unavailableModelPickerCatalogResource,
 } from "@/components/features/agents/model-picker";
 import {
   ensureDraftAgentDefault,
@@ -23,6 +19,10 @@ import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
 import { RepositoryDefaultModelBlock } from "./settings-repository-default-model";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
+import {
+  RepositoryModelPickerField,
+  toModelPickerRuntimes,
+} from "./settings-repository-model-picker-field";
 
 type RepositoryAgentsSectionProps = {
   selectedRepoConfig: SettingsRepoConfig | null;
@@ -175,26 +175,10 @@ export function RepositoryAgentsSection({
     );
   }
 
-  const modelPickerRuntimes: ModelPickerRuntime[] = availableRuntimeDefinitions.map(
-    (descriptor) => {
-      const resource = catalogResources.find(
-        (candidate) => candidate.runtimeKind === descriptor.kind,
-      );
-      return {
-        descriptor,
-        resource: resource
-          ? toModelPickerCatalogResource({
-              catalog: resource.catalog,
-              isFetching: resource.isFetching,
-              error: resource.error,
-              isAvailable: resource.isEnabled,
-              unavailableReason: "This runtime catalog is not available yet.",
-              retry: resource.retry,
-            })
-          : unavailableModelPickerCatalogResource("This runtime catalog is not available yet."),
-      };
-    },
-  );
+  const modelPickerRuntimes = toModelPickerRuntimes({
+    runtimeDefinitions: availableRuntimeDefinitions,
+    catalogResources,
+  });
   const agentDropdownClassName = "sm:min-w-[18rem]";
   const variantDropdownClassName = "sm:min-w-[16rem]";
   const missingRoleLabels = findMissingRoleLabels({
@@ -300,54 +284,39 @@ export function RepositoryAgentsSection({
               </div>
 
               <div className="grid gap-2 md:grid-cols-3">
-                <div className="grid min-w-0 gap-1">
-                  <Label className="text-xs">Runtime and Model</Label>
-                  <ModelPicker
-                    runtimes={modelPickerRuntimes}
-                    value={selectedPickerValue}
-                    favoriteState={favoriteState}
-                    selectionPolicy={
-                      isSaving || isLoadingSettings
-                        ? { kind: "read_only", reason: "Settings are being saved or loaded." }
-                        : { kind: "editable" }
-                    }
-                    placeholder={isRoleCatalogLoading ? "Loading models…" : "Select a model"}
-                    onValueChange={(selectedValue) => {
-                      const targetRuntime = modelPickerRuntimes.find(
-                        (candidate) => candidate.descriptor.kind === selectedValue.runtimeKind,
-                      );
-                      if (targetRuntime?.resource.status !== "ready") {
-                        return;
-                      }
-                      const targetCatalog = targetRuntime.resource.catalog;
-
-                      onUpdateSelectedRepoConfig((repoConfig) => {
-                        const currentValue = repoConfig.agentDefaults[role] ?? null;
-                        const currentRuntimeKind = resolveRepoAgentDefaultRuntimeKind({
-                          selectedRepoConfig: repoConfig,
-                          runtimeDefinitions: availableRuntimeDefinitions,
-                          role,
-                        });
-                        const nextDefault = resolveRepoAgentDefaultModelPickerSelection({
-                          currentValue: currentValue ? ensureDraftAgentDefault(currentValue) : null,
-                          currentRuntimeKind,
-                          targetCatalog,
-                          value: selectedValue,
-                        });
-                        if (!nextDefault) {
-                          return repoConfig;
-                        }
-                        return {
-                          ...repoConfig,
-                          agentDefaults: {
-                            ...repoConfig.agentDefaults,
-                            [role]: nextDefault,
-                          },
-                        };
+                <RepositoryModelPickerField
+                  runtimes={modelPickerRuntimes}
+                  value={selectedPickerValue}
+                  favoriteState={favoriteState}
+                  isReadOnly={isSaving || isLoadingSettings}
+                  isLoadingCatalog={isRoleCatalogLoading}
+                  onSelect={(selectedValue, targetCatalog) => {
+                    onUpdateSelectedRepoConfig((repoConfig) => {
+                      const currentValue = repoConfig.agentDefaults[role] ?? null;
+                      const currentRuntimeKind = resolveRepoAgentDefaultRuntimeKind({
+                        selectedRepoConfig: repoConfig,
+                        runtimeDefinitions: availableRuntimeDefinitions,
+                        role,
                       });
-                    }}
-                  />
-                </div>
+                      const nextDefault = resolveRepoAgentDefaultModelPickerSelection({
+                        currentValue: currentValue ? ensureDraftAgentDefault(currentValue) : null,
+                        currentRuntimeKind,
+                        targetCatalog,
+                        value: selectedValue,
+                      });
+                      if (!nextDefault) {
+                        return repoConfig;
+                      }
+                      return {
+                        ...repoConfig,
+                        agentDefaults: {
+                          ...repoConfig.agentDefaults,
+                          [role]: nextDefault,
+                        },
+                      };
+                    });
+                  }}
+                />
 
                 <div className="grid min-w-0 gap-1">
                   <Label className="text-xs">Agent Profile</Label>

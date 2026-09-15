@@ -22,6 +22,7 @@ import {
   togglePromptOverrideEnabled,
   toRoleVariantOptions,
   updatePromptOverrideTemplate,
+  updateRepoDefaultModel,
   updateRoleDefault,
 } from "./settings-modal-model";
 
@@ -115,6 +116,34 @@ describe("settings-modal-model", () => {
       variant: "",
       profileId: "",
     });
+  });
+
+  test("updates the repository default model immutably", () => {
+    const next = updateRepoDefaultModel(
+      {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "",
+        profileId: "",
+      },
+      "profileId",
+      "builder",
+    );
+
+    expect(next).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "",
+      profileId: "builder",
+    });
+  });
+
+  test("skips the repository default model update when no runtime kind exists", () => {
+    expect(
+      updateRepoDefaultModel({ providerId: "openai", modelId: "gpt-5" }, "profileId", "builder"),
+    ).toBeNull();
   });
 
   test("updates and clears role defaults immutably", () => {

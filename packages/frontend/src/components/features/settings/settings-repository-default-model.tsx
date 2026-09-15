@@ -3,12 +3,8 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { type ReactElement, useMemo } from "react";
 import { toPrimaryAgentOptions } from "@/components/features/agents";
 import {
-  ModelPicker,
   type ModelPickerFavoriteState,
-  type ModelPickerRuntime,
   type ModelPickerValue,
-  toModelPickerCatalogResource,
-  unavailableModelPickerCatalogResource,
 } from "@/components/features/agents/model-picker";
 import {
   ensureDraftAgentDefault,
@@ -25,6 +21,10 @@ import {
 } from "@/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
+import {
+  RepositoryModelPickerField,
+  toModelPickerRuntimes,
+} from "./settings-repository-model-picker-field";
 
 type RepositoryDefaultModelBlockProps = {
   selectedRepoConfig: SettingsRepoConfig;
@@ -47,32 +47,6 @@ type RepositoryDefaultModelBlockProps = {
   ) => void;
   onClearSelectedRepoDefaultModel: () => void;
 };
-
-const toModelPickerRuntimes = ({
-  runtimeDefinitions,
-  catalogResources,
-}: {
-  runtimeDefinitions: RuntimeDescriptor[];
-  catalogResources: RuntimeModelCatalogQueryResource[];
-}): ModelPickerRuntime[] =>
-  runtimeDefinitions.map((descriptor) => {
-    const resource = catalogResources.find(
-      (candidate) => candidate.runtimeKind === descriptor.kind,
-    );
-    return {
-      descriptor,
-      resource: resource
-        ? toModelPickerCatalogResource({
-            catalog: resource.catalog,
-            isFetching: resource.isFetching,
-            error: resource.error,
-            isAvailable: resource.isEnabled,
-            unavailableReason: "This runtime catalog is not available yet.",
-            retry: resource.retry,
-          })
-        : unavailableModelPickerCatalogResource("This runtime catalog is not available yet."),
-    };
-  });
 
 export function RepositoryDefaultModelBlock({
   selectedRepoConfig,
@@ -147,48 +121,33 @@ export function RepositoryDefaultModelBlock({
       ) : null}
 
       <div className="grid gap-2 md:grid-cols-3">
-        <div className="grid min-w-0 gap-1">
-          <Label className="text-xs">Runtime and Model</Label>
-          <ModelPicker
-            runtimes={modelPickerRuntimes}
-            value={selectedPickerValue}
-            favoriteState={favoriteState}
-            selectionPolicy={
-              isSaving || isLoadingSettings
-                ? { kind: "read_only", reason: "Settings are being saved or loaded." }
-                : { kind: "editable" }
-            }
-            placeholder={isModelPickerCatalogLoading ? "Loading models…" : "Select a model"}
-            onValueChange={(selectedValue) => {
-              const targetRuntime = modelPickerRuntimes.find(
-                (candidate) => candidate.descriptor.kind === selectedValue.runtimeKind,
-              );
-              if (targetRuntime?.resource.status !== "ready") {
-                return;
-              }
-              const targetCatalog = targetRuntime.resource.catalog;
-
-              onUpdateSelectedRepoConfig((repoConfig) => {
-                const nextDefault = resolveRepoAgentDefaultModelPickerSelection({
-                  currentValue:
-                    repoConfig.defaultModel === undefined
-                      ? null
-                      : ensureDraftAgentDefault(repoConfig.defaultModel),
-                  currentRuntimeKind: repoConfig.defaultModel?.runtimeKind ?? null,
-                  targetCatalog,
-                  value: selectedValue,
-                });
-                if (!nextDefault) {
-                  return repoConfig;
-                }
-                return {
-                  ...repoConfig,
-                  defaultModel: nextDefault,
-                };
+        <RepositoryModelPickerField
+          runtimes={modelPickerRuntimes}
+          value={selectedPickerValue}
+          favoriteState={favoriteState}
+          isReadOnly={isSaving || isLoadingSettings}
+          isLoadingCatalog={isModelPickerCatalogLoading}
+          onSelect={(selectedValue, targetCatalog) => {
+            onUpdateSelectedRepoConfig((repoConfig) => {
+              const nextDefault = resolveRepoAgentDefaultModelPickerSelection({
+                currentValue:
+                  repoConfig.defaultModel === undefined
+                    ? null
+                    : ensureDraftAgentDefault(repoConfig.defaultModel),
+                currentRuntimeKind: repoConfig.defaultModel?.runtimeKind ?? null,
+                targetCatalog,
+                value: selectedValue,
               });
-            }}
-          />
-        </div>
+              if (!nextDefault) {
+                return repoConfig;
+              }
+              return {
+                ...repoConfig,
+                defaultModel: nextDefault,
+              };
+            });
+          }}
+        />
 
         {supportsProfiles ? (
           <div className="grid min-w-0 gap-1">

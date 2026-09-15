@@ -7,8 +7,7 @@ import type {
   SettingsSnapshot,
 } from "@openducktor/contracts";
 import { useCallback } from "react";
-import { ensureDraftAgentDefault } from "@/components/features/settings";
-import { REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR } from "@/lib/repo-agent-defaults";
+import { ensureDraftAgentDefault, updateRepoDefaultModel } from "@/components/features/settings";
 import type { SettingsSnapshotDraftUpdater } from "./use-settings-modal-snapshot-state";
 
 type UseSettingsModalDraftActionsArgs = {
@@ -262,20 +261,8 @@ export const useSettingsModalDraftActions = ({
       value: string,
     ): void => {
       updateSelectedRepoConfig((repoConfig) => {
-        const currentDefaultModel = ensureDraftAgentDefault(repoConfig.defaultModel ?? null);
-        const runtimeKind = currentDefaultModel.runtimeKind;
-        if (!runtimeKind) {
-          throw new Error(REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR);
-        }
-
-        return {
-          ...repoConfig,
-          defaultModel: {
-            ...currentDefaultModel,
-            runtimeKind,
-            [field]: value,
-          },
-        };
+        const nextDefaultModel = updateRepoDefaultModel(repoConfig.defaultModel, field, value);
+        return nextDefaultModel ? { ...repoConfig, defaultModel: nextDefaultModel } : repoConfig;
       });
     },
     [updateSelectedRepoConfig],
