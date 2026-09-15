@@ -166,6 +166,8 @@ export const createWorkspaceLifecycleService = ({
       return yield* admission.withAdministrativeAccess(
         [
           input.workspaceId,
+          ...catalog.openWorkspaces.map((workspace) => workspace.workspaceId),
+          ...catalog.closedWorkspaces.map((workspace) => workspace.workspaceId),
           ...catalog.incompleteRemovals.map((removal) => removal.workspace.workspaceId),
         ],
         collectWorkspaceTaskWorktreePaths(
@@ -383,10 +385,8 @@ export const createWorkspaceLifecycleService = ({
         }
       }
 
-      const catalog = yield* workspaceSettingsService.removeWorkspaceRegistration(
-        input.workspaceId,
-        input.expectedRepoPath,
-      );
+      yield* runtimeOrchestrator.clearRepoRuntimeStartupStatuses(journaledRepoConfig.repoPath);
+      yield* hostOwnership.releaseWorkspace(input.workspaceId);
       while (
         !(yield* admission.forgetWorkspaceWhenDrained({
           repoPath: journaledRepoConfig.repoPath,
@@ -395,8 +395,10 @@ export const createWorkspaceLifecycleService = ({
       ) {
         yield* admission.awaitWorkStarts(journaledRepoConfig.repoPath);
       }
-      yield* runtimeOrchestrator.clearRepoRuntimeStartupStatuses(journaledRepoConfig.repoPath);
-      yield* hostOwnership.releaseWorkspace(input.workspaceId);
+      const catalog = yield* workspaceSettingsService.removeWorkspaceRegistration(
+        input.workspaceId,
+        input.expectedRepoPath,
+      );
       return { catalog, removedWorktrees };
     });
 
