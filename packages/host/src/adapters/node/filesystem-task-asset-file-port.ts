@@ -53,18 +53,18 @@ const existingStat = async (target: string) => {
 export const createNodeTaskAssetFilePort = (
   {
     configDir,
-    configDirScope = "production",
+    configDirScope,
   }: {
     configDir: string;
-    configDirScope?: OpenDucktorConfigDirScope;
+    configDirScope: OpenDucktorConfigDirScope;
   },
   ownership?: TaskAssetFileOwnershipDependencies,
 ): TaskAssetFilePort => {
-  const fileSafety = createTaskAssetFileSafety({ configDir, configDirScope });
-  fileSafety.assertConfigDirAllowed();
+  const fileGuard = createTaskAssetFileSafety({ configDir, configDirScope });
+  fileGuard.assertConfigDirAllowed();
   const durableRoot = path.resolve(configDir, "task-assets");
   const ownerState = createTaskAssetFileOwnership(
-    { configDir, removeRecursively: fileSafety.removeRecursively },
+    { configDir, removeRecursively: fileGuard.removeRecursively },
     ownership,
   );
   const { ownedQuarantineRoot, ownedStagingRoot, quarantineRoot } = ownerState;
@@ -76,7 +76,7 @@ export const createNodeTaskAssetFilePort = (
     createTaskAssetQuarantineFiles({
       durableRoot,
       quarantineRoot: root,
-      removeRecursively: fileSafety.removeRecursively,
+      removeRecursively: fileGuard.removeRecursively,
       reservedDirectoryNames,
     });
   const quarantineFiles = quarantineFilesForRoot(ownedQuarantineRoot, []);
@@ -294,7 +294,7 @@ export const createNodeTaskAssetFilePort = (
                         await mkdir(path.dirname(move.from), { recursive: true });
                         await rename(move.to, move.from);
                       }
-                      await fileSafety.removeRecursively(root);
+                      await fileGuard.removeRecursively(root);
                     },
                     {
                       operation: input.operation,

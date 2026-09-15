@@ -83,7 +83,7 @@ const run = async (): Promise<TestScopeProductionConfigResult> => {
   const before = await readState();
   let error: string | null = null;
   let taskState: "deleted" | "present" = "present";
-  // SAFETY: The test config guard runs while the file port is built, before the service can read workspace settings.
+  // SAFETY: The config guard throws before the service can read this stub.
   const unusedWorkspaceSettingsService = {} as WorkspaceSettingsService;
 
   try {

@@ -16,11 +16,13 @@ import {
   type TaskAssetStagingService,
 } from "../../application/task-assets/task-asset-staging-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
-import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
+import {
+  type OpenDucktorConfigDirScope,
+  resolveOpenDucktorBaseDir,
+} from "../../config/openducktor-config-dir";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { HostShutdownStep } from "../host-lifecycle";
-import type { OpenDucktorConfigDirScope } from "../../config/openducktor-config-dir";
 
 export type NodeTaskAssetServices = {
   workspaceSessionStore: WorkspaceSessionStorePort;

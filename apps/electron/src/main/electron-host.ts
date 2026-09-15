@@ -16,7 +16,7 @@ export const resolveElectronMcpBridgeDiscoveryMode = (
   isPackaged: boolean,
 ): McpBridgeDiscoveryMode => (isPackaged ? "production" : "development");
 
-const withElectronMcpBridgeDiscoveryMode = (
+const toNodeHostInput = (
   input: CreateElectronHostCommandRouterInput,
 ): CreateNodeHostCommandRouterInput => {
   const { isPackaged, ...hostInput } = input;
@@ -29,7 +29,7 @@ const withElectronMcpBridgeDiscoveryMode = (
 
 export const createElectronEffectHostCommandRouter = (
   input: CreateElectronHostCommandRouterInput,
-) => createNodeEffectHostCommandRouter(withElectronMcpBridgeDiscoveryMode(input));
+) => createNodeEffectHostCommandRouter(toNodeHostInput(input));
 
 export const createElectronHostCommandRouter = (input: CreateElectronHostCommandRouterInput) =>
-  createNodeHostCommandRouter(withElectronMcpBridgeDiscoveryMode(input));
+  createNodeHostCommandRouter(toNodeHostInput(input));

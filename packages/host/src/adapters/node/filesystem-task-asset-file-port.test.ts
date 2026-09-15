@@ -32,7 +32,7 @@ const createHarness = async () => {
       processStartedAtMs.set(processId, processId);
     }
     return createNodeTaskAssetFilePort(
-      { configDir },
+      { configDir, configDirScope: "test" },
       {
         owner: { version: 1, instanceId, processId, startedAtMs: processId },
         processIsAlive: (candidate) => aliveProcessIds.has(candidate),
@@ -383,7 +383,7 @@ describe("node task asset file port", () => {
       }),
     );
     await writeFile(liveStagingFile, new Uint8Array([1]));
-    const port = createNodeTaskAssetFilePort({ configDir });
+    const port = createNodeTaskAssetFilePort({ configDir, configDirScope: "test" });
 
     try {
       expect(await Effect.runPromise(port.clearStaging())).toBe(0);
@@ -520,7 +520,7 @@ describe("node task asset file port", () => {
       }),
     );
     await writeFile(path.join(staleStagingRoot, assetId), Buffer.from([1]));
-    const port = createNodeTaskAssetFilePort({ configDir });
+    const port = createNodeTaskAssetFilePort({ configDir, configDirScope: "test" });
 
     expect(await Effect.runPromise(port.clearStaging())).toBe(1);
     expect(await readdir(ownersRoot)).not.toContain(`${staleInstanceId}.json`);

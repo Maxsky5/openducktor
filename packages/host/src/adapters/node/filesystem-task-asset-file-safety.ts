@@ -6,36 +6,6 @@ import {
   resolveOpenDucktorBaseDir,
 } from "../../config/openducktor-config-dir";
 
-const isWithinDirectory = (directory: string, target: string): boolean => {
-  const relative = path.relative(directory, target);
-  return (
-    relative === "" ||
-    (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
-  );
-};
-
-const resolvePathThroughExistingAncestor = (
-  inputPath: string,
-  missingSegments: string[] = [],
-): string => {
-  const absolutePath = path.resolve(inputPath);
-  try {
-    return path.join(realpathSync.native(absolutePath), ...missingSegments);
-  } catch (cause) {
-    if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
-      throw cause;
-    }
-    const parentPath = path.dirname(absolutePath);
-    if (parentPath === absolutePath) {
-      throw cause;
-    }
-    return resolvePathThroughExistingAncestor(parentPath, [
-      path.basename(absolutePath),
-      ...missingSegments,
-    ]);
-  }
-};
-
 export const createTaskAssetFileSafety = ({
   configDir,
   configDirScope,
@@ -43,25 +13,44 @@ export const createTaskAssetFileSafety = ({
   configDir: string;
   configDirScope: OpenDucktorConfigDirScope;
 }) => {
-  const productionConfigDir =
-    configDirScope === "test"
-      ? resolvePathThroughExistingAncestor(resolveOpenDucktorBaseDir("production", {}))
-      : null;
-  const assertProductionConfigIsNotUsedByTests = (target: string): void => {
-    if (
-      productionConfigDir !== null &&
-      isWithinDirectory(productionConfigDir, resolvePathThroughExistingAncestor(target))
-    ) {
+  const productionRoot =
+    configDirScope === "test" ? realPath(resolveOpenDucktorBaseDir("production", {})) : null;
+  const checkTestPath = (target: string): void => {
+    if (productionRoot !== null && isWithin(productionRoot, realPath(target))) {
       throw new Error(
-        `Test scope refuses task asset access under the production config directory ${productionConfigDir}.`,
+        `Test scope refuses task asset access under the production config directory ${productionRoot}.`,
       );
     }
   };
   return {
-    assertConfigDirAllowed: () => assertProductionConfigIsNotUsedByTests(configDir),
+    assertConfigDirAllowed: () => checkTestPath(configDir),
     removeRecursively: async (target: string): Promise<void> => {
-      assertProductionConfigIsNotUsedByTests(target);
+      checkTestPath(target);
       await rm(target, { force: true, recursive: true });
     },
   };
 };
+
+function isWithin(directory: string, target: string): boolean {
+  const relative = path.relative(directory, target);
+  return (
+    relative === "" ||
+    (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+  );
+}
+
+function realPath(target: string, tail: string[] = []): string {
+  const fullPath = path.resolve(target);
+  try {
+    return path.join(realpathSync.native(fullPath), ...tail);
+  } catch (cause) {
+    if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
+      throw cause;
+    }
+    const parent = path.dirname(fullPath);
+    if (parent === fullPath) {
+      throw cause;
+    }
+    return realPath(parent, [path.basename(fullPath), ...tail]);
+  }
+}

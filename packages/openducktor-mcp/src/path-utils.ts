@@ -12,8 +12,10 @@ import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/
 const EMPTY_ENV_SENTINELS = new Set(["undefined", "null"]);
 const OPENDUCKTOR_CHANNEL_ENV = "OPENDUCKTOR_CHANNEL";
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
-const DEFAULT_OPENDUCKTOR_CONFIG_DIR_NAME = ".openducktor";
-const DEFAULT_OPENDUCKTOR_DEV_CONFIG_DIR_NAME = ".openducktor-dev";
+const DEFAULT_CONFIG_DIR_NAMES = {
+  dev: ".openducktor-dev",
+  production: ".openducktor",
+} as const;
 
 export const normalizeOptionalInput = (value: string | undefined): string | undefined => {
   if (value === undefined) {
@@ -45,9 +47,9 @@ const resolveMcpUserPath = (normalized: string): string => {
   return resolve(expanded);
 };
 
-const resolveOpenducktorBaseDir = (environment: NodeJS.ProcessEnv): string => {
-  if (Object.hasOwn(environment, OPENDUCKTOR_CONFIG_DIR_ENV)) {
-    const configured = normalizeOptionalInput(environment[OPENDUCKTOR_CONFIG_DIR_ENV]);
+const resolveOpenDucktorBaseDir = (env: NodeJS.ProcessEnv): string => {
+  if (Object.hasOwn(env, OPENDUCKTOR_CONFIG_DIR_ENV)) {
+    const configured = normalizeOptionalInput(env[OPENDUCKTOR_CONFIG_DIR_ENV]);
     const normalized = configured ? normalizeUserPathInput(configured) : undefined;
     if (!normalized) {
       throw new Error(
@@ -59,21 +61,19 @@ const resolveOpenducktorBaseDir = (environment: NodeJS.ProcessEnv): string => {
 
   return join(
     resolveHomeDirectory(),
-    environment[OPENDUCKTOR_CHANNEL_ENV] === "dev"
-      ? DEFAULT_OPENDUCKTOR_DEV_CONFIG_DIR_NAME
-      : DEFAULT_OPENDUCKTOR_CONFIG_DIR_NAME,
+    env[OPENDUCKTOR_CHANNEL_ENV] === "dev"
+      ? DEFAULT_CONFIG_DIR_NAMES.dev
+      : DEFAULT_CONFIG_DIR_NAMES.production,
   );
 };
 
-const resolveMcpBridgeDiscoveryRelativePath = (
-  environment: NodeJS.ProcessEnv,
-): readonly string[] => {
-  if (!Object.hasOwn(environment, OPENDUCKTOR_CHANNEL_ENV)) {
+const resolveMcpBridgeDiscoverySegments = (env: NodeJS.ProcessEnv): readonly string[] => {
+  if (!Object.hasOwn(env, OPENDUCKTOR_CHANNEL_ENV)) {
     return MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS;
   }
-  const channel = environment[OPENDUCKTOR_CHANNEL_ENV];
+  const channel = env[OPENDUCKTOR_CHANNEL_ENV];
   if (channel === "dev") {
-    const developmentInstanceId = environment[OPENDUCKTOR_DEV_INSTANCE_ENV]?.trim();
+    const developmentInstanceId = env[OPENDUCKTOR_DEV_INSTANCE_ENV]?.trim();
     if (!developmentInstanceId) {
       throw new Error(
         `${OPENDUCKTOR_DEV_INSTANCE_ENV} is required when ${OPENDUCKTOR_CHANNEL_ENV}=dev.`,
@@ -91,13 +91,8 @@ const resolveMcpBridgeDiscoveryRelativePath = (
   );
 };
 
-export const resolveMcpBridgeDiscoveryPath = (
-  environment: NodeJS.ProcessEnv = process.env,
-): string =>
-  join(
-    resolveOpenducktorBaseDir(environment),
-    ...resolveMcpBridgeDiscoveryRelativePath(environment),
-  );
+export const resolveMcpBridgeDiscoveryPath = (env: NodeJS.ProcessEnv = process.env): string =>
+  join(resolveOpenDucktorBaseDir(env), ...resolveMcpBridgeDiscoverySegments(env));
 
 export const normalizeBaseUrl = (value: string): string =>
   value.endsWith("/") ? value.slice(0, -1) : value;

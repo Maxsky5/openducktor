@@ -3,10 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-const testConfigDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-test-"));
-process.env.OPENDUCKTOR_CONFIG_DIR = testConfigDirectory;
+const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-test-"));
+process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
 process.once("beforeExit", () => {
-  void rm(testConfigDirectory, { force: true, recursive: true });
+  void rm(configDir, { force: true, recursive: true });
 });
 
 const frontendRequire = createRequire(
