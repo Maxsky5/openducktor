@@ -7,7 +7,7 @@ import {
   validatePromptTemplatePlaceholders,
 } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "../types/agent-orchestrator";
-import { ODT_TOOL_ARG_SPEC } from "./odt-tool-arg-spec";
+import { formatOdtToolArgs } from "./odt-tool-args";
 
 export type AgentPromptTaskContext = {
   taskId: string;
@@ -478,7 +478,7 @@ const toRoleBaseTemplateId = (role: AgentRole): AgentPromptTemplateId => {
 
 const buildToolListPlaceholder = (role: AgentRole): string => {
   const allowedTools = AGENT_ROLE_TOOL_POLICY[role];
-  return allowedTools.map((tool) => `- ${ODT_TOOL_ARG_SPEC[tool]}`).join("\n");
+  return allowedTools.map((tool) => `- ${formatOdtToolArgs(tool)}`).join("\n");
 };
 
 const buildPlaceholderValues = ({
