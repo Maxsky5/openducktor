@@ -164,6 +164,7 @@ export const assembleNodeEffectHostCommandRouter = (
     settings: workspaceSettingsService,
     git,
     eventBus,
+    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
   });
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const agentSessionLiveStateService = createAgentSessionLiveStateService({

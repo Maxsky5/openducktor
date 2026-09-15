@@ -10,7 +10,7 @@ import type {
   WorkspaceSession,
 } from "@openducktor/contracts";
 import { repoConfigSchema } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import {
   createSqliteTaskStoreHarness,
@@ -29,6 +29,7 @@ import { createWorkspaceSessionRuntimePersistence } from "./workspace-session-ru
 import { createWorkspaceSessionService } from "./workspace-session-service";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import { createAgentSessionCommandService } from "../agent-sessions/agent-session-command-service";
+import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 
 describe("Workspace Session persistence through the shared command module", () => {
   let database: SqliteTaskStoreTestHarness;
@@ -39,7 +40,10 @@ describe("Workspace Session persistence through the shared command module", () =
     await database.cleanup();
   });
 
-  const setup = async () => {
+  const setup = async (
+    withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"] = (_repoPath, effect) =>
+      effect,
+  ) => {
     const ref: AgentSessionLiveRef = {
       repoPath: database.repoPath,
       runtimeKind: "opencode",
@@ -120,6 +124,7 @@ describe("Workspace Session persistence through the shared command module", () =
     };
     const persistence = createWorkspaceSessionRuntimePersistence({
       operationGate,
+      withWorkStartLease,
       store: {
         ...store,
         recordAcceptedMessage: (input) =>
@@ -134,12 +139,16 @@ describe("Workspace Session persistence through the shared command module", () =
               ),
             ),
           ),
-        recordActivity: (input) => {
-          activityTimes.push(input.activity.occurredAt);
-          return state.failActivity
-            ? failure("activity write failed")
-            : store.recordActivity(input);
-        },
+        recordActivity: (input) =>
+          Effect.sync(() => {
+            activityTimes.push(input.activity.occurredAt);
+          }).pipe(
+            Effect.zipRight(
+              Effect.suspend(() =>
+                state.failActivity ? failure("activity write failed") : store.recordActivity(input),
+              ),
+            ),
+          ),
       },
       settings: {
         getRepoConfigByRepoPath: () =>
@@ -672,6 +681,35 @@ describe("Workspace Session persistence through the shared command module", () =
     await h.emit(idle);
     expect(h.activityTimes).toEqual([Date.parse(base.timestamp)]);
     expect((await h.get()).updatedAt).toBe(Date.parse(base.timestamp));
+  });
+
+  test("holds a work-start lease while it stores final assistant activity", async () => {
+    const entered = await Effect.runPromise(Deferred.make<void>());
+    const release = await Effect.runPromise(Deferred.make<void>());
+    const h = await setup((_repoPath, effect) =>
+      Deferred.succeed(entered, undefined).pipe(
+        Effect.zipRight(Deferred.await(release)),
+        Effect.zipRight(effect),
+      ),
+    );
+    const event = {
+      externalSessionId: "native",
+      sessionRef: h.ref,
+      timestamp: "2026-09-07T10:01:00Z",
+    };
+    await h.emit({
+      ...event,
+      type: "assistant_message",
+      messageId: "assistant-1",
+      message: "Final answer",
+    });
+
+    const idle = h.emit({ ...event, type: "session_idle" });
+    await Effect.runPromise(Deferred.await(entered));
+    expect(h.activityTimes).toEqual([]);
+    await Effect.runPromise(Deferred.succeed(release, undefined));
+    await idle;
+    expect(h.activityTimes).toEqual([Date.parse(event.timestamp)]);
   });
 
   test("does not count retracted or older final messages as new activity", async () => {

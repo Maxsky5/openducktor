@@ -428,9 +428,9 @@ describe("workspace lifecycle service", () => {
       "beginRemoval",
       "removeTaskStore",
       "removeAssets",
-      "unregister",
       "clearRuntimeStatus:/repos/ws",
       "releaseOwnership:ws",
+      "unregister",
     ]);
     expect(result.removedWorktrees).toEqual([]);
   });
@@ -849,6 +849,53 @@ describe("workspace lifecycle service", () => {
     expect(progress).toEqual([]);
   });
 
+  test("removeWorkspace reads every inventory workspace with administrative access", async () => {
+    const administrativeWorkspaceIds: Array<readonly string[]> = [];
+    const workspace = (workspaceId: string, repoPath: string) =>
+      workspaceRecordSchema.parse({
+        workspaceId,
+        workspaceName: workspaceId,
+        repoPath,
+        isActive: false,
+        hasConfig: true,
+        configuredWorktreeBasePath: null,
+        defaultWorktreeBasePath: null,
+        effectiveWorktreeBasePath: null,
+      });
+    const service = createService({
+      admission: {
+        ...createAdmissionDouble(),
+        withAdministrativeAccess: (workspaceIds, effect) => {
+          administrativeWorkspaceIds.push(workspaceIds);
+          return effect;
+        },
+      },
+      getWorkspaceCatalog: () =>
+        Effect.succeed(
+          catalog({
+            openWorkspaces: [workspace("open", "/repos/open")],
+            closedWorkspaces: [workspace("closed", "/repos/closed")],
+            incompleteRemovals: [
+              {
+                workspace: workspace("removing", "/repos/removing"),
+                record: removalRecord({ phase: "task_store" }),
+              },
+            ],
+          }),
+        ),
+    });
+
+    await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    expect(administrativeWorkspaceIds).toEqual([["ws", "open", "closed", "removing"]]);
+  });
+
   test("removeWorkspace journals a recovery inventory failure", async () => {
     const progress: Array<{ phase: string; lastFailure: string | null }> = [];
     const service = createService({
@@ -920,6 +967,34 @@ describe("workspace lifecycle service", () => {
       lastFailure:
         "Failed to remove workspace task attachments: disk failure. Retry removal to continue.",
     });
+  });
+
+  test("removeWorkspace keeps the journal and registration when ownership release fails", async () => {
+    const removeWorkspaceRegistration = mock(() => Effect.succeed(catalog()));
+    const service = createService({
+      hostOwnership: {
+        claimWorkspace: () => Effect.void,
+        releaseWorkspace: () =>
+          Effect.fail(
+            new HostOperationError({
+              operation: "workspaceHostOwnership.release",
+              message: "owner lock removal failed",
+            }),
+          ),
+      },
+      removeWorkspaceRegistration,
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: false,
+        }),
+      ),
+    ).rejects.toThrow("owner lock removal failed");
+    expect(removeWorkspaceRegistration).not.toHaveBeenCalled();
   });
 
   test("removeWorkspace asks the user to restart when the task store connection cannot close", async () => {
