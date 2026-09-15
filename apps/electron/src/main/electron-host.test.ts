@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type {
@@ -20,6 +20,7 @@ import {
   type HostEventBusPort,
   type LocalAttachmentPort,
   type OpenInToolsPort,
+  ProcessEnvironmentError,
   type RuntimeHealthPort,
   type RuntimeRegistryPort,
   type RuntimeWorkspaceStarterPort,
@@ -42,17 +43,38 @@ const testRuntimeDistribution = createArtifactRuntimeDistribution({
   },
 });
 
-const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRouterInput> = {}) =>
-  createProductionElectronHostCommandRouter({
+const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRouterInput> = {}) => {
+  const defaultEnvironment = input.processEnvironmentInput
+    ? {}
+    : {
+        processEnv: {
+          OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
+          PATH: "/usr/bin:/bin",
+        },
+      };
+  return createProductionElectronHostCommandRouter({
     isPackaged: false,
     onBackgroundFailure: () => Effect.void,
-    processEnv: {
-      OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
-      PATH: "/usr/bin:/bin",
-    },
+    ...defaultEnvironment,
     runtimeDistribution: testRuntimeDistribution,
     ...input,
   });
+};
+
+const pathFailure = (
+  error: ProcessEnvironmentError,
+  baseEnv: NodeJS.ProcessEnv = {},
+): NonNullable<ElectronHostCommandRouterInput["processEnvironmentInput"]> => ({
+  baseEnv: {
+    HOME: "/home/dev",
+    OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
+    PATH: "/usr/bin:/bin",
+    ...baseEnv,
+  },
+  platform: "linux",
+  readLoginShellPath: () => Effect.fail(error),
+  readUserShell: () => process.execPath,
+});
 
 const createFilesystem = (): FilesystemPort => ({
   homeDirectory: () => "/home/dev",
@@ -755,6 +777,51 @@ describe("createElectronHostCommandRouter", () => {
     });
   });
 
+  test("does not write runtime paths when PATH resolution fails", async () => {
+    const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-path-config-"));
+    const configPath = path.join(configDirectory, "config.json");
+    const diagnostic = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
+    try {
+      const router = await createElectronHostCommandRouter({
+        processEnvironmentInput: pathFailure(diagnostic, {
+          OPENDUCKTOR_CONFIG_DIR: configDirectory,
+        }),
+      });
+
+      await expect(router.invoke("workspace_get_settings_snapshot")).rejects.toThrow(
+        diagnostic.message,
+      );
+      await expect(readFile(configPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+
+      const legacyConfig = JSON.stringify({
+        version: 2,
+        agentRuntimes: {
+          opencode: { enabled: true },
+          codex: { enabled: true },
+          claude: { enabled: false },
+        },
+      });
+      await writeFile(configPath, legacyConfig);
+
+      await expect(router.invoke("workspace_get_settings_snapshot")).rejects.toThrow(
+        diagnostic.message,
+      );
+      expect(await readFile(configPath, "utf8")).toBe(legacyConfig);
+
+      await writeFile(configPath, JSON.stringify({ version: 3 }));
+      await expect(router.invoke("workspace_get_settings_snapshot")).resolves.toMatchObject({
+        theme: "system",
+      });
+    } finally {
+      await rm(configDirectory, { force: true, recursive: true });
+    }
+  });
+
   test("registers migrated local attachment host commands", async () => {
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -981,6 +1048,156 @@ describe("createElectronHostCommandRouter", () => {
     );
   });
 
+  test("shows a PATH probe failure in dev server start output", async () => {
+    const diagnostic = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
+    const router = await createElectronHostCommandRouter({
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      processEnvironmentInput: pathFailure(diagnostic),
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          workspaces: {
+            repo: repoConfig({
+              devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
+            }),
+          },
+          workspaceOrder: ["repo"],
+        }),
+      ),
+    });
+
+    await expect(
+      router.invoke("dev_server_start", { repoPath: "/repo", taskId: "task-1" }),
+    ).rejects.toThrow(diagnostic.message);
+    const state = await router.invoke("dev_server_get_state", {
+      repoPath: "/repo",
+      taskId: "task-1",
+    });
+
+    expect(state.scripts[0]).toMatchObject({ status: "failed", lastError: diagnostic.message });
+    expect(state.scripts[0]?.bufferedTerminalChunks.map((chunk) => chunk.data)).toContain(
+      `${diagnostic.message}\r\n`,
+    );
+  });
+
+  test("blocks an injected dev server process when the user PATH is unavailable", async () => {
+    const diagnostic = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
+    let startCalls = 0;
+    const devServerProcesses: DevServerProcessPort = {
+      start: () =>
+        Effect.sync(() => {
+          startCalls += 1;
+          throw new Error("Injected dev server process must not start.");
+        }),
+    };
+    const router = await createElectronHostCommandRouter({
+      devServerProcesses,
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      processEnvironmentInput: pathFailure(diagnostic),
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          workspaces: {
+            repo: repoConfig({
+              devServers: [{ id: "web", name: "Web", command: "bun run dev" }],
+            }),
+          },
+          workspaceOrder: ["repo"],
+        }),
+      ),
+    });
+
+    await expect(
+      router.invoke("dev_server_start", { repoPath: "/repo", taskId: "task-1" }),
+    ).rejects.toThrow(diagnostic.message);
+    expect(startCalls).toBe(0);
+  });
+
+  test("blocks every runtime start when the user PATH is unavailable", async () => {
+    const diagnostic = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/tcsh: the probe ended with exit code 1. Fix errors in the shell startup files and restart OpenDucktor.",
+      reason: "unexpected_exit",
+      shell: "/bin/tcsh",
+    });
+    const router = await createElectronHostCommandRouter({
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      processEnvironmentInput: pathFailure(diagnostic),
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          agentRuntimes: {
+            opencode: { enabled: true },
+            codex: { enabled: true },
+            claude: { enabled: true },
+          },
+          workspaces: { repo: repoConfig() },
+          workspaceOrder: ["repo"],
+        }),
+      ),
+    });
+
+    for (const runtimeKind of ["claude", "codex", "opencode"] as const) {
+      await expect(
+        router.invoke("runtime_ensure", { runtimeKind, repoPath: "/repo" }),
+      ).rejects.toThrow(
+        `Failed to start ${runtimeKind} runtime because the user PATH is unavailable. ${diagnostic.message}`,
+      );
+    }
+  });
+
+  test("blocks an injected runtime registry when the user PATH is unavailable", async () => {
+    const diagnostic = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
+    let startCalls = 0;
+    const runtimeRegistry = createRuntimeRegistry({
+      workspaceStarter: {
+        startWorkspaceRuntime: () =>
+          Effect.sync(() => {
+            startCalls += 1;
+            throw new Error("Injected runtime registry must not start.");
+          }),
+      },
+    });
+    const router = await createElectronHostCommandRouter({
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      processEnvironmentInput: pathFailure(diagnostic),
+      runtimeRegistry,
+      settingsConfig: createSettingsConfig(
+        globalConfig({
+          workspaces: { repo: repoConfig() },
+          workspaceOrder: ["repo"],
+        }),
+      ),
+    });
+
+    await expect(
+      router.invoke("runtime_ensure", { runtimeKind: "opencode", repoPath: "/repo" }),
+    ).rejects.toThrow(
+      `Failed to start opencode runtime because the user PATH is unavailable. ${diagnostic.message}`,
+    );
+    expect(startCalls).toBe(0);
+  });
+
   test("registers migrated read-only git host commands", async () => {
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -1198,10 +1415,17 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("registers migrated diagnostics host commands", async () => {
+    const processEnvironmentError = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
+      processEnvironmentInput: pathFailure(processEnvironmentError),
       runtimeHealth: createRuntimeHealth(),
       settingsConfig: createSettingsConfig(),
       systemCommands: createSystemCommands(),
@@ -1214,6 +1438,7 @@ describe("createElectronHostCommandRouter", () => {
         { kind: "codex", ok: false, enabled: false },
         { kind: "claude", ok: false, enabled: false },
       ],
+      errors: [processEnvironmentError.message],
     });
     await expect(router.invoke("task_store_check", { repoPath: "/repo" })).resolves.toMatchObject({
       taskStoreOk: false,

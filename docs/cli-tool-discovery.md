@@ -43,12 +43,18 @@ Use `@openducktor/path-support` to parse a user path. Supply home directory and 
 
 `createNodeHostDefaultPorts` builds these values in order:
 
-1. `processEnv` with platform environment rules.
+1. `processEnv` from one asynchronous interactive login shell probe on POSIX, or from platform environment rules on Windows.
 2. `systemCommands` from that environment.
 3. `toolDiscovery` from system commands, environment, shell paths, and distribution paths.
 4. Adapters and services that use `toolDiscovery`.
 
 Electron, the published web package, and web workspace mode use this setup.
+
+The POSIX probe uses a login-style `argv0`, interactive login command flags, and a minimal environment. It uses `-ilc` for common shells and `-ic` for csh and tcsh because those shells reject `-ilc`. A marker separates startup output from the environment payload. The host puts the resolved shell `PATH` before inherited GUI entries and keeps this snapshot for the app lifetime. Dev servers, runtime sessions, tool discovery, Git, and terminals receive the same snapshot. Windows uses its normalized inherited environment and does not run a shell probe.
+
+The probe has no PTY. Shell startup lines that require a real tty can produce a different result in an integrated terminal. Changes to shell startup files take effect after OpenDucktor restarts.
+
+If the host cannot find an executable login shell, or the probe cannot start, exits with an error, returns invalid output, exceeds the output limit, or times out, the host records a `ProcessEnvironmentError` and removes the inherited GUI `PATH` from the shared environment. System diagnostics show the error. Dev server and runtime starts also show the error and do not start a child process.
 
 ## Search order
 
@@ -93,7 +99,7 @@ A descriptor can list exact files that do not fit a directory search. Codex uses
 `PATH` is the last built-in source. `SystemCommandPort.resolveCommandPath` applies platform rules:
 
 - POSIX accepts an executable regular file.
-- POSIX startup puts the login shell `PATH` before inherited GUI entries.
+- POSIX startup puts the interactive login shell `PATH` before inherited GUI entries.
 - Windows uses `PATHEXT` and accepts executable types such as `.exe`, `.cmd`, and `.bat`.
 - No platform accepts a directory as a command.
 

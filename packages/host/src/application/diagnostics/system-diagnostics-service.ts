@@ -111,6 +111,7 @@ const versionForResolvedTool = (
         }),
       );
 export const createSystemDiagnosticsService = ({
+  pathError,
   runtimeDefinitionsService,
   runtimeHealth,
   settingsConfig,
@@ -118,6 +119,7 @@ export const createSystemDiagnosticsService = ({
   toolDiscovery,
   repoStoreDiagnostics,
 }: {
+  pathError?: string | null;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
@@ -154,7 +156,9 @@ export const createSystemDiagnosticsService = ({
         },
         { concurrency: "unbounded" },
       );
-      const errors = [gitError].filter((error): error is string => error !== null);
+      const errors = [pathError ?? null, gitError].filter(
+        (error): error is string => error !== null,
+      );
       for (const runtime of runtimes) {
         if (runtime.enabled && runtime.error) {
           errors.push(runtime.error);
