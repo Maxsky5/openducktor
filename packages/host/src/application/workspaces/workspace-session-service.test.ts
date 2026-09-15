@@ -15,6 +15,7 @@ import {
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import { HostOperationError } from "../../effect/host-errors";
+import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
   createGitPortTestDouble,
@@ -690,11 +691,17 @@ describe("host-owned Workspace Session lifecycle", () => {
         h.paths.add(directory);
         if (collision === "registered worktree") h.registered.add(directory);
       }
-      await expect(Effect.runPromise(h.service.create(worktreeInput()))).rejects.toThrow(
-        collision === "branch"
-          ? "Branch already exists: odt/my-feature. Choose another name or use Existing branch."
-          : `Worktree directory already exists: ${directory}. Choose another name.`,
-      );
+      const error = await Effect.runPromise(Effect.flip(h.service.create(worktreeInput())));
+      expect(hostInvokeFailureFromError(error)).toEqual({
+        kind: "workspace_session_validation",
+        field: collision === "branch" ? "worktree.branchName" : "worktree.name",
+      });
+      expect(error).toMatchObject({
+        message:
+          collision === "branch"
+            ? "Branch already exists: odt/my-feature. Choose another name or use Existing branch."
+            : `Worktree directory already exists: ${directory}. Choose another name.`,
+      });
       expect(h.calls).toEqual([]);
       expect(h.branches.has("refs/heads/odt/my-feature")).toBe(collision === "branch");
       expect(h.paths.has(directory)).toBe(collision !== "branch");
