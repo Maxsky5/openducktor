@@ -233,6 +233,30 @@ describe("workspace worktree inventory", () => {
     expect(paths).toEqual(["/managed/ws/task-1"]);
   });
 
+  test("keeps a missing task worktree when Git still registers it", async () => {
+    const dependencies = createDependencies({
+      canonicalizePath: (path) =>
+        path === "/managed/ws/task-1"
+          ? Effect.fail(
+              new HostOperationError({
+                operation: "git.canonicalizePath",
+                message: "Failed to canonicalize /managed/ws/task-1.",
+              }),
+            )
+          : Effect.succeed(path),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/task-1", worktreePath: "/managed/ws/task-1" }]),
+      pathExists: () => Effect.succeed(false),
+      listTasks: () => Effect.succeed([task("task-1")]),
+    });
+
+    const paths = await Effect.runPromise(
+      collectWorkspaceTaskWorktreePaths(dependencies, repoConfig()),
+    );
+
+    expect(paths).toEqual(["/managed/ws/task-1"]);
+  });
+
   test("rejects a missing pending worktree that contains another workspace repository", async () => {
     const dependencies = createDependencies({
       canonicalizePath: (path) =>
