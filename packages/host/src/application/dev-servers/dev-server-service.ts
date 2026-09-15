@@ -361,6 +361,14 @@ export const createDevServerService = ({
     start(input) {
       return Effect.gen(function* () {
         const { repoPath, taskId } = input;
+        const worktreePath = yield* getWorktreePath(repoPath, taskId);
+        if (!worktreePath) {
+          return yield* new HostValidationError({
+            field: "taskId",
+            message: `Builder continuation cannot start until a task worktree exists for task ${taskId}. Start Builder first.`,
+            details: { repoPath, taskId },
+          });
+        }
         return yield* withWorkStartLease(
           repoPath,
           Effect.gen(function* () {
@@ -371,16 +379,6 @@ export const createDevServerService = ({
                   field: "devServers",
                   message: `No builder dev server scripts are configured for ${repoConfig.repoPath}. Add them in repository settings first.`,
                   details: { repoPath: repoConfig.repoPath },
-                }),
-              );
-            }
-            const worktreePath = yield* getWorktreePath(repoPath, taskId);
-            if (!worktreePath) {
-              return yield* Effect.fail(
-                new HostValidationError({
-                  field: "taskId",
-                  message: `Builder continuation cannot start until a task worktree exists for task ${taskId}. Start Builder first.`,
-                  details: { repoPath, taskId },
                 }),
               );
             }
@@ -436,6 +434,7 @@ export const createDevServerService = ({
               }),
             );
           }),
+          worktreePath,
         );
       });
     },

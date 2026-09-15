@@ -30,6 +30,7 @@ import { createWorkspaceSessionService } from "./workspace-session-service";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import { createAgentSessionCommandService } from "../agent-sessions/agent-session-command-service";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
+import { createWorkspaceOwnershipLock } from "./workspace-ownership-lock";
 
 describe("Workspace Session persistence through the shared command module", () => {
   let database: SqliteTaskStoreTestHarness;
@@ -563,6 +564,7 @@ describe("Workspace Session persistence through the shared command module", () =
     });
     const workspace = createWorkspaceSessionService({
       operationGate: h.operationGate,
+      ownershipLock: createWorkspaceOwnershipLock(),
       withWorkStartLease: (_repoPath, effect) => effect,
       store: h.store,
       settings: {

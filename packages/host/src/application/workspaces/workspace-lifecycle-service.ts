@@ -62,7 +62,6 @@ export type WorkspaceLifecycleService = {
     input: WorkspaceRemovalInput,
   ): Effect.Effect<WorkspaceRemovalCommandResult, WorkspaceLifecycleError>;
 };
-
 type CreateWorkspaceLifecycleServiceInput = {
   activity: WorkspaceActivityPort;
   admission: Pick<
@@ -101,7 +100,6 @@ type CreateWorkspaceLifecycleServiceInput = {
     "pathIsWithinRoot" | "removePathIfPresent" | "resolvePathWithinRoot" | "resolveWorktreePath"
   >;
 };
-
 const blockingActivityMessage = (blockers: WorkspaceActivityBlocker[]): string =>
   `Stop the running work before closing or removing this workspace: ${blockers
     .map((blocker) => blocker.label)
@@ -429,6 +427,7 @@ export const createWorkspaceLifecycleService = ({
         Effect.gen(function* () {
           const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
           if (repoConfig.closed) {
+            yield* storage.closeWorkspaceTaskStore(input.workspaceId);
             yield* hostOwnership.releaseWorkspace(input.workspaceId);
             return yield* workspaceSettingsService.getWorkspaceCatalog();
           }
@@ -450,6 +449,7 @@ export const createWorkspaceLifecycleService = ({
                   repoPath: repoConfig.repoPath,
                   workspaceId: input.workspaceId,
                 });
+                yield* storage.closeWorkspaceTaskStore(input.workspaceId);
                 yield* hostOwnership.releaseWorkspace(input.workspaceId);
                 return catalog;
               }),

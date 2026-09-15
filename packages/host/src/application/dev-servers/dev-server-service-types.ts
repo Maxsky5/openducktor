@@ -19,6 +19,7 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
+import type { WorkspaceAdmissionService } from "../workspaces/workspace-admission-service";
 
 export type DevServerServiceError =
   | DevServerProcessStartExitError
@@ -74,10 +75,7 @@ export type DevServerStopAllResult = {
 };
 
 export type CreateDevServerServiceInput = {
-  withWorkStartLease<A, E, R>(
-    repoPath: string,
-    effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E | HostOperationErrorAggregate | HostValidationErrorAggregate, R>;
+  withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"];
   eventBus?: HostEventBusPort;
   processPort?: DevServerProcessPort;
   taskWorktreeService?: TaskWorktreeService;
