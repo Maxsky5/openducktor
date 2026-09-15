@@ -69,7 +69,6 @@ export const createWorkspaceActivityObserver = ({
   let sessionRecordsError: string | null = null;
   let stopArchivedSubscription: (() => void) | null = null;
   let version = 0;
-  let disposed = false;
 
   const emit = (): void => {
     version += 1;
@@ -170,10 +169,9 @@ export const createWorkspaceActivityObserver = ({
   };
 
   return {
+    // Reusable after dispose. React StrictMode mounts, tears down, then mounts
+    // the same observer again, so a disposed observer must observe again.
     syncWorkspaces(workspaces: readonly WorkspaceActivityWorkspace[]): void {
-      if (disposed) {
-        return;
-      }
       stopArchivedSubscription ??= archivedSessions.subscribe(emit);
       const nextWorkspaceIds = new Set(workspaces.map((workspace) => workspace.workspaceId));
       let changed = false;
@@ -225,7 +223,6 @@ export const createWorkspaceActivityObserver = ({
       return state;
     },
     dispose(): void {
-      disposed = true;
       stopArchivedSubscription?.();
       stopArchivedSubscription = null;
       for (const workspaceId of observations.keys()) {

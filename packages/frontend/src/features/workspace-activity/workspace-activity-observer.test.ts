@@ -36,7 +36,9 @@ const createHarness = ({
   failObserveFor = new Set<string>(),
   failArchivedFor = new Set<string>(),
 }: { failObserveFor?: Set<string>; failArchivedFor?: Set<string> } = {}): Harness => {
-  const listeners = new Map<string, (envelope: AgentSessionLiveEnvelope) => void>();
+  // Both shells fan one repository stream out to every concurrent subscriber,
+  // and each stop removes only its own listener.
+  const listeners = new Map<string, Set<(envelope: AgentSessionLiveEnvelope) => void>>();
   const stopped: string[] = [];
   const archived = new Map<string, Set<string>>();
   const archivedListeners = new Set<() => void>();
@@ -59,10 +61,12 @@ const createHarness = ({
       if (failObserveFor.has(repoPath)) {
         throw new Error(`live stream unavailable for ${repoPath}`);
       }
-      listeners.set(repoPath, listener);
+      const repoListeners = listeners.get(repoPath) ?? new Set();
+      repoListeners.add(listener);
+      listeners.set(repoPath, repoListeners);
       return () => {
         stopped.push(repoPath);
-        listeners.delete(repoPath);
+        repoListeners.delete(listener);
       };
     },
     archivedSessions,
@@ -70,7 +74,9 @@ const createHarness = ({
 
   return {
     observer,
-    emit: (repoPath, envelope) => listeners.get(repoPath)?.(envelope),
+    emit: (repoPath, envelope) => {
+      for (const listener of listeners.get(repoPath) ?? []) listener(envelope);
+    },
     stopped,
     archived,
     notifyArchivedChanged: () => {
@@ -239,6 +245,27 @@ describe("createWorkspaceActivityObserver", () => {
 
     harness.observer.dispose();
     expect(harness.stopped).toEqual(["/beta", "/alpha"]);
+  });
+
+  test("observes again after dispose, because StrictMode remounts the same observer", async () => {
+    const harness = createHarness();
+    harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
+    harness.observer.dispose();
+
+    harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
+    await harness.settle();
+    harness.emit("/alpha", {
+      type: "snapshot",
+      repoPath: "/alpha",
+      sessions: [snapshot("/alpha", "a", { activity: "running" })],
+    });
+
+    expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
+      kind: "ready",
+      inputRequired: false,
+      error: false,
+      active: true,
+    });
   });
 
   test("notifies subscribers when a workspace activity changes", async () => {
