@@ -54,7 +54,9 @@ describe("live runtime registration lifecycle", () => {
         })(runtime),
       );
       await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
-      const resumed = Effect.runPromiseExit(service.resumeSession({ ...ref, sessionScope }));
+      const resumed = Effect.runPromiseExit(
+        service.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+      );
       await nativeEntered.promise;
       const released = Effect.runPromiseExit(service.releaseRuntime(runtime.runtimeId));
       await detached.promise;

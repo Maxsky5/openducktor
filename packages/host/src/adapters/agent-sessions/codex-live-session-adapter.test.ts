@@ -29,10 +29,14 @@ import { Cause, Effect, Exit, Fiber } from "effect";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
-import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
+import type {
+  AgentSessionControlContinueInterruptedTurnInput,
+  AgentSessionLiveAdapterChange,
+} from "../../ports/agent-session-live-adapter-port";
 import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { createCodexLiveSessionAdapterPreparer } from "./codex-live-session-adapter";
+import type { CodexSessionController } from "./codex-live-session-adapter-contract";
 import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registry";
 
 const runtime: RuntimeInstanceSummary = {
@@ -160,6 +164,7 @@ type ControllerHarnessOptions = {
 type AgentControlInputs = {
   starts: StartAgentSessionInput[];
   resumes: ResumeAgentSessionInput[];
+  continuations: AgentSessionControlContinueInterruptedTurnInput[];
   forks: ForkAgentSessionInput[];
   sends: SendAgentUserMessageInput[];
 };
@@ -181,6 +186,7 @@ const createControllerHarness = ({
   const controlInputs: AgentControlInputs = {
     starts: [],
     resumes: [],
+    continuations: [],
     forks: [],
     sends: [],
   };
@@ -289,6 +295,12 @@ const createControllerHarness = ({
         },
         resumeSession: async (input: ResumeAgentSessionInput) => {
           controlInputs.resumes.push(input);
+          return controlSummary;
+        },
+        continueInterruptedTurn: async (
+          input: Parameters<CodexSessionController["continueInterruptedTurn"]>[0],
+        ) => {
+          controlInputs.continuations.push(input);
           return controlSummary;
         },
         forkSession: async (input: ForkAgentSessionInput) => {
@@ -632,7 +644,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         systemPrompt: "Build",
       }),
     );
-    await Effect.runPromise(prepared.adapter.resumeSession({ ...ref, sessionScope }));
+    await Effect.runPromise(
+      prepared.adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
     await Effect.runPromise(
       prepared.adapter.forkSession({
         repoPath: "/repo",
@@ -652,7 +666,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     );
 
     expect(policyScopes).toEqual([sessionScope, sessionScope, sessionScope, sessionScope]);
-    for (const inputs of Object.values(harness.controlInputs)) {
+    const { continuations, ...invokedControls } = harness.controlInputs;
+    expect(continuations).toEqual([]);
+    for (const inputs of Object.values(invokedControls)) {
       expect(inputs).toEqual([
         expect.objectContaining({
           runtimeKind: "codex",

@@ -93,6 +93,7 @@ export const assembleNodeEffectHostCommandRouter = (
   gitProviderResolver: GitProviderResolver,
 ): EffectNodeHostCommandRouter => {
   const {
+    claudeInterruptedTurnResumeEnabled = true,
     clientVersion,
     eventBus,
     lifecycleLogger = defaultLifecycleLogger,
@@ -159,7 +160,9 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const localAttachmentService = createLocalAttachmentService(localAttachments);
   const openInToolsService = createOpenInToolsService(openInTools);
-  const runtimeDefinitionsService = createRuntimeDefinitionsService();
+  const runtimeDefinitionsService = createRuntimeDefinitionsService({
+    claudeInterruptedTurnResumeEnabled,
+  });
   const systemDiagnosticsService = createSystemDiagnosticsService({
     pathError: processEnvironmentError?.message ?? null,
     runtimeDefinitionsService,

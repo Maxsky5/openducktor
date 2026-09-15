@@ -32,6 +32,8 @@ export function useWorkspaceSessionChatActions(
   const [isStarting, setStarting] = useState(false);
   const [isSavingModel, setSavingModel] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isResumingSession, setResumingSession] = useState(false);
+  const [resumeSessionError, setResumeSessionError] = useState<string | null>(null);
 
   const updateDraftModel = useCallback(
     (selection: AgentModelSelection | null) => {
@@ -99,5 +101,31 @@ export function useWorkspaceSessionChatActions(
     }
   };
 
-  return { isSending, isStarting, isSavingModel, error, updateDraftModel, sendDraft };
+  const continueInterruptedTurn = operations.continueInterruptedTurn;
+  const resumeInterruptedTurn = useCallback(
+    (target: Parameters<typeof continueInterruptedTurn>[0]): void => {
+      void continueInterruptedTurn(target)
+        .catch((cause: unknown) => {
+          if (mounted.current) setResumeSessionError(errorMessage(cause));
+        })
+        .finally(() => {
+          if (mounted.current) setResumingSession(false);
+        });
+      setResumingSession(true);
+      setResumeSessionError(null);
+    },
+    [continueInterruptedTurn, mounted],
+  );
+
+  return {
+    isSending,
+    isStarting,
+    isSavingModel,
+    error,
+    updateDraftModel,
+    sendDraft,
+    isResumingSession,
+    resumeSessionError,
+    resumeInterruptedTurn,
+  };
 }

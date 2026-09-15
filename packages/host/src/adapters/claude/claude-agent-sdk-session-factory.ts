@@ -1,4 +1,4 @@
-import { type Options, query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentSessionSummary, AgentSessionTodoItem } from "@openducktor/core";
 import { HostOperationError } from "../../effect/host-errors";
 import {
@@ -7,7 +7,10 @@ import {
 } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { consumeClaudeSession, renameClaudeSessionIfNeeded } from "./claude-agent-sdk-session-io";
-import { requireClaudeOpenDucktorMcpForScope } from "./claude-agent-sdk-session-policy";
+import {
+  type ClaudeSessionLaunchInput,
+  requireClaudeOpenDucktorMcpForScope,
+} from "./claude-agent-sdk-session-policy";
 import { createClaudeSessionSummary } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEventEmitter,
@@ -28,13 +31,7 @@ export type CreateClaudeAgentSdkSessionInput = {
   resolvedDependencies: ClaudeAgentSdkOptionsDependencies;
   runtimeId: string;
   serviceInput: CreateClaudeAgentSdkServiceInput;
-  sessionInput: {
-    externalSessionId: string;
-    options: Pick<Options, "forkSession" | "resume" | "sessionId">;
-    parentExternalSessionId?: string;
-    startedMessage: string;
-    title?: string;
-  };
+  sessionInput: ClaudeSessionLaunchInput;
   sessionStore: ClaudeSessionStore;
 };
 
@@ -100,6 +97,7 @@ export const createClaudeAgentSdkSession = async ({
       randomId,
       resolvedDependencies,
       emit,
+      resumeInterruptedTurn: sessionInput.resumeInterruptedTurn === true,
       sessionOptions,
     });
     sdkQuery = query({ prompt: queue, options });

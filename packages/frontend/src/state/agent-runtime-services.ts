@@ -66,6 +66,8 @@ const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
       return hostClient.agentSessionControlStart(startInput);
     },
     resumeSession: (input) => hostClient.agentSessionControlResume(input),
+    continueInterruptedTurn: (input) =>
+      hostClient.agentSessionControlResume({ ...input, resumeMode: "continue_interrupted_turn" }),
     releaseSession: (input) => hostClient.agentSessionControlRelease(input),
     forkSession: (input) => hostClient.agentSessionControlFork(input),
     listRuntimeDefinitions: () => Object.values(RUNTIME_DESCRIPTORS_BY_KIND),

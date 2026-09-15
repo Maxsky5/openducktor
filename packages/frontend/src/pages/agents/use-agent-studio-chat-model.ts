@@ -1,7 +1,7 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
 import type {
   AgentChatModel,
@@ -43,6 +43,10 @@ export type AgentStudioChatSessionActionsContext = {
   canUseKickoffPrompt: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
+  canResumeSession: boolean;
+  isResumingSession: boolean;
+  resumeSessionError: string | null;
+  onResumeSession: () => void;
   startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
@@ -323,6 +327,11 @@ export function useAgentStudioChatModel({
     }),
     [draftPersistence, draftStateKey],
   );
+  const onResumeSession = sessionActions.onResumeSession;
+  const continueInterruptedTurn = useCallback((): Promise<void> => {
+    onResumeSession();
+    return Promise.resolve();
+  }, [onResumeSession]);
   const reviewCommentComposer = useAgentStudioReviewCommentComposerAdapter({
     draftScope: composer.draftScope,
     draftStateKey,
@@ -357,6 +366,10 @@ export function useAgentStudioChatModel({
       busySendBlockedReason: sessionActions.busySendBlockedReason,
       canStopSession: sessionActions.canStopSession,
       stopAgentSession: sessionActions.stopAgentSession,
+      canResumeSession: sessionActions.canResumeSession,
+      isResumingSession: sessionActions.isResumingSession,
+      resumeSessionError: sessionActions.resumeSessionError,
+      continueInterruptedTurn,
       isReadOnly: surfaceState.composerReadOnly,
       readOnlyReason: surfaceState.composerReadOnlyReason,
       draftScope: composerDraftScope,
@@ -436,7 +449,11 @@ export function useAgentStudioChatModel({
     surfaceState.composerReadOnly,
     surfaceState.composerReadOnlyReason,
     sessionActions.busySendBlockedReason,
+    sessionActions.canResumeSession,
     sessionActions.canStopSession,
+    continueInterruptedTurn,
+    sessionActions.isResumingSession,
+    sessionActions.resumeSessionError,
     sessionActions.isSending,
     sessionActions.isSessionWorking,
     sessionActions.isStarting,

@@ -371,6 +371,7 @@ const createAgentOperationsValue = (): AgentOperationsContextValue => ({
   startAgentSession: startAgentSessionMock,
   sendAgentMessage: sendAgentMessageMock,
   stopAgentSession: async () => {},
+  continueInterruptedTurn: async () => undefined,
   updateAgentSessionModel: updateAgentSessionModelMock,
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},

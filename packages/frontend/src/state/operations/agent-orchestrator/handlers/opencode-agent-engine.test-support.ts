@@ -1,6 +1,7 @@
 import type { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type {
   AgentEnginePort,
+  ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
@@ -40,6 +41,26 @@ const bindResumeInput = (
 ): ResumeAgentSessionInput => {
   requireOpenCodeRuntime(input.runtimeKind);
   const boundInput: ResumeAgentSessionInput = {
+    repoPath: input.repoPath,
+    workingDirectory: input.workingDirectory,
+    externalSessionId: input.externalSessionId,
+    sessionScope: input.sessionScope,
+    ...openCodeRuntimePolicy,
+  };
+  if (input.model !== undefined) {
+    boundInput.model = input.model;
+  }
+  if (input.systemPrompt !== undefined) {
+    boundInput.systemPrompt = input.systemPrompt;
+  }
+  return boundInput;
+};
+
+const bindContinueInterruptedTurnInput = (
+  input: Parameters<AgentEnginePort["continueInterruptedTurn"]>[0],
+): ContinueInterruptedAgentTurnInput => {
+  requireOpenCodeRuntime(input.runtimeKind);
+  const boundInput: ContinueInterruptedAgentTurnInput = {
     repoPath: input.repoPath,
     workingDirectory: input.workingDirectory,
     externalSessionId: input.externalSessionId,
@@ -154,6 +175,8 @@ export const createOpenCodeAgentEngineTestAdapter = (
   searchFiles: (input) => adapter.searchFiles(validateOpenCodeInput(input)),
   startSession: (input) => adapter.startSession(bindStartInput(input)),
   resumeSession: (input) => adapter.resumeSession(bindResumeInput(input)),
+  continueInterruptedTurn: (input) =>
+    adapter.continueInterruptedTurn(bindContinueInterruptedTurnInput(input)),
   releaseSession: (input) => adapter.releaseSession(input),
   forkSession: (input) => adapter.forkSession(bindForkInput(input)),
   updateSessionModel: (input) =>

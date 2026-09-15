@@ -1,4 +1,5 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import { errorMessage } from "@/lib/errors";
 import type {
   GitBranch,
   GitTargetBranch,
@@ -8,7 +9,7 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
@@ -65,6 +66,7 @@ type UseAgentStudioSessionActionsArgs = {
   workspaceRepoPath: string | null;
   runSessionStartWorkflow: RunSessionStartWorkflow;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
+  continueInterruptedTurn: AgentOperationsContextValue["continueInterruptedTurn"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
@@ -90,6 +92,10 @@ export type UseAgentStudioSessionActionsResult = {
   canUseKickoffPrompt: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
+  canResumeSession: boolean;
+  isResumingSession: boolean;
+  resumeSessionError: string | null;
+  onResumeSession: () => void;
   startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
@@ -124,6 +130,7 @@ export function useAgentStudioSessionActions({
   workspaceRepoPath,
   runSessionStartWorkflow,
   sendAgentMessage,
+  continueInterruptedTurn,
   humanRequestChangesTask,
   setTaskTargetBranch,
   replyAgentApproval,
@@ -250,6 +257,25 @@ export function useAgentStudioSessionActions({
   });
   const kickoffLabel = LAUNCH_ACTION_LABELS[launchActionId];
   const canStopSession = selectedSessionIdentity !== null && isSessionWorking;
+  const canResumeSession = sessionState.canResumeSession;
+
+  const [isResumingSession, setIsResumingSession] = useState(false);
+  const [resumeSessionError, setResumeSessionError] = useState<string | null>(null);
+
+  const onResumeSession = useCallback((): void => {
+    if (selectedSessionIdentity === null || isResumingSession) {
+      return;
+    }
+    setIsResumingSession(true);
+    setResumeSessionError(null);
+    void continueInterruptedTurn(selectedSessionIdentity)
+      .catch((error) => {
+        setResumeSessionError(errorMessage(error));
+      })
+      .finally(() => {
+        setIsResumingSession(false);
+      });
+  }, [continueInterruptedTurn, isResumingSession, selectedSessionIdentity]);
 
   return {
     isStarting,
@@ -266,6 +292,10 @@ export function useAgentStudioSessionActions({
     canUseKickoffPrompt,
     kickoffLabel,
     canStopSession,
+    canResumeSession,
+    isResumingSession,
+    resumeSessionError,
+    onResumeSession,
     startLaunchKickoff,
     onSend,
     onSubmitQuestionAnswers,

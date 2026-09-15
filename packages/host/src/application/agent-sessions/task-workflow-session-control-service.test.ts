@@ -199,6 +199,7 @@ const createModelUpdateService = ({
     runtime: {
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: () => Effect.dieMessage("unexpected resume"),
+      continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
       forkSession: () => Effect.dieMessage("unexpected fork"),
       sendUserMessage: unexpectedSend,
       updateSessionModel: updateRuntimeModel,
@@ -220,6 +221,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -304,6 +306,7 @@ describe("createAgentSessionCommandService", () => {
               }
             }),
           resumeSession: () => Effect.dieMessage("unexpected resume"),
+          continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
           forkSession: () => Effect.dieMessage("unexpected fork"),
           sendUserMessage: unexpectedSend,
           updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -394,6 +397,7 @@ describe("createAgentSessionCommandService", () => {
             return summary;
           }),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -464,6 +468,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.succeed(summary),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -517,6 +522,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.succeed(summary),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -583,6 +589,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.succeed(summary),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -617,6 +624,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.succeed(summary),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -659,6 +667,7 @@ describe("createAgentSessionCommandService", () => {
             ...summary,
             externalSessionId: input.externalSessionId,
           }),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -685,6 +694,7 @@ describe("createAgentSessionCommandService", () => {
 
     await Effect.runPromise(
       service.resumeSession({
+        resumeMode: "reattach",
         repoPath: "/repo",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
@@ -711,6 +721,57 @@ describe("createAgentSessionCommandService", () => {
     expect(stored[0]?.selectedModel).toEqual(storedModel);
   });
 
+  test("routes a continue-interrupted-turn resume to the runtime without storing a session", async () => {
+    const continuations: unknown[] = [];
+    const service = createAgentSessionCommandService({
+      ...createControlDeps(),
+      runtime: {
+        startSession: () => Effect.dieMessage("unexpected start"),
+        resumeSession: () => Effect.dieMessage("unexpected reattach resume"),
+        continueInterruptedTurn: (input) =>
+          Effect.sync(() => {
+            continuations.push(input);
+            return { ...summary, externalSessionId: input.externalSessionId };
+          }),
+        forkSession: () => Effect.dieMessage("unexpected fork"),
+        sendUserMessage: unexpectedSend,
+        updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+        stopSession: () => Effect.dieMessage("unexpected stop"),
+        releaseSession: () => Effect.dieMessage("unexpected release"),
+      },
+      tasks: {
+        agentSessionsList: () =>
+          Effect.succeed([{ ...summary, role: "build" as const, selectedModel: storedModel }]),
+        agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
+        agentSessionUpdateModel: () => Effect.dieMessage("unexpected stored model update"),
+      },
+    });
+
+    const result = await Effect.runPromise(
+      service.resumeSession({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+        sessionScope: workflowStart.sessionScope,
+        model: storedModel,
+        resumeMode: "continue_interrupted_turn",
+      }),
+    );
+
+    expect(result).toMatchObject({ externalSessionId: "session-1" });
+    expect(continuations).toHaveLength(1);
+    expect(continuations[0]).toMatchObject({
+      repoPath: "/repo",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      sessionScope: workflowStart.sessionScope,
+      model: storedModel,
+    });
+    expect(continuations[0]).not.toHaveProperty("resumeMode");
+    expect(continuations[0]).not.toHaveProperty("selectedModel");
+  });
+
   test("rejects a workflow resume when the stored role differs", async () => {
     let runtimeCalls = 0;
     const service = createAgentSessionCommandService({
@@ -722,6 +783,7 @@ describe("createAgentSessionCommandService", () => {
             runtimeCalls += 1;
             return summary;
           }),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -745,6 +807,7 @@ describe("createAgentSessionCommandService", () => {
     await expect(
       Effect.runPromise(
         service.resumeSession({
+          resumeMode: "reattach",
           repoPath: "/repo",
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktree",
@@ -763,6 +826,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
@@ -804,6 +868,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
@@ -846,6 +911,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: (input) =>
           Effect.sync(() => {
@@ -884,6 +950,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: () =>
           Effect.sync(() => {
@@ -916,6 +983,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: () =>
           Effect.sync(() => {
@@ -959,6 +1027,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: (input) =>
@@ -1165,6 +1234,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () =>
@@ -1206,6 +1276,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () =>
@@ -1259,6 +1330,7 @@ describe("createAgentSessionCommandService", () => {
             runtimeCalls += 1;
             return summary;
           }),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -1280,6 +1352,7 @@ describe("createAgentSessionCommandService", () => {
           yield* taskLifecycle.acquireLifecycle("/repo", ["task-1"], "reset task");
           return yield* Effect.either(
             service.resumeSession({
+              resumeMode: "reattach",
               repoPath: "/repo",
               runtimeKind: "opencode",
               workingDirectory: "/repo/worktree",
@@ -1304,6 +1377,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () =>
           Effect.sync(() => {
             runtimeCalls += 1;
@@ -1354,6 +1428,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -1402,6 +1477,7 @@ describe("createAgentSessionCommandService", () => {
       runtime: {
         startSession: () => Effect.dieMessage("unexpected start"),
         resumeSession: () => Effect.dieMessage("unexpected resume"),
+        continueInterruptedTurn: () => Effect.dieMessage("unexpected continue interrupted turn"),
         forkSession: () => Effect.dieMessage("unexpected fork"),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () =>

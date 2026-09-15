@@ -162,6 +162,77 @@ describe("handleClaudeSdkMessage tool events", () => {
     );
   });
 
+  test("hides the Claude meta continuation turn before live tool-result ingress", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: "0c1e6a5a-6a0b-4a3f-9f7f-0c1e6a5a6a0b",
+        session_id: "session-1",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "mcp_tool_use",
+              id: "tool-meta-1",
+              name: "mcp__openducktor__odt_read_task",
+              server_name: "openducktor",
+              input: { taskId: "task-1" },
+            },
+          ],
+        },
+      }),
+    });
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message: {
+        ...claudeSdkMessageFixture({
+          type: "user",
+          uuid: "4a1b2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d",
+          session_id: "session-1",
+          parent_tool_use_id: "tool-meta-1",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "tool-meta-1",
+                content: [{ type: "text", text: "hidden task" }],
+              },
+            ],
+          },
+        }),
+        isMeta: true,
+      },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({ callId: "tool-meta-1", status: "pending" }),
+      }),
+    );
+  });
+
   test("does not invent generic tool rows for nameless orphan tool results", () => {
     const events: AgentEvent[] = [];
     const session = createSession();

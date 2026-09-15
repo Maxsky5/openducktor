@@ -96,6 +96,10 @@ const buildModel = () => ({
     outputLimit: 8_000,
   },
   canStopSession: true,
+  canResumeSession: false,
+  isResumingSession: false,
+  resumeSessionError: null,
+  onResumeSession: () => {},
   onStopSession: () => {},
   composerFormRef: createRef<HTMLFormElement>(),
   composerEditorRef: createRef<HTMLDivElement>(),
@@ -181,6 +185,38 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("/ for commands");
     expect(html).not.toContain("@ for files");
     expect(html).not.toContain("@ for subagents");
+  });
+
+  test("renders the resume action and its pending label", () => {
+    const idle = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: { ...buildModel(), canResumeSession: true },
+      }),
+    );
+    const pending = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: { ...buildModel(), canResumeSession: true, isResumingSession: true },
+      }),
+    );
+
+    expect(idle).toContain("Resume");
+    expect(idle).not.toContain("Resuming");
+    expect(pending).toContain("Resuming");
+    expect(pending).toContain("disabled");
+  });
+
+  test("renders the resume failure notice and hides resume when unavailable", () => {
+    const failed = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: { ...buildModel(), resumeSessionError: "Continuation failed" },
+      }),
+    );
+    const hidden = renderToStaticMarkup(createElement(AgentChatComposer, { model: buildModel() }));
+
+    expect(failed).toContain('role="alert"');
+    expect(failed).toContain("Continuation failed");
+    expect(failed).not.toContain(">Resume<");
+    expect(hidden).not.toContain(">Resume<");
   });
 
   test("hides stop and context widgets when not available", () => {

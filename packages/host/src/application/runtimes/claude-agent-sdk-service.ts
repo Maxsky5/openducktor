@@ -10,6 +10,7 @@ import type {
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
   AgentSubagentCatalog,
+  ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
   ListAgentModelsInput,
   ListAgentSkillsInput,
@@ -49,6 +50,10 @@ export type ClaudeAgentSdkService = {
   ): Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
   resumeSession(
     input: ResumeAgentSessionInput,
+    runtimeId: string,
+  ): Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
+  continueInterruptedTurn(
+    input: ContinueInterruptedAgentTurnInput,
     runtimeId: string,
   ): Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
   forkSession(

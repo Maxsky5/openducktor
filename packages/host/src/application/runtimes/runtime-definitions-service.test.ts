@@ -35,4 +35,35 @@ describe("createRuntimeDefinitionsService", () => {
     expect(definitions[2]?.capabilities.promptInput.supportsSkillReferences).toBe(true);
     expect(definitions[2]?.capabilities.promptInput.supportsSubagentReferences).toBe(false);
   });
+
+  test("reports interrupted-turn resume support for every built-in runtime", () => {
+    const service = createRuntimeDefinitionsService();
+
+    const definitions = service.listRuntimeDefinitions();
+
+    expect(
+      definitions.map(
+        (definition) => definition.capabilities.sessionLifecycle.supportsInterruptedTurnResume,
+      ),
+    ).toEqual([true, true, true]);
+  });
+
+  test("turns off the Claude capability when the safety gate is disabled", () => {
+    const service = createRuntimeDefinitionsService({
+      claudeInterruptedTurnResumeEnabled: false,
+    });
+
+    const definitions = service.listRuntimeDefinitions();
+
+    expect(
+      definitions.map((definition) => [
+        definition.kind,
+        definition.capabilities.sessionLifecycle.supportsInterruptedTurnResume,
+      ]),
+    ).toEqual([
+      ["opencode", true],
+      ["codex", true],
+      ["claude", false],
+    ]);
+  });
 });

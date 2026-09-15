@@ -12,7 +12,7 @@ import type { AgentSessionLiveStateService } from "./agent-session-live-state-se
 
 type ObservedSessionCommands = Pick<
   AgentSessionLiveStateService,
-  "loadContext" | "loadSessionDiff" | "replyApproval" | "replyQuestion"
+  "continueInterruptedTurn" | "loadContext" | "loadSessionDiff" | "replyApproval" | "replyQuestion"
 >;
 
 export const createAgentSessionCommandService = ({
@@ -101,6 +101,10 @@ export const createAgentSessionCommandService = ({
           "resume session",
           Effect.gen(function* () {
             const prepared = yield* policy.prepareResume(ref);
+            if (input.resumeMode === "continue_interrupted_turn") {
+              const { resumeMode: _resumeMode, ...continuationInput } = prepared.input;
+              return yield* runtime.continueInterruptedTurn(continuationInput);
+            }
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {
                 const summary = yield* runtime.resumeSession(prepared.input);

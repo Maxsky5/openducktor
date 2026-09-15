@@ -97,6 +97,65 @@ describe("OpencodeSdkAdapter session history", () => {
     ]);
   });
 
+  test("loadSessionHistory hides the empty continuation user row", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-user",
+            role: "user",
+            time: { created: Date.parse("2026-02-17T11:58:00Z") },
+          },
+          parts: [
+            {
+              id: "text-user-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-user",
+              type: "text",
+              text: "Started before the interruption",
+              time: { start: Date.now(), end: Date.now() },
+            },
+          ],
+        },
+        {
+          info: {
+            id: "msg-continuation",
+            role: "user",
+            time: { created: Date.parse("2026-02-17T11:59:00Z") },
+          },
+          parts: [],
+        },
+        {
+          info: {
+            id: "msg-answer",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z"), completed: Date.now() },
+          },
+          parts: [
+            {
+              id: "text-answer-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-answer",
+              type: "text",
+              text: "Continued output",
+            },
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:01:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      ...defaultRepoRuntimeInput,
+      externalSessionId: "session-opencode-1",
+    });
+
+    expect(history.map((entry) => entry.messageId)).toEqual(["msg-user", "msg-answer"]);
+  });
+
   test("loadSessionHistory maps Opencode user message system prompts to system history once", async () => {
     const mock = makeMockClient({
       messagesResponse: [

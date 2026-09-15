@@ -12,6 +12,11 @@ import type { HostLifecycleLogger } from "../host-lifecycle";
 import type { CreateNodeHostDefaultPortsInput } from "./node-host-default-ports";
 
 export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput & {
+  /**
+   * Turns Claude interrupted-turn resume on or off. The Claude runtime advertises the
+   * capability, so a disabled gate fails the resume with a typed `unsupported` error.
+   */
+  claudeInterruptedTurnResumeEnabled?: boolean;
   clientVersion?: string;
   eventBus?: HostEventBusPort;
   lifecycleLogger?: HostLifecycleLogger;

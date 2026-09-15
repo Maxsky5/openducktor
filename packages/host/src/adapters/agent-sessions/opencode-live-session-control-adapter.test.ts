@@ -66,6 +66,7 @@ describe("OpenCode live session controls", () => {
     try {
       await Effect.runPromise(
         prepared.adapter.resumeSession({
+          resumeMode: "reattach",
           ...ref,
           externalSessionId: "controlled-session",
           sessionScope: controlSummary.sessionAssociation,
@@ -149,6 +150,7 @@ describe("OpenCode live session controls", () => {
     });
     await Effect.runPromise(
       adapter.resumeSession({
+        resumeMode: "reattach",
         ...controlRef,
         sessionScope: startInput.sessionScope,
       }),
@@ -197,6 +199,7 @@ describe("OpenCode live session controls", () => {
     });
     await Effect.runPromise(
       adapter.resumeSession({
+        resumeMode: "reattach",
         ...controlRef,
         sessionScope: startInput.sessionScope,
       }),
@@ -252,9 +255,16 @@ describe("OpenCode live session controls", () => {
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
-    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
     await Effect.runPromise(
-      adapter.resumeSession({ ...ref, externalSessionId: "session-2", sessionScope }),
+      adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
+    await Effect.runPromise(
+      adapter.resumeSession({
+        resumeMode: "reattach",
+        ...ref,
+        externalSessionId: "session-2",
+        sessionScope,
+      }),
     );
     publishedChanges.length = 0;
     const sending = Effect.runPromise(
@@ -377,9 +387,16 @@ describe("OpenCode live session controls", () => {
     );
     const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
-    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
     await Effect.runPromise(
-      adapter.resumeSession({ ...ref, externalSessionId: "session-2", sessionScope }),
+      adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
+    await Effect.runPromise(
+      adapter.resumeSession({
+        resumeMode: "reattach",
+        ...ref,
+        externalSessionId: "session-2",
+        sessionScope,
+      }),
     );
     const send = (externalSessionId: string) =>
       Effect.runPromise(
@@ -450,7 +467,9 @@ describe("OpenCode live session controls", () => {
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
-    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
+    await Effect.runPromise(
+      adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
     const sending = Effect.runPromise(
       adapter.sendUserMessage({
         ...ref,
@@ -524,6 +543,7 @@ describe("OpenCode live session controls", () => {
       } else if (operation === "resume") {
         await Effect.runPromise(
           adapter.resumeSession({
+            resumeMode: "reattach",
             ...controlRef,
             sessionScope,
           }),
@@ -604,9 +624,16 @@ describe("OpenCode live session controls", () => {
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
-    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
     await Effect.runPromise(
-      adapter.resumeSession({ ...ref, externalSessionId: "session-2", sessionScope }),
+      adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
+    await Effect.runPromise(
+      adapter.resumeSession({
+        resumeMode: "reattach",
+        ...ref,
+        externalSessionId: "session-2",
+        sessionScope,
+      }),
     );
     publishedChanges.length = 0;
 
@@ -667,6 +694,7 @@ describe("OpenCode live session controls", () => {
     const adapter = prepared.adapter;
     await Effect.runPromise(
       adapter.resumeSession({
+        resumeMode: "reattach",
         ...ref,
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       }),

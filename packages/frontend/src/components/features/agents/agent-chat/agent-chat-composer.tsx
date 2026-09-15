@@ -1,4 +1,4 @@
-import { Bot, BrainCog, LoaderCircle, Paperclip, SendHorizontal, Square } from "lucide-react";
+import { Bot, BrainCog, LoaderCircle, Paperclip, Play, SendHorizontal, Square } from "lucide-react";
 import {
   memo,
   type ReactElement,
@@ -110,6 +110,10 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   contextUsage,
   canStopSession,
   onStopSession,
+  canResumeSession,
+  isResumingSession,
+  resumeSessionError,
+  onResumeSession,
   showSubmittingState,
   sendDisabled,
   pendingSendItems,
@@ -129,6 +133,10 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   contextUsage: AgentChatComposerModel["contextUsage"];
   canStopSession: boolean;
   onStopSession: AgentChatComposerModel["onStopSession"];
+  canResumeSession: boolean;
+  isResumingSession: boolean;
+  resumeSessionError: string | null;
+  onResumeSession: AgentChatComposerModel["onResumeSession"];
   showSubmittingState: boolean;
   sendDisabled: boolean;
   pendingSendItems: AgentChatComposerModel["pendingSendItems"];
@@ -208,6 +216,28 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
                 : {})}
             />
           </div>
+        ) : null}
+        {resumeSessionError ? (
+          <p className="max-w-[24rem] text-right text-xs text-destructive" role="alert">
+            {resumeSessionError}
+          </p>
+        ) : null}
+        {canResumeSession ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 rounded-full px-3 text-xs"
+            disabled={isResumingSession}
+            onClick={onResumeSession}
+          >
+            {isResumingSession ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : (
+              <Play className="size-3.5" />
+            )}
+            {isResumingSession ? "Resuming" : "Resume"}
+          </Button>
         ) : null}
         {canStopSession ? (
           <Button
@@ -345,6 +375,10 @@ function AgentChatComposerFormView({
     contextUsage,
     canStopSession,
     onStopSession,
+    canResumeSession,
+    isResumingSession,
+    resumeSessionError,
+    onResumeSession,
     composerFormRef,
     composerEditorRef,
     onComposerEditorInput,
@@ -438,6 +472,10 @@ function AgentChatComposerFormView({
             contextUsage={contextUsage}
             canStopSession={canStopSession}
             onStopSession={onStopSession}
+            canResumeSession={canResumeSession}
+            isResumingSession={isResumingSession}
+            resumeSessionError={resumeSessionError}
+            onResumeSession={onResumeSession}
             showSubmittingState={isSubmitting}
             sendDisabled={sendDisabled}
             pendingSendItems={pendingSendItems}

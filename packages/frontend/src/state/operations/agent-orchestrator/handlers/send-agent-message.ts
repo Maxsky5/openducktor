@@ -204,9 +204,11 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       const staleError = "Workspace changed while resuming the session.";
       throwIfRepoStale(isRepoStale, staleError);
       const stoppedSession = currentSession;
-      const resumed = await dependencies.adapter.resumeSession(
-        toBoundRuntimeSessionRef(repoPath, stoppedSession, "resume session"),
-      );
+      const resumeInput: Parameters<typeof dependencies.adapter.resumeSession>[0] = {
+        ...toBoundRuntimeSessionRef(repoPath, stoppedSession, "resume session"),
+        resumeMode: "reattach",
+      };
+      const resumed = await dependencies.adapter.resumeSession(resumeInput);
       throwIfRepoStale(isRepoStale, staleError);
       if (!matchesAgentSessionIdentity(resumed, stoppedSession)) {
         throw new Error(`The runtime resumed a different session than '${externalSessionId}'.`);

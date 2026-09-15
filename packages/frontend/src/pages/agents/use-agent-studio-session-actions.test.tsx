@@ -384,6 +384,7 @@ const createBaseArgs = (): HookArgs => {
     },
     runSessionStartWorkflow: createRunSessionStartWorkflow(),
     sendAgentMessage: async () => {},
+    continueInterruptedTurn: async () => undefined,
     humanRequestChangesTask: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
@@ -2009,6 +2010,7 @@ describe("direct prepared submission", () => {
       setTaskTargetBranch: persist,
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     });
     try {
       await harness.mount();
@@ -2046,6 +2048,7 @@ describe("direct prepared submission", () => {
       setTaskTargetBranch: persist,
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     });
     try {
       await harness.mount();
@@ -2070,6 +2073,7 @@ describe("direct prepared submission", () => {
       selectedTask: createTask({ targetBranchError: "Invalid task target branch" }),
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     });
     try {
       await harness.mount();
@@ -2095,6 +2099,7 @@ describe("direct prepared submission", () => {
       repoSettings: null,
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     });
     try {
       await harness.mount();
@@ -2133,6 +2138,7 @@ describe("direct prepared submission", () => {
         }),
         runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
         sendAgentMessage: send,
+        continueInterruptedTurn: async () => undefined,
       };
       const harness = createHookHarness(args);
       await harness.mount();
@@ -2182,6 +2188,7 @@ describe("direct prepared submission", () => {
       ...createBaseArgs(),
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     };
     const harness = createHookHarness(args);
     await harness.mount();
@@ -2197,6 +2204,7 @@ describe("direct prepared submission", () => {
       ...args,
       selectedSession: selectedSessionFromIdentity(sessionIdentity("kept")),
       sendAgentMessage: async () => {},
+      continueInterruptedTurn: async () => undefined,
     });
     await harness.run(async (state) => {
       expect(await state.onSend(createComposerDraft("recover me"))).toBe(true);
@@ -2216,6 +2224,7 @@ describe("prepared composer catalog refresh", () => {
         ...createBaseArgs(),
         runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
         sendAgentMessage: send,
+        continueInterruptedTurn: async () => undefined,
       };
       let catalog = args.newSessionCatalog!;
       const loadCatalog = async () => catalog;
@@ -2299,6 +2308,7 @@ describe("direct submission context isolation", () => {
       scheduleQueryUpdate: navigation,
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     };
     const harness = createHookHarness(args);
     try {
@@ -2339,6 +2349,7 @@ describe("direct submission context isolation", () => {
         scheduleQueryUpdate: navigation,
         runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
         sendAgentMessage: send,
+        continueInterruptedTurn: async () => undefined,
       };
       const harness = createHookHarness(args);
       let submitted!: Promise<AgentChatSendResult>;

@@ -1400,6 +1400,7 @@ describe("runtime schemas", () => {
           supportsListLiveSessions: true,
           supportsQueuedUserMessages: true,
           supportsPendingInputSnapshots: true,
+          supportsInterruptedTurnResume: true,
         },
         history: {
           loadable: true,

@@ -24,6 +24,7 @@ import {
   type ParsedOpencodePart,
 } from "./opencode-ingress";
 import { toOpenCodeRequestError } from "./request-errors";
+import { isOpencodeContinuationArtifactEntry } from "./opencode-interrupted-turn";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
 import { normalizeTodoList } from "./todo-normalizers";
@@ -380,6 +381,7 @@ export const loadSessionHistory = async (
   const childSessionLinks = await listChildSessionLinks(client, input);
   const normalizedEntries = data
     .filter((entry) => !isCompactionMarkerEntry(entry))
+    .filter((entry) => !isOpencodeContinuationArtifactEntry(entry))
     .map((entry) => {
       const info = entry.info;
       const infoText = "";

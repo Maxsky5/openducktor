@@ -32,6 +32,7 @@ import {
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
+import { canResumeInterruptedTurn } from "@/lib/agent-session-interrupted-turn";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 
 type WorkspaceSessionChatProps = {
@@ -185,6 +186,17 @@ export function WorkspaceSessionChat({
       },
     },
   });
+  const canResumeSession =
+    identity !== null &&
+    !isStarting &&
+    canResumeInterruptedTurn({
+      activityState,
+      messages: session?.messages.items ?? [],
+      runtimeDescriptor:
+        runtime.allRuntimeDefinitions.find(
+          (definition) => definition.kind === record.runtimeKind,
+        ) ?? null,
+    });
   const canInteract =
     readiness.interactionEnabled &&
     observationReady &&
@@ -265,6 +277,13 @@ export function WorkspaceSessionChat({
       busySendBlockedReason: null,
       canStopSession,
       stopAgentSession: operations.stopAgentSession,
+      canResumeSession: canResumeSession && canInteract,
+      isResumingSession: actions.isResumingSession,
+      resumeSessionError: actions.resumeSessionError,
+      continueInterruptedTurn: (target) => {
+        actions.resumeInterruptedTurn(target);
+        return Promise.resolve();
+      },
       isReadOnly,
       readOnlyReason,
       draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },

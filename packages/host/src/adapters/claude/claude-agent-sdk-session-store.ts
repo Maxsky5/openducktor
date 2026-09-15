@@ -16,7 +16,7 @@ export type CreateClaudeAgentSdkSessionStoreInput = {
   now?: () => string;
 };
 
-const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
+export const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
   session.activity === "running" ||
   session.sdkState === "running" ||
   session.sdkState === "requires_action" ||

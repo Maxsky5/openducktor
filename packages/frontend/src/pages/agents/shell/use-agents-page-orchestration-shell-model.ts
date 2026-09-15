@@ -29,6 +29,7 @@ type UseAgentsPageOrchestrationShellModelArgs = {
   agentOperations: Pick<
     ReturnType<typeof useAgentOperations>,
     | "sendAgentMessage"
+    | "continueInterruptedTurn"
     | "stopAgentSession"
     | "loadAgentSessionHistory"
     | "updateAgentSessionModel"
@@ -115,6 +116,7 @@ export function useAgentsPageOrchestrationShellModel({
       openTaskDetails,
       runSessionStartWorkflow,
       sendAgentMessage: agentOperations.sendAgentMessage,
+      continueInterruptedTurn: agentOperations.continueInterruptedTurn,
       stopAgentSession: agentOperations.stopAgentSession,
       loadAgentSessionHistory: agentOperations.loadAgentSessionHistory,
       updateAgentSessionModel: agentOperations.updateAgentSessionModel,

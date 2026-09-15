@@ -83,6 +83,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const {
     startAgentSession,
     sendAgentMessage,
+    continueInterruptedTurn,
     stopAgentSession,
     loadAgentSessionHistory,
     updateAgentSessionModel,
@@ -151,6 +152,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     runSessionStartWorkflow,
     agentOperations: {
       sendAgentMessage,
+      continueInterruptedTurn,
       stopAgentSession,
       loadAgentSessionHistory,
       updateAgentSessionModel,

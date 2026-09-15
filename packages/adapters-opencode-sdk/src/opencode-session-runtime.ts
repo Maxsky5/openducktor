@@ -5,6 +5,7 @@ import type {
   AgentWorkspaceInspectionPort,
   AcceptedAgentUserMessage,
   AgentEvent,
+  ContinueInterruptedAgentTurnInput,
   AgentSessionSummary,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
@@ -63,6 +64,9 @@ export type OpencodeSessionRuntimeConnection = {
   readonly replyQuestion: (input: OpencodeNativeQuestionReply) => Promise<void>;
   readonly startSession: (input: StartAgentSessionInput) => Promise<AgentSessionSummary>;
   readonly resumeSession: (input: ResumeAgentSessionInput) => Promise<AgentSessionSummary>;
+  readonly continueInterruptedTurn: (
+    input: ContinueInterruptedAgentTurnInput,
+  ) => Promise<AgentSessionSummary>;
   readonly forkSession: (input: ForkAgentSessionInput) => Promise<AgentSessionSummary>;
   readonly sendUserMessage: (input: SendAgentUserMessageInput) => Promise<AcceptedAgentUserMessage>;
   readonly updateSessionModel: (input: UpdateAgentSessionModelInput) => Promise<void>;
@@ -445,6 +449,8 @@ export const createPrepareOpencodeSessionRuntime = (
         replyToOpencodeQuestion({ createClient, runtimeEndpoint: input.runtimeEndpoint }, reply),
       startSession: (sessionInput) => controlAdapter.startSession(sessionInput),
       resumeSession: (sessionInput) => controlAdapter.resumeSession(sessionInput),
+      continueInterruptedTurn: (sessionInput) =>
+        controlAdapter.continueInterruptedTurn(sessionInput),
       forkSession: (sessionInput) => controlAdapter.forkSession(sessionInput),
       sendUserMessage: (messageInput) => controlAdapter.sendUserMessage(messageInput),
       updateSessionModel: (modelInput) => controlAdapter.updateSessionModel(modelInput),

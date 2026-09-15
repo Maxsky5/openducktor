@@ -2,6 +2,7 @@ import { createCodexRuntimeTransport } from "./codex-runtime-transport";
 import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import { createCodexImageOperations } from "./codex-image-operations";
 import { createCodexImageSettlement } from "./codex-live-session-images";
+import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
 import {
   CodexAppServerAdapter,
@@ -14,11 +15,9 @@ import {
   type AgentSessionScope,
   acceptedAgentUserMessageSchema,
   agentSessionLiveLoadContextResultSchema,
-  type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import type { AgentRuntimePolicyBinding, AgentSessionSummary } from "@openducktor/core";
 import { Effect, Exit } from "effect";
-import type { z } from "zod";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import {
   type HostError,
@@ -38,71 +37,16 @@ import type {
 import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
 import { toCodexUserMessagePart } from "./codex-live-session-inputs";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
-
-type CodexRuntimeInstance = RuntimeInstanceSummary & {
-  readonly kind: "codex";
-  readonly runtimeRoute: { readonly type: "stdio"; readonly identity: string };
-};
-
-type CodexRuntimeValidationDetails =
-  | { readonly runtimeId: string; readonly runtimeKind: RuntimeInstanceSummary["kind"] }
-  | { readonly runtimeId: string };
-
-type OperationValidationDetails = { readonly operation: string };
-
-const isCodexRuntimeInstance = (runtime: RuntimeInstanceSummary): runtime is CodexRuntimeInstance =>
-  runtime.kind === "codex" && runtime.runtimeRoute.type === "stdio";
+import {
+  parseCodexLiveSessionOutput,
+  requireCodexStdioRuntime,
+  toCodexLiveSessionRef,
+} from "./codex-live-session-runtime-guards";
 export type {
   CodexLiveSessionAdapterPreparer,
   CreateCodexLiveSessionAdapterPreparerInput,
   PreparedCodexLiveSessionAdapter,
 } from "./codex-live-session-adapter-contract";
-
-const toSessionRef = (ref: AgentSessionLiveRef): AgentSessionLiveRef => ({
-  repoPath: ref.repoPath,
-  runtimeKind: ref.runtimeKind,
-  workingDirectory: ref.workingDirectory,
-  externalSessionId: ref.externalSessionId,
-});
-
-const parseOutput = <Schema extends z.ZodType, Input>(
-  schema: Schema,
-  value: Input,
-  operation: string,
-): Effect.Effect<z.output<Schema>, HostValidationError<OperationValidationDetails>> =>
-  Effect.try({
-    try: () => schema.parse(value),
-    catch: (cause) =>
-      new HostValidationError<OperationValidationDetails>({
-        message: cause instanceof Error ? cause.message : String(cause),
-        cause,
-        details: { operation },
-      }),
-  });
-
-const requireRuntime = (
-  runtime: RuntimeInstanceSummary,
-): Effect.Effect<CodexRuntimeInstance, HostValidationError<CodexRuntimeValidationDetails>> => {
-  if (!isCodexRuntimeInstance(runtime)) {
-    return Effect.fail(
-      new HostValidationError<CodexRuntimeValidationDetails>({
-        field: "runtime",
-        message: `Codex live-session adapter requires a Codex stdio runtime, received '${runtime.kind}/${runtime.runtimeRoute.type}'.`,
-        details: { runtimeId: runtime.runtimeId, runtimeKind: runtime.kind },
-      }),
-    );
-  }
-  if (runtime.runtimeRoute.identity !== runtime.runtimeId) {
-    return Effect.fail(
-      new HostValidationError<CodexRuntimeValidationDetails>({
-        field: "runtime.runtimeRoute.identity",
-        message: `Codex runtime route identity '${runtime.runtimeRoute.identity}' does not match runtime '${runtime.runtimeId}'.`,
-        details: { runtimeId: runtime.runtimeId },
-      }),
-    );
-  }
-  return Effect.succeed(runtime);
-};
 
 const defaultCreateController = (options: CodexAppServerAdapterOptions): CodexSessionController =>
   new CodexAppServerAdapter(options);
@@ -118,7 +62,7 @@ export const createCodexLiveSessionAdapterPreparer =
   }: CreateCodexLiveSessionAdapterPreparerInput): CodexLiveSessionAdapterPreparer =>
   (runtimeInput) =>
     Effect.gen(function* () {
-      const runtime = yield* requireRuntime(runtimeInput);
+      const runtime = yield* requireCodexStdioRuntime(runtimeInput);
       const eventHub = createCodexLiveSessionEventHub(runtime.runtimeId);
       const projection = createCodexLiveSessionProjection({
         runtime,
@@ -326,7 +270,7 @@ export const createCodexLiveSessionAdapterPreparer =
                     ),
                   });
                 });
-            const normalized = yield* parseOutput(
+            const normalized = yield* parseCodexLiveSessionOutput(
               agentSessionLiveLoadContextResultSchema,
               usage,
               "codex-live-session.normalize-context",
@@ -376,7 +320,7 @@ export const createCodexLiveSessionAdapterPreparer =
             catch: sessionError("codex-live-session.reply-question", input.externalSessionId),
           }).pipe(
             Effect.flatMap((event) =>
-              refreshProjection([{ ...event, sessionRef: toSessionRef(input) }]),
+              refreshProjection([{ ...event, sessionRef: toCodexLiveSessionRef(input) }]),
             ),
           ),
         settleRuntimeTranscript: images.settleRuntimeTranscript,
@@ -409,6 +353,30 @@ export const createCodexLiveSessionAdapterPreparer =
                 controller.resumeSession(request),
               );
             }),
+          ),
+        continueInterruptedTurn: (input) =>
+          bindControlPolicy(input, "continue-interrupted-turn").pipe(
+            Effect.flatMap((boundInput) => {
+              const { model, systemPrompt, ...requiredInput } = boundInput;
+              const request: Parameters<typeof controller.continueInterruptedTurn>[0] =
+                requiredInput;
+              if (model !== undefined) {
+                request.model = model;
+              }
+              if (systemPrompt !== undefined) {
+                request.systemPrompt = systemPrompt;
+              }
+              return runControlSummary("codex-live-session.continue-interrupted-turn", () =>
+                controller.continueInterruptedTurn(request),
+              );
+            }),
+            Effect.mapError((cause) =>
+              toAgentSessionResumeError(
+                cause,
+                toCodexLiveSessionRef(input),
+                "codex-live-session.continue-interrupted-turn",
+              ),
+            ),
           ),
         forkSession: (input) =>
           bindControlPolicy(input, "fork-session").pipe(
@@ -449,20 +417,20 @@ export const createCodexLiveSessionAdapterPreparer =
               });
             }),
             Effect.flatMap((value) =>
-              parseOutput(
+              parseCodexLiveSessionOutput(
                 acceptedAgentUserMessageSchema,
                 value,
                 "codex-live-session.normalize-user-message",
               ).pipe(Effect.as(value)),
             ),
             Effect.flatMap((value) =>
-              refreshProjection([{ ...value, sessionRef: toSessionRef(input) }]).pipe(
+              refreshProjection([{ ...value, sessionRef: toCodexLiveSessionRef(input) }]).pipe(
                 Effect.as(value),
                 Effect.mapError(
                   (cause) =>
                     new AgentSessionMessageAcceptedError(
                       {
-                        sessionRef: toSessionRef(input),
+                        sessionRef: toCodexLiveSessionRef(input),
                         acceptedMessage: value,
                         stage: "live_update",
                       },

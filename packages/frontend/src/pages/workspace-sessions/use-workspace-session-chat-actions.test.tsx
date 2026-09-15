@@ -126,6 +126,7 @@ test.each([
       },
       sendAgentMessage,
       stopAgentSession: async () => {},
+      continueInterruptedTurn: async () => undefined,
       updateAgentSessionModel: () => {},
       replyAgentApproval: async () => {},
       answerAgentQuestion: async () => {},

@@ -11,7 +11,11 @@ import { z } from "zod";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
-import { buildClaudeAgentSdkOptions } from "./claude-agent-sdk-options";
+import {
+  buildClaudeAgentSdkBaseOptions,
+  buildClaudeAgentSdkOptions,
+  CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV,
+} from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type {
   ClaudeSessionContext,
@@ -187,6 +191,23 @@ const preToolUseHook = async (
     { signal: new AbortController().signal },
   );
 };
+
+describe("buildClaudeAgentSdkBaseOptions", () => {
+  test("injects the interrupted-turn resume switch only when it is requested", () => {
+    const withoutSwitch = buildClaudeAgentSdkBaseOptions({
+      claudeExecutablePath: process.execPath,
+      cwd: process.cwd(),
+    });
+    const withSwitch = buildClaudeAgentSdkBaseOptions({
+      claudeExecutablePath: process.execPath,
+      cwd: process.cwd(),
+      resumeInterruptedTurn: true,
+    });
+
+    expect(withoutSwitch.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBeUndefined();
+    expect(withSwitch.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBe("1");
+  });
+});
 
 describe("buildClaudeAgentSdkOptions", () => {
   test("keeps the full workspace-bound OpenDucktor catalog available for repository sessions", async () => {

@@ -39,6 +39,7 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
       : new AgentSessionLiveRegistration(binding, (mutation) =>
           Effect.map(mutation, ({ value }) => value),
         ),
+  continueInterruptedTurn: unexpectedEffectCall("live session adapter", "continueInterruptedTurn"),
   forkSession: unexpectedEffectCall("live session adapter", "forkSession"),
   listSnapshots: unexpectedEffectCall("live session adapter", "listSnapshots"),
   loadContext: unexpectedEffectCall("live session adapter", "loadContext"),

@@ -176,14 +176,35 @@ describe("agent session control contracts", () => {
       externalSessionId: "session-1",
       sessionScope: workflowScope,
     };
+    const resumeRef = { ...ref, resumeMode: "reattach" as const };
 
-    expect(agentSessionControlResumeInputSchema.parse(ref)).toEqual(ref);
+    expect(agentSessionControlResumeInputSchema.parse(resumeRef)).toEqual(resumeRef);
     expect(
       agentSessionControlSendInputSchema.parse({
         ...ref,
         parts: [{ kind: "text", text: "hello" }],
       }),
     ).toMatchObject(ref);
+  });
+
+  test("requires a resume mode on every resume control", () => {
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/task",
+      externalSessionId: "session-1",
+      sessionScope: workflowScope,
+    };
+
+    expect(agentSessionControlResumeInputSchema.safeParse(ref).success).toBe(false);
+    expect(
+      agentSessionControlResumeInputSchema.safeParse({ ...ref, resumeMode: "detach" }).success,
+    ).toBe(false);
+    for (const resumeMode of ["reattach", "continue_interrupted_turn"] as const) {
+      expect(agentSessionControlResumeInputSchema.safeParse({ ...ref, resumeMode }).success).toBe(
+        true,
+      );
+    }
   });
 
   test("rejects send controls that combine a slash command with an attachment", () => {
@@ -247,7 +268,8 @@ describe("agent session control contracts", () => {
         systemPrompt: "Repository chat",
       }),
     ).toMatchObject({ sessionScope: repositoryScope });
-    expect(agentSessionControlResumeInputSchema.parse(ref)).toEqual(ref);
+    const resumeRef = { ...ref, resumeMode: "reattach" as const };
+    expect(agentSessionControlResumeInputSchema.parse(resumeRef)).toEqual(resumeRef);
     expect(
       agentSessionControlForkInputSchema.parse({
         repoPath: ref.repoPath,

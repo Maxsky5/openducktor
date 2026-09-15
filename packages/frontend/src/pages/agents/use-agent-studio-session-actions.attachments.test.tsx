@@ -213,6 +213,7 @@ const createBaseArgs = (): HookArgs => {
     repoSettings: null,
     runSessionStartWorkflow: createRunSessionStartWorkflow(),
     sendAgentMessage: async () => {},
+    continueInterruptedTurn: async () => undefined,
     humanRequestChangesTask: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},

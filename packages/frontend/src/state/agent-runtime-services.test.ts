@@ -158,7 +158,7 @@ describe("agent runtime services", () => {
           systemPrompt: "Build",
         }),
       ).rejects.toThrow("Workflow sessions must start through agentSessionWorkflowStart.");
-      await agentEngine.resumeSession({ ...sessionRef, sessionScope });
+      await agentEngine.resumeSession({ ...sessionRef, sessionScope, resumeMode: "reattach" });
       await agentEngine.forkSession({
         repoPath: sessionRef.repoPath,
         runtimeKind: sessionRef.runtimeKind,
@@ -187,7 +187,11 @@ describe("agent runtime services", () => {
         systemPrompt: "Build",
       });
       expect(resume).toHaveBeenCalledTimes(1);
-      expect(resume).toHaveBeenCalledWith({ ...sessionRef, sessionScope });
+      expect(resume).toHaveBeenCalledWith({
+        ...sessionRef,
+        sessionScope,
+        resumeMode: "reattach",
+      });
       expect(fork).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledWith({

@@ -224,6 +224,7 @@ export type AgentOperationsContextValue = {
     options?: AgentMessageSendOptions,
   ) => Promise<void>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
+  continueInterruptedTurn: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,

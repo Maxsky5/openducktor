@@ -200,6 +200,10 @@ export type AgentChatComposerModel = {
   } | null;
   canStopSession: boolean;
   onStopSession: () => void;
+  canResumeSession: boolean;
+  isResumingSession: boolean;
+  resumeSessionError: string | null;
+  onResumeSession: () => void;
   composerFormRef: RefObject<HTMLFormElement | null>;
   composerEditorRef: RefObject<HTMLDivElement | null>;
   onComposerEditorInput: () => void;

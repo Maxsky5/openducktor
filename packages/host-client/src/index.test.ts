@@ -483,6 +483,7 @@ describe("HostClient", () => {
         workingDirectory: "/repo/worktree",
         externalSessionId: "session-1",
         sessionScope: { kind: "repository" },
+        resumeMode: "reattach",
       }),
     ).resolves.toEqual(summary);
     await expect(
@@ -531,6 +532,7 @@ describe("HostClient", () => {
           workingDirectory: "/repo/worktree",
           externalSessionId: "session-1",
           sessionScope: { kind: "repository" },
+          resumeMode: "reattach",
         },
       },
       {

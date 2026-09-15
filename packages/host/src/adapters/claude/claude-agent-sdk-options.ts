@@ -37,6 +37,12 @@ export type ClaudeAgentSdkOptionsDependencies = {
   mcpCommand: string[];
 };
 
+/**
+ * Private bundled CLI switch. It is absent from the public SDK type contract,
+ * so it stays a named constant behind the host compatibility gate.
+ */
+export const CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV = "CLAUDE_CODE_RESUME_INTERRUPTED_TURN";
+
 type BuildClaudeAgentSdkOptionsInput = {
   input: ClaudeSessionInput;
   session: ClaudeSessionContext;
@@ -46,6 +52,7 @@ type BuildClaudeAgentSdkOptionsInput = {
   randomId: () => string;
   emit: ClaudeAgentSdkEventEmitter;
   resolvedDependencies: ClaudeAgentSdkOptionsDependencies;
+  resumeInterruptedTurn?: boolean;
 };
 
 const CLAUDE_OPENDUCKTOR_MCP_TOKEN_FILE_ENV = "ODT_HOST_TOKEN_FILE";
@@ -56,17 +63,20 @@ export const buildClaudeAgentSdkBaseOptions = ({
   claudeExecutablePath,
   cwd,
   processEnv,
+  resumeInterruptedTurn = false,
 }: {
   claudeExecutablePath: string;
   cwd: string;
   processEnv?: NodeJS.ProcessEnv | undefined;
+  resumeInterruptedTurn?: boolean;
 }): Options => {
+  const env = {
+    ...sanitizeChildProcessEnvironment(processEnv ?? {}),
+    CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor",
+  };
   const options: Options = {
     cwd,
-    env: {
-      ...sanitizeChildProcessEnvironment(processEnv ?? {}),
-      CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor",
-    },
+    env: resumeInterruptedTurn ? { ...env, [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]: "1" } : env,
     skills: "all",
     tools: { type: "preset", preset: "claude_code" },
   };
@@ -80,6 +90,7 @@ export const buildClaudeAgentSdkOptions = async ({
   now,
   randomId,
   resolvedDependencies,
+  resumeInterruptedTurn,
   serviceInput,
   session,
   sessionOptions,
@@ -114,6 +125,7 @@ export const buildClaudeAgentSdkOptions = async ({
       claudeExecutablePath: resolvedDependencies.claudeExecutablePath,
       cwd: input.workingDirectory,
       processEnv: serviceInput.processEnv,
+      resumeInterruptedTurn: resumeInterruptedTurn === true,
     }),
     additionalDirectories: [input.workingDirectory],
     ...sessionOptions,

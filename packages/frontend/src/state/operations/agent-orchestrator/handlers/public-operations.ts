@@ -29,6 +29,7 @@ type SessionActions = {
     options?: AgentMessageSendOptions,
   ) => Promise<void>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
+  continueInterruptedTurn: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
@@ -99,6 +100,8 @@ export const createOrchestratorPublicOperations = ({
   },
   stopAgentSession: (session): Promise<void> =>
     withErrorToast("Failed to stop agent session", () => sessionActions.stopAgentSession(session)),
+  continueInterruptedTurn: (session): Promise<void> =>
+    sessionActions.continueInterruptedTurn(session),
   updateAgentSessionModel: (session, selection): void => {
     void withErrorToast("Failed to update session model", () =>
       sessionActions.updateAgentSessionModel(session, selection),

@@ -52,3 +52,14 @@ export const readClaudeQueuedPrompt = (entry: ClaudeHistoryMessage): string | nu
 export const isClaudeMetaHistoryMessage = (entry: ClaudeHistoryMessage): boolean => {
   return entry.isMeta === true || entry.interruptedByShutdown === true;
 };
+
+const claudeMetaStreamFlagSchema = z.looseObject({ isMeta: z.boolean().optional() });
+
+/**
+ * Reads the hidden-turn flag from a live SDK message. The SDK type omits it, and the
+ * Claude CLI sets it on its "Continue from where you left off." continuation turn.
+ */
+export const isClaudeMetaStreamMessage = (message: SDKMessage | SessionStoreEntry): boolean => {
+  const parsed = claudeMetaStreamFlagSchema.safeParse(message);
+  return parsed.success && parsed.data.isMeta === true;
+};

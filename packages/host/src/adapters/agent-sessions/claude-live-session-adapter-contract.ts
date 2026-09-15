@@ -34,6 +34,7 @@ export type ClaudeRuntimeSessionAdapterPreparer = (
 export type CreateClaudeLiveSessionAdapterPreparerInput = {
   readonly eventHub: ClaudeAgentSdkEventHub;
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "createRuntimeRegistration">;
+  readonly resumeInterruptedTurnEnabled?: boolean;
   readonly service: Pick<
     ClaudeAgentSdkService,
     | "resolveSessionParent"
@@ -46,6 +47,7 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
     | "loadSessionTodos"
     | "loadSessionDiff"
     | "loadFileStatus"
+    | "continueInterruptedTurn"
     | "forkSession"
     | "loadSessionContextUsage"
     | "prepareApprovalReply"

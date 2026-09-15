@@ -116,6 +116,7 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
         throw new Error("Unexpected message send");
       },
       stopAgentSession: async () => {},
+      continueInterruptedTurn: async () => undefined,
       updateAgentSessionModel: () => {},
       replyAgentApproval: async () => {},
       answerAgentQuestion: async () => {},

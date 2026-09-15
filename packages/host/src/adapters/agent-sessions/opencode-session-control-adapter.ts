@@ -9,6 +9,7 @@ import type { AgentSessionSummary, AgentUserMessagePart } from "@openducktor/cor
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import { type HostError, toHostOperationError } from "../../effect/host-errors";
+import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
 import type {
   AgentSessionControlAdapterPort,
@@ -132,6 +133,23 @@ export const createOpenCodeSessionControlAdapter = ({
         connection.resumeSession(request),
       );
     },
+    continueInterruptedTurn: (input) =>
+      runControlSummary("opencode-live-session.continue-interrupted-turn", () =>
+        connection.continueInterruptedTurn({
+          ...toSessionRef(input),
+          runtimeKind: "opencode",
+          runtimePolicy: { kind: "opencode" },
+          sessionScope: input.sessionScope,
+        }),
+      ).pipe(
+        Effect.mapError((cause) =>
+          toAgentSessionResumeError(
+            cause,
+            toSessionRef(input),
+            "opencode-live-session.continue-interrupted-turn",
+          ),
+        ),
+      ),
     forkSession: (input) => {
       const request: Parameters<typeof connection.forkSession>[0] = {
         repoPath: input.repoPath,

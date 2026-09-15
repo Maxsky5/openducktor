@@ -193,6 +193,7 @@ const operations = (
   },
   sendAgentMessage: async () => {},
   stopAgentSession: async () => {},
+  continueInterruptedTurn: async () => undefined,
   updateAgentSessionModel: () => {},
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},

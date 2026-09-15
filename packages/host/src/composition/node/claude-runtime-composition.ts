@@ -27,6 +27,10 @@ export type ClaudeRuntimeComposition = {
 };
 
 export type CreateClaudeRuntimeCompositionInput = {
+  /**
+   * Turns Claude interrupted-turn resume on or off. Defaults to on.
+   */
+  interruptedTurnResumeEnabled?: boolean;
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
@@ -39,6 +43,7 @@ export type CreateClaudeRuntimeCompositionInput = {
 };
 
 export const createClaudeRuntimeComposition = ({
+  interruptedTurnResumeEnabled = true,
   liveSessionLifecycle,
   onBackgroundFailure,
   processEnv,
@@ -67,6 +72,7 @@ export const createClaudeRuntimeComposition = ({
   const prepareLiveSessionAdapter = createClaudeLiveSessionAdapterPreparer({
     eventHub,
     liveSessionLifecycle,
+    resumeInterruptedTurnEnabled: interruptedTurnResumeEnabled,
     service: agentSdkService,
     sessionStore,
     workingDirectoryDependencies,

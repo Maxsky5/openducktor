@@ -40,6 +40,7 @@ test.each(["opencode", "codex", "claude"] as const)(
           workingDirectory: session.workingDirectory,
           externalSessionId: session.externalSessionId,
           sessionScope: { kind: "repository" },
+          resumeMode: "reattach",
         });
         return { ...session, status: "idle" };
       };
@@ -99,6 +100,7 @@ test.each(["opencode", "codex", "claude"] as const)(
         workingDirectory: session.workingDirectory,
         externalSessionId: session.externalSessionId,
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        resumeMode: "reattach",
       });
       return { ...session, status: "idle" };
     };
