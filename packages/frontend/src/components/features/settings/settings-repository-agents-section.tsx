@@ -19,10 +19,7 @@ import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
 import { RepositoryDefaultModelBlock } from "./settings-repository-default-model";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
-import {
-  RepositoryModelPickerField,
-  toModelPickerRuntimes,
-} from "./settings-repository-model-picker-field";
+import { RepositoryModelPickerField } from "./settings-repository-model-picker-field";
 
 type RepositoryAgentsSectionProps = {
   selectedRepoConfig: SettingsRepoConfig | null;
@@ -175,10 +172,6 @@ export function RepositoryAgentsSection({
     );
   }
 
-  const modelPickerRuntimes = toModelPickerRuntimes({
-    runtimeDefinitions: availableRuntimeDefinitions,
-    catalogResources,
-  });
   const agentDropdownClassName = "sm:min-w-[18rem]";
   const variantDropdownClassName = "sm:min-w-[16rem]";
   const missingRoleLabels = findMissingRoleLabels({
@@ -285,7 +278,8 @@ export function RepositoryAgentsSection({
 
               <div className="grid gap-2 md:grid-cols-3">
                 <RepositoryModelPickerField
-                  runtimes={modelPickerRuntimes}
+                  runtimeDefinitions={availableRuntimeDefinitions}
+                  catalogResources={catalogResources}
                   value={selectedPickerValue}
                   favoriteState={favoriteState}
                   isReadOnly={isSaving || isLoadingSettings}

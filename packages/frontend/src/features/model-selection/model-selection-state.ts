@@ -251,8 +251,7 @@ export const resolveModelSelectionForProfileChange = ({
   profileId: string;
   runtimeKind: RuntimeKind;
 }): AgentModelSelection | null => {
-  const baseSelection = currentSelection;
-  if (!baseSelection || baseSelection.runtimeKind !== runtimeKind) {
+  if (!currentSelection || currentSelection.runtimeKind !== runtimeKind) {
     return null;
   }
 
@@ -260,10 +259,10 @@ export const resolveModelSelectionForProfileChange = ({
     ? normalizeVisibleCatalogProfileId(catalog, profileId)
     : profileId || undefined;
   if (!normalizedProfileId) {
-    return baseSelection;
+    return currentSelection;
   }
 
-  return { ...baseSelection, profileId: normalizedProfileId };
+  return { ...currentSelection, profileId: normalizedProfileId };
 };
 
 export const resolveModelSelectionForModelChange = ({

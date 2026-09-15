@@ -1,23 +1,18 @@
 import type { RuntimeKind } from "@openducktor/contracts";
+import type { AgentModelSelection } from "@openducktor/core";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 export type RepoAgentDefaultRole = "spec" | "planner" | "build" | "qa";
 
-type RepoAgentDefaultDraft = {
+export type RepoAgentDefaultDraft = {
   runtimeKind?: RuntimeKind | null;
   providerId: string;
   modelId: string;
-  variant?: string | null | undefined;
-  profileId?: string | null | undefined;
+  variant?: string | undefined;
+  profileId?: string | undefined;
 };
 
-export type NormalizedRepoAgentDefault = {
-  modelId: string;
-  profileId?: string;
-  providerId: string;
-  runtimeKind: RuntimeKind;
-  variant?: string;
-};
+export type RuntimeBoundModelSelection = AgentModelSelection & { runtimeKind: RuntimeKind };
 
 const REPO_AGENT_DEFAULT_LABELS = {
   spec: "Specification",
@@ -53,7 +48,7 @@ export const resolveConfiguredAgentRuntimeKind = (
 const normalizeRepoModelDefaultForSave = (
   entry: RepoAgentDefaultDraft | null | undefined,
   runtimeKindError: string,
-): NormalizedRepoAgentDefault | undefined => {
+): RuntimeBoundModelSelection | undefined => {
   if (!entry) {
     return undefined;
   }
@@ -71,7 +66,7 @@ const normalizeRepoModelDefaultForSave = (
   const variant = trimNonEmpty(entry.variant);
   const profileId = trimNonEmpty(entry.profileId);
 
-  const selection: NormalizedRepoAgentDefault = {
+  const selection: RuntimeBoundModelSelection = {
     runtimeKind: entry.runtimeKind,
     providerId,
     modelId,
@@ -88,10 +83,10 @@ const normalizeRepoModelDefaultForSave = (
 export const normalizeRepoAgentDefaultForSave = (
   role: RepoAgentDefaultRole,
   entry: RepoAgentDefaultDraft | null | undefined,
-): NormalizedRepoAgentDefault | undefined =>
+): RuntimeBoundModelSelection | undefined =>
   normalizeRepoModelDefaultForSave(entry, repoAgentDefaultRuntimeKindError(role));
 
 export const normalizeRepoDefaultModelForSave = (
   entry: RepoAgentDefaultDraft | null | undefined,
-): NormalizedRepoAgentDefault | undefined =>
+): RuntimeBoundModelSelection | undefined =>
   normalizeRepoModelDefaultForSave(entry, REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR);

@@ -1,8 +1,12 @@
-import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
+import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { errorMessage } from "@/lib/errors";
-import { pickRepoAgentDefault } from "@/lib/repo-agent-defaults";
+import {
+  pickRepoAgentDefault,
+  type RepoAgentDefaultDraft,
+  type RuntimeBoundModelSelection,
+} from "@/lib/repo-agent-defaults";
 import {
   missingSessionDefaultModelError,
   unavailableSessionDefaultCatalogError,
@@ -17,17 +21,7 @@ export {
   pickDefaultVisibleSelectionForCatalog,
 } from "@/features/model-selection/model-selection-state";
 
-type RepoModelDefaultLike = {
-  runtimeKind?: RuntimeKind | null;
-  providerId: string;
-  modelId: string;
-  variant?: string | null | undefined;
-  profileId?: string | null | undefined;
-};
-
-export type RuntimeBoundModelSelection = AgentModelSelection & { runtimeKind: RuntimeKind };
-
-const toAgentModelSelection = (value: RepoModelDefaultLike): RuntimeBoundModelSelection | null => {
+const toAgentModelSelection = (value: RepoAgentDefaultDraft): RuntimeBoundModelSelection | null => {
   if (!value.providerId || !value.modelId || !value.runtimeKind) {
     return null;
   }

@@ -21,10 +21,7 @@ import {
 } from "@/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
-import {
-  RepositoryModelPickerField,
-  toModelPickerRuntimes,
-} from "./settings-repository-model-picker-field";
+import { RepositoryModelPickerField } from "./settings-repository-model-picker-field";
 
 type RepositoryDefaultModelBlockProps = {
   selectedRepoConfig: SettingsRepoConfig;
@@ -76,10 +73,6 @@ export function RepositoryDefaultModelBlock({
   const catalog = runtimeKind ? getCatalogForRuntime(runtimeKind) : null;
   const isModelPickerCatalogLoading = runtimeKind ? isCatalogLoadingForRuntime(runtimeKind) : false;
   const value = ensureDraftAgentDefault(defaultModel);
-  const modelPickerRuntimes = useMemo(
-    () => toModelPickerRuntimes({ runtimeDefinitions, catalogResources }),
-    [catalogResources, runtimeDefinitions],
-  );
   const selectedPickerValue: ModelPickerValue | null =
     runtimeKind && value.providerId && value.modelId
       ? {
@@ -122,7 +115,8 @@ export function RepositoryDefaultModelBlock({
 
       <div className="grid gap-2 md:grid-cols-3">
         <RepositoryModelPickerField
-          runtimes={modelPickerRuntimes}
+          runtimeDefinitions={runtimeDefinitions}
+          catalogResources={catalogResources}
           value={selectedPickerValue}
           favoriteState={favoriteState}
           isReadOnly={isSaving || isLoadingSettings}

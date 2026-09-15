@@ -11,23 +11,20 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { catalogModelOptionValue } from "@/components/features/agents/catalog-select-options";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { resolveRuntimeKindSelection } from "@/lib/agent-runtime";
-import { pickRepoAgentDefault } from "@/lib/repo-agent-defaults";
+import {
+  pickRepoAgentDefault,
+  type RepoAgentDefaultDraft,
+  type RuntimeBoundModelSelection,
+} from "@/lib/repo-agent-defaults";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 
 type RepoDefaultRole = keyof RepoSettingsInput["agentDefaults"];
-type RepoAgentDefaultLike = {
-  runtimeKind?: RuntimeKind | null;
-  providerId: string;
-  modelId: string;
-  variant?: string | undefined;
-  profileId?: string | undefined;
-};
 type RepoAgentDefaultsInput = {
-  spec?: RepoAgentDefaultLike | null | undefined;
-  planner?: RepoAgentDefaultLike | null | undefined;
-  build?: RepoAgentDefaultLike | null | undefined;
-  qa?: RepoAgentDefaultLike | null | undefined;
+  spec?: RepoAgentDefaultDraft | null | undefined;
+  planner?: RepoAgentDefaultDraft | null | undefined;
+  build?: RepoAgentDefaultDraft | null | undefined;
+  qa?: RepoAgentDefaultDraft | null | undefined;
 };
 
 export const isSettingsInteractionDisabled = ({
@@ -50,16 +47,7 @@ export const ROLE_DEFAULTS: ReadonlyArray<{
 ];
 
 export const ensureDraftAgentDefault = (
-  value:
-    | {
-        runtimeKind?: RuntimeKind | null;
-        providerId: string;
-        modelId: string;
-        variant?: string | undefined;
-        profileId?: string | undefined;
-      }
-    | null
-    | undefined,
+  value: RepoAgentDefaultDraft | null | undefined,
 ): RepoAgentDefaultInput => {
   const draft: RepoAgentDefaultInput = {
     providerId: value?.providerId ?? "",
@@ -90,10 +78,10 @@ export const updateRoleDefault = (
 };
 
 export const updateRepoDefaultModel = (
-  defaultModel: Parameters<typeof ensureDraftAgentDefault>[0],
+  defaultModel: RepoAgentDefaultDraft | null | undefined,
   field: keyof RepoAgentDefaultInput,
   value: string,
-): (RepoAgentDefaultInput & { runtimeKind: RuntimeKind }) | null => {
+): RuntimeBoundModelSelection | null => {
   const draft = ensureDraftAgentDefault(defaultModel);
   const runtimeKind = draft.runtimeKind;
   if (!runtimeKind) {

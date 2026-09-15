@@ -1,6 +1,6 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import type { ReactElement } from "react";
+import { type ReactElement, useMemo } from "react";
 import {
   ModelPicker,
   type ModelPickerFavoriteState,
@@ -12,34 +12,9 @@ import {
 import { Label } from "@/components/ui/label";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
 
-export const toModelPickerRuntimes = ({
-  runtimeDefinitions,
-  catalogResources,
-}: {
+type RepositoryModelPickerFieldProps = {
   runtimeDefinitions: RuntimeDescriptor[];
   catalogResources: RuntimeModelCatalogQueryResource[];
-}): ModelPickerRuntime[] =>
-  runtimeDefinitions.map((descriptor) => {
-    const resource = catalogResources.find(
-      (candidate) => candidate.runtimeKind === descriptor.kind,
-    );
-    return {
-      descriptor,
-      resource: resource
-        ? toModelPickerCatalogResource({
-            catalog: resource.catalog,
-            isFetching: resource.isFetching,
-            error: resource.error,
-            isAvailable: resource.isEnabled,
-            unavailableReason: "This runtime catalog is not available yet.",
-            retry: resource.retry,
-          })
-        : unavailableModelPickerCatalogResource("This runtime catalog is not available yet."),
-    };
-  });
-
-type RepositoryModelPickerFieldProps = {
-  runtimes: ModelPickerRuntime[];
   value: ModelPickerValue | null;
   favoriteState: ModelPickerFavoriteState;
   isReadOnly: boolean;
@@ -48,13 +23,19 @@ type RepositoryModelPickerFieldProps = {
 };
 
 export function RepositoryModelPickerField({
-  runtimes,
+  runtimeDefinitions,
+  catalogResources,
   value,
   favoriteState,
   isReadOnly,
   isLoadingCatalog,
   onSelect,
 }: RepositoryModelPickerFieldProps): ReactElement {
+  const runtimes = useMemo(
+    () => toModelPickerRuntimes({ runtimeDefinitions, catalogResources }),
+    [catalogResources, runtimeDefinitions],
+  );
+
   return (
     <div className="grid min-w-0 gap-1">
       <Label className="text-xs">Runtime and Model</Label>
@@ -81,3 +62,29 @@ export function RepositoryModelPickerField({
     </div>
   );
 }
+
+const toModelPickerRuntimes = ({
+  runtimeDefinitions,
+  catalogResources,
+}: {
+  runtimeDefinitions: RuntimeDescriptor[];
+  catalogResources: RuntimeModelCatalogQueryResource[];
+}): ModelPickerRuntime[] =>
+  runtimeDefinitions.map((descriptor) => {
+    const resource = catalogResources.find(
+      (candidate) => candidate.runtimeKind === descriptor.kind,
+    );
+    return {
+      descriptor,
+      resource: resource
+        ? toModelPickerCatalogResource({
+            catalog: resource.catalog,
+            isFetching: resource.isFetching,
+            error: resource.error,
+            isAvailable: resource.isEnabled,
+            unavailableReason: "This runtime catalog is not available yet.",
+            retry: resource.retry,
+          })
+        : unavailableModelPickerCatalogResource("This runtime catalog is not available yet."),
+    };
+  });
