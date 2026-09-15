@@ -114,11 +114,14 @@ export const resolvePreferredModelSelection = ({
   preferredSelection: AgentModelSelection | null;
   fallbackSelection: AgentModelSelection | null;
 }): AgentModelSelection | null => {
-  return (
-    coerceVisibleSelectionToCatalog(catalog, preferredSelection) ??
-    coerceVisibleSelectionToCatalog(catalog, fallbackSelection) ??
-    pickDefaultVisibleSelectionForCatalog(catalog)
-  );
+  const normalizedPreferred = coerceVisibleSelectionToCatalog(catalog, preferredSelection);
+  if (normalizedPreferred) {
+    return normalizedPreferred;
+  }
+  if (fallbackSelection) {
+    return coerceVisibleSelectionToCatalog(catalog, fallbackSelection);
+  }
+  return pickDefaultVisibleSelectionForCatalog(catalog);
 };
 
 export const resolveInitialModelSelection = ({
@@ -153,11 +156,14 @@ export const resolveInitialModelSelection = ({
     ? coerceVisibleSelectionToCatalog(runtimeCatalog, runtimeDefault)
     : runtimeDefault;
 
-  return (
-    normalizedRequested ??
-    normalizedDefault ??
-    pickDefaultVisibleSelectionForCatalog(runtimeCatalog)
-  );
+  const selected = normalizedRequested ?? normalizedDefault;
+  if (selected) {
+    return selected;
+  }
+  if (runtimeDefault) {
+    return null;
+  }
+  return pickDefaultVisibleSelectionForCatalog(runtimeCatalog);
 };
 
 export const resolveModelSelectionForRuntimeChange = ({
@@ -245,7 +251,7 @@ export const resolveModelSelectionForProfileChange = ({
   profileId: string;
   runtimeKind: RuntimeKind;
 }): AgentModelSelection | null => {
-  const baseSelection = currentSelection ?? pickDefaultVisibleSelectionForCatalog(catalog);
+  const baseSelection = currentSelection;
   if (!baseSelection || baseSelection.runtimeKind !== runtimeKind) {
     return null;
   }

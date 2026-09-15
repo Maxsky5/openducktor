@@ -129,7 +129,7 @@ describe("model-selection-state", () => {
     ).toBeNull();
   });
 
-  test("validates a runtime-change default against the target catalog", () => {
+  test("rejects a runtime-change default that is absent from the target catalog", () => {
     expect(
       resolveModelSelectionForRuntimeChange({
         catalog: CATALOG,
@@ -146,13 +146,7 @@ describe("model-selection-state", () => {
         selectedModel: null,
         runtimeKind: "opencode",
       }),
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "reviewer",
-    });
+    ).toBeNull();
   });
 
   test("changes model and normalizes the variant while preserving the runtime profile", () => {
@@ -236,6 +230,17 @@ describe("model-selection-state", () => {
       resolveModelSelectionForProfileChange({
         catalog: CATALOG,
         currentSelection: { ...EXPLICIT_SELECTION, runtimeKind: "claude" },
+        profileId: "reviewer",
+        runtimeKind: "opencode",
+      }),
+    ).toBeNull();
+  });
+
+  test("does not invent a catalog default when no model is selected", () => {
+    expect(
+      resolveModelSelectionForProfileChange({
+        catalog: CATALOG,
+        currentSelection: null,
         profileId: "reviewer",
         runtimeKind: "opencode",
       }),

@@ -78,6 +78,36 @@ describe("session-start selection adapter", () => {
     });
   });
 
+  test("returns no selection when the workflow default is absent from the catalog", () => {
+    expect(
+      resolveInitialModelSelection({
+        catalog: CATALOG,
+        defaultSelection: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "retired-model",
+        },
+        runtimeKind: "opencode",
+        selectedModel: null,
+      }),
+    ).toBeNull();
+
+    expect(
+      resolveInitialModelSelection({
+        catalog: CATALOG,
+        defaultSelection: null,
+        runtimeKind: "opencode",
+        selectedModel: null,
+      }),
+    ).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      profileId: "spec-agent",
+    });
+  });
+
   test("falls back from a missing requested model to the validated workflow default", () => {
     expect(
       resolveInitialModelSelection({

@@ -76,7 +76,7 @@ describe("settings runtime availability validation", () => {
     expect(validation.totalErrorCount).toBe(0);
   });
 
-  test("allows dormant repository runtime references when every runtime is disabled", () => {
+  test("reports a disabled Default Model runtime when every runtime is disabled", () => {
     const snapshotDraft = createSnapshot();
     snapshotDraft.agentRuntimes.opencode.enabled = false;
 
@@ -85,8 +85,10 @@ describe("settings runtime availability validation", () => {
       snapshotDraft,
     });
 
-    expect(validation.errorsByWorkspaceId).toEqual({});
-    expect(validation.totalErrorCount).toBe(0);
+    expect(validation.errorsByWorkspaceId).toEqual({
+      repo: ['Default Model runtime "Codex" is disabled.'],
+    });
+    expect(validation.totalErrorCount).toBe(1);
   });
 
   test("reports an enabled runtime whose saved executable path is invalid", () => {

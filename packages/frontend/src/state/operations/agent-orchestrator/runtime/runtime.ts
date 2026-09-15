@@ -8,13 +8,7 @@ import type {
 import { type AgentModelSelection, type AgentRole, mergePromptOverrides } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { appQueryClient } from "@/lib/query-client";
-import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
-import { missingSessionDefaultModelError } from "@/lib/session-start-errors";
-import {
-  loadRepoConfigFromQuery,
-  loadSettingsSnapshotFromQuery,
-  toRepoSettingsInput,
-} from "@/state/queries/workspace";
+import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
 
 export type EnsureExistingSessionRuntime = (
@@ -109,19 +103,6 @@ export const loadTaskWorktree = async (
   taskId: string,
 ): Promise<TaskWorktreeSummary | null> => {
   return host.taskWorktreeGet(repoPath, taskId);
-};
-
-export const loadRepoDefaultRuntimeKind = async (
-  workspaceId: string,
-  role: AgentRole,
-  loadRepoConfig: RepoConfigLoader = defaultRepoConfigLoader,
-): Promise<RuntimeKind> => {
-  const config = await loadRepoConfig(workspaceId);
-  const runtimeKind = resolveConfiguredAgentRuntimeKind(toRepoSettingsInput(config), role);
-  if (!runtimeKind) {
-    throw new Error(missingSessionDefaultModelError(role));
-  }
-  return runtimeKind;
 };
 
 export const requireConfiguredRuntimeKind = (

@@ -8,7 +8,6 @@ import {
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   loadRepoDefaultModel,
-  loadRepoDefaultRuntimeKind,
   loadRepoPromptOverrides,
   loadTaskDocuments,
   requireConfiguredRuntimeKind,
@@ -44,32 +43,6 @@ const createPromptOverrideSettingsSnapshot = (
 ): SettingsSnapshot => createSettingsSnapshotFixture({ globalPromptOverrides });
 
 describe("agent-orchestrator-runtime", () => {
-  test("uses the role runtime before the repository default", async () => {
-    await expect(
-      loadRepoDefaultRuntimeKind("repo", "build", async () =>
-        createRepoConfig({
-          agentDefaults: {
-            build: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
-          },
-        }),
-      ),
-    ).resolves.toBe("codex");
-  });
-
-  test("uses the repository runtime when the role has no default", async () => {
-    await expect(
-      loadRepoDefaultRuntimeKind("repo", "build", async () => createRepoConfig()),
-    ).resolves.toBe("opencode");
-  });
-
-  test("propagates runtime config loading failures", async () => {
-    await expect(
-      loadRepoDefaultRuntimeKind("repo", "build", async () => {
-        throw new Error("cannot read repository config");
-      }),
-    ).rejects.toThrow("cannot read repository config");
-  });
-
   test.each([null, undefined])(
     "rejects a missing runtime with caller instructions: %s",
     (runtimeKind) => {

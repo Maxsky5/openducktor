@@ -537,19 +537,13 @@ describe("model-selection-preferences", () => {
     });
   });
 
-  test("resolves an unavailable initial default from the catalog", () => {
+  test("keeps no selection when the initial default is unavailable", () => {
     expect(
       resolveChatComposerModelSelections({
         source: { kind: "new_session", composerCatalog: CATALOG, draftSelection: null },
         defaultSelection: { runtimeKind: "codex", providerId: "missing", modelId: "missing" },
       }).selectionForNewSession,
-    ).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "spec-agent",
-    });
+    ).toBeNull();
   });
 
   test("keeps explicit unavailable choices for direct-start validation", () => {

@@ -40,13 +40,13 @@ const buildRepoRuntimeAvailabilityErrors = ({
 }): string[] => {
   const errors: string[] = [];
   const availableKinds = new Set(availableRuntimeDefinitions.map(({ kind }) => kind));
-  if (availableKinds.size === 0) return errors;
   const defaultModelRuntimeKind = repoConfig.defaultModel?.runtimeKind;
   if (defaultModelRuntimeKind && !availableKinds.has(defaultModelRuntimeKind)) {
     errors.push(
       `Default Model runtime "${unavailableRuntimeLabel(allRuntimeDefinitions, defaultModelRuntimeKind)}" is disabled.`,
     );
   }
+  if (availableKinds.size === 0) return errors;
 
   for (const { role, label } of ROLE_DEFAULTS) {
     const runtimeKind = repoConfig.agentDefaults[role]?.runtimeKind;

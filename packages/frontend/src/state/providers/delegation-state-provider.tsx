@@ -3,6 +3,7 @@ import { buildDelegationStateValue } from "../app-state-context-values";
 import {
   DelegationStateContext,
   useActiveWorkspaceContext,
+  useRuntimeDefinitionsContext,
   useTaskControlContext,
 } from "../app-state-contexts";
 import { useDelegationOperations } from "../operations/tasks/use-delegation-operations";
@@ -10,8 +11,13 @@ import { useDelegationOperations } from "../operations/tasks/use-delegation-oper
 export function DelegationStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace } = useActiveWorkspaceContext();
   const { refreshTaskData } = useTaskControlContext();
+  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
 
-  const { delegateTask } = useDelegationOperations({ activeWorkspace, refreshTaskData });
+  const { delegateTask } = useDelegationOperations({
+    activeWorkspace,
+    refreshTaskData,
+    loadRepoRuntimeCatalog,
+  });
 
   const delegationStateValue = useMemo(
     () =>

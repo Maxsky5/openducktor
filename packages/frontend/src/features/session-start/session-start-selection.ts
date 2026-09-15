@@ -1,6 +1,11 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import {
+  missingSessionDefaultModelError,
+  unavailableSessionDefaultModelError,
+} from "@/lib/session-start-errors";
+import { coerceVisibleSelectionToCatalog } from "@/features/model-selection/model-selection-state";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 export {
@@ -58,6 +63,31 @@ export const defaultSessionSelectionFor = (
   role: AgentRole,
 ): RuntimeBoundModelSelection | null =>
   roleDefaultSelectionFor(repoSettings, role) ?? repoDefaultModelSelectionFor(repoSettings);
+
+export const resolveRequiredDefaultSessionSelection = async ({
+  role,
+  repoSettings,
+  repoPath,
+  loadRepoRuntimeCatalog,
+}: {
+  role: AgentRole;
+  repoSettings: RepoSettingsInput | null;
+  repoPath: string;
+  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+}): Promise<RuntimeBoundModelSelection> => {
+  const savedDefaultSelection = defaultSessionSelectionFor(repoSettings, role);
+  if (!savedDefaultSelection) {
+    throw new Error(missingSessionDefaultModelError(role));
+  }
+
+  const runtimeKind = savedDefaultSelection.runtimeKind;
+  const catalog = await loadRepoRuntimeCatalog({ repoPath, runtimeKind });
+  const validatedSelection = coerceVisibleSelectionToCatalog(catalog, savedDefaultSelection);
+  if (!validatedSelection) {
+    throw new Error(unavailableSessionDefaultModelError({ role, runtimeKind }));
+  }
+  return { ...validatedSelection, runtimeKind };
+};
 
 export const availableDefaultSessionSelectionFor = ({
   repoSettings,

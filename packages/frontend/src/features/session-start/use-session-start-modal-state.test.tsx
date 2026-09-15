@@ -417,7 +417,7 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
-  test("normalizes stale defaults against the loaded catalog", async () => {
+  test("drops a stale default that is absent from the loaded catalog", async () => {
     const harness = createHookHarness(
       createBaseProps({
         repoSettings: createRepoSettings({
@@ -445,18 +445,12 @@ describe("useSessionStartModalState", () => {
       });
     });
 
-    expect(harness.getLatest().selection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "spec-agent",
-    });
+    expect(harness.getLatest().selection).toBeNull();
 
     await harness.unmount();
   });
 
-  test("uses the resolved visible selection as the base after catalog hydration", async () => {
+  test("requires an explicit pick after the catalog rejects the stale default", async () => {
     const catalogDeferred = createDeferred<AgentModelCatalog>();
     const loadCatalog = mock(async () => catalogDeferred.promise);
     const props = createBaseProps({
@@ -490,25 +484,21 @@ describe("useSessionStartModalState", () => {
     await harness.run(() => {
       catalogDeferred.resolve(CATALOG);
     });
-    await harness.waitFor((state) => state.selection?.modelId === "gpt-5");
-
-    expect(harness.getLatest().selection).toEqual({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "default",
-      profileId: "spec-agent",
-    });
+    await harness.waitFor((state) => state.selection === null);
 
     await harness.run(() => {
-      harness.getLatest().handleSelectVariant("high");
+      harness.getLatest().handleSelectModelPair({
+        runtimeKind: "opencode",
+        providerId: "anthropic",
+        modelId: "claude-sonnet",
+      });
     });
 
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
+      providerId: "anthropic",
+      modelId: "claude-sonnet",
+      variant: "default",
       profileId: "spec-agent",
     });
 
