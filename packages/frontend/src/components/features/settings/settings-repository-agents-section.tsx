@@ -2,11 +2,6 @@ import type { RuntimeDescriptor, RuntimeKind, SettingsRepoConfig } from "@opendu
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ReactElement } from "react";
 import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
-import {
-  ensureDraftAgentDefault,
-  ROLE_DEFAULTS,
-  resolveRepoAgentDefaultRuntimeKind,
-} from "@/components/features/settings";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
@@ -16,6 +11,11 @@ import { buildRepositoryAgentControls } from "./settings-repository-agent-contro
 import { RepositoryDefaultModelBlock } from "./settings-repository-default-model";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./settings-repository-agent-selection";
 import { RepositoryModelPickerField } from "./settings-repository-model-picker-field";
+import {
+  ensureDraftAgentDefault,
+  ROLE_DEFAULTS,
+  resolveRepoAgentDefaultRuntimeKind,
+} from "./settings-modal-model";
 
 type RepositoryAgentsSectionProps = {
   selectedRepoConfig: SettingsRepoConfig | null;

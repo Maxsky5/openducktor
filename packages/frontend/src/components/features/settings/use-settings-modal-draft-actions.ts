@@ -7,7 +7,7 @@ import type {
   SettingsSnapshot,
 } from "@openducktor/contracts";
 import { useCallback } from "react";
-import { ensureDraftAgentDefault, updateRepoDefaultModel } from "@/components/features/settings";
+import { ensureDraftAgentDefault, updateRepoDefaultModel } from "./settings-modal-model";
 import type { SettingsSnapshotDraftUpdater } from "./use-settings-modal-snapshot-state";
 
 type UseSettingsModalDraftActionsArgs = {

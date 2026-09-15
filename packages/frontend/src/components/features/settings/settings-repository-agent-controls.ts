@@ -1,6 +1,6 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { toPrimaryAgentOptions } from "@/components/features/agents";
+import { toPrimaryAgentOptions } from "@/components/features/agents/catalog-select-options";
 import type { ModelPickerValue } from "@/components/features/agents/model-picker";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
