@@ -184,6 +184,27 @@ describe("settings config adapter initialization", () => {
     });
   });
 
+  test("reports an invalid config file with its path, the bad field, and a recovery hint", async () => {
+    await withTempConfig(async (configPath) => {
+      await writeFile(configPath, JSON.stringify({ version: 3, theme: "blue" }));
+      const adapter = createSettingsConfigAdapter({ configPath });
+
+      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.either));
+      if (result._tag !== "Left" || !(result.left instanceof HostValidationError)) {
+        throw new Error("Expected a config validation failure");
+      }
+
+      expect(result.left.message).toBe(
+        [
+          `Invalid config file ${configPath}:`,
+          'theme: Invalid option: expected one of "system"|"light"|"dark" (found "blue")',
+          "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
+        ].join("\n"),
+      );
+      expect(result.left.details).toEqual({ path: configPath });
+    });
+  });
+
   test("round trips a legacy GitHub provider through only the canonical provider shape", async () => {
     await withTempConfig(async (configPath) => {
       await writeFile(

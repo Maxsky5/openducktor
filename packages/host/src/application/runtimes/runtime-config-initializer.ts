@@ -9,7 +9,8 @@ import {
   type LoadedGlobalConfig,
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
-import { HostOperationError, type HostValidationError } from "../../effect/host-errors";
+import { configValidationMessage } from "../../config/config-validation-message";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   discoverToolFresh,
   type ToolDiscoveryDetails,
@@ -68,5 +69,13 @@ export const createRuntimeConfigInitializer =
           ];
         }),
       );
-      return globalConfigSchema.parse({ ...config, agentRuntimes });
+      const payload = { ...config, agentRuntimes };
+      return yield* Effect.try({
+        try: () => globalConfigSchema.parse(payload),
+        catch: (cause) =>
+          new HostValidationError({
+            message: configValidationMessage(cause, payload),
+            cause,
+          }),
+      });
     });

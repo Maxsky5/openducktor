@@ -22,6 +22,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
+import { configValidationMessage } from "../../config/config-validation-message";
 import {
   HostInvariantError,
   type HostInvariantErrorAggregate,
@@ -318,7 +319,7 @@ export const saveAndReturnWorkspaceRecord = (
       try: () => globalConfigSchema.parse(config),
       catch: (cause) =>
         new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
+          message: configValidationMessage(cause, config),
           cause,
         }),
     });

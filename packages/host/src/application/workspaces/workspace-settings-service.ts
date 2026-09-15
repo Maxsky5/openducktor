@@ -9,6 +9,7 @@ import {
   themePreferenceSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { configValidationMessage } from "../../config/config-validation-message";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { buildAgentStudioStateUpdate } from "./workspace-agent-studio-state";
@@ -174,7 +175,7 @@ const createUnserializedWorkspaceSettingsService = (
         try: () => globalConfigSchema.parse(config),
         catch: (cause) =>
           new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
+            message: configValidationMessage(cause, config),
             cause,
           }),
       });
@@ -206,7 +207,7 @@ const createUnserializedWorkspaceSettingsService = (
         try: () => repoConfigSchema.parse(repoConfig),
         catch: (cause) =>
           new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
+            message: configValidationMessage(cause, repoConfig),
             cause,
           }),
       });
@@ -225,7 +226,7 @@ const createUnserializedWorkspaceSettingsService = (
         try: () => buildAgentStudioStateUpdate(config, workspaceId, rawState),
         catch: (cause) =>
           new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
+            message: configValidationMessage(cause),
             cause,
           }),
       });
@@ -361,31 +362,29 @@ const createUnserializedWorkspaceSettingsService = (
         config,
         snapshot.workspaces,
       );
+      const payload = {
+        ...config,
+        git: snapshot.git,
+        general: snapshot.general,
+        system: snapshot.system,
+        appearance: snapshot.appearance,
+        chat: snapshot.chat,
+        reusablePrompts: snapshot.reusablePrompts,
+        kanban: snapshot.kanban,
+        autopilot: snapshot.autopilot,
+        notifications: snapshot.notifications,
+        agentRuntimes: snapshot.agentRuntimes,
+        agentModelFavorites: config.agentModelFavorites,
+        workspaces,
+        globalPromptOverrides: snapshot.globalPromptOverrides,
+      };
+      if (snapshot.customAgentRoles !== undefined)
+        payload.customAgentRoles = snapshot.customAgentRoles;
       const nextConfig = yield* Effect.try({
-        try: () => {
-          const next = {
-            ...config,
-            git: snapshot.git,
-            general: snapshot.general,
-            system: snapshot.system,
-            appearance: snapshot.appearance,
-            chat: snapshot.chat,
-            reusablePrompts: snapshot.reusablePrompts,
-            kanban: snapshot.kanban,
-            autopilot: snapshot.autopilot,
-            notifications: snapshot.notifications,
-            agentRuntimes: snapshot.agentRuntimes,
-            agentModelFavorites: config.agentModelFavorites,
-            workspaces,
-            globalPromptOverrides: snapshot.globalPromptOverrides,
-          };
-          if (snapshot.customAgentRoles !== undefined)
-            next.customAgentRoles = snapshot.customAgentRoles;
-          return globalConfigSchema.parse(next);
-        },
+        try: () => globalConfigSchema.parse(payload),
         catch: (cause) =>
           new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
+            message: configValidationMessage(cause, payload),
             cause,
           }),
       });
@@ -412,15 +411,15 @@ const createUnserializedWorkspaceSettingsService = (
             cause,
           }),
       });
+      const payload = {
+        ...config,
+        agentModelFavorites: favorites,
+      };
       const nextConfig = yield* Effect.try({
-        try: () =>
-          globalConfigSchema.parse({
-            ...config,
-            agentModelFavorites: favorites,
-          }),
+        try: () => globalConfigSchema.parse(payload),
         catch: (cause) =>
           new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
+            message: configValidationMessage(cause, payload),
             cause,
           }),
       });
@@ -447,7 +446,7 @@ const createUnserializedWorkspaceSettingsService = (
           }),
         catch: (cause) =>
           new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
+            message: configValidationMessage(cause),
             cause,
           }),
       });
@@ -465,7 +464,7 @@ const createUnserializedWorkspaceSettingsService = (
           }),
         catch: (cause) =>
           new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
+            message: configValidationMessage(cause),
             cause,
           }),
       });
