@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import {
   mkdir,
   mkdtemp,
@@ -9,10 +11,14 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Cause, Effect, Exit } from "effect";
+import { z } from "zod";
 import { createNodeTaskAssetFilePort } from "./filesystem-task-asset-file-port";
+import type { TaskAssetOwnerProbeFailure } from "./filesystem-task-asset-ownership";
+import type { TestScopeNestedSymlinkResult } from "./test-support/test-scope-nested-symlink-fixture";
 
 const roots: string[] = [];
 
@@ -24,13 +30,21 @@ const createHarness = async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
   roots.push(configDir);
   const aliveProcessIds = new Set([10_001]);
+  const probeFailures: TaskAssetOwnerProbeFailure[] = [];
   const processStartedAtMs = new Map([[10_001, 10_001]]);
   const createPort = (instanceId: string, processId: number) => {
     if (!processStartedAtMs.has(processId)) {
       processStartedAtMs.set(processId, processId);
     }
     return createNodeTaskAssetFilePort(
-      { configDir },
+      {
+        configDir,
+        configDirScope: "test",
+        reportProbeFailure: (failure) => {
+          probeFailures.push(failure);
+          return Promise.resolve();
+        },
+      },
       {
         owner: { version: 1, instanceId, processId, startedAtMs: processId },
         processIsAlive: (candidate) => aliveProcessIds.has(candidate),
@@ -49,6 +63,7 @@ const createHarness = async () => {
     configDir,
     createPort,
     port: createPort("10000000-0000-4000-8000-000000000001", 10_001),
+    probeFailures,
     processStartedAtMs,
   };
 };
@@ -56,6 +71,10 @@ const createHarness = async () => {
 const workspaceId = "fairnest";
 const taskId = "task-1";
 const assetId = "550e8400-e29b-41d4-a716-446655440000";
+const nestedSymlinkResultSchema = z.object({
+  bytes: z.array(z.number()).nullable(),
+  error: z.string().nullable(),
+}) satisfies z.ZodType<TestScopeNestedSymlinkResult>;
 
 describe("node task asset file port", () => {
   test("promotes, quarantines, restores, and purges within the dedicated namespace", async () => {
@@ -349,6 +368,155 @@ describe("node task asset file port", () => {
     );
   });
 
+  test("keeps staging for a live owner when the start-time probe uses local ps output", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
+    roots.push(configDir);
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1_000)"], {
+      stdio: "ignore",
+    });
+    if (!child.pid) {
+      throw new Error("Expected the child process to have a PID.");
+    }
+
+    const liveInstanceId = "10000000-0000-4000-8000-000000000004";
+    const ownersRoot = path.join(configDir, "task-asset-owners");
+    const liveStagingFile = path.join(
+      configDir,
+      "task-asset-staging",
+      "instances",
+      liveInstanceId,
+      workspaceId,
+      assetId,
+    );
+    await mkdir(ownersRoot, { recursive: true });
+    await mkdir(path.dirname(liveStagingFile), { recursive: true });
+    await writeFile(
+      path.join(ownersRoot, `${liveInstanceId}.json`),
+      JSON.stringify({
+        version: 1,
+        instanceId: liveInstanceId,
+        processId: child.pid,
+        startedAtMs: Date.now(),
+      }),
+    );
+    await writeFile(liveStagingFile, new Uint8Array([1]));
+    const port = createNodeTaskAssetFilePort({ configDir, configDirScope: "test" });
+
+    try {
+      expect(await Effect.runPromise(port.clearStaging())).toBe(0);
+      await expect(readFile(liveStagingFile)).resolves.toEqual(Buffer.from([1]));
+    } finally {
+      child.kill();
+      if (child.exitCode === null) {
+        await once(child, "exit");
+      }
+      await Effect.runPromise(port.cleanupCurrentOwner());
+    }
+  }, 1_000);
+
+  test("keeps staging when a live owner's start-time probe fails", async () => {
+    const { aliveProcessIds, configDir, createPort, port, probeFailures, processStartedAtMs } =
+      await createHarness();
+    await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1]) }));
+    processStartedAtMs.delete(10_001);
+    aliveProcessIds.add(10_002);
+    const recoveryPort = createPort("10000000-0000-4000-8000-000000000002", 10_002);
+
+    expect(await Effect.runPromise(recoveryPort.clearStaging())).toBe(0);
+    expect(probeFailures).toEqual([
+      {
+        cause: expect.objectContaining({
+          message: "Missing process start time for 10001.",
+        }),
+        owner: expect.objectContaining({
+          instanceId: "10000000-0000-4000-8000-000000000001",
+          processId: 10_001,
+        }),
+      },
+    ]);
+    await expect(
+      readFile(
+        path.join(
+          configDir,
+          "task-asset-staging",
+          "instances",
+          "10000000-0000-4000-8000-000000000001",
+          workspaceId,
+          assetId,
+        ),
+      ),
+    ).resolves.toEqual(Buffer.from([1]));
+  });
+
+  test.each([
+    ["production root", path.join(homedir(), ".openducktor"), "production"],
+    ["production child", path.join(homedir(), ".openducktor", "task-test"), "production"],
+    ["development root", path.join(homedir(), ".openducktor-dev"), "development"],
+    ["development child", path.join(homedir(), ".openducktor-dev", "task-test"), "development"],
+    ["similar sibling prefix", path.join(homedir(), ".openducktor-copy"), null],
+  ] as const)(
+    "refuses the test-scoped %s before a file operation can run",
+    (_, configDir, blockedScope) => {
+      const createPort = () => createNodeTaskAssetFilePort({ configDir, configDirScope: "test" });
+      if (blockedScope) {
+        expect(createPort).toThrow(
+          `Test scope refuses task asset access under the ${blockedScope} config directory`,
+        );
+        return;
+      }
+      expect(createPort).not.toThrow();
+    },
+  );
+
+  test.each([
+    ["production", "staged write", "stage", null],
+    ["production", "staged delete", "removeStaged", [7]],
+    ["production", "durable copy", "promote", null],
+    ["production", "durable move", "quarantine", [7]],
+    ["development", "staged write", "stage", null],
+    ["development", "staged delete", "removeStaged", [7]],
+    ["development", "durable copy", "promote", null],
+    ["development", "durable move", "quarantine", [7]],
+  ] as const)(
+    "refuses a %s %s through a nested symlink",
+    async (liveScope, _, action, expectedBytes) => {
+      const temporaryHome = await mkdtemp(path.join(tmpdir(), "openducktor-nested-guard-"));
+      roots.push(temporaryHome);
+      const environment: NodeJS.ProcessEnv = {
+        ...process.env,
+        HOME: temporaryHome,
+        USERPROFILE: temporaryHome,
+      };
+      delete environment.OPENDUCKTOR_CONFIG_DIR;
+      const child = Bun.spawn({
+        cmd: [
+          process.execPath,
+          fileURLToPath(
+            new URL("./test-support/test-scope-nested-symlink-fixture.ts", import.meta.url),
+          ),
+          action,
+          liveScope,
+          temporaryHome,
+        ],
+        env: environment,
+        stderr: "pipe",
+        stdout: "pipe",
+      });
+      const [exitCode, stderr, stdout] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+        new Response(child.stdout).text(),
+      ]);
+
+      expect(exitCode, stderr).toBe(0);
+      const result = nestedSymlinkResultSchema.parse(JSON.parse(stdout));
+      expect(result.error).toContain(
+        `Test scope refuses task asset access under the ${liveScope} config directory`,
+      );
+      expect(result.bytes).toEqual(expectedBytes === null ? null : [...expectedBytes]);
+    },
+  );
+
   test("keeps crash cleanup bounded across repeated owner generations", async () => {
     const { aliveProcessIds, configDir, createPort } = await createHarness();
     aliveProcessIds.clear();
@@ -431,7 +599,7 @@ describe("node task asset file port", () => {
       }),
     );
     await writeFile(path.join(staleStagingRoot, assetId), Buffer.from([1]));
-    const port = createNodeTaskAssetFilePort({ configDir });
+    const port = createNodeTaskAssetFilePort({ configDir, configDirScope: "test" });
 
     expect(await Effect.runPromise(port.clearStaging())).toBe(1);
     expect(await readdir(ownersRoot)).not.toContain(`${staleInstanceId}.json`);

@@ -45,6 +45,7 @@ export type SqliteTaskRepositoryContextManager = {
 };
 
 type CreateSqliteTaskRepositoryContextManagerInput = {
+  configDir?: string;
   onBackgroundFailure?: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   openConnection?: OpenSqliteTaskStoreConnection;
   processEnv: NodeJS.ProcessEnv;
@@ -60,10 +61,10 @@ type AdmissionGate = {
 };
 
 const resolveDefaultDatabasePath =
-  (processEnv: NodeJS.ProcessEnv): ResolveSqliteTaskStorePath =>
+  (configDir: string | undefined, processEnv: NodeJS.ProcessEnv): ResolveSqliteTaskStorePath =>
   ({ workspaceId }) =>
     resolveSqliteTaskStoreDatabasePath({
-      configDir: resolveOpenDucktorBaseDir(processEnv),
+      configDir: configDir ?? resolveOpenDucktorBaseDir("production", processEnv),
       workspaceId,
     });
 
@@ -124,10 +125,11 @@ const createAdmissionGate = (): AdmissionGate => {
 };
 
 export const createSqliteTaskRepositoryContextManager = ({
+  configDir,
   onBackgroundFailure = (failure) => Effect.logError(failure.message),
   openConnection = openSqliteTaskStoreConnection,
   processEnv,
-  resolveDatabasePath = resolveDefaultDatabasePath(processEnv),
+  resolveDatabasePath = resolveDefaultDatabasePath(configDir, processEnv),
   resolveWorkspaceIdForRepoPath,
 }: CreateSqliteTaskRepositoryContextManagerInput): SqliteTaskRepositoryContextManager => {
   const admission = createAdmissionGate();

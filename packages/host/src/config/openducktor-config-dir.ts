@@ -1,10 +1,16 @@
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { OPENDUCKTOR_CONFIG_DIR_NAMES } from "@openducktor/contracts";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 import { HostResourceError, HostValidationError } from "../effect/host-errors";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
-const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
+
+export type OpenDucktorConfigDirScope = "dev" | "production" | "test";
+export type OpenDucktorConfigDir = Readonly<{
+  root: string;
+  scope: OpenDucktorConfigDirScope;
+}>;
 
 const resolveHomeDirectory = (): string => {
   const home = homedir();
@@ -49,11 +55,18 @@ const resolveConfiguredBaseDir = (rawPath: string): string => {
   });
 };
 
-export const resolveOpenDucktorBaseDir = (env: NodeJS.ProcessEnv = process.env): string => {
+export const resolveOpenDucktorBaseDir = (
+  scope: OpenDucktorConfigDirScope,
+  env: NodeJS.ProcessEnv = process.env,
+): string => {
   const envDir = env[OPENDUCKTOR_CONFIG_DIR_ENV];
   if (envDir !== undefined) {
     return resolveConfiguredBaseDir(envDir);
   }
 
-  return path.join(resolveHomeDirectory(), DEFAULT_CONFIG_DIR_NAME);
+  if (scope === "test") {
+    return path.join(tmpdir(), `openducktor-test-${process.pid}`);
+  }
+
+  return path.join(resolveHomeDirectory(), OPENDUCKTOR_CONFIG_DIR_NAMES[scope]);
 };

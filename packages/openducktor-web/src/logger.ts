@@ -1,4 +1,8 @@
-import { createOpenDucktorDailyLogWriter, type OpenDucktorDailyLogWriter } from "@openducktor/host";
+import {
+  createOpenDucktorDailyLogWriter,
+  type OpenDucktorConfigDirScope,
+  type OpenDucktorDailyLogWriter,
+} from "@openducktor/host";
 import { Effect } from "effect";
 import { errorMessage, WebResourceError } from "./effect/web-errors";
 
@@ -14,6 +18,7 @@ type WebLogOutputStream = {
 };
 
 type WebLoggerInput = {
+  configDirScope: OpenDucktorConfigDirScope;
   console?: WebLogConsole;
   environment?: NodeJS.ProcessEnv;
   now?: () => Date;
@@ -115,15 +120,21 @@ const colorSuccessMessage = (useColor: boolean, message: string): string => {
 };
 
 export const createWebLogger = ({
+  configDirScope,
   console: consoleOutput = console,
   environment = process.env,
   now = () => new Date(),
   stdout = process.stdout,
   writer,
-}: WebLoggerInput = {}) =>
+}: WebLoggerInput) =>
   (writer
     ? Effect.succeed(writer)
-    : createOpenDucktorDailyLogWriter({ surface: "web", environment, clock: now })
+    : createOpenDucktorDailyLogWriter({
+        surface: "web",
+        configDirScope,
+        environment,
+        clock: now,
+      })
   ).pipe(
     Effect.map((resolvedWriter): WebLogger => {
       const writeLog = (

@@ -25,6 +25,11 @@ import {
   type ToolDiscoveryPathOptions,
 } from "../../adapters/system/tool-discovery";
 import { createRuntimeConfigInitializer } from "../../application/runtimes/runtime-config-initializer";
+import {
+  type OpenDucktorConfigDir,
+  type OpenDucktorConfigDirScope,
+  resolveOpenDucktorBaseDir,
+} from "../../config/openducktor-config-dir";
 import { toHostOperationError } from "../../effect/host-errors";
 import {
   type CreateProcessEnvironmentInput,
@@ -67,6 +72,7 @@ export type NodeHostDefaultPorts = {
   generatedImageFiles: GeneratedImageFilePort;
   localAttachments: LocalAttachmentPort;
   openInTools: OpenInToolsPort;
+  configDir: OpenDucktorConfigDir;
   processEnvironment: ProcessEnvironmentResolution;
   runtimeDistribution: HostRuntimeDistribution;
   runtimeExecutableProbes: RuntimeExecutableProbesByKind;
@@ -94,6 +100,7 @@ type CodexAppServerInput =
     };
 
 export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
+  configDirScope: OpenDucktorConfigDirScope;
   runtimeDistribution: HostRuntimeDistribution;
   terminalPty: TerminalPtyPort;
 } & Partial<{
@@ -141,16 +148,28 @@ const makeNodeHostDefaultPorts = (
   imageWorkers: GeneratedImageWorkers,
 ) =>
   Effect.gen(function* () {
-    const processEnvironment = input.processEnv
+    const sourceProcessEnvironment = input.processEnv
       ? {
           status: "ready" as const,
           environment: input.processEnv,
           error: null,
         }
       : yield* createProcessEnvironment(input.processEnvironmentInput);
-    const { environment: processEnv } = processEnvironment;
+    const sourceEnv = sourceProcessEnvironment.environment;
     return yield* Effect.try({
       try: () => {
+        const configDir: OpenDucktorConfigDir = {
+          root: resolveOpenDucktorBaseDir(input.configDirScope, sourceEnv),
+          scope: input.configDirScope,
+        };
+        const processEnv = {
+          ...sourceEnv,
+          OPENDUCKTOR_CONFIG_DIR: configDir.root,
+        };
+        const processEnvironment = {
+          ...sourceProcessEnvironment,
+          environment: processEnv,
+        };
         const systemCommands =
           input.systemCommands ?? createSystemCommandRunner({ env: processEnv });
         const bundledToolBinDirs =
@@ -236,6 +255,7 @@ const makeNodeHostDefaultPorts = (
           localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
           openInTools:
             input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
+          configDir,
           processEnvironment,
           runtimeDistribution: input.runtimeDistribution,
           runtimeExecutableProbes,

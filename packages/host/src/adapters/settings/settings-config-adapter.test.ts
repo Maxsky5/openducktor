@@ -20,6 +20,22 @@ const withTempConfig = async (run: (configPath: string) => Promise<void>): Promi
 };
 
 describe("settings config adapter initialization", () => {
+  test("uses the explicit config directory instead of the environment", async () => {
+    await withTempConfig(async (configPath) => {
+      const otherDir = join(configPath, "..", "other");
+      const adapter = createSettingsConfigAdapter({
+        configDir: join(configPath, ".."),
+        environment: { OPENDUCKTOR_CONFIG_DIR: otherDir },
+        initializeConfig: () => Effect.succeed(createDefaultGlobalConfig()),
+      });
+
+      await Effect.runPromise(adapter.readConfig());
+
+      expect(await Bun.file(configPath).exists()).toBe(true);
+      expect(await Bun.file(join(otherDir, "config.json")).exists()).toBe(false);
+    });
+  });
+
   test("initializes and writes a missing config only once across concurrent reads", async () => {
     await withTempConfig(async (configPath) => {
       let calls = 0;

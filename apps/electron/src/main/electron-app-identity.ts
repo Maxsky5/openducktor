@@ -13,7 +13,7 @@ type ElectronWindowsAppIdentity = {
 };
 
 type CreateProfileDirectory = (profilePath: string) => void;
-type ResolveConfigDirectory = (env?: NodeJS.ProcessEnv) => string;
+type ResolveConfigDirectory = (scope: "dev" | "production", env?: NodeJS.ProcessEnv) => string;
 
 export type ElectronProfileKind = "development" | "production";
 
@@ -91,7 +91,7 @@ export const configureElectronAppIdentity = (
   let profilePath = "";
   try {
     profilePath = resolveElectronProfilePath(
-      resolveConfigDirectory(processEnv),
+      resolveConfigDirectory(profileKind === "production" ? "production" : "dev", processEnv),
       profileKind,
       developmentInstanceId,
     );

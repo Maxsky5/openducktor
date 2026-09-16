@@ -3,7 +3,7 @@ import { errorMessage } from "@/lib/errors";
 import { buildRepoStoreUnavailableDescription } from "@/lib/repo-store-health";
 
 const TASK_STORE_HINT =
-  "OpenDucktor stores tasks in ~/.openducktor/task-stores/<workspaceId>/database.sqlite. Initialization is automatic on repo open; retry if this is the first load.";
+  "OpenDucktor stores tasks under the active config directory at task-stores/<workspaceId>/database.sqlite. Initialization is automatic on repo open; retry if this is the first load.";
 
 export type TaskLoadFailureContext = {
   error: unknown;

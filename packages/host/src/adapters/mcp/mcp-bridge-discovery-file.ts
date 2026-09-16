@@ -32,7 +32,10 @@ export const resolveMcpBridgeDiscoveryPath = (
   mode: McpBridgeDiscoveryMode,
   env: NodeJS.ProcessEnv = process.env,
 ): string => {
-  const baseDirectory = resolveOpenDucktorBaseDir(env);
+  const baseDirectory = resolveOpenDucktorBaseDir(
+    mode === "production" ? "production" : "dev",
+    env,
+  );
   if (mode === "production") {
     return path.resolve(baseDirectory, ...MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS);
   }

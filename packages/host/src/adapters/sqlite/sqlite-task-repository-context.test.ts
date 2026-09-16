@@ -122,6 +122,35 @@ test("opens a connection using only the resolved database path", async () => {
   await Effect.runPromise(manager.dispose());
 });
 
+test("uses the explicit config directory instead of the environment", async () => {
+  const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-config-root-"));
+  tempDirectories.add(configDir);
+  const inputs: string[] = [];
+  const manager = createSqliteTaskRepositoryContextManager({
+    configDir,
+    openConnection: (databasePath) => {
+      inputs.push(databasePath);
+      return Effect.fail(
+        new HostOperationError({
+          operation: "test.openSqliteTaskStoreConnection",
+          message: "Stop after observing the connection input.",
+        }),
+      );
+    },
+    processEnv: { OPENDUCKTOR_CONFIG_DIR: path.join(configDir, "other") },
+    resolveWorkspaceIdForRepoPath: () => Effect.succeed("alpha"),
+  });
+
+  await Effect.runPromise(
+    Effect.either(
+      manager.withDatabase("/repos/alpha", "test.explicit-config-dir", () => Effect.void),
+    ),
+  );
+
+  expect(inputs).toEqual([path.join(configDir, "task-stores", "alpha", "database.sqlite")]);
+  await Effect.runPromise(manager.dispose());
+});
+
 test("closes an idle SQLite connection after five minutes", async () => {
   const { manager } = await createHarness();
 

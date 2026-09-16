@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createTaskAssetFileSafety } from "./filesystem-task-asset-file-safety";
 import { createTaskAssetQuarantineFiles } from "./filesystem-task-asset-quarantine";
 
 const roots: string[] = [];
@@ -18,6 +19,7 @@ describe("createTaskAssetQuarantineFiles", () => {
     await mkdir(path.join(quarantineRoot, ".publishing-interrupted"), { recursive: true });
     const files = createTaskAssetQuarantineFiles({
       durableRoot: path.join(root, "durable"),
+      fileChanges: createTaskAssetFileSafety({ configDir: root, configDirScope: "production" }),
       quarantineRoot,
       reservedDirectoryNames: [],
     });

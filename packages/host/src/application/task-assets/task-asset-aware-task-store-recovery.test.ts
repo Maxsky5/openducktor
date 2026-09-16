@@ -20,7 +20,10 @@ afterEach(async () => {
 const createHarness = async () => {
   const sqlite = await createSqliteTaskStoreHarness();
   cleanups.add(sqlite.cleanup);
-  const filePort = createNodeTaskAssetFilePort({ configDir: sqlite.configDir });
+  const filePort = createNodeTaskAssetFilePort({
+    configDir: sqlite.configDir,
+    configDirScope: "test",
+  });
   const staging = createTaskAssetStagingService(filePort);
   const registry = createSqliteTaskAssetRegistry({
     contextProvider: sqlite.contextProvider,

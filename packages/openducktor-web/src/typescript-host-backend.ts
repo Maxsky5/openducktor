@@ -16,6 +16,7 @@ import {
   type HostRuntimeDistribution,
   hostInvokeFailureFromError,
   type McpBridgeDiscoveryMode,
+  type OpenDucktorConfigDirScope,
   resolveDevelopmentInstanceIdFromEnvironment,
   type TaskAssetReadService,
   type ToolDiscoveryId,
@@ -65,6 +66,7 @@ export type TypescriptHostBackendOptions = {
   host?: string;
   basePath?: string;
   logger: WebLogger;
+  configDirScope: OpenDucktorConfigDirScope;
   mcpBridgeDiscoveryMode: McpBridgeDiscoveryMode;
   onBackgroundFailure(cause: unknown): void;
   processEnv?: NodeJS.ProcessEnv;
@@ -942,6 +944,7 @@ export const startTypescriptHostBackendEffect = ({
   host,
   basePath,
   logger,
+  configDirScope,
   mcpBridgeDiscoveryMode,
   onBackgroundFailure,
   processEnv,
@@ -981,6 +984,7 @@ export const startTypescriptHostBackendEffect = ({
       resolveExited = resolve;
     });
     const routerInput: Parameters<typeof createNodeEffectHostCommandRouter>[0] = {
+      configDirScope,
       eventBus,
       lifecycleLogger: {
         error: logger.error,

@@ -62,7 +62,10 @@ export {
   resolveDevelopmentInstanceIdFromEnvironment,
   validateDevelopmentInstanceId,
 } from "./config/development-instance";
-export { resolveOpenDucktorBaseDir } from "./config/openducktor-config-dir";
+export {
+  type OpenDucktorConfigDirScope,
+  resolveOpenDucktorBaseDir,
+} from "./config/openducktor-config-dir";
 export type { HostValidationErrorAggregate } from "./effect/host-errors";
 export { TaskAssetError, taskAssetErrorToFailure } from "./effect/task-asset-error";
 export {

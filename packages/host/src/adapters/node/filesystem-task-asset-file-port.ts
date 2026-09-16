@@ -1,21 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import {
-  copyFile,
-  lstat,
-  mkdir,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { taskAssetIdSchema } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
 import { z } from "zod";
 import { TaskAssetError } from "../../application/task-assets/task-asset-error";
+import type { OpenDucktorConfigDirScope } from "../../config/openducktor-config-dir";
 import type { TaskAssetFilePort, TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 import {
   taskAssetFileTryPromise as tryPromise,
@@ -23,9 +13,11 @@ import {
   validateTaskAssetStageContext as validateStageContext,
   validateTaskAssetTaskContext as validateTaskContext,
 } from "./filesystem-task-asset-errors";
+import { createTaskAssetFileSafety } from "./filesystem-task-asset-file-safety";
 import {
   createTaskAssetFileOwnership,
   type TaskAssetFileOwnershipDependencies,
+  type TaskAssetOwnerProbeFailure,
 } from "./filesystem-task-asset-ownership";
 import {
   createTaskAssetQuarantineFiles,
@@ -51,13 +43,22 @@ const existingStat = async (target: string) => {
 export const createNodeTaskAssetFilePort = (
   {
     configDir,
+    configDirScope,
+    reportProbeFailure = rejectProbeFailure,
   }: {
     configDir: string;
+    configDirScope: OpenDucktorConfigDirScope;
+    reportProbeFailure?: (failure: TaskAssetOwnerProbeFailure) => Promise<void>;
   },
   ownership?: TaskAssetFileOwnershipDependencies,
 ): TaskAssetFilePort => {
+  const files = createTaskAssetFileSafety({ configDir, configDirScope });
+  files.assertConfigDir();
   const durableRoot = path.resolve(configDir, "task-assets");
-  const ownerState = createTaskAssetFileOwnership({ configDir }, ownership);
+  const ownerState = createTaskAssetFileOwnership(
+    { configDir, fileChanges: files, reportProbeFailure },
+    ownership,
+  );
   const { ownedQuarantineRoot, ownedStagingRoot, quarantineRoot } = ownerState;
   const stagedPath = (workspaceId: string, assetId: string) =>
     path.join(ownedStagingRoot, workspaceId, assetId);
@@ -66,6 +67,7 @@ export const createNodeTaskAssetFilePort = (
   const quarantineFilesForRoot = (root: string, reservedDirectoryNames: readonly string[]) =>
     createTaskAssetQuarantineFiles({
       durableRoot,
+      fileChanges: files,
       quarantineRoot: root,
       reservedDirectoryNames,
     });
@@ -138,8 +140,8 @@ export const createNodeTaskAssetFilePort = (
         yield* tryPromise(
           async () => {
             await ownerState.ensureCurrent();
-            await mkdir(path.dirname(destination), { recursive: true });
-            await writeFile(destination, input.bytes, { flag: "wx", mode: 0o600 });
+            await files.ensureDirectory(path.dirname(destination));
+            await files.writeNew(destination, input.bytes);
           },
           {
             operation: "stage",
@@ -155,7 +157,7 @@ export const createNodeTaskAssetFilePort = (
       return Effect.gen(function* () {
         for (const assetId of input.assetIds) {
           yield* validateStageContext(input.workspaceId, assetId);
-          yield* tryPromise(() => rm(stagedPath(input.workspaceId, assetId), { force: true }), {
+          yield* tryPromise(() => files.remove(stagedPath(input.workspaceId, assetId)), {
             operation: "discard",
             code: "purge",
             phase: "remove_staging_file",
@@ -187,12 +189,8 @@ export const createNodeTaskAssetFilePort = (
         const destination = durablePath(input.workspaceId, input.taskId, input.assetId);
         yield* tryPromise(
           async () => {
-            await mkdir(path.dirname(destination), { recursive: true });
-            await copyFile(
-              stagedPath(input.workspaceId, input.assetId),
-              destination,
-              constants.COPYFILE_EXCL,
-            );
+            await files.ensureDirectory(path.dirname(destination));
+            await files.copyNew(stagedPath(input.workspaceId, input.assetId), destination);
           },
           {
             operation: input.operation,
@@ -227,14 +225,17 @@ export const createNodeTaskAssetFilePort = (
       return Effect.gen(function* () {
         for (const assetId of input.assetIds) {
           yield* validateContext(input.workspaceId, input.taskId, assetId, input.operation);
-          yield* tryPromise(() => unlink(durablePath(input.workspaceId, input.taskId, assetId)), {
-            operation: input.operation,
-            code: "purge",
-            phase: "remove_promoted_file",
-            message: `Failed to remove promoted task asset ${assetId}.`,
-            assetIds: [assetId],
-            taskId: input.taskId,
-          });
+          yield* tryPromise(
+            () => files.unlink(durablePath(input.workspaceId, input.taskId, assetId)),
+            {
+              operation: input.operation,
+              code: "purge",
+              phase: "remove_promoted_file",
+              message: `Failed to remove promoted task asset ${assetId}.`,
+              assetIds: [assetId],
+              taskId: input.taskId,
+            },
+          );
         }
       });
     },
@@ -262,8 +263,8 @@ export const createNodeTaskAssetFilePort = (
           const to = path.join(root, assetId);
           yield* tryPromise(
             async () => {
-              await mkdir(root, { recursive: true });
-              await rename(from, to);
+              await files.ensureDirectory(root);
+              await files.move(from, to);
               moves.push({ from, to });
             },
             {
@@ -281,10 +282,10 @@ export const createNodeTaskAssetFilePort = (
                   tryPromise(
                     async () => {
                       for (const move of moves.toReversed()) {
-                        await mkdir(path.dirname(move.from), { recursive: true });
-                        await rename(move.to, move.from);
+                        await files.ensureDirectory(path.dirname(move.from));
+                        await files.move(move.to, move.from);
                       }
-                      await rm(root, { force: true, recursive: true });
+                      await files.removeTree(root);
                     },
                     {
                       operation: input.operation,
@@ -345,7 +346,7 @@ export const createNodeTaskAssetFilePort = (
         yield* writeQuarantineManifest(manifest);
         yield* tryPromise(
           async () => {
-            await rename(taskRoot, to);
+            await files.move(taskRoot, to);
           },
           {
             operation: "delete",
@@ -464,3 +465,7 @@ export const createNodeTaskAssetFilePort = (
     },
   };
 };
+
+function rejectProbeFailure(failure: TaskAssetOwnerProbeFailure): Promise<void> {
+  return Promise.reject(failure.cause);
+}

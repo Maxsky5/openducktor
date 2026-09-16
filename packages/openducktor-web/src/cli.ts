@@ -13,7 +13,7 @@ import {
   WebResourceError,
   WebValidationError,
 } from "./effect/web-errors";
-import { type LauncherOptions, runLauncherEffect } from "./launcher";
+import { type LauncherOptions, resolveWebConfigDirScope, runLauncherEffect } from "./launcher";
 import { createWebLogger, type WebLogger, writeWebLogEffect } from "./logger";
 import { parseHostEffect, parseHttpOriginEffect } from "./http-origin";
 
@@ -208,9 +208,8 @@ const runCliEffect = (cliOptions: CliOptions, logger: WebLogger): Effect.Effect<
   });
 
 const runCli = async (): Promise<void> => {
-  const parseResult = await runWebBoundary(
-    Effect.either(parseCliArgsEffect(process.argv.slice(2))),
-  );
+  const args = process.argv.slice(2);
+  const parseResult = await runWebBoundary(Effect.either(parseCliArgsEffect(args)));
   if (parseResult._tag === "Right" && parseResult.right._tag === "Help") {
     printHelp();
     process.exit(0);
@@ -219,7 +218,13 @@ const runCli = async (): Promise<void> => {
 
   let logger: WebLogger;
   try {
-    logger = await runWebBoundary(createWebLogger());
+    const workspaceMode =
+      parseResult._tag === "Right" && parseResult.right._tag === "Launch"
+        ? parseResult.right.options.workspaceMode
+        : args.includes("--workspace");
+    logger = await runWebBoundary(
+      createWebLogger({ configDirScope: resolveWebConfigDirScope(workspaceMode) }),
+    );
   } catch (error) {
     console.error(errorMessage(error));
     process.exit(1);

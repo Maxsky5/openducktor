@@ -19,7 +19,7 @@ afterEach(async () => {
 const createHarness = async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
   cleanups.add(() => rm(configDir, { force: true, recursive: true }));
-  const filePort = createNodeTaskAssetFilePort({ configDir });
+  const filePort = createNodeTaskAssetFilePort({ configDir, configDirScope: "test" });
   return { filePort, service: createTaskAssetStagingService(filePort) };
 };
 

@@ -30,6 +30,7 @@ describe("createWebLogger", () => {
       const output = createConsoleOutput();
       const logger = await Effect.runPromise(
         createWebLogger({
+          configDirScope: "dev",
           console: output.console,
           environment: { FORCE_COLOR: "1", OPENDUCKTOR_CONFIG_DIR: configDirectory },
           now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
@@ -68,6 +69,7 @@ describe("createWebLogger", () => {
     const output = createConsoleOutput();
     const logger = await Effect.runPromise(
       createWebLogger({
+        configDirScope: "dev",
         console: output.console,
         environment: { NO_COLOR: "1" },
         now: () => new Date(2026, 4, 13, 23, 45, 12, 345),
@@ -95,6 +97,7 @@ describe("createWebLogger", () => {
     const appended: Array<{ recordedAt: Date; record: string }> = [];
     const logger = await Effect.runPromise(
       createWebLogger({
+        configDirScope: "dev",
         console: output.console,
         environment: { NO_COLOR: "1" },
         now: () => recordedAt,
@@ -128,6 +131,7 @@ describe("createWebLogger", () => {
     });
     const logger = await Effect.runPromise(
       createWebLogger({
+        configDirScope: "dev",
         console: output.console,
         writer: {
           append: () => Effect.fail(failure),

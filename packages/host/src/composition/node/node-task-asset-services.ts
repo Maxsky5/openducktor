@@ -16,7 +16,7 @@ import {
   type TaskAssetStagingService,
 } from "../../application/task-assets/task-asset-staging-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
-import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
+import type { OpenDucktorConfigDir } from "../../config/openducktor-config-dir";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { HostShutdownStep } from "../host-lifecycle";
@@ -32,11 +32,13 @@ export type NodeTaskAssetServices = {
 };
 
 export const createNodeTaskAssetServices = ({
+  configDir,
   configuredTaskStore,
   onBackgroundFailure,
   processEnv,
   workspaceSettingsService,
 }: {
+  configDir: OpenDucktorConfigDir;
   configuredTaskStore?: TaskStorePort | undefined;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv: NodeJS.ProcessEnv;
@@ -47,10 +49,26 @@ export const createNodeTaskAssetServices = ({
       .getRepoConfigByRepoPath(repoPath)
       .pipe(Effect.map((repoConfig) => repoConfig.workspaceId));
   const filePort = createNodeTaskAssetFilePort({
-    configDir: resolveOpenDucktorBaseDir(processEnv),
+    configDir: configDir.root,
+    configDirScope: configDir.scope,
+    reportProbeFailure: ({ cause, owner }) =>
+      Effect.runPromise(
+        onBackgroundFailure(
+          new HostOperationError({
+            operation: "taskAssets.probeOwner",
+            message: `Could not verify task asset owner '${owner.instanceId}' process ${owner.processId}. OpenDucktor kept its staged files.`,
+            cause,
+            details: {
+              instanceId: owner.instanceId,
+              processId: owner.processId,
+            },
+          }),
+        ),
+      ),
   });
   const taskAssetStagingService = createTaskAssetStagingService(filePort);
   const contextManager = createSqliteTaskRepositoryContextManager({
+    configDir: configDir.root,
     onBackgroundFailure,
     processEnv,
     resolveWorkspaceIdForRepoPath,

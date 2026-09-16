@@ -3,7 +3,10 @@ import { appendFile, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { Data, Effect } from "effect";
-import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
+import {
+  type OpenDucktorConfigDirScope,
+  resolveOpenDucktorBaseDir,
+} from "../../config/openducktor-config-dir";
 import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
 
 export type OpenDucktorLogSurface = "electron" | "web";
@@ -14,6 +17,7 @@ export type OpenDucktorDailyLogWriter = {
 
 export type OpenDucktorDailyLogWriterOptions = {
   surface: OpenDucktorLogSurface;
+  configDirScope?: OpenDucktorConfigDirScope;
   environment?: NodeJS.ProcessEnv;
   clock?: () => Date;
 };
@@ -25,7 +29,7 @@ export type OpenDucktorDailyLogWriterDependencies = {
   createDirectory(directoryPath: string): Promise<void>;
   readDirectory(directoryPath: string): Promise<OpenDucktorLogDirectoryEntry[]>;
   removeFile(filePath: string): Promise<void>;
-  resolveBaseDirectory(environment: NodeJS.ProcessEnv): string;
+  resolveBaseDirectory(environment: NodeJS.ProcessEnv, scope: OpenDucktorConfigDirScope): string;
 };
 
 export class OpenDucktorLogPersistenceError extends Data.TaggedError(
@@ -45,7 +49,7 @@ const defaultDependencies: OpenDucktorDailyLogWriterDependencies = {
   createDirectory: (directoryPath) => mkdir(directoryPath, { recursive: true }).then(() => {}),
   readDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
   removeFile: (filePath) => rm(filePath, { force: true }),
-  resolveBaseDirectory: resolveOpenDucktorBaseDir,
+  resolveBaseDirectory: (environment, scope) => resolveOpenDucktorBaseDir(scope, environment),
 };
 
 const pad = (value: number, length = 2): string => String(value).padStart(length, "0");
@@ -109,6 +113,7 @@ const normalizeRecord = (record: string): string =>
 export const createOpenDucktorDailyLogWriterWithDependencies = (
   {
     surface,
+    configDirScope = "production",
     environment = process.env,
     clock = () => new Date(),
   }: OpenDucktorDailyLogWriterOptions,
@@ -123,7 +128,7 @@ export const createOpenDucktorDailyLogWriterWithDependencies = (
       ...dependencyOverrides,
     };
     const baseDirectory = yield* Effect.try({
-      try: () => dependencies.resolveBaseDirectory(environment),
+      try: () => dependencies.resolveBaseDirectory(environment, configDirScope),
       catch: (cause) =>
         cause instanceof HostValidationError
           ? cause
