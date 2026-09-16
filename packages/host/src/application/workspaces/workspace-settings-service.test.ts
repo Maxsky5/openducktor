@@ -348,7 +348,6 @@ describe("createWorkspaceSettingsService", () => {
         workspaceId: "added",
         workspaceName: "Added",
         repoPath: "/repos/added",
-        defaultRuntimeKind: "opencode",
       }),
     ).then(() => {
       addCompleted = true;
