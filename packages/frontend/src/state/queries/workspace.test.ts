@@ -1,6 +1,30 @@
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
-import { dropWorkspaceQueries, markWorkspaceCachesChanged, workspaceQueryKeys } from "./workspace";
+import {
+  dropWorkspaceQueries,
+  loadWorkspaceCatalogFromQuery,
+  markWorkspaceCachesChanged,
+  workspaceQueryKeys,
+} from "./workspace";
+
+test("workspace catalog refresh replaces fresh cached data", async () => {
+  const queryClient = new QueryClient();
+  const cached = {
+    openWorkspaces: [],
+    closedWorkspaces: [],
+    incompleteRemovals: [],
+    onboardingCompleted: false,
+  };
+  const current = { ...cached, onboardingCompleted: true };
+  const workspaceCatalogGet = mock(async () => current);
+  queryClient.setQueryData(workspaceQueryKeys.catalog(), cached);
+
+  const result = await loadWorkspaceCatalogFromQuery(queryClient, { workspaceCatalogGet });
+
+  expect(workspaceCatalogGet).toHaveBeenCalledTimes(1);
+  expect(result).toBe(current);
+  expect(queryClient.getQueryData<typeof current>(workspaceQueryKeys.catalog())).toEqual(current);
+});
 
 describe("dropWorkspaceQueries", () => {
   test("removes all workspace ID session queries and keeps other workspaces", async () => {

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
+import { access, type FileHandle, mkdir, open, readFile, realpath, rename } from "node:fs/promises";
 import path from "node:path";
 import type { GlobalConfig, PersistedGlobalConfigV2 } from "@openducktor/contracts";
-import { Clock, Deferred, Effect, FiberId } from "effect";
+import { Clock, Deferred, Effect, Exit, FiberId } from "effect";
 import { z } from "zod";
 import {
   type LoadedGlobalConfig,
@@ -121,6 +121,17 @@ type PersistedConfigState =
 const makeSettingsInitializationFlight = (): SettingsInitializationFlight =>
   Deferred.unsafeMake(FiberId.none);
 
+const withFileHandle = <A>(
+  acquire: () => Promise<FileHandle>,
+  use: (handle: FileHandle) => Promise<A>,
+) =>
+  Effect.gen(function* () {
+    const handle = yield* Effect.tryPromise(acquire);
+    const useExit = yield* Effect.exit(Effect.tryPromise(() => use(handle)));
+    const closeExit = yield* Effect.exit(Effect.tryPromise(() => handle.close()));
+    return yield* Exit.zipLeft(useExit, closeExit);
+  });
+
 const persistGlobalConfig = (resolvedConfigPath: string, baseDir: string, config: GlobalConfig) =>
   Effect.gen(function* () {
     yield* Effect.tryPromise({
@@ -150,8 +161,19 @@ const persistGlobalConfig = (resolvedConfigPath: string, baseDir: string, config
     const payload = `${JSON.stringify(config, null, 2)}\n`;
 
     yield* Effect.gen(function* () {
-      yield* Effect.tryPromise(() => writeFile(tempPath, payload, { mode: 0o600 }));
+      yield* withFileHandle(
+        () => open(tempPath, "w", 0o600),
+        async (handle) => {
+          await handle.writeFile(payload);
+          await handle.sync();
+        },
+      );
       yield* Effect.tryPromise(() => rename(tempPath, resolvedConfigPath));
+      const syncPath = process.platform === "win32" ? resolvedConfigPath : baseDir;
+      yield* withFileHandle(
+        () => open(syncPath, "r"),
+        (handle) => handle.sync(),
+      );
     }).pipe(
       Effect.mapError((cause) =>
         toHostOperationError(cause, "settingsConfig.writeConfig", {

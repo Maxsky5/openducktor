@@ -38,7 +38,11 @@ export const registerWindowContextMenu = (
       if (window.isDestroyed() || claimed) {
         return;
       }
-      Menu.buildFromTemplate(createContextMenuTemplate(isDevelopment)).popup({ window });
+      Menu.buildFromTemplate(createContextMenuTemplate(isDevelopment)).popup({
+        window,
+        x: params.x,
+        y: params.y,
+      });
     }, CONTEXT_MENU_CLAIM_WINDOW_MS);
   });
 };

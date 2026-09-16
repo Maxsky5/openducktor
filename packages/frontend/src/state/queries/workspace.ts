@@ -105,7 +105,11 @@ export const loadRepoConfigFromQuery = (
 export const loadWorkspaceCatalogFromQuery = (
   queryClient: QueryClient,
   hostClient?: WorkspaceCatalogQueryHost,
-): Promise<WorkspaceCatalog> => queryClient.fetchQuery(workspaceCatalogQueryOptions(hostClient));
+): Promise<WorkspaceCatalog> =>
+  queryClient.fetchQuery({
+    ...workspaceCatalogQueryOptions(hostClient),
+    staleTime: 0,
+  });
 
 export const updateWorkspaceCatalogOpenWorkspaces = (
   queryClient: QueryClient,

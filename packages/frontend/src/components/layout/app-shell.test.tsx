@@ -734,6 +734,16 @@ describe("AppShell", () => {
     expect(globalThis.localStorage.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBeNull();
   });
 
+  test("refreshes the workspace catalog when the repository modal opens", async () => {
+    const retryWorkspaces = mock(async () => {});
+    renderAppShellForTest({ workspacePresence: { retryWorkspaces } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+
+    await screen.findByRole("heading", { name: "Open a Repository" });
+    expect(retryWorkspaces).toHaveBeenCalledTimes(1);
+  });
+
   test("exposes the sidebar state to the shell layout", () => {
     renderAppShellForTest();
 

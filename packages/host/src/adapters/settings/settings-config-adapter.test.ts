@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import {
   createDefaultGlobalConfig,
@@ -37,6 +38,33 @@ describe("settings config adapter initialization", () => {
 
       expect(await Bun.file(configPath).exists()).toBe(true);
       expect(await Bun.file(join(otherDir, "config.json")).exists()).toBe(false);
+    });
+  });
+
+  test("syncs the config file and directory before reporting success", async () => {
+    await withTempConfig(async (configPath) => {
+      const realOpen = fs.open;
+      const syncedPaths: string[] = [];
+      const openFile = spyOn(fs, "open").mockImplementation(async (...args) => {
+        const handle = await realOpen(...args);
+        const sync = handle.sync.bind(handle);
+        spyOn(handle, "sync").mockImplementation(async () => {
+          syncedPaths.push(String(args[0]));
+          await sync();
+        });
+        return handle;
+      });
+
+      try {
+        const adapter = createSettingsConfigAdapter({ configPath });
+        await Effect.runPromise(adapter.writeConfig(createDefaultGlobalConfig()));
+      } finally {
+        openFile.mockRestore();
+      }
+
+      expect(syncedPaths).toHaveLength(2);
+      expect(syncedPaths[0]).toContain(".config.json.tmp-");
+      expect(syncedPaths[1]).toBe(process.platform === "win32" ? configPath : dirname(configPath));
     });
   });
 

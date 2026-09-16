@@ -81,6 +81,8 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("x: params.x");
     expect(source).toContain("y: params.y");
     expect(source).toContain("contextMenuClaims.takeClaim(eventId)");
+    expect(source.indexOf("x: params.x", source.indexOf(".popup({"))).toBeGreaterThanOrEqual(0);
+    expect(source.indexOf("y: params.y", source.indexOf(".popup({"))).toBeGreaterThanOrEqual(0);
     expect(source).toContain("}, CONTEXT_MENU_CLAIM_WINDOW_MS);");
     expect(source).not.toContain("}, 50);");
   });

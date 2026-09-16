@@ -72,7 +72,7 @@ const persistLeftSidebarPreference = (preference: AppShellSidebarPreference): vo
 
 const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   const activeWorkspace = useActiveWorkspace();
-  const { isLoadingWorkspaces, workspaceLoadError } = useWorkspacePresence();
+  const { isLoadingWorkspaces, retryWorkspaces, workspaceLoadError } = useWorkspacePresence();
   useQuery({
     ...repoConfigQueryOptions(activeWorkspace?.workspaceId ?? NO_ACTIVE_WORKSPACE_ID),
     enabled: activeWorkspace !== null,
@@ -108,7 +108,10 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
 
   const openRepositoryModal = useCallback(() => {
     setRepositoryModalOpen(true);
-  }, []);
+    void retryWorkspaces().catch((error) => {
+      console.error("[app-shell] Workspace catalog refresh failed.", { error });
+    });
+  }, [retryWorkspaces]);
 
   const handleHideSidebar = useCallback(() => {
     setSidebarOpen(false);
