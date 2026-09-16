@@ -6,7 +6,7 @@ import type {
   WorkspaceRecord,
   WorkspaceRemovalInput,
 } from "@openducktor/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
@@ -108,6 +108,16 @@ const resolveActiveWorkspaceFromRecords = ({
     records.find((entry) => entry.repoPath === activeWorkspace.repoPath) ??
     activeWorkspace
   );
+};
+
+const refreshAfterRemovalFailure = async (queryClient: QueryClient): Promise<void> => {
+  try {
+    await markWorkspaceCachesChanged(queryClient);
+  } catch (error) {
+    toast.error("Workspace removal failed, and workspace refresh also failed", {
+      description: errorMessage(error),
+    });
+  }
 };
 
 export function useWorkspaceSelectionOperations({
@@ -443,8 +453,8 @@ export function useWorkspaceSelectionOperations({
   );
 
   const removeWorkspace = useCallback(
-    (input: WorkspaceRemovalInput): Promise<void> =>
-      runLifecycleAction(async () => {
+    (input: WorkspaceRemovalInput): Promise<void> => {
+      const remove = async (): Promise<{ title: string; description: string }> => {
         try {
           const result = await hostClient.workspaceRemove(input);
           applyLifecycleCatalog(result.catalog);
@@ -461,10 +471,12 @@ export function useWorkspaceSelectionOperations({
                 : "The repository and its branches remain.",
           };
         } catch (error) {
-          await markWorkspaceCachesChanged(queryClient);
+          await refreshAfterRemovalFailure(queryClient);
           throw error;
         }
-      }),
+      };
+      return runLifecycleAction(remove);
+    },
     [applyLifecycleCatalog, hostClient, queryClient, runLifecycleAction],
   );
 

@@ -342,6 +342,7 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceSettingsService,
   });
   const runtimeOrchestratorWithEffectiveRegistry = createRuntimeOrchestratorService({
+    withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
     gitPort: git,
     runtimeDefinitionsService,
     runtimeRegistry: effectiveRuntimeRegistry,

@@ -101,6 +101,53 @@ describe("OpenRepositoryModal", () => {
     view.unmount();
   });
 
+  test("reserves workspace IDs used by closed and incomplete-removal workspaces", async () => {
+    const closedWorkspace = {
+      workspaceId: "repo",
+      workspaceName: "Closed",
+      repoPath: "/closed",
+      isActive: false,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: "/worktrees/repo",
+      effectiveWorktreeBasePath: "/worktrees/repo",
+    };
+    const removingWorkspace = {
+      ...closedWorkspace,
+      workspaceId: "repo-2",
+      workspaceName: "Removing",
+      repoPath: "/removing",
+    };
+    const { unmount } = render(
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider
+          value={createWorkspaceStateValue({
+            closedWorkspaces: [closedWorkspace],
+            incompleteRemovals: [
+              {
+                workspace: removingWorkspace,
+                record: {
+                  phase: "attachments",
+                  removeTaskWorktrees: false,
+                  pendingWorktreePath: null,
+                },
+              },
+            ],
+          })}
+        >
+          <SeedFilesystemDirectory />
+          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
+
+    expect((await screen.findByLabelText<HTMLInputElement>("Workspace ID")).value).toBe("repo-3");
+    unmount();
+  });
+
   test("locks modal dismissal and closed workspaces while a repository add is pending", async () => {
     const addWorkspaceResult = createDeferred<void>();
     const addWorkspace = mock(async () => addWorkspaceResult.promise);

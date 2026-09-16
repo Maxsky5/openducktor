@@ -28,6 +28,7 @@ export function OpenRepositoryModal({
   const {
     workspaces,
     closedWorkspaces,
+    incompleteRemovals,
     addWorkspace,
     reopenWorkspace,
     resolveWorkspacePath,
@@ -36,6 +37,11 @@ export function OpenRepositoryModal({
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const interactionLocked = isSwitchingWorkspace || isCreatingWorkspace;
+  const configuredWorkspaces = [
+    ...workspaces,
+    ...closedWorkspaces,
+    ...incompleteRemovals.map((removal) => removal.workspace),
+  ];
 
   const reopenClosedWorkspace = async (
     workspaceId: string,
@@ -79,7 +85,7 @@ export function OpenRepositoryModal({
 
         <DialogBody className="flex flex-col gap-5 py-4">
           <WorkspaceCreationForm
-            workspaces={workspaces}
+            workspaces={configuredWorkspaces}
             addWorkspace={addWorkspace}
             resolveRepoPath={resolveWorkspacePath}
             onReopenClosedWorkspace={async (workspace) => {

@@ -668,6 +668,39 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
+  test("preserves a removal failure when its cache refresh also fails", async () => {
+    workspaceHost.workspaceRemove = mock(async () => {
+      throw new Error("Removal stopped at task store cleanup");
+    });
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      spyOn(queryClient, "invalidateQueries").mockImplementation(async () => {
+        throw new Error("Workspace refresh failed");
+      });
+
+      await expect(
+        harness.run((value) =>
+          value.removeWorkspace({
+            workspaceId: "repo",
+            expectedRepoPath: "/repo",
+            removeTaskWorktrees: false,
+          }),
+        ),
+      ).rejects.toThrow("Removal stopped at task store cleanup");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("rejects a second lifecycle action while the first action is pending", async () => {
     const closeStarted = createDeferred<void>();
     const closeResult =

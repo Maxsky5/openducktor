@@ -282,6 +282,25 @@ describe("workspace lifecycle service", () => {
     expect(inspect).not.toHaveBeenCalled();
   });
 
+  test("reopenWorkspace returns the catalog for an already open workspace", async () => {
+    const expected = catalog();
+    const reopenWorkspace = mock(() => Effect.succeed(catalog()));
+    const reserveWorkspace = mock(() => Effect.void);
+    const service = createService({
+      admission: { ...createAdmissionDouble(), reserveWorkspace },
+      getWorkspaceCatalog: () => Effect.succeed(expected),
+      reopenWorkspace,
+    });
+
+    const result = await Effect.runPromise(
+      service.reopenWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+    );
+
+    expect(result).toEqual(expected);
+    expect(reserveWorkspace).not.toHaveBeenCalled();
+    expect(reopenWorkspace).not.toHaveBeenCalled();
+  });
+
   test("removeWorkspace writes the removal record before deleting data", async () => {
     const calls: string[] = [];
     const service = createService({
@@ -444,6 +463,75 @@ describe("workspace lifecycle service", () => {
 
     expect(removed).toEqual([]);
     expect(result.removedWorktrees).toEqual([]);
+  });
+
+  test("removeWorkspace keeps a shared-base worktree claimed by an incomplete removal", async () => {
+    const removed: string[] = [];
+    const service = createService({
+      getWorkspaceCatalog: () =>
+        Effect.succeed(
+          catalog({
+            incompleteRemovals: [
+              {
+                workspace: {
+                  workspaceId: "other",
+                  workspaceName: "Other",
+                  repoPath: "/repos/other",
+                  isActive: false,
+                  hasConfig: true,
+                  configuredWorktreeBasePath: "/managed/ws",
+                  defaultWorktreeBasePath: "/managed/other",
+                  effectiveWorktreeBasePath: "/managed/ws",
+                },
+                record: removalRecord({ phase: "attachments" }),
+              },
+            ],
+          }),
+        ),
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/task-1", worktreePath: "/managed/ws/task-1" }]),
+      removeWorktree: (_repoPath, worktreePath) =>
+        Effect.sync(() => {
+          removed.push(worktreePath);
+        }),
+    });
+
+    const { result } = await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    expect(removed).toEqual([]);
+    expect(result.removedWorktrees).toEqual([]);
+  });
+
+  test("removeWorkspace removes a registered task worktree outside the current base", async () => {
+    const removed: string[] = [];
+    const service = createService({
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      pathExists: (path) => Effect.succeed(path === "/old-base/task-1"),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/task-1", worktreePath: "/old-base/task-1" }]),
+      removeWorktree: (_repoPath, worktreePath) =>
+        Effect.sync(() => {
+          removed.push(worktreePath);
+        }),
+    });
+
+    const { result } = await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    expect(removed).toEqual(["/old-base/task-1"]);
+    expect(result.removedWorktrees).toEqual(["/old-base/task-1"]);
   });
 
   test("removeWorkspace keeps a worktree that contains another workspace", async () => {
@@ -747,6 +835,7 @@ describe("workspace lifecycle service", () => {
     const unblockWorkspace = mock(() => {});
     const service = createService({
       admission: { ...createAdmissionDouble(), unblockWorkspace },
+      getRepoConfig: () => Effect.succeed(repoConfig({ closed: true })),
       reopenWorkspace,
     });
 

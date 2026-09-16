@@ -226,12 +226,19 @@ export function WorkspaceRemovalRecoveryDialog({
   onOpenChange: (open: boolean) => void;
 }): ReactElement {
   const { removeWorkspace } = useWorkspaceState();
+  const canKeepTaskWorktrees =
+    removal.record.removeTaskWorktrees &&
+    removal.record.phase === "worktrees" &&
+    removal.record.pendingWorktreePath === null;
+  const [removeTaskWorktrees, setRemoveTaskWorktrees] = useState(
+    removal.record.removeTaskWorktrees,
+  );
   const submit = useLifecycleSubmit(
     () =>
       removeWorkspace({
         workspaceId: removal.workspace.workspaceId,
         expectedRepoPath: removal.workspace.repoPath,
-        removeTaskWorktrees: removal.record.removeTaskWorktrees,
+        removeTaskWorktrees,
       }),
     () => onOpenChange(false),
   );
@@ -254,10 +261,28 @@ export function WorkspaceRemovalRecoveryDialog({
       </p>
       <p>
         Stopped at: {removalPhaseLabel[removal.record.phase]}.
-        {removal.record.removeTaskWorktrees
+        {removeTaskWorktrees
           ? " Task worktrees are part of this removal."
           : " Task worktrees are kept."}
       </p>
+      {canKeepTaskWorktrees ? (
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
+          <Checkbox
+            id="retry-remove-task-worktrees"
+            checked={removeTaskWorktrees}
+            disabled={submit.submitting}
+            onCheckedChange={(checked) => setRemoveTaskWorktrees(checked === true)}
+          />
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="retry-remove-task-worktrees" className="cursor-pointer">
+              Remove task worktrees
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Clear this option to keep task worktrees and continue removal.
+            </p>
+          </div>
+        </div>
+      ) : null}
     </LifecycleDialog>
   );
 }

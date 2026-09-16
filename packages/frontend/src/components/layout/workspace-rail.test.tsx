@@ -197,6 +197,44 @@ describe("WorkspaceRail", () => {
     );
   });
 
+  test("can retry an incomplete inventory removal without deleting task worktrees", async () => {
+    const removeWorkspace = mock(
+      async (_input: {
+        workspaceId: string;
+        expectedRepoPath: string;
+        removeTaskWorktrees: boolean;
+      }): Promise<void> => {},
+    );
+    workspaceState.incompleteRemovals = [
+      {
+        workspace: workspaceRecord("stuck", {
+          workspaceName: "Stuck Repo",
+          repoPath: "/stuck",
+        }),
+        record: {
+          phase: "worktrees",
+          removeTaskWorktrees: true,
+          pendingWorktreePath: null,
+        },
+      },
+    ];
+    workspaceState.removeWorkspace = removeWorkspace;
+
+    renderRail();
+
+    fireEvent.click(screen.getByRole("button", { name: "Finish removing Stuck Repo" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Remove task worktrees" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry removal" }));
+
+    await waitFor(() =>
+      expect(removeWorkspace).toHaveBeenCalledWith({
+        workspaceId: "stuck",
+        expectedRepoPath: "/stuck",
+        removeTaskWorktrees: false,
+      }),
+    );
+  });
+
   test("keeps buttons interactive-looking while a workspace switch is pending", () => {
     workspaceState.isSwitchingWorkspace = true;
     workspaceState.workspaces = [

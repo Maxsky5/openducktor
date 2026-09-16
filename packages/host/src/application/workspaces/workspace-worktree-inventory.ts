@@ -6,7 +6,10 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
-import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
+import {
+  isRelatedTaskBranch,
+  managedWorktreeBaseForRepoConfig,
+} from "../tasks/support/task-cleanup-support";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 
 export type WorkspaceWorktreeInventoryError =
@@ -54,9 +57,8 @@ export const collectWorkspaceTaskWorktreePaths = (
           pathStartsWith(candidatePath, workspace.repoPath) ||
           pathStartsWith(workspace.repoPath, candidatePath),
       );
-    const sharedBaseWorkspaces = completeWorkspaces.filter(
+    const sharedBaseWorkspaces = otherWorkspaces.filter(
       (workspace) =>
-        workspace.workspaceId !== workspaceId &&
         workspace.effectiveWorktreeBasePath !== null &&
         normalizePathForComparison(workspace.effectiveWorktreeBasePath) ===
           normalizePathForComparison(managedWorktreeBasePath),
@@ -93,6 +95,17 @@ export const collectWorkspaceTaskWorktreePaths = (
     }
 
     const inventory = yield* dependencies.gitPort.listWorktrees(repoPath);
+    for (const worktree of inventory) {
+      const task = tasks.find((candidate) =>
+        isRelatedTaskBranch(worktree.branch, repoConfig.branchPrefix, candidate.id),
+      );
+      if (task) {
+        candidates.set(normalizePathForComparison(worktree.worktreePath), {
+          path: worktree.worktreePath,
+          taskId: task.id,
+        });
+      }
+    }
     const inventoryPaths = new Set(
       inventory.map((worktree) => normalizePathForComparison(worktree.worktreePath)),
     );

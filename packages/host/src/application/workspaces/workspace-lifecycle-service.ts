@@ -452,6 +452,9 @@ export const createWorkspaceLifecycleService = ({
     reopenWorkspace(input) {
       return Effect.gen(function* () {
         const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
+        if (!repoConfig.closed) {
+          return yield* workspaceSettingsService.getWorkspaceCatalog();
+        }
         return yield* runUnderReservation(
           {
             operation: "reopen",
