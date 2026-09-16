@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceRail } from "./workspace-rail";
@@ -160,26 +159,6 @@ describe("WorkspaceRail", () => {
     );
   });
 
-  test("claims a workspace context menu at its click position", () => {
-    const previousBridge = getShellBridge();
-    const claimContextMenu = mock(() => {});
-    workspaceState.workspaces = [workspaceRecord("alpha", { workspaceName: "Alpha Repo" })];
-    configureShellBridge({ ...previousBridge, claimContextMenu });
-
-    const view = renderRail();
-    try {
-      fireEvent.contextMenu(screen.getByRole("button", { name: "Alpha Repo" }), {
-        clientX: 12,
-        clientY: 34,
-      });
-
-      expect(claimContextMenu).toHaveBeenCalledWith({ x: 12, y: 34 });
-    } finally {
-      view.unmount();
-      configureShellBridge(previousBridge);
-    }
-  });
-
   test("retries an incomplete removal from the rail recovery entry", async () => {
     const removeWorkspace = mock(
       async (_input: {
@@ -195,14 +174,9 @@ describe("WorkspaceRail", () => {
           repoPath: "/stuck",
         }),
         record: {
-          version: 1,
-          operationId: "op-1",
           phase: "attachments",
           removeTaskWorktrees: true,
-          removedWorktrees: ["/managed/stuck/task-1"],
           pendingWorktreePath: null,
-          startedAt: "2026-01-01T00:00:00.000Z",
-          lastFailure: "disk failure",
         },
       },
     ];
@@ -212,7 +186,6 @@ describe("WorkspaceRail", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Finish removing Stuck Repo" }));
     expect(await screen.findByText("Workspace removal did not finish")).toBeTruthy();
-    expect(screen.getByText("disk failure")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry removal" }));
 
     await waitFor(() =>
@@ -221,9 +194,6 @@ describe("WorkspaceRail", () => {
         expectedRepoPath: "/stuck",
         removeTaskWorktrees: true,
       }),
-    );
-    await waitFor(() =>
-      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Open repository" })),
     );
   });
 
@@ -243,48 +213,5 @@ describe("WorkspaceRail", () => {
 
     expect(screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("disabled")).toBe(null);
     expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("disabled")).toBe(null);
-  });
-
-  test("disables lifecycle entries while a workspace operation is pending", async () => {
-    workspaceState.isSwitchingWorkspace = true;
-    workspaceState.workspaces = [
-      workspaceRecord("alpha", {
-        workspaceName: "Alpha Repo",
-        isActive: true,
-      }),
-    ];
-    workspaceState.incompleteRemovals = [
-      {
-        workspace: workspaceRecord("stuck", {
-          workspaceName: "Stuck Repo",
-          repoPath: "/stuck",
-        }),
-        record: {
-          version: 1,
-          operationId: "op-1",
-          phase: "attachments",
-          removeTaskWorktrees: true,
-          removedWorktrees: [],
-          pendingWorktreePath: null,
-          startedAt: "2026-01-01T00:00:00.000Z",
-          lastFailure: null,
-        },
-      },
-    ];
-
-    renderRail();
-
-    expect(
-      screen.getByRole("button", { name: "Finish removing Stuck Repo" }).hasAttribute("disabled"),
-    ).toBe(true);
-    expect(screen.getByRole("button", { name: "Open repository" }).hasAttribute("disabled")).toBe(
-      true,
-    );
-
-    fireEvent.contextMenu(screen.getByRole("button", { name: "Alpha Repo" }));
-    const closeItem = await screen.findByRole("menuitem", { name: "Close workspace" });
-    const removeItem = screen.getByRole("menuitem", { name: "Remove workspace" });
-    expect(closeItem.getAttribute("data-disabled")).not.toBe(null);
-    expect(removeItem.getAttribute("data-disabled")).not.toBe(null);
   });
 });

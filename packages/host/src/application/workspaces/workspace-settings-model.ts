@@ -78,16 +78,11 @@ export type WorkspaceSettingsService = {
     workspaceId: string;
     expectedRepoPath: string;
     removeTaskWorktrees: boolean;
-  }): Effect.Effect<
-    { record: WorkspaceRemovalRecord; repoConfig: RepoConfig },
-    WorkspaceSettingsError
-  >;
+  }): Effect.Effect<WorkspaceRemovalRecord, WorkspaceSettingsError>;
   recordWorkspaceRemovalProgress(input: {
     workspaceId: string;
     phase: WorkspaceRemovalPhase;
-    removedWorktrees: string[];
-    lastFailure: string | null;
-    pendingWorktreePath: string | null | undefined;
+    pendingWorktreePath: string | null;
   }): Effect.Effect<void, WorkspaceSettingsError>;
   reorderWorkspaces(
     workspaceOrder: string[],
@@ -301,15 +296,6 @@ export const requireConfiguredWorkspace = (
   }
   return existing;
 };
-export const assertNoIncompleteRemoval = (workspaceId: string, repoConfig: RepoConfig) =>
-  repoConfig.removal
-    ? Effect.fail(
-        new HostValidationError({
-          message: `Workspace removal is incomplete for ${workspaceId}. Finish the removal before changing repository settings.`,
-          field: "workspaceId",
-        }),
-      )
-    : Effect.void;
 export const findRepoConfigByRepoPath = (
   settingsConfig: SettingsConfigPort,
   config: LoadedGlobalConfig,
@@ -384,15 +370,12 @@ export const normalizeSnapshotWorkspaces = (
           }),
         );
       }
-      if (existingRepoConfig.removal !== undefined) {
-        nextWorkspaces[workspaceId] = existingRepoConfig;
-        continue;
-      }
       const normalizedRepoConfig = yield* validateAndNormalizeRepoConfig(settingsConfig, {
         ...repoConfig,
         workspaceId,
         agentStudioState: existingRepoConfig.agentStudioState,
         closed: existingRepoConfig.closed,
+        removal: existingRepoConfig.removal,
       });
       const conflictingWorkspaceId = Object.entries(nextWorkspaces).find(
         ([, workspace]) => workspace.repoPath === normalizedRepoConfig.repoPath,

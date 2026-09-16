@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { globalConfigSchema, persistedGlobalConfigV3Schema } from "@openducktor/contracts";
+import { globalConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createSettingsConfigTestDouble } from "../../test-support/service-test-doubles";
-import { createWorkspaceOwnershipLock } from "./workspace-ownership-lock";
 import { createWorkspaceSettingsService } from "./workspace-settings-service";
 
 const setup = () => {
-  let config = globalConfigSchema.parse({ version: 4 });
+  let config = globalConfigSchema.parse({ version: 3 });
   const service = createWorkspaceSettingsService(
     createSettingsConfigTestDouble({
       readConfig: () => Effect.sync(() => structuredClone(config)),
@@ -15,7 +14,6 @@ const setup = () => {
           config = structuredClone(next);
         }),
     }),
-    createWorkspaceOwnershipLock(),
   );
   return { service, config: () => config };
 };
@@ -106,17 +104,17 @@ describe("global Custom Agent Roles", () => {
   });
 
   test("validates duplicate names and IDs in persisted config and defaults old config to no roles", () => {
-    expect(persistedGlobalConfigV3Schema.parse({ version: 3 }).customAgentRoles).toEqual([]);
+    expect(globalConfigSchema.parse({ version: 3 }).customAgentRoles).toEqual([]);
     const role = { id: "one", name: "Name", systemPrompt: "Prompt" };
     expect(
       globalConfigSchema.safeParse({
-        version: 4,
+        version: 3,
         customAgentRoles: [role, { ...role, id: "two", name: " NAME " }],
       }).success,
     ).toBe(false);
     expect(
       globalConfigSchema.safeParse({
-        version: 4,
+        version: 3,
         customAgentRoles: [role, { ...role, name: "Other" }],
       }).success,
     ).toBe(false);

@@ -212,7 +212,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
       const rendered = render(
         <ThemeProvider>
           <AgentSessionTranscriptDialog
-            workspaceId="ws"
             workspaceRepoPath="/repo-a"
             target={target}
             open
@@ -335,7 +334,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
     );
     const rendered = render(
       <AgentSessionTranscriptDialog
-        workspaceId="ws"
         workspaceRepoPath="/repo-a"
         target={transcriptTarget}
         open

@@ -36,7 +36,6 @@ export const createTaskImplementationResetUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-  withWorkStartLease,
   taskSessionLifecycleCoordinator: coordinator,
 }: TaskServiceUseCaseInput) => ({
   resetImplementation(input: Parameters<TaskService["resetImplementation"]>[0]) {
@@ -144,7 +143,6 @@ export const createTaskImplementationResetUseCase = ({
           worktreeCleanupOperation: "task_reset_implementation",
           worktreeFiles,
           worktreePaths: cleanupTargets.worktreePaths,
-          withWorkStartLease,
         });
         if (canonicalTarget) {
           yield* dependencies.gitPort.restoreWorktreeToReference(

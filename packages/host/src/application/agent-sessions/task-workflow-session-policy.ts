@@ -21,7 +21,6 @@ import {
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { TaskSessionStartPreparationService } from "../tasks/worktrees/task-session-start-preparation-service";
-import type { WorkspaceOwnershipLock } from "../workspaces/workspace-ownership-lock";
 import { createStartTaskWorkflowSession } from "./task-workflow-session-start";
 import { storeWorkflowSession, toControlSessionRef } from "./task-workflow-session-storage";
 import type { AgentSessionOperationPolicy } from "./agent-session-operation-policy";
@@ -152,7 +151,7 @@ export type TaskSessionModelPersistence = (
 ) => Effect.Effect<{ updated: boolean; publish: Effect.Effect<void, HostError> }, HostError>;
 
 export const createTaskWorkflowSessionPolicy = ({
-  withWorkStartLease,
+  assertProcessStart,
   canonicalizeRepoPath,
   runtime,
   taskReader,
@@ -160,12 +159,10 @@ export const createTaskWorkflowSessionPolicy = ({
   taskLifecycle,
   taskSessionStart,
   persistTaskModel,
-  ownershipLock,
 }: {
-  withWorkStartLease: <A, E, R>(
-    repoPath: string,
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E | HostValidationErrorAggregate, R>;
+  assertProcessStart?:
+    | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
+    | undefined;
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtime: RuntimeControl;
   taskReader: TaskReader;
@@ -173,16 +170,14 @@ export const createTaskWorkflowSessionPolicy = ({
   taskLifecycle: TaskLifecycle;
   taskSessionStart: TaskSessionStartPreparationService;
   persistTaskModel: TaskSessionModelPersistence;
-  ownershipLock: WorkspaceOwnershipLock;
 }) => ({
   startWorkflowSession: createStartTaskWorkflowSession({
-    withWorkStartLease,
+    assertProcessStart,
     canonicalizeRepoPath,
     runtime,
     tasks,
     taskLifecycle,
     taskSessionStart,
-    ownershipLock,
   }),
   forkSession: (input: Parameters<RuntimeControl["forkSession"]>[0]) => {
     if (input.sessionScope.kind !== "workflow") {

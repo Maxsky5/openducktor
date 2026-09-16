@@ -119,16 +119,6 @@ describe("SQLite Workspace Session store", () => {
     ).rejects.toThrow("active draft");
   });
 
-  test("lists active and archived sessions for internal inventory", async () => {
-    const repository = store();
-    const active = makeSession("active");
-    const archived = { ...makeSession("archived"), archivedAt: 10 };
-    await Effect.runPromise(repository.create({ ...scope(), session: active }));
-    await Effect.runPromise(repository.create({ ...scope(), session: archived }));
-
-    expect(await Effect.runPromise(repository.listAll(scope()))).toEqual([active, archived]);
-  });
-
   test("migrates existing workspace sessions without changing rows or indexes", async () => {
     const database = new Database(":memory:");
     try {

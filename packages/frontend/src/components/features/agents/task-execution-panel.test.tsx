@@ -887,11 +887,7 @@ describe("TaskExecutionPanel", () => {
               },
             }}
           />
-          <TaskExecutionSelectedFilePreview
-            workspaceId="ws"
-            model={preview.model}
-            onFileSaved={() => {}}
-          />
+          <TaskExecutionSelectedFilePreview model={preview.model} onFileSaved={() => {}} />
         </>
       );
     }

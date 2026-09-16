@@ -11,27 +11,18 @@ import type {
 import { Deferred, Effect, Exit, Fiber } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
-import type { WorkspaceOwnershipLock } from "../workspaces/workspace-ownership-lock";
 import { createAgentSessionCommandService as createControlService } from "./agent-session-command-service";
 
 type ControlServiceInput = Parameters<typeof createControlService>[0];
 type TestControlServiceInput = Omit<
   ControlServiceInput,
-  | "withWorkStartLease"
-  | "taskSessionStart"
-  | "tasks"
-  | "repositoryPolicy"
-  | "persistTaskModel"
-  | "runtime"
-  | "ownershipLock"
+  "taskSessionStart" | "tasks" | "repositoryPolicy" | "persistTaskModel" | "runtime"
 > & {
-  withWorkStartLease?: ControlServiceInput["withWorkStartLease"];
   runtime: Omit<
     ControlServiceInput["runtime"],
     "loadContext" | "loadSessionDiff" | "replyApproval" | "replyQuestion"
   >;
   taskSessionStart?: ControlServiceInput["taskSessionStart"];
-  ownershipLock?: WorkspaceOwnershipLock;
   tasks: Omit<ControlServiceInput["tasks"], "transitionTask"> &
     Partial<Pick<ControlServiceInput["tasks"], "transitionTask">>;
 };
@@ -43,8 +34,6 @@ const createAgentSessionCommandService = (input: TestControlServiceInput) =>
       complete: () => Effect.dieMessage("unexpected task session completion"),
     },
     ...input,
-    withWorkStartLease: input.withWorkStartLease ?? ((_repoPath, effect) => effect),
-    ownershipLock: input.ownershipLock ?? { runExclusive: (effect) => effect },
     runtime: {
       loadContext: () => Effect.dieMessage("unexpected context read"),
       loadSessionDiff: () => Effect.dieMessage("unexpected diff read"),
@@ -228,7 +217,7 @@ describe("createAgentSessionCommandService", () => {
     const prepared: string[] = [];
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
-      withWorkStartLease: () =>
+      assertProcessStart: () =>
         Effect.fail(
           new HostValidationError({
             message: "Workspace is closed: /repo. Reopen it before using it.",
@@ -503,13 +492,6 @@ describe("createAgentSessionCommandService", () => {
     const preparedTask = task("ready_for_dev");
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
-      ownershipLock: {
-        runExclusive: (effect) =>
-          Effect.sync(() => calls.push("lock")).pipe(
-            Effect.zipRight(effect),
-            Effect.ensuring(Effect.sync(() => calls.push("unlock"))),
-          ),
-      },
       taskSessionStart: {
         prepare: () =>
           Effect.succeed({
@@ -555,7 +537,7 @@ describe("createAgentSessionCommandService", () => {
         }),
       ),
     ).rejects.toThrow("store failed");
-    expect(calls).toEqual(["lock", "stop-runtime", "cleanup-worktree", "unlock"]);
+    expect(calls).toEqual(["stop-runtime", "cleanup-worktree"]);
   });
 
   test("keeps a new worktree when session storage and runtime stop both fail", async () => {

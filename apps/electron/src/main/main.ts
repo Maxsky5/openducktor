@@ -45,11 +45,9 @@ import {
   ELECTRON_APP_UPDATE_GET_STATE_CHANNEL,
   ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
-  ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   ELECTRON_OPEN_EXTERNAL_URL_CHANNEL,
   type ElectronAppUpdateCheckInput,
-  type ElectronContextMenuPosition,
 } from "../shared/electron-bridge-contract";
 import { ELECTRON_TASK_ASSET_PROTOCOL } from "../shared/electron-task-asset-url";
 import {
@@ -94,11 +92,7 @@ import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
-import {
-  installApplicationMenu,
-  markContextMenuClaimed,
-  registerWindowContextMenu,
-} from "./main-menu";
+import { installApplicationMenu } from "./main-menu";
 import { registerElectronTerminalIpc } from "./terminals/electron-terminal-ipc";
 import { createNodePtyPort } from "./terminals/node-pty-adapter";
 
@@ -489,7 +483,6 @@ const createMainWindowEffect = (
     window.webContents.on("will-navigate", (event) => {
       event.preventDefault();
     });
-    registerWindowContextMenu(window, { isDevelopment });
     window.on("close", (event) => {
       if (shutdownController.isHostShutdownComplete()) {
         return;
@@ -734,13 +727,6 @@ const registerIpcHandlers = (
       return result;
     },
   });
-
-  ipcMain.on(
-    ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL,
-    (event, position: ElectronContextMenuPosition) => {
-      markContextMenuClaimed({ webContentsId: event.sender.id, ...position });
-    },
-  );
 
   ipcMain.handle(ELECTRON_OPEN_EXTERNAL_URL_CHANNEL, async (_event, url) => {
     await runElectronEffect(openExternalUrlEffect(url));

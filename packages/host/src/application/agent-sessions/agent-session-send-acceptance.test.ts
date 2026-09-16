@@ -27,7 +27,6 @@ describe("message acceptance through the command and live adapter modules", () =
       const failure = new HostOperationError({ operation: "test", message: `${stage} failed` });
       const live = createAgentSessionLiveStateService({
         adapterRegistry: createLiveSessionAdapterRegistry(),
-        withWorkStartLease: (_repoPath, effect) => effect,
         faultLog: () => Effect.void,
         publish: (event) => {
           events.push(event);
@@ -80,8 +79,6 @@ describe("message acceptance through the command and live adapter modules", () =
         prepared.adapter.resumeSession({ ...ref, sessionScope: { kind: "repository" } }),
       );
       const commands = createAgentSessionCommandService({
-        withWorkStartLease: (_repoPath, effect) => effect,
-        ownershipLock: { runExclusive: (effect) => effect },
         runtime: live,
         repositoryPolicy: {
           run: (_ref, _operation, effect) => effect,

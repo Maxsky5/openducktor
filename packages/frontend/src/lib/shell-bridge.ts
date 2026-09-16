@@ -111,7 +111,6 @@ export type NotificationBridge = {
 export type ShellBridge = HostBridge & {
   appUpdates: AppUpdateBridge;
   capabilities: ShellCapabilities;
-  claimContextMenu?: (position: { x: number; y: number }) => void;
   notifications: NotificationBridge;
   openExternalUrl: (url: string) => Promise<void>;
   resolveLocalAttachmentPreviewSrc: (path: string) => Promise<string>;

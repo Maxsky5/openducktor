@@ -272,19 +272,14 @@ describe("createNodeEffectHostCommandRouter", () => {
     expect(infos).toContain("No dev servers are running");
   });
 
-  test("releases workspace ownership after SQLite task store connections", async () => {
+  test("disposes SQLite task store connections after every other host resource", async () => {
     const { infos, logger } = createLogger();
 
     const router = await createRouter({ logger });
     await Effect.runPromise(router.dispose());
 
-    expect(infos.slice(-5)).toEqual([
-      "Stopping SQLite task store connections...",
-      "Stopped SQLite task store connections",
-      "Stopping workspace host ownership...",
-      "Stopped workspace host ownership",
-      "OpenDucktor host services stopped",
-    ]);
+    expect(infos.at(-2)).toBe("Stopped SQLite task store connections");
+    expect(infos.at(-1)).toBe("OpenDucktor host services stopped");
   });
 
   test("stops the pull request sync loop during host disposal", async () => {
@@ -347,7 +342,6 @@ describe("createNodeEffectHostCommandRouter", () => {
 
     expect(exit._tag).toBe("Failure");
     expect(infos).not.toContain("OpenDucktor host services stopped");
-    expect(infos).not.toContain("Stopping workspace host ownership...");
   });
 
   test("preserves shutdown and lifecycle logging failures together", async () => {

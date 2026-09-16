@@ -21,6 +21,8 @@ import type {
   TaskUpdatePatch,
   WorkspacePathResolution,
   WorkspaceRecord,
+  WorkspaceLifecycleTargetInput,
+  WorkspaceRemovalInput,
 } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
@@ -52,15 +54,6 @@ export type WorkspaceSelectionOperationsInput = {
 };
 
 export type ActiveWorkspace = Pick<WorkspaceRecord, "workspaceId" | "workspaceName" | "repoPath">;
-
-export type WorkspaceLifecycleTarget = {
-  workspaceId: string;
-  expectedRepoPath: string;
-};
-
-export type WorkspaceRemovalInput = WorkspaceLifecycleTarget & {
-  removeTaskWorktrees: boolean;
-};
 
 export type RepoAgentDefaultInput = {
   runtimeKind?: RuntimeKind | null;
@@ -102,9 +95,9 @@ export type WorkspaceStateContextValue = {
   activeBranch: GitCurrentBranch | null;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
-  closeWorkspace: (input: WorkspaceLifecycleTarget) => Promise<void>;
+  closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
-  reopenWorkspace: (input: WorkspaceLifecycleTarget) => Promise<void>;
+  reopenWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
   resolveWorkspacePath: (repoPath: string) => Promise<WorkspacePathResolution>;
   reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
@@ -131,7 +124,6 @@ export type WorkspaceBranchStateContextValue = Pick<
 
 export type WorkspacePresenceContextValue = {
   hasWorkspaces: boolean;
-  onboardingCompleted: boolean;
   hasLoadedWorkspaceList: boolean;
   isLoadingWorkspaces: boolean;
   workspaceLoadError: Error | null;

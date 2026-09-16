@@ -96,7 +96,6 @@ describe("workspaceFileTreeQueryOptions", () => {
       { wrapper: IsolatedQueryWrapper },
     );
     const input = {
-      workspaceId: "ws",
       rootPath: "/repo",
       relativePath: "file.txt",
       contents: "saved",
@@ -158,7 +157,6 @@ describe("workspaceFileTreeQueryOptions", () => {
     await act(async () => {
       try {
         await result.current.mutation.mutateAsync({
-          workspaceId: "ws",
           rootPath: "/repo",
           relativePath: "file.txt",
           contents: "draft",

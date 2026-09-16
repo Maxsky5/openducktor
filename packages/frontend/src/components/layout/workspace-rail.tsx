@@ -19,7 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { IncompleteWorkspaceRemoval, WorkspaceRecord } from "@openducktor/contracts";
-import { EyeOff, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { PanelLeftClose, Plus, Trash2, TriangleAlert } from "lucide-react";
 import {
   type CSSProperties,
   type ReactElement,
@@ -27,6 +27,7 @@ import {
   type RefCallback,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from "react";
@@ -37,16 +38,19 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
-import { noColorTileClasses, tileColorFaceStyle } from "@/lib/workspace-tile-appearance";
+import {
+  deriveWorkspaceInitials,
+  noColorTileClasses,
+  tileColorFaceStyle,
+  tileLabelSizeClass,
+} from "@/lib/workspace-tile-appearance";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import {
   WorkspaceCloseDialog,
   WorkspaceRemovalRecoveryDialog,
   WorkspaceRemoveDialog,
 } from "../features/repository/workspace-lifecycle-dialogs";
-import { WorkspaceAvatar } from "../features/repository/workspace-identity";
 
 const DRAG_DISTANCE_PX = 6;
 
@@ -57,6 +61,34 @@ const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void
     frameRef.current = null;
   }
 };
+
+function WorkspaceRailAvatar({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
+  const [failedIconDataUrl, markIconDataUrlFailed] = useReducer(
+    (_current: string | null, next: string) => next,
+    null,
+  );
+  const iconDataUrl = workspace.iconDataUrl ?? null;
+
+  if (iconDataUrl && failedIconDataUrl !== iconDataUrl) {
+    return (
+      <img
+        src={iconDataUrl}
+        alt=""
+        aria-hidden="true"
+        className="size-6 rounded-md object-cover"
+        onError={() => {
+          markIconDataUrlFailed(iconDataUrl);
+        }}
+      />
+    );
+  }
+
+  const label = workspace.abbreviation ?? deriveWorkspaceInitials(workspace.workspaceName);
+
+  return (
+    <span className={cn("font-semibold leading-none", tileLabelSizeClass(label))}>{label}</span>
+  );
+}
 
 type WorkspaceRailButtonShellProps = {
   workspace: WorkspaceRecord;
@@ -146,7 +178,7 @@ function WorkspaceRailButtonShell({
           onSelectWorkspace?.(workspace.workspaceId);
         }}
       >
-        <WorkspaceAvatar workspace={workspace} />
+        <WorkspaceRailAvatar workspace={workspace} />
       </Button>
     </div>
   );
@@ -182,12 +214,7 @@ function SortableWorkspaceRailButton({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger
-        className="block"
-        onContextMenu={(event) => {
-          getShellBridge().claimContextMenu?.({ x: event.clientX, y: event.clientY });
-        }}
-      >
+      <ContextMenuTrigger className="block">
         <WorkspaceRailButtonShell
           workspace={workspace}
           tileColor={tileColor}
@@ -206,18 +233,11 @@ function SortableWorkspaceRailButton({
         />
       </ContextMenuTrigger>
       <ContextMenuContent className="w-52">
-        <ContextMenuItem
-          disabled={isSwitchingWorkspace}
-          onSelect={() => onRequestCloseWorkspace(workspace)}
-        >
-          <EyeOff />
+        <ContextMenuItem onSelect={() => onRequestCloseWorkspace(workspace)}>
+          <PanelLeftClose />
           Close workspace
         </ContextMenuItem>
-        <ContextMenuItem
-          variant="destructive"
-          disabled={isSwitchingWorkspace}
-          onSelect={() => onRequestRemoveWorkspace(workspace)}
-        >
+        <ContextMenuItem variant="destructive" onSelect={() => onRequestRemoveWorkspace(workspace)}>
           <Trash2 />
           Remove workspace
         </ContextMenuItem>
@@ -248,7 +268,6 @@ export function WorkspaceRail({
     [workspaces],
   );
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
-  const openRepositoryButtonRef = useRef<HTMLButtonElement>(null);
   const suppressedSelectionWorkspaceIdRef = useRef<string | null>(null);
   const selectionSuppressionFrameRef = useRef<number | null>(null);
   const activeDragWorkspace = activeWorkspaceId
@@ -379,7 +398,6 @@ export function WorkspaceRail({
                 className="size-10 text-destructive hover:text-destructive"
                 aria-label={`Finish removing ${removal.workspace.workspaceName}`}
                 title={`Finish removing ${removal.workspace.workspaceName}`}
-                disabled={isSwitchingWorkspace}
                 onClick={() => setLifecycleRequest({ action: "recovery", removal })}
               >
                 <TriangleAlert className="size-5" />
@@ -387,14 +405,12 @@ export function WorkspaceRail({
             ))}
 
             <Button
-              ref={openRepositoryButtonRef}
               type="button"
               size="icon"
               variant="ghost"
               className="size-10"
               aria-label="Open repository"
               title="Open repository"
-              disabled={isSwitchingWorkspace}
               onClick={onOpenRepositoryModal}
             >
               <Plus className="size-5" />
@@ -405,7 +421,6 @@ export function WorkspaceRail({
       {lifecycleRequest?.action === "close" ? (
         <WorkspaceCloseDialog
           workspace={lifecycleRequest.workspace}
-          returnFocusRef={openRepositoryButtonRef}
           onOpenChange={(open) => {
             if (!open) setLifecycleRequest(null);
           }}
@@ -414,7 +429,6 @@ export function WorkspaceRail({
       {lifecycleRequest?.action === "remove" ? (
         <WorkspaceRemoveDialog
           workspace={lifecycleRequest.workspace}
-          returnFocusRef={openRepositoryButtonRef}
           onOpenChange={(open) => {
             if (!open) setLifecycleRequest(null);
           }}
@@ -422,13 +436,7 @@ export function WorkspaceRail({
       ) : null}
       {lifecycleRequest?.action === "recovery" ? (
         <WorkspaceRemovalRecoveryDialog
-          removal={
-            incompleteRemovals.find(
-              (removal) =>
-                removal.workspace.workspaceId === lifecycleRequest.removal.workspace.workspaceId,
-            ) ?? lifecycleRequest.removal
-          }
-          returnFocusRef={openRepositoryButtonRef}
+          removal={lifecycleRequest.removal}
           onOpenChange={(open) => {
             if (!open) setLifecycleRequest(null);
           }}

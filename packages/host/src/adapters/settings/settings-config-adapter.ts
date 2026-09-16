@@ -1,17 +1,15 @@
 import { createHash } from "node:crypto";
-import { access, type FileHandle, mkdir, open, readFile, realpath, rename } from "node:fs/promises";
+import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { GlobalConfig, PersistedGlobalConfigV2 } from "@openducktor/contracts";
-import { Clock, Deferred, Effect, Exit, FiberId } from "effect";
+import { Clock, Deferred, Effect, FiberId } from "effect";
 import { z } from "zod";
 import {
   type LoadedGlobalConfig,
   parsePersistedGlobalConfig,
   parsePersistedGlobalConfigV2,
-  parsePersistedGlobalConfigV3,
   readPersistedGlobalConfigVersion,
   upgradePersistedGlobalConfigV2,
-  upgradePersistedGlobalConfigV3,
 } from "../../config/global-config";
 import { configValidationMessage } from "../../config/config-validation-message";
 import {
@@ -28,7 +26,6 @@ import {
 } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
-import type { WorkspaceOwnershipLock } from "../../application/workspaces/workspace-ownership-lock";
 
 const USER_SETTINGS_FILENAME = "config.json";
 const missingConfigFileErrorSchema = z.object({ code: z.literal("ENOENT") }).passthrough();
@@ -105,7 +102,6 @@ export type CreateSettingsConfigAdapterInput = {
   configDir?: string;
   configPath?: string;
   environment?: NodeJS.ProcessEnv;
-  initializationLock?: WorkspaceOwnershipLock;
   initializeConfig?: (
     legacyConfig: PersistedGlobalConfigV2 | null,
   ) => Effect.Effect<LoadedGlobalConfig, SettingsConfigError>;
@@ -113,24 +109,8 @@ export type CreateSettingsConfigAdapterInput = {
 
 type SettingsInitializationFlight = Deferred.Deferred<LoadedGlobalConfig, SettingsConfigError>;
 
-type PersistedConfigState =
-  | { readonly _tag: "missing" }
-  | { readonly _tag: "current"; readonly config: LoadedGlobalConfig }
-  | { readonly _tag: "legacy"; readonly config: PersistedGlobalConfigV2 };
-
 const makeSettingsInitializationFlight = (): SettingsInitializationFlight =>
   Deferred.unsafeMake(FiberId.none);
-
-const withFileHandle = <A>(
-  acquire: () => Promise<FileHandle>,
-  use: (handle: FileHandle) => Promise<A>,
-) =>
-  Effect.gen(function* () {
-    const handle = yield* Effect.tryPromise(acquire);
-    const useExit = yield* Effect.exit(Effect.tryPromise(() => use(handle)));
-    const closeExit = yield* Effect.exit(Effect.tryPromise(() => handle.close()));
-    return yield* Exit.zipLeft(useExit, closeExit);
-  });
 
 const persistGlobalConfig = (resolvedConfigPath: string, baseDir: string, config: GlobalConfig) =>
   Effect.gen(function* () {
@@ -161,20 +141,8 @@ const persistGlobalConfig = (resolvedConfigPath: string, baseDir: string, config
     const payload = `${JSON.stringify(config, null, 2)}\n`;
 
     yield* Effect.gen(function* () {
-      yield* withFileHandle(
-        () => open(tempPath, "w", 0o600),
-        async (handle) => {
-          await handle.writeFile(payload);
-          await handle.sync();
-        },
-      );
+      yield* Effect.tryPromise(() => writeFile(tempPath, payload, { mode: 0o600 }));
       yield* Effect.tryPromise(() => rename(tempPath, resolvedConfigPath));
-      if (process.platform !== "win32") {
-        yield* withFileHandle(
-          () => open(baseDir, "r"),
-          (handle) => handle.sync(),
-        );
-      }
     }).pipe(
       Effect.mapError((cause) =>
         toHostOperationError(cause, "settingsConfig.writeConfig", {
@@ -198,7 +166,6 @@ export const createSettingsConfigAdapter = ({
   configDir,
   configPath,
   environment,
-  initializationLock,
   initializeConfig,
 }: CreateSettingsConfigAdapterInput = {}): SettingsConfigPort => {
   const resolvedConfigPath =
@@ -210,74 +177,17 @@ export const createSettingsConfigAdapter = ({
   const baseDir = path.dirname(resolvedConfigPath);
   let initializationFlight: SettingsInitializationFlight | null = null;
 
-  const readPersistedConfig = (): Effect.Effect<PersistedConfigState, SettingsConfigError> =>
-    Effect.gen(function* () {
-      const payload = yield* Effect.tryPromise({
-        try: () => readFile(resolvedConfigPath, "utf8"),
-        catch: (cause) =>
-          toHostOperationError(cause, "settingsConfig.readConfig", { path: resolvedConfigPath }),
-      }).pipe(
-        Effect.catchTag("HostOperationError", (error) => {
-          if (missingConfigFileErrorSchema.safeParse(error.cause).success) {
-            return Effect.succeed(null);
-          }
-
-          return Effect.fail(error);
-        }),
-      );
-      if (payload === null) {
-        return { _tag: "missing" } as const;
-      }
-
-      const parsedPayload = yield* Effect.try({
-        try: () => parseJson(payload),
-        catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
-      });
-      const version = yield* Effect.try({
-        try: () => readPersistedGlobalConfigVersion(parsedPayload),
-        catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
-      });
-      if (version === 4) {
-        const config = yield* Effect.try({
-          try: () => parsePersistedGlobalConfig(parsedPayload),
-          catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
-        });
-        return { _tag: "current", config } as const;
-      }
-      if (version === 3) {
-        const config = yield* Effect.try({
-          try: () => upgradePersistedGlobalConfigV3(parsePersistedGlobalConfigV3(parsedPayload)),
-          catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
-        });
-        return { _tag: "current", config } as const;
-      }
-
-      const config = yield* Effect.try({
-        try: () => parsePersistedGlobalConfigV2(parsedPayload),
-        catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
-      });
-      return { _tag: "legacy", config } as const;
-    });
-
   const completeInitialization = (
+    legacyConfig: PersistedGlobalConfigV2 | null,
     flight: SettingsInitializationFlight,
     initializer: NonNullable<CreateSettingsConfigAdapterInput["initializeConfig"]>,
-  ) => {
-    const initialize = Effect.gen(function* () {
-      const persisted = yield* readPersistedConfig();
-      if (persisted._tag === "current") {
-        return persisted.config;
-      }
-      const config = yield* initializer(persisted._tag === "legacy" ? persisted.config : null);
-      yield* persistGlobalConfig(resolvedConfigPath, baseDir, config);
-      return config;
-    });
-    const guardedInitialization = initializationLock
-      ? initializationLock.runExclusive(initialize)
-      : initialize;
-
-    return Effect.gen(function* () {
-      const exit = yield* Effect.exit(guardedInitialization);
+  ) =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        initializer(legacyConfig).pipe(
+          Effect.tap((config) => persistGlobalConfig(resolvedConfigPath, baseDir, config)),
+        ),
+      );
       yield* Deferred.done(flight, exit);
     }).pipe(
       Effect.ensuring(
@@ -288,9 +198,8 @@ export const createSettingsConfigAdapter = ({
         }),
       ),
     );
-  };
 
-  const initializeOnce = () => {
+  const initializeOnce = (legacyConfig: PersistedGlobalConfigV2 | null) => {
     if (!initializeConfig) {
       return Effect.fail(
         new HostValidationError({
@@ -311,7 +220,9 @@ export const createSettingsConfigAdapter = ({
           return { created: true as const, flight };
         });
         if (reservation.created) {
-          yield* Effect.forkDaemon(completeInitialization(reservation.flight, initializer));
+          yield* Effect.forkDaemon(
+            completeInitialization(legacyConfig, reservation.flight, initializer),
+          );
         }
         return yield* restore(Deferred.await(reservation.flight));
       }),
@@ -322,18 +233,44 @@ export const createSettingsConfigAdapter = ({
     readConfig(options) {
       const initialize = options?.initialize ?? true;
       return Effect.gen(function* () {
-        const persisted = yield* readPersistedConfig();
-        if (persisted._tag === "current") {
-          return persisted.config;
+        const payload = yield* Effect.tryPromise({
+          try: () => readFile(resolvedConfigPath, "utf8"),
+          catch: (cause) =>
+            toHostOperationError(cause, "settingsConfig.readConfig", { path: resolvedConfigPath }),
+        }).pipe(
+          Effect.catchTag("HostOperationError", (error) => {
+            if (missingConfigFileErrorSchema.safeParse(error.cause).success) {
+              return Effect.succeed(null);
+            }
+
+            return Effect.fail(error);
+          }),
+        );
+        if (payload === null) {
+          return initialize && initializeConfig ? yield* initializeOnce(null) : null;
         }
 
-        if (!initialize) {
-          return persisted._tag === "legacy"
-            ? upgradePersistedGlobalConfigV2(persisted.config, {})
-            : null;
+        const parsedPayload = yield* Effect.try({
+          try: () => parseJson(payload),
+          catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
+        });
+        const version = yield* Effect.try({
+          try: () => readPersistedGlobalConfigVersion(parsedPayload),
+          catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
+        });
+        if (version === 3) {
+          return yield* Effect.try({
+            try: () => parsePersistedGlobalConfig(parsedPayload),
+            catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
+          });
         }
-
-        return initializeConfig ? yield* initializeOnce() : null;
+        const legacyConfig = yield* Effect.try({
+          try: () => parsePersistedGlobalConfigV2(parsedPayload),
+          catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
+        });
+        return initialize
+          ? yield* initializeOnce(legacyConfig)
+          : upgradePersistedGlobalConfigV2(legacyConfig, {});
       });
     },
     writeConfig(config: GlobalConfig) {

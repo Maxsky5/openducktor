@@ -17,14 +17,11 @@ import {
   workspaceRecordsInEffectiveOrder,
 } from "./workspace-catalog-model";
 import { createWorkspaceLifecycleSettingsMethods } from "./workspace-lifecycle-settings";
-import type { WorkspaceOwnershipLock } from "./workspace-ownership-lock";
 import {
   areAgentModelFavoritesEqual,
-  type WorkspaceSettingsOwnershipMode,
   withSerializedConfigWrites,
 } from "./workspace-settings-serializer";
 import {
-  assertNoIncompleteRemoval,
   buildMergedRepoConfig,
   ensureRepoPathAvailable,
   findRepoConfigByRepoPath,
@@ -89,7 +86,6 @@ const createUnserializedWorkspaceSettingsService = (
       config.workspaces[repoConfig.workspaceId] = repoConfig;
       config.workspaceOrder = [...config.workspaceOrder, repoConfig.workspaceId];
       config.activeWorkspace = repoConfig.workspaceId;
-      config.onboardingCompleted = true;
       touchRecentWorkspace(config, repoConfig.workspaceId);
 
       return yield* saveAndReturnWorkspaceRecord(settingsConfig, config, repoConfig.workspaceId);
@@ -238,7 +234,6 @@ const createUnserializedWorkspaceSettingsService = (
             cause,
           }),
       });
-      yield* assertNoIncompleteRemoval(workspaceId, existing);
       const nextRepoConfig = yield* validateAndNormalizeRepoConfig(
         settingsConfig,
         buildMergedRepoConfig(workspaceId, existing, update, false),
@@ -271,7 +266,6 @@ const createUnserializedWorkspaceSettingsService = (
             cause,
           }),
       });
-      yield* assertNoIncompleteRemoval(workspaceId, existing);
       const nextRepoConfig = yield* validateAndNormalizeRepoConfig(
         settingsConfig,
         buildMergedRepoConfig(workspaceId, existing, settings, true),
@@ -406,11 +400,5 @@ const createUnserializedWorkspaceSettingsService = (
 
 export const createWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
-  ownershipLock: WorkspaceOwnershipLock,
-  ownershipMode: WorkspaceSettingsOwnershipMode = "acquire",
 ): WorkspaceSettingsService =>
-  withSerializedConfigWrites(
-    createUnserializedWorkspaceSettingsService(settingsConfig),
-    ownershipLock,
-    ownershipMode,
-  );
+  withSerializedConfigWrites(createUnserializedWorkspaceSettingsService(settingsConfig));

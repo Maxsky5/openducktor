@@ -26,23 +26,27 @@ const validateSqliteTaskStoreWorkspaceId = (
   return Effect.succeed(workspaceId);
 };
 
-export const sqliteTaskStoreDirectoryPath = (configDir: string, workspaceId: string): string =>
-  path.join(configDir, "task-stores", workspaceId);
+const sqliteTaskStoreDatabasePathSegments = (
+  workspaceId: string,
+): Effect.Effect<
+  [string, string, typeof TASK_STORE_DATABASE_FILENAME],
+  HostInvariantError<{ workspaceId: string }>
+> =>
+  validateSqliteTaskStoreWorkspaceId(workspaceId).pipe(
+    Effect.map((validWorkspaceId) => [
+      "task-stores",
+      validWorkspaceId,
+      TASK_STORE_DATABASE_FILENAME,
+    ]),
+  );
 
-const resolveSqliteTaskStoreDirectory = ({
+export const resolveSqliteTaskStoreDatabasePath = ({
   configDir,
   workspaceId,
 }: ResolveSqliteTaskStoreDatabasePathInput): Effect.Effect<
   string,
   HostInvariantError<{ workspaceId: string }>
 > =>
-  validateSqliteTaskStoreWorkspaceId(workspaceId).pipe(
-    Effect.map((validWorkspaceId) => sqliteTaskStoreDirectoryPath(configDir, validWorkspaceId)),
-  );
-
-export const resolveSqliteTaskStoreDatabasePath = (
-  input: ResolveSqliteTaskStoreDatabasePathInput,
-): Effect.Effect<string, HostInvariantError<{ workspaceId: string }>> =>
-  resolveSqliteTaskStoreDirectory(input).pipe(
-    Effect.map((directory) => path.join(directory, TASK_STORE_DATABASE_FILENAME)),
+  sqliteTaskStoreDatabasePathSegments(workspaceId).pipe(
+    Effect.map((segments) => path.join(configDir, ...segments)),
   );

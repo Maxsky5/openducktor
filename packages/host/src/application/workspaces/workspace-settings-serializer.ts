@@ -1,12 +1,6 @@
 import { type AgentModelFavorite, isSameAgentModelFavorite } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type {
-  WorkspaceOwnershipLock,
-  WorkspaceOwnershipLockError,
-} from "./workspace-ownership-lock";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
-
-export type WorkspaceSettingsOwnershipMode = "acquire" | "already-held";
 
 export const areAgentModelFavoritesEqual = (
   left: readonly AgentModelFavorite[],
@@ -17,47 +11,38 @@ export const areAgentModelFavoritesEqual = (
 
 export const withSerializedConfigWrites = (
   service: WorkspaceSettingsService,
-  ownershipLock: WorkspaceOwnershipLock,
-  ownershipMode: WorkspaceSettingsOwnershipMode = "acquire",
 ): WorkspaceSettingsService => {
   const semaphore = Effect.unsafeMakeSemaphore(1);
   const serialize = semaphore.withPermits(1);
-  const serializeOwned = <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E | WorkspaceOwnershipLockError, R> =>
-    ownershipLock.runExclusive(serialize(effect));
-  const serializeWrite = ownershipMode === "acquire" ? serializeOwned : serialize;
 
   return {
     ...service,
-    createCustomAgentRole: (input) => serializeWrite(service.createCustomAgentRole(input)),
-    updateCustomAgentRole: (id, input) => serializeWrite(service.updateCustomAgentRole(id, input)),
-    deleteCustomAgentRole: (id) => serializeWrite(service.deleteCustomAgentRole(id)),
-    addWorkspace: (input) => serializeWrite(service.addWorkspace(input)),
-    selectWorkspace: (workspaceId) => serializeWrite(service.selectWorkspace(workspaceId)),
+    createCustomAgentRole: (input) => serialize(service.createCustomAgentRole(input)),
+    updateCustomAgentRole: (id, input) => serialize(service.updateCustomAgentRole(id, input)),
+    deleteCustomAgentRole: (id) => serialize(service.deleteCustomAgentRole(id)),
+    addWorkspace: (input) => serialize(service.addWorkspace(input)),
+    selectWorkspace: (workspaceId) => serialize(service.selectWorkspace(workspaceId)),
     closeWorkspace: (workspaceId, expectedRepoPath) =>
-      serializeWrite(service.closeWorkspace(workspaceId, expectedRepoPath)),
+      serialize(service.closeWorkspace(workspaceId, expectedRepoPath)),
     reopenWorkspace: (workspaceId, expectedRepoPath) =>
-      serializeWrite(service.reopenWorkspace(workspaceId, expectedRepoPath)),
+      serialize(service.reopenWorkspace(workspaceId, expectedRepoPath)),
     removeWorkspaceRegistration: (workspaceId, expectedRepoPath) =>
-      serializeWrite(service.removeWorkspaceRegistration(workspaceId, expectedRepoPath)),
-    beginWorkspaceRemoval: (input) => serializeWrite(service.beginWorkspaceRemoval(input)),
+      serialize(service.removeWorkspaceRegistration(workspaceId, expectedRepoPath)),
+    beginWorkspaceRemoval: (input) => serialize(service.beginWorkspaceRemoval(input)),
     recordWorkspaceRemovalProgress: (input) =>
-      serializeWrite(service.recordWorkspaceRemovalProgress(input)),
-    reorderWorkspaces: (workspaceOrder) =>
-      serializeWrite(service.reorderWorkspaces(workspaceOrder)),
+      serialize(service.recordWorkspaceRemovalProgress(input)),
+    reorderWorkspaces: (workspaceOrder) => serialize(service.reorderWorkspaces(workspaceOrder)),
     replaceAgentStudioState: (workspaceId, state) =>
-      serializeWrite(service.replaceAgentStudioState(workspaceId, state)),
+      serialize(service.replaceAgentStudioState(workspaceId, state)),
     updateRepoConfig: (workspaceId, update) =>
-      serializeWrite(service.updateRepoConfig(workspaceId, update)),
+      serialize(service.updateRepoConfig(workspaceId, update)),
     saveRepoSettings: (workspaceId, settings) =>
-      serializeWrite(service.saveRepoSettings(workspaceId, settings)),
-    updateRepoHooks: (workspaceId, hooks) =>
-      serializeWrite(service.updateRepoHooks(workspaceId, hooks)),
-    saveSettingsSnapshot: (snapshot) => serializeWrite(service.saveSettingsSnapshot(snapshot)),
+      serialize(service.saveRepoSettings(workspaceId, settings)),
+    updateRepoHooks: (workspaceId, hooks) => serialize(service.updateRepoHooks(workspaceId, hooks)),
+    saveSettingsSnapshot: (snapshot) => serialize(service.saveSettingsSnapshot(snapshot)),
     updateAgentModelFavorites: (favorites) =>
-      serializeWrite(service.updateAgentModelFavorites(favorites)),
-    setTheme: (theme) => serializeWrite(service.setTheme(theme)),
-    updateGlobalGitConfig: (git) => serializeWrite(service.updateGlobalGitConfig(git)),
+      serialize(service.updateAgentModelFavorites(favorites)),
+    setTheme: (theme) => serialize(service.setTheme(theme)),
+    updateGlobalGitConfig: (git) => serialize(service.updateGlobalGitConfig(git)),
   };
 };

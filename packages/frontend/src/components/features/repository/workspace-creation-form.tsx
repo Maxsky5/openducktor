@@ -90,7 +90,6 @@ const reducer = (state: State, action: Action): State => {
 
 type WorkspaceCreationFormProps = {
   workspaces: WorkspaceRecord[];
-  reservedWorkspaceIds?: ReadonlySet<string>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   disabled?: boolean;
   onSubmittingChange?: (submitting: boolean) => void;
@@ -122,7 +121,6 @@ export type WorkspaceCreationController = {
 
 export function useWorkspaceCreation({
   workspaces,
-  reservedWorkspaceIds,
   addWorkspace,
   disabled = false,
   onSubmittingChange,
@@ -137,12 +135,8 @@ export function useWorkspaceCreation({
   });
   const submitInFlight = useRef(false);
   const existingIds = useMemo(
-    () =>
-      new Set([
-        ...workspaces.map((workspace) => workspace.workspaceId),
-        ...(reservedWorkspaceIds ?? []),
-      ]),
-    [workspaces, reservedWorkspaceIds],
+    () => new Set(workspaces.map((workspace) => workspace.workspaceId)),
+    [workspaces],
   );
   const duplicateRepo = workspaces.find((workspace) => workspace.repoPath === state.repoPath);
   let validationError: string | null = null;
@@ -161,23 +155,17 @@ export function useWorkspaceCreation({
   const confirmRepo = async (repoPath: string): Promise<void> => {
     if (resolveRepoPath) {
       const resolution = await resolveRepoPath(repoPath);
-      switch (resolution.kind) {
-        case "removing":
-          throw new Error(
-            `Workspace removal is incomplete for ${resolution.removal.workspace.workspaceName}. Retry removal from the workspace rail.`,
-          );
-        case "closed":
-          if (!onReopenClosedWorkspace) {
-            throw new Error("This form cannot reopen a closed workspace.");
-          }
+      if (resolution.kind === "removing") {
+        throw new Error(
+          `Workspace removal is incomplete for ${resolution.removal.workspace.workspaceName}. Retry removal from the workspace rail.`,
+        );
+      }
+      if (resolution.kind === "closed") {
+        if (onReopenClosedWorkspace) {
           await onReopenClosedWorkspace(resolution.workspace);
-          onSuccess?.();
-          return;
-        case "open":
-          // The draft validation reports the repository as already configured.
-          break;
-        case "new":
-          break;
+        }
+        onSuccess?.();
+        return;
       }
     }
     const workspaceName = deriveWorkspaceNameFromRepoPath(repoPath);

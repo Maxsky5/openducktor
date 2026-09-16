@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
@@ -125,23 +125,11 @@ const makeService = async (
   pty = makePty(),
   idFactory: () => string = () => "terminal-1",
   filesystemPort: FilesystemPort = filesystem,
-  assertWorkspaceAdmitsWork: (
-    repoPath: string,
-  ) => Effect.Effect<void, HostValidationErrorAggregate> = () => Effect.void,
-  withWorkStartLease: Parameters<typeof createTerminalService>[0]["withWorkStartLease"] = (
-    _repoPath,
-    effect,
-  ) => effect,
-  resolveWorkspaceRepoPath: Parameters<
-    typeof createTerminalService
-  >[0]["resolveWorkspaceRepoPath"] = () => Effect.succeed(null),
+  assertProcessStart?: (repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>,
 ) => {
   const titleSettlement = makeTitleSettlementScheduler();
   const shellPath = await resolveFakeShellPath();
   const serviceInput: Parameters<typeof createTerminalService>[0] = {
-    assertWorkspaceAdmitsWork,
-    resolveWorkspaceRepoPath,
-    withWorkStartLease,
     filesystem: filesystemPort,
     ptyPort: pty.port,
     resolveLaunchEnvironment: createTerminalLaunchEnvironment({
@@ -154,6 +142,9 @@ const makeService = async (
     now: () => new Date("2026-07-12T00:00:00.000Z"),
     scheduleTitleSettlement: titleSettlement.schedule,
   };
+  if (assertProcessStart) {
+    serviceInput.assertProcessStart = assertProcessStart;
+  }
   return {
     pty,
     settleTitles: titleSettlement.flush,
@@ -164,24 +155,16 @@ const makeService = async (
 describe("TerminalService", () => {
   test("rejects task terminal creation and input for a blocked workspace", async () => {
     let blocked = true;
-    const blockedError = () =>
-      new HostValidationError({
-        message: "Workspace is closed: ws. Reopen it before using it.",
-        field: "workspaceId",
-      });
-    const assertWorkspaceAdmitsWork = (_repoPath: string) =>
-      blocked ? Effect.fail(blockedError()) : Effect.void;
-    const withWorkStartLease: Parameters<typeof createTerminalService>[0]["withWorkStartLease"] = (
-      repoPath,
-      effect,
-    ) => assertWorkspaceAdmitsWork(repoPath).pipe(Effect.zipRight(effect));
-    const { service, pty } = await makeService(
-      makePty(),
-      undefined,
-      undefined,
-      assertWorkspaceAdmitsWork,
-      withWorkStartLease,
-    );
+    const assertProcessStart = (_repoPath: string) =>
+      blocked
+        ? Effect.fail(
+            new HostValidationError({
+              message: "Workspace is closed: ws. Reopen it before using it.",
+              field: "workspaceId",
+            }),
+          )
+        : Effect.void;
+    const { service, pty } = await makeService(makePty(), undefined, undefined, assertProcessStart);
 
     await expect(
       Effect.runPromise(
@@ -207,85 +190,6 @@ describe("TerminalService", () => {
     expect(pty.operations).not.toContain("write:ls");
   });
 
-  test("passes the working directory to the raw repository lease", async () => {
-    const events: string[] = [];
-    const { service } = await makeService(
-      makePty(),
-      undefined,
-      {
-        ...filesystem,
-        canonicalize: (path: string) => {
-          events.push(`canonicalize:${path}`);
-          return Effect.succeed(`/canonical${path}`);
-        },
-      },
-      () => Effect.void,
-      (repoPath, effect, workingDirectory) => {
-        events.push(`lease:${repoPath}:${workingDirectory}`);
-        return effect;
-      },
-    );
-
-    await Effect.runPromise(
-      service.create({
-        workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task-1" },
-      }),
-    );
-
-    expect(events.slice(0, 2)).toEqual(["lease:/repo:/repo", "canonicalize:/repo"]);
-  });
-
-  test("protects a taskless terminal that starts in a workspace worktree", async () => {
-    const events: string[] = [];
-    const { service } = await makeService(
-      makePty(true, true),
-      undefined,
-      undefined,
-      (repoPath) =>
-        repoPath === "/repo" ? Effect.void : Effect.die(`unexpected repo: ${repoPath}`),
-      (repoPath, effect, workingDirectory) => {
-        events.push(`lease:${repoPath}:${workingDirectory}`);
-        return effect;
-      },
-      () => Effect.succeed("/repo"),
-    );
-
-    await Effect.runPromise(service.create({ workingDir: "/worktree", context: {} }));
-
-    expect(events).toEqual(["lease:/repo:/worktree"]);
-    await expect(Effect.runPromise(service.inspectWorkspaceActivity("/repo"))).resolves.toEqual({
-      activeTerminalIds: ["terminal-1"],
-      unknownTerminalIds: [],
-    });
-    await expect(
-      Effect.runPromise(service.write("terminal-1", new TextEncoder().encode("ls"))),
-    ).resolves.toBeUndefined();
-  });
-
-  test("inspects workspace activity without touching the filesystem", async () => {
-    const canonicalize = mock((path: string) => Effect.succeed(`/canonical${path}`));
-    const { service } = await makeService(makePty(true, true), undefined, {
-      ...filesystem,
-      canonicalize,
-    });
-    await Effect.runPromise(
-      service.create({
-        workingDir: "/repo",
-        context: { repoPath: "/repo", taskId: "task-1" },
-      }),
-    );
-    const callsBefore = canonicalize.mock.calls.length;
-
-    await expect(
-      Effect.runPromise(service.inspectWorkspaceActivity("/canonical/missing")),
-    ).resolves.toEqual({
-      activeTerminalIds: [],
-      unknownTerminalIds: [],
-    });
-    expect(canonicalize.mock.calls.length).toBe(callsBefore);
-  });
-
   test("reports an idle live terminal as unknown activity", async () => {
     const idle = await makeService(makePty(true, false));
     await Effect.runPromise(
@@ -296,7 +200,7 @@ describe("TerminalService", () => {
     );
 
     await expect(
-      Effect.runPromise(idle.service.inspectWorkspaceActivity("/canonical/repo")),
+      Effect.runPromise(idle.service.inspectWorkspaceActivity("/repo")),
     ).resolves.toEqual({
       activeTerminalIds: [],
       unknownTerminalIds: ["terminal-1"],
@@ -313,7 +217,7 @@ describe("TerminalService", () => {
     );
 
     await expect(
-      Effect.runPromise(busy.service.inspectWorkspaceActivity("/canonical/repo")),
+      Effect.runPromise(busy.service.inspectWorkspaceActivity("/repo")),
     ).resolves.toEqual({
       activeTerminalIds: ["terminal-1"],
       unknownTerminalIds: [],

@@ -313,8 +313,6 @@ function AppShellTestEnvironment({
                 retryWorkspaces: async () => {},
                 ...options.workspacePresence,
                 hasWorkspaces,
-                onboardingCompleted:
-                  options.workspacePresence?.onboardingCompleted ?? hasWorkspaces,
               }}
             >
               <WorkspaceStateContext.Provider
@@ -471,23 +469,10 @@ describe("AppShell", () => {
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 
-  test("keeps the workspace shell when onboarding completed with no workspaces", async () => {
-    renderAppShellForTest({
-      workspacePresence: { hasWorkspaces: false, onboardingCompleted: true },
-    });
-
-    await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe("/kanban"));
-    expect(await screen.findByRole("heading", { name: "Open a Repository" })).toBeTruthy();
-    expect(
-      screen.queryByRole("heading", { name: "Set up your local coding workspace" }),
-    ).toBeNull();
-  });
-
   test("shows the workspace load failure when no cached workspace exists", () => {
     renderAppShellForTest({
       workspacePresence: {
         hasWorkspaces: false,
-        onboardingCompleted: false,
         hasLoadedWorkspaceList: false,
         workspaceLoadError: new Error("Workspace list unavailable"),
       },
@@ -507,7 +492,6 @@ describe("AppShell", () => {
     renderAppShellForTest({
       workspacePresence: {
         hasWorkspaces: false,
-        onboardingCompleted: false,
         hasLoadedWorkspaceList: false,
         workspaceLoadError: new Error("Workspace list unavailable"),
         retryWorkspaces,
@@ -538,7 +522,6 @@ describe("AppShell", () => {
       initialEntry: "/onboarding",
       workspacePresence: {
         hasWorkspaces: false,
-        onboardingCompleted: false,
         workspaceLoadError: new Error("Workspace refresh unavailable"),
       },
     });
@@ -732,16 +715,6 @@ describe("AppShell", () => {
     expect(screen.getByRole("button", { name: "Hide sidebar" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
     expect(globalThis.localStorage.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBeNull();
-  });
-
-  test("refreshes the workspace catalog when the repository modal opens", async () => {
-    const retryWorkspaces = mock(async () => {});
-    renderAppShellForTest({ workspacePresence: { retryWorkspaces } });
-
-    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
-
-    await screen.findByRole("heading", { name: "Open a Repository" });
-    expect(retryWorkspaces).toHaveBeenCalledTimes(1);
   });
 
   test("exposes the sidebar state to the shell layout", () => {

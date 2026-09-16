@@ -33,9 +33,6 @@ const createRecordingService = () => {
           }),
       });
     },
-    clearRepoRuntimeStartupStatuses() {
-      return Effect.void;
-    },
     runtimeEnsure(input) {
       return Effect.tryPromise({
         try: async () => {

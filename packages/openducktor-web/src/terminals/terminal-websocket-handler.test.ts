@@ -298,9 +298,6 @@ describe("terminalWebSocketHandler", () => {
     } satisfies TerminalPtyPort;
     const service = await Effect.runPromise(
       createTerminalService({
-        assertWorkspaceAdmitsWork: () => Effect.void,
-        resolveWorkspaceRepoPath: () => Effect.succeed(null),
-        withWorkStartLease: (_repoPath, effect) => effect,
         filesystem: unusedFilesystem,
         ptyPort: unusedPtyPort,
         resolveLaunchEnvironment: () =>

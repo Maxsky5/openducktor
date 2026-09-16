@@ -36,7 +36,6 @@ export type RuntimeOrchestratorError =
   | TaskStoreError;
 
 export type RuntimeOrchestratorService = {
-  clearRepoRuntimeStartupStatuses(repoPath: string): Effect.Effect<void>;
   agentSessionStop(input: AgentSessionStopTarget): Effect.Effect<
     {
       ok: boolean;

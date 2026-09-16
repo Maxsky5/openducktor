@@ -114,7 +114,6 @@ export const buildWorkspaceCatalog = (
       const record = config.workspaces[workspace.workspaceId]?.removal;
       return record ? [{ workspace, record }] : [];
     }),
-    onboardingCompleted: config.onboardingCompleted === true,
   };
 };
 export const firstOpenWorkspaceId = (

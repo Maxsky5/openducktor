@@ -639,7 +639,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     });
     const envelopes: Array<{ type: string }> = [];
     const service = createAgentSessionLiveStateService({
-      withWorkStartLease: (_repoPath, effect) => effect,
       adapterRegistry: createLiveSessionAdapterRegistry(),
       faultLog: () => Effect.void,
       publish: (envelope) => envelopes.push(envelope),
@@ -757,7 +756,6 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     };
     const adapterRegistry = createLiveSessionAdapterRegistry();
     const service = createAgentSessionLiveStateService({
-      withWorkStartLease: (_repoPath, effect) => effect,
       adapterRegistry,
       faultLog: () => Effect.void,
       publish: () => undefined,

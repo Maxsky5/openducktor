@@ -59,7 +59,6 @@ const createElectronApi = () => {
   return {
     electronApi: {
       platform: "darwin",
-      claimContextMenu: mock(() => {}),
       invoke: mock(async () => ({ ok: true as const, value: undefined })),
       subscribe: mock(() => unsubscribe),
       appUpdates: {
@@ -198,13 +197,11 @@ describe("electron shell bridge", () => {
       listener,
       onTerminalFailure,
     );
-    bridge.claimContextMenu?.({ x: 12, y: 34 });
 
     expect(bridge.capabilities).toEqual({
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,
     });
-    expect(electronApi.claimContextMenu).toHaveBeenCalledWith({ x: 12, y: 34 });
     expect(await bridge.editorClipboard?.readText()).toBe("plain");
     expect(
       await bridge.editorClipboard?.readText("application/vnd.pierre.diffs-selections+json"),

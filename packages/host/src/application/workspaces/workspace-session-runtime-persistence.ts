@@ -18,7 +18,6 @@ import type { AgentSessionPersistencePort } from "../../ports/agent-session-pers
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
-import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { AgentSessionOperationPolicy } from "../agent-sessions/agent-session-operation-policy";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
@@ -50,14 +49,12 @@ export const createWorkspaceSessionRuntimePersistence = ({
   git,
   publishUpdated,
   operationGate,
-  withWorkStartLease,
 }: {
   store: WorkspaceSessionStorePort;
   settings: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
   git: WorkspaceSessionTargetDependencies["git"];
   publishUpdated: WorkspaceSessionUpdatedPublisher;
   operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
-  withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"];
 }): AgentSessionPersistencePort & AgentSessionOperationPolicy => {
   const pendingFinalMessages = new Map<string, { messageId: string; occurredAt: number }>();
   const find = (runtimeRef: AgentSessionLiveRef) =>
@@ -143,13 +140,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
           );
         input.selectedModel = { ...message.model, runtimeKind: runtimeRef.runtimeKind };
       }
-      yield* withWorkStartLease(
-        runtimeRef.repoPath,
-        storeEffect(store.recordAcceptedMessage(input)).pipe(
-          Effect.tap((saved) => publishUpdated(known.ref.workspaceId, saved)),
-        ),
-        runtimeRef.workingDirectory,
-      );
+      const saved = yield* storeEffect(store.recordAcceptedMessage(input));
+      yield* publishUpdated(known.ref.workspaceId, saved);
     });
   const flushFinalMessage = (runtimeRef: AgentSessionLiveRef) =>
     Effect.gen(function* () {
@@ -158,16 +150,13 @@ export const createWorkspaceSessionRuntimePersistence = ({
       if (!pending) return;
       const known = yield* find(runtimeRef);
       if (known && pending.occurredAt > known.session.updatedAt) {
-        yield* withWorkStartLease(
-          runtimeRef.repoPath,
-          storeEffect(
-            store.recordActivity({
-              ...known.ref,
-              activity: { type: "assistant_response", occurredAt: pending.occurredAt },
-            }),
-          ).pipe(Effect.tap((saved) => publishUpdated(known.ref.workspaceId, saved))),
-          runtimeRef.workingDirectory,
+        const saved = yield* storeEffect(
+          store.recordActivity({
+            ...known.ref,
+            activity: { type: "assistant_response", occurredAt: pending.occurredAt },
+          }),
         );
+        yield* publishUpdated(known.ref.workspaceId, saved);
       }
       pendingFinalMessages.delete(key);
     });

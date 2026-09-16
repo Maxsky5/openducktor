@@ -5,12 +5,7 @@ import {
   workspaceSessionBranchNameSchema,
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
-import {
-  type HostError,
-  HostOperationError,
-  HostValidationError,
-  type HostValidationErrorAggregate,
-} from "../../effect/host-errors";
+import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
@@ -22,11 +17,6 @@ export type WorkspaceSessionTargetDependencies = {
   settingsConfig: SettingsConfigPort;
   worktreeFiles: WorktreeFilePort;
   systemCommands: SystemCommandPort;
-  withWorkStartLease<A, E, R>(
-    repoPath: string,
-    effect: Effect.Effect<A, E, R>,
-    workingDirectory?: string,
-  ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
 };
 
 export const validateWorkspaceSessionTarget = (
@@ -152,7 +142,6 @@ export const withWorkspaceSessionTarget = <A, E>(
           }),
         );
       }
-      yield* dependencies.withWorkStartLease(repoPath, Effect.void, workingDirectory);
       yield* worktreeFiles.ensureDirectory(namespace);
       let acquired = false;
       let retained = false;

@@ -66,25 +66,6 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain('window.webContents.setWindowOpenHandler(() => ({ action: "deny" }))');
     expect(source).toContain('window.webContents.on("will-navigate", (event) => {');
     expect(source).toContain("event.preventDefault()");
-    const windowOpenHandlerIndex = source.indexOf("window.webContents.setWindowOpenHandler");
-    expect(windowOpenHandlerIndex).toBeGreaterThanOrEqual(0);
-    expect(
-      source.indexOf("registerWindowContextMenu(window", windowOpenHandlerIndex),
-    ).toBeGreaterThan(windowOpenHandlerIndex);
-  });
-
-  test("native context menus wait for their renderer claim", () => {
-    const source = readRepoFile("apps/electron/src/main/main-menu.ts");
-
-    expect(source).toContain('window.webContents.on("context-menu", (_event, params) => {');
-    expect(source).toContain("webContentsId: window.webContents.id");
-    expect(source).toContain("x: params.x");
-    expect(source).toContain("y: params.y");
-    expect(source).toContain("contextMenuClaims.takeClaim(eventId)");
-    expect(source.indexOf("x: params.x", source.indexOf(".popup({"))).toBeGreaterThanOrEqual(0);
-    expect(source.indexOf("y: params.y", source.indexOf(".popup({"))).toBeGreaterThanOrEqual(0);
-    expect(source).toContain("}, CONTEXT_MENU_CLAIM_WINDOW_MS);");
-    expect(source).not.toContain("}, 50);");
   });
 
   test("startup starts scheduled app update checks after the main window is created", () => {
@@ -150,7 +131,7 @@ describe("Electron main lifecycle policy", () => {
     expect(source).toContain("OpenDucktor update state forwarding failed");
   });
 
-  test("startup initializes host services before creating the window", async () => {
+  test("startup creates the window before initializing background host services", async () => {
     const calls: string[] = [];
 
     const ready = await runElectronEffect(
@@ -188,8 +169,8 @@ describe("Electron main lifecycle policy", () => {
       "prepare-pre-ready",
       "wait-until-ready",
       "configure-ready:host-router",
-      "initialize-host:host-router",
       "create-window:renderer-session",
+      "initialize-host:host-router",
       "register-activate:renderer-session",
     ]);
   });

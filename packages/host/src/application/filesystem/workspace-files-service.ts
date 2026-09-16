@@ -33,35 +33,8 @@ export type WorkspaceFilesService = {
   }): Effect.Effect<WorkspaceTextFileReadResult, HostValidationErrorAggregate>;
   writeTextFile(
     input: WorkspaceTextFileWriteInput,
-  ): Effect.Effect<
-    WorkspaceTextFileWriteResult,
-    WorkspaceTextFileWriteError | HostValidationErrorAggregate
-  >;
+  ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
 };
-
-export type WorkspaceFilesAdmission = {
-  resolveRepoPath(workspaceId: string): Effect.Effect<string, HostValidationErrorAggregate>;
-  withWorkStartLease<A, E, R>(
-    repoPath: string,
-    effect: Effect.Effect<A, E, R>,
-    workingDirectory?: string,
-  ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
-};
-
-export const withWorkspaceFilesAdmission = (
-  service: WorkspaceFilesService,
-  admission: WorkspaceFilesAdmission,
-): WorkspaceFilesService => ({
-  ...service,
-  writeTextFile: (input) =>
-    admission
-      .resolveRepoPath(input.workspaceId)
-      .pipe(
-        Effect.flatMap((repoPath) =>
-          admission.withWorkStartLease(repoPath, service.writeTextFile(input), input.rootPath),
-        ),
-      ),
-});
 
 type WorkspaceGitChange = {
   originalPath?: string;

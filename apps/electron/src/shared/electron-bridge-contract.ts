@@ -29,7 +29,6 @@ import { z } from "zod";
 
 export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
 export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
-export const ELECTRON_CONTEXT_MENU_CLAIMED_CHANNEL = "openducktor:context-menu-claimed";
 export const ELECTRON_OPEN_EXTERNAL_URL_CHANNEL = "openducktor:open-external-url";
 export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL = "openducktor:local-attachment-preview-src";
 export const ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL = "openducktor:editor-clipboard:read";
@@ -43,11 +42,6 @@ export const ELECTRON_HOST_SHUTDOWN_MESSAGE =
 export const ELECTRON_TERMINAL_SEND_CHANNEL = "openducktor:terminal:send";
 export const PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE =
   "application/vnd.pierre.diffs-selections+json" as const;
-
-export type ElectronContextMenuPosition = {
-  x: number;
-  y: number;
-};
 export type EditorClipboardReadType = typeof PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE;
 export const ELECTRON_TERMINAL_DISCONNECT_CHANNEL = "openducktor:terminal:disconnect";
 export const ELECTRON_TERMINAL_EVENT_CHANNEL = "openducktor:terminal:event";
@@ -199,7 +193,6 @@ export type OpenDucktorElectronNotificationApi = {
 
 export type OpenDucktorElectronApi = {
   platform: AppPlatform;
-  claimContextMenu(position: ElectronContextMenuPosition): void;
   invoke(
     command: HostCommandName,
     args?: ElectronHostInvokeRequest["args"],

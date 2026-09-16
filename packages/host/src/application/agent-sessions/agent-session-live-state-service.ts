@@ -114,11 +114,9 @@ export type AgentSessionLiveStateService = {
 export type CreateAgentSessionLiveStateServiceInput = {
   readonly persistence?: AgentSessionPersistencePort;
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
-  readonly withWorkStartLease: <A, E, R>(
-    repoPath: string,
-    effect: Effect.Effect<A, E, R>,
-    workingDirectory?: string,
-  ) => Effect.Effect<A, E | HostValidationErrorAggregate, R>;
+  readonly assertProcessStart?:
+    | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
+    | undefined;
   readonly faultLog: AgentSessionLiveFaultLogger;
   readonly publish: AgentSessionLiveEnvelopePublisher;
   readonly coordinator?: LiveStateCoordinator;
@@ -126,18 +124,20 @@ export type CreateAgentSessionLiveStateServiceInput = {
 
 export const createAgentSessionLiveStateService = ({
   adapterRegistry,
-  withWorkStartLease,
+  assertProcessStart,
   faultLog,
   publish,
   coordinator = createLiveStateCoordinator(),
   persistence,
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
   const withStartAdmission =
-    <Input extends { repoPath: string; workingDirectory: string }, Success>(
+    <Input extends { repoPath: string }, Success>(
       operation: (input: Input) => Effect.Effect<Success, HostError>,
     ) =>
     (input: Input): Effect.Effect<Success, HostError> =>
-      withWorkStartLease(input.repoPath, operation(input), input.workingDirectory);
+      assertProcessStart
+        ? assertProcessStart(input.repoPath).pipe(Effect.zipRight(operation(input)))
+        : operation(input);
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
   const refreshGate = createLiveStateCoordinator();
   const executionEpisodes = createAgentSessionExecutionEpisodes();
@@ -334,9 +334,8 @@ export const createAgentSessionLiveStateService = ({
         return acceptedMessage;
       }),
     ),
-    updateSessionModel: withStartAdmission((input) =>
+    updateSessionModel: (input) =>
       runControl(input, (adapter) => adapter.updateSessionModel(input)),
-    ),
     stopSession: (input) => runControl(input, (adapter) => adapter.stopSession(input)),
     releaseSession: (input) => runControl(input, (adapter) => adapter.releaseSession(input)),
     registerRuntimeAdapter: lifecycle.registerRuntimeAdapter,

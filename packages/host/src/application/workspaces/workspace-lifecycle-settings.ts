@@ -5,7 +5,6 @@ import {
   type WorkspaceRemovalRecord,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { LoadedGlobalConfig } from "../../config/global-config";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import {
@@ -68,35 +67,19 @@ const assertExpectedRepoPath = (
   );
 };
 
-const moveActiveSelection = (config: LoadedGlobalConfig, workspaceId: string): void => {
+const moveActiveSelection = (
+  config: Parameters<typeof firstOpenWorkspaceId>[0],
+  workspaceId: string,
+): void => {
   if (config.activeWorkspace !== workspaceId) {
     return;
   }
-  const nextActiveWorkspace = firstOpenWorkspaceId(config, workspaceId);
-  if (nextActiveWorkspace === undefined) {
+  const nextWorkspaceId = firstOpenWorkspaceId(config, workspaceId);
+  if (nextWorkspaceId === undefined) {
     delete config.activeWorkspace;
   } else {
-    config.activeWorkspace = nextActiveWorkspace;
+    config.activeWorkspace = nextWorkspaceId;
   }
-};
-
-const nextRemovalRecord = (
-  existing: WorkspaceRemovalRecord | undefined,
-  removeTaskWorktrees: boolean,
-): WorkspaceRemovalRecord => {
-  if (existing) {
-    return existing;
-  }
-  return {
-    version: 1,
-    operationId: globalThis.crypto.randomUUID(),
-    removeTaskWorktrees,
-    phase: removeTaskWorktrees ? "worktrees" : "task_store",
-    removedWorktrees: [],
-    pendingWorktreePath: null,
-    startedAt: new Date().toISOString(),
-    lastFailure: null,
-  };
 };
 
 const readCatalog = (
@@ -225,24 +208,19 @@ export const createWorkspaceLifecycleSettingsMethods = (
       const config = yield* loadGlobalConfig(settingsConfig);
       const repoConfig = yield* requireWorkspace(config, input.workspaceId);
       yield* assertExpectedRepoPath(input.workspaceId, repoConfig, input.expectedRepoPath);
-      if (
-        repoConfig.removal &&
-        repoConfig.removal.removeTaskWorktrees !== input.removeTaskWorktrees
-      ) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Workspace removal already started with removeTaskWorktrees set to ${repoConfig.removal.removeTaskWorktrees}. Retry with the recorded choice.`,
-            field: "removeTaskWorktrees",
-          }),
-        );
+      if (repoConfig.removal) {
+        return repoConfig.removal;
       }
 
-      const removal = nextRemovalRecord(repoConfig.removal, input.removeTaskWorktrees);
-      const journaledRepoConfig = { ...repoConfig, removal };
-      config.workspaces[input.workspaceId] = journaledRepoConfig;
+      const removal: WorkspaceRemovalRecord = {
+        removeTaskWorktrees: input.removeTaskWorktrees,
+        phase: input.removeTaskWorktrees ? "worktrees" : "attachments",
+        pendingWorktreePath: null,
+      };
+      config.workspaces[input.workspaceId] = { ...repoConfig, removal };
       moveActiveSelection(config, input.workspaceId);
       yield* writeConfig(settingsConfig, config);
-      return { record: removal, repoConfig: journaledRepoConfig };
+      return removal;
     });
   },
   recordWorkspaceRemovalProgress(input) {
@@ -258,18 +236,12 @@ export const createWorkspaceLifecycleSettingsMethods = (
         );
       }
 
-      const pendingWorktreePath =
-        input.pendingWorktreePath === undefined
-          ? repoConfig.removal.pendingWorktreePath
-          : input.pendingWorktreePath;
       config.workspaces[input.workspaceId] = {
         ...repoConfig,
         removal: {
           ...repoConfig.removal,
           phase: input.phase,
-          removedWorktrees: input.removedWorktrees,
-          pendingWorktreePath,
-          lastFailure: input.lastFailure,
+          pendingWorktreePath: input.pendingWorktreePath,
         },
       };
       yield* writeConfig(settingsConfig, config);

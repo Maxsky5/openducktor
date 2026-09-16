@@ -1,10 +1,11 @@
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { taskAssetIdSchema } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
-import { readProcessStartedAtMs } from "../../infrastructure/process/process-start-time";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 import type { TaskAssetFileChanges } from "./filesystem-task-asset-file-safety";
 
@@ -35,6 +36,37 @@ export type TaskAssetFileOwnershipDependencies = {
   owner: TaskAssetFileOwner;
   processIsAlive(processId: number): boolean;
   processStartedAtMs(processId: number): Promise<number>;
+};
+
+const execFileAsync = promisify(execFile);
+
+const readProcessStartedAtMs = async (processId: number): Promise<number> => {
+  if (processId === process.pid) {
+    return Math.floor(Date.now() - process.uptime() * 1_000);
+  }
+
+  const { stdout } =
+    process.platform === "win32"
+      ? await execFileAsync(
+          "powershell.exe",
+          [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            `(Get-Process -Id ${processId} -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o')`,
+          ],
+          { windowsHide: true },
+        )
+      : await execFileAsync("ps", ["-p", processId.toString(), "-o", "lstart="], {
+          env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+        });
+  const startedAtMs = Date.parse(
+    process.platform === "win32" ? stdout.trim() : `${stdout.trim()} UTC`,
+  );
+  if (!Number.isFinite(startedAtMs)) {
+    throw new Error(`Could not read the start time for process ${processId}.`);
+  }
+  return startedAtMs;
 };
 
 const nodeErrorSchema = z.object({ code: z.string() }).passthrough();

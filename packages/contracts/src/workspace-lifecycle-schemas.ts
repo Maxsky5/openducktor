@@ -23,14 +23,9 @@ export const workspaceRemovalPhaseSchema = z.enum(["worktrees", "attachments", "
 export type WorkspaceRemovalPhase = z.infer<typeof workspaceRemovalPhaseSchema>;
 
 export const workspaceRemovalRecordSchema = z.object({
-  version: z.literal(1),
-  operationId: z.string().min(1),
   removeTaskWorktrees: z.boolean(),
   phase: workspaceRemovalPhaseSchema,
-  removedWorktrees: z.array(z.string()).default([]),
   pendingWorktreePath: z.string().nullable().default(null),
-  startedAt: z.string(),
-  lastFailure: z.string().nullable().default(null),
 });
 export type WorkspaceRemovalRecord = z.infer<typeof workspaceRemovalRecordSchema>;
 
@@ -44,7 +39,6 @@ export const workspaceCatalogSchema = z.object({
   openWorkspaces: z.array(workspaceRecordSchema),
   closedWorkspaces: z.array(workspaceRecordSchema),
   incompleteRemovals: z.array(incompleteWorkspaceRemovalSchema),
-  onboardingCompleted: z.boolean(),
 });
 export type WorkspaceCatalog = z.infer<typeof workspaceCatalogSchema>;
 
@@ -56,8 +50,12 @@ export const workspacePathResolutionSchema = z.discriminatedUnion("kind", [
 ]);
 export type WorkspacePathResolution = z.infer<typeof workspacePathResolutionSchema>;
 
-export const workspaceRemovalCommandResultSchema = z.object({
-  catalog: workspaceCatalogSchema,
+export const workspaceRemovalResultSchema = z.object({
   removedWorktrees: z.array(z.string()),
+});
+export type WorkspaceRemovalResult = z.infer<typeof workspaceRemovalResultSchema>;
+
+export const workspaceRemovalCommandResultSchema = workspaceRemovalResultSchema.extend({
+  catalog: workspaceCatalogSchema,
 });
 export type WorkspaceRemovalCommandResult = z.infer<typeof workspaceRemovalCommandResultSchema>;

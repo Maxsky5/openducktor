@@ -98,7 +98,6 @@ describe("createWorkspaceFilesCommandHandlers", () => {
 
     const result = await Effect.runPromise(
       router.invoke("filesystem_write_text_file", {
-        workspaceId: "ws",
         rootPath: "/repo",
         relativePath: "file.txt",
         contents: "saved",
@@ -108,7 +107,6 @@ describe("createWorkspaceFilesCommandHandlers", () => {
 
     expect(received).toEqual([
       {
-        workspaceId: "ws",
         rootPath: "/repo",
         relativePath: "file.txt",
         contents: "saved",

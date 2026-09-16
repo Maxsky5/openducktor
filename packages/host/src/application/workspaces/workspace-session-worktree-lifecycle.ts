@@ -39,11 +39,7 @@ export const readWorkspaceSessionArchivePreview = (
     }
     const worktreeExists = yield* settingsConfig.pathExists(target.workingDirectory);
     if (!worktreeExists) {
-      return {
-        branchName: target.branchName,
-        worktreeExists: false,
-        hasUncommittedChanges: false,
-      };
+      return { branchName: target.branchName, worktreeExists: false, hasUncommittedChanges: false };
     }
     yield* validateWorkspaceSessionTarget(dependencies, config.repoPath, target);
     const current = yield* git.getCurrentBranch(target.workingDirectory);
@@ -109,70 +105,58 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
           message: `Configured default branch ${startPoint} is unavailable. Fetch it or update the repository settings before restoring.`,
         });
       }
-      return yield* dependencies.withWorkStartLease(
-        repoPath,
+      let acquired = false;
+      const result = yield* Effect.exit(
         Effect.gen(function* () {
-          let acquired = false;
-          const result = yield* Effect.exit(
+          yield* git
+            .createWorktree(repoPath, target.workingDirectory, target.branchName, true, startPoint)
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new HostOperationError({
+                    operation: "workspaceSession.restore.acquire",
+                    message: `Git did not confirm worktree creation at ${target.workingDirectory} for branch ${target.branchName}. Inspect the directory and branch before retrying. No automatic cleanup ran.\n${cause.message}`,
+                    cause,
+                  }),
+              ),
+            );
+          acquired = true;
+          yield* restore(
             Effect.gen(function* () {
-              yield* git
-                .createWorktree(
-                  repoPath,
-                  target.workingDirectory,
-                  target.branchName,
-                  true,
-                  startPoint,
-                )
-                .pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new HostOperationError({
-                        operation: "workspaceSession.restore.acquire",
-                        message: `Git did not confirm worktree creation at ${target.workingDirectory} for branch ${target.branchName}. Inspect the directory and branch before retrying. No automatic cleanup ran.\n${cause.message}`,
-                        cause,
-                      }),
-                  ),
-                );
-              acquired = true;
-              yield* restore(
-                Effect.gen(function* () {
-                  yield* worktreeFiles.copyConfiguredPaths(
-                    repoPath,
-                    target.workingDirectory,
-                    config.worktreeCopyPaths,
-                  );
-                  const hookFailure = yield* runHookCommandsAllowFailure(
-                    systemCommands,
-                    config.hooks.preStart,
-                    target.workingDirectory,
-                  );
-                  if (hookFailure) {
-                    return yield* new HostOperationError({
-                      operation: "workspaceSession.restore.preStart",
-                      message: `Workspace Session pre-start hook failed: ${hookFailure.hook}\n${hookFailure.stderr}`,
-                    });
-                  }
-                  yield* validateWorkspaceSessionTarget(dependencies, repoPath, target);
-                }),
+              yield* worktreeFiles.copyConfiguredPaths(
+                repoPath,
+                target.workingDirectory,
+                config.worktreeCopyPaths,
               );
-              return yield* use({ ...target, worktreeState: "present" });
+              const hookFailure = yield* runHookCommandsAllowFailure(
+                systemCommands,
+                config.hooks.preStart,
+                target.workingDirectory,
+              );
+              if (hookFailure) {
+                return yield* new HostOperationError({
+                  operation: "workspaceSession.restore.preStart",
+                  message: `Workspace Session pre-start hook failed: ${hookFailure.hook}\n${hookFailure.stderr}`,
+                });
+              }
+              yield* validateWorkspaceSessionTarget(dependencies, repoPath, target);
             }),
           );
-          if (Exit.isSuccess(result)) return result.value;
-          if (!acquired) return yield* Effect.failCause(result.cause);
-          const cleanup = yield* Effect.exit(
-            removeWorkspaceSessionWorktree(dependencies, repoPath, target),
-          );
-          if (Exit.isFailure(cleanup)) {
-            return yield* new HostOperationError({
-              operation: "workspaceSession.restore.cleanup",
-              message: `Workspace Session restore failed: ${Cause.pretty(result.cause)}\nGit cleanup also failed: ${Cause.pretty(cleanup.cause)}`,
-              cause: { restore: result.cause, cleanup: cleanup.cause },
-            });
-          }
-          return yield* Effect.failCause(result.cause);
+          return yield* use({ ...target, worktreeState: "present" });
         }),
-        target.workingDirectory,
       );
+      if (Exit.isSuccess(result)) return result.value;
+      if (!acquired) return yield* Effect.failCause(result.cause);
+      const cleanup = yield* Effect.exit(
+        removeWorkspaceSessionWorktree(dependencies, repoPath, target),
+      );
+      if (Exit.isFailure(cleanup)) {
+        return yield* new HostOperationError({
+          operation: "workspaceSession.restore.cleanup",
+          message: `Workspace Session restore failed: ${Cause.pretty(result.cause)}\nGit cleanup also failed: ${Cause.pretty(cleanup.cause)}`,
+          cause: { restore: result.cause, cleanup: cleanup.cause },
+        });
+      }
+      return yield* Effect.failCause(result.cause);
     }),
   );

@@ -197,7 +197,6 @@ const workspaceWriteFailure = (cause: unknown): WorkspaceTextFileWriteFailure | 
 };
 
 type UseTaskExecutionFileEditorInput = {
-  workspaceId: string;
   selectedFile: TaskExecutionSelectedFile | null;
   readyResult: TextFileResult | null;
   onFileSaved(): void;
@@ -205,7 +204,6 @@ type UseTaskExecutionFileEditorInput = {
 };
 
 export const useTaskExecutionFileEditor = ({
-  workspaceId,
   selectedFile,
   readyResult,
   onFileSaved,
@@ -292,7 +290,6 @@ export const useTaskExecutionFileEditor = ({
     let didSaveActiveSession = false;
     try {
       const saved: WorkspaceTextFileWriteResult = await mutation.mutateAsync({
-        workspaceId,
         rootPath: session.baseline.rootPath,
         relativePath: session.baseline.relativePath,
         contents: contentsToSave,
@@ -354,7 +351,6 @@ export const useTaskExecutionFileEditor = ({
     }
   }, [
     mutation,
-    workspaceId,
     onFileSaved,
     onLeavePolicyChange,
     selectedFileId,

@@ -32,7 +32,6 @@ export const createTaskDeleteUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-  withWorkStartLease,
   taskSessionLifecycleCoordinator,
 }: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "deleteTask"> => ({
   deleteTask(input) {
@@ -161,7 +160,6 @@ export const createTaskDeleteUseCase = ({
           worktreeCleanupOperation: "task_delete",
           worktreeFiles,
           worktreePaths,
-          withWorkStartLease,
         });
         yield* taskStore.deleteTask({
           repoPath: effectiveRepoPath,

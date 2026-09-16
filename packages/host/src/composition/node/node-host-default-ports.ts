@@ -7,10 +7,6 @@ import {
 import { Context, Effect, Layer } from "effect";
 import { createLocalAttachmentAdapter } from "../../adapters/attachments/local-attachment-adapter";
 import {
-  createNodeWorkspaceHostOwnership,
-  createNodeWorkspaceOwnershipLock,
-} from "../../adapters/node/workspace-host-ownership-adapter";
-import {
   type CodexAppServerTransportRegistry,
   createCodexAppServerTransportRegistry,
 } from "../../adapters/codex/codex-app-server-transport-registry";
@@ -29,7 +25,6 @@ import {
   type ToolDiscoveryPathOptions,
 } from "../../adapters/system/tool-discovery";
 import { createRuntimeConfigInitializer } from "../../application/runtimes/runtime-config-initializer";
-import type { WorkspaceOwnershipLock } from "../../application/workspaces/workspace-ownership-lock";
 import {
   type OpenDucktorConfigDir,
   type OpenDucktorConfigDirScope,
@@ -65,10 +60,6 @@ import {
   ToolDiscoveryPortTag,
 } from "../../ports/tool-discovery-port";
 import { type WorktreeFilePort, WorktreeFilePortTag } from "../../ports/worktree-file-port";
-import {
-  type WorkspaceHostOwnershipPort,
-  WorkspaceHostOwnershipPortTag,
-} from "../../ports/workspace-host-ownership-port";
 import { guardDevServerStart } from "./user-path-start-guard";
 
 export type NodeHostDefaultPorts = {
@@ -91,8 +82,6 @@ export type NodeHostDefaultPorts = {
   toolDiscovery: ToolDiscoveryPort;
   terminalPty: TerminalPtyPort;
   worktreeFiles: WorktreeFilePort;
-  workspaceHostOwnership: WorkspaceHostOwnershipPort;
-  workspaceOwnershipLock: WorkspaceOwnershipLock;
 };
 
 type CodexAppServer = CodexAppServerPort & CodexSessionHistoryPort;
@@ -131,8 +120,6 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
     toolDiscovery: ToolDiscoveryPort;
     providedToolPaths: Partial<Record<ToolDiscoveryId, string>>;
     worktreeFiles: WorktreeFilePort;
-    workspaceHostOwnership: WorkspaceHostOwnershipPort;
-    workspaceOwnershipLock: WorkspaceOwnershipLock;
   }>;
 
 export class NodeHostDefaultPortsTag extends Context.Tag("@openducktor/host/NodeHostDefaultPorts")<
@@ -154,8 +141,7 @@ export type NodeHostDefaultPortServices =
   | SystemCommandPortTag
   | ToolDiscoveryPortTag
   | TerminalPtyPortTag
-  | WorktreeFilePortTag
-  | WorkspaceHostOwnershipPortTag;
+  | WorktreeFilePortTag;
 
 const makeNodeHostDefaultPorts = (
   input: CreateNodeHostDefaultPortsInput,
@@ -217,8 +203,6 @@ const makeNodeHostDefaultPorts = (
         const runtimeHealth =
           input.runtimeHealth ??
           createRuntimeHealthProbe(systemCommands, toolDiscovery, runtimeExecutableProbes);
-        const workspaceOwnershipLock =
-          input.workspaceOwnershipLock ?? createNodeWorkspaceOwnershipLock({ processEnv });
         const initializeRuntimeConfig =
           processEnvironment.status === "ready"
             ? createRuntimeConfigInitializer(toolDiscovery)
@@ -237,7 +221,6 @@ const makeNodeHostDefaultPorts = (
           input.settingsConfig ??
           createSettingsConfigAdapter({
             environment: processEnv,
-            initializationLock: workspaceOwnershipLock,
             initializeConfig: initializeRuntimeConfig,
           });
         const defaultCodexAppServer = createCodexAppServerTransportRegistry();
@@ -282,9 +265,6 @@ const makeNodeHostDefaultPorts = (
           toolDiscovery,
           terminalPty: input.terminalPty,
           worktreeFiles: input.worktreeFiles ?? createWorktreeFileAdapter(),
-          workspaceHostOwnership:
-            input.workspaceHostOwnership ?? createNodeWorkspaceHostOwnership({ processEnv }),
-          workspaceOwnershipLock,
         };
       },
       catch: (cause) => cause,
@@ -312,7 +292,6 @@ const makeNodeHostDefaultPortContext = (
         Context.add(ToolDiscoveryPortTag, ports.toolDiscovery),
         Context.add(TerminalPtyPortTag, ports.terminalPty),
         Context.add(WorktreeFilePortTag, ports.worktreeFiles),
-        Context.add(WorkspaceHostOwnershipPortTag, ports.workspaceHostOwnership),
       ),
     ),
   );

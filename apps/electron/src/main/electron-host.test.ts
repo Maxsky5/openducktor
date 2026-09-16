@@ -57,10 +57,6 @@ const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRoute
     onBackgroundFailure: () => Effect.void,
     ...defaultEnvironment,
     runtimeDistribution: testRuntimeDistribution,
-    workspaceHostOwnership: {
-      claimWorkspace: () => Effect.void,
-      releaseAll: () => Effect.void,
-    },
     ...input,
   });
 };
@@ -164,19 +160,6 @@ const createSettingsConfig = (config: GlobalConfig | null = null): SettingsConfi
   join: (...paths) => paths.join("/").replaceAll(/\/+/g, "/"),
 });
 
-const createConfiguredSettingsConfig = (): SettingsConfigPort =>
-  createSettingsConfig(
-    globalConfig({
-      agentRuntimes: {
-        opencode: { enabled: true, executablePath: "/usr/bin/opencode" },
-        codex: { enabled: false, executablePath: "/usr/bin/codex" },
-        claude: { enabled: false, executablePath: "/usr/bin/claude" },
-      },
-      workspaces: { repo: repoConfig() },
-      workspaceOrder: ["repo"],
-    }),
-  );
-
 const createGit = (): GitPort => ({
   canonicalizePath: (path) => Effect.succeed(path),
   isGitRepository: () => Effect.succeed(true),
@@ -227,7 +210,6 @@ const createGit = (): GitPort => ({
       upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
     }),
   createWorktree: () => Effect.succeed(undefined),
-  isRegisteredWorktree: () => Effect.succeed(false),
   removeWorktree: () => Effect.succeed(undefined),
   deleteLocalBranch: () => Effect.succeed(undefined),
   isAncestor: () => Effect.succeed(true),
@@ -813,9 +795,7 @@ describe("createElectronHostCommandRouter", () => {
       await expect(router.invoke("workspace_get_settings_snapshot")).rejects.toThrow(
         diagnostic.message,
       );
-      await expect(readFile(configPath, "utf8")).rejects.toMatchObject({
-        code: "ENOENT",
-      });
+      await expect(readFile(configPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
 
       const legacyConfig = JSON.stringify({
         version: 2,
@@ -917,7 +897,7 @@ describe("createElectronHostCommandRouter", () => {
             failureKind: null,
           }),
       },
-      settingsConfig: createConfiguredSettingsConfig(),
+      settingsConfig: createSettingsConfig(),
     });
 
     await expect(router.invoke("runtime_definitions_list", {})).resolves.toMatchObject([
@@ -979,16 +959,11 @@ describe("createElectronHostCommandRouter", () => {
 
   test("registers migrated passive dev server state command", async () => {
     const { eventBus, events } = createEventBus();
-    const taskWorktreePath = "/home/dev/.openducktor/worktrees/repo/task-1";
     const router = await createElectronHostCommandRouter({
       devServerProcesses: createDevServerProcesses(),
       eventBus,
       filesystem: createFilesystem(),
-      git: {
-        ...createGit(),
-        isRegisteredWorktree: (_repoPath, worktreePath) =>
-          Effect.succeed(worktreePath === taskWorktreePath),
-      },
+      git: createGit(),
       openInTools: createOpenInTools(),
       settingsConfig: createSettingsConfig(
         globalConfig({
@@ -1016,7 +991,7 @@ describe("createElectronHostCommandRouter", () => {
     ).resolves.toMatchObject({
       repoPath: "/repo",
       taskId: "task-1",
-      worktreePath: taskWorktreePath,
+      worktreePath: "/home/dev/.openducktor/worktrees/repo/task-1",
       scripts: [
         {
           scriptId: "web",
@@ -1032,7 +1007,7 @@ describe("createElectronHostCommandRouter", () => {
         taskId: "task-1",
       }),
     ).resolves.toEqual({
-      workingDirectory: taskWorktreePath,
+      workingDirectory: "/home/dev/.openducktor/worktrees/repo/task-1",
     });
     await expect(
       router.invoke("dev_server_start", {
@@ -1073,7 +1048,6 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("shows a PATH probe failure in dev server start output", async () => {
-    const taskWorktreePath = "/home/dev/.openducktor/worktrees/repo/task-1";
     const diagnostic = new ProcessEnvironmentError({
       message:
         "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
@@ -1082,11 +1056,7 @@ describe("createElectronHostCommandRouter", () => {
     });
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
-      git: {
-        ...createGit(),
-        isRegisteredWorktree: (_repoPath, worktreePath) =>
-          Effect.succeed(worktreePath === taskWorktreePath),
-      },
+      git: createGit(),
       openInTools: createOpenInTools(),
       processEnvironmentInput: pathFailure(diagnostic),
       settingsConfig: createSettingsConfig(
@@ -1102,27 +1072,20 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     await expect(
-      router.invoke("dev_server_start", {
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      router.invoke("dev_server_start", { repoPath: "/repo", taskId: "task-1" }),
     ).rejects.toThrow(diagnostic.message);
     const state = await router.invoke("dev_server_get_state", {
       repoPath: "/repo",
       taskId: "task-1",
     });
 
-    expect(state.scripts[0]).toMatchObject({
-      status: "failed",
-      lastError: diagnostic.message,
-    });
+    expect(state.scripts[0]).toMatchObject({ status: "failed", lastError: diagnostic.message });
     expect(state.scripts[0]?.bufferedTerminalChunks.map((chunk) => chunk.data)).toContain(
       `${diagnostic.message}\r\n`,
     );
   });
 
   test("blocks an injected dev server process when the user PATH is unavailable", async () => {
-    const taskWorktreePath = "/home/dev/.openducktor/worktrees/repo/task-1";
     const diagnostic = new ProcessEnvironmentError({
       message:
         "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
@@ -1140,11 +1103,7 @@ describe("createElectronHostCommandRouter", () => {
     const router = await createElectronHostCommandRouter({
       devServerProcesses,
       filesystem: createFilesystem(),
-      git: {
-        ...createGit(),
-        isRegisteredWorktree: (_repoPath, worktreePath) =>
-          Effect.succeed(worktreePath === taskWorktreePath),
-      },
+      git: createGit(),
       openInTools: createOpenInTools(),
       processEnvironmentInput: pathFailure(diagnostic),
       settingsConfig: createSettingsConfig(
@@ -1160,10 +1119,7 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     await expect(
-      router.invoke("dev_server_start", {
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
+      router.invoke("dev_server_start", { repoPath: "/repo", taskId: "task-1" }),
     ).rejects.toThrow(diagnostic.message);
     expect(startCalls).toBe(0);
   });
@@ -1234,10 +1190,7 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     await expect(
-      router.invoke("runtime_ensure", {
-        runtimeKind: "opencode",
-        repoPath: "/repo",
-      }),
+      router.invoke("runtime_ensure", { runtimeKind: "opencode", repoPath: "/repo" }),
     ).rejects.toThrow(
       `Failed to start opencode runtime because the user PATH is unavailable. ${diagnostic.message}`,
     );
@@ -1249,7 +1202,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createConfiguredSettingsConfig(),
+      settingsConfig: createSettingsConfig(),
     });
 
     await expect(router.invoke("git_get_branches", { repoPath: "/repo" })).resolves.toEqual([
@@ -1408,11 +1361,7 @@ describe("createElectronHostCommandRouter", () => {
           id: "github",
           enabled: true,
           autoDetected: false,
-          repository: {
-            host: "github.com",
-            owner: "openai",
-            name: "openducktor",
-          },
+          repository: { host: "github.com", owner: "openai", name: "openducktor" },
         },
       },
     });
@@ -1440,9 +1389,7 @@ describe("createElectronHostCommandRouter", () => {
       name: "openducktor",
     });
     await expect(
-      router.invoke("workspace_get_git_provider_context", {
-        repoPath: "/repo",
-      }),
+      router.invoke("workspace_get_git_provider_context", { repoPath: "/repo" }),
     ).resolves.toMatchObject({
       descriptor: {
         id: "github",
@@ -1544,13 +1491,9 @@ describe("createElectronHostCommandRouter", () => {
           errors: expect.arrayContaining([processEnvironmentError.message]),
         });
         if (fixture.config) {
-          expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({
-            version: 2,
-          });
+          expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({ version: 2 });
         } else {
-          await expect(readFile(configPath, "utf8")).rejects.toMatchObject({
-            code: "ENOENT",
-          });
+          await expect(readFile(configPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
         }
       } finally {
         await rm(root, { force: true, recursive: true });
@@ -1563,7 +1506,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createConfiguredSettingsConfig(),
+      settingsConfig: createSettingsConfig(),
       taskStore: createTaskStore(),
     });
 
@@ -1694,7 +1637,7 @@ describe("createElectronHostCommandRouter", () => {
       git: createGit(),
       openInTools: createOpenInTools(),
       runtimeRegistry: sessionRuntimeRegistry,
-      settingsConfig: createConfiguredSettingsConfig(),
+      settingsConfig: createSettingsConfig(),
       taskStore: {
         ...sessionTaskStore,
         getTaskMetadata: () =>
@@ -1855,7 +1798,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createConfiguredSettingsConfig(),
+      settingsConfig: createSettingsConfig(),
       taskStore: {
         ...pullRequestTaskStore,
         getTask: (input) =>
@@ -2631,10 +2574,7 @@ describe("createElectronHostCommandRouter", () => {
     const removedMergedWorktreePaths: string[] = [];
     const mergedPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
-      git: {
-        ...createGit(),
-        isRegisteredWorktree: () => Effect.succeed(true),
-      },
+      git: createGit(),
       openInTools: createOpenInTools(),
       worktreeFiles: {
         ensureDirectory: () => Effect.void,
@@ -2751,7 +2691,7 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
-      settingsConfig: createConfiguredSettingsConfig(),
+      settingsConfig: createSettingsConfig(),
       taskStore: {
         ...createTaskStore(),
         listTasks: () =>

@@ -35,7 +35,6 @@ export const createTaskFullResetUseCase = ({
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-  withWorkStartLease,
   taskSessionLifecycleCoordinator,
 }: TaskServiceUseCaseInput) => ({
   resetTask(input: Parameters<TaskService["resetTask"]>[0]) {
@@ -150,7 +149,6 @@ export const createTaskFullResetUseCase = ({
           worktreeCleanupOperation: "task_reset",
           worktreeFiles,
           worktreePaths,
-          withWorkStartLease,
         });
         yield* storeDependencies.clearWorkflowDocuments({ repoPath: effectiveRepoPath, taskId });
         taskStoreWriteCompleted = true;

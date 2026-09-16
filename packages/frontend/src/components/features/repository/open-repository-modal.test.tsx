@@ -76,35 +76,6 @@ function SeedFilesystemDirectory(): ReactNode {
 }
 
 describe("OpenRepositoryModal", () => {
-  test("shows workspace loading and errors instead of an empty closed list", () => {
-    const { rerender } = render(
-      <QueryProvider useIsolatedClient>
-        <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
-          <OpenRepositoryModal open canClose onOpenChange={() => {}} isLoadingWorkspaces />
-        </WorkspaceStateContext.Provider>
-      </QueryProvider>,
-    );
-
-    expect(screen.getByText("Loading closed workspaces...")).toBeTruthy();
-    expect(screen.queryByText("No closed workspaces")).toBeNull();
-
-    rerender(
-      <QueryProvider useIsolatedClient>
-        <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
-          <OpenRepositoryModal
-            open
-            canClose
-            onOpenChange={() => {}}
-            workspaceLoadError={new Error("settings unavailable")}
-          />
-        </WorkspaceStateContext.Provider>
-      </QueryProvider>,
-    );
-
-    expect(screen.getByRole("alert").textContent).toContain("settings unavailable");
-    expect(screen.queryByText("No closed workspaces")).toBeNull();
-  });
-
   test("resets repository creation fields when the modal reopens", async () => {
     const onOpenChange = mock((_open: boolean) => {});
     const workspaceState = createWorkspaceStateValue();
@@ -128,76 +99,6 @@ describe("OpenRepositoryModal", () => {
     expect(await screen.findByRole("button", { name: /choose repository folder/i })).toBeTruthy();
     expect(screen.queryByLabelText("Repository path")).toBeNull();
     view.unmount();
-  });
-
-  test("derives a free workspace ID when a closed workspace holds the derived ID", async () => {
-    const closedWorkspace = {
-      workspaceId: "repo",
-      workspaceName: "Hidden repo",
-      repoPath: "/other",
-      isActive: false,
-      hasConfig: true,
-      configuredWorktreeBasePath: null,
-      defaultWorktreeBasePath: null,
-      effectiveWorktreeBasePath: null,
-    };
-    const { unmount } = render(
-      <QueryProvider useIsolatedClient>
-        <WorkspaceStateContext.Provider
-          value={createWorkspaceStateValue({ closedWorkspaces: [closedWorkspace] })}
-        >
-          <SeedFilesystemDirectory />
-          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
-        </WorkspaceStateContext.Provider>
-      </QueryProvider>,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
-    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
-
-    expect((await screen.findByLabelText<HTMLInputElement>("Workspace ID")).value).toBe("repo-2");
-    unmount();
-  });
-
-  test("derives a free workspace ID when an incomplete removal holds the derived ID", async () => {
-    const removal = {
-      workspace: {
-        workspaceId: "repo",
-        workspaceName: "Removing repo",
-        repoPath: "/other",
-        isActive: false,
-        hasConfig: true,
-        configuredWorktreeBasePath: null,
-        defaultWorktreeBasePath: null,
-        effectiveWorktreeBasePath: null,
-      },
-      record: {
-        version: 1 as const,
-        operationId: "op-1",
-        removeTaskWorktrees: false,
-        phase: "task_store" as const,
-        removedWorktrees: [],
-        pendingWorktreePath: null,
-        startedAt: "2026-01-01T00:00:00.000Z",
-        lastFailure: null,
-      },
-    };
-    const { unmount } = render(
-      <QueryProvider useIsolatedClient>
-        <WorkspaceStateContext.Provider
-          value={createWorkspaceStateValue({ incompleteRemovals: [removal] })}
-        >
-          <SeedFilesystemDirectory />
-          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
-        </WorkspaceStateContext.Provider>
-      </QueryProvider>,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
-    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
-
-    expect((await screen.findByLabelText<HTMLInputElement>("Workspace ID")).value).toBe("repo-2");
-    unmount();
   });
 
   test("locks modal dismissal and closed workspaces while a repository add is pending", async () => {
@@ -344,38 +245,6 @@ describe("OpenRepositoryModal", () => {
     unmount();
   });
 
-  test("reports an open repository through the duplicate validation path", async () => {
-    const openWorkspace = {
-      workspaceId: "existing",
-      workspaceName: "Existing",
-      repoPath: "/repo",
-      isActive: true,
-      hasConfig: true,
-      configuredWorktreeBasePath: null,
-      defaultWorktreeBasePath: "/worktrees",
-      effectiveWorktreeBasePath: "/worktrees",
-    };
-    const { unmount } = render(
-      <QueryProvider useIsolatedClient>
-        <WorkspaceStateContext.Provider
-          value={createWorkspaceStateValue({
-            workspaces: [openWorkspace],
-            resolveWorkspacePath: async () => ({ kind: "open", workspace: openWorkspace }),
-          })}
-        >
-          <SeedFilesystemDirectory />
-          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
-        </WorkspaceStateContext.Provider>
-      </QueryProvider>,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
-    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
-
-    expect(await screen.findByText(/Repository is already configured as Existing/)).toBeTruthy();
-    unmount();
-  });
-
   test("keeps the folder picker open when the path has an incomplete removal", async () => {
     const { unmount } = render(
       <QueryProvider useIsolatedClient>
@@ -395,14 +264,9 @@ describe("OpenRepositoryModal", () => {
                   effectiveWorktreeBasePath: "/worktrees",
                 },
                 record: {
-                  version: 1,
-                  operationId: "op-1",
                   phase: "attachments",
                   removeTaskWorktrees: true,
-                  removedWorktrees: [],
                   pendingWorktreePath: null,
-                  startedAt: "2026-01-01T00:00:00.000Z",
-                  lastFailure: null,
                 },
               },
             }),

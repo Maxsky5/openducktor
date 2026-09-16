@@ -184,11 +184,7 @@ const renderPreview = (
 
   return (
     <PreviewTestProviders>
-      <TaskExecutionSelectedFilePreview
-        workspaceId="ws"
-        model={fullModel}
-        onFileSaved={onFileSaved}
-      />
+      <TaskExecutionSelectedFilePreview model={fullModel} onFileSaved={onFileSaved} />
     </PreviewTestProviders>
   );
 };
@@ -297,7 +293,6 @@ function ChatPreviewHarness(): ReactElement {
       </ChatFileLinkProvider>
       <TaskExecutionSelectedFilePreview
         key={preview.model.previewSessionKey}
-        workspaceId="ws"
         model={preview.model}
         onFileSaved={() => {}}
       />
@@ -668,7 +663,6 @@ describe("TaskExecutionSelectedFilePreview", () => {
 
     await waitFor(() => expect(writeTextFileMock).toHaveBeenCalledTimes(1));
     expect(writeTextFileMock).toHaveBeenCalledWith({
-      workspaceId: "ws",
       rootPath: "/repo",
       relativePath: "src/first.ts",
       contents: "const first = false;\n",

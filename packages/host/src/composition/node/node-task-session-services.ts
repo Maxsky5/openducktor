@@ -6,9 +6,7 @@ import { Effect } from "effect";
 import { toHostOperationError } from "../../effect/host-errors";
 import type { CreateTaskServiceInput } from "../../application/tasks/task-service";
 import { createTaskServiceWithMutationProgress } from "../../application/tasks/task-service";
-import { withTaskWorkspaceOwnership } from "../../application/tasks/task-workspace-admission";
 import { createTaskSessionStartPreparationService } from "../../application/tasks/worktrees/task-session-start-preparation-service";
-import type { WorkspaceOwnershipLock } from "../../application/workspaces/workspace-ownership-lock";
 import { createNodeTaskEventServices } from "./node-task-event-services";
 
 type TaskServiceInput = Parameters<typeof createTaskServiceWithMutationProgress>[0] &
@@ -19,20 +17,15 @@ export const createNodeTaskSessionServices = ({
   eventServiceInput,
   agentSessionLiveStateService,
   canonicalizeRepoPath,
-  ownershipLock,
   repositoryPolicy,
 }: {
   taskServiceInput: TaskServiceInput;
   eventServiceInput: Omit<Parameters<typeof createNodeTaskEventServices>[0], "baseTaskService">;
   agentSessionLiveStateService: AgentSessionLiveStateService;
   canonicalizeRepoPath: CanonicalizeRepoPath;
-  ownershipLock: WorkspaceOwnershipLock;
   repositoryPolicy: AgentSessionOperationPolicy;
 }) => {
-  const baseTaskService = withTaskWorkspaceOwnership(
-    createTaskServiceWithMutationProgress(taskServiceInput),
-    ownershipLock,
-  );
+  const baseTaskService = createTaskServiceWithMutationProgress(taskServiceInput);
   const eventServices = createNodeTaskEventServices({
     ...eventServiceInput,
     baseTaskService,
@@ -40,7 +33,7 @@ export const createNodeTaskSessionServices = ({
   const agentSessionCommandService = {
     ...agentSessionLiveStateService,
     ...createAgentSessionCommandService({
-      withWorkStartLease: taskServiceInput.withWorkStartLease,
+      assertProcessStart: taskServiceInput.assertProcessStart,
       canonicalizeRepoPath,
       repositoryPolicy,
       runtime: agentSessionLiveStateService,
@@ -62,7 +55,6 @@ export const createNodeTaskSessionServices = ({
         ),
       taskLifecycle: taskServiceInput.taskSessionLifecycleCoordinator,
       taskSessionStart: createTaskSessionStartPreparationService(taskServiceInput),
-      ownershipLock,
     }),
   };
   return { ...eventServices, agentSessionCommandService };

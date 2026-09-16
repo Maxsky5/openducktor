@@ -1,9 +1,8 @@
-import { Effect, Exit } from "effect";
+import { Effect } from "effect";
 import { TaskAssetError } from "../../effect/task-asset-error";
-import type { TaskAssetFilePort, TaskAssetQuarantine } from "../../ports/task-asset-file-port";
+import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
 import type { TaskAssetRegistryPort } from "../../ports/task-asset-registry-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
-import type { WorkspaceHostOwnershipPort } from "../../ports/workspace-host-ownership-port";
 
 type RecoveryFilePort = Pick<
   TaskAssetFilePort,
@@ -18,112 +17,105 @@ export type TaskAssetRecoveryService = {
 
 export const createTaskAssetRecoveryService = ({
   filePort,
-  hostOwnership,
-  isWorkspaceRemovalPending,
+  isWorkspaceBlocked,
   registry,
   resolveRepoPath,
   taskStore,
-  withAdministrativeAccess,
 }: {
   filePort: RecoveryFilePort;
-  hostOwnership: Pick<WorkspaceHostOwnershipPort, "claimWorkspace" | "releaseWorkspace">;
-  isWorkspaceRemovalPending: (workspaceId: string) => boolean;
+  isWorkspaceBlocked?: (workspaceId: string) => boolean;
   registry: RecoveryRegistryPort;
   resolveRepoPath: (workspaceId: string) => Effect.Effect<string, TaskStoreError>;
   taskStore: Pick<TaskStorePort, "deleteTask">;
-  withAdministrativeAccess: <A, E, R>(
-    workspaceIds: readonly string[],
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E, R>;
-}): TaskAssetRecoveryService => {
-  const withHostOwnership = <E, R>(
-    workspaceId: string,
-    effect: () => Effect.Effect<void, E, R>,
-  ): Effect.Effect<void, E | TaskStoreError, R> =>
-    Effect.uninterruptibleMask((restore) =>
-      Effect.gen(function* () {
-        const claimed = yield* hostOwnership.claimWorkspace(workspaceId);
-        if (!claimed) return;
-        const exit = yield* Effect.exit(restore(effect()));
-        yield* hostOwnership.releaseWorkspace(workspaceId);
-        return yield* Exit.matchEffect(exit, {
-          onFailure: Effect.failCause,
-          onSuccess: Effect.succeed,
-        });
-      }),
-    );
-
-  const reconcileQuarantine = (quarantine: TaskAssetQuarantine) =>
-    Effect.gen(function* () {
-      const repoPath = yield* resolveRepoPath(quarantine.workspaceId);
-      if (quarantine.operation === "delete") {
-        const taskExists = yield* registry.taskExists({
-          repoPath,
-          taskId: quarantine.taskId,
-        });
-        if (taskExists) {
-          yield* filePort.restoreQuarantine(quarantine.id);
-        } else {
-          yield* filePort.purgeQuarantine(quarantine.id);
+}): TaskAssetRecoveryService => ({
+  startupSweep() {
+    return Effect.gen(function* () {
+      const quarantines = yield* filePort.listQuarantines();
+      for (const quarantine of quarantines) {
+        if (isWorkspaceBlocked?.(quarantine.workspaceId) === true) {
+          continue;
         }
-        return;
-      }
-
-      const registered = yield* registry.listAssets({
-        repoPath,
-        taskId: quarantine.taskId,
-        scope: "description",
-      });
-      const registeredIds = new Set(registered.map((asset) => asset.id));
-      const retainedCount = quarantine.assetIds.filter((id) => registeredIds.has(id)).length;
-      const promotedCount = quarantine.promotedAssetIds.filter((id) =>
-        registeredIds.has(id),
-      ).length;
-      const committed = retainedCount === 0 && promotedCount === quarantine.promotedAssetIds.length;
-      const uncommitted = retainedCount === quarantine.assetIds.length && promotedCount === 0;
-      if (!committed && !uncommitted) {
-        return yield* new TaskAssetError({
-          operation: "startup_sweep",
-          code: "partial_state",
-          taskId: quarantine.taskId,
-          assetIds: quarantine.assetIds,
-          failedPhase: "reconcile_update_quarantine",
-          durableState: "unknown",
-          retryAllowed: false,
-          message:
-            "Task asset recovery found a partially committed asset registry update. Manual repair is required.",
-        });
-      }
-      if (committed) {
-        yield* filePort.purgeQuarantine(quarantine.id);
-        return;
-      }
-
-      const existingPromotedAssetIds: string[] = [];
-      for (const assetId of quarantine.promotedAssetIds) {
-        if (
-          yield* filePort.durableExists({
-            workspaceId: quarantine.workspaceId,
-            taskId: quarantine.taskId,
-            assetId,
-            operation: "startup_sweep",
-          })
-        ) {
-          existingPromotedAssetIds.push(assetId);
-        }
-      }
-
-      if (quarantine.operation === "create") {
-        const taskExists = yield* registry.taskExists({
-          repoPath,
-          taskId: quarantine.taskId,
-        });
-        if (taskExists) {
-          yield* taskStore.deleteTask({
+        const repoPath = yield* resolveRepoPath(quarantine.workspaceId);
+        if (quarantine.operation === "delete") {
+          const taskExists = yield* registry.taskExists({
             repoPath,
             taskId: quarantine.taskId,
-            deleteSubtasks: true,
           });
+          if (taskExists) {
+            yield* filePort.restoreQuarantine(quarantine.id);
+          } else {
+            yield* filePort.purgeQuarantine(quarantine.id);
+          }
+          continue;
+        }
+
+        const registered = yield* registry.listAssets({
+          repoPath,
+          taskId: quarantine.taskId,
+          scope: "description",
+        });
+        const registeredIds = new Set(registered.map((asset) => asset.id));
+        const retainedCount = quarantine.assetIds.filter((id) => registeredIds.has(id)).length;
+        const promotedCount = quarantine.promotedAssetIds.filter((id) =>
+          registeredIds.has(id),
+        ).length;
+        const committed =
+          retainedCount === 0 && promotedCount === quarantine.promotedAssetIds.length;
+        const uncommitted = retainedCount === quarantine.assetIds.length && promotedCount === 0;
+        if (!committed && !uncommitted) {
+          return yield* new TaskAssetError({
+            operation: "startup_sweep",
+            code: "partial_state",
+            taskId: quarantine.taskId,
+            assetIds: quarantine.assetIds,
+            failedPhase: "reconcile_update_quarantine",
+            durableState: "unknown",
+            retryAllowed: false,
+            message:
+              "Task asset recovery found a partially committed asset registry update. Manual repair is required.",
+          });
+        }
+        if (committed) {
+          yield* filePort.purgeQuarantine(quarantine.id);
+          continue;
+        }
+
+        const existingPromotedAssetIds: string[] = [];
+        for (const assetId of quarantine.promotedAssetIds) {
+          if (
+            yield* filePort.durableExists({
+              workspaceId: quarantine.workspaceId,
+              taskId: quarantine.taskId,
+              assetId,
+              operation: "startup_sweep",
+            })
+          ) {
+            existingPromotedAssetIds.push(assetId);
+          }
+        }
+
+        if (quarantine.operation === "create") {
+          const taskExists = yield* registry.taskExists({
+            repoPath,
+            taskId: quarantine.taskId,
+          });
+          if (taskExists) {
+            yield* taskStore.deleteTask({
+              repoPath,
+              taskId: quarantine.taskId,
+              deleteSubtasks: true,
+            });
+          }
+          if (existingPromotedAssetIds.length > 0) {
+            yield* filePort.removeDurable({
+              workspaceId: quarantine.workspaceId,
+              taskId: quarantine.taskId,
+              assetIds: existingPromotedAssetIds,
+              operation: "startup_sweep",
+            });
+          }
+          yield* filePort.purgeQuarantine(quarantine.id);
+          continue;
         }
         if (existingPromotedAssetIds.length > 0) {
           yield* filePort.removeDurable({
@@ -133,34 +125,9 @@ export const createTaskAssetRecoveryService = ({
             operation: "startup_sweep",
           });
         }
-        yield* filePort.purgeQuarantine(quarantine.id);
-        return;
+        yield* filePort.restoreQuarantine(quarantine.id);
       }
-      if (existingPromotedAssetIds.length > 0) {
-        yield* filePort.removeDurable({
-          workspaceId: quarantine.workspaceId,
-          taskId: quarantine.taskId,
-          assetIds: existingPromotedAssetIds,
-          operation: "startup_sweep",
-        });
-      }
-      yield* filePort.restoreQuarantine(quarantine.id);
+      return quarantines.length;
     });
-
-  return {
-    startupSweep() {
-      return Effect.gen(function* () {
-        const quarantines = yield* filePort.listQuarantines();
-        for (const quarantine of quarantines) {
-          if (isWorkspaceRemovalPending(quarantine.workspaceId)) {
-            continue;
-          }
-          yield* withHostOwnership(quarantine.workspaceId, () =>
-            withAdministrativeAccess([quarantine.workspaceId], reconcileQuarantine(quarantine)),
-          );
-        }
-        return quarantines.length;
-      });
-    },
-  };
-};
+  },
+});

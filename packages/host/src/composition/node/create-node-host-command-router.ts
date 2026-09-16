@@ -5,7 +5,6 @@ import {
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostValidationError } from "../../effect/host-errors";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
@@ -22,15 +21,12 @@ import { createLocalAttachmentService } from "../../application/attachments/loca
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import { createFilesystemService } from "../../application/filesystem/filesystem-service";
+import { createWorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
 import {
-  createWorkspaceFilesService,
-  withWorkspaceFilesAdmission,
-} from "../../application/filesystem/workspace-files-service";
-import { createWorkspaceActivityInspector } from "../../application/workspaces/workspace-activity-inspector";
-import { createWorkspaceLifecycleService } from "../../application/workspaces/workspace-lifecycle-service";
+  createWorkspaceActivityInspector,
+  createWorkspaceLifecycleService,
+} from "../../application/workspaces/workspace-lifecycle-service";
 import { createGitService } from "../../application/git/git-service";
-import { withGitWorkspaceAdmission } from "../../application/git/git-workspace-admission";
-import { withTaskAssetWorkspaceAdmission } from "../../application/task-assets/task-asset-admission";
 import { createGitProviderService } from "../../application/git/git-provider-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
@@ -42,6 +38,8 @@ import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/w
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
+import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
+import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
@@ -80,7 +78,6 @@ import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createNodeWorkspaceSessionPersistence } from "./node-workspace-session-persistence";
-import { createNodeWorkspaceAccessServices } from "./node-workspace-access-services";
 import { createOpenCodeRuntimeComposition } from "./opencode-runtime-composition";
 import { createRuntimeActiveSessionResolver } from "./runtime-active-session-resolver";
 import {
@@ -123,78 +120,39 @@ export const assembleNodeEffectHostCommandRouter = (
     terminalPty,
     toolDiscovery,
     worktreeFiles,
-    workspaceHostOwnership,
-    workspaceOwnershipLock,
   } = defaultPorts;
   const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
-  const { ownedWorkspaceSettingsService, workspaceAdmissionService, workspaceSettingsService } =
-    createNodeWorkspaceAccessServices({
-      git,
-      settingsConfig,
-      worktreeFiles,
-      workspaceHostOwnership,
-      workspaceOwnershipLock,
-    });
+  const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
+  const workspaceAdmissionService = createWorkspaceAdmissionService({
+    workspaceSettingsService,
+  });
   const assets = createNodeTaskAssetServices({
     configDir,
     assertWorkspaceAdmitted: workspaceAdmissionService.assertTaskStoreAccess,
     configuredTaskStore,
-    hostOwnership: workspaceHostOwnership,
-    isWorkspaceRemovalPending: workspaceAdmissionService.isWorkspaceRemovalPending,
+    isWorkspaceBlocked: workspaceAdmissionService.isWorkspaceBlocked,
     onBackgroundFailure,
     processEnv,
-    settingsConfig,
-    withAdministrativeAccess: workspaceAdmissionService.withAdministrativeAccess,
     workspaceSettingsService,
   });
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
-  const admittedTaskAssetStagingService = withTaskAssetWorkspaceAdmission({
-    admission: workspaceAdmissionService,
-    resolveRepoPath: (workspaceId) =>
-      workspaceSettingsService
-        .getRepoConfig(workspaceId)
-        .pipe(Effect.map((repoConfig) => repoConfig.repoPath)),
-    service: taskAssetStagingService,
-  });
   const workspaceSessions = createNodeWorkspaceSessionPersistence({
     store: assets.workspaceSessionStore,
     settings: workspaceSettingsService,
     git,
     eventBus,
-    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
   });
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
     adapterRegistry: liveSessionAdapterRegistry,
-    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
+    assertProcessStart: workspaceAdmissionService.assertProcessStart,
     persistence: workspaceSessions.persistence,
     faultLog: createLiveSessionFaultLogger(lifecycleLogger),
     publish: createLiveSessionPublisher(eventBus),
   });
   const filesystemService = createFilesystemService(filesystem);
-  const workspaceFilesService = withWorkspaceFilesAdmission(
-    createWorkspaceFilesService(filesystem, git),
-    {
-      resolveRepoPath: (workspaceId) =>
-        workspaceSettingsService.getRepoConfig(workspaceId).pipe(
-          Effect.map((repoConfig) => repoConfig.repoPath),
-          Effect.mapError(
-            (cause) =>
-              new HostValidationError({
-                message: cause.message,
-                field: "workspaceId",
-                cause,
-              }),
-          ),
-        ),
-      withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
-    },
-  );
-  const gitService = withGitWorkspaceAdmission(
-    createGitService({ gitPort: git, settingsConfig, worktreeFiles }),
-    workspaceAdmissionService,
-    workspaceOwnershipLock,
-  );
+  const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
+  const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
   const gitProviderService = createGitProviderService({
     resolver: gitProviderResolver,
     workspaceSettingsService,
@@ -301,16 +259,14 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const terminalService = Effect.runSync(
     createTerminalService({
-      assertWorkspaceAdmitsWork: workspaceAdmissionService.assertWorkspaceAdmitsWork,
-      resolveWorkspaceRepoPath: workspaceAdmissionService.resolveWorkspaceRepoPath,
-      withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
+      assertProcessStart: workspaceAdmissionService.assertProcessStart,
       filesystem,
       ptyPort: terminalPty,
       resolveLaunchEnvironment: createTerminalLaunchEnvironment({ processEnv }),
     }),
   );
   const devServerServiceInput: Parameters<typeof createDevServerService>[0] = {
-    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
+    assertProcessStart: workspaceAdmissionService.assertProcessStart,
     processPort: devServerProcesses,
     taskWorktreeService,
     workspaceSettingsService,
@@ -319,37 +275,21 @@ export const assembleNodeEffectHostCommandRouter = (
     devServerServiceInput.eventBus = eventBus;
   }
   const devServerService = createDevServerService(devServerServiceInput);
-  const runtimeOrchestratorWithEffectiveRegistry = createRuntimeOrchestratorService({
-    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
-    gitPort: git,
-    runtimeDefinitionsService,
-    runtimeRegistry: effectiveRuntimeRegistry,
-    taskReader: taskStore,
-    logger: lifecycleLogger,
-  });
   const workspaceLifecycleService = createWorkspaceLifecycleService({
     activity: createWorkspaceActivityInspector({
       agentSessionLiveStateService,
       devServerService,
-      runtimeRegistry: effectiveRuntimeRegistry,
       terminalService,
     }),
     admission: workspaceAdmissionService,
     gitPort: git,
-    hostOwnership: workspaceHostOwnership,
-    ownershipLock: workspaceOwnershipLock,
-    runtimeOrchestrator: runtimeOrchestratorWithEffectiveRegistry,
     settingsConfig,
     storage: {
-      assertPermanentRemovalSupported: assets.assertPermanentRemovalSupported,
-      closeWorkspaceTaskStore: assets.closeWorkspaceTaskStore,
-      workspaceTaskStoreExists: assets.workspaceTaskStoreExists,
       removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
       removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
     },
     taskStore,
-    workspaceSessionStore: assets.workspaceSessionStore,
-    workspaceSettingsService: ownedWorkspaceSettingsService,
+    workspaceSettingsService,
     worktreeFiles,
   });
   const taskActivityGuard = createRuntimeTaskActivityGuard({
@@ -360,8 +300,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const { taskEventStream, taskService, taskSyncService, agentSessionCommandService } =
     createNodeTaskSessionServices({
       taskServiceInput: {
-        assertWorkspaceAdmitsWork: workspaceAdmissionService.assertWorkspaceAdmitsWork,
-        withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
+        assertProcessStart: workspaceAdmissionService.assertProcessStart,
         devServerService,
         terminalService,
         gitPort: git,
@@ -386,7 +325,6 @@ export const assembleNodeEffectHostCommandRouter = (
       },
       canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
       agentSessionLiveStateService,
-      ownershipLock: workspaceOwnershipLock,
       repositoryPolicy: workspaceSessions.persistence,
     });
   const odtMcpBridgeService = createOdtMcpBridgeService({
@@ -404,9 +342,15 @@ export const assembleNodeEffectHostCommandRouter = (
     discoveryPath: resolveMcpBridgeDiscoveryPath(input.mcpBridgeDiscoveryMode, processEnv),
     workspaceSettingsService,
   });
+  const runtimeOrchestratorWithEffectiveRegistry = createRuntimeOrchestratorService({
+    gitPort: git,
+    runtimeDefinitionsService,
+    runtimeRegistry: effectiveRuntimeRegistry,
+    taskReader: taskStore,
+    logger: lifecycleLogger,
+  });
   const workspaceSessionService = createWorkspaceSessionService({
     operationGate: workspaceSessions.operationGate,
-    ownershipLock: workspaceOwnershipLock,
     store: assets.workspaceSessionStore,
     settings: workspaceSettingsService,
     runtime: runtimeOrchestratorWithEffectiveRegistry,
@@ -415,7 +359,6 @@ export const assembleNodeEffectHostCommandRouter = (
     settingsConfig,
     worktreeFiles,
     systemCommands,
-    withWorkStartLease: workspaceAdmissionService.withWorkStartLease,
   });
   const hostRouterLifecycle = createNodeHostRouterLifecycle({
     assets,
@@ -428,7 +371,6 @@ export const assembleNodeEffectHostCommandRouter = (
     taskAssetStagingService,
     taskSyncService,
     terminalService,
-    workspaceHostOwnership,
   });
   const router = createEffectHostCommandRouter({
     initialize: () =>
@@ -473,7 +415,7 @@ export const assembleNodeEffectHostCommandRouter = (
       ...createRuntimeOrchestratorCommandHandlers(runtimeOrchestratorWithEffectiveRegistry),
       ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService),
       ...createSystemPlatformCommandHandlers(),
-      ...createTaskAssetCommandHandlers(admittedTaskAssetStagingService),
+      ...createTaskAssetCommandHandlers(taskAssetStagingService),
       ...createTaskCommandHandlers(taskService),
       ...createTaskWorktreeCommandHandlers(taskWorktreeService),
       ...createTerminalCommandHandlers(terminalService),

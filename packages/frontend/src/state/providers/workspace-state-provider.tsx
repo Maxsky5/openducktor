@@ -23,7 +23,6 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     workspaces,
     closedWorkspaces,
     incompleteRemovals,
-    onboardingCompleted,
     hasLoadedWorkspaceList,
     isLoadingWorkspaces,
     workspaceLoadError,
@@ -194,8 +193,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
 
   const workspacePresenceValue = useMemo(
     () => ({
-      hasWorkspaces: workspaces.length > 0,
-      onboardingCompleted,
+      hasWorkspaces: workspaces.length + closedWorkspaces.length + incompleteRemovals.length > 0,
       hasLoadedWorkspaceList,
       isLoadingWorkspaces,
       workspaceLoadError,
@@ -204,7 +202,8 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     [
       hasLoadedWorkspaceList,
       isLoadingWorkspaces,
-      onboardingCompleted,
+      closedWorkspaces.length,
+      incompleteRemovals.length,
       refreshWorkspaces,
       workspaceLoadError,
       workspaces.length,

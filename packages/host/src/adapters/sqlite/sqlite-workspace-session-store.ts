@@ -133,16 +133,6 @@ export const createSqliteWorkspaceSessionStore = (
       withDatabase(input, "workspaceSessionStore.get", (session) =>
         getRecord(session, input.sessionId),
       ),
-    listAll: (input) =>
-      withDatabase(input, "workspaceSessionStore.listAll", (session) =>
-        Effect.gen(function* () {
-          const rows = yield* session.execute(
-            (database) => database.select().from(workspaceSessions),
-            "workspaceSessionStore.listAll",
-          );
-          return yield* Effect.forEach(rows, decodeRecord);
-        }),
-      ),
     listActive: (input) =>
       withDatabase(input, "workspaceSessionStore.listActive", (session) =>
         Effect.gen(function* () {

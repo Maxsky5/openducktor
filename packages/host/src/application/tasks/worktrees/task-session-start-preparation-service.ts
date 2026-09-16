@@ -54,14 +54,9 @@ export type TaskSessionStartPreparationService = ReturnType<
 >;
 
 export type TaskSessionStartPreparationDependencies = {
-  assertWorkspaceAdmitsWork?:
+  assertProcessStart?:
     | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
     | undefined;
-  withWorkStartLease<A, E, R>(
-    repoPath: string,
-    effect: Effect.Effect<A, E, R>,
-    workingDirectory?: string,
-  ): Effect.Effect<A, E | HostValidationErrorAggregate, R>;
   gitPort?: GitPort;
   taskStore: TaskStorePort;
   settingsConfig?: SettingsConfigPort;
@@ -74,8 +69,7 @@ export type TaskSessionStartPreparationDependencies = {
 };
 
 export const createTaskSessionStartPreparationService = ({
-  assertWorkspaceAdmitsWork,
-  withWorkStartLease,
+  assertProcessStart,
   gitPort,
   taskStore,
   settingsConfig,
@@ -92,8 +86,8 @@ export const createTaskSessionStartPreparationService = ({
     ): Effect.Effect<PreparedTaskSessionStart, TaskServiceError> {
       return Effect.gen(function* () {
         const { canonicalRepoPath: canonicalInputRepoPath, runtimeKind, taskId, role } = input;
-        if (assertWorkspaceAdmitsWork) {
-          yield* assertWorkspaceAdmitsWork(canonicalInputRepoPath);
+        if (assertProcessStart) {
+          yield* assertProcessStart(canonicalInputRepoPath);
         }
         const dependencies = yield* requireDependencies(() =>
           requireBuildStartDependencies(
@@ -188,7 +182,7 @@ export const createTaskSessionStartPreparationService = ({
               yield* validateTaskSessionWorkflowAvailable(task, role, canonicalRepoPath);
             }
             const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
-            const worktreePreparation = Effect.scoped(
+            yield* Effect.scoped(
               Effect.gen(function* () {
                 yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([worktreePath]);
                 const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
@@ -228,7 +222,6 @@ export const createTaskSessionStartPreparationService = ({
                 }
               }),
             );
-            yield* withWorkStartLease(canonicalRepoPath, worktreePreparation, worktreePath);
             yield* dependencies.runtimeRegistry
               .ensureWorkspaceRuntime({
                 runtimeKind: descriptor.kind,

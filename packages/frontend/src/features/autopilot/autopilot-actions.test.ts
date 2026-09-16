@@ -4,6 +4,7 @@ import type {
   RepositoryGitProviderContext,
   RepoConfig,
   TaskCard,
+  WorkspaceRecord,
 } from "@openducktor/contracts";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentModelCatalog } from "@openducktor/core";
@@ -22,7 +23,11 @@ import type { SessionStartWorkflowResult } from "@/features/session-start/sessio
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { createStartSessionTestHarness } from "@/state/operations/agent-orchestrator/handlers/start-session.test-helpers";
 import { withTimeout } from "@/state/operations/agent-orchestrator/test-utils";
-import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import {
+  repoConfigQueryOptions,
+  settingsSnapshotQueryOptions,
+  workspaceQueryKeys,
+} from "@/state/queries/workspace";
 import {
   createGitProviderContextFixture,
   createDeferred,
@@ -104,6 +109,17 @@ const createRepoConfig = (): RepoConfig => ({
 
 const createQueryClient = (): QueryClient => {
   const queryClient = new QueryClient();
+  const workspace: WorkspaceRecord = {
+    workspaceId: "repo",
+    workspaceName: "Repo",
+    repoPath: "/repo",
+    isActive: true,
+    hasConfig: true,
+    configuredWorktreeBasePath: null,
+    defaultWorktreeBasePath: "/worktrees/repo",
+    effectiveWorktreeBasePath: "/worktrees/repo",
+  };
+  queryClient.setQueryData(workspaceQueryKeys.list(), [workspace]);
   queryClient.setQueryData(repoConfigQueryOptions("repo").queryKey, createRepoConfig());
   queryClient.setQueryData(
     repositoryGitProviderContextQueryOptions("/repo").queryKey,

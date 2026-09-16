@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { workspaceIdSchema } from "./config-schemas";
 
 export const directoryEntrySchema = z.object({
   name: z.string().min(1),
@@ -75,7 +74,6 @@ export type WorkspaceTextFileReadResult = z.infer<typeof workspaceTextFileReadRe
 
 export const workspaceTextFileWriteInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
     rootPath: z.string().min(1),
     relativePath: z.string().min(1),
     contents: z.string(),

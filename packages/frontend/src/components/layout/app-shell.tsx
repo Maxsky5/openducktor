@@ -72,7 +72,6 @@ const persistLeftSidebarPreference = (preference: AppShellSidebarPreference): vo
 
 const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   const activeWorkspace = useActiveWorkspace();
-  const { isLoadingWorkspaces, retryWorkspaces, workspaceLoadError } = useWorkspacePresence();
   useQuery({
     ...repoConfigQueryOptions(activeWorkspace?.workspaceId ?? NO_ACTIVE_WORKSPACE_ID),
     enabled: activeWorkspace !== null,
@@ -108,10 +107,7 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
 
   const openRepositoryModal = useCallback(() => {
     setRepositoryModalOpen(true);
-    void retryWorkspaces().catch((error) => {
-      console.error("[app-shell] Workspace catalog refresh failed.", { error });
-    });
-  }, [retryWorkspaces]);
+  }, []);
 
   const handleHideSidebar = useCallback(() => {
     setSidebarOpen(false);
@@ -248,8 +244,6 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
         open={isRepositoryModalOpen}
         canClose
         onOpenChange={handleRepositoryModalOpenChange}
-        isLoadingWorkspaces={isLoadingWorkspaces}
-        workspaceLoadError={workspaceLoadError}
       />
     </>
   );
@@ -261,7 +255,6 @@ export const AppShell = memo(function AppShell(): ReactElement {
   const onboardingStartedWithoutWorkspaceRef = useRef(false);
   const {
     hasWorkspaces,
-    onboardingCompleted,
     hasLoadedWorkspaceList,
     isLoadingWorkspaces,
     workspaceLoadError,
@@ -272,21 +265,10 @@ export const AppShell = memo(function AppShell(): ReactElement {
   useEffect(() => {
     if (!isOnboardingRoute) {
       onboardingStartedWithoutWorkspaceRef.current = false;
-    } else if (
-      !isLoadingWorkspaces &&
-      !workspaceLoadError &&
-      !hasWorkspaces &&
-      !onboardingCompleted
-    ) {
+    } else if (!isLoadingWorkspaces && !workspaceLoadError && !hasWorkspaces) {
       onboardingStartedWithoutWorkspaceRef.current = true;
     }
-  }, [
-    hasWorkspaces,
-    isLoadingWorkspaces,
-    isOnboardingRoute,
-    onboardingCompleted,
-    workspaceLoadError,
-  ]);
+  }, [hasWorkspaces, isLoadingWorkspaces, isOnboardingRoute, workspaceLoadError]);
 
   const completeOnboarding = useCallback((): void => {
     navigate("/kanban", { replace: true, flushSync: true });
@@ -327,13 +309,13 @@ export const AppShell = memo(function AppShell(): ReactElement {
   }
 
   if (isOnboardingRoute) {
-    if ((hasWorkspaces || onboardingCompleted) && !onboardingStartedWithoutWorkspaceRef.current) {
+    if (hasWorkspaces && !onboardingStartedWithoutWorkspaceRef.current) {
       return <Navigate to="/kanban" replace />;
     }
     return <OnboardingPage onComplete={completeOnboarding} />;
   }
 
-  if (!hasWorkspaces && !onboardingCompleted) {
+  if (!hasWorkspaces) {
     return <Navigate to="/onboarding" replace />;
   }
 

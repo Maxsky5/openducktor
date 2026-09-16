@@ -10,46 +10,39 @@ import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
-import type { host } from "../shared/host";
 import { useWorkspaceOperations } from "./use-workspace-operations";
 
 enableReactActEnvironment();
 
 type WorkspaceHostClient = NonNullable<Parameters<typeof useWorkspaceOperations>[0]["hostClient"]>;
 type SettingsSnapshotHostClient = NonNullable<Parameters<typeof settingsSnapshotQueryOptions>[0]>;
-type WorkspaceIntegrationHostClient = WorkspaceHostClient &
-  SettingsSnapshotHostClient &
-  Pick<typeof host, "workspaceList">;
+type WorkspaceIntegrationHostClient = WorkspaceHostClient & SettingsSnapshotHostClient;
 
-const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient => {
-  const client: WorkspaceIntegrationHostClient = {
+const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient =>
+  ({
     workspaceList: async () => [],
     workspaceAdd: async (input) => workspace(input.repoPath),
     workspaceSelect: async (repoPath: string) => workspace(repoPath, true),
     workspaceCatalogGet: async () => ({
-      openWorkspaces: await client.workspaceList(),
+      openWorkspaces: [],
       closedWorkspaces: [],
       incompleteRemovals: [],
-      onboardingCompleted: false,
     }),
     workspaceClose: async () => ({
       openWorkspaces: [],
       closedWorkspaces: [],
       incompleteRemovals: [],
-      onboardingCompleted: true,
     }),
     workspaceReopen: async () => ({
       openWorkspaces: [],
       closedWorkspaces: [],
       incompleteRemovals: [],
-      onboardingCompleted: true,
     }),
     workspaceRemove: async () => ({
       catalog: {
         openWorkspaces: [],
         closedWorkspaces: [],
         incompleteRemovals: [],
-        onboardingCompleted: true,
       },
       removedWorktrees: [],
     }),
@@ -68,9 +61,7 @@ const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient => {
     gitSwitchBranch: async () => {
       throw new Error("gitSwitchBranch not configured");
     },
-  };
-  return client;
-};
+  }) satisfies WorkspaceIntegrationHostClient;
 
 let workspaceHost = createWorkspaceHostClient();
 
@@ -868,7 +859,6 @@ describe("use-workspace-operations", () => {
 
   test("preserves current repo branch state when workspace selection fails", async () => {
     const setActiveRepo = mock(() => {});
-    workspaceHost.workspaceList = mock(async () => [workspace("/repo-old", true)]);
     const clearTaskData = mock(() => {});
     const clearActiveTaskStoreCheck = mock(() => {});
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => {
@@ -967,18 +957,8 @@ describe("use-workspace-operations", () => {
 
   test("keeps switched repo active when workspace refresh fails after a successful switch", async () => {
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-a", true));
-    let catalogReadCount = 0;
-    const workspaceCatalogGet = mock(async () => {
-      catalogReadCount += 1;
-      if (catalogReadCount === 1) {
-        return {
-          openWorkspaces: [workspace("/repo-old", true), workspace("/repo-a", false)],
-          closedWorkspaces: [],
-          incompleteRemovals: [],
-          onboardingCompleted: true,
-        };
-      }
-      throw new Error("workspace catalog failed");
+    const workspaceList = mock(async (): Promise<WorkspaceRecord[]> => {
+      throw new Error("workspace list failed");
     });
     const gitGetCurrentBranch = mock(async () => ({
       name: "main",
@@ -998,11 +978,11 @@ describe("use-workspace-operations", () => {
     ]);
 
     const originalWorkspaceSelect = workspaceHost.workspaceSelect;
-    const originalWorkspaceCatalogGet = workspaceHost.workspaceCatalogGet;
+    const originalWorkspaceList = workspaceHost.workspaceList;
     const originalGitGetCurrentBranch = workspaceHost.gitGetCurrentBranch;
     const originalGitGetBranches = workspaceHost.gitGetBranches;
     workspaceHost.workspaceSelect = workspaceSelect;
-    workspaceHost.workspaceCatalogGet = workspaceCatalogGet;
+    workspaceHost.workspaceList = workspaceList;
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
     workspaceHost.gitGetBranches = gitGetBranches;
 
@@ -1024,9 +1004,19 @@ describe("use-workspace-operations", () => {
       });
       const { refreshBranches } = value;
       const previousRepoRef = useRef(activeWorkspace?.repoPath ?? null);
+      const hasSeededWorkspacesRef = useRef(false);
 
       latest = value;
       latestActiveRepo = activeWorkspace?.repoPath ?? null;
+
+      useEffect(() => {
+        if (hasSeededWorkspacesRef.current) {
+          return;
+        }
+
+        hasSeededWorkspacesRef.current = true;
+        value.applyWorkspaceRecords([workspace("/repo-old", true), workspace("/repo-a", false)]);
+      }, [value]);
 
       useEffect(() => {
         const activeRepo = activeWorkspace?.repoPath ?? null;
@@ -1071,7 +1061,7 @@ describe("use-workspace-operations", () => {
       expect(gitGetCurrentBranch).toHaveBeenCalledWith("/repo-a");
       expect(gitGetBranches).toHaveBeenCalledWith("/repo-a");
       expect(toastError).toHaveBeenCalledWith("Repository switched, but workspace refresh failed", {
-        description: "workspace catalog failed",
+        description: "workspace list failed",
       });
 
       if (!latest) {
@@ -1102,7 +1092,7 @@ describe("use-workspace-operations", () => {
     } finally {
       unmount();
       workspaceHost.workspaceSelect = originalWorkspaceSelect;
-      workspaceHost.workspaceCatalogGet = originalWorkspaceCatalogGet;
+      workspaceHost.workspaceList = originalWorkspaceList;
       workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
       workspaceHost.gitGetBranches = originalGitGetBranches;
       toastError.mockRestore();
@@ -1265,7 +1255,6 @@ describe("use-workspace-operations", () => {
 
   test("marks branch sync degraded and throttles repeated probe failure toasts", async () => {
     const setActiveRepo = mock(() => {});
-    workspaceHost.workspaceList = mock(async () => [workspace("/repo-a", true)]);
     let probeFailureCount = 0;
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
@@ -1359,7 +1348,6 @@ describe("use-workspace-operations", () => {
 
   test("clears degraded branch sync state after a successful probe", async () => {
     const setActiveRepo = mock(() => {});
-    workspaceHost.workspaceList = mock(async () => [workspace("/repo-a", true)]);
     let shouldFailProbe = true;
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
@@ -1414,7 +1402,6 @@ describe("use-workspace-operations", () => {
 
   test("marks branch sync degraded when refresh after branch identity change fails", async () => {
     const setActiveRepo = mock(() => {});
-    workspaceHost.workspaceList = mock(async () => [workspace("/repo-a", true)]);
     let currentBranchCallCount = 0;
     let branchesCallCount = 0;
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
@@ -1485,7 +1472,6 @@ describe("use-workspace-operations", () => {
 
   test("clears branch cache and degraded state on active repository change", async () => {
     const setActiveRepo = mock(() => {});
-    workspaceHost.workspaceList = mock(async () => [workspace("/repo-a", true)]);
     const { triggerFocus, restoreBrowserGlobals } = createBrowserListenerHarness();
 
     const gitGetCurrentBranch = mock(async () => {

@@ -147,12 +147,7 @@ const extendSettingsConfigPort = (
 ): SettingsConfigPort => createSettingsConfigPort({ ...base, ...overrides });
 const createTaskStorePort = (overrides: TaskStorePort): RealTaskStorePort =>
   createTaskStoreTestDouble(overrides);
-type TaskServiceTestInput = Omit<
-  CreateTaskServiceInput,
-  "assertWorkspaceAdmitsWork" | "withWorkStartLease" | "taskStore" | "taskActivityGuard"
-> & {
-  assertWorkspaceAdmitsWork?: CreateTaskServiceInput["assertWorkspaceAdmitsWork"];
-  withWorkStartLease?: CreateTaskServiceInput["withWorkStartLease"];
+type TaskServiceTestInput = Omit<CreateTaskServiceInput, "taskStore" | "taskActivityGuard"> & {
   taskActivityGuard?: TaskActivityGuardPort;
   taskStore: TaskStorePort;
 };
@@ -172,8 +167,6 @@ const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceI
   const resolvedToolDiscovery = toolDiscovery ?? createToolDiscoveryAdapter({ systemCommands });
   const taskServiceInput: CreateTaskServiceInput = {
     ...rest,
-    assertWorkspaceAdmitsWork: rest.assertWorkspaceAdmitsWork ?? (() => Effect.void),
-    withWorkStartLease: rest.withWorkStartLease ?? ((_repoPath, effect) => effect),
     gitProviderResolver: rest.gitProviderResolver ?? createDefaultGitProviderResolver(),
     terminalService:
       rest.terminalService ??
@@ -270,7 +263,7 @@ const createBuildSettingsConfig = (
     readConfig() {
       return Effect.succeed(
         globalConfigSchema.parse({
-          version: 4,
+          version: 3,
           workspaces: {
             repo: {
               workspaceId: "repo",

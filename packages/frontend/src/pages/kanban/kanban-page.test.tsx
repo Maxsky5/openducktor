@@ -345,7 +345,6 @@ const createWorkspaceBranchStateValue = (): WorkspaceBranchStateContextValue => 
 
 const createWorkspacePresenceValue = (): WorkspacePresenceContextValue => ({
   hasWorkspaces: true,
-  onboardingCompleted: true,
   hasLoadedWorkspaceList: true,
   isLoadingWorkspaces: false,
   workspaceLoadError: null,
