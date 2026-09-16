@@ -28,7 +28,7 @@ The browser route requires the app-session cookie. Electron uses a privileged ap
 
 ## Previews
 
-The chat task card renders a bounded part of the description. The five-line clamp cuts the display. An image shows a chip. The chip label uses the alt text, the file name, or the word Image. A diagram shows its source as code. The task details view loads the asset image when it has task context.
+The chat task card renders a bounded part of the description. The five-line clamp cuts the display. An image renders as a chip. The chip label uses the alt text, the file name, or the word Image. A diagram shows its source as code. The task details view loads the asset image when it has task context.
 
 ## Agent access
 

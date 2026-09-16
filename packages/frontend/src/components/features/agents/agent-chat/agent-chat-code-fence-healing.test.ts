@@ -28,13 +28,6 @@ describe("agent-chat-code-fence-healing", () => {
       marker: "~~~",
       char: "~",
       size: 3,
-      infoString: "sh",
-    });
-    expect(findUnclosedCodeFence("```\ntext")).toEqual({
-      marker: "```",
-      char: "`",
-      size: 3,
-      infoString: "",
     });
     expect(findUnclosedCodeFence("~~~sh\necho hi\n~~~")).toBeNull();
   });

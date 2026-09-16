@@ -125,9 +125,11 @@ export const createTaskDescriptionComponents = ({
     if (src?.startsWith(TASK_ASSET_URI_PREFIX)) {
       if (!parseTaskAssetUri(src)) {
         return (
-          <TaskAssetAlert>
-            Image could not be loaded: the task asset reference is invalid.
-          </TaskAssetAlert>
+          callerImage ?? (
+            <TaskAssetAlert>
+              Image could not be loaded: the task asset reference is invalid.
+            </TaskAssetAlert>
+          )
         );
       }
       if (taskAssetContext && resolveTaskAssetSrc) {

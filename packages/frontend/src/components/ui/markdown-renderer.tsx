@@ -46,6 +46,7 @@ type MarkdownRendererProps = {
   fallback?: ReactNode;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
   stripTaskDescriptionFrontMatter?: boolean;
+  lightweight?: boolean;
 };
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -108,6 +109,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   fallback,
   taskAssetContext,
   stripTaskDescriptionFrontMatter = false,
+  lightweight = false,
 }: MarkdownRendererProps): ReactElement | null {
   const components = useMemo(
     () => markdownLinkComponents(MARKDOWN_COMPONENTS[variant], componentOverrides, linkPolicy),
@@ -118,10 +120,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     return null;
   }
 
-  const hasMathCandidate = content.includes("$");
-  const hasMermaidCandidate = content.includes("mermaid");
+  const hasMathCandidate = !lightweight && content.includes("$");
+  const hasMermaidCandidate = !lightweight && content.includes("mermaid");
   const rendersTaskAsset = content.includes(TASK_ASSET_URI_PREFIX);
-  const needsRichRenderer = rendersTaskAsset || taskAssetContext !== undefined;
+  const needsRichRenderer = taskAssetContext !== undefined || (rendersTaskAsset && !lightweight);
   const resolveTaskAssetSrc = taskAssetContext ? getShellBridge().resolveTaskAssetSrc : undefined;
   const taskAssetProps: Pick<
     ComponentProps<typeof MarkdownRendererRich>,

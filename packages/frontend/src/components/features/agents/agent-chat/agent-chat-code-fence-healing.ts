@@ -1,13 +1,12 @@
-export type OpenCodeFence = {
+type OpenCodeFence = {
   marker: string;
   char: "`" | "~";
   size: number;
-  infoString: string;
 };
 
 const FENCE_START_PATTERN = /^[\t ]{0,3}(`{3,}|~{3,})(.*)$/;
 
-export const readFenceStart = (line: string): OpenCodeFence | null => {
+const readFenceStart = (line: string): OpenCodeFence | null => {
   const match = FENCE_START_PATTERN.exec(line);
   const marker = match?.[1];
   const infoString = match?.[2] ?? "";
@@ -27,11 +26,10 @@ export const readFenceStart = (line: string): OpenCodeFence | null => {
     marker,
     char,
     size: marker.length,
-    infoString,
   };
 };
 
-export const isFenceClose = (line: string, fence: OpenCodeFence): boolean => {
+const isFenceClose = (line: string, fence: OpenCodeFence): boolean => {
   let cursor = 0;
 
   while (cursor < line.length && (line[cursor] === " " || line[cursor] === "\t")) {

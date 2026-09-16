@@ -5,7 +5,7 @@ import {
 } from "./agent-chat-task-description-preview";
 
 describe("buildTaskDescriptionPreviewMarkdown", () => {
-  test("keeps a short description without a diagram unchanged", () => {
+  test("keeps a short description unchanged", () => {
     const description = "### Context\n\n- Failure: CI run\n- Test: workspace-session";
     expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
   });
@@ -49,62 +49,14 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
     expect(preview.length).toBeLessThanOrEqual(TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS);
   });
 
-  test("renders a diagram fence as code", () => {
-    const description = [
-      "Text before.",
-      "",
-      "```mermaid",
-      "graph TD",
-      "  A --> B",
-      "```",
-      "",
-      "Text after.",
-    ].join("\n");
-    const preview = buildTaskDescriptionPreviewMarkdown(description);
+  test("leaves fences untouched for the renderer to handle", () => {
+    const diagram = ["Text before.", "", "```mermaid", "graph TD", "  A --> B", "```"].join("\n");
+    const indentedCode = ["Text before.", "", "    ```mermaid", "    graph TD"].join("\n");
 
-    expect(preview).toBe(
-      ["Text before.", "", "```", "graph TD", "  A --> B", "```", "", "Text after."].join("\n"),
+    expect(buildTaskDescriptionPreviewMarkdown(diagram)).toBe(diagram);
+    expect(buildTaskDescriptionPreviewMarkdown(indentedCode)).toBe(indentedCode);
+    expect(buildTaskDescriptionPreviewMarkdown("- ```mermaid\n  graph TD")).toBe(
+      "- ```mermaid\n  graph TD",
     );
-  });
-
-  test("renders a diagram fence that the character budget cuts as code", () => {
-    const description = [
-      "x".repeat(400),
-      "",
-      "```mermaid",
-      "graph TD",
-      "  A[One] --> B[Two]",
-      "  B[Two] --> C[Three]",
-      "  C[Three] --> D[Four]",
-    ].join("\n");
-    const preview = buildTaskDescriptionPreviewMarkdown(description);
-
-    expect(preview).toContain("x".repeat(400));
-    expect(preview).toContain("graph TD");
-    expect(preview).not.toContain("mermaid");
-  });
-
-  test("renders a diagram fence in a blockquote or a list item as code", () => {
-    const blockquote = ["> ```mermaid", "> graph TD", ">   A --> B", "> ```"].join("\n");
-    const list = ["- Item", "", "    ```mermaid", "    graph TD", "    ```"].join("\n");
-
-    expect(buildTaskDescriptionPreviewMarkdown(blockquote)).toBe(
-      ["> ```", "> graph TD", ">   A --> B", "> ```"].join("\n"),
-    );
-    expect(buildTaskDescriptionPreviewMarkdown(list)).toBe(
-      ["- Item", "", "    ```", "    graph TD", "    ```"].join("\n"),
-    );
-  });
-
-  test("keeps a fence whose info string rules it out", () => {
-    const description = "```markdown `literal`\nThis remains plain text";
-
-    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
-  });
-
-  test("keeps a non-diagram fence unchanged", () => {
-    const description = ["```js", "const answer = 42;", "```"].join("\n");
-
-    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
   });
 });

@@ -2,10 +2,7 @@ import { expect, test } from "bun:test";
 import type { PublicTaskSummaryTask } from "@openducktor/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import {
-  createMessageCardElement,
-  renderMessageCardToHtml,
-} from "./agent-chat-message-card-test-harness";
+import { createMessageCardElement } from "./agent-chat-message-card-test-harness";
 
 const task = (id = "task-1"): PublicTaskSummaryTask => ({
   id,
@@ -163,7 +160,7 @@ test("renders the description as a bounded markdown preview inside the five-line
   expect(card?.innerHTML).not.toContain("b".repeat(1000));
 });
 
-test("renders a task asset image as preview alt text without a task context alert", async () => {
+test("renders a task asset image as preview alt text without a task context alert", () => {
   const assetId = "550e8400-e29b-41d4-a716-446655440000";
   const description = [
     `![Screenshot](odt-asset:${assetId} "shot.png")`,
@@ -171,11 +168,9 @@ test("renders a task asset image as preview alt text without a task context aler
     "",
     "b".repeat(2000),
   ].join("\n");
-  const html = await renderMessageCardToHtml(
-    createToolElement("openducktor_odt_create_task", {
-      output: JSON.stringify({ task: { ...task(), description } }),
-    }),
-  );
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({ task: { ...task(), description } }),
+  });
   const document = new DOMParser().parseFromString(html, "text/html");
   const preview = document.querySelector("[data-task-id] .markdown-body");
   expect(preview?.classList.contains("line-clamp-5")).toBe(true);
@@ -184,6 +179,19 @@ test("renders a task asset image as preview alt text without a task context aler
   expect(preview?.querySelector("svg.lucide-image")).not.toBeNull();
   expect(preview?.textContent).not.toContain("b".repeat(1000));
   expect(html).not.toContain("task context is unavailable");
+  expect(document.querySelector("[data-task-id] img")).toBeNull();
+});
+
+test("labels a malformed task asset reference without a task context alert", () => {
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({
+      task: { ...task(), description: "![](odt-asset:not-a-uuid)" },
+    }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.textContent).toContain("Image");
+  expect(html).not.toContain("task asset reference is invalid");
   expect(document.querySelector("[data-task-id] img")).toBeNull();
 });
 
@@ -231,7 +239,8 @@ test("strips front matter and renders a diagram fence as code in the description
   expect(preview?.textContent).toContain("Body text here.");
   expect(preview?.textContent).not.toContain("priority: high");
   expect(preview?.textContent).toContain("graph TD");
-  expect(preview?.querySelector(".language-mermaid")).toBeNull();
+  expect(preview?.querySelector(".language-mermaid")).not.toBeNull();
+  expect(preview?.querySelector("section[aria-label='Mermaid diagram']")).toBeNull();
   expect(preview?.querySelector("svg")).toBeNull();
 });
 

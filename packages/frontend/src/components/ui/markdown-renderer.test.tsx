@@ -465,6 +465,41 @@ describe("rich task description rendering", () => {
     expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
   });
 
+  test("renders task asset markdown through the caller image component on the lightweight path", () => {
+    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    configureShellBridge({
+      ...createUnavailableShellBridge(),
+      resolveTaskAssetSrc,
+    });
+    const view = render(
+      <MarkdownRenderer
+        markdown="![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000)"
+        lightweight
+        components={{
+          img: ({ alt }) => <span data-testid="image-placeholder">{alt}</span>,
+        }}
+      />,
+    );
+
+    expect(view.getByTestId("image-placeholder").textContent).toBe("Architecture");
+    expect(view.queryByRole("alert")).toBeNull();
+    expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
+  });
+
+  test("uses a caller-provided image component for an invalid task asset reference", async () => {
+    const view = render(
+      <MarkdownRenderer
+        markdown="![Forged](odt-asset:550e8400e29b-41d4-a716-446655440000-)"
+        components={{
+          img: ({ alt }) => <span data-testid="image-placeholder">{alt}</span>,
+        }}
+      />,
+    );
+
+    expect((await view.findByTestId("image-placeholder")).textContent).toBe("Forged");
+    expect(view.queryByRole("alert")).toBeNull();
+  });
+
   test("resolves a task asset with context before a caller image component", async () => {
     const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
     configureShellBridge({
@@ -535,6 +570,29 @@ describe("rich task description rendering", () => {
     expect(view.queryByText("Mermaid source")).toBeNull();
     expect(view.queryByText(/graph TD/)).toBeNull();
     expect(view.container.querySelector("script")).toBeNull();
+  }, 4000);
+
+  test("keeps a diagram fence as code and never mounts the diagram renderer on the lightweight path", async () => {
+    const renderModule = await import("./markdown-mermaid-render");
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
+      async () => "<svg></svg>",
+    );
+
+    try {
+      const view = render(
+        <MarkdownRenderer markdown={"```mermaid\ngraph TD\n  A --> B\n```"} lightweight />,
+      );
+
+      await waitFor(() => expect(view.container.textContent).toContain("graph TD"), {
+        timeout: 1000,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(renderSpy).not.toHaveBeenCalled();
+      expect(view.queryByRole("region", { name: "Mermaid diagram" })).toBeNull();
+      expect(view.container.querySelector(".language-mermaid")).not.toBeNull();
+    } finally {
+      renderSpy.mockRestore();
+    }
   }, 4000);
 
   test("uses sanitizer-safe SVG text for Mermaid labels", () => {
