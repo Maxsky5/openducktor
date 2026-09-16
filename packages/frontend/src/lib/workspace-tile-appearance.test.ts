@@ -29,6 +29,16 @@ describe("deriveWorkspaceInitials", () => {
   test("skips leading punctuation on a single word", () => {
     expect(deriveWorkspaceInitials("_alpha")).toBe("AL");
   });
+
+  test("keeps a decomposed accent with its base letter", () => {
+    // macOS reports directory names decomposed, and a workspace name often starts as one.
+    expect(deriveWorkspaceInitials("E\u0301quipe Mobile")).toBe("E\u0301M");
+  });
+
+  test("never splits a letter outside the basic plane", () => {
+    expect(deriveWorkspaceInitials("\u{1D49C}lpha Beta")).toBe("\u{1D49C}B");
+    expect(deriveWorkspaceInitials("\u{1D49C}lpha")).toBe("\u{1D49C}L");
+  });
 });
 
 describe("normalizeHexInput", () => {
@@ -135,5 +145,10 @@ describe("tileLabelSizeClass", () => {
   test("shrinks the label for a 3 character abbreviation", () => {
     expect(tileLabelSizeClass("AB")).toBe("text-xs");
     expect(tileLabelSizeClass("iOS")).toBe("text-[0.625rem]");
+  });
+
+  test("counts a decomposed accent as one character", () => {
+    // Three UTF-16 units, two tile columns.
+    expect(tileLabelSizeClass("E\u0301M")).toBe("text-xs");
   });
 });

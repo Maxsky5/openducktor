@@ -28,16 +28,30 @@ export const WORKSPACE_TILE_PALETTE: readonly WorkspaceTilePaletteEntry[] = [
   { id: "black", label: "Black", hex: "#000000" },
 ];
 
+const GRAPHEME_SEGMENTER = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/**
+ * Counts what a reader sees rather than UTF-16 code units, so a decomposed accent stays one
+ * character and a letter outside the basic plane is never cut in half.
+ */
+export const graphemesOf = (text: string): string[] =>
+  [...GRAPHEME_SEGMENTER.segment(text)].map(({ segment }) => segment);
+
+const firstGraphemes = (text: string, count: number): string =>
+  graphemesOf(text).slice(0, count).join("");
+
 export const deriveWorkspaceInitials = (workspaceName: string): string => {
   const trimmedName = workspaceName.trim();
   if (!trimmedName) {
     return "?";
   }
 
-  // Split on anything that is not a letter or a digit in any script, so a name such as
-  // `Équipe Mobile` keeps its leading `É` and `_alpha` drops its leading underscore.
+  // Split on anything that is not a letter, a digit or a combining mark, so `Équipe Mobile` keeps
+  // its leading `É` whether the accent is precomposed or decomposed, and `_alpha` drops its
+  // leading underscore. macOS reports directory names decomposed, and a workspace name often
+  // starts life as a directory name.
   const segments = trimmedName
-    .split(/[^\p{L}\p{N}]+/u)
+    .split(/[^\p{L}\p{N}\p{M}]+/u)
     .reduce<string[]>((nextSegments, segment) => {
       const trimmedSegment = segment.trim();
       if (trimmedSegment.length > 0) {
@@ -47,10 +61,10 @@ export const deriveWorkspaceInitials = (workspaceName: string): string => {
     }, []);
 
   if (segments.length >= 2) {
-    return `${segments[0]?.[0] ?? ""}${segments[1]?.[0] ?? ""}`.toUpperCase();
+    return `${firstGraphemes(segments[0] ?? "", 1)}${firstGraphemes(segments[1] ?? "", 1)}`.toUpperCase();
   }
 
-  return (segments[0] ?? trimmedName).slice(0, 2).toUpperCase();
+  return firstGraphemes(segments[0] ?? trimmedName, 2).toUpperCase();
 };
 
 /**
@@ -198,9 +212,12 @@ export const tileForegroundColor = (hex: string): string =>
     ? LIGHT_TILE_FOREGROUND
     : DARK_TILE_FOREGROUND;
 
-/** Keeps a 3 character abbreviation inside the tile without a cut. */
+/**
+ * Keeps a 3 character abbreviation inside the tile without a cut. The count is in graphemes,
+ * because a decomposed accent takes two UTF-16 units but only one tile column.
+ */
 export const tileLabelSizeClass = (label: string): string =>
-  label.length >= 3 ? "text-[0.625rem]" : "text-xs";
+  graphemesOf(label).length >= 3 ? "text-[0.625rem]" : "text-xs";
 
 /** The opaque color face, with a label color picked by contrast. Carries no active marker. */
 export const tileColorFaceStyle = (hex: string): CSSProperties => ({
