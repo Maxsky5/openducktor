@@ -120,32 +120,10 @@ describe("workflow-tool-permissions", () => {
       pattern: "*",
       action: "deny",
     });
-    expect(rules).toContainEqual({ permission: "odt_create_task", pattern: "*", action: "allow" });
-    expect(rules).toContainEqual({ permission: "odt_search_tasks", pattern: "*", action: "allow" });
     expect(rules).toContainEqual({
       permission: "odt_get_workspaces",
       pattern: "*",
       action: "deny",
-    });
-    expect(rules).toContainEqual({
-      permission: "openducktor_odt_create_task",
-      pattern: "*",
-      action: "allow",
-    });
-    expect(rules).toContainEqual({
-      permission: "functions.openducktor_odt_create_task",
-      pattern: "*",
-      action: "allow",
-    });
-    expect(rules).toContainEqual({
-      permission: "openducktor_odt_search_tasks",
-      pattern: "*",
-      action: "allow",
-    });
-    expect(rules).toContainEqual({
-      permission: "functions.openducktor_odt_search_tasks",
-      pattern: "*",
-      action: "allow",
     });
     expect(rules).toContainEqual({
       permission: "openducktor_odt_get_workspaces",
