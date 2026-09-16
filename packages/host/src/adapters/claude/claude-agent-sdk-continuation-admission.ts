@@ -3,7 +3,7 @@ import { isClaudeMetaStreamMessage } from "./claude-agent-sdk-local-commands";
 
 /**
  * A resumed interrupted turn is admitted when the CLI starts its hidden continuation turn.
- * The CLI signals that with the meta user turn or with a running session state.
+ * The CLI signals that with the synthetic user turn or with a running session state.
  */
 export const isClaudeContinuationAdmission = (message: SDKMessage): boolean => {
   if (message.type === "user" && isClaudeMetaStreamMessage(message)) {

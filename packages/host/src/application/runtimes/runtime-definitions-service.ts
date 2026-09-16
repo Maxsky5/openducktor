@@ -13,7 +13,11 @@ import {
 } from "../../effect/host-errors";
 
 export type RuntimeDefinitionsService = {
-  /** Static descriptors with the host safety gate applied. */
+  /**
+   * Static descriptors with the host safety gate applied. The Claude resume capability
+   * is optimistic here, because this method does not probe the executable. Use
+   * {@link listEffectiveRuntimeDefinitions} for launch-scoped gates.
+   */
   listRuntimeDefinitions(): RuntimeDescriptor[];
   /**
    * Descriptors for the client. Runtime-conditional capabilities, such as the Claude
@@ -78,22 +82,33 @@ const parseRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescripto
 const parseRuntimeDescriptors = (): RuntimeDescriptor[] =>
   Object.values(RUNTIME_DESCRIPTORS_BY_KIND).map(parseRuntimeDescriptor);
 
+const claudeResumeGateEnabled = (options: RuntimeDefinitionsServiceOptions): boolean =>
+  options.claudeInterruptedTurnResumeEnabled !== false;
+
+const resolveEffectiveClaudeResumeSupport = (
+  options: RuntimeDefinitionsServiceOptions,
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    if (!claudeResumeGateEnabled(options)) {
+      return false;
+    }
+    return options.resolveClaudeInterruptedTurnResumeSupport === undefined
+      ? true
+      : yield* options.resolveClaudeInterruptedTurnResumeSupport();
+  });
+
 export const createRuntimeDefinitionsService = (
   options: RuntimeDefinitionsServiceOptions = {},
 ): RuntimeDefinitionsService => ({
   listRuntimeDefinitions() {
-    const claudeSupported = options.claudeInterruptedTurnResumeEnabled !== false;
+    const claudeSupported = claudeResumeGateEnabled(options);
     return parseRuntimeDescriptors().map((descriptor) =>
       withClaudeResumeCapability(descriptor, claudeSupported),
     );
   },
   listEffectiveRuntimeDefinitions() {
     return Effect.gen(function* () {
-      const claudeSupported =
-        options.claudeInterruptedTurnResumeEnabled !== false &&
-        (options.resolveClaudeInterruptedTurnResumeSupport === undefined
-          ? true
-          : yield* options.resolveClaudeInterruptedTurnResumeSupport());
+      const claudeSupported = yield* resolveEffectiveClaudeResumeSupport(options);
       const descriptors = yield* Effect.try({
         try: parseRuntimeDescriptors,
         catch: (cause) =>

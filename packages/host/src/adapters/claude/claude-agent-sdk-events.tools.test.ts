@@ -162,7 +162,7 @@ describe("handleClaudeSdkMessage tool events", () => {
     );
   });
 
-  test("hides the Claude meta continuation turn before live tool-result ingress", () => {
+  test("hides the Claude synthetic continuation turn before live tool-result ingress", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
 
@@ -220,7 +220,7 @@ describe("handleClaudeSdkMessage tool events", () => {
             ],
           },
         }),
-        isMeta: true,
+        isSynthetic: true,
       },
     });
 

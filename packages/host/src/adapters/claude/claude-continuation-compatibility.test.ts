@@ -8,6 +8,7 @@ import { CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION } from "./claude-contin
 import { createClaudeHistoryInputProjector } from "./claude-agent-sdk-history-input";
 import { isClaudeMetaStreamMessage } from "./claude-agent-sdk-local-commands";
 import {
+  CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV,
   CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV,
   buildClaudeAgentSdkBaseOptions,
 } from "./claude-agent-sdk-options";
@@ -141,7 +142,7 @@ describe("Claude interrupted-turn resume compatibility", () => {
     expect(readBundledCliVersion(binaryPath)).toContain(SUPPORTED_CLAUDE_CLI_VERSION);
   });
 
-  test("keeps the resume switch and the hidden continuation turn in the shipped CLI", async () => {
+  test("keeps the resume switch, the state switch, and the hidden continuation turn in the shipped CLI", async () => {
     const manifest = readClaudeSdkManifest();
     const { binaryPath } = resolveBundledCli(manifest);
 
@@ -149,6 +150,10 @@ describe("Claude interrupted-turn resume compatibility", () => {
       {
         label: CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV,
         bytes: Buffer.from(CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV),
+      },
+      {
+        label: CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV,
+        bytes: Buffer.from(CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV),
       },
       {
         label: "Continue from where you left off.",
@@ -159,8 +164,8 @@ describe("Claude interrupted-turn resume compatibility", () => {
     expect(
       missing,
       `The bundled Claude CLI no longer carries ${missing.join(", ")}. It cannot classify an ` +
-        `interrupted transcript or hide its continuation turn, so disable ` +
-        `claudeInterruptedTurnResumeEnabled until the CLI contract is verified again.`,
+        `interrupted transcript, report the continuation state, or hide its continuation turn, ` +
+        `so disable claudeInterruptedTurnResumeEnabled until the CLI contract is verified again.`,
     ).toEqual([]);
   });
 
@@ -182,8 +187,9 @@ describe("Claude interrupted-turn resume compatibility", () => {
     ).toEqual([]);
   });
 
-  test("the adapter writes the SDK switch value the bundle consumes", () => {
+  test("the adapter writes the SDK switch values the bundle consumes", () => {
     expect(CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV).toBe("CLAUDE_CODE_RESUME_INTERRUPTED_TURN");
+    expect(CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV).toBe("CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS");
 
     const options = buildClaudeAgentSdkBaseOptions({
       claudeExecutablePath: process.execPath,
@@ -191,6 +197,7 @@ describe("Claude interrupted-turn resume compatibility", () => {
       resumeInterruptedTurn: true,
     });
     expect(options.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBe("1");
+    expect(options.env?.[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]).toBe("1");
   });
 
   test("the hidden continuation user turn stays out of imported history", () => {
@@ -234,8 +241,9 @@ describe("Claude interrupted-turn resume compatibility", () => {
     });
   });
 
-  test("the live stream drops messages the CLI marks as meta", () => {
-    expect(isClaudeMetaStreamMessage({ type: "user", isMeta: true })).toBe(true);
+  test("the live stream drops messages the CLI marks as synthetic", () => {
+    expect(isClaudeMetaStreamMessage({ type: "user", isSynthetic: true })).toBe(true);
+    expect(isClaudeMetaStreamMessage({ type: "user", isMeta: true })).toBe(false);
     expect(isClaudeMetaStreamMessage({ type: "user" })).toBe(false);
   });
 });

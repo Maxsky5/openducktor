@@ -43,6 +43,13 @@ export type ClaudeAgentSdkOptionsDependencies = {
  */
 export const CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV = "CLAUDE_CODE_RESUME_INTERRUPTED_TURN";
 
+/**
+ * Private bundled CLI switch that makes the CLI emit `session_state_changed` frames.
+ * The continuation admission waits for the running state, so the continuation launch
+ * sets it.
+ */
+export const CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV = "CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS";
+
 type BuildClaudeAgentSdkOptionsInput = {
   input: ClaudeSessionInput;
   session: ClaudeSessionContext;
@@ -76,7 +83,13 @@ export const buildClaudeAgentSdkBaseOptions = ({
   };
   const options: Options = {
     cwd,
-    env: resumeInterruptedTurn ? { ...env, [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]: "1" } : env,
+    env: resumeInterruptedTurn
+      ? {
+          ...env,
+          [CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]: "1",
+          [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]: "1",
+        }
+      : env,
     skills: "all",
     tools: { type: "preset", preset: "claude_code" },
   };

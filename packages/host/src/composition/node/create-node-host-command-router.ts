@@ -93,7 +93,6 @@ export const assembleNodeEffectHostCommandRouter = (
   gitProviderResolver: GitProviderResolver,
 ): EffectNodeHostCommandRouter => {
   const {
-    claudeInterruptedTurnResumeEnabled = true,
     clientVersion,
     eventBus,
     lifecycleLogger = defaultLifecycleLogger,
@@ -160,12 +159,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const localAttachmentService = createLocalAttachmentService(localAttachments);
   const openInToolsService = createOpenInToolsService(openInTools);
-  const runtimeDefinitionsService = createHostRuntimeDefinitionsService({
-    claudeInterruptedTurnResumeEnabled,
-    settingsConfig,
-    toolDiscovery,
-    systemCommands,
-  });
+  const runtimeDefinitionsService = createHostRuntimeDefinitionsService(input, defaultPorts);
   const systemDiagnosticsService = createSystemDiagnosticsService({
     pathError: processEnvironmentError?.message ?? null,
     runtimeDefinitionsService,
@@ -183,7 +177,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const resolveRuntimeMcpBridge = (kind: "codex" | "opencode", repoPath: string) =>
     resolveWorkspaceRuntimeMcpBridgeConnection(resolvedMcpHostBridge, kind, repoPath);
   const claudeRuntime = createClaudeRuntimeComposition({
-    interruptedTurnResumeEnabled: claudeInterruptedTurnResumeEnabled,
+    interruptedTurnResumeEnabled: input.claudeInterruptedTurnResumeEnabled ?? true,
     liveSessionLifecycle: agentSessionLiveStateService,
     onBackgroundFailure,
     processEnv,

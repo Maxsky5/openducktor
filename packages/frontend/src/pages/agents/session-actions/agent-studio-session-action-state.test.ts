@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { EMPTY_SELECTED_SESSION_RUNTIME_DATA } from "@/types/selected-session-runtime-data";
 import type { AgentStudioSelectedSessionState } from "../selected-session/selected-session-state";
 import { deriveAgentStudioSessionActionState } from "./agent-studio-session-action-state";
@@ -121,5 +123,43 @@ describe("deriveAgentStudioSessionActionState", () => {
       canQueueBusyFollowups: false,
       busySendBlockedReason: null,
     });
+  });
+
+  test("offers resume only from the effective runtime definitions", () => {
+    const unfinishedUserTurn: AgentChatMessage = {
+      id: "user-1",
+      role: "user",
+      content: "Continue the build.",
+      timestamp: "2026-06-17T08:00:00.000Z",
+    };
+    const selectedSessionState = createSelectedSession({
+      identity: {
+        externalSessionId: "session-1",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+      },
+      activityState: "idle",
+      loadedSession: createAgentSessionFixture({ messages: [unfinishedUserTurn] }),
+      runtimeData: {
+        ...EMPTY_SELECTED_SESSION_RUNTIME_DATA,
+        modelCatalog: {
+          runtime: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+          models: [],
+          defaultModelsByProvider: {},
+        },
+      },
+    });
+
+    const withoutDefinitions = deriveAgentStudioSessionActionState({
+      selectedSession: selectedSessionState,
+      runtimeDefinitions: [],
+    });
+    expect(withoutDefinitions.canResumeSession).toBe(false);
+
+    const withDefinitions = deriveAgentStudioSessionActionState({
+      selectedSession: selectedSessionState,
+      runtimeDefinitions: [RUNTIME_DESCRIPTORS_BY_KIND.claude],
+    });
+    expect(withDefinitions.canResumeSession).toBe(true);
   });
 });

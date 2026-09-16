@@ -53,13 +53,14 @@ export const isClaudeMetaHistoryMessage = (entry: ClaudeHistoryMessage): boolean
   return entry.isMeta === true || entry.interruptedByShutdown === true;
 };
 
-const claudeMetaStreamFlagSchema = z.looseObject({ isMeta: z.boolean().optional() });
+const claudeMetaStreamFlagSchema = z.looseObject({ isSynthetic: z.boolean().optional() });
 
 /**
- * Reads the hidden-turn flag from a live SDK message. The SDK type omits it, and the
- * Claude CLI sets it on its "Continue from where you left off." continuation turn.
+ * Reads the hidden-turn flag from a live SDK message. The CLI stores its "Continue from
+ * where you left off." turn with `isMeta` and maps that field to `isSynthetic` on the
+ * live stream, so the live predicate must read the wire field.
  */
 export const isClaudeMetaStreamMessage = (message: SDKMessage | SessionStoreEntry): boolean => {
   const parsed = claudeMetaStreamFlagSchema.safeParse(message);
-  return parsed.success && parsed.data.isMeta === true;
+  return parsed.success && parsed.data.isSynthetic === true;
 };

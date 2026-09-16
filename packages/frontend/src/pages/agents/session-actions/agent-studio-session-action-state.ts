@@ -46,7 +46,7 @@ export function deriveAgentStudioSessionActionState({
     canResumeInterruptedTurn({
       activityState: selectedSession.activityState,
       messages: selectedSession.loadedSession?.messages.items ?? [],
-      runtimeDescriptor: selectedRuntimeDescriptor,
+      runtimeDescriptor: currentRuntimeDescriptor,
     });
 
   return {

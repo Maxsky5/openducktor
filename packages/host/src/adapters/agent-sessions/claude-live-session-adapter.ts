@@ -335,7 +335,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                     interruptedTurnResumeError({
                       reason: "unsupported",
                       message:
-                        "Interrupted-turn resume is disabled for the Claude runtime. Enable it in host settings and try again.",
+                        "Interrupted-turn resume is disabled for this Claude runtime configuration.",
                     }),
                     toClaudeLiveSessionRef(input),
                     "claude-live-session.continue-interrupted-turn",

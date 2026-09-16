@@ -3,22 +3,19 @@ import {
   createRuntimeDefinitionsService,
   type RuntimeDefinitionsService,
 } from "../../application/runtimes/runtime-definitions-service";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
-import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import type { NodeHostDefaultPorts } from "./node-host-default-ports";
+import type { CreateNodeHostCommandRouterInput } from "./node-host-command-router-types";
 
-export const createHostRuntimeDefinitionsService = (input: {
-  readonly claudeInterruptedTurnResumeEnabled: boolean;
-  readonly settingsConfig: SettingsConfigPort;
-  readonly toolDiscovery: ToolDiscoveryPort;
-  readonly systemCommands: SystemCommandPort;
-}): RuntimeDefinitionsService =>
+export const createHostRuntimeDefinitionsService = (
+  input: Pick<CreateNodeHostCommandRouterInput, "claudeInterruptedTurnResumeEnabled">,
+  ports: Pick<NodeHostDefaultPorts, "settingsConfig" | "toolDiscovery" | "systemCommands">,
+): RuntimeDefinitionsService =>
   createRuntimeDefinitionsService({
-    claudeInterruptedTurnResumeEnabled: input.claudeInterruptedTurnResumeEnabled,
+    claudeInterruptedTurnResumeEnabled: input.claudeInterruptedTurnResumeEnabled !== false,
     resolveClaudeInterruptedTurnResumeSupport: () =>
       isClaudeInterruptedTurnResumeSupported({
-        settingsConfig: input.settingsConfig,
-        toolDiscovery: input.toolDiscovery,
-        systemCommands: input.systemCommands,
+        settingsConfig: ports.settingsConfig,
+        toolDiscovery: ports.toolDiscovery,
+        systemCommands: ports.systemCommands,
       }),
   });

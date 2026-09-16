@@ -684,7 +684,7 @@ describe("createClaudeAgentSdkSession", () => {
     }
   });
 
-  test("admits a continuation from the hidden meta user turn", async () => {
+  test("admits a continuation from the hidden synthetic user turn", async () => {
     const streamFinished = deferred<void>();
     const fakeQuery = createClaudeQueryFixture({
       close: () => streamFinished.resolve(),
@@ -697,7 +697,7 @@ describe("createClaudeAgentSdkSession", () => {
             session_id: "session-continuation",
             uuid: "7b7fe9e0-fd84-476f-8610-4c9ce2beb135",
           }),
-          isMeta: true,
+          isSynthetic: true,
         };
         await streamFinished.promise;
         yield* [];

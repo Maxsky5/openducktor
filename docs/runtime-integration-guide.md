@@ -73,6 +73,7 @@ Each enabled `RuntimeDescriptor.capabilities` field needs a working adapter path
 | `sessionLifecycle.supportsListLiveSessions` | Can return live state for sessions that OpenDucktor registered |
 | `sessionLifecycle.supportsQueuedUserMessages` | Can keep a queued user message visible while busy |
 | `sessionLifecycle.supportsPendingInputSnapshots` | Can keep unresolved input in snapshots |
+| `sessionLifecycle.supportsInterruptedTurnResume` | Can continue an unfinished turn with no user message |
 
 ### History
 

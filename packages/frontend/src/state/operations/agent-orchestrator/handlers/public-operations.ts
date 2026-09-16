@@ -100,8 +100,7 @@ export const createOrchestratorPublicOperations = ({
   },
   stopAgentSession: (session): Promise<void> =>
     withErrorToast("Failed to stop agent session", () => sessionActions.stopAgentSession(session)),
-  continueInterruptedTurn: (session): Promise<void> =>
-    sessionActions.continueInterruptedTurn(session),
+  continueInterruptedTurn: sessionActions.continueInterruptedTurn,
   updateAgentSessionModel: (session, selection): void => {
     void withErrorToast("Failed to update session model", () =>
       sessionActions.updateAgentSessionModel(session, selection),
