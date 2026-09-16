@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY } from "./agent-orchestrator";
 import { loadWorkflowContractFixture } from "./workflow-contract-fixture.test-support";
 
@@ -6,6 +7,11 @@ describe("agent orchestrator role policy contract", () => {
   test("matches canonical workflow fixture", () => {
     const fixture = loadWorkflowContractFixture();
     expect(AGENT_ROLE_TOOL_POLICY).toEqual(fixture.roles);
+  });
+
+  test("matches the workflow tool catalog", () => {
+    const fixture = loadWorkflowContractFixture();
+    expect([...fixture.tools].sort()).toEqual([...ODT_WORKFLOW_AGENT_TOOL_NAMES].sort());
   });
 
   test("keeps odt_set_pull_request restricted to Builder sessions", () => {

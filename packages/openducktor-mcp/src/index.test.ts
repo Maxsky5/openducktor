@@ -212,6 +212,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
       return;
     }
 
+    requests.push({ url, body: await readJsonBody(request) });
     writeJson(
       response,
       {

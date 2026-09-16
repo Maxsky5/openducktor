@@ -10,7 +10,7 @@ This matrix lists every allowed task transition. The backend validates it. The U
 - `odt_search_tasks`: `priority?`, `issueType?`, `status?`, `title?`, `tags?`, `limit?`
 - `odt_create_task`: `title`, `issueType`, `priority`, `description?`, `labels?`, `aiReviewEnabled?`
 - `odt_set_spec`: `taskId`, `markdown`
-- `odt_set_plan`: `taskId`, `markdown`, `subtasks?`
+- `odt_set_plan`: `taskId`, `markdown`
 - `odt_build_blocked`: `taskId`, `reason`
 - `odt_build_resumed`: `taskId`
 - `odt_build_completed`: `taskId`, `summary?`

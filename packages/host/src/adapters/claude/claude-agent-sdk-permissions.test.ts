@@ -204,15 +204,6 @@ describe("createClaudeCanUseTool", () => {
   });
 
   test("allows task search and create for read-only workflow roles without an interactive approval", async () => {
-    const events: AgentEvent[] = [];
-    const session = createSession();
-    const canUseTool = createClaudeCanUseTool({
-      session,
-      now: () => "2026-06-25T12:00:00.000Z",
-      randomId: () => "request-1",
-      emit: (_session, event) => events.push(event),
-    });
-
     const cases = [
       { toolName: "mcp__openducktor__odt_search_tasks", toolInput: { status: "open" } },
       {
@@ -220,27 +211,38 @@ describe("createClaudeCanUseTool", () => {
         toolInput: { title: "Follow-up", issueType: "task", priority: 2 },
       },
     ];
-    for (const { toolName, toolInput } of cases) {
-      expect(
-        await authorizeClaudeToolUse({
-          session,
-          toolName,
-          toolInput,
-        }),
-      ).toMatchObject({ behavior: "allow", approval: "workflow_role" });
-      await expect(
-        canUseTool(toolName, toolInput, {
-          signal: new AbortController().signal,
-          toolUseID: "tool-use-1",
-          requestId: "sdk-request-1",
-        }),
-      ).resolves.toEqual({
-        behavior: "allow",
-        updatedInput: toolInput,
+    for (const role of ["spec", "planner", "qa"] as const) {
+      const events: AgentEvent[] = [];
+      const session = createSession(role);
+      const canUseTool = createClaudeCanUseTool({
+        session,
+        now: () => "2026-06-25T12:00:00.000Z",
+        randomId: () => "request-1",
+        emit: (_session, event) => events.push(event),
       });
+
+      for (const { toolName, toolInput } of cases) {
+        expect(
+          await authorizeClaudeToolUse({
+            session,
+            toolName,
+            toolInput,
+          }),
+        ).toMatchObject({ behavior: "allow", approval: "workflow_role" });
+        await expect(
+          canUseTool(toolName, toolInput, {
+            signal: new AbortController().signal,
+            toolUseID: "tool-use-1",
+            requestId: "sdk-request-1",
+          }),
+        ).resolves.toEqual({
+          behavior: "allow",
+          updatedInput: toolInput,
+        });
+      }
+      expect(events).toEqual([]);
+      expect(session.pendingApprovals.size).toBe(0);
     }
-    expect(events).toEqual([]);
-    expect(session.pendingApprovals.size).toBe(0);
   });
 
   test("delegates Bash permission decisions for read-only workflow roles", async () => {
