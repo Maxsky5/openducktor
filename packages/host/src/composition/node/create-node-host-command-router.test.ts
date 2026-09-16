@@ -119,6 +119,7 @@ const createRouter = (input: {
     mcpBridgeDiscoveryMode: "production",
     mcpHostBridge: createMcpHostBridge(),
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
+    processEnv: { ...process.env },
     taskEventPublicationReporter: { report: () => Effect.void },
     runtimeDistribution: createRuntimeDistribution(),
     runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
@@ -128,7 +129,7 @@ const createRouter = (input: {
   if (input.eventBus) {
     routerInput.eventBus = input.eventBus;
   }
-  return Effect.runSync(createNodeEffectHostCommandRouter(routerInput));
+  return Effect.runPromise(createNodeEffectHostCommandRouter(routerInput));
 };
 
 describe("createNodeEffectHostCommandRouter", () => {
@@ -236,7 +237,8 @@ describe("createNodeEffectHostCommandRouter", () => {
   test("stops managed dev servers during normal host disposal", async () => {
     const { infos, logger } = createLogger();
 
-    await Effect.runPromise(createRouter({ logger }).dispose());
+    const router = await createRouter({ logger });
+    await Effect.runPromise(router.dispose());
 
     expect(infos).toContain("No dev servers are running");
   });
@@ -244,7 +246,8 @@ describe("createNodeEffectHostCommandRouter", () => {
   test("disposes SQLite task store connections after every other host resource", async () => {
     const { infos, logger } = createLogger();
 
-    await Effect.runPromise(createRouter({ logger }).dispose());
+    const router = await createRouter({ logger });
+    await Effect.runPromise(router.dispose());
 
     expect(infos.at(-2)).toBe("Stopped SQLite task store connections");
     expect(infos.at(-1)).toBe("OpenDucktor host services stopped");
@@ -252,7 +255,7 @@ describe("createNodeEffectHostCommandRouter", () => {
 
   test("stops the pull request sync loop during host disposal", async () => {
     const { infos, logger } = createLogger();
-    const router = createRouter({ eventBus: createEventBus(), logger });
+    const router = await createRouter({ eventBus: createEventBus(), logger });
 
     await Effect.runPromise(router.initialize());
     await Effect.runPromise(router.dispose());
@@ -278,7 +281,8 @@ describe("createNodeEffectHostCommandRouter", () => {
       }),
     );
 
-    const exit = await Effect.runPromiseExit(createRouter({ logger, runtimeRegistry }).dispose());
+    const router = await createRouter({ logger, runtimeRegistry });
+    const exit = await Effect.runPromiseExit(router.dispose());
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
@@ -304,7 +308,8 @@ describe("createNodeEffectHostCommandRouter", () => {
       ),
     );
 
-    const exit = await Effect.runPromiseExit(createRouter({ logger, runtimeRegistry }).dispose());
+    const router = await createRouter({ logger, runtimeRegistry });
+    const exit = await Effect.runPromiseExit(router.dispose());
 
     expect(exit._tag).toBe("Failure");
     expect(infos).not.toContain("OpenDucktor host services stopped");
@@ -322,7 +327,8 @@ describe("createNodeEffectHostCommandRouter", () => {
     };
     const runtimeRegistry = createRuntimeRegistry(() => Effect.fail(runtimeFailure));
 
-    const exit = await Effect.runPromiseExit(createRouter({ logger, runtimeRegistry }).dispose());
+    const router = await createRouter({ logger, runtimeRegistry });
+    const exit = await Effect.runPromiseExit(router.dispose());
 
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {

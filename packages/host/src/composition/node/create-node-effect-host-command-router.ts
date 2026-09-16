@@ -12,10 +12,9 @@ export const createNodeEffectHostCommandRouter = (input: CreateNodeHostCommandRo
       const imageWorkers = yield* createGeneratedImageWorkers(input.onBackgroundFailure);
       return yield* restore(
         Effect.gen(function* () {
-          const defaultPorts = yield* Effect.try({
-            try: () => createNodeHostDefaultPorts(input, imageWorkers),
-            catch: (cause) => toHostOperationError(cause, "host.create-router"),
-          });
+          const defaultPorts = yield* createNodeHostDefaultPorts(input, imageWorkers).pipe(
+            Effect.mapError((cause) => toHostOperationError(cause, "host.create-router")),
+          );
           const { git, systemCommands, toolDiscovery } = defaultPorts;
           const resolver = yield* createNodeGitProviderResolver({
             gitPort: git,

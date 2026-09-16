@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { userInfo } from "node:os";
 import { basename, delimiter, isAbsolute } from "node:path";
+import { Effect } from "effect";
+import { probeLoginShellPath } from "./login-shell-path-probe";
+import { ProcessEnvironmentError, processEnvironmentError } from "./process-environment-error";
 
-const LOGIN_SHELL_ENV_MARKER_TEXT = "__OPENDUCKTOR_ENV_START__";
-const LOGIN_SHELL_ENV_MARKER = `${LOGIN_SHELL_ENV_MARKER_TEXT}\0`;
 const LOGIN_SHELL_TIMEOUT_MS = 5_000;
 
 const HOST_CONTROL_ENV_NAMES = [
@@ -22,10 +22,33 @@ const HOST_CONTROL_ENV_NAMES = [
 
 export type ReadUserShell = () => string | null;
 
+export {
+  ProcessEnvironmentError,
+  type ProcessEnvironmentErrorReason,
+} from "./process-environment-error";
+
+export type ProcessEnvironmentResolution =
+  | {
+      status: "ready";
+      environment: NodeJS.ProcessEnv;
+      error: null;
+    }
+  | {
+      status: "path_unavailable";
+      environment: NodeJS.ProcessEnv;
+      error: ProcessEnvironmentError;
+    };
+
+export type ReadLoginShellPath = (
+  env: NodeJS.ProcessEnv,
+  shell: string,
+) => Effect.Effect<string, ProcessEnvironmentError>;
+
 export type CreateProcessEnvironmentInput = {
   baseEnv?: NodeJS.ProcessEnv;
+  loginShellTimeoutMs?: number;
   platform?: NodeJS.Platform;
-  readLoginShellPath?: (env: NodeJS.ProcessEnv) => string | null;
+  readLoginShellPath?: ReadLoginShellPath;
   readUserShell?: ReadUserShell;
 };
 
@@ -134,6 +157,14 @@ const setPathEnvironmentValue = (
   env.PATH = value;
 };
 
+const deletePathEnvironmentValue = (env: NodeJS.ProcessEnv, platform: NodeJS.Platform): void => {
+  for (const key of Object.keys(env)) {
+    if ((platform === "win32" && isPathKey(key)) || key === "PATH") {
+      delete env[key];
+    }
+  }
+};
+
 export const accountUserShell = (): string | null => {
   try {
     return userInfo().shell || null;
@@ -170,69 +201,19 @@ export const resolveUserLoginShell = (
   return shell && isUsableLoginShell(shell) ? shell : null;
 };
 
-const minimalLoginShellEnv = (env: NodeJS.ProcessEnv, shell: string): NodeJS.ProcessEnv => ({
-  HOME: env.HOME,
-  LOGNAME: env.LOGNAME ?? env.USER,
-  PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
-  SHELL: shell,
-  TERM: "dumb",
-  USER: env.USER,
-});
-const buildLoginShellPathProbeArgs = (): string[] => [
-  "-c",
-  `printf '${LOGIN_SHELL_ENV_MARKER_TEXT}\\0'; /usr/bin/env -0`,
-];
-const parsePathFromLoginShellOutput = (stdout: Buffer): string | null => {
-  const marker = Buffer.from(LOGIN_SHELL_ENV_MARKER);
-  const markerIndex = stdout.indexOf(marker);
-  if (markerIndex < 0) {
-    return null;
-  }
-
-  const payload = stdout.subarray(markerIndex + marker.length);
-  for (const entry of payload.toString("utf8").split("\0")) {
-    const separatorIndex = entry.indexOf("=");
-    if (separatorIndex <= 0) {
-      continue;
-    }
-
-    const key = entry.slice(0, separatorIndex);
-    if (key === "PATH") {
-      return entry.slice(separatorIndex + 1);
-    }
-  }
-
-  return null;
-};
-
-const readCurrentUserLoginShellPath = (env: NodeJS.ProcessEnv, shell: string): string | null => {
-  const result = spawnSync(shell, buildLoginShellPathProbeArgs(), {
-    argv0: `-${basename(shell)}`,
-    env: minimalLoginShellEnv(env, shell),
-    maxBuffer: 1024 * 1024,
-    stdio: ["ignore", "pipe", "ignore"],
-    timeout: LOGIN_SHELL_TIMEOUT_MS,
-  });
-
-  if (result.status !== 0 || !Buffer.isBuffer(result.stdout)) {
-    return null;
-  }
-
-  return parsePathFromLoginShellOutput(result.stdout);
-};
-
 export const createProcessEnvironment = (
   input: CreateProcessEnvironmentInput = {},
-): NodeJS.ProcessEnv => {
+): Effect.Effect<ProcessEnvironmentResolution> => {
   const {
     baseEnv = process.env,
+    loginShellTimeoutMs = LOGIN_SHELL_TIMEOUT_MS,
     platform = process.platform,
     readUserShell = accountUserShell,
     readLoginShellPath,
   } = input;
   const env = normalizeProcessEnvironment(baseEnv, platform);
   if (platform === "win32") {
-    return env;
+    return Effect.succeed({ status: "ready", environment: env, error: null });
   }
 
   const shell = resolveUserLoginShell(env, readUserShell);
@@ -240,23 +221,38 @@ export const createProcessEnvironment = (
     env.SHELL = shell;
   }
 
-  let loginShellPath: string | null = null;
-  if (readLoginShellPath) {
-    loginShellPath = readLoginShellPath(env);
-  } else if (shell) {
-    loginShellPath = readCurrentUserLoginShellPath(env, shell);
-  }
-  if (loginShellPath) {
-    setPathEnvironmentValue(
-      env,
-      mergePathValues(
-        loginShellPath,
-        pathEnvironmentValue(env, platform),
-        pathDelimiterForPlatform(platform),
+  if (!shell) {
+    const shellName = env.SHELL?.trim() || "unknown";
+    deletePathEnvironmentValue(env, platform);
+    return Effect.succeed({
+      status: "path_unavailable",
+      environment: env,
+      error: processEnvironmentError(
+        shellName,
+        "shell_unavailable",
+        `Failed to resolve PATH: no executable login shell is available. Check the account login shell or set SHELL to an absolute executable path, then restart OpenDucktor. Current SHELL: ${shellName}.`,
       ),
-      platform,
-    );
+    });
   }
 
-  return env;
+  const inheritedPath = pathEnvironmentValue(env, platform);
+  const probeEnv = sanitizeChildProcessEnvironment(env, platform);
+  const loginShellPath = readLoginShellPath
+    ? readLoginShellPath(probeEnv, shell)
+    : probeLoginShellPath(probeEnv, shell, loginShellTimeoutMs);
+  return Effect.either(loginShellPath).pipe(
+    Effect.map((result): ProcessEnvironmentResolution => {
+      if (result._tag === "Left") {
+        deletePathEnvironmentValue(env, platform);
+        return { status: "path_unavailable", environment: env, error: result.left };
+      }
+
+      setPathEnvironmentValue(
+        env,
+        mergePathValues(result.right, inheritedPath, pathDelimiterForPlatform(platform)),
+        platform,
+      );
+      return { status: "ready", environment: env, error: null };
+    }),
+  );
 };

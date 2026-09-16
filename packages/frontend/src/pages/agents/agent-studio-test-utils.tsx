@@ -209,6 +209,7 @@ export const createRepoRuntimeHealthContextValue = (
 
 const TEST_CHECKS_OPERATIONS_CONTEXT = {
   refreshRuntimeCheck: async () => ({
+    pathOk: true,
     gitOk: true,
     gitVersion: null,
     runtimes: [],

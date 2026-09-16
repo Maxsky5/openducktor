@@ -131,6 +131,7 @@ describe("DiagnosticsPanelSections", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: [
@@ -216,6 +217,7 @@ describe("DiagnosticsPanelSections", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: [

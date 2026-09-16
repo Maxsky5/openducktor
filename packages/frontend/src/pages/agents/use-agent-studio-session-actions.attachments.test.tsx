@@ -94,6 +94,7 @@ const createHookHarness = (initialProps: HookArgs) => {
       {
         value: {
           refreshRuntimeCheck: async () => ({
+            pathOk: true,
             gitOk: true,
             gitVersion: null,
             runtimes: [],

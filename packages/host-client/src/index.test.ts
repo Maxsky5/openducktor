@@ -949,6 +949,7 @@ describe("HostClient", () => {
     const { client, calls } = createClient((command) => {
       if (command === "runtime_check") {
         return {
+          pathOk: true,
           gitOk: true,
           gitVersion: "2.45.0",
           runtimes: [

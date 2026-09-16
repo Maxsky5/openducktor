@@ -54,6 +54,7 @@ export const buildRuntimeCheckErrorState = (
   runtimeDefinitions: RuntimeDescriptor[],
   runtimeCheckError: string,
 ): RuntimeCheck => ({
+  pathOk: false,
   gitOk: false,
   gitVersion: null,
   runtimes: runtimeDefinitions.map((definition) => ({
@@ -80,7 +81,7 @@ export const buildTaskStoreCheckErrorState = (taskStoreCheckError: string): Task
 });
 
 export const hasCliToolCheckFailure = (runtimeCheck: RuntimeCheck | null): boolean => {
-  return runtimeCheck !== null && !runtimeCheck.gitOk;
+  return runtimeCheck !== null && (!runtimeCheck.pathOk || !runtimeCheck.gitOk);
 };
 
 export const hasTaskStoreCheckFailure = (taskStoreCheck: TaskStoreCheck | null): boolean => {
@@ -129,6 +130,9 @@ export const getCliToolsCheckFailureDetail = (
   }
   if (!runtimeCheck) {
     return null;
+  }
+  if (!runtimeCheck.pathOk) {
+    return runtimeCheck.errors[0] ?? "The user PATH is unavailable.";
   }
   if (!runtimeCheck.gitOk) {
     return runtimeCheck.errors[0] ?? "Git is unavailable.";

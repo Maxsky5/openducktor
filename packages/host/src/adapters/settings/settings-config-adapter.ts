@@ -9,6 +9,7 @@ import {
   parsePersistedGlobalConfig,
   parsePersistedGlobalConfigV2,
   readPersistedGlobalConfigVersion,
+  upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
 import { resolveOpenDucktorBaseDir, resolveUserPath } from "../../config/openducktor-config-dir";
 import {
@@ -178,7 +179,8 @@ export const createSettingsConfigAdapter = ({
   };
 
   return {
-    readConfig() {
+    readConfig(options) {
+      const initialize = options?.initialize ?? true;
       return Effect.gen(function* () {
         const payload = yield* Effect.tryPromise({
           try: () => readFile(resolvedConfigPath, "utf8"),
@@ -194,7 +196,7 @@ export const createSettingsConfigAdapter = ({
           }),
         );
         if (payload === null) {
-          return initializeConfig ? yield* initializeOnce(null) : null;
+          return initialize && initializeConfig ? yield* initializeOnce(null) : null;
         }
 
         const parsedPayload = yield* Effect.try({
@@ -263,7 +265,9 @@ export const createSettingsConfigAdapter = ({
                   path: resolvedConfigPath,
                 }),
         });
-        return yield* initializeOnce(legacyConfig);
+        return initialize
+          ? yield* initializeOnce(legacyConfig)
+          : upgradePersistedGlobalConfigV2(legacyConfig, {});
       });
     },
     writeConfig(config: GlobalConfig) {

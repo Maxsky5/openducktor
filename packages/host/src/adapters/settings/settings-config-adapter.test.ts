@@ -85,6 +85,36 @@ describe("settings config adapter initialization", () => {
     });
   });
 
+  test("reads version 2 for diagnostics without initialization or a write", async () => {
+    await withTempConfig(async (configPath) => {
+      const payload = JSON.stringify({
+        version: 2,
+        agentRuntimes: {
+          opencode: { enabled: false },
+          codex: { enabled: true },
+          claude: { enabled: false },
+        },
+      });
+      await writeFile(configPath, payload);
+      let calls = 0;
+      const adapter = createSettingsConfigAdapter({
+        configPath,
+        initializeConfig: () => {
+          calls += 1;
+          return Effect.succeed(createDefaultGlobalConfig());
+        },
+      });
+
+      const config = await Effect.runPromise(adapter.readConfig({ initialize: false }));
+
+      expect(config?.version).toBe(3);
+      expect(config?.agentRuntimes.codex).toMatchObject({ enabled: true, executablePath: "" });
+      expect(config?.agentRuntimes.opencode.enabled).toBe(false);
+      expect(calls).toBe(0);
+      expect(await readFile(configPath, "utf8")).toBe(payload);
+    });
+  });
+
   test("shares initialization failures and permits a later retry", async () => {
     await withTempConfig(async (configPath) => {
       let calls = 0;

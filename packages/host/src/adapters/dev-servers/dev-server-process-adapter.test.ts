@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, Chunk, Effect, Exit } from "effect";
@@ -226,43 +226,52 @@ setInterval(() => {}, 1000);
     }
   });
 
-  test("keeps the resolved login-shell PATH for dev server commands", async () => {
+  test("passes a PATH entry defined only in .zshrc to dev server commands", async () => {
     if (process.platform === "win32") {
       return;
     }
 
     const root = await mkdtemp(join(tmpdir(), "odt-dev-server-path-"));
     const outputs: string[] = [];
-    const processEnv = createProcessEnvironment({
-      baseEnv: { PATH: "/usr/bin:/bin" },
-      platform: "linux",
-      readLoginShellPath: () => "/opt/resolved:/usr/bin",
-    });
-    const port = createDevServerProcessAdapter({
-      processEnv,
-      startGracePeriodMs: 50,
-      stopTimeoutMs: 750,
-    });
-    const command = [
-      quoteShellCommandArgForTest(process.execPath),
-      "-e",
-      quoteShellCommandArgForTest(
-        "process.stdout.write(process.env.PATH ?? ''); setInterval(() => {}, 1000)",
-      ),
-    ].join(" ");
-
     try {
+      const shellPath = join(root, "fixture-shell");
+      await writeFile(join(root, ".zshrc"), 'export PATH="/zshrc-only/bin:$PATH"\n');
+      await writeFile(
+        shellPath,
+        '#!/bin/sh\ncase "$1" in *i*) . "$HOME/.zshrc" ;; esac\nexec /bin/sh -c "$2"\n',
+      );
+      await chmod(shellPath, 0o755);
+      const resolution = await Effect.runPromise(
+        createProcessEnvironment({
+          baseEnv: { HOME: root, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
+          platform: "linux",
+          readUserShell: () => shellPath,
+        }),
+      );
+      expect(resolution.error).toBeNull();
+      const port = createDevServerProcessAdapter({
+        processEnv: resolution.environment,
+        startGracePeriodMs: 50,
+        stopTimeoutMs: 750,
+      });
+      const command = [
+        quoteShellCommandArgForTest(process.execPath),
+        "-e",
+        quoteShellCommandArgForTest(
+          "process.stdout.write(process.env.PATH ?? ''); setInterval(() => {}, 1000)",
+        ),
+      ].join(" ");
       const handle = await port.start({
         command,
         cwd: root,
         onExit: () => {},
         onOutput: (output) => outputs.push(output.data),
       });
-      await waitFor(() => outputs.join("").includes("/opt/resolved"), 1_000);
+      await waitFor(() => outputs.join("").includes("/zshrc-only/bin"), 1_000);
 
       await handle.stop();
 
-      expect(outputs.join("").startsWith("/opt/resolved")).toBe(true);
+      expect(outputs.join("").startsWith("/zshrc-only/bin")).toBe(true);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

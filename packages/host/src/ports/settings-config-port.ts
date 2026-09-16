@@ -11,8 +11,14 @@ export type SettingsConfigError =
   | HostPathAccessErrorAggregate
   | HostValidationErrorAggregate;
 
+export type ReadSettingsConfigOptions = {
+  initialize?: boolean;
+};
+
 export type SettingsConfigPort = {
-  readConfig(): Effect.Effect<GlobalConfig | null, SettingsConfigError>;
+  readConfig(
+    options?: ReadSettingsConfigOptions,
+  ): Effect.Effect<GlobalConfig | null, SettingsConfigError>;
   writeConfig(config: GlobalConfig): Effect.Effect<void, HostOperationErrorAggregate>;
   defaultWorktreeBasePath(workspaceId: string): string;
   defaultRepoWorktreeBasePath(repoPath: string): string;

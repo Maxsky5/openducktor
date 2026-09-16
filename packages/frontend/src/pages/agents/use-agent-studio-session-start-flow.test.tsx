@@ -165,6 +165,7 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
       {
         value: {
           refreshRuntimeCheck: async () => ({
+            pathOk: true,
             gitOk: true,
             gitVersion: null,
             runtimes: [],

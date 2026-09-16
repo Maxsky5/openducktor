@@ -41,10 +41,10 @@ export type SystemDiagnosticsError =
   | TaskStoreError
   | ToolDiscoveryError;
 const RUNTIME_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
-const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
-  Effect.gen(function* () {
-    return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
-  });
+const loadGlobalConfig = (settingsConfig: SettingsConfigPort, pathError?: string | null) =>
+  settingsConfig
+    .readConfig({ initialize: pathError == null })
+    .pipe(Effect.map((config) => config ?? createDefaultGlobalConfig()));
 const buildTaskStoreCheck = (repoStoreHealth: RepoStoreHealth): TaskStoreCheck => {
   const taskStoreError = !repoStoreHealth.isReady ? repoStoreHealth.detail : null;
   return {
@@ -111,6 +111,7 @@ const versionForResolvedTool = (
         }),
       );
 export const createSystemDiagnosticsService = ({
+  pathError,
   runtimeDefinitionsService,
   runtimeHealth,
   settingsConfig,
@@ -118,6 +119,7 @@ export const createSystemDiagnosticsService = ({
   toolDiscovery,
   repoStoreDiagnostics,
 }: {
+  pathError?: string | null;
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
@@ -154,13 +156,16 @@ export const createSystemDiagnosticsService = ({
         },
         { concurrency: "unbounded" },
       );
-      const errors = [gitError].filter((error): error is string => error !== null);
+      const errors = [pathError ?? null, gitError].filter(
+        (error): error is string => error !== null,
+      );
       for (const runtime of runtimes) {
         if (runtime.enabled && runtime.error) {
           errors.push(runtime.error);
         }
       }
       return {
+        pathOk: pathError == null,
         gitOk,
         gitVersion: gitVersion.version,
         runtimes,
@@ -170,7 +175,7 @@ export const createSystemDiagnosticsService = ({
   const runtimeCheck = (forceRefresh?: boolean) =>
     Effect.gen(function* () {
       const force = forceRefresh ?? false;
-      const config = yield* loadGlobalConfig(settingsConfig);
+      const config = yield* loadGlobalConfig(settingsConfig, pathError);
       const configSignature = runtimeConfigSignature(config);
       if (!force && cachedRuntimeCheck) {
         const now = yield* Clock.currentTimeMillis;
@@ -208,6 +213,7 @@ export const createSystemDiagnosticsService = ({
         errors.push(`task store: ${taskStore.taskStoreError}`);
       }
       return {
+        pathOk: runtime.pathOk,
         gitOk: runtime.gitOk,
         gitVersion: runtime.gitVersion,
         runtimes: runtime.runtimes,

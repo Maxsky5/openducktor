@@ -29,6 +29,7 @@ describe("check-diagnostics helpers", () => {
       buildRuntimeCheckErrorState([OPENCODE_RUNTIME_DESCRIPTOR], "Timed out after 15000ms"),
     ).toEqual(
       expect.objectContaining({
+        pathOk: false,
         gitOk: false,
         runtimes: [
           expect.objectContaining({
@@ -202,6 +203,7 @@ describe("check-diagnostics helpers", () => {
       activeWorkspace: createActiveWorkspace("/repo"),
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: [
@@ -218,5 +220,32 @@ describe("check-diagnostics helpers", () => {
     });
 
     expect(issues).toEqual([]);
+  });
+
+  test("adds a CLI issue when PATH is unavailable and Git is healthy", () => {
+    const pathError = "Failed to resolve PATH from interactive login shell /bin/zsh.";
+    const issues = buildDiagnosticsToastIssues({
+      activeWorkspace: createActiveWorkspace("/repo"),
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeCheck: {
+        pathOk: false,
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        runtimes: [
+          { kind: "opencode", ok: false, executablePath: null, version: null, error: null },
+        ],
+        errors: [pathError],
+      },
+      runtimeCheckError: null,
+      runtimeCheckFailureKind: null,
+      taskStoreCheck: null,
+      taskStoreCheckError: null,
+      taskStoreCheckFailureKind: null,
+      runtimeHealthByRuntime: {},
+    });
+
+    expect(issues).toContainEqual(
+      expect.objectContaining({ id: "diagnostics:cli-tools", description: pathError }),
+    );
   });
 });

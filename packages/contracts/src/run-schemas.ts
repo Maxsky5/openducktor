@@ -84,6 +84,7 @@ export const toolExecutableProvenanceSchema = z.object({
 export type ToolExecutableProvenance = z.infer<typeof toolExecutableProvenanceSchema>;
 
 export const systemCheckSchema = z.object({
+  pathOk: z.boolean(),
   gitOk: z.boolean(),
   gitVersion: z.string().nullable(),
   runtimes: z.array(runtimeHealthSchema).default([]),
@@ -96,6 +97,7 @@ export const systemCheckSchema = z.object({
 export type SystemCheck = z.infer<typeof systemCheckSchema>;
 
 export const runtimeCheckSchema = z.object({
+  pathOk: z.boolean(),
   gitOk: z.boolean(),
   gitVersion: z.string().nullable(),
   runtimes: z.array(runtimeHealthSchema).default([]),

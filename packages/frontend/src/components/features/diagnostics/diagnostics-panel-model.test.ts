@@ -78,6 +78,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -102,6 +103,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -147,6 +149,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -197,6 +200,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -246,6 +250,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -281,6 +286,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -335,6 +341,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -377,6 +384,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({
@@ -435,6 +443,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: false, version: null }),
@@ -503,6 +512,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -542,6 +552,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -614,6 +625,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -688,6 +700,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -727,6 +740,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),
@@ -770,6 +784,7 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: true, version: "1.2.9" }),

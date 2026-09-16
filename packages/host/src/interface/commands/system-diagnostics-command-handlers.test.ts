@@ -14,6 +14,7 @@ const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 const runtimeCheckResult = {
+  pathOk: true,
   gitOk: true,
   gitVersion: "2.50.0",
   runtimes: [],

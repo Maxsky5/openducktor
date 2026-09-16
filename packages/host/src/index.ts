@@ -78,7 +78,12 @@ export {
   OpenDucktorLogPersistenceError,
   type OpenDucktorLogSurface,
 } from "./infrastructure/logging/openducktor-daily-log-writer";
-export { createProcessEnvironment } from "./infrastructure/process/process-environment";
+export {
+  createProcessEnvironment,
+  ProcessEnvironmentError,
+  type ProcessEnvironmentErrorReason,
+  type ProcessEnvironmentResolution,
+} from "./infrastructure/process/process-environment";
 export {
   type ProcessTreeInspector,
   type ProcessTreeTerminator,

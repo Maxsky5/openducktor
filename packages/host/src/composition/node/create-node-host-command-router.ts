@@ -75,7 +75,7 @@ import type {
   CreateNodeHostCommandRouterInput,
   EffectNodeHostCommandRouter,
 } from "./node-host-command-router-types";
-import { createNodeHostDefaultPorts } from "./node-host-default-ports";
+import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
@@ -87,11 +87,12 @@ import {
   resolveClaudeWorkspaceRuntimeMcpBridgeConnection,
   resolveWorkspaceRuntimeMcpBridgeConnection,
 } from "./workspace-runtime-mcp-bridge-connection";
+import { guardRuntimeStart } from "./user-path-start-guard";
 
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
-  defaultPorts: ReturnType<typeof createNodeHostDefaultPorts>,
+  defaultPorts: NodeHostDefaultPorts,
   gitProviderResolver: GitProviderResolver,
 ): EffectNodeHostCommandRouter => {
   const {
@@ -112,7 +113,7 @@ export const assembleNodeEffectHostCommandRouter = (
     git,
     localAttachments,
     openInTools,
-    processEnv,
+    processEnvironment,
     runtimeDistribution,
     runtimeExecutableProbes,
     runtimeHealth,
@@ -122,6 +123,7 @@ export const assembleNodeEffectHostCommandRouter = (
     toolDiscovery,
     worktreeFiles,
   } = defaultPorts;
+  const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
   const assets = createNodeTaskAssetServices({
     configuredTaskStore,
@@ -154,6 +156,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const systemDiagnosticsService = createSystemDiagnosticsService({
+    pathError: processEnvironmentError?.message ?? null,
     runtimeDefinitionsService,
     runtimeHealth,
     settingsConfig,
@@ -241,7 +244,10 @@ export const assembleNodeEffectHostCommandRouter = (
       onBackgroundFailure,
     );
   }
-  const effectiveRuntimeRegistry = runtimeRegistry ?? createRuntimeRegistry(runtimeRegistryInput);
+  const effectiveRuntimeRegistry = guardRuntimeStart(
+    runtimeRegistry ?? createRuntimeRegistry(runtimeRegistryInput),
+    processEnvironment,
+  );
   const taskWorktreeService = createTaskWorktreeService({
     settingsConfig,
     workspaceSettingsService,
