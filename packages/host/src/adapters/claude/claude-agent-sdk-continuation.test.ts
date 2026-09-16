@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import { assertClaudePersistedContinuationEligible } from "./claude-agent-sdk-continuation";
+import {
+  assertClaudeContinuationEligible,
+  assertClaudePersistedContinuationEligible,
+  claudeLiveContinuationNeedsTranscript,
+} from "./claude-agent-sdk-continuation";
+import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
 
 const userMessage = (messageId: string): AgentSessionHistoryMessage => ({
   messageId,
@@ -32,6 +37,51 @@ const assistantMessage = (
             reason: finishReason,
           },
         ],
+});
+
+const acceptedUserMessage = (messageId: string) => ({
+  messageId,
+  parts: [],
+  text: "Continue.",
+  timestamp: "2026-06-25T20:00:01.000Z",
+});
+
+describe("assertClaudeContinuationEligible", () => {
+  test("rejects a completed latest in-process turn as completed_turn", () => {
+    const session = createClaudeSession({
+      acceptedUserMessages: [acceptedUserMessage("user-1")],
+      lastAssistantTextFinal: true,
+      lastAssistantTextTurnIndex: 1,
+    });
+
+    expect(() => assertClaudeContinuationEligible(session, "session-1")).toThrow(
+      "Claude session 'session-1' has a final assistant result.",
+    );
+  });
+
+  test("accepts an unfinished latest turn after an earlier final result", () => {
+    const session = createClaudeSession({
+      acceptedUserMessages: [acceptedUserMessage("user-1"), acceptedUserMessage("user-2")],
+      lastAssistantTextFinal: true,
+      lastAssistantTextTurnIndex: 1,
+    });
+
+    expect(() => assertClaudeContinuationEligible(session, "session-1")).not.toThrow();
+  });
+});
+
+describe("claudeLiveContinuationNeedsTranscript", () => {
+  test("requires the transcript when the session accepted no user turn", () => {
+    expect(claudeLiveContinuationNeedsTranscript(createClaudeSession())).toBe(true);
+  });
+
+  test("keeps the live decision when the session accepted a user turn", () => {
+    expect(
+      claudeLiveContinuationNeedsTranscript(
+        createClaudeSession({ acceptedUserMessages: [acceptedUserMessage("user-1")] }),
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("assertClaudePersistedContinuationEligible", () => {

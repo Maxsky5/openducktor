@@ -15,7 +15,10 @@ import {
 } from "./claude-agent-sdk-system-commands.test-support";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
-import { classifyPersistedClaudeContinuationFailure } from "./claude-agent-sdk-service-continuation";
+import {
+  checkLiveClaudeContinuationEligibility,
+  classifyPersistedClaudeContinuationFailure,
+} from "./claude-agent-sdk-service-continuation";
 import {
   createClaudeContextUsageResponse,
   createClaudeQueryFixture,
@@ -1200,5 +1203,100 @@ describe("continueInterruptedTurn eligibility", () => {
     await expect(
       resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
     ).resolves.toBe("waiting_input");
+  });
+
+  test("refuses a fresh live session without a user turn as ineligible_turn_state", async () => {
+    const service = createService(
+      createSession({
+        input: {
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: "Build",
+        },
+      }),
+    );
+
+    await expect(
+      resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
+    ).resolves.toBe("ineligible_turn_state");
+  });
+
+  test("reads the persisted transcript for a reattached live session before continuing", async () => {
+    const service = createService(
+      createSession({
+        input: {
+          repoPath: "/missing-worktree",
+          runtimeKind: "claude",
+          workingDirectory: "/missing-worktree",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        },
+      }),
+    );
+
+    await expect(
+      resumeFailureReason(
+        service.continueInterruptedTurn(
+          {
+            ...continuationInput,
+            repoPath: "/missing-worktree",
+            workingDirectory: "/missing-worktree",
+          },
+          "runtime-claude",
+        ),
+      ),
+    ).resolves.toBe("session_not_found");
+  });
+
+  test("accepts a live session whose latest in-process turn is unfinished", async () => {
+    const session = createSession({
+      acceptedUserMessages: [
+        {
+          messageId: "user-1",
+          parts: [],
+          text: "Continue.",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+    });
+
+    await expect(
+      Effect.runPromise(
+        checkLiveClaudeContinuationEligibility(
+          session,
+          continuationInput,
+          () => "2026-06-25T20:00:02.000Z",
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  test("refuses a live session whose latest in-process turn completed", async () => {
+    const session = createSession({
+      acceptedUserMessages: [
+        {
+          messageId: "user-1",
+          parts: [],
+          text: "Continue.",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+      lastAssistantTextFinal: true,
+      lastAssistantTextTurnIndex: 1,
+    });
+
+    await expect(
+      resumeFailureReason(
+        checkLiveClaudeContinuationEligibility(
+          session,
+          continuationInput,
+          () => "2026-06-25T20:00:02.000Z",
+        ),
+      ),
+    ).resolves.toBe("completed_turn");
   });
 });

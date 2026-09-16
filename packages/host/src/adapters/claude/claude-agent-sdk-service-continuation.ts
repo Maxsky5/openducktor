@@ -17,16 +17,27 @@ import { assertClaudeInterruptedTurnResumeCompatible } from "./claude-continuati
 import {
   assertClaudeContinuationEligible,
   assertClaudePersistedContinuationEligible,
+  claudeLiveContinuationNeedsTranscript,
 } from "./claude-agent-sdk-continuation";
+import {
+  claudeLiveHistoryContext,
+  type ClaudeLiveHistoryContext,
+} from "./claude-agent-sdk-history-loader";
 import { resolveClaudeExecutable } from "./claude-agent-sdk-runtime";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import type { ClaudeSession, CreateClaudeAgentSdkServiceInput } from "./claude-agent-sdk-types";
 import { fromPromise } from "./claude-agent-sdk-utils";
 
-/** Rejects an interrupted-turn resume that the registered live session cannot start. */
+/**
+ * Rejects a continuation that the registered live session cannot start. The live state
+ * answers waiting input, live work, and an in-process completed latest turn. A session
+ * without accepted user turns falls through to the persisted transcript, so a fresh or
+ * reattached session cannot continue a turn the transcript does not show as unfinished.
+ */
 export const checkLiveClaudeContinuationEligibility = (
   session: ClaudeSession,
   input: ResumeAgentSessionInput,
+  now: () => string,
 ) =>
   fromPromise("claudeRuntime.continueInterruptedTurn", async () => {
     try {
@@ -42,7 +53,13 @@ export const checkLiveClaudeContinuationEligibility = (
       throw cause;
     }
     assertClaudeContinuationEligible(session, input.externalSessionId);
-  });
+  }).pipe(
+    Effect.flatMap(() =>
+      claudeLiveContinuationNeedsTranscript(session)
+        ? checkClaudeContinuationHistoryEligibility(input, now, claudeLiveHistoryContext(session))
+        : Effect.void,
+    ),
+  );
 
 type PersistedContinuationFailure = {
   readonly reason: InterruptedTurnResumeFailureReason;
@@ -80,15 +97,14 @@ export const classifyPersistedClaudeContinuationFailure = (
   };
 };
 
-/**
- * Rejects an interrupted-turn resume after a restart, when no live session entry exists.
- * The check reads the persisted transcript because the CLI classifier is not available yet.
- */
-export const checkPersistedClaudeContinuationEligibility = (
+const checkClaudeContinuationHistoryEligibility = (
   input: ResumeAgentSessionInput,
   now: () => string,
+  liveContext?: ClaudeLiveHistoryContext,
 ) =>
-  fromPromise("claudeRuntime.continueInterruptedTurn", () => loadClaudeHistory(input, now)).pipe(
+  fromPromise("claudeRuntime.continueInterruptedTurn", () =>
+    loadClaudeHistory(input, now, liveContext),
+  ).pipe(
     Effect.catchAll((cause) =>
       Effect.fail(
         toHostOperationError(
@@ -106,6 +122,15 @@ export const checkPersistedClaudeContinuationEligibility = (
       }),
     ),
   );
+
+/**
+ * Rejects an interrupted-turn resume after a restart, when no live session entry exists.
+ * The check reads the persisted transcript because the CLI classifier is not available yet.
+ */
+export const checkPersistedClaudeContinuationEligibility = (
+  input: ResumeAgentSessionInput,
+  now: () => string,
+) => checkClaudeContinuationHistoryEligibility(input, now);
 
 /**
  * Binds the interrupted-turn continuation to the executable the runtime will run.

@@ -39,6 +39,7 @@ import {
   loadClaudeSessionContextUsage,
 } from "./claude-agent-sdk-context-usage";
 import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
+import { claudeLiveHistoryContext } from "./claude-agent-sdk-history-loader";
 import {
   prepareClaudeApprovalReply,
   prepareClaudeQuestionReply,
@@ -135,7 +136,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           yield* assertClaudeContinuationExecutableCompatible(this.input, input);
           const existing = this.sessionStore.get(input.externalSessionId);
           if (existing) {
-            yield* checkLiveClaudeContinuationEligibility(existing, input);
+            yield* checkLiveClaudeContinuationEligibility(existing, input, this.now);
             this.sessionStore.close(existing);
           } else {
             yield* checkPersistedClaudeContinuationEligibility(input, this.now);
@@ -226,23 +227,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   loadSessionHistory(input: LoadAgentSessionHistoryInput) {
     const { target, session } = resolveClaudeQuerySession(this.sessionStore, input);
-    const liveContext =
-      session && !target.subpath
-        ? {
-            source:
-              "externalSessionId" in session.input || "parentExternalSessionId" in session.input
-                ? ("persisted" as const)
-                : ("fresh" as const),
-            userMessages: session.acceptedUserMessages.map((message) => ({
-              ...message,
-              state: session.queuedSdkMessages.some(
-                (queuedMessage) => queuedMessage.uuid === message.messageId,
-              )
-                ? ("queued" as const)
-                : ("read" as const),
-            })),
-          }
-        : undefined;
+    const liveContext = session && !target.subpath ? claudeLiveHistoryContext(session) : undefined;
     return fromPromise("claudeRuntime.loadSessionHistory", () =>
       loadClaudeHistory(input, this.now, liveContext),
     );

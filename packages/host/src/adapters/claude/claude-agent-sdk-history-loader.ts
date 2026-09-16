@@ -18,6 +18,7 @@ import {
   isClaudeSubagentTranscriptTarget,
   parseClaudeTranscriptTarget,
 } from "./claude-agent-sdk-subagent-transcripts";
+import type { ClaudeSession } from "./claude-agent-sdk-types";
 import { readStringProp } from "./claude-agent-sdk-utils";
 
 const claudeSubagentAssistantMessageSchema = z.looseObject({
@@ -36,6 +37,25 @@ export type ClaudeLiveHistoryContext = {
   source: "fresh" | "persisted";
   userMessages: readonly ClaudeLiveUserMessage[];
 };
+
+/**
+ * Describes the live session for a history read. A session started in this process is
+ * fresh; a resumed or forked session owns a persisted transcript.
+ */
+export const claudeLiveHistoryContext = (session: ClaudeSession): ClaudeLiveHistoryContext => ({
+  source:
+    "externalSessionId" in session.input || "parentExternalSessionId" in session.input
+      ? "persisted"
+      : "fresh",
+  userMessages: session.acceptedUserMessages.map((message) => ({
+    ...message,
+    state: session.queuedSdkMessages.some(
+      (queuedMessage) => queuedMessage.uuid === message.messageId,
+    )
+      ? ("queued" as const)
+      : ("read" as const),
+  })),
+});
 
 export const isClaudeSubagentTranscriptComplete = (
   messages: readonly SessionMessage[],

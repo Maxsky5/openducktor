@@ -5,7 +5,12 @@ import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 /**
  * Rejects a continuation that the live session cannot start: waiting input, live work,
- * or a final assistant result. The caller closes the session before it starts a new turn.
+ * or a completed latest turn. The final-assistant check matches the turn index, so a
+ * final text from an earlier turn does not hide an unfinished latest turn.
+ *
+ * A session that has not accepted a user turn in this process cannot answer the
+ * latest-turn question. The caller must consult the persisted transcript when
+ * {@link claudeLiveContinuationNeedsTranscript} is true.
  */
 export const assertClaudeContinuationEligible = (
   session: ClaudeSession,
@@ -23,13 +28,26 @@ export const assertClaudeContinuationEligible = (
       message: `Claude session '${externalSessionId}' has live work.`,
     });
   }
-  if (session.lastAssistantTextFinal === true) {
+  const latestAcceptedTurnIndex = session.acceptedUserMessages.length;
+  if (
+    latestAcceptedTurnIndex > 0 &&
+    session.lastAssistantTextFinal === true &&
+    session.lastAssistantTextTurnIndex === latestAcceptedTurnIndex
+  ) {
     throw interruptedTurnResumeError({
       reason: "completed_turn",
       message: `Claude session '${externalSessionId}' has a final assistant result.`,
     });
   }
 };
+
+/**
+ * Reports whether the live session lacks the state that proves an unfinished latest turn.
+ * A fresh or normally resumed session starts with no accepted user turns, so only the
+ * persisted transcript can distinguish no-user, completed, and unfinished turns.
+ */
+export const claudeLiveContinuationNeedsTranscript = (session: ClaudeSession): boolean =>
+  session.acceptedUserMessages.length === 0;
 
 const hasFinalAssistantHistory = (message: AgentSessionHistoryMessage): boolean =>
   message.role === "assistant" &&
