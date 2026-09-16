@@ -145,7 +145,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const agentSessionLiveStateService = createAgentSessionLiveStateService({
     adapterRegistry: liveSessionAdapterRegistry,
-    assertProcessStart: workspaceAdmissionService.assertProcessStart,
+    withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
     persistence: workspaceSessions.persistence,
     faultLog: createLiveSessionFaultLogger(lifecycleLogger),
     publish: createLiveSessionPublisher(eventBus),
@@ -259,14 +259,14 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const terminalService = Effect.runSync(
     createTerminalService({
-      assertProcessStart: workspaceAdmissionService.assertProcessStart,
+      withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
       filesystem,
       ptyPort: terminalPty,
       resolveLaunchEnvironment: createTerminalLaunchEnvironment({ processEnv }),
     }),
   );
   const devServerServiceInput: Parameters<typeof createDevServerService>[0] = {
-    assertProcessStart: workspaceAdmissionService.assertProcessStart,
+    withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
     processPort: devServerProcesses,
     taskWorktreeService,
     workspaceSettingsService,
@@ -300,7 +300,6 @@ export const assembleNodeEffectHostCommandRouter = (
   const { taskEventStream, taskService, taskSyncService, agentSessionCommandService } =
     createNodeTaskSessionServices({
       taskServiceInput: {
-        assertProcessStart: workspaceAdmissionService.assertProcessStart,
         devServerService,
         terminalService,
         gitPort: git,

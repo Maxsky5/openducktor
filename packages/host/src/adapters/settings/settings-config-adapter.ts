@@ -8,8 +8,10 @@ import {
   type LoadedGlobalConfig,
   parsePersistedGlobalConfig,
   parsePersistedGlobalConfigV2,
+  parsePersistedGlobalConfigV3,
   readPersistedGlobalConfigVersion,
   upgradePersistedGlobalConfigV2,
+  upgradePersistedGlobalConfigV3,
 } from "../../config/global-config";
 import { configValidationMessage } from "../../config/config-validation-message";
 import {
@@ -258,9 +260,15 @@ export const createSettingsConfigAdapter = ({
           try: () => readPersistedGlobalConfigVersion(parsedPayload),
           catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
         });
-        if (version === 3) {
+        if (version === 4) {
           return yield* Effect.try({
             try: () => parsePersistedGlobalConfig(parsedPayload),
+            catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
+          });
+        }
+        if (version === 3) {
+          return yield* Effect.try({
+            try: () => upgradePersistedGlobalConfigV3(parsePersistedGlobalConfigV3(parsedPayload)),
             catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
           });
         }

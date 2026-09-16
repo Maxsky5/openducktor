@@ -94,7 +94,8 @@ export const collectWorkspaceTaskWorktreePaths = (
     for (const [candidateComparison, candidate] of candidates) {
       if (
         candidateComparison === repoPathComparison ||
-        otherWorkspacePaths.has(candidateComparison)
+        otherWorkspacePaths.has(candidateComparison) ||
+        otherWorkspaceClaims.has(candidateComparison)
       ) {
         continue;
       }
@@ -105,7 +106,8 @@ export const collectWorkspaceTaskWorktreePaths = (
       const canonicalComparison = normalizePathForComparison(canonicalPath);
       if (
         canonicalComparison === repoPathComparison ||
-        otherWorkspacePaths.has(canonicalComparison)
+        otherWorkspacePaths.has(canonicalComparison) ||
+        otherWorkspaceClaims.has(canonicalComparison)
       ) {
         continue;
       }

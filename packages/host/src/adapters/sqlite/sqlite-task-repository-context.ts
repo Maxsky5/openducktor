@@ -197,11 +197,12 @@ export const createSqliteTaskRepositoryContextManager = ({
       );
       const failures: HostOperationErrorAggregate[] = [];
       for (const [databasePath, slot] of matches) {
-        slots.delete(databasePath);
         const result = yield* Effect.either(slot.shutdown());
         if (result._tag === "Left") {
           failures.push(result.left);
+          continue;
         }
+        slots.delete(databasePath);
       }
       if (failures.length > 0) {
         return yield* new HostOperationError({

@@ -209,6 +209,21 @@ export const createWorkspaceLifecycleSettingsMethods = (
       const repoConfig = yield* requireWorkspace(config, input.workspaceId);
       yield* assertExpectedRepoPath(input.workspaceId, repoConfig, input.expectedRepoPath);
       if (repoConfig.removal) {
+        if (
+          repoConfig.removal.removeTaskWorktrees &&
+          !input.removeTaskWorktrees &&
+          repoConfig.removal.phase === "worktrees" &&
+          repoConfig.removal.pendingWorktreePath === null
+        ) {
+          const removal: WorkspaceRemovalRecord = {
+            removeTaskWorktrees: false,
+            phase: "attachments",
+            pendingWorktreePath: null,
+          };
+          config.workspaces[input.workspaceId] = { ...repoConfig, removal };
+          yield* writeConfig(settingsConfig, config);
+          return removal;
+        }
         return repoConfig.removal;
       }
 

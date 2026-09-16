@@ -4,7 +4,9 @@ import {
   createDefaultGlobalConfig,
   parsePersistedGlobalConfig,
   parsePersistedGlobalConfigV2,
+  parsePersistedGlobalConfigV3,
   upgradePersistedGlobalConfigV2,
+  upgradePersistedGlobalConfigV3,
 } from "./global-config";
 
 const rejectionMessage = (run: () => void): string => {
@@ -18,30 +20,33 @@ const rejectionMessage = (run: () => void): string => {
 };
 
 describe("global config", () => {
-  test("creates current version 3 config", () => {
+  test("creates current version 4 config", () => {
     const config = createDefaultGlobalConfig();
 
-    expect(config.version).toBe(3);
+    expect(config.version).toBe(4);
     expect(config.agentRuntimes.opencode).toEqual({ enabled: false, executablePath: "" });
     expect(config.autopilot.alwaysStartQaReviewsFresh).toBe(false);
     expect(config.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
   });
 
   test("parses current and legacy versions through distinct entry points", () => {
-    expect(parsePersistedGlobalConfig({ version: 3 }).autopilot.alwaysStartQaReviewsFresh).toBe(
+    expect(parsePersistedGlobalConfig({ version: 4 }).autopilot.alwaysStartQaReviewsFresh).toBe(
+      false,
+    );
+    expect(parsePersistedGlobalConfigV3({ version: 3 }).autopilot.alwaysStartQaReviewsFresh).toBe(
       false,
     );
     expect(parsePersistedGlobalConfigV2({ version: 2 }).autopilot.alwaysStartQaReviewsFresh).toBe(
       false,
     );
     expect(() => parsePersistedGlobalConfig({ version: 2 })).toThrow(
-      "Unsupported config version 2. Expected 3.",
+      "Unsupported config version 2. Expected 4.",
     );
   });
 
   test("normalizes missing and empty legacy repository Git config", () => {
     const withoutGit = parsePersistedGlobalConfig({
-      version: 3,
+      version: 4,
       workspaces: {
         repo: {
           workspaceId: "repo",
@@ -51,7 +56,7 @@ describe("global config", () => {
       },
     });
     const withEmptyLegacyProviders = parsePersistedGlobalConfig({
-      version: 3,
+      version: 4,
       workspaces: {
         repo: {
           workspaceId: "repo",
@@ -68,7 +73,7 @@ describe("global config", () => {
 
   test("migrates one legacy repository Git provider without losing values", () => {
     const config = parsePersistedGlobalConfig({
-      version: 3,
+      version: 4,
       workspaces: {
         repo: {
           workspaceId: "repo",
@@ -137,7 +142,7 @@ describe("global config", () => {
   test("rejects canonical and legacy repository Git config together", () => {
     expect(() =>
       parsePersistedGlobalConfig({
-        version: 3,
+        version: 4,
         workspaces: {
           repo: {
             workspaceId: "repo",
@@ -156,7 +161,7 @@ describe("global config", () => {
   test("rejects legacy repository Git config with more than one provider", () => {
     expect(() =>
       parsePersistedGlobalConfig({
-        version: 3,
+        version: 4,
         workspaces: {
           repo: {
             workspaceId: "repo",
@@ -194,7 +199,7 @@ describe("global config", () => {
       claude: "/tools/claude",
     });
 
-    expect(upgraded.version).toBe(3);
+    expect(upgraded.version).toBe(4);
     expect(upgraded.agentRuntimes.opencode).toMatchObject({
       enabled: false,
       executablePath: "/tools/opencode",
@@ -211,7 +216,7 @@ describe("global config", () => {
   test("reports a missing field for a rejected config", () => {
     expect(() =>
       parsePersistedGlobalConfig({
-        version: 3,
+        version: 4,
         workspaces: {
           fairnest: {
             workspaceId: "fairnest",
@@ -227,7 +232,7 @@ describe("global config", () => {
   test("lists each rejected config field on its own line without raw issue JSON", () => {
     const message = rejectionMessage(() =>
       parsePersistedGlobalConfig({
-        version: 3,
+        version: 4,
         theme: "blue",
         workspaces: {
           fairnest: {
@@ -272,7 +277,7 @@ describe("global config", () => {
       }),
     );
 
-    const message = rejectionMessage(() => parsePersistedGlobalConfig({ version: 3, workspaces }));
+    const message = rejectionMessage(() => parsePersistedGlobalConfig({ version: 4, workspaces }));
 
     const lines = message.split("\n");
     expect(lines.filter((line) => line.startsWith("workspaces."))).toHaveLength(5);
@@ -283,5 +288,24 @@ describe("global config", () => {
     expect(() => parsePersistedGlobalConfigV2({ version: 2, theme: "blue" })).toThrow(
       'theme: Invalid option: expected one of "system"|"light"|"dark" (found "blue")',
     );
+  });
+
+  test("upgrades version 3 workspace lifecycle state", () => {
+    const legacy = parsePersistedGlobalConfigV3({
+      version: 3,
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          closed: true,
+        },
+      },
+    });
+
+    const upgraded = upgradePersistedGlobalConfigV3(legacy);
+
+    expect(upgraded.version).toBe(4);
+    expect(upgraded.workspaces.repo?.closed).toBe(true);
   });
 });

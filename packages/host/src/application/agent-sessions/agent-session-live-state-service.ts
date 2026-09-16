@@ -28,12 +28,7 @@ import {
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
-import {
-  type HostError,
-  HostInvariantError,
-  HostValidationError,
-  type HostValidationErrorAggregate,
-} from "../../effect/host-errors";
+import { type HostError, HostInvariantError, HostValidationError } from "../../effect/host-errors";
 import type { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import type {
   AgentSessionLiveAdapterChange,
@@ -55,6 +50,7 @@ import { createLiveStateCoordinator, type LiveStateCoordinator } from "./live-st
 import { createAgentSessionLiveRuntimeLifecycle } from "./agent-session-live-runtime-lifecycle";
 import { parseAdapterOutput } from "./agent-session-live-validation";
 import { createAgentSessionExecutionEpisodes } from "./agent-session-execution-episodes";
+import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 
 export type {
   AgentSessionLiveEnvelopePublisher,
@@ -114,9 +110,7 @@ export type AgentSessionLiveStateService = {
 export type CreateAgentSessionLiveStateServiceInput = {
   readonly persistence?: AgentSessionPersistencePort;
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
-  readonly assertProcessStart?:
-    | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
-    | undefined;
+  readonly withProcessStartAdmission?: WithProcessStartAdmission | undefined;
   readonly faultLog: AgentSessionLiveFaultLogger;
   readonly publish: AgentSessionLiveEnvelopePublisher;
   readonly coordinator?: LiveStateCoordinator;
@@ -124,7 +118,7 @@ export type CreateAgentSessionLiveStateServiceInput = {
 
 export const createAgentSessionLiveStateService = ({
   adapterRegistry,
-  assertProcessStart,
+  withProcessStartAdmission,
   faultLog,
   publish,
   coordinator = createLiveStateCoordinator(),
@@ -135,8 +129,8 @@ export const createAgentSessionLiveStateService = ({
       operation: (input: Input) => Effect.Effect<Success, HostError>,
     ) =>
     (input: Input): Effect.Effect<Success, HostError> =>
-      assertProcessStart
-        ? assertProcessStart(input.repoPath).pipe(Effect.zipRight(operation(input)))
+      withProcessStartAdmission
+        ? withProcessStartAdmission(input.repoPath, operation(input))
         : operation(input);
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
   const refreshGate = createLiveStateCoordinator();

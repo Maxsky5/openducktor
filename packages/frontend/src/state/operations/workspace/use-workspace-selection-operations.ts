@@ -128,8 +128,9 @@ export function useWorkspaceSelectionOperations({
   const workspaces = workspaceListQuery.data ?? [];
   const closedWorkspaces = workspaceCatalogQuery.data?.closedWorkspaces ?? [];
   const incompleteRemovals = workspaceCatalogQuery.data?.incompleteRemovals ?? [];
-  const workspaceLoadError = workspaceListQuery.error
-    ? new Error(errorMessage(workspaceListQuery.error), { cause: workspaceListQuery.error })
+  const workspaceQueryError = workspaceListQuery.error ?? workspaceCatalogQuery.error;
+  const workspaceLoadError = workspaceQueryError
+    ? new Error(errorMessage(workspaceQueryError), { cause: workspaceQueryError })
     : null;
   const workspacesRef = useRef(workspaces);
 
@@ -264,14 +265,14 @@ export function useWorkspaceSelectionOperations({
   }, [applyActiveWorkspaceFromRecords, workspaceListQuery.data]);
 
   useEffect(() => {
-    if (!workspaceListQuery.error) {
+    if (!workspaceQueryError) {
       return;
     }
 
     toast.error("Workspace load failed", {
-      description: errorMessage(workspaceListQuery.error),
+      description: errorMessage(workspaceQueryError),
     });
-  }, [workspaceListQuery.error]);
+  }, [workspaceQueryError]);
 
   const reorderWorkspaces = useCallback(
     async (workspaceIds: string[]): Promise<void> => {
@@ -398,18 +399,14 @@ export function useWorkspaceSelectionOperations({
   );
 
   const runLifecycleAction = useCallback(
-    async (
-      run: () => Promise<void>,
-      success: () => { title: string; description: string },
-    ): Promise<void> => {
+    async (run: () => Promise<{ title: string; description: string }>): Promise<void> => {
       workspaceSwitchVersionRef.current += 1;
       workspaceReorderVersionRef.current += 1;
       setIsSwitchingWorkspace(true);
       try {
-        await run();
+        const success = await run();
         await refreshWorkspaceCachesAfterMutation();
-        const { title, description } = success();
-        toast.success(title, { description });
+        toast.success(success.title, { description: success.description });
       } finally {
         setIsSwitchingWorkspace(false);
       }
@@ -419,59 +416,50 @@ export function useWorkspaceSelectionOperations({
 
   const closeWorkspace = useCallback(
     (input: WorkspaceLifecycleTargetInput): Promise<void> =>
-      runLifecycleAction(
-        async () => {
-          const catalog = await hostClient.workspaceClose(
-            input.workspaceId,
-            input.expectedRepoPath,
-          );
-          applyLifecycleCatalog(catalog);
-        },
-        () => ({
+      runLifecycleAction(async () => {
+        const catalog = await hostClient.workspaceClose(input.workspaceId, input.expectedRepoPath);
+        applyLifecycleCatalog(catalog);
+        return {
           title: "Workspace closed",
           description: "Reopen it from Open a Repository when you need it again.",
-        }),
-      ),
+        };
+      }),
     [applyLifecycleCatalog, hostClient, runLifecycleAction],
   );
 
   const removeWorkspace = useCallback(
-    (input: WorkspaceRemovalInput): Promise<void> => {
-      let removedWorktreeCount = 0;
-      return runLifecycleAction(
-        async () => {
+    (input: WorkspaceRemovalInput): Promise<void> =>
+      runLifecycleAction(async () => {
+        try {
           const result = await hostClient.workspaceRemove(input);
-          removedWorktreeCount = result.removedWorktrees.length;
           applyLifecycleCatalog(result.catalog);
           dropWorkspaceQueries(queryClient, {
             repoPath: input.expectedRepoPath,
             workspaceId: input.workspaceId,
           });
-        },
-        () => ({
-          title: "Workspace removed",
-          description:
-            removedWorktreeCount > 0
-              ? `Removed ${removedWorktreeCount} task worktree(s). The repository and its branches remain.`
-              : "The repository and its branches remain.",
-        }),
-      );
-    },
+          const removedWorktreeCount = result.removedWorktrees.length;
+          return {
+            title: "Workspace removed",
+            description:
+              removedWorktreeCount > 0
+                ? `Removed ${removedWorktreeCount} task worktree(s). The repository and its branches remain.`
+                : "The repository and its branches remain.",
+          };
+        } catch (error) {
+          await markWorkspaceCachesChanged(queryClient);
+          throw error;
+        }
+      }),
     [applyLifecycleCatalog, hostClient, queryClient, runLifecycleAction],
   );
 
   const reopenWorkspace = useCallback(
     (input: WorkspaceLifecycleTargetInput): Promise<void> =>
-      runLifecycleAction(
-        async () => {
-          const catalog = await hostClient.workspaceReopen(
-            input.workspaceId,
-            input.expectedRepoPath,
-          );
-          applyLifecycleCatalog(catalog);
-        },
-        () => ({ title: "Workspace reopened", description: input.expectedRepoPath }),
-      ),
+      runLifecycleAction(async () => {
+        const catalog = await hostClient.workspaceReopen(input.workspaceId, input.expectedRepoPath);
+        applyLifecycleCatalog(catalog);
+        return { title: "Workspace reopened", description: input.expectedRepoPath };
+      }),
     [applyLifecycleCatalog, hostClient, runLifecycleAction],
   );
 
@@ -485,8 +473,9 @@ export function useWorkspaceSelectionOperations({
     workspaces,
     closedWorkspaces,
     incompleteRemovals,
-    hasLoadedWorkspaceList: workspaceListQuery.data !== undefined,
-    isLoadingWorkspaces: workspaceListQuery.isPending,
+    hasLoadedWorkspaceList:
+      workspaceListQuery.data !== undefined && workspaceCatalogQuery.data !== undefined,
+    isLoadingWorkspaces: workspaceListQuery.isPending || workspaceCatalogQuery.isPending,
     workspaceLoadError,
     isSwitchingWorkspace,
     refreshWorkspaces,

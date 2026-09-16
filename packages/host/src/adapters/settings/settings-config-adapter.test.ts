@@ -59,7 +59,7 @@ describe("settings config adapter initialization", () => {
 
       expect(calls).toBe(1);
       expect(configs[0]?.agentRuntimes.opencode.executablePath).toBe("/tools/opencode");
-      expect(JSON.parse(await readFile(configPath, "utf8")).version).toBe(3);
+      expect(JSON.parse(await readFile(configPath, "utf8")).version).toBe(4);
     });
   });
 
@@ -92,7 +92,7 @@ describe("settings config adapter initialization", () => {
 
       const config = await Effect.runPromise(adapter.readConfig());
 
-      expect(config?.version).toBe(3);
+      expect(config?.version).toBe(4);
       expect(config?.agentRuntimes.opencode).toMatchObject({
         enabled: false,
         executablePath: "/tools/opencode",
@@ -123,7 +123,7 @@ describe("settings config adapter initialization", () => {
 
       const config = await Effect.runPromise(adapter.readConfig({ initialize: false }));
 
-      expect(config?.version).toBe(3);
+      expect(config?.version).toBe(4);
       expect(config?.agentRuntimes.codex).toMatchObject({ enabled: true, executablePath: "" });
       expect(config?.agentRuntimes.opencode.enabled).toBe(false);
       expect(calls).toBe(0);
@@ -161,7 +161,7 @@ describe("settings config adapter initialization", () => {
 
       const retried = await Effect.runPromise(adapter.readConfig());
       expect(calls).toBe(2);
-      expect(retried?.version).toBe(3);
+      expect(retried?.version).toBe(4);
     });
   });
 
@@ -179,7 +179,7 @@ describe("settings config adapter initialization", () => {
 
       const config = await Effect.runPromise(adapter.readConfig());
 
-      expect(config?.version).toBe(3);
+      expect(config?.version).toBe(4);
       expect(calls).toBe(0);
     });
   });

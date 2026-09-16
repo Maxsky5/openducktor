@@ -5,7 +5,7 @@ import { createSettingsConfigTestDouble } from "../../test-support/service-test-
 import { createWorkspaceSettingsService } from "./workspace-settings-service";
 
 const setup = () => {
-  let config = globalConfigSchema.parse({ version: 3 });
+  let config = globalConfigSchema.parse({ version: 4 });
   const service = createWorkspaceSettingsService(
     createSettingsConfigTestDouble({
       readConfig: () => Effect.sync(() => structuredClone(config)),
@@ -104,17 +104,17 @@ describe("global Custom Agent Roles", () => {
   });
 
   test("validates duplicate names and IDs in persisted config and defaults old config to no roles", () => {
-    expect(globalConfigSchema.parse({ version: 3 }).customAgentRoles).toEqual([]);
+    expect(globalConfigSchema.parse({ version: 4 }).customAgentRoles).toEqual([]);
     const role = { id: "one", name: "Name", systemPrompt: "Prompt" };
     expect(
       globalConfigSchema.safeParse({
-        version: 3,
+        version: 4,
         customAgentRoles: [role, { ...role, id: "two", name: " NAME " }],
       }).success,
     ).toBe(false);
     expect(
       globalConfigSchema.safeParse({
-        version: 3,
+        version: 4,
         customAgentRoles: [role, { ...role, name: "Other" }],
       }).success,
     ).toBe(false);

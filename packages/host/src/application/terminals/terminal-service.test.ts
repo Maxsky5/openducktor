@@ -12,8 +12,9 @@ import {
   type TerminalPtyPort,
 } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
-import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
+import { HostValidationError } from "../../effect/host-errors";
 import { createTerminalService } from "./terminal-service";
+import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 
 let directoryAvailable = true;
@@ -125,7 +126,7 @@ const makeService = async (
   pty = makePty(),
   idFactory: () => string = () => "terminal-1",
   filesystemPort: FilesystemPort = filesystem,
-  assertProcessStart?: (repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>,
+  withProcessStartAdmission?: WithProcessStartAdmission,
 ) => {
   const titleSettlement = makeTitleSettlementScheduler();
   const shellPath = await resolveFakeShellPath();
@@ -142,8 +143,8 @@ const makeService = async (
     now: () => new Date("2026-07-12T00:00:00.000Z"),
     scheduleTitleSettlement: titleSettlement.schedule,
   };
-  if (assertProcessStart) {
-    serviceInput.assertProcessStart = assertProcessStart;
+  if (withProcessStartAdmission) {
+    serviceInput.withProcessStartAdmission = withProcessStartAdmission;
   }
   return {
     pty,
@@ -155,7 +156,7 @@ const makeService = async (
 describe("TerminalService", () => {
   test("rejects task terminal creation and input for a blocked workspace", async () => {
     let blocked = true;
-    const assertProcessStart = (_repoPath: string) =>
+    const withProcessStartAdmission: WithProcessStartAdmission = (_repoPath, effect) =>
       blocked
         ? Effect.fail(
             new HostValidationError({
@@ -163,8 +164,13 @@ describe("TerminalService", () => {
               field: "workspaceId",
             }),
           )
-        : Effect.void;
-    const { service, pty } = await makeService(makePty(), undefined, undefined, assertProcessStart);
+        : effect;
+    const { service, pty } = await makeService(
+      makePty(),
+      undefined,
+      undefined,
+      withProcessStartAdmission,
+    );
 
     await expect(
       Effect.runPromise(

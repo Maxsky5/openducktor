@@ -14,7 +14,6 @@ import {
   terminalPreparePathInputRequestSchema,
 } from "@openducktor/contracts";
 import { Effect, type Scope } from "effect";
-import type { HostValidationErrorAggregate } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 import type { TerminalGrid, TerminalPtyPort } from "../../ports/terminal-pty-port";
 import { createTerminalAdmission } from "./terminal-admission";
@@ -30,6 +29,7 @@ import {
   type TerminalWorkspaceActivity,
 } from "./terminal-session-engine";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
+import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 
 const DEFAULT_GRID: TerminalGrid = { columns: 80, rows: 24 };
 
@@ -67,7 +67,7 @@ export type TerminalService = {
 };
 
 type CreateTerminalServiceInput = {
-  assertProcessStart?: (repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>;
+  withProcessStartAdmission?: WithProcessStartAdmission;
   filesystem: FilesystemPort;
   ptyPort: TerminalPtyPort;
   resolveLaunchEnvironment: TerminalLaunchEnvironmentPort;
@@ -78,7 +78,7 @@ type CreateTerminalServiceInput = {
 };
 
 export const createTerminalService = ({
-  assertProcessStart,
+  withProcessStartAdmission,
   filesystem,
   ptyPort,
   resolveLaunchEnvironment,
@@ -144,34 +144,38 @@ export const createTerminalService = ({
             (reservation) =>
               Effect.gen(function* () {
                 const context = yield* canonicalizeContext(input.context, "create");
-                if ("taskId" in context && assertProcessStart) {
-                  yield* assertProcessStart(context.repoPath).pipe(
-                    Effect.mapError(
-                      (cause) =>
-                        new TerminalServiceError({
+                const start = Effect.gen(function* () {
+                  yield* reservation.bind(context);
+                  const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
+                  const terminalId = idFactory();
+                  const summary: TerminalSummary = {
+                    terminalId,
+                    label: plan.cwd,
+                    context,
+                    initialWorkingDir: plan.cwd,
+                    createdAt: now().toISOString(),
+                    lifecycle: "starting",
+                    exit: null,
+                  };
+                  const started = yield* engine.start(summary, plan);
+                  return { ref: { terminalId }, summary: started };
+                });
+                if (!("taskId" in context) || !withProcessStartAdmission) {
+                  return yield* start;
+                }
+                return yield* withProcessStartAdmission(context.repoPath, start).pipe(
+                  Effect.mapError((cause) =>
+                    cause instanceof TerminalServiceError
+                      ? cause
+                      : new TerminalServiceError({
                           code: "invalid_input",
                           operation: "create",
                           message: cause.message,
                           cause,
                           workingDir: context.repoPath,
                         }),
-                    ),
-                  );
-                }
-                yield* reservation.bind(context);
-                const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
-                const terminalId = idFactory();
-                const summary: TerminalSummary = {
-                  terminalId,
-                  label: plan.cwd,
-                  context,
-                  initialWorkingDir: plan.cwd,
-                  createdAt: now().toISOString(),
-                  lifecycle: "starting",
-                  exit: null,
-                };
-                const started = yield* engine.start(summary, plan);
-                return { ref: { terminalId }, summary: started };
+                  ),
+                );
               }),
             (reservation) => Effect.sync(() => reservation.release()),
           );
@@ -203,11 +207,15 @@ export const createTerminalService = ({
       write: (terminalId, data) =>
         Effect.gen(function* () {
           const context = engine.getContext(terminalId);
-          if (context && "taskId" in context && assertProcessStart) {
-            yield* assertProcessStart(context.repoPath).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new TerminalServiceError({
+          const write = engine.write(terminalId, data);
+          if (!context || !("taskId" in context) || !withProcessStartAdmission) {
+            return yield* write;
+          }
+          yield* withProcessStartAdmission(context.repoPath, write).pipe(
+            Effect.mapError((cause) =>
+              cause instanceof TerminalServiceError
+                ? cause
+                : new TerminalServiceError({
                     code: "invalid_input",
                     operation: "write",
                     message: cause.message,
@@ -215,10 +223,8 @@ export const createTerminalService = ({
                     terminalId,
                     workingDir: context.repoPath,
                   }),
-              ),
-            );
-          }
-          yield* engine.write(terminalId, data);
+            ),
+          );
         }),
       resize: engine.resize,
       acknowledge: engine.acknowledge,

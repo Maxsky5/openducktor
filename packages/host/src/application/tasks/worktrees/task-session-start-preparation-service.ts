@@ -2,12 +2,7 @@ import type { AgentRole, RuntimeKind, TaskCard, TaskStatus } from "@openducktor/
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { buildBranchName } from "../../../domain/task";
-import {
-  errorMessage,
-  HostOperationError,
-  HostValidationError,
-  type HostValidationErrorAggregate,
-} from "../../../effect/host-errors";
+import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
@@ -54,9 +49,6 @@ export type TaskSessionStartPreparationService = ReturnType<
 >;
 
 export type TaskSessionStartPreparationDependencies = {
-  assertProcessStart?:
-    | ((repoPath: string) => Effect.Effect<void, HostValidationErrorAggregate>)
-    | undefined;
   gitPort?: GitPort;
   taskStore: TaskStorePort;
   settingsConfig?: SettingsConfigPort;
@@ -69,7 +61,6 @@ export type TaskSessionStartPreparationDependencies = {
 };
 
 export const createTaskSessionStartPreparationService = ({
-  assertProcessStart,
   gitPort,
   taskStore,
   settingsConfig,
@@ -86,9 +77,6 @@ export const createTaskSessionStartPreparationService = ({
     ): Effect.Effect<PreparedTaskSessionStart, TaskServiceError> {
       return Effect.gen(function* () {
         const { canonicalRepoPath: canonicalInputRepoPath, runtimeKind, taskId, role } = input;
-        if (assertProcessStart) {
-          yield* assertProcessStart(canonicalInputRepoPath);
-        }
         const dependencies = yield* requireDependencies(() =>
           requireBuildStartDependencies(
             gitPort,

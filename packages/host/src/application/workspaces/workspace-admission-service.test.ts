@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkspaceCatalog, WorkspaceRecord } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
 import { createWorkspaceAdmissionService } from "./workspace-admission-service";
 
@@ -58,7 +58,7 @@ describe("workspace admission service", () => {
     expect(admission.isWorkspaceBlocked("open-ws")).toBe(false);
   });
 
-  test("blocks task store writes for closed workspaces but allows reads", async () => {
+  test("blocks all ordinary task store access for closed workspaces", async () => {
     const admission = createAdmission(
       catalog({ closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")] }),
     );
@@ -81,7 +81,7 @@ describe("workspace admission service", () => {
           workspaceId: "closed-ws",
         }),
       ),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow("Workspace is closed: closed-ws");
   });
 
   test("blocks all ordinary task store access while removal is incomplete", async () => {
@@ -129,11 +129,11 @@ describe("workspace admission service", () => {
       catalog({ closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")] }),
     );
 
-    await expect(Effect.runPromise(admission.assertProcessStart("/repos/closed"))).rejects.toThrow(
-      "Workspace is closed: closed-ws",
-    );
     await expect(
-      Effect.runPromise(admission.assertProcessStart("/repos/open")),
+      Effect.runPromise(admission.withProcessStartAdmission("/repos/closed", Effect.void)),
+    ).rejects.toThrow("Workspace is closed: closed-ws");
+    await expect(
+      Effect.runPromise(admission.withProcessStartAdmission("/repos/open", Effect.void)),
     ).resolves.toBeUndefined();
   });
 
@@ -169,7 +169,7 @@ describe("workspace admission service", () => {
     ).resolves.toBeUndefined();
   });
 
-  test("reservations block process starts and gate task store access by operation", async () => {
+  test("reservations block process starts and task store access", async () => {
     const admission = createAdmission(catalog());
 
     await Effect.runPromise(
@@ -180,9 +180,9 @@ describe("workspace admission service", () => {
       }),
     );
 
-    await expect(Effect.runPromise(admission.assertProcessStart("/repos/ws"))).rejects.toThrow(
-      "already in progress for ws",
-    );
+    await expect(
+      Effect.runPromise(admission.withProcessStartAdmission("/repos/ws", Effect.void)),
+    ).rejects.toThrow("already in progress for ws");
     await expect(
       Effect.runPromise(
         admission.assertTaskStoreAccess({
@@ -191,7 +191,7 @@ describe("workspace admission service", () => {
           workspaceId: "ws",
         }),
       ),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow("already in progress for ws");
     await expect(
       Effect.runPromise(
         admission.assertTaskStoreAccess({
@@ -219,6 +219,94 @@ describe("workspace admission service", () => {
         }),
       ),
     ).rejects.toThrow("already in progress for ws");
+  });
+
+  test("rejects a lifecycle reservation while a process start is active", async () => {
+    const admission = createAdmission(catalog());
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const started = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
+          const fiber = yield* Effect.fork(
+            admission.withProcessStartAdmission(
+              "/repos/ws",
+              Deferred.succeed(started, undefined).pipe(Effect.zipRight(Deferred.await(release))),
+            ),
+          );
+          yield* Deferred.await(started);
+
+          const reservation = yield* Effect.either(
+            admission.reserveWorkspace({
+              operation: "close",
+              repoPath: "/repos/ws",
+              workspaceId: "ws",
+            }),
+          );
+          expect(reservation).toMatchObject({
+            _tag: "Left",
+            left: { message: "A process is starting for ws. Wait for it to finish and retry." },
+          });
+
+          yield* Deferred.succeed(release, undefined);
+          yield* Fiber.join(fiber);
+        }),
+      ),
+    );
+
+    await expect(
+      Effect.runPromise(
+        admission.reserveWorkspace({
+          operation: "close",
+          repoPath: "/repos/ws",
+          workspaceId: "ws",
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  test("keeps administrative access local to its effect", async () => {
+    const admission = createAdmission(
+      catalog({ closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")] }),
+    );
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const started = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
+          const fiber = yield* Effect.fork(
+            admission.withAdministrativeAccess(
+              "closed-ws",
+              Deferred.succeed(started, undefined).pipe(
+                Effect.zipRight(Deferred.await(release)),
+                Effect.zipRight(
+                  admission.assertTaskStoreAccess({
+                    operation: "sqliteTaskRepository.listTasks",
+                    repoPath: "/repos/closed",
+                    workspaceId: "closed-ws",
+                  }),
+                ),
+              ),
+            ),
+          );
+          yield* Deferred.await(started);
+
+          const ordinaryAccess = yield* Effect.either(
+            admission.assertTaskStoreAccess({
+              operation: "sqliteTaskRepository.listTasks",
+              repoPath: "/repos/closed",
+              workspaceId: "closed-ws",
+            }),
+          );
+          expect(ordinaryAccess._tag).toBe("Left");
+
+          yield* Deferred.succeed(release, undefined);
+          yield* Fiber.join(fiber);
+        }),
+      ),
+    );
   });
 
   test("tracks block and unblock changes after initialization", async () => {

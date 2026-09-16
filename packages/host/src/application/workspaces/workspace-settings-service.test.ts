@@ -37,7 +37,7 @@ const repoConfig = (workspaceId: string, repoPath: string): RepoConfig => ({
 });
 const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   customAgentRoles: [],
-  version: 3,
+  version: 4,
   system: {},
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
@@ -950,6 +950,39 @@ describe("createWorkspaceSettingsService", () => {
     });
     expect(await Effect.runPromise(service.listWorkspaces())).toEqual([]);
   });
+  test("lets a retry keep task worktrees before worktree deletion starts", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaceOrder: ["repo-a"],
+        workspaces: {
+          "repo-a": {
+            ...repoConfig("repo-a", "/repos/a"),
+            removal: {
+              removeTaskWorktrees: true,
+              phase: "worktrees",
+              pendingWorktreePath: null,
+            },
+          },
+        },
+      }),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const record = await Effect.runPromise(
+      service.beginWorkspaceRemoval({
+        workspaceId: "repo-a",
+        expectedRepoPath: "/repos/a",
+        removeTaskWorktrees: false,
+      }),
+    );
+
+    expect(record).toEqual({
+      removeTaskWorktrees: false,
+      phase: "attachments",
+      pendingWorktreePath: null,
+    });
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-a"]?.removal).toEqual(record);
+  });
   test("rejects close, reopen, and select while removal is incomplete", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({
@@ -1086,7 +1119,7 @@ describe("createWorkspaceSettingsService", () => {
     expect(records).toHaveLength(1);
     expect(records[0]?.repoPath).toBe("/canonical/repo");
     expect(settingsConfig.writtenConfigs[0]).toMatchObject({
-      version: 3,
+      version: 4,
       system: {},
       activeWorkspace: "repo",
       theme: "light",

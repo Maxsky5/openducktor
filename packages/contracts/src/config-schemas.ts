@@ -703,8 +703,15 @@ export const persistedGlobalConfigV2Schema = z.object({
 });
 export type PersistedGlobalConfigV2 = z.infer<typeof persistedGlobalConfigV2Schema>;
 
-export const globalConfigSchema = z.object({
+export const persistedGlobalConfigV3Schema = z.object({
   version: z.literal(3),
+  ...globalConfigSharedFields,
+  agentRuntimes: agentRuntimesSchema,
+});
+export type PersistedGlobalConfigV3 = z.infer<typeof persistedGlobalConfigV3Schema>;
+
+export const globalConfigSchema = z.object({
+  version: z.literal(4),
   ...globalConfigSharedFields,
   agentRuntimes: agentRuntimesSchema,
 });

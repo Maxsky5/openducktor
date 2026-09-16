@@ -380,6 +380,20 @@ test("reports close failures from every retained database during disposal", asyn
   }
 });
 
+test("retains a workspace slot when shutdown fails", async () => {
+  const manager = await createCloseFailureHarness();
+  await Effect.runPromise(manager.withDatabase("/repos/alpha", "test.open", () => Effect.void));
+
+  const first = await Effect.runPromise(Effect.either(manager.closeWorkspace("alpha")));
+  const retry = await Effect.runPromise(Effect.either(manager.closeWorkspace("alpha")));
+
+  expect(first._tag).toBe("Left");
+  expect(retry._tag).toBe("Left");
+  if (retry._tag === "Left") {
+    expect(retry.left.message).toBe("Failed to close alpha.");
+  }
+});
+
 test("reports an idle close failure and rejects later operations for that database", async () => {
   const backgroundFailures: HostOperationErrorAggregate[] = [];
   const manager = await createCloseFailureHarness((failure) =>
