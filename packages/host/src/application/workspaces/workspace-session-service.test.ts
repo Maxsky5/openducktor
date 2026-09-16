@@ -1466,6 +1466,34 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
   });
 
+  test("checks saved worktree ownership when the archive path is missing", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    h.paths.delete(session.executionTarget.workingDirectory);
+    const callsBefore = [...h.calls];
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      withWorkStartLease: (_repoPath, effect, workingDirectory) =>
+        workingDirectory === session.executionTarget.workingDirectory
+          ? Effect.fail(
+              new HostValidationError({
+                field: "workingDirectory",
+                message: "The saved worktree belongs to another workspace.",
+              }),
+            )
+          : effect,
+    });
+
+    await expect(
+      Effect.runPromise(service.archive({ ...ref, confirmStop: true, removeWorktree: true })),
+    ).rejects.toThrow("belongs to another workspace");
+
+    expect(h.calls).toEqual(callsBefore);
+    expect(h.registered.has(session.executionTarget.workingDirectory)).toBe(true);
+    expect(h.branches.has(`refs/heads/${h.state.branch}`)).toBe(true);
+  });
+
   test("holds the ownership lock through archive removal", async () => {
     const h = setup();
     const { session } = await Effect.runPromise(h.service.create(worktreeInput()));

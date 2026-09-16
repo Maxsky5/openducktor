@@ -296,4 +296,35 @@ describe("task asset recovery service", () => {
       `release:${updateQuarantine.workspaceId}`,
     ]);
   });
+
+  test("does not recover or release a workspace owned by this process", async () => {
+    const events: string[] = [];
+    const service = createTaskAssetRecoveryService({
+      hostOwnership: {
+        claimWorkspace: () => Effect.sync(() => (events.push("claim"), false)),
+        releaseWorkspace: () => Effect.sync(() => events.push("release")),
+      },
+      isWorkspaceRemovalPending: () => false,
+      withAdministrativeAccess: (_workspaceIds, effect) => {
+        events.push("administrative-access");
+        return effect;
+      },
+      filePort: {
+        durableExists: () => Effect.die("Recovery must not inspect durable assets."),
+        listQuarantines: () => Effect.succeed([updateQuarantine]),
+        removeDurable: () => Effect.die("Recovery must not remove durable assets."),
+        restoreQuarantine: () => Effect.die("Recovery must not restore quarantine."),
+        purgeQuarantine: () => Effect.die("Recovery must not purge quarantine."),
+      },
+      registry: {
+        listAssets: () => Effect.die("Recovery must not read asset rows."),
+        taskExists: () => Effect.die("Recovery must not read tasks."),
+      },
+      taskStore: { deleteTask: () => Effect.die("Recovery must not delete tasks.") },
+      resolveRepoPath: () => Effect.die("Recovery must not resolve the repository."),
+    });
+
+    expect(await Effect.runPromise(service.startupSweep())).toBe(1);
+    expect(events).toEqual(["claim"]);
+  });
 });

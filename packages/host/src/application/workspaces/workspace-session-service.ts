@@ -325,18 +325,16 @@ export const createWorkspaceSessionService = (
                 });
               }
               const config = yield* settings.getRepoConfig(input.workspaceId);
-              const preview = yield* readWorkspaceSessionArchivePreview(
+              yield* readWorkspaceSessionArchivePreview(
                 dependencies,
                 { ...config, repoPath: ref.repoPath },
                 target,
               );
-              if (preview.worktreeExists) {
-                yield* dependencies.withWorkStartLease(
-                  ref.repoPath,
-                  Effect.void,
-                  target.workingDirectory,
-                );
-              }
+              yield* dependencies.withWorkStartLease(
+                ref.repoPath,
+                Effect.void,
+                target.workingDirectory,
+              );
             } else if (session.externalSessionId !== null) {
               yield* validateWorkspaceSessionTarget(dependencies, ref.repoPath, target);
             }

@@ -3456,9 +3456,9 @@ describe("createTaskService pull requests", () => {
         type: "setPullRequest",
         input: { repoPath: "/repo", taskId: "task-1", pullRequest: pullRequest() },
       },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "removeWorktree",
         repoPath: "/repo",

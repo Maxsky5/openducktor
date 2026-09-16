@@ -37,6 +37,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
+  withWorkStartLease,
   worktreeFiles,
   workspaceSettingsService,
 }: CreateTaskServiceInput) => ({
@@ -147,7 +148,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
           const cleanupEffect = cleanup
             ? cleanupMergedTaskState(
-                dependencies,
+                { ...dependencies, withWorkStartLease },
                 taskStore,
                 repoPath,
                 taskId,

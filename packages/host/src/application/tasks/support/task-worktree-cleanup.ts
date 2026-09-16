@@ -21,6 +21,7 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../../workspaces/workspace-settings-service";
+import type { WorkspaceAdmissionService } from "../../workspaces/workspace-admission-service";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import type {
   TaskWorktreeService,
@@ -107,6 +108,7 @@ export const cleanupMergedTaskState = (
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
     terminalService: TaskTerminalCleanupPort;
+    withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"];
     worktreeFiles?: WorktreeFilePort;
   },
   taskStore: TaskStorePort,
@@ -116,13 +118,6 @@ export const cleanupMergedTaskState = (
   targetBranch: string,
 ) =>
   Effect.gen(function* () {
-    yield* runTaskRuntimeCleanup({
-      devServerService: dependencies.devServerService,
-      progress: createTaskCleanupProgressState(),
-      repoPath,
-      taskIds: [taskId],
-      terminalService: dependencies.terminalService,
-    });
     const cleanupTarget = yield* findLatestCleanupTarget(
       dependencies,
       taskStore,
@@ -130,6 +125,16 @@ export const cleanupMergedTaskState = (
       taskId,
       sourceBranch,
     );
+    if (cleanupTarget) {
+      yield* dependencies.withWorkStartLease(repoPath, Effect.void, cleanupTarget);
+    }
+    yield* runTaskRuntimeCleanup({
+      devServerService: dependencies.devServerService,
+      progress: createTaskCleanupProgressState(),
+      repoPath,
+      taskIds: [taskId],
+      terminalService: dependencies.terminalService,
+    });
     if (cleanupTarget && (yield* dependencies.settingsConfig.pathExists(cleanupTarget))) {
       const worktreeFiles = yield* requireWorktreeFiles(dependencies.worktreeFiles);
       const canonicalCleanupTarget = yield* dependencies.gitPort.canonicalizePath(cleanupTarget);
@@ -170,6 +175,7 @@ export const cleanupDirectMergeTaskState = (
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
     terminalService: TaskTerminalCleanupPort;
+    withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"];
     worktreeFiles?: WorktreeFilePort;
   },
   taskStore: TaskStorePort,

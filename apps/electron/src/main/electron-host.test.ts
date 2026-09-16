@@ -2631,7 +2631,10 @@ describe("createElectronHostCommandRouter", () => {
     const removedMergedWorktreePaths: string[] = [];
     const mergedPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
-      git: createGit(),
+      git: {
+        ...createGit(),
+        isRegisteredWorktree: () => Effect.succeed(true),
+      },
       openInTools: createOpenInTools(),
       worktreeFiles: {
         ensureDirectory: () => Effect.void,

@@ -16,6 +16,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
+  withWorkStartLease,
   worktreeFiles,
 }: TaskServiceUseCaseInput): Pick<TaskService, "completeDirectMerge"> => ({
   completeDirectMerge(input) {
@@ -120,7 +121,13 @@ export const createTaskCompleteDirectMergeUseCase = ({
       if (current.status !== "closed") {
         yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
       }
-      yield* cleanupDirectMergeTaskState(dependencies, taskStore, repoPath, taskId, directMerge);
+      yield* cleanupDirectMergeTaskState(
+        { ...dependencies, withWorkStartLease },
+        taskStore,
+        repoPath,
+        taskId,
+        directMerge,
+      );
       if (current.status !== "closed") {
         task = yield* taskStore.transitionTask({ repoPath, taskId, status: "closed" });
       }

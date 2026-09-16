@@ -36,13 +36,14 @@ export const createTaskAssetRecoveryService = ({
     effect: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E, R>;
 }): TaskAssetRecoveryService => {
-  const withHostOwnership = <A, E, R>(
+  const withHostOwnership = <E, R>(
     workspaceId: string,
-    effect: () => Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E | TaskStoreError, R> =>
+    effect: () => Effect.Effect<void, E, R>,
+  ): Effect.Effect<void, E | TaskStoreError, R> =>
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        yield* hostOwnership.claimWorkspace(workspaceId);
+        const claimed = yield* hostOwnership.claimWorkspace(workspaceId);
+        if (!claimed) return;
         const exit = yield* Effect.exit(restore(effect()));
         yield* hostOwnership.releaseWorkspace(workspaceId);
         return yield* Exit.matchEffect(exit, {

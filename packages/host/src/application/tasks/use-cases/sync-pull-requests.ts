@@ -22,6 +22,7 @@ export const createTaskPullRequestSyncUseCases = ({
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
+  withWorkStartLease,
   worktreeFiles,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<
@@ -108,7 +109,7 @@ export const createTaskPullRequestSyncUseCases = ({
             yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
             yield* completeTaskClosure({
               cleanup: cleanupMergedTaskState(
-                cleanupDependencies,
+                { ...cleanupDependencies, withWorkStartLease },
                 taskStore,
                 effectiveRepoPath,
                 task.id,

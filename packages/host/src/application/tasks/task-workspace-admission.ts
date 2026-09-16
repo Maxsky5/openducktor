@@ -65,7 +65,14 @@ export const withTaskWorkspaceOwnership = (
   ...service,
   buildStart: (input) => ownershipLock.runExclusive(service.buildStart(input)),
   closeTask: (input) => ownershipLock.runExclusive(service.closeTask(input)),
+  completeDirectMerge: (input) => ownershipLock.runExclusive(service.completeDirectMerge(input)),
   deleteTask: (input) => ownershipLock.runExclusive(service.deleteTask(input)),
+  directMerge: (input) => ownershipLock.runExclusive(service.directMerge(input)),
+  linkMergedPullRequest: (input) =>
+    ownershipLock.runExclusive(service.linkMergedPullRequest(input)),
+  repoPullRequestSync: (input) => ownershipLock.runExclusive(service.repoPullRequestSync(input)),
+  repoPullRequestSyncDetailed: (input) =>
+    ownershipLock.runExclusive(service.repoPullRequestSyncDetailed(input)),
   resetImplementation: (input) => ownershipLock.runExclusive(service.resetImplementation(input)),
   resetTask: (input) => ownershipLock.runExclusive(service.resetTask(input)),
 });

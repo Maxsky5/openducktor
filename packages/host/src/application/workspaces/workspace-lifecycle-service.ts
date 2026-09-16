@@ -432,8 +432,6 @@ export const createWorkspaceLifecycleService = ({
             () =>
               Effect.gen(function* () {
                 yield* assertNoBlockingActivity(repoConfig.repoPath);
-                yield* activity.releaseWorkspaceSessions(repoConfig.repoPath);
-                yield* activity.releaseWorkspaceRuntimes(repoConfig.repoPath);
                 const catalog = yield* workspaceSettingsService.closeWorkspace(
                   input.workspaceId,
                   input.expectedRepoPath,
@@ -443,6 +441,8 @@ export const createWorkspaceLifecycleService = ({
                   repoPath: repoConfig.repoPath,
                   workspaceId: input.workspaceId,
                 });
+                yield* activity.releaseWorkspaceSessions(repoConfig.repoPath);
+                yield* activity.releaseWorkspaceRuntimes(repoConfig.repoPath);
                 yield* storage.closeWorkspaceTaskStore(input.workspaceId);
                 yield* hostOwnership.releaseWorkspace(input.workspaceId);
                 return catalog;

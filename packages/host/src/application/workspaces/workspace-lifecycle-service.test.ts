@@ -182,7 +182,7 @@ const createService = ({
   admission?: ReturnType<typeof createAdmissionDouble>;
   getRepoConfig?: () => Effect.Effect<RepoConfig, never>;
   getWorkspaceCatalog?: () => Effect.Effect<WorkspaceCatalog, never>;
-  closeWorkspace?: () => Effect.Effect<WorkspaceCatalog, never>;
+  closeWorkspace?: () => Effect.Effect<WorkspaceCatalog, HostOperationError>;
   reopenWorkspace?: () => Effect.Effect<WorkspaceCatalog, HostOperationError>;
   beginWorkspaceRemoval?: (input: {
     workspaceId: string;
@@ -407,13 +407,43 @@ describe("workspace lifecycle service", () => {
     expect(releaseWorkspace).toHaveBeenCalledWith("ws");
     expect(closeWorkspaceTaskStore).toHaveBeenCalledWith("ws");
     expect(calls).toEqual([
-      "release-sessions",
-      "release-runtimes",
       "close",
       "block",
+      "release-sessions",
+      "release-runtimes",
       "close-task-store",
       "release",
     ]);
+  });
+
+  test("closeWorkspace keeps live resources when the close state cannot be saved", async () => {
+    const calls: string[] = [];
+    const service = createService({
+      activity: activityWith(
+        [],
+        () => Effect.sync(() => calls.push("release-sessions")),
+        () => Effect.sync(() => calls.push("release-runtimes")),
+      ),
+      admission: {
+        ...createAdmissionDouble(),
+        blockWorkspace: () => calls.push("block"),
+      },
+      closeWorkspace: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "workspaceSettings.closeWorkspace",
+            message: "settings write failed",
+          }),
+        ),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      ),
+    ).rejects.toThrow("settings write failed");
+
+    expect(calls).toEqual([]);
   });
 
   test("closeWorkspace keeps ownership when the task store cannot close", async () => {

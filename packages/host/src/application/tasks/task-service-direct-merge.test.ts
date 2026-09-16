@@ -859,9 +859,9 @@ describe("createTaskService direct merge", () => {
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/repo" },
       { type: "aheadBehind", workingDir: "/repo", targetBranch: "origin/main" },
-      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
         type: "removeWorktree",
         repoPath: "/repo",

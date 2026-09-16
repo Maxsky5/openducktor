@@ -6,7 +6,7 @@ import {
   type RuntimeSupportedScope,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError } from "../../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { TaskStorePort as RealTaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { TaskTerminalCleanupPort } from "../task-service";
@@ -87,6 +87,8 @@ const createTerminalCleanupService = (calls: unknown[]): TaskTerminalCleanupPort
         }),
     ),
 });
+
+const allowWorkStart = <A, E, R>(_repoPath: string, effect: Effect.Effect<A, E, R>) => effect;
 
 const runtimeDefinitionsWithScopes = (supportedScopes: RuntimeSupportedScope[]) =>
   ({
@@ -341,6 +343,7 @@ describe("task worktree cleanup", () => {
             settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
             taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
             terminalService: createTerminalCleanupService(calls),
+            withWorkStartLease: allowWorkStart,
             worktreeFiles: createBuildStartWorktreeFiles(calls),
           },
           taskStoreWithTasks([task()]),
@@ -353,9 +356,9 @@ describe("task worktree cleanup", () => {
     );
 
     expect(calls).toEqual([
+      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       { type: "acquireTerminalCleanup", repoPath: "/repo", taskIds: ["task-1"] },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
-      { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
       {
         type: "removeWorktree",
         repoPath: "/repo",
@@ -368,6 +371,42 @@ describe("task worktree cleanup", () => {
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       { type: "releaseTerminalCleanup" },
     ]);
+  });
+
+  test("checks cleanup target ownership before merge cleanup", async () => {
+    const calls: unknown[] = [];
+    const cleanupTarget = "/worktrees/repo/task-1";
+
+    await expect(
+      Effect.runPromise(
+        Effect.scoped(
+          cleanupMergedTaskState(
+            {
+              devServerService: createDirectMergeDevServerService(calls),
+              gitPort: createDirectMergeGitPort({ calls }),
+              settingsConfig: createBuildSettingsConfig(new Set()),
+              taskWorktreeService: createDirectMergeTaskWorktreeService(cleanupTarget),
+              terminalService: createTerminalCleanupService(calls),
+              withWorkStartLease: (_repoPath, _effect, workingDirectory) =>
+                Effect.fail(
+                  new HostValidationError({
+                    field: "workingDirectory",
+                    message: `The cleanup target belongs to another workspace: ${workingDirectory}`,
+                  }),
+                ),
+              worktreeFiles: createBuildStartWorktreeFiles(calls),
+            },
+            taskStoreWithTasks([task()]),
+            "/repo",
+            "task-1",
+            "odt/task-1",
+            "main",
+          ),
+        ),
+      ),
+    ).rejects.toThrow("belongs to another workspace");
+
+    expect(calls).toEqual([]);
   });
 
   test("does not remove the repository root when cleanup target normalizes to repo path", async () => {
@@ -393,6 +432,7 @@ describe("task worktree cleanup", () => {
             settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/repo/./task/.."])),
             taskWorktreeService: createDirectMergeTaskWorktreeService("/repo/./task/.."),
             terminalService: createTerminalCleanupService(calls),
+            withWorkStartLease: allowWorkStart,
             worktreeFiles: createBuildStartWorktreeFiles(calls),
           },
           taskStoreWithTasks([task()]),
@@ -451,6 +491,7 @@ describe("task worktree cleanup", () => {
               settingsConfig,
               taskWorktreeService,
               terminalService: createTerminalCleanupService(calls),
+              withWorkStartLease: allowWorkStart,
               worktreeFiles: {
                 ...createBuildStartWorktreeFiles(calls),
                 resolvePathWithinRoot: (_root, candidate) =>
@@ -516,6 +557,7 @@ describe("task worktree cleanup", () => {
               settingsConfig: createBuildSettingsConfig(existingPaths, repoPath),
               taskWorktreeService: createDirectMergeTaskWorktreeService(worktreePath),
               terminalService: createTerminalCleanupService(calls),
+              withWorkStartLease: allowWorkStart,
               worktreeFiles: createBuildStartWorktreeFiles(calls),
             },
             taskStoreWithTasks([task()]),
@@ -562,6 +604,7 @@ describe("task worktree cleanup", () => {
               ),
               taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
               terminalService: createTerminalCleanupService(calls),
+              withWorkStartLease: allowWorkStart,
               worktreeFiles: createBuildStartWorktreeFiles(calls),
             },
             taskStoreWithTasks([task()]),
