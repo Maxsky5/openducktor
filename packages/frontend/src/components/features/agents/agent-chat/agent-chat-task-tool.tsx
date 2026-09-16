@@ -49,7 +49,12 @@ const TaskDescriptionPreviewImage = ({
   </span>
 );
 
+const TaskDescriptionPreviewLink = ({
+  children,
+}: ComponentProps<"a"> & ExtraProps): ReactElement => <span>{children}</span>;
+
 const TASK_DESCRIPTION_PREVIEW_COMPONENTS: Components = {
+  a: TaskDescriptionPreviewLink,
   img: TaskDescriptionPreviewImage,
 };
 

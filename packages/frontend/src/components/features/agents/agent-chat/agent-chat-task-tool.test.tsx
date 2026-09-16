@@ -206,6 +206,17 @@ test("keeps a preview image chip when the image token crosses the preview budget
   expect(preview?.querySelector("svg.lucide-image")).not.toBeNull();
 });
 
+test("renders a description link as text without an anchor", () => {
+  const description = "See [the docs](https://example.com/docs) for details.";
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({ task: { ...task(), description } }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.textContent).toContain("the docs");
+  expect(preview?.querySelector("a[href]")).toBeNull();
+});
+
 test("does not load a remote image in the description preview", () => {
   const html = renderTool("openducktor_odt_create_task", {
     output: JSON.stringify({
