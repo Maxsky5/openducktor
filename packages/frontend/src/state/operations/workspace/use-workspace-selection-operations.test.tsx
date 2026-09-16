@@ -171,6 +171,40 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
+  test("refreshWorkspaces retries a failed workspace catalog load", async () => {
+    let catalogCalls = 0;
+    workspaceHost.workspaceCatalogGet = mock(async () => {
+      catalogCalls += 1;
+      if (catalogCalls === 1) {
+        throw new Error("Catalog load failed");
+      }
+      return {
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      };
+    });
+    const harness = createSelectionHarness({
+      activeRepo: null,
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.workspaceLoadError !== null);
+      await harness.run((value) => value.refreshWorkspaces());
+      await harness.waitFor((state) => state.hasLoadedWorkspaceList);
+
+      expect(catalogCalls).toBe(2);
+      expect(harness.getLatest().workspaceLoadError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("trims repo paths before adding a workspace", async () => {
     const workspaceAdd = mock(async (): Promise<ReturnType<typeof workspace>> =>
       workspace("/repo-new"),

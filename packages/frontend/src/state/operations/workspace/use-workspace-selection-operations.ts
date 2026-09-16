@@ -313,7 +313,10 @@ export function useWorkspaceSelectionOperations({
   );
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
-    const data = await loadWorkspaceListFromQuery(queryClient, hostClient);
+    const [data] = await Promise.all([
+      loadWorkspaceListFromQuery(queryClient, hostClient),
+      queryClient.fetchQuery(workspaceCatalogQueryOptions(hostClient)),
+    ]);
     applyWorkspaceRecords(data);
   }, [applyWorkspaceRecords, hostClient, queryClient]);
 

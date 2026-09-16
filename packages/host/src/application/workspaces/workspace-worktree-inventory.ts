@@ -40,9 +40,11 @@ export const collectWorkspaceTaskWorktreePaths = (
       repoConfig,
     );
     const catalog = yield* dependencies.workspaceSettingsService.getWorkspaceCatalog();
-    const otherWorkspaces = [...catalog.openWorkspaces, ...catalog.closedWorkspaces].filter(
-      (workspace) => workspace.workspaceId !== workspaceId,
-    );
+    const completeWorkspaces = [...catalog.openWorkspaces, ...catalog.closedWorkspaces];
+    const otherWorkspaces = [
+      ...completeWorkspaces,
+      ...catalog.incompleteRemovals.map((removal) => removal.workspace),
+    ].filter((workspace) => workspace.workspaceId !== workspaceId);
     const otherWorkspacePaths = new Set(
       otherWorkspaces.map((workspace) => normalizePathForComparison(workspace.repoPath)),
     );
@@ -52,8 +54,9 @@ export const collectWorkspaceTaskWorktreePaths = (
           pathStartsWith(candidatePath, workspace.repoPath) ||
           pathStartsWith(workspace.repoPath, candidatePath),
       );
-    const sharedBaseWorkspaces = otherWorkspaces.filter(
+    const sharedBaseWorkspaces = completeWorkspaces.filter(
       (workspace) =>
+        workspace.workspaceId !== workspaceId &&
         workspace.effectiveWorktreeBasePath !== null &&
         normalizePathForComparison(workspace.effectiveWorktreeBasePath) ===
           normalizePathForComparison(managedWorktreeBasePath),

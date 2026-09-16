@@ -45,6 +45,7 @@ export type WorkspaceActivityBlocker = {
 
 export type WorkspaceActivityPort = {
   inspect(repoPath: string): Effect.Effect<WorkspaceActivityBlocker[], HostOperationErrorAggregate>;
+  releaseSessions(repoPath: string): Effect.Effect<void, HostOperationErrorAggregate>;
 };
 
 export type WorkspaceStoragePort = {
@@ -116,7 +117,7 @@ export const createWorkspaceActivityInspector = ({
   devServerService,
   terminalService,
 }: {
-  agentSessionLiveStateService: Pick<AgentSessionLiveStateService, "list">;
+  agentSessionLiveStateService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">;
   devServerService: Pick<DevServerService, "inspectWorkspaceActivity">;
   terminalService: Pick<TerminalService, "inspectWorkspaceActivity">;
 }): WorkspaceActivityPort => ({
@@ -186,6 +187,36 @@ export const createWorkspaceActivityInspector = ({
       }
 
       return blockers;
+    }),
+  releaseSessions: (repoPath) =>
+    Effect.gen(function* () {
+      const sessions = yield* agentSessionLiveStateService
+        .list({ repoPath })
+        .pipe(
+          Effect.mapError((cause) =>
+            toHostOperationError(
+              "workspace.releaseAgentSessions",
+              `Failed to list agent sessions before removing ${repoPath}. Retry removal.`,
+              cause,
+            ),
+          ),
+        );
+      yield* Effect.forEach(
+        sessions,
+        (session) =>
+          agentSessionLiveStateService
+            .releaseSession(session.ref)
+            .pipe(
+              Effect.mapError((cause) =>
+                toHostOperationError(
+                  "workspace.releaseAgentSessions",
+                  `Failed to release agent session ${session.ref.externalSessionId} before removing ${repoPath}. Retry removal.`,
+                  cause,
+                ),
+              ),
+            ),
+        { discard: true },
+      );
     }),
 });
 
@@ -279,6 +310,7 @@ export const createWorkspaceLifecycleService = ({
         repoPath: repoConfig.repoPath,
         workspaceId: input.workspaceId,
       });
+      yield* activity.releaseSessions(repoConfig.repoPath);
 
       const removedWorktrees: string[] = [];
       let phase = startedRecord.phase;
