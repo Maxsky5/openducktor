@@ -8,6 +8,9 @@ const INDEX_NOT_FOUND = -1;
 
 const isHighSurrogate = (codeUnit: number): boolean => codeUnit >= 0xd800 && codeUnit <= 0xdbff;
 
+const isWhitespace = (character: string | undefined): boolean =>
+  character === " " || character === "\t" || character === "\n" || character === "\r";
+
 const findCharacterIndex = (
   body: string,
   character: string,
@@ -38,7 +41,7 @@ const findInlineImageEnd = (body: string, openIndex: number, limit: number): num
       if (character === titleDelimiter) {
         titleDelimiter = "";
       }
-    } else if (character === '"' || character === "'") {
+    } else if ((character === '"' || character === "'") && isWhitespace(body[index - 1])) {
       titleDelimiter = character;
     } else if (character === "(") {
       depth += 1;
@@ -52,20 +55,30 @@ const findInlineImageEnd = (body: string, openIndex: number, limit: number): num
   return INDEX_NOT_FOUND;
 };
 
-const findImageTokenEnd = (body: string, imageStart: number, limit: number): number => {
+type ImageTokenMatch =
+  | { kind: "complete"; end: number }
+  | { kind: "incomplete" }
+  | { kind: "unknown" };
+
+const matchImageToken = (body: string, imageStart: number, limit: number): ImageTokenMatch => {
   const altEnd = findCharacterIndex(body, "]", imageStart + 2, limit);
   if (altEnd === INDEX_NOT_FOUND) {
-    return INDEX_NOT_FOUND;
+    return { kind: "unknown" };
   }
   const delimiter = body[altEnd + 1];
   if (delimiter === "[") {
     const referenceEnd = findCharacterIndex(body, "]", altEnd + 2, limit);
-    return referenceEnd === INDEX_NOT_FOUND ? INDEX_NOT_FOUND : referenceEnd + 1;
+    return referenceEnd === INDEX_NOT_FOUND
+      ? { kind: "incomplete" }
+      : { kind: "complete", end: referenceEnd + 1 };
   }
   if (delimiter === "(") {
-    return findInlineImageEnd(body, altEnd + 1, limit);
+    const inlineEnd = findInlineImageEnd(body, altEnd + 1, limit);
+    return inlineEnd === INDEX_NOT_FOUND
+      ? { kind: "incomplete" }
+      : { kind: "complete", end: inlineEnd };
   }
-  return altEnd + 1;
+  return { kind: "complete", end: altEnd + 1 };
 };
 
 const completeImageToken = (body: string, end: number): string => {
@@ -74,11 +87,14 @@ const completeImageToken = (body: string, end: number): string => {
   if (imageStart === INDEX_NOT_FOUND) {
     return bounded;
   }
-  const tokenEnd = findImageTokenEnd(body, imageStart, end + IMAGE_TOKEN_MAX_EXTENSION);
-  if (tokenEnd === INDEX_NOT_FOUND) {
+  const match = matchImageToken(body, imageStart, end + IMAGE_TOKEN_MAX_EXTENSION);
+  if (match.kind === "unknown") {
+    return bounded;
+  }
+  if (match.kind === "incomplete") {
     return bounded.slice(0, imageStart);
   }
-  return tokenEnd > end ? body.slice(0, tokenEnd) : bounded;
+  return match.end > end ? body.slice(0, match.end) : bounded;
 };
 
 export const buildTaskDescriptionPreviewMarkdown = (description: string): string => {

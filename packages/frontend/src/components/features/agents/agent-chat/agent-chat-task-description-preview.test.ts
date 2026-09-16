@@ -78,6 +78,32 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
     expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
   });
 
+  test("keeps an image token whole when its destination holds an apostrophe", () => {
+    const description = `${"a".repeat(470)}\n\n![alt](https://example.com/it's.png)`;
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
+  });
+
+  test("keeps an escaped image marker in the description", () => {
+    const description = "Use \\![ in documentation";
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
+  });
+
+  test("keeps a code-span image marker in the description", () => {
+    const description = "Use `![ incomplete` here";
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
+  });
+
+  test("keeps a literal image marker in a long description", () => {
+    const description = `Use ![ here\n\n${"a".repeat(600)}`;
+    const preview = buildTaskDescriptionPreviewMarkdown(description);
+
+    expect(preview.startsWith("Use ![ here")).toBe(true);
+    expect(preview.length).toBe(TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS);
+  });
+
   test("keeps a reference-style image token", () => {
     const description = "![Architecture][diagram]";
 
