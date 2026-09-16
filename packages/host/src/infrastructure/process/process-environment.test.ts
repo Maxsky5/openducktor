@@ -634,9 +634,9 @@ describe("createProcessEnvironment", () => {
       });
       expect(resolution.error?.message).toContain("wait for input");
       expect(resolution.environment.PATH).toBeUndefined();
-      await waitFor(() => !processIsAlive(stoppedPid));
+      await waitFor(() => processHasStopped(stoppedPid));
     } finally {
-      if (childPid && processIsAlive(childPid)) {
+      if (childPid && !processHasStopped(childPid)) {
         process.kill(childPid, "SIGKILL");
       }
       await rm(root, { force: true, recursive: true });
