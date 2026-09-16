@@ -48,6 +48,18 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
     expect(exact.length).toBe(TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS);
   });
 
+  test("keeps an image token that crosses the character budget", () => {
+    const description = `${"a".repeat(470)}\n\n![Screenshot](odt-asset:550e8400-e29b-41d4-a716-446655440000 "shot.png")`;
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
+  });
+
+  test("drops an image token without a closing bracket", () => {
+    const description = `${"a".repeat(472)}![Screenshot](odt-asset:550e8400-e29b-41d4-a716-446655440000`;
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe("a".repeat(472));
+  });
+
   test("hides a valid front matter block and bounds the body", () => {
     const description = [
       "---",

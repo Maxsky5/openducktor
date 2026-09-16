@@ -195,6 +195,17 @@ test("labels a malformed task asset reference without a task context alert", () 
   expect(document.querySelector("[data-task-id] img")).toBeNull();
 });
 
+test("keeps a preview image chip when the image token crosses the preview budget", () => {
+  const description = `${"a".repeat(470)}\n\n![Screenshot](odt-asset:550e8400-e29b-41d4-a716-446655440000 "shot.png")`;
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({ task: { ...task(), description } }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.textContent).toContain("Screenshot");
+  expect(preview?.querySelector("svg.lucide-image")).not.toBeNull();
+});
+
 test("does not load a remote image in the description preview", () => {
   const html = renderTool("openducktor_odt_create_task", {
     output: JSON.stringify({
