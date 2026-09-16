@@ -105,12 +105,15 @@ export function useWorkspaceSessionChatActions(
     resume: resumeInterruptedTurn,
     isSessionResuming,
     resumeErrorForSession,
+    persistentResumeErrorForSession,
   } = useInterruptedTurnResume(operations.continueInterruptedTurn);
   const recordIdentity = workspaceSessionIdentity(record);
   const recordSessionKey = recordIdentity === null ? null : agentSessionIdentityKey(recordIdentity);
   const isResumingSession = recordSessionKey !== null && isSessionResuming(recordSessionKey);
   const resumeSessionError =
     recordSessionKey === null ? null : resumeErrorForSession(recordSessionKey);
+  const persistentResumeError =
+    recordSessionKey === null ? null : persistentResumeErrorForSession(recordSessionKey);
 
   return {
     isSending,
@@ -121,6 +124,7 @@ export function useWorkspaceSessionChatActions(
     sendDraft,
     isResumingSession,
     resumeSessionError,
+    persistentResumeError,
     resumeInterruptedTurn,
   };
 }

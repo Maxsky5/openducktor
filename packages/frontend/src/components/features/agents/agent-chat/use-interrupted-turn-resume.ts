@@ -2,17 +2,47 @@ import { HostInvokeError } from "@openducktor/host-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
-import { getAgentSessionResumeFailureNotice } from "@/state/agent-runtime-services";
+import {
+  getAgentSessionResumeFailureNotice,
+  type AgentSessionResumeFailureNotice,
+} from "@/state/agent-runtime-services";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 export type InterruptedTurnResumeController = {
   readonly resume: (identity: AgentSessionIdentity) => void;
   readonly isSessionResuming: (sessionKey: string) => boolean;
   readonly resumeErrorForSession: (sessionKey: string) => string | null;
+  /**
+   * The text of a resume failure that outlives the Resume action. The runtime was not
+   * available to answer for the continuation, and the chat keeps the notice after the
+   * session stops offering Resume.
+   */
+  readonly persistentResumeErrorForSession: (sessionKey: string) => string | null;
+};
+
+type InterruptedTurnResumeFailure = {
+  readonly text: string;
+  readonly persistent: boolean;
 };
 
 const EMPTY_SESSION_KEYS: ReadonlySet<string> = new Set();
-const EMPTY_FAILURES: ReadonlyMap<string, string> = new Map();
+const EMPTY_FAILURES: ReadonlyMap<string, InterruptedTurnResumeFailure> = new Map();
+
+/**
+ * A `runtime_unavailable` failure must outlive the Resume action: the runtime can be
+ * working on the accepted continuation after the turn stops offering Resume.
+ */
+const failureSurvivesResumeAction = (notice: AgentSessionResumeFailureNotice): boolean =>
+  notice.reason === "runtime_unavailable";
+
+const toResumeFailure = (cause: unknown): InterruptedTurnResumeFailure => {
+  const notice =
+    cause instanceof HostInvokeError ? getAgentSessionResumeFailureNotice(cause) : null;
+  if (!notice) {
+    return { text: errorMessage(cause), persistent: false };
+  }
+  return { text: notice.text, persistent: failureSurvivesResumeAction(notice) };
+};
 
 /**
  * Runs interrupted-turn resumes and keys the loading and failure state by session.
@@ -33,7 +63,8 @@ export const useInterruptedTurnResume = (
   const activeSessionKeysRef = useRef(new Set<string>());
   const [resumingSessionKeys, setResumingSessionKeys] =
     useState<ReadonlySet<string>>(EMPTY_SESSION_KEYS);
-  const [failures, setFailures] = useState<ReadonlyMap<string, string>>(EMPTY_FAILURES);
+  const [failures, setFailures] =
+    useState<ReadonlyMap<string, InterruptedTurnResumeFailure>>(EMPTY_FAILURES);
 
   const resume = useCallback(
     (identity: AgentSessionIdentity): void => {
@@ -56,9 +87,7 @@ export const useInterruptedTurnResume = (
           if (!mounted.current || !activeSessionKeysRef.current.has(sessionKey)) {
             return;
           }
-          const notice =
-            cause instanceof HostInvokeError ? getAgentSessionResumeFailureNotice(cause) : null;
-          setFailures((current) => new Map(current).set(sessionKey, notice ?? errorMessage(cause)));
+          setFailures((current) => new Map(current).set(sessionKey, toResumeFailure(cause)));
         })
         .finally(() => {
           if (!activeSessionKeysRef.current.delete(sessionKey)) {
@@ -77,12 +106,19 @@ export const useInterruptedTurnResume = (
     [resumingSessionKeys],
   );
   const resumeErrorForSession = useCallback(
-    (sessionKey: string): string | null => failures.get(sessionKey) ?? null,
+    (sessionKey: string): string | null => failures.get(sessionKey)?.text ?? null,
+    [failures],
+  );
+  const persistentResumeErrorForSession = useCallback(
+    (sessionKey: string): string | null => {
+      const failure = failures.get(sessionKey);
+      return failure?.persistent === true ? failure.text : null;
+    },
     [failures],
   );
 
   return useMemo(
-    () => ({ resume, isSessionResuming, resumeErrorForSession }),
-    [isSessionResuming, resume, resumeErrorForSession],
+    () => ({ resume, isSessionResuming, resumeErrorForSession, persistentResumeErrorForSession }),
+    [isSessionResuming, persistentResumeErrorForSession, resume, resumeErrorForSession],
   );
 };

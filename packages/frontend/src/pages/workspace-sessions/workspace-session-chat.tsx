@@ -246,6 +246,7 @@ export function WorkspaceSessionChat({
         runtimeData.runtimePolicyError,
         runtimeData.todosError,
         catalogError,
+        canResumeSession && canInteract ? null : actions.persistentResumeError,
       ].find((error) => error != null) ?? null,
     interactionEnabled: canInteract,
     runtimePresentation,

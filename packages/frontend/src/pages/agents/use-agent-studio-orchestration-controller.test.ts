@@ -61,6 +61,7 @@ const createBaseArgs = (): BuildArgs => {
     canResumeSession: false,
     isResumingSession: false,
     resumeSessionError: null,
+    persistentResumeError: null,
     onResumeSession: () => {},
     startLaunchKickoff: async () => {},
     onSend: async () => true,

@@ -26,6 +26,9 @@ export const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
   session.pendingApprovals.size > 0 ||
   session.pendingQuestions.size > 0;
 
+export const isClaudeSessionStopped = (session: ClaudeSession): boolean =>
+  session.activity === "stopped";
+
 export const createClaudeAgentSdkSessionStore = ({
   emit,
   now = () => new Date().toISOString(),

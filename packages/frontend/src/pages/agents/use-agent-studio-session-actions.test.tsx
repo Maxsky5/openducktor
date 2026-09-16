@@ -455,6 +455,45 @@ describe("useAgentStudioSessionActions", () => {
     }
   });
 
+  test("keeps an unconfirmed continuation failure for the chat surface", async () => {
+    const failure = new HostInvokeError("Continuation unconfirmed", {
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "runtime_unavailable",
+        sessionRef: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        },
+        operation: "agent-session.continue-interrupted-turn",
+        message: "The runtime did not confirm the continuation.",
+        nextAction: "Inspect the runtime and this session.",
+      },
+    });
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      ...selectedSessionArgs(),
+      continueInterruptedTurn: async () => {
+        throw failure;
+      },
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.onResumeSession();
+      });
+      await harness.waitFor(() => harness.getLatest().persistentResumeError !== null);
+
+      expect(harness.getLatest().persistentResumeError).toBe(
+        "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("blocks a second resume selection before the first one renders", async () => {
     let resolveContinuation = (): void => {};
     const continueInterruptedTurn = mock(

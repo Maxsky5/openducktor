@@ -1235,6 +1235,35 @@ describe("continueInterruptedTurn eligibility", () => {
     expect(sessionStore.get("session-1")).toBe(attached);
   });
 
+  test("drops an attached stopped session when the replacement continuation cannot start", async () => {
+    const sessionStore = createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const attached = createSession({
+      activity: "stopped",
+      acceptedUserMessages: [
+        {
+          messageId: "user-1",
+          parts: [],
+          text: "Continue.",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+    });
+    const closeSession = mock((target: ClaudeSession) => sessionStore.close(target));
+    const service = createService(attached, undefined, undefined, {
+      ...sessionStore,
+      close: closeSession,
+    });
+
+    await expect(
+      resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
+    ).resolves.toBe("session_not_found");
+
+    expect(closeSession).toHaveBeenCalledWith(attached);
+    expect(sessionStore.get("session-1")).toBeUndefined();
+  });
+
   test("reads the persisted transcript for a reattached live session before continuing", async () => {
     const service = createService(
       createSession({

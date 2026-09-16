@@ -339,7 +339,63 @@ test("shows the host reason and next action when a continuation is refused", asy
     expect(view.result.current.resumeSessionError).toBe(
       "OpenCode session 'session-1' has a completed latest turn. Send a new message to start new work.",
     );
+    expect(view.result.current.persistentResumeError).toBeNull();
     expect(view.result.current.isResumingSession).toBe(false);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+  }
+});
+
+test("keeps an unconfirmed continuation failure after the Resume action settles", async () => {
+  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+  const failure = new HostInvokeError("Continuation unconfirmed", {
+    kind: "agent_session_resume",
+    agentSessionResumeFailure: {
+      reason: "runtime_unavailable",
+      sessionRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      },
+      operation: "agent-session.continue-interrupted-turn",
+      message: "The runtime did not confirm the continuation.",
+      nextAction: "Inspect the runtime and this session.",
+    },
+  });
+  const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const operations = createOperations({
+    sendAgentMessage: async () => {},
+    continueInterruptedTurn: async () => {
+      throw failure;
+    },
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>
+        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+      </AgentSessionsContext>
+    </QueryClientProvider>
+  );
+  const view = renderHook(({ record }) => useWorkspaceSessionChatActions(workspace, record), {
+    wrapper,
+    initialProps: { record: createSessionOneRecord() },
+  });
+
+  try {
+    await act(async () => {
+      view.result.current.resumeInterruptedTurn({
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      });
+    });
+
+    expect(view.result.current.persistentResumeError).toBe(
+      "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+    );
   } finally {
     view.unmount();
     queryClient.clear();

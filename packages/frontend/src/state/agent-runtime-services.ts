@@ -3,6 +3,7 @@ import { generatedImageMetadataSessionKey } from "@/state/queries/agent-generate
 import type {
   AgentRepositorySessionStartInput,
   AgentSessionLiveRef,
+  AgentSessionResumeFailureReason,
   RuntimeInstanceSummary,
   RuntimeKind,
 } from "@openducktor/contracts";
@@ -121,16 +122,23 @@ const toAcceptedAgentUserMessage = (
   return acceptedMessage;
 };
 
+export type AgentSessionResumeFailureNotice = {
+  readonly reason: AgentSessionResumeFailureReason;
+  readonly text: string;
+};
+
 /**
- * Turns a typed resume failure into the text the chat shows beside Resume. The host
- * message names the cause, and the next action names the fix.
+ * Turns a typed resume failure into the reason and the text the chat shows beside Resume.
+ * The host message names the cause, and the next action names the fix.
  */
-export const getAgentSessionResumeFailureNotice = (error: HostInvokeError): string | null => {
+export const getAgentSessionResumeFailureNotice = (
+  error: HostInvokeError,
+): AgentSessionResumeFailureNotice | null => {
   if (error.failure?.kind !== "agent_session_resume") {
     return null;
   }
-  const { message, nextAction } = error.failure.agentSessionResumeFailure;
-  return `${message} ${nextAction}`;
+  const { message, nextAction, reason } = error.failure.agentSessionResumeFailure;
+  return { reason, text: `${message} ${nextAction}` };
 };
 
 export const getAcceptedMessageAfterSendFailure = (

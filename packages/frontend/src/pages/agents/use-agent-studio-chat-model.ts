@@ -47,6 +47,7 @@ export type AgentStudioChatSessionActionsContext = {
   canResumeSession: boolean;
   isResumingSession: boolean;
   resumeSessionError: string | null;
+  persistentResumeError: string | null;
   onResumeSession: () => void;
   startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
@@ -477,7 +478,8 @@ export function useAgentStudioChatModel({
       selectedSessionRuntimeData.contextError ??
       selectedSessionRuntimeData.runtimePolicyError ??
       selectedSessionRuntimeData.todosError ??
-      selectedSessionRuntimeData.catalogError,
+      selectedSessionRuntimeData.catalogError ??
+      (sessionActions.canResumeSession ? null : sessionActions.persistentResumeError),
     interactionEnabled: chatReadiness.interactionEnabled,
     runtimePresentation,
     emptyState: surfaceState.emptyState,

@@ -26,6 +26,7 @@ import {
   canRestoreClaudeSessionModelAfterQueuedTurns,
   hasActiveSdkUserTurn,
 } from "./claude-agent-sdk-session-queue-policy";
+import { isClaudeSessionStopped } from "./claude-agent-sdk-session-store";
 import { toClaudeDisplayParts } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAcceptedUserMessage,
@@ -35,8 +36,6 @@ import type {
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
 import { modelSelection, textFromContentBlocks } from "./claude-agent-sdk-utils";
-
-const isClaudeSessionStopped = (session: ClaudeSession): boolean => session.activity === "stopped";
 
 const assertClaudeSessionAcceptingMessages = (session: ClaudeSession): void => {
   if (session.activity !== "stopped") {
@@ -189,6 +188,8 @@ export const consumeClaudeSession = async (input: {
     closeLiveSession();
   };
   const failSession = async (cause: unknown): Promise<void> => {
+    // The interrupted-turn path reads this flag before it restores a failed continuation.
+    session.activity = "stopped";
     if (!isLiveSession()) {
       return;
     }
@@ -201,7 +202,6 @@ export const consumeClaudeSession = async (input: {
         message: errorMessage(cause),
       });
     }
-    session.activity = "stopped";
     await flushClaudeLiveContextUsageRefresh(session);
     if (!isLiveSession()) {
       return;
@@ -243,6 +243,8 @@ export const consumeClaudeSession = async (input: {
       }
     }
     await flushClaudeLiveContextUsageRefresh(session);
+    // A stream that ends after a replacement took the store key must still stop.
+    session.activity = "stopped";
     if (isLiveSession()) {
       finishLiveSession("Claude Agent SDK session stream ended.");
     }

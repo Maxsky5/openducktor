@@ -49,6 +49,7 @@ const createContinuationAdapter = ({
   threadId = "thread-1",
   turnStartError,
   continuationTurnStatus = "inProgress",
+  threadSetNameError,
 }: {
   threadStatus: CodexAppServerThreadStatus;
   latestTurnStatus: "completed" | "failed" | "inProgress" | "interrupted";
@@ -56,8 +57,10 @@ const createContinuationAdapter = ({
   threadId?: string;
   turnStartError?: Error;
   continuationTurnStatus?: "failed" | "inProgress" | "interrupted";
+  threadSetNameError?: () => Error | undefined;
 }) => {
   const calls: RecordedCall[] = [];
+  let resumeCount = 0;
   const adapter = new CodexAppServerAdapter({
     repoRuntimeResolver: {
       requireRepoRuntime: async ({ repoPath, runtimeKind }) => ({
@@ -94,11 +97,25 @@ const createContinuationAdapter = ({
                 ],
               }),
             };
-          case "thread/resume":
+          case "thread/resume": {
+            resumeCount += 1;
             return {
               ...codexThreadStartResultFixture(threadId, "thread/resume"),
-              thread: codexThreadFixture({ id: threadId, cwd, status: threadStatus }),
+              thread: codexThreadFixture({
+                id: threadId,
+                cwd,
+                status: threadStatus,
+                createdAt: 1_778_112_000 + resumeCount,
+              }),
             };
+          }
+          case "thread/name/set": {
+            const renameError = threadSetNameError?.();
+            if (renameError) {
+              throw renameError;
+            }
+            return {};
+          }
           case "turn/start":
             if (turnStartError) {
               throw turnStartError;
@@ -153,6 +170,42 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
       input: [],
       approvalPolicy: "on-request",
     });
+  });
+
+  test("releases the resumed session when the thread rename fails", async () => {
+    const { adapter } = createContinuationAdapter({
+      threadStatus: { type: "idle" },
+      latestTurnStatus: "interrupted",
+      threadSetNameError: () => new Error("rename rejected"),
+    });
+
+    await expect(
+      adapter.continueInterruptedTurn(continuationInput({ sessionScope: { kind: "repository" } })),
+    ).rejects.toMatchObject({ reason: "continuation_failed" });
+
+    expect(adapter.listLiveSessionSnapshots("runtime-live")).toEqual([]);
+  });
+
+  test("keeps the attached session when the thread rename fails for a continuation", async () => {
+    const renameError = new Error("rename rejected");
+    let failRename = false;
+    const { adapter } = createContinuationAdapter({
+      threadStatus: { type: "idle" },
+      latestTurnStatus: "interrupted",
+      threadSetNameError: () => (failRename ? renameError : undefined),
+    });
+    const resumed = await adapter.resumeSession(
+      continuationInput({ sessionScope: { kind: "repository" } }),
+    );
+
+    failRename = true;
+    await expect(
+      adapter.continueInterruptedTurn(continuationInput({ sessionScope: { kind: "repository" } })),
+    ).rejects.toMatchObject({ reason: "continuation_failed" });
+
+    const snapshots = adapter.listLiveSessionSnapshots("runtime-live");
+    expect(snapshots.map((snapshot) => snapshot.ref.externalSessionId)).toEqual(["thread-1"]);
+    expect(snapshots[0]?.startedAt).toBe(resumed.startedAt);
   });
 
   test("refuses a live thread without starting a turn", async () => {

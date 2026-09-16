@@ -61,6 +61,7 @@ import {
   assertClaudeContinuationExecutableCompatible,
   checkLiveClaudeContinuationEligibility,
   checkPersistedClaudeContinuationEligibility,
+  resolveFailedClaudeContinuationSession,
 } from "./claude-agent-sdk-service-continuation";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
@@ -142,7 +143,8 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           }
           // The replacement starts a new CLI process for the same session id. Keep the
           // attached session until the replacement is created, so a failed continuation
-          // leaves the user with the session they already had.
+          // leaves the user with the session they already had. A session whose stream
+          // ended in the meantime has no consumer, so it is dropped instead of restored.
           return yield* this.createSession(
             input,
             runtimeId,
@@ -155,11 +157,12 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
                 }
               }),
             ),
-            Effect.tapError(() =>
-              Effect.sync(() => {
-                if (existing) {
-                  this.sessionStore.set(existing);
-                }
+            Effect.mapError((cause) =>
+              resolveFailedClaudeContinuationSession({
+                cause,
+                existing,
+                externalSessionId: input.externalSessionId,
+                sessionStore: this.sessionStore,
               }),
             ),
           );

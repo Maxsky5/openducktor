@@ -142,6 +142,13 @@ import type {
 
 export { createCodexAppServerClient } from "./app-server-client";
 
+const codexContinuationFailed = (externalSessionId: string, cause: unknown) =>
+  interruptedTurnResumeError({
+    reason: "continuation_failed",
+    message: `Codex could not continue the interrupted turn for session '${externalSessionId}': ${cause instanceof Error ? cause.message : String(cause)}`,
+    cause,
+  });
+
 const toLivePendingApproval = (
   request: AgentPendingApprovalRequest,
 ): AgentSessionLivePendingApprovalRequest => {
@@ -607,21 +614,29 @@ export class CodexAppServerAdapter
     if (sessionPolicy.kind === "repository") {
       session.summary = { ...session.summary, title: sessionPolicy.title };
     }
+    const previous = this.localSessions.get(input.externalSessionId);
     this.localSessions.remember(session);
     if (sessionPolicy.kind === "repository") {
-      await client.threadSetName({
-        threadId: session.threadId,
-        name: sessionPolicy.title,
-      });
+      try {
+        await client.threadSetName({
+          threadId: session.threadId,
+          name: sessionPolicy.title,
+        });
+      } catch (cause) {
+        // A replacement that cannot be prepared must not stay registered as a live
+        // session, or the host would show a running session without a consumer.
+        if (previous) {
+          this.localSessions.remember(previous);
+        } else {
+          this.localSessions.release(session.threadId);
+        }
+        throw codexContinuationFailed(input.externalSessionId, cause);
+      }
     }
     try {
       await startCodexContinuationTurn(this.turnLifecycleContext(), input.externalSessionId, model);
     } catch (cause) {
-      throw interruptedTurnResumeError({
-        reason: "continuation_failed",
-        message: `Codex could not continue the interrupted turn for session '${input.externalSessionId}': ${cause instanceof Error ? cause.message : String(cause)}`,
-        cause,
-      });
+      throw codexContinuationFailed(input.externalSessionId, cause);
     }
     return session.summary;
   }

@@ -13,6 +13,7 @@ import {
 import { Effect } from "effect";
 import {
   HostOperationError,
+  type HostOperationErrorAggregate,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
@@ -30,7 +31,12 @@ import {
 } from "./claude-agent-sdk-history-loader";
 import { resolveClaudeExecutable } from "./claude-agent-sdk-runtime";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
-import type { ClaudeSession, CreateClaudeAgentSdkServiceInput } from "./claude-agent-sdk-types";
+import { isClaudeSessionStopped } from "./claude-agent-sdk-session-store";
+import type {
+  ClaudeSession,
+  ClaudeSessionStore,
+  CreateClaudeAgentSdkServiceInput,
+} from "./claude-agent-sdk-types";
 import { fromPromise } from "./claude-agent-sdk-utils";
 
 const continuationOperation = "claudeRuntime.continueInterruptedTurn";
@@ -40,6 +46,36 @@ const failClaudeContinuation = (error: InterruptedTurnResumeError) =>
 
 const finishClaudeContinuationDecision = (decision: ClaudeContinuationDecision) =>
   decision.kind === "reject" ? failClaudeContinuation(decision.error) : Effect.void;
+
+/**
+ * Decides what happens to the attached session after a failed replacement. A session
+ * whose stream ended in the meantime has no consumer, so it is dropped instead of
+ * restored, and the failure names the missing session.
+ */
+export const resolveFailedClaudeContinuationSession = <Failure>(input: {
+  cause: Failure;
+  existing: ClaudeSession | undefined;
+  externalSessionId: string;
+  sessionStore: ClaudeSessionStore;
+}): Failure | HostOperationErrorAggregate => {
+  const { cause, existing, externalSessionId, sessionStore } = input;
+  if (!existing) {
+    return cause;
+  }
+  if (isClaudeSessionStopped(existing)) {
+    sessionStore.close(existing);
+    return toHostOperationError(
+      interruptedTurnResumeError({
+        reason: "session_not_found",
+        message: `Claude session '${externalSessionId}' stopped while the continuation was being created, so the continuation cannot use it.`,
+        cause,
+      }),
+      continuationOperation,
+    );
+  }
+  sessionStore.set(existing);
+  return cause;
+};
 
 /**
  * Reads the persisted transcript for a continuation. The read covers the full

@@ -46,9 +46,10 @@ describe("getAgentSessionResumeFailureNotice", () => {
       },
     });
 
-    expect(getAgentSessionResumeFailureNotice(error)).toBe(
-      "Codex session 'session-1' has a live turn. Wait for the live turn to finish, then retry Resume.",
-    );
+    expect(getAgentSessionResumeFailureNotice(error)).toEqual({
+      reason: "live_turn",
+      text: "Codex session 'session-1' has a live turn. Wait for the live turn to finish, then retry Resume.",
+    });
   });
 
   test("ignores other host failures", () => {

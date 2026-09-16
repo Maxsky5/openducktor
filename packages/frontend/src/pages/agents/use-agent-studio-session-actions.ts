@@ -96,6 +96,7 @@ export type UseAgentStudioSessionActionsResult = {
   canResumeSession: boolean;
   isResumingSession: boolean;
   resumeSessionError: string | null;
+  persistentResumeError: string | null;
   onResumeSession: () => void;
   startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
@@ -260,13 +261,15 @@ export function useAgentStudioSessionActions({
   const canStopSession = selectedSessionIdentity !== null && isSessionWorking;
   const canResumeSession = sessionState.canResumeSession;
 
-  const { resume, isSessionResuming, resumeErrorForSession } =
+  const { resume, isSessionResuming, resumeErrorForSession, persistentResumeErrorForSession } =
     useInterruptedTurnResume(continueInterruptedTurn);
   const selectedSessionKey =
     selectedSessionIdentity === null ? null : agentSessionIdentityKey(selectedSessionIdentity);
   const isResumingSession = selectedSessionKey !== null && isSessionResuming(selectedSessionKey);
   const resumeSessionError =
     selectedSessionKey === null ? null : resumeErrorForSession(selectedSessionKey);
+  const persistentResumeError =
+    selectedSessionKey === null ? null : persistentResumeErrorForSession(selectedSessionKey);
 
   const onResumeSession = useCallback((): void => {
     if (selectedSessionIdentity === null) {
@@ -293,6 +296,7 @@ export function useAgentStudioSessionActions({
     canResumeSession,
     isResumingSession,
     resumeSessionError,
+    persistentResumeError,
     onResumeSession,
     startLaunchKickoff,
     onSend,

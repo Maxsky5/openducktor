@@ -111,12 +111,63 @@ test("keeps a pending resume of another session independent", async () => {
       "OpenCode session 'session-a' has a completed latest turn. Send a new message to start new work.",
     );
     expect(view.result.current.resumeErrorForSession(keyB)).toBeNull();
+    expect(view.result.current.persistentResumeErrorForSession(keyA)).toBeNull();
 
     await act(async () => {
       pending[1]?.resolve();
     });
 
     expect(view.result.current.isSessionResuming(keyB)).toBe(false);
+  } finally {
+    view.unmount();
+  }
+});
+
+test("keeps an unconfirmed continuation failure after the Resume action settles", async () => {
+  const { pending, continueInterruptedTurn } = createResumeRecorder();
+  const view = renderHook(() => useInterruptedTurnResume(continueInterruptedTurn));
+  const failure = new HostInvokeError("Continuation unconfirmed", {
+    kind: "agent_session_resume",
+    agentSessionResumeFailure: {
+      reason: "runtime_unavailable",
+      sessionRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-a",
+      },
+      operation: "agent-session.continue-interrupted-turn",
+      message: "The runtime did not confirm the continuation.",
+      nextAction: "Inspect the runtime and this session.",
+    },
+  });
+
+  try {
+    act(() => {
+      view.result.current.resume(identityA);
+    });
+
+    await act(async () => {
+      pending[0]?.reject(failure);
+    });
+
+    expect(view.result.current.resumeErrorForSession(keyA)).toBe(
+      "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+    );
+    expect(view.result.current.persistentResumeErrorForSession(keyA)).toBe(
+      "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+    );
+    expect(view.result.current.persistentResumeErrorForSession(keyB)).toBeNull();
+
+    act(() => {
+      view.result.current.resume(identityA);
+    });
+
+    expect(view.result.current.persistentResumeErrorForSession(keyA)).toBeNull();
+
+    await act(async () => {
+      pending[1]?.resolve();
+    });
   } finally {
     view.unmount();
   }
