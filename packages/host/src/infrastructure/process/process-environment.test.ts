@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, readFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -36,6 +36,23 @@ const waitFor = async (check: () => boolean, timeoutMs = 1_000): Promise<void> =
       throw new Error("Timed out waiting for the process to stop.");
     }
     await Bun.sleep(10);
+  }
+};
+
+const processHasStopped = (pid: number): boolean => {
+  if (!processIsAlive(pid)) {
+    return true;
+  }
+  if (process.platform !== "linux") {
+    return false;
+  }
+
+  try {
+    // Linux reports zombies as alive until their parent reaps them.
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2).startsWith("Z ");
+  } catch {
+    return !processIsAlive(pid);
   }
 };
 
@@ -582,9 +599,9 @@ describe("createProcessEnvironment", () => {
 
         expect(resolution.error).toBeNull();
         expect(resolution.environment.PATH?.split(":")[0]).toBe("/fixture/background");
-        await waitFor(() => !processIsAlive(stoppedPid));
+        await waitFor(() => processHasStopped(stoppedPid));
       } finally {
-        if (childPid && processIsAlive(childPid)) {
+        if (childPid && !processHasStopped(childPid)) {
           process.kill(childPid, "SIGKILL");
         }
         await rm(root, { force: true, recursive: true });
