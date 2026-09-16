@@ -175,34 +175,44 @@ export const consumeClaudeSession = async (input: {
       sessionStore.close(session);
     }
   };
+  // A replacement that never admitted the continuation must not remove the attached session.
+  let continuationAdmitted = onContinuationAdmission === undefined;
+  const finishLiveSession = (message: string): void => {
+    if (isLiveSession() && continuationAdmitted) {
+      emit(session, {
+        type: "session_finished",
+        externalSessionId: session.externalSessionId,
+        timestamp: now(),
+        message,
+      });
+    }
+    closeLiveSession();
+  };
   const failSession = async (cause: unknown): Promise<void> => {
     if (!isLiveSession()) {
       return;
     }
     const timestamp = now();
-    emit(session, {
-      type: "session_error",
-      externalSessionId: session.externalSessionId,
-      timestamp,
-      message: errorMessage(cause),
-    });
+    if (continuationAdmitted) {
+      emit(session, {
+        type: "session_error",
+        externalSessionId: session.externalSessionId,
+        timestamp,
+        message: errorMessage(cause),
+      });
+    }
     session.activity = "stopped";
     await flushClaudeLiveContextUsageRefresh(session);
     if (!isLiveSession()) {
       return;
     }
-    emit(session, {
-      type: "session_finished",
-      externalSessionId: session.externalSessionId,
-      timestamp,
-      message: "Claude Agent SDK session stream stopped after an error.",
-    });
-    closeLiveSession();
+    finishLiveSession("Claude Agent SDK session stream stopped after an error.");
   };
   try {
     for await (const message of session.query) {
       const timestamp = readClaudeSdkMessageTimestamp(message, now);
       if (onContinuationAdmission && isClaudeContinuationAdmission(message)) {
+        continuationAdmitted = true;
         onContinuationAdmission();
       }
       handleClaudeSdkMessage({
@@ -234,14 +244,7 @@ export const consumeClaudeSession = async (input: {
     }
     await flushClaudeLiveContextUsageRefresh(session);
     if (isLiveSession()) {
-      const timestamp = now();
-      emit(session, {
-        type: "session_finished",
-        externalSessionId: session.externalSessionId,
-        timestamp,
-        message: "Claude Agent SDK session stream ended.",
-      });
-      closeLiveSession();
+      finishLiveSession("Claude Agent SDK session stream ended.");
     }
   } catch (error) {
     await failSession(error);

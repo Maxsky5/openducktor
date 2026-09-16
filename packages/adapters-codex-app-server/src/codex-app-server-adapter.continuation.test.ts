@@ -211,6 +211,18 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     expect(methodsOf(calls)).not.toContain("turn/start");
   });
 
+  test("continues a failed latest turn instead of refusing it", async () => {
+    const { adapter, calls } = createContinuationAdapter({
+      threadStatus: { type: "idle" },
+      latestTurnStatus: "failed",
+    });
+
+    const summary = await adapter.continueInterruptedTurn(continuationInput());
+
+    expect(summary).toMatchObject({ externalSessionId: "thread-1", runtimeKind: "codex" });
+    expect(methodsOf(calls)).toContain("turn/start");
+  });
+
   test("refuses a thread that does not match the stored working directory", async () => {
     const { adapter, calls } = createContinuationAdapter({
       threadStatus: { type: "idle" },

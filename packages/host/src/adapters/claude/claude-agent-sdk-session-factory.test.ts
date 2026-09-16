@@ -856,6 +856,9 @@ describe("createClaudeAgentSdkSession", () => {
 
       expect(sessionStore.get("session-continuation")).toBeUndefined();
       expect(events.some((event) => event.type === "session_started")).toBe(false);
+      expect(
+        events.some((event) => event.type === "session_finished" || event.type === "session_error"),
+      ).toBe(false);
     } finally {
       querySpy.mockRestore();
     }

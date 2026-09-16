@@ -573,7 +573,7 @@ export class CodexAppServerAdapter
         message: `Codex session '${input.externalSessionId}' has no turn to continue.`,
       });
     }
-    if (latestTurn.status === "completed" || latestTurn.status === "failed") {
+    if (latestTurn.status === "completed") {
       throw interruptedTurnResumeError({
         reason: "completed_turn",
         message: `Codex session '${input.externalSessionId}' has a completed latest turn.`,
