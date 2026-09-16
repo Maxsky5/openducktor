@@ -208,20 +208,19 @@ describe("global config", () => {
     expect(upgraded.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
   });
 
-  test("reports a missing field and its allowed values for a rejected config", () => {
+  test("reports a missing field for a rejected config", () => {
     expect(() =>
       parsePersistedGlobalConfig({
         version: 3,
         workspaces: {
           fairnest: {
             workspaceId: "fairnest",
-            workspaceName: "Fairnest",
             repoPath: "/repo",
           },
         },
       }),
     ).toThrow(
-      'workspaces.fairnest.defaultRuntimeKind: Invalid option: expected one of "opencode"|"codex"|"claude" (missing)',
+      "workspaces.fairnest.workspaceName: Invalid input: expected string, received undefined (missing)",
     );
   });
 
@@ -233,15 +232,13 @@ describe("global config", () => {
         workspaces: {
           fairnest: {
             workspaceId: "fairnest",
-            workspaceName: "Fairnest",
+            workspaceName: null,
             repoPath: "/repo",
-            defaultRuntimeKind: null,
           },
           openducktor: {
             workspaceId: "openducktor",
-            workspaceName: "OpenDucktor",
+            workspaceName: "",
             repoPath: "/repo",
-            defaultRuntimeKind: "cursor",
           },
         },
       }),
@@ -252,10 +249,10 @@ describe("global config", () => {
       'theme: Invalid option: expected one of "system"|"light"|"dark" (found "blue")',
     );
     expect(lines).toContain(
-      'workspaces.fairnest.defaultRuntimeKind: Invalid option: expected one of "opencode"|"codex"|"claude" (found null)',
+      "workspaces.fairnest.workspaceName: Invalid input: expected string, received null (found null)",
     );
     expect(lines).toContain(
-      'workspaces.openducktor.defaultRuntimeKind: Invalid option: expected one of "opencode"|"codex"|"claude" (found "cursor")',
+      'workspaces.openducktor.workspaceName: Workspace name cannot be blank. (found "")',
     );
     expect(message).not.toContain('"code"');
   });
@@ -268,9 +265,8 @@ describe("global config", () => {
           workspaceId,
           {
             workspaceId,
-            workspaceName: `Repo ${index}`,
+            workspaceName: null,
             repoPath: "/repo",
-            defaultRuntimeKind: null,
           },
         ];
       }),
