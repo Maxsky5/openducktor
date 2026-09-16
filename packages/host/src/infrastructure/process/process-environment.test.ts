@@ -577,11 +577,12 @@ describe("createProcessEnvironment", () => {
             readUserShell: () => shellPath,
           }),
         );
-        childPid = Number(await readFile(childPidPath, "utf8"));
+        const stoppedPid = Number(await readFile(childPidPath, "utf8"));
+        childPid = stoppedPid;
 
         expect(resolution.error).toBeNull();
         expect(resolution.environment.PATH?.split(":")[0]).toBe("/fixture/background");
-        expect(processIsAlive(childPid)).toBe(false);
+        await waitFor(() => !processIsAlive(stoppedPid));
       } finally {
         if (childPid && processIsAlive(childPid)) {
           process.kill(childPid, "SIGKILL");
