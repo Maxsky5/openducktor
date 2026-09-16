@@ -1,8 +1,16 @@
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
 import type { ContinueInterruptedAgentTurnInput, ResumeAgentSessionInput } from "@openducktor/core";
-import { interruptedTurnResumeError } from "@openducktor/core";
+import {
+  AgentRuntimeQueryError,
+  interruptedTurnResumeError,
+  type InterruptedTurnResumeFailureReason,
+} from "@openducktor/core";
 import { Effect } from "effect";
-import { toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { loadClaudeHistory } from "./claude-agent-sdk-catalog";
 import { assertClaudeInterruptedTurnResumeCompatible } from "./claude-continuation-compatibility";
@@ -21,9 +29,56 @@ export const checkLiveClaudeContinuationEligibility = (
   input: ResumeAgentSessionInput,
 ) =>
   fromPromise("claudeRuntime.continueInterruptedTurn", async () => {
-    assertClaudeSessionRef(session, input, "continue interrupted turn");
+    try {
+      assertClaudeSessionRef(session, input, "continue interrupted turn");
+    } catch (cause) {
+      if (cause instanceof HostValidationError) {
+        throw interruptedTurnResumeError({
+          reason: "identity_mismatch",
+          message: cause.message,
+          cause,
+        });
+      }
+      throw cause;
+    }
     assertClaudeContinuationEligible(session, input.externalSessionId);
   });
+
+type PersistedContinuationFailure = {
+  readonly reason: InterruptedTurnResumeFailureReason;
+  readonly message: string;
+};
+
+/**
+ * Classifies a persisted-history failure with the native code that caused it. A missing
+ * session and a working-directory mismatch must not collapse into a generic probe failure.
+ */
+export const classifyPersistedClaudeContinuationFailure = (
+  cause: unknown,
+  externalSessionId: string,
+): PersistedContinuationFailure => {
+  const native =
+    cause instanceof HostOperationError || cause instanceof HostValidationError
+      ? cause.cause
+      : cause;
+  if (native instanceof AgentRuntimeQueryError && native.code === "scope_mismatch") {
+    return {
+      reason: "identity_mismatch",
+      message: `Cannot continue Claude session '${externalSessionId}': ${native.message}`,
+    };
+  }
+  if (native instanceof AgentRuntimeQueryError && native.code === "request_failed") {
+    return {
+      reason: "session_not_found",
+      message: `Cannot read the persisted Claude transcript for session '${externalSessionId}': ${native.message}`,
+    };
+  }
+  const detail = cause instanceof Error ? cause.message : String(cause);
+  return {
+    reason: "probe_failed",
+    message: `Cannot read the persisted Claude transcript for session '${externalSessionId}': ${detail}`,
+  };
+};
 
 /**
  * Rejects an interrupted-turn resume after a restart, when no live session entry exists.
@@ -38,8 +93,7 @@ export const checkPersistedClaudeContinuationEligibility = (
       Effect.fail(
         toHostOperationError(
           interruptedTurnResumeError({
-            reason: "probe_failed",
-            message: `Cannot read the persisted Claude transcript for session '${input.externalSessionId}': ${cause.message}`,
+            ...classifyPersistedClaudeContinuationFailure(cause, input.externalSessionId),
             cause,
           }),
           "claudeRuntime.continueInterruptedTurn",
@@ -55,7 +109,7 @@ export const checkPersistedClaudeContinuationEligibility = (
 
 /**
  * Binds the interrupted-turn continuation to the executable the runtime will run.
- * The executable must report the minimum version that owns the continuation contract.
+ * The executable must report the verified version that owns the continuation contract.
  */
 export const assertClaudeContinuationExecutableCompatible = (
   serviceInput: CreateClaudeAgentSdkServiceInput,

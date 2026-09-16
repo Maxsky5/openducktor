@@ -65,7 +65,11 @@ import {
 } from "@openducktor/core";
 import { requireCodexPendingRequestKey } from "./codex-app-server-approvals";
 import { codexApprovalResponseForRequest } from "./codex-app-server-requests";
-import { type ActiveCodexTurn, unsupported } from "./codex-app-server-shared";
+import {
+  type ActiveCodexTurn,
+  isCodexThreadNotLoadedError,
+  unsupported,
+} from "./codex-app-server-shared";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
 import { interruptedTurnResumeError } from "@openducktor/core";
 import type { CodexThreadInventory, CodexThreadStatusSnapshot } from "./codex-app-server-threads";
@@ -513,6 +517,13 @@ export class CodexAppServerAdapter
         includeTurns: true,
       }));
     } catch (cause) {
+      if (isCodexThreadNotLoadedError(cause)) {
+        throw interruptedTurnResumeError({
+          reason: "session_not_found",
+          message: `Codex thread '${input.externalSessionId}' no longer exists on the runtime.`,
+          cause,
+        });
+      }
       throw interruptedTurnResumeError({
         reason: "probe_failed",
         message: `Cannot read the Codex thread for session '${input.externalSessionId}': ${cause instanceof Error ? cause.message : String(cause)}`,

@@ -224,6 +224,50 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.activity).toBe("idle");
   });
 
+  test("reports a missing thread as session_not_found without starting a turn", async () => {
+    const calls: RecordedCall[] = [];
+    const adapter = new CodexAppServerAdapter({
+      repoRuntimeResolver: {
+        requireRepoRuntime: async ({ repoPath, runtimeKind }) => ({
+          ...makeRuntimeSummary("runtime-live"),
+          repoPath,
+          kind: runtimeKind,
+        }),
+      },
+      transportFactory: (): CodexJsonRpcTransport => ({
+        async request({ method, params }) {
+          calls.push({ method, params });
+          switch (method) {
+            case "initialize":
+              return {
+                codexHome: "/tmp/codex-home",
+                platformFamily: "unix",
+                platformOs: "macos",
+                userAgent: "codex_cli_rs/0.149.0-test",
+              };
+            case "model/list":
+              return modelCatalogResult();
+            case "thread/read":
+              throw new Error(
+                "Codex app-server request thread/read failed for runtime runtime-live: thread not loaded: thread-1",
+              );
+            default:
+              return {};
+          }
+        },
+      }),
+      subscribeEvents: () => () => {},
+      respondServerRequest: async () => {},
+    });
+
+    await expect(adapter.continueInterruptedTurn(continuationInput())).rejects.toMatchObject({
+      reason: "session_not_found",
+      message: "Codex thread 'thread-1' no longer exists on the runtime.",
+    });
+    expect(methodsOf(calls)).not.toContain("thread/resume");
+    expect(methodsOf(calls)).not.toContain("turn/start");
+  });
+
   test("reports a failed probe without starting a turn", async () => {
     const calls: RecordedCall[] = [];
     const adapter = new CodexAppServerAdapter({

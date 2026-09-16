@@ -71,6 +71,18 @@ describe("OpencodeSdkAdapter interrupted-turn continuation", () => {
     expect(mock.session.promptAsyncCalls).toHaveLength(0);
   });
 
+  test("reports a registered-session identity mismatch as identity_mismatch", async () => {
+    const mock = makeMockClient({ messagesResponse: interruptedMessages() });
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const ref = sessionRuntimeRef("session-opencode-1", { sessionScope });
+    await adapter.resumeSession(ref);
+
+    await expect(
+      adapter.continueInterruptedTurn({ ...ref, workingDirectory: "/other-worktree" }),
+    ).rejects.toMatchObject({ reason: "identity_mismatch" });
+    expect(mock.session.promptAsyncCalls).toHaveLength(0);
+  });
+
   test("prefers the request model and system prompt over the loaded session values", async () => {
     const mock = makeMockClient({ messagesResponse: interruptedMessages() });
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });

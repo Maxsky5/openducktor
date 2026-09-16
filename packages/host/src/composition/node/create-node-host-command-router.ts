@@ -30,7 +30,6 @@ import { createGitService } from "../../application/git/git-service";
 import { createGitProviderService } from "../../application/git/git-provider-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
-import { createRuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import { createRuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { readSavedRuntimeExecutablePath } from "../../application/runtimes/saved-runtime-executable";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
@@ -67,6 +66,7 @@ import { createWorkspaceLifecycleCommandHandlers } from "../../interface/command
 import { createWorkspaceSettingsCommandHandlers } from "../../interface/commands/workspace-settings-command-handlers";
 import { createEffectHostCommandRouter } from "../../interface/router/host-command-router";
 import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
+import { createHostRuntimeDefinitionsService } from "./create-host-runtime-definitions-service";
 import type {
   CreateNodeHostCommandRouterInput,
   EffectNodeHostCommandRouter,
@@ -160,8 +160,11 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const localAttachmentService = createLocalAttachmentService(localAttachments);
   const openInToolsService = createOpenInToolsService(openInTools);
-  const runtimeDefinitionsService = createRuntimeDefinitionsService({
+  const runtimeDefinitionsService = createHostRuntimeDefinitionsService({
     claudeInterruptedTurnResumeEnabled,
+    settingsConfig,
+    toolDiscovery,
+    systemCommands,
   });
   const systemDiagnosticsService = createSystemDiagnosticsService({
     pathError: processEnvironmentError?.message ?? null,

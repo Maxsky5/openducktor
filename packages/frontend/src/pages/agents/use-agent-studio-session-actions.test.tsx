@@ -455,6 +455,38 @@ describe("useAgentStudioSessionActions", () => {
     }
   });
 
+  test("blocks a second resume selection before the first one renders", async () => {
+    let resolveContinuation = (): void => {};
+    const continueInterruptedTurn = mock(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveContinuation = resolve;
+        }),
+    );
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      ...selectedSessionArgs(),
+      continueInterruptedTurn,
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.onResumeSession();
+        state.onResumeSession();
+      });
+
+      expect(continueInterruptedTurn).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().isResumingSession).toBe(true);
+
+      resolveContinuation();
+      await harness.waitFor(() => harness.getLatest().isResumingSession === false);
+      expect(continueInterruptedTurn).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("prepares a message-first session target without starting or sending", async () => {
     const scheduleQueryUpdate = mock(() => {});
     const selectAgentStudioSelection = mock(() => {});

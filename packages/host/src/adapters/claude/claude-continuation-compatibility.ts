@@ -1,14 +1,18 @@
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { resolveSavedRuntimeExecutable } from "../../application/runtimes/saved-runtime-executable";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 /**
- * Claude Code release that ships the classifier for `CLAUDE_CODE_RESUME_INTERRUPTED_TURN`.
+ * Claude Code release that owns the classifier for `CLAUDE_CODE_RESUME_INTERRUPTED_TURN`.
+ * OpenDucktor verifies only this release; a different version is unverified and fails closed.
  * Keep this value in step with `claude-continuation-compatibility.test.ts`.
  */
-export const CLAUDE_INTERRUPTED_TURN_RESUME_MINIMUM_VERSION = "2.1.251";
+export const CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION = "2.1.251";
 
 export const CLAUDE_VERSION_COMMAND_TIMEOUT_MS = 2_000;
 
@@ -32,16 +36,41 @@ const parseVersionPrefix = (value: string): ClaudeCliVersion | null => {
 export const parseClaudeCliVersion = (output: string | null): ClaudeCliVersion | null =>
   output === null ? null : parseVersionPrefix(output);
 
-const compareClaudeCliVersions = (left: ClaudeCliVersion, right: ClaudeCliVersion): number =>
-  left.major - right.major || left.minor - right.minor || left.patch - right.patch;
-
 export const supportsClaudeInterruptedTurnResume = (version: ClaudeCliVersion | null): boolean => {
-  const minimum = parseVersionPrefix(CLAUDE_INTERRUPTED_TURN_RESUME_MINIMUM_VERSION);
-  if (version === null || minimum === null) {
+  const verified = parseVersionPrefix(CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION);
+  if (version === null || verified === null) {
     return false;
   }
-  return compareClaudeCliVersions(version, minimum) >= 0;
+  return (
+    version.major === verified.major &&
+    version.minor === verified.minor &&
+    version.patch === verified.patch
+  );
 };
+
+/**
+ * Reads the executable OpenDucktor will run and reports whether it is the verified release.
+ * The probe fails closed: every resolution, command, or parse failure reports no support,
+ * so a descriptor can never advertise a path the continuation action would reject.
+ */
+export const isClaudeInterruptedTurnResumeSupported = (input: {
+  readonly settingsConfig: SettingsConfigPort;
+  readonly toolDiscovery: ToolDiscoveryPort;
+  readonly systemCommands: SystemCommandPort;
+}): Effect.Effect<boolean> =>
+  resolveSavedRuntimeExecutable({
+    kind: "claude",
+    settingsConfig: input.settingsConfig,
+    toolDiscovery: input.toolDiscovery,
+  }).pipe(
+    Effect.flatMap((executablePath) =>
+      input.systemCommands.versionCommand(executablePath, ["--version"], {
+        timeoutMs: CLAUDE_VERSION_COMMAND_TIMEOUT_MS,
+      }),
+    ),
+    Effect.map((output) => supportsClaudeInterruptedTurnResume(parseClaudeCliVersion(output))),
+    Effect.catchAll(() => Effect.succeed(false)),
+  );
 
 const compatibilityRejected = (input: {
   readonly sessionRef: AgentSessionLiveRef;
@@ -89,8 +118,8 @@ export const assertClaudeInterruptedTurnResumeCompatible = (input: {
             sessionRef: input.sessionRef,
             message:
               output === null
-                ? `Cannot read the version of the Claude executable '${input.executablePath}'. Interrupted-turn resume needs Claude Code ${CLAUDE_INTERRUPTED_TURN_RESUME_MINIMUM_VERSION} or later.`
-                : `Claude Code '${output.trim()}' at '${input.executablePath}' does not support interrupted-turn resume. Interrupted-turn resume needs Claude Code ${CLAUDE_INTERRUPTED_TURN_RESUME_MINIMUM_VERSION} or later.`,
+                ? `Cannot read the version of the Claude executable '${input.executablePath}'. OpenDucktor verified interrupted-turn resume with Claude Code ${CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION}.`
+                : `Claude Code '${output.trim()}' at '${input.executablePath}' is not the verified interrupted-turn resume release. OpenDucktor verified interrupted-turn resume with Claude Code ${CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION}.`,
           }),
         );
       }),

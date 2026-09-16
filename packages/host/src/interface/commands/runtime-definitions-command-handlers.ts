@@ -19,17 +19,17 @@ export const createRuntimeDefinitionsCommandHandlers = (
 ) =>
   ({
     runtime_definitions_list: (args) =>
-      Effect.try({
-        try: () => {
-          requireNoArgs("runtime_definitions_list", args);
-          return runtimeDefinitionsService.listRuntimeDefinitions();
-        },
-        catch: (cause) =>
-          cause instanceof HostValidationError
-            ? cause
-            : new HostValidationError({
-                message: cause instanceof Error ? cause.message : String(cause),
-                field: "args",
-              }),
+      Effect.gen(function* () {
+        yield* Effect.try({
+          try: () => requireNoArgs("runtime_definitions_list", args),
+          catch: (cause) =>
+            cause instanceof HostValidationError
+              ? cause
+              : new HostValidationError({
+                  message: cause instanceof Error ? cause.message : String(cause),
+                  field: "args",
+                }),
+        });
+        return yield* runtimeDefinitionsService.listEffectiveRuntimeDefinitions();
       }),
   }) satisfies HostCommandHandlerDefinitions;

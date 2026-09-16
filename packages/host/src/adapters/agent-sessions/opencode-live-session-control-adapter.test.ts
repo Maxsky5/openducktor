@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { interruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
+import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import { createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter";
 import {
@@ -156,6 +158,45 @@ describe("OpenCode live session controls", () => {
           type: "user_message",
           externalSessionId: "session-1",
         }),
+      });
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
+  test("maps a native continuation identity mismatch to the typed resume failure", async () => {
+    const harness = createRuntimeHarness({
+      continueInterruptedTurnError: interruptedTurnResumeError({
+        reason: "identity_mismatch",
+        message:
+          "OpenCode session 'controlled-session' is registered to repo '/repo' and working directory '/repo/other-worktree'.",
+      }),
+    });
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+
+    try {
+      const failure = await Effect.runPromise(
+        Effect.flip(
+          prepared.adapter.continueInterruptedTurn({
+            ...ref,
+            externalSessionId: "controlled-session",
+            sessionScope: controlSummary.sessionAssociation,
+          }),
+        ),
+      );
+
+      expect(failure).toBeInstanceOf(AgentSessionResumeError);
+      expect(failure).toMatchObject({
+        reason: "identity_mismatch",
+        operation: "opencode-live-session.continue-interrupted-turn",
+        nextAction:
+          "Reopen the session from the session list so the stored identity matches, then retry Resume.",
       });
     } finally {
       await Effect.runPromise(prepared.adapter.releaseRuntime());

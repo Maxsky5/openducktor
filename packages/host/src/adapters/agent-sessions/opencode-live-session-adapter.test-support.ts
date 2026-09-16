@@ -79,6 +79,7 @@ type RuntimeHarness = {
 
 export const createRuntimeHarness = (
   options: {
+    readonly continueInterruptedTurnError?: Error;
     readonly sendUserMessageBarrier?: Promise<void>;
     readonly onSendUserMessage?: () => void;
     readonly sessionFailures?: OpencodeRuntimeSnapshotFailure[];
@@ -129,6 +130,9 @@ export const createRuntimeHarness = (
     },
     continueInterruptedTurn: async (input) => {
       controlCalls.push({ operation: "continue", input });
+      if (options.continueInterruptedTurnError) {
+        throw options.continueInterruptedTurnError;
+      }
       return {
         ...controlSummary,
         externalSessionId: input.externalSessionId,

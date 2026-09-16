@@ -3,6 +3,7 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import { getAgentSessionResumeFailureNotice } from "@/state/agent-runtime-services";
 import { HostInvokeError } from "@openducktor/host-client";
@@ -36,6 +37,7 @@ export function useWorkspaceSessionChatActions(
   const [error, setError] = useState<string | null>(null);
   const [isResumingSession, setResumingSession] = useState(false);
   const [resumeSessionError, setResumeSessionError] = useState<string | null>(null);
+  const resumingSessionKeyRef = useRef<string | null>(null);
 
   const updateDraftModel = useCallback(
     (selection: AgentModelSelection | null) => {
@@ -106,6 +108,11 @@ export function useWorkspaceSessionChatActions(
   const continueInterruptedTurn = operations.continueInterruptedTurn;
   const resumeInterruptedTurn = useCallback(
     (target: Parameters<typeof continueInterruptedTurn>[0]): void => {
+      const sessionKey = agentSessionIdentityKey(target);
+      if (resumingSessionKeyRef.current === sessionKey) {
+        return;
+      }
+      resumingSessionKeyRef.current = sessionKey;
       void continueInterruptedTurn(target)
         .catch((cause) => {
           if (mounted.current) {
@@ -115,6 +122,10 @@ export function useWorkspaceSessionChatActions(
           }
         })
         .finally(() => {
+          if (resumingSessionKeyRef.current !== sessionKey) {
+            return;
+          }
+          resumingSessionKeyRef.current = null;
           if (mounted.current) setResumingSession(false);
         });
       setResumingSession(true);

@@ -227,6 +227,62 @@ test.each([
   },
 );
 
+test("blocks a second resume selection before the first one settles", async () => {
+  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+  const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let resolveContinuation = (): void => {};
+  let continuations = 0;
+  const operations = createOperations({
+    sendAgentMessage: async () => {},
+    continueInterruptedTurn: () => {
+      continuations += 1;
+      return new Promise<void>((resolve) => {
+        resolveContinuation = resolve;
+      });
+    },
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>
+        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+      </AgentSessionsContext>
+    </QueryClientProvider>
+  );
+  const view = renderHook(({ record }) => useWorkspaceSessionChatActions(workspace, record), {
+    wrapper,
+    initialProps: { record: { ...createWorkspaceSessionRecord(), externalSessionId: "native" } },
+  });
+
+  try {
+    act(() => {
+      view.result.current.resumeInterruptedTurn({
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      });
+      view.result.current.resumeInterruptedTurn({
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      });
+    });
+
+    expect(continuations).toBe(1);
+    expect(view.result.current.isResumingSession).toBe(true);
+
+    await act(async () => {
+      resolveContinuation();
+    });
+
+    expect(view.result.current.isResumingSession).toBe(false);
+    expect(continuations).toBe(1);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+  }
+});
+
 test("shows the host reason and next action when a continuation is refused", async () => {
   const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
   const failure = new HostInvokeError("Continuation refused", {

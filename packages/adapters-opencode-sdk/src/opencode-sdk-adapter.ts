@@ -300,6 +300,16 @@ export class OpencodeSdkAdapter
       this.getRuntimeDefinition(),
       "continue OpenCode turn",
     );
+    const registered = this.sessions.get(input.externalSessionId);
+    if (registered) {
+      const registeredRef = opencodeSessionRef(registered);
+      if (!agentSessionRefsEqual(registeredRef, input)) {
+        throw interruptedTurnResumeError({
+          reason: "identity_mismatch",
+          message: `OpenCode session '${input.externalSessionId}' is registered to repo '${registeredRef.repoPath}' and working directory '${registeredRef.workingDirectory}'.`,
+        });
+      }
+    }
     try {
       await this.resumeSession(input);
     } catch (error) {

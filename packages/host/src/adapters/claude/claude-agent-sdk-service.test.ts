@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { InterruptedTurnResumeError } from "@openducktor/core";
+import { AgentRuntimeQueryError, InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostDependencyError, HostOperationError } from "../../effect/host-errors";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
@@ -15,6 +15,7 @@ import {
 } from "./claude-agent-sdk-system-commands.test-support";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
+import { classifyPersistedClaudeContinuationFailure } from "./claude-agent-sdk-service-continuation";
 import {
   createClaudeContextUsageResponse,
   createClaudeQueryFixture,
@@ -1064,7 +1065,7 @@ describe("continueInterruptedTurn eligibility", () => {
     return failure.cause.reason;
   };
 
-  test("refuses a restart continuation when the persisted transcript cannot be read", async () => {
+  test("reports a missing persisted session as session_not_found", async () => {
     const service = createService(null);
 
     await expect(
@@ -1074,10 +1075,59 @@ describe("continueInterruptedTurn eligibility", () => {
           "runtime-claude",
         ),
       ),
-    ).resolves.toBe("probe_failed");
+    ).resolves.toBe("session_not_found");
   });
 
-  test("refuses a continuation when the Claude executable is older than the minimum version", async () => {
+  test("reports a persisted working-directory mismatch as identity_mismatch", () => {
+    expect(
+      classifyPersistedClaudeContinuationFailure(
+        new AgentRuntimeQueryError(
+          "scope_mismatch",
+          "The Claude session belongs to another working directory. Select the matching session.",
+        ),
+        "session-1",
+      ),
+    ).toEqual({
+      reason: "identity_mismatch",
+      message:
+        "Cannot continue Claude session 'session-1': The Claude session belongs to another working directory. Select the matching session.",
+    });
+  });
+
+  test("keeps an unclassified persisted-history failure as probe_failed", () => {
+    expect(
+      classifyPersistedClaudeContinuationFailure(
+        new Error("transcript store unavailable"),
+        "session-1",
+      ),
+    ).toEqual({
+      reason: "probe_failed",
+      message:
+        "Cannot read the persisted Claude transcript for session 'session-1': transcript store unavailable",
+    });
+  });
+
+  test("reports a registered-session identity mismatch as identity_mismatch", async () => {
+    const service = createService(
+      createSession({
+        input: {
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/other-worktree/",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: "Build",
+        },
+      }),
+    );
+
+    await expect(
+      resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
+    ).resolves.toBe("identity_mismatch");
+  });
+
+  test("refuses a continuation when the Claude executable is older than the verified version", async () => {
     const service = createService(
       null,
       undefined,
@@ -1093,6 +1143,20 @@ describe("continueInterruptedTurn eligibility", () => {
 
   test("refuses a continuation when the Claude executable reports no version", async () => {
     const service = createService(null, undefined, createClaudeSystemCommands(null));
+
+    await expect(
+      continuationFailureReason(
+        service.continueInterruptedTurn(continuationInput, "runtime-claude"),
+      ),
+    ).resolves.toBe("compatibility_rejected");
+  });
+
+  test("refuses a continuation when the Claude executable is a later unverified release", async () => {
+    const service = createService(
+      null,
+      undefined,
+      createClaudeSystemCommands("2.1.252 (Claude Code)"),
+    );
 
     await expect(
       continuationFailureReason(

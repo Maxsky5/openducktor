@@ -18,6 +18,7 @@ import { normalizeRepoScripts } from "@/state/read-models/settings-read-model";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import { checksQueryKeys } from "../../queries/checks";
 import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
+import { runtimeQueryKeys } from "../../queries/runtime";
 import { getProductionTaskViewSync } from "../../queries/task-view-sync";
 import { customAgentRolesQueryOptions } from "../../queries/workspace-sessions";
 import {
@@ -204,6 +205,7 @@ export function useRepoSettingsOperations({
       }
       if (changes.agentRuntimesChanged) {
         void queryClient.invalidateQueries({ queryKey: checksQueryKeys.all });
+        void queryClient.invalidateQueries({ queryKey: runtimeQueryKeys.definitions() });
       }
       for (const repoPath of changes.changedGitProviderRepoPaths) {
         void queryClient.resetQueries({

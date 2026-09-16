@@ -3,14 +3,16 @@ import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-ada
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND, repoConfigSchema } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/core";
+import { interruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import type {
   ClaudeAgentSdkService,
   ClaudePendingInputResolution,
 } from "../../application/runtimes/claude-agent-sdk-service";
 import type { RuntimeWorkingDirectoryDependencies } from "../../application/runtimes/runtime-working-directory";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
@@ -350,6 +352,41 @@ describe("Claude host live-session adapter", () => {
       runtimeKind: "claude",
       runtimePolicy: { kind: "claude" },
       systemPrompt: "Build",
+    });
+  });
+
+  test("maps a native continuation identity mismatch to the typed resume failure", async () => {
+    const harness = await createHarness(workingDirectoryDependencies, {
+      resumeInterruptedTurnEnabled: true,
+    });
+    harness.setContinueInterruptedTurn(() =>
+      Effect.fail(
+        toHostOperationError(
+          interruptedTurnResumeError({
+            reason: "identity_mismatch",
+            message:
+              "Cannot continue interrupted turn Claude session 'session-1' from repo '/repo' and working directory '/repo/worktree'.",
+          }),
+          "claudeRuntime.continueInterruptedTurn",
+        ),
+      ),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        harness.adapter.continueInterruptedTurn({
+          ...startInput,
+          externalSessionId: "session-1",
+        }),
+      ),
+    );
+
+    expect(failure).toBeInstanceOf(AgentSessionResumeError);
+    expect(failure).toMatchObject({
+      reason: "identity_mismatch",
+      operation: "claude-live-session.continue-interrupted-turn",
+      nextAction:
+        "Reopen the session from the session list so the stored identity matches, then retry Resume.",
     });
   });
 

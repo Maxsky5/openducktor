@@ -25,8 +25,10 @@ import type {
   SendAgentUserMessageInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
+import { interruptedTurnResumeError } from "@openducktor/core";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import type {
@@ -159,6 +161,7 @@ type ControllerHarnessOptions = {
   liveContextUsage?: CodexSessionContextUsage | null;
   persistedContextUsage?: CodexSessionContextUsage | null;
   sessionDiffs?: FileDiff[];
+  continueInterruptedTurnError?: Error;
 };
 
 type AgentControlInputs = {
@@ -176,6 +179,7 @@ const createControllerHarness = ({
   liveContextUsage = { totalTokens: 123, contextWindow: 1_000 },
   persistedContextUsage = { totalTokens: 456, contextWindow: 2_000 },
   sessionDiffs = [],
+  continueInterruptedTurnError,
 }: ControllerHarnessOptions = {}) => {
   let options: CodexAppServerAdapterOptions | null = null;
   let snapshots = initialSnapshots;
@@ -301,6 +305,9 @@ const createControllerHarness = ({
           input: Parameters<CodexSessionController["continueInterruptedTurn"]>[0],
         ) => {
           controlInputs.continuations.push(input);
+          if (continueInterruptedTurnError) {
+            throw continueInterruptedTurnError;
+          }
           return controlSummary;
         },
         forkSession: async (input: ForkAgentSessionInput) => {
@@ -721,6 +728,44 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         runtimePolicy: { kind: "codex", policy: codexPolicy },
       }),
     ]);
+  });
+
+  test("maps a native continuation session_not_found to the typed resume failure", async () => {
+    const harness = createControllerHarness({
+      continueInterruptedTurnError: interruptedTurnResumeError({
+        reason: "session_not_found",
+        message: "Codex thread 'thread-1' no longer exists on the runtime.",
+      }),
+    });
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        prepared.adapter.continueInterruptedTurn({
+          ...ref,
+          sessionScope,
+        }),
+      ),
+    );
+
+    expect(failure).toBeInstanceOf(AgentSessionResumeError);
+    expect(failure).toMatchObject({
+      reason: "session_not_found",
+      operation: "codex-live-session.continue-interrupted-turn",
+      nextAction: "Reopen the session from the session list, then retry Resume.",
+    });
   });
 
   test("releases through the host lifecycle without re-entering its coordinator", async () => {

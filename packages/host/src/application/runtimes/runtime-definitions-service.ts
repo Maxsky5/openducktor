@@ -4,10 +4,26 @@ import {
   type RuntimeDescriptor,
   runtimeDescriptorSchema,
 } from "@openducktor/contracts";
+import { Effect } from "effect";
 import { z } from "zod";
+import {
+  errorMessage,
+  HostOperationError,
+  type HostOperationErrorAggregate,
+} from "../../effect/host-errors";
 
 export type RuntimeDefinitionsService = {
+  /** Static descriptors with the host safety gate applied. */
   listRuntimeDefinitions(): RuntimeDescriptor[];
+  /**
+   * Descriptors for the client. Runtime-conditional capabilities, such as the Claude
+   * interrupted-turn resume path, resolve against the current environment before the
+   * frontend can offer an action the adapter would reject.
+   */
+  listEffectiveRuntimeDefinitions(): Effect.Effect<
+    RuntimeDescriptor[],
+    HostOperationErrorAggregate
+  >;
 };
 
 export type RuntimeDefinitionsServiceOptions = {
@@ -16,6 +32,11 @@ export type RuntimeDefinitionsServiceOptions = {
    * effective Claude descriptor reports no support and the adapter rejects the request.
    */
   claudeInterruptedTurnResumeEnabled?: boolean;
+  /**
+   * Reports whether the executable the Claude runtime will run owns the verified
+   * interrupted-turn continuation contract. The probe fails closed.
+   */
+  resolveClaudeInterruptedTurnResumeSupport?: () => Effect.Effect<boolean>;
 };
 
 const describeRuntimeDescriptor = (descriptor: RuntimeDescriptor): string => {
@@ -23,11 +44,11 @@ const describeRuntimeDescriptor = (descriptor: RuntimeDescriptor): string => {
   return parsedKind.success ? parsedKind.data : "unknown";
 };
 
-const withEffectiveCapabilities = (
+const withClaudeResumeCapability = (
   descriptor: RuntimeDescriptor,
-  { claudeInterruptedTurnResumeEnabled }: RuntimeDefinitionsServiceOptions,
+  supported: boolean,
 ): RuntimeDescriptor => {
-  if (descriptor.kind !== "claude" || claudeInterruptedTurnResumeEnabled !== false) {
+  if (descriptor.kind !== "claude" || supported) {
     return descriptor;
   }
   return {
@@ -54,12 +75,37 @@ const parseRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescripto
   );
 };
 
+const parseRuntimeDescriptors = (): RuntimeDescriptor[] =>
+  Object.values(RUNTIME_DESCRIPTORS_BY_KIND).map(parseRuntimeDescriptor);
+
 export const createRuntimeDefinitionsService = (
   options: RuntimeDefinitionsServiceOptions = {},
 ): RuntimeDefinitionsService => ({
   listRuntimeDefinitions() {
-    return Object.values(RUNTIME_DESCRIPTORS_BY_KIND)
-      .map((descriptor) => withEffectiveCapabilities(descriptor, options))
-      .map(parseRuntimeDescriptor);
+    const claudeSupported = options.claudeInterruptedTurnResumeEnabled !== false;
+    return parseRuntimeDescriptors().map((descriptor) =>
+      withClaudeResumeCapability(descriptor, claudeSupported),
+    );
+  },
+  listEffectiveRuntimeDefinitions() {
+    return Effect.gen(function* () {
+      const claudeSupported =
+        options.claudeInterruptedTurnResumeEnabled !== false &&
+        (options.resolveClaudeInterruptedTurnResumeSupport === undefined
+          ? true
+          : yield* options.resolveClaudeInterruptedTurnResumeSupport());
+      const descriptors = yield* Effect.try({
+        try: parseRuntimeDescriptors,
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "runtimeDefinitions.list",
+            message: errorMessage(cause),
+            cause,
+          }),
+      });
+      return descriptors.map((descriptor) =>
+        withClaudeResumeCapability(descriptor, claudeSupported),
+      );
+    });
   },
 });
