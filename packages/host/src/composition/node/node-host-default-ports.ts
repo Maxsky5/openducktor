@@ -156,20 +156,20 @@ const makeNodeHostDefaultPorts = (
         }
       : yield* createProcessEnvironment(input.processEnvironmentInput);
     const sourceEnv = sourceProcessEnvironment.environment;
-    const configDir: OpenDucktorConfigDir = {
-      root: resolveOpenDucktorBaseDir(input.configDirScope, sourceEnv),
-      scope: input.configDirScope,
-    };
-    const processEnv = {
-      ...sourceEnv,
-      OPENDUCKTOR_CONFIG_DIR: configDir.root,
-    };
-    const processEnvironment = {
-      ...sourceProcessEnvironment,
-      environment: processEnv,
-    };
     return yield* Effect.try({
       try: () => {
+        const configDir: OpenDucktorConfigDir = {
+          root: resolveOpenDucktorBaseDir(input.configDirScope, sourceEnv),
+          scope: input.configDirScope,
+        };
+        const processEnv = {
+          ...sourceEnv,
+          OPENDUCKTOR_CONFIG_DIR: configDir.root,
+        };
+        const processEnvironment = {
+          ...sourceProcessEnvironment,
+          environment: processEnv,
+        };
         const systemCommands =
           input.systemCommands ?? createSystemCommandRunner({ env: processEnv });
         const bundledToolBinDirs =

@@ -153,6 +153,31 @@ describe("createNodeEffectHostCommandRouter", () => {
     }
   });
 
+  test("returns config directory validation faults through the Effect channel", async () => {
+    const result = await Effect.runPromise(
+      createNodeEffectHostCommandRouter({
+        configDirScope: "test",
+        mcpBridgeDiscoveryMode: "production",
+        onBackgroundFailure: () => Effect.void,
+        processEnv: { OPENDUCKTOR_CONFIG_DIR: "" },
+        runtimeDistribution: createRuntimeDistribution(),
+        taskEventPublicationReporter: { report: () => Effect.void },
+        terminalPty,
+      }).pipe(Effect.either),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toEqual(
+        expect.objectContaining({
+          _tag: "HostOperationError",
+          operation: "host.create-router",
+          message: "OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path",
+        }),
+      );
+    }
+  });
+
   test("rejects the Promise boundary for synchronous setup faults", async () => {
     const router = createNodeHostCommandRouter(createFailingRouterInput());
 

@@ -71,4 +71,20 @@ describe("Bun test preload", () => {
     }
     await expect(access(configDir)).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  test("loads the frontend DOM setup for a focused test run from the repository root", async () => {
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "test",
+        path.join(ROOT, "packages/frontend/src/lib/canonical-route-redirect.test.tsx"),
+      ],
+      cwd: ROOT,
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+
+    expect(exitCode, stderr).toBe(0);
+  });
 });

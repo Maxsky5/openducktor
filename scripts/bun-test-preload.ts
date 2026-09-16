@@ -10,8 +10,10 @@ afterAll(async () => {
   await rm(configDir, { force: true, recursive: true });
 });
 
-const frontendRoot = path.resolve(import.meta.dir, "../packages/frontend");
-if (path.resolve(process.cwd()) === frontendRoot) {
+const repoRoot = path.resolve(import.meta.dir, "..");
+const frontendRoot = path.join(repoRoot, "packages/frontend");
+const testRoot = path.resolve(process.cwd());
+if (testRoot === repoRoot || testRoot === frontendRoot) {
   const frontendRequire = createRequire(
     new URL("../packages/frontend/package.json", import.meta.url),
   );
