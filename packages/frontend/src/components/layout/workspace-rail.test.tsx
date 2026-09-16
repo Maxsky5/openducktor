@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ACTIVE_TILE_BORDER_WIDTH_PX } from "@/lib/workspace-tile-appearance";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceRail } from "./workspace-rail";
@@ -154,42 +153,84 @@ describe("WorkspaceRail", () => {
     );
   });
 
-  test("marks only the active tile with the wide primary border", () => {
+  test("marks the active workspace with a raised surface across the rail", () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", { workspaceName: "Alpha Repo", tileColor: "#c4dafc" }),
+      workspaceRecord("beta", {
+        workspaceName: "Beta Repo",
+        tileColor: "#06347f",
+        isActive: true,
+      }),
+    ];
+
+    renderRail();
+
+    const shellOf = (name: string): HTMLElement => {
+      const shell = screen.getByRole("button", { name }).parentElement;
+      if (!shell) {
+        throw new Error(`Expected a rail shell around ${name}.`);
+      }
+      return shell;
+    };
+
+    expect(shellOf("Beta Repo").className).toContain("bg-segmented-selected");
+    expect(shellOf("Alpha Repo").className).not.toContain("bg-segmented-selected");
+
+    // The rail divider stops at the selected row so its surface joins the panel next to it.
+    expect(shellOf("Beta Repo").className).toContain("border-r-transparent");
+    expect(shellOf("Alpha Repo").className).toContain("border-r-border");
+  });
+
+  test("keeps a workspace without a picked color on the primary accent in both states", () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", { workspaceName: "Alpha Repo", isActive: true }),
+      workspaceRecord("beta", { workspaceName: "Beta Repo" }),
+    ];
+
+    renderRail();
+
+    for (const name of ["Alpha Repo", "Beta Repo"]) {
+      const tile = screen.getByRole("button", { name });
+      expect(tile.className).toContain("bg-primary");
+      expect(tile.getAttribute("style")).toBeNull();
+    }
+  });
+
+  test("keeps a backgrounded tile on its own color instead of the selection surface", () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", { workspaceName: "Alpha Repo", tileColor: "#d946ef" }),
+      workspaceRecord("beta", {
+        workspaceName: "Beta Repo",
+        tileColor: "#3b82f6",
+        isActive: true,
+      }),
+    ];
+
+    renderRail();
+
+    expect(screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("style")).toContain(
+      "background-color: #d946ef",
+    );
+    expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("style")).toContain(
+      "background-color: #3b82f6",
+    );
+  });
+
+  test("keeps a picked color off the theme classes in both states", () => {
     workspaceState.workspaces = [
       workspaceRecord("alpha", {
         workspaceName: "Alpha Repo",
-        tileColor: "#c4dafc",
+        tileColor: "#3b82f6",
         isActive: true,
       }),
-      workspaceRecord("beta", { workspaceName: "Beta Repo", tileColor: "#06347f" }),
     ];
 
     renderRail();
 
-    const activeStyle = screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("style");
-    const inactiveStyle = screen.getByRole("button", { name: "Beta Repo" }).getAttribute("style");
+    const tile = screen.getByRole("button", { name: "Alpha Repo" });
 
-    expect(activeStyle).toContain(`outline-width: ${ACTIVE_TILE_BORDER_WIDTH_PX}px`);
-    expect(activeStyle).toContain("outline-style: solid");
-    expect(activeStyle).toContain("outline-color: var(--primary)");
-    expect(activeStyle).toContain(`outline-offset: -${ACTIVE_TILE_BORDER_WIDTH_PX}px`);
-    expect(inactiveStyle).not.toContain("outline");
-  });
-
-  test("gives different automatic colors to workspaces without a picked color", () => {
-    workspaceState.workspaces = [
-      workspaceRecord("alpha", { workspaceName: "Alpha Repo", isActive: true }),
-      workspaceRecord("beta", { workspaceName: "Beta Repo", isActive: true }),
-    ];
-
-    renderRail();
-
-    const alphaStyle = screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("style");
-    const betaStyle = screen.getByRole("button", { name: "Beta Repo" }).getAttribute("style");
-
-    expect(alphaStyle).toContain("background-color");
-    expect(betaStyle).toContain("background-color");
-    expect(alphaStyle).not.toBe(betaStyle);
+    expect(tile.className).not.toContain("bg-primary");
+    expect(tile.getAttribute("style")).toContain("background-color: #3b82f6");
   });
 
   test("keeps buttons interactive-looking while a workspace switch is pending", () => {

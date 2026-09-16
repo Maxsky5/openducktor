@@ -14,24 +14,40 @@ const HEX_ERROR_MESSAGE = "Enter a 6-digit RGB hex value, such as f08c00.";
 
 const stripHash = (hex: string): string => hex.replace(/^#/, "");
 
+const PALETTE_HEX_VALUES = new Set(WORKSPACE_TILE_PALETTE.map((entry) => entry.hex));
+
+/**
+ * Which control set the current color. Two controls can produce the same value, white for example,
+ * so the ring follows the control the user last used instead of every control that matches.
+ */
+type TileColorSource = "swatch" | "shade" | "hex";
+
+/**
+ * The hex slot starts empty, so a color that is already on the palette came from its swatch and
+ * anything else came from the shade row, which always holds the picked color at its own level.
+ */
+const initialColorSource = (pickedColor: string | null): TileColorSource =>
+  pickedColor !== null && PALETTE_HEX_VALUES.has(pickedColor) ? "swatch" : "shade";
+
 type WorkspaceTileColorPickerProps = {
   idPrefix: string;
+  /** The color the user picked, or `null` for the default tile color. */
   pickedColor: string | null;
-  automaticColor: string;
-  effectiveColor: string;
   isDisabled: boolean;
   onChangeTileColor: (nextTileColor: string | null) => void;
 };
 
 function TileColorSwatchButton({
   style,
+  className,
   label,
   isSelected,
   isDisabled,
   onSelect,
   children,
 }: {
-  style: CSSProperties;
+  style?: CSSProperties;
+  className?: string;
   label: string;
   isSelected: boolean;
   isDisabled: boolean;
@@ -49,6 +65,7 @@ function TileColorSwatchButton({
       style={style}
       className={cn(
         "flex size-8 items-center justify-center rounded-md border border-border/60 outline-none",
+        className,
         "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         "disabled:cursor-not-allowed disabled:opacity-50",
         isSelected && "ring-2 ring-ring ring-offset-2 ring-offset-background",
@@ -63,27 +80,26 @@ function TileColorSwatchButton({
 export function WorkspaceTileColorPicker({
   idPrefix,
   pickedColor,
-  automaticColor,
-  effectiveColor,
   isDisabled,
   onChangeTileColor,
 }: WorkspaceTileColorPickerProps): ReactElement {
-  const [hexInput, setHexInput] = useState(() => stripHash(effectiveColor));
-  const [lastEffectiveColor, setLastEffectiveColor] = useState(effectiveColor);
+  // The hex field is its own slot. It starts empty and no swatch or shade click ever rewrites it,
+  // so a typed color stays available and only loses the selection ring. The picked color is
+  // already shown by its swatch, or by the shade row, which always holds it at its own level.
+  const [hexInput, setHexInput] = useState("");
   const [hexError, setHexError] = useState<string | null>(null);
+  const [colorSource, setColorSource] = useState<TileColorSource>(() =>
+    initialColorSource(pickedColor),
+  );
 
-  // The hex field follows every other control, so a swatch click, a shade click, the automatic
-  // choice, and a switch to another repository all reset the typed text and the message.
-  if (effectiveColor !== lastEffectiveColor) {
-    setLastEffectiveColor(effectiveColor);
-    if (normalizeHexInput(hexInput) !== effectiveColor) {
-      setHexInput(stripHash(effectiveColor));
-      setHexError(null);
-    }
-  }
+  const selectColor = (nextColor: string, source: TileColorSource): void => {
+    setColorSource(source);
+    onChangeTileColor(nextColor);
+  };
 
-  const isAutomatic = pickedColor === null;
-  const shades = tileShadeRamp(effectiveColor);
+  const hasColor = pickedColor !== null;
+  const shades = hasColor ? tileShadeRamp(pickedColor) : [];
+  const hexColor = normalizeHexInput(hexInput);
   const hexFieldId = `${idPrefix}-tile-color-hex`;
   const hexErrorId = `${hexFieldId}-error`;
 
@@ -92,13 +108,18 @@ export function WorkspaceTileColorPicker({
     { reportIncomplete }: { reportIncomplete: boolean },
   ): void => {
     setHexInput(raw);
+    const candidateLength = stripHash(raw.trim()).length;
+    // Clearing the field only empties the slot. The picked color changes through the swatches.
+    if (candidateLength === 0) {
+      setHexError(null);
+      return;
+    }
     const normalized = normalizeHexInput(raw);
     if (normalized) {
       setHexError(null);
-      onChangeTileColor(normalized);
+      selectColor(normalized, "hex");
       return;
     }
-    const candidateLength = stripHash(raw.trim()).length;
     setHexError(reportIncomplete || candidateLength >= 6 ? HEX_ERROR_MESSAGE : null);
   };
 
@@ -108,52 +129,49 @@ export function WorkspaceTileColorPicker({
         <p className="text-sm font-medium text-foreground">Tile color</p>
         <div className="flex flex-wrap items-center gap-2">
           <TileColorSwatchButton
-            label="Automatic"
-            style={tileColorFaceStyle(automaticColor)}
-            isSelected={isAutomatic}
+            label="Default"
+            className="bg-primary text-primary-foreground"
+            isSelected={!hasColor}
             isDisabled={isDisabled}
             onSelect={() => {
               onChangeTileColor(null);
             }}
-          >
-            {isAutomatic ? null : <span className="text-[0.625rem] font-semibold">A</span>}
-          </TileColorSwatchButton>
+          />
 
           {WORKSPACE_TILE_PALETTE.map((entry) => (
             <TileColorSwatchButton
               key={entry.id}
               label={`${entry.label} (${entry.hex})`}
               style={tileColorFaceStyle(entry.hex)}
-              isSelected={!isAutomatic && entry.hex === effectiveColor}
+              isSelected={colorSource === "swatch" && entry.hex === pickedColor}
               isDisabled={isDisabled}
               onSelect={() => {
-                onChangeTileColor(entry.hex);
+                selectColor(entry.hex, "swatch");
               }}
             />
           ))}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Automatic gives this workspace a color from the palette that stays stable across restarts.
-        </p>
       </div>
 
-      <div className="grid gap-2">
-        <p className="text-sm font-medium text-foreground">Shades</p>
-        <div className="flex flex-wrap items-center gap-2">
-          {shades.map((shade) => (
-            <TileColorSwatchButton
-              key={shade.level}
-              label={`Shade ${shade.level} (${shade.hex})`}
-              style={tileColorFaceStyle(shade.hex)}
-              isSelected={!isAutomatic && shade.hex === effectiveColor}
-              isDisabled={isDisabled}
-              onSelect={() => {
-                onChangeTileColor(shade.hex);
-              }}
-            />
-          ))}
+      {hasColor ? (
+        <div className="grid gap-2">
+          <p className="text-sm font-medium text-foreground">Shades</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {shades.map((shade) => (
+              <TileColorSwatchButton
+                key={shade.level}
+                label={`Shade ${shade.level} (${shade.hex})`}
+                style={tileColorFaceStyle(shade.hex)}
+                isSelected={colorSource === "shade" && shade.hex === pickedColor}
+                isDisabled={isDisabled}
+                onSelect={() => {
+                  selectColor(shade.hex, "shade");
+                }}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="grid gap-2">
         <Label htmlFor={hexFieldId}>Hex code</Label>
@@ -178,6 +196,17 @@ export function WorkspaceTileColorPicker({
               applyHexInput(event.currentTarget.value, { reportIncomplete: true });
             }}
           />
+          {hexColor ? (
+            <TileColorSwatchButton
+              label={`Hex color (${hexColor})`}
+              style={tileColorFaceStyle(hexColor)}
+              isSelected={colorSource === "hex" && hexColor === pickedColor}
+              isDisabled={isDisabled}
+              onSelect={() => {
+                selectColor(hexColor, "hex");
+              }}
+            />
+          ) : null}
         </div>
         {hexError ? (
           <p id={hexErrorId} role="alert" className="text-xs text-destructive">

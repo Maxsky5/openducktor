@@ -12,7 +12,6 @@ const renderSection = (overrides: Partial<SettingsRepoConfig> = {}) => {
   const rendered = render(
     createElement(RepositoryConfigurationSection, {
       selectedRepoConfig: { ...repoConfig, ...overrides },
-      configuredWorkspaceIds: [repoConfig.workspaceId],
       selectedRepoEffectiveWorktreeBasePath: "/tmp/worktrees",
       selectedRepoBranches: [] satisfies GitBranch[],
       selectedRepoBranchesError: null,
@@ -33,7 +32,6 @@ const renderSection = (overrides: Partial<SettingsRepoConfig> = {}) => {
 const sectionElement = (overrides: Partial<SettingsRepoConfig>) =>
   createElement(RepositoryConfigurationSection, {
     selectedRepoConfig: { ...repoConfig, ...overrides },
-    configuredWorkspaceIds: ["repo", "other-repo"],
     selectedRepoEffectiveWorktreeBasePath: "/tmp/worktrees",
     selectedRepoBranches: [] satisfies GitBranch[],
     selectedRepoBranchesError: null,
@@ -74,7 +72,6 @@ describe("RepositoryConfigurationSection", () => {
     const rendered = render(
       createElement(RepositoryConfigurationSection, {
         selectedRepoConfig: repoConfig,
-        configuredWorkspaceIds: [repoConfig.workspaceId],
         selectedRepoEffectiveWorktreeBasePath: "/tmp/worktrees",
         selectedRepoBranches: [] satisfies GitBranch[],
         selectedRepoBranchesError: null,
@@ -119,14 +116,14 @@ describe("RepositoryConfigurationSection", () => {
     }
   });
 
-  test("writes the picked swatch color and clears it again for the automatic choice", () => {
+  test("writes the picked swatch color and clears it again for the default choice", () => {
     const { rendered, updaters } = renderSection();
 
     try {
       fireEvent.click(screen.getByRole("button", { name: "Blue (#3b82f6)" }));
       expect(updaters[0]?.(repoConfig).tileColor).toBe("#3b82f6");
 
-      fireEvent.click(screen.getByRole("button", { name: "Automatic" }));
+      fireEvent.click(screen.getByRole("button", { name: "Default" }));
       expect(updaters[1]?.({ ...repoConfig, tileColor: "#3b82f6" }).tileColor).toBeUndefined();
     } finally {
       rendered.unmount();
@@ -137,15 +134,46 @@ describe("RepositoryConfigurationSection", () => {
     const { rendered, updaters } = renderSection({ tileColor: "#3b82f6" });
 
     try {
+      // A palette color has its own swatch, so the hex slot starts empty.
       const hexInput = screen.getByLabelText<HTMLInputElement>("Hex code");
-      expect(hexInput.value).toBe("3b82f6");
+      expect(hexInput.value).toBe("");
+      expect(screen.queryByRole("button", { name: /^Hex color/ })).toBeNull();
 
       fireEvent.change(hexInput, { target: { value: "F08C00" } });
       expect(updaters[0]?.(repoConfig).tileColor).toBe("#f08c00");
+      expect(screen.getByRole("button", { name: "Hex color (#f08c00)" })).toBeTruthy();
 
       fireEvent.change(hexInput, { target: { value: "nothex" } });
       expect(updaters).toHaveLength(1);
       expect(screen.getByRole("alert").textContent).toContain("Enter a 6-digit RGB hex value");
+      expect(screen.queryByRole("button", { name: /^Hex color/ })).toBeNull();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("keeps the typed hex in its slot when a swatch takes the selection", () => {
+    const rendered = render(sectionElement({ workspaceId: "repo" }));
+
+    try {
+      fireEvent.change(screen.getByLabelText("Hex code"), { target: { value: "f08c00" } });
+      // The parent commits the typed value, which selects the preview next to the field.
+      rendered.rerender(sectionElement({ workspaceId: "repo", tileColor: "#f08c00" }));
+      expect(
+        screen.getByRole("button", { name: "Hex color (#f08c00)" }).getAttribute("aria-pressed"),
+      ).toBe("true");
+
+      // Picking a swatch only moves the selection. The typed value and its preview stay put.
+      fireEvent.click(screen.getByRole("button", { name: "Blue (#3b82f6)" }));
+      rendered.rerender(sectionElement({ workspaceId: "repo", tileColor: "#3b82f6" }));
+
+      expect(screen.getByLabelText<HTMLInputElement>("Hex code").value).toBe("f08c00");
+      expect(
+        screen.getByRole("button", { name: "Hex color (#f08c00)" }).getAttribute("aria-pressed"),
+      ).toBe("false");
+      expect(
+        screen.getByRole("button", { name: "Blue (#3b82f6)" }).getAttribute("aria-pressed"),
+      ).toBe("true");
     } finally {
       rendered.unmount();
     }
@@ -161,9 +189,38 @@ describe("RepositoryConfigurationSection", () => {
       rendered.rerender(sectionElement({ workspaceId: "other-repo", tileColor: "#f08c00" }));
 
       expect(screen.queryByRole("alert")).toBeNull();
-      expect(screen.getByLabelText<HTMLInputElement>("Hex code").value).toBe("f08c00");
+      expect(screen.getByLabelText<HTMLInputElement>("Hex code").value).toBe("");
     } finally {
       rendered.unmount();
+    }
+  });
+
+  test("rings only the control that last set the color when two of them hold the same value", () => {
+    const pressedLabels = (): string[] =>
+      screen
+        .getAllByRole("button")
+        .filter((button) => button.getAttribute("aria-pressed") === "true")
+        .map((button) => button.getAttribute("aria-label") ?? "");
+
+    const typed = render(sectionElement({ workspaceId: "repo" }));
+    try {
+      fireEvent.change(screen.getByLabelText("Hex code"), { target: { value: "ffffff" } });
+      typed.rerender(sectionElement({ workspaceId: "repo", tileColor: "#ffffff" }));
+
+      expect(pressedLabels()).toEqual(["Hex color (#ffffff)"]);
+    } finally {
+      typed.unmount();
+    }
+
+    const clicked = render(sectionElement({ workspaceId: "repo" }));
+    try {
+      fireEvent.change(screen.getByLabelText("Hex code"), { target: { value: "ffffff" } });
+      fireEvent.click(screen.getByRole("button", { name: "White (#ffffff)" }));
+      clicked.rerender(sectionElement({ workspaceId: "repo", tileColor: "#ffffff" }));
+
+      expect(pressedLabels()).toEqual(["White (#ffffff)"]);
+    } finally {
+      clicked.unmount();
     }
   });
 
@@ -204,11 +261,12 @@ describe("RepositoryConfigurationSection", () => {
       arbitrary.rendered.unmount();
     }
 
-    const automatic = renderSection();
+    const defaultColor = renderSection();
     try {
-      expect(pressedLabels()).toEqual(["Automatic"]);
+      expect(pressedLabels()).toEqual(["Default"]);
+      expect(shadeLabels()).toEqual([]);
     } finally {
-      automatic.rendered.unmount();
+      defaultColor.rendered.unmount();
     }
   });
 });

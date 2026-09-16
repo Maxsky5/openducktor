@@ -13,7 +13,6 @@ import { resolveFolderPickerInitialPath } from "./settings-repository-configurat
 
 type RepositoryConfigurationSectionProps = {
   selectedRepoConfig: SettingsRepoConfig | null;
-  configuredWorkspaceIds: readonly string[];
   selectedRepoEffectiveWorktreeBasePath: string | null;
   selectedRepoBranches: GitBranch[];
   selectedRepoBranchesError: string | null;
@@ -32,7 +31,6 @@ type UpdateSelectedRepoConfig = RepositoryConfigurationSectionProps["onUpdateSel
 
 export function RepositoryConfigurationSection({
   selectedRepoConfig,
-  configuredWorkspaceIds,
   selectedRepoEffectiveWorktreeBasePath,
   selectedRepoBranches,
   selectedRepoBranchesError,
@@ -92,7 +90,6 @@ export function RepositoryConfigurationSection({
         <RepositoryWorkspaceIdentitySection
           isDisabled={isLoadingSettings || isSaving}
           selectedRepoConfig={selectedRepoConfig}
-          configuredWorkspaceIds={configuredWorkspaceIds}
           onPickRepoPath={() => setIsRepoPathPickerOpen(true)}
           onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
         />
@@ -167,13 +164,11 @@ export function RepositoryConfigurationSection({
 function RepositoryWorkspaceIdentitySection({
   isDisabled,
   selectedRepoConfig,
-  configuredWorkspaceIds,
   onPickRepoPath,
   onUpdateSelectedRepoConfig,
 }: {
   isDisabled: boolean;
   selectedRepoConfig: SettingsRepoConfig;
-  configuredWorkspaceIds: readonly string[];
   onPickRepoPath: () => void;
   onUpdateSelectedRepoConfig: UpdateSelectedRepoConfig;
 }): ReactElement {
@@ -215,11 +210,9 @@ function RepositoryWorkspaceIdentitySection({
       <WorkspaceIdentityFields
         key={selectedRepoConfig.workspaceId}
         idPrefix="repo-workspace"
-        workspaceId={selectedRepoConfig.workspaceId}
         workspaceName={selectedRepoConfig.workspaceName}
         abbreviation={selectedRepoConfig.abbreviation ?? null}
         tileColor={selectedRepoConfig.tileColor ?? null}
-        configuredWorkspaceIds={configuredWorkspaceIds}
         isDisabled={isDisabled}
         onChangeAbbreviation={(abbreviation) => {
           onUpdateSelectedRepoConfig((repoConfig) => ({

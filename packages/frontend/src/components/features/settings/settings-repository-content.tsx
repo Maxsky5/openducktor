@@ -241,7 +241,6 @@ export function SettingsRepositoryContent({
         {selectedRepoConfig && repositorySection === "configuration" ? (
           <RepositoryConfigurationSection
             selectedRepoConfig={selectedRepoConfig}
-            configuredWorkspaceIds={workspaceIds}
             selectedRepoEffectiveWorktreeBasePath={selectedRepoEffectiveWorktreeBasePath}
             selectedRepoBranches={selectedRepoBranches}
             selectedRepoBranchesError={selectedRepoBranchesError}

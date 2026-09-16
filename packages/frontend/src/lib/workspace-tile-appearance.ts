@@ -24,9 +24,9 @@ export const WORKSPACE_TILE_PALETTE: readonly WorkspaceTilePaletteEntry[] = [
   { id: "fuchsia", label: "Fuchsia", hex: "#d946ef" },
   { id: "rose", label: "Rose", hex: "#f43f5e" },
   { id: "slate", label: "Slate", hex: "#64748b" },
+  { id: "white", label: "White", hex: "#ffffff" },
+  { id: "black", label: "Black", hex: "#000000" },
 ];
-
-const FALLBACK_PALETTE_HEX = "#64748b";
 
 export const deriveWorkspaceInitials = (workspaceName: string): string => {
   const trimmedName = workspaceName.trim();
@@ -51,70 +51,6 @@ export const deriveWorkspaceInitials = (workspaceName: string): string => {
   }
 
   return (segments[0] ?? trimmedName).slice(0, 2).toUpperCase();
-};
-
-const hashWorkspaceId = (workspaceId: string): number => {
-  let hash = 2166136261;
-  for (let index = 0; index < workspaceId.length; index += 1) {
-    hash ^= workspaceId.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-};
-
-export type WorkspaceAutomaticTileColors = ReadonlyMap<string, string>;
-
-/**
- * Assigns a palette color to every given workspace id. The set of ids is the only input, so the
- * assignment survives a restart, a rename, a rail reorder, and any other settings change.
- */
-export const resolveAutomaticTileColors = (
-  workspaceIds: readonly string[],
-): WorkspaceAutomaticTileColors => {
-  const paletteSize = WORKSPACE_TILE_PALETTE.length;
-  const uniqueIds = [...new Set(workspaceIds)].sort((left, right) => (left < right ? -1 : 1));
-  const takenIndexes = new Set<number>();
-  const assignment = new Map<string, string>();
-
-  for (const workspaceId of uniqueIds) {
-    const preferredIndex = hashWorkspaceId(workspaceId) % paletteSize;
-    let chosenIndex = preferredIndex;
-    for (let offset = 0; offset < paletteSize; offset += 1) {
-      const candidateIndex = (preferredIndex + offset) % paletteSize;
-      if (!takenIndexes.has(candidateIndex)) {
-        chosenIndex = candidateIndex;
-        break;
-      }
-    }
-    takenIndexes.add(chosenIndex);
-    assignment.set(workspaceId, WORKSPACE_TILE_PALETTE[chosenIndex]?.hex ?? FALLBACK_PALETTE_HEX);
-  }
-
-  return assignment;
-};
-
-/**
- * Returns the color the user picked, or the automatic color of the workspace. An id outside the
- * given assignment keeps its own preferred palette color.
- */
-export const resolveTileColor = ({
-  workspaceId,
-  pickedColor,
-  automaticColors,
-}: {
-  workspaceId: string;
-  pickedColor: string | null;
-  automaticColors: WorkspaceAutomaticTileColors;
-}): string => {
-  if (pickedColor) {
-    return pickedColor;
-  }
-  const preferredIndex = hashWorkspaceId(workspaceId) % WORKSPACE_TILE_PALETTE.length;
-  return (
-    automaticColors.get(workspaceId) ??
-    WORKSPACE_TILE_PALETTE[preferredIndex]?.hex ??
-    FALLBACK_PALETTE_HEX
-  );
 };
 
 /**
@@ -271,35 +207,3 @@ export const tileColorFaceStyle = (hex: string): CSSProperties => ({
   backgroundColor: hex,
   color: tileForegroundColor(hex),
 });
-
-export const ACTIVE_TILE_BORDER_WIDTH_PX = 4;
-
-/**
- * The wide border that marks the active workspace. Its color is the theme primary accent, so it
- * never depends on the tile color.
- *
- * The border is drawn as an inset outline. That keeps the tile at its layout size, follows the
- * rounded corners, and leaves the focus ring alone, because the shared button focus state uses a
- * box shadow. The longhand properties are used because a `var()` value inside the `outline`
- * shorthand is mis-parsed by the test DOM.
- */
-const activeTileBorderStyle = (): CSSProperties => ({
-  outlineWidth: `${ACTIVE_TILE_BORDER_WIDTH_PX}px`,
-  outlineStyle: "solid",
-  outlineColor: "var(--primary)",
-  outlineOffset: `-${ACTIVE_TILE_BORDER_WIDTH_PX}px`,
-});
-
-/**
- * Every tile shows its workspace color at full strength. Only the active tile adds the
- * primary-color border.
- *
- * A user can pick any shade, so a dimmed inactive face could reach the intensity of the
- * full-strength active face of a neighbor. The border carries the active state on its own, so the
- * color is free to identify the workspace in every state.
- */
-export const tileSurfaceStyle = (
-  hex: string,
-  { isActive }: { isActive: boolean },
-): CSSProperties =>
-  isActive ? { ...tileColorFaceStyle(hex), ...activeTileBorderStyle() } : tileColorFaceStyle(hex);

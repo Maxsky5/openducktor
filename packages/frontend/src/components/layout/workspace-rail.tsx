@@ -35,10 +35,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   deriveWorkspaceInitials,
-  resolveAutomaticTileColors,
-  resolveTileColor,
+  tileColorFaceStyle,
   tileLabelSizeClass,
-  tileSurfaceStyle,
 } from "@/lib/workspace-tile-appearance";
 import { useWorkspaceState } from "@/state/app-state-provider";
 
@@ -82,7 +80,7 @@ function WorkspaceRailAvatar({ workspace }: { workspace: WorkspaceRecord }): Rea
 
 type WorkspaceRailButtonShellProps = {
   workspace: WorkspaceRecord;
-  tileColor: string;
+  tileColor: string | null;
   dragListeners?: ReturnType<typeof useSortable>["listeners"];
   shellRef?: RefCallback<HTMLDivElement>;
   style?: CSSProperties;
@@ -113,13 +111,26 @@ function WorkspaceRailButtonShell({
   const { isSwitchingWorkspace } = interactionState;
   const isInteractionDisabled = isSwitchingWorkspace && !isDragOverlay;
 
+  const showActiveSurface = workspace.isActive && !isDragOverlay;
+  // The divider is drawn per row so it can stop at the selected one. The drag preview floats free
+  // of the rail, so it carries no divider either.
+  const showRailDivider = !showActiveSurface && !isDragOverlay;
+
   return (
     <div
       ref={shellRef}
       data-active={workspace.isActive ? "true" : "false"}
       data-dragging={isDragSource ? "true" : "false"}
       style={style}
-      className={cn("touch-none", isDragSource && !isDragOverlay && "opacity-0")}
+      className={cn(
+        // The border is always reserved so every row keeps the same width, and only its color
+        // changes. The active workspace takes the selected surface across the full rail width, so
+        // it reads as selected whatever color its tile carries.
+        "flex touch-none justify-center border-r border-r-transparent px-2 py-1",
+        showRailDivider && "border-r-border",
+        showActiveSurface && "bg-segmented-selected",
+        isDragSource && !isDragOverlay && "opacity-0",
+      )}
       {...dragListeners}
     >
       <Button
@@ -128,9 +139,13 @@ function WorkspaceRailButtonShell({
         variant="ghost"
         className={cn(
           "size-10 rounded-lg border-none p-0 shadow-sm transition-none",
+          // A workspace without a picked color keeps the primary accent in both states. The tile
+          // color never changes, so the sidebar surface behind the active row is the only cue for
+          // the selection and nothing else competes with it.
+          !tileColor && "bg-primary text-primary-foreground hover:bg-primary",
           isDragOverlay && "pointer-events-none",
         )}
-        style={tileSurfaceStyle(tileColor, { isActive: workspace.isActive })}
+        style={tileColor ? tileColorFaceStyle(tileColor) : undefined}
         aria-label={workspace.workspaceName}
         title={workspace.workspaceName}
         aria-disabled={isInteractionDisabled ? true : undefined}
@@ -170,7 +185,7 @@ function SortableWorkspaceRailButton({
   onSelectWorkspace,
 }: {
   workspace: WorkspaceRecord;
-  tileColor: string;
+  tileColor: string | null;
   isActiveDrag: boolean;
   shouldSuppressSelection: boolean;
   isSwitchingWorkspace: boolean;
@@ -215,10 +230,6 @@ export function WorkspaceRail({
   const workspaceIds = useMemo(
     () => workspaces.map((workspace) => workspace.workspaceId),
     [workspaces],
-  );
-  const automaticTileColors = useMemo(
-    () => resolveAutomaticTileColors(workspaceIds),
-    [workspaceIds],
   );
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const suppressedSelectionWorkspaceIdRef = useRef<string | null>(null);
@@ -279,8 +290,8 @@ export function WorkspaceRail({
   };
 
   return (
-    <aside className="workspace-rail flex h-full w-14 shrink-0 flex-col border-r border-border bg-background">
-      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+    <aside className="workspace-rail flex h-full w-14 shrink-0 flex-col bg-background">
+      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto pb-1">
         {workspaces.length > 0 ? (
           <DndContext
             sensors={sensors}
@@ -296,16 +307,12 @@ export function WorkspaceRail({
             onDragCancel={handleDragCancel}
           >
             <SortableContext items={workspaceIds} strategy={verticalListSortingStrategy}>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col">
                 {workspaces.map((workspace) => (
                   <SortableWorkspaceRailButton
                     key={workspace.workspaceId}
                     workspace={workspace}
-                    tileColor={resolveTileColor({
-                      workspaceId: workspace.workspaceId,
-                      pickedColor: workspace.tileColor,
-                      automaticColors: automaticTileColors,
-                    })}
+                    tileColor={workspace.tileColor}
                     isActiveDrag={activeWorkspaceId === workspace.workspaceId}
                     shouldSuppressSelection={
                       suppressedSelectionWorkspaceIdRef.current === workspace.workspaceId
@@ -329,11 +336,7 @@ export function WorkspaceRail({
               {activeDragWorkspace ? (
                 <WorkspaceRailButtonShell
                   workspace={activeDragWorkspace}
-                  tileColor={resolveTileColor({
-                    workspaceId: activeDragWorkspace.workspaceId,
-                    pickedColor: activeDragWorkspace.tileColor,
-                    automaticColors: automaticTileColors,
-                  })}
+                  tileColor={activeDragWorkspace.tileColor}
                   dragState={{ isOverlay: true }}
                   interactionState={{ isSwitchingWorkspace }}
                 />
@@ -342,17 +345,22 @@ export function WorkspaceRail({
           </DndContext>
         ) : null}
 
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-10"
-          aria-label="Open repository"
-          title="Open repository"
-          onClick={onOpenRepositoryModal}
-        >
-          <Plus className="size-5" />
-        </Button>
+        <div className="flex justify-center border-r border-r-border px-2 py-1">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-10"
+            aria-label="Open repository"
+            title="Open repository"
+            onClick={onOpenRepositoryModal}
+          >
+            <Plus className="size-5" />
+          </Button>
+        </div>
+
+        {/* Continues the rail divider past the last row. */}
+        <div className="min-h-0 flex-1 border-r border-r-border" />
       </div>
     </aside>
   );

@@ -64,7 +64,6 @@ test("RepositoryConfigurationSection applies the confirmed worktree base path", 
         <SeedFilesystemDirectory path="/tmp/worktrees" />
         <RepositoryConfigurationSection
           selectedRepoConfig={selectedRepoConfig}
-          configuredWorkspaceIds={[selectedRepoConfig.workspaceId]}
           selectedRepoEffectiveWorktreeBasePath={null}
           selectedRepoBranches={[]}
           selectedRepoBranchesError={null}
@@ -113,7 +112,6 @@ test("RepositoryConfigurationSection applies the confirmed repository rebind pat
         <SeedFilesystemDirectory path="/tmp/rebound-repo" currentPathIsGitRepo />
         <RepositoryConfigurationSection
           selectedRepoConfig={selectedRepoConfig}
-          configuredWorkspaceIds={[selectedRepoConfig.workspaceId]}
           selectedRepoEffectiveWorktreeBasePath={null}
           selectedRepoBranches={[]}
           selectedRepoBranchesError={null}

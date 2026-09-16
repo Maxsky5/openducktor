@@ -3,17 +3,11 @@ import {
   WORKSPACE_TILE_PALETTE,
   deriveWorkspaceInitials,
   normalizeHexInput,
-  resolveAutomaticTileColors,
-  resolveTileColor,
-  ACTIVE_TILE_BORDER_WIDTH_PX,
   tileColorFaceStyle,
   tileForegroundColor,
   tileLabelSizeClass,
   tileShadeRamp,
-  tileSurfaceStyle,
 } from "./workspace-tile-appearance";
-
-const paletteHexValues = new Set(WORKSPACE_TILE_PALETTE.map((entry) => entry.hex));
 
 describe("deriveWorkspaceInitials", () => {
   test("takes the first letter of the first two words", () => {
@@ -34,63 +28,6 @@ describe("deriveWorkspaceInitials", () => {
 
   test("skips leading punctuation on a single word", () => {
     expect(deriveWorkspaceInitials("_alpha")).toBe("AL");
-  });
-});
-
-describe("resolveAutomaticTileColors", () => {
-  test("gives every workspace a palette color", () => {
-    const colors = resolveAutomaticTileColors(["alpha", "beta", "gamma"]);
-    expect([...colors.values()].every((hex) => paletteHexValues.has(hex))).toBe(true);
-  });
-
-  test("never repeats a color while the palette has a free slot", () => {
-    const workspaceIds = Array.from({ length: WORKSPACE_TILE_PALETTE.length }, (_, index) =>
-      String(index),
-    );
-    const colors = resolveAutomaticTileColors(workspaceIds);
-    expect(new Set(colors.values()).size).toBe(WORKSPACE_TILE_PALETTE.length);
-  });
-
-  test("keeps an assignment stable when the rail order changes", () => {
-    const ordered = resolveAutomaticTileColors(["alpha", "beta", "gamma"]);
-    const reordered = resolveAutomaticTileColors(["gamma", "alpha", "beta"]);
-    expect([...reordered.entries()]).toEqual([...ordered.entries()]);
-  });
-
-  test("repeats a color only after the palette is exhausted", () => {
-    const workspaceIds = Array.from({ length: WORKSPACE_TILE_PALETTE.length + 3 }, (_, index) =>
-      String(index),
-    );
-    const colors = resolveAutomaticTileColors(workspaceIds);
-    expect(colors.size).toBe(workspaceIds.length);
-    expect(new Set(colors.values()).size).toBe(WORKSPACE_TILE_PALETTE.length);
-  });
-});
-
-describe("resolveTileColor", () => {
-  const automaticColors = resolveAutomaticTileColors(["alpha", "beta"]);
-
-  test("prefers the color the user picked", () => {
-    expect(
-      resolveTileColor({ workspaceId: "alpha", pickedColor: "#123456", automaticColors }),
-    ).toBe("#123456");
-  });
-
-  test("falls back to the automatic color when nothing is picked", () => {
-    const alphaAutomaticColor = automaticColors.get("alpha");
-    expect(alphaAutomaticColor).toBeDefined();
-    expect(resolveTileColor({ workspaceId: "alpha", pickedColor: null, automaticColors })).toBe(
-      alphaAutomaticColor ?? "",
-    );
-  });
-
-  test("gives a palette color to an id outside the assignment", () => {
-    const resolved = resolveTileColor({
-      workspaceId: "unknown",
-      pickedColor: null,
-      automaticColors,
-    });
-    expect(paletteHexValues.has(resolved)).toBe(true);
   });
 });
 
@@ -191,45 +128,6 @@ describe("tileColorFaceStyle", () => {
 
   test("carries no active marker, so a color sample never reads as an active tile", () => {
     expect(tileColorFaceStyle("#3b82f6")).not.toHaveProperty("outlineColor");
-  });
-});
-
-describe("tileSurfaceStyle", () => {
-  test("uses the opaque color and a wide primary border for the active tile", () => {
-    expect(tileSurfaceStyle("#3b82f6", { isActive: true })).toEqual({
-      backgroundColor: "#3b82f6",
-      color: "#000000",
-      outlineWidth: `${ACTIVE_TILE_BORDER_WIDTH_PX}px`,
-      outlineStyle: "solid",
-      outlineColor: "var(--primary)",
-      outlineOffset: `-${ACTIVE_TILE_BORDER_WIDTH_PX}px`,
-    });
-  });
-
-  test("marks the active tile with a border that does not depend on the tile color", () => {
-    const markers = WORKSPACE_TILE_PALETTE.map(
-      (entry) => tileSurfaceStyle(entry.hex, { isActive: true }).outlineColor,
-    );
-
-    expect(new Set(markers)).toEqual(new Set(["var(--primary)"]));
-  });
-
-  test("shows an inactive tile at full strength and leaves it unmarked", () => {
-    expect(tileSurfaceStyle("#3b82f6", { isActive: false })).toEqual({
-      backgroundColor: "#3b82f6",
-      color: "#000000",
-    });
-  });
-
-  test("separates the active tile from a neighbor of any intensity through the border alone", () => {
-    const lightShade = tileShadeRamp("#3b82f6")[0]?.hex ?? "";
-    const activeLight = tileSurfaceStyle(lightShade, { isActive: true });
-    const inactiveDark = tileSurfaceStyle("#06347f", { isActive: false });
-
-    expect(activeLight.outlineColor).toBe("var(--primary)");
-    expect(activeLight.outlineWidth).toBe(`${ACTIVE_TILE_BORDER_WIDTH_PX}px`);
-    expect(inactiveDark).not.toHaveProperty("outlineColor");
-    expect(inactiveDark.backgroundColor).toBe("#06347f");
   });
 });
 

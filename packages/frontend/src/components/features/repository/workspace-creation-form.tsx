@@ -102,7 +102,6 @@ export type WorkspaceCreationController = {
   workspaceId: string;
   abbreviation: string;
   tileColor: string | null;
-  configuredWorkspaceIds: string[];
   pickerOpen: boolean;
   submitting: boolean;
   busy: boolean;
@@ -195,7 +194,6 @@ export function useWorkspaceCreation({
     workspaceId: state.workspaceId,
     abbreviation: state.abbreviation,
     tileColor: state.tileColor,
-    configuredWorkspaceIds: [...existingIds, state.workspaceId.trim()],
     pickerOpen: state.pickerOpen,
     submitting: state.submitting,
     busy,
@@ -270,11 +268,9 @@ export function WorkspaceCreationFields({
           </div>
           <WorkspaceIdentityFields
             idPrefix="workspace-create"
-            workspaceId={controller.workspaceId.trim()}
             workspaceName={controller.workspaceName}
             abbreviation={controller.abbreviation || null}
             tileColor={controller.tileColor}
-            configuredWorkspaceIds={controller.configuredWorkspaceIds}
             isDisabled={controller.busy}
             onChangeAbbreviation={controller.updateAbbreviation}
             onChangeTileColor={controller.updateTileColor}

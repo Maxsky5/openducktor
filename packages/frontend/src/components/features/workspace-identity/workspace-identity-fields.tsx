@@ -2,25 +2,15 @@ import { WORKSPACE_ABBREVIATION_MAX_LENGTH } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  deriveWorkspaceInitials,
-  resolveAutomaticTileColors,
-  resolveTileColor,
-} from "@/lib/workspace-tile-appearance";
+import { deriveWorkspaceInitials } from "@/lib/workspace-tile-appearance";
 import { WorkspaceTileColorPicker } from "./workspace-tile-color-picker";
 
 type WorkspaceIdentityFieldsProps = {
   /** Keeps the control ids unique when the settings panel and a creation form are both mounted. */
   idPrefix: string;
-  workspaceId: string;
   workspaceName: string;
   abbreviation: string | null;
   tileColor: string | null;
-  /**
-   * Every workspace id that competes for an automatic color, including the one being edited or
-   * created. The panel and the rail resolve the same assignment from this set.
-   */
-  configuredWorkspaceIds: readonly string[];
   isDisabled: boolean;
   onChangeAbbreviation: (nextAbbreviation: string) => void;
   onChangeTileColor: (nextTileColor: string | null) => void;
@@ -32,21 +22,14 @@ type WorkspaceIdentityFieldsProps = {
  */
 export function WorkspaceIdentityFields({
   idPrefix,
-  workspaceId,
   workspaceName,
   abbreviation,
   tileColor,
-  configuredWorkspaceIds,
   isDisabled,
   onChangeAbbreviation,
   onChangeTileColor,
 }: WorkspaceIdentityFieldsProps): ReactElement {
   const automaticAbbreviation = deriveWorkspaceInitials(workspaceName);
-  const automaticTileColor = resolveTileColor({
-    workspaceId,
-    pickedColor: null,
-    automaticColors: resolveAutomaticTileColors(configuredWorkspaceIds),
-  });
   const abbreviationFieldId = `${idPrefix}-abbreviation`;
 
   return (
@@ -65,16 +48,13 @@ export function WorkspaceIdentityFields({
           }}
         />
         <p className="text-xs text-muted-foreground">
-          Up to {WORKSPACE_ABBREVIATION_MAX_LENGTH} characters shown on the workspace rail tile.
-          Leave this blank to use the letters from the workspace name.
+          Up to {WORKSPACE_ABBREVIATION_MAX_LENGTH} characters.
         </p>
       </div>
 
       <WorkspaceTileColorPicker
         idPrefix={idPrefix}
         pickedColor={tileColor}
-        automaticColor={automaticTileColor}
-        effectiveColor={tileColor ?? automaticTileColor}
         isDisabled={isDisabled}
         onChangeTileColor={onChangeTileColor}
       />
