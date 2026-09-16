@@ -27,6 +27,12 @@ export const hasUnfinishedLatestTurn = (messages: readonly AgentChatMessage[]): 
   return false;
 };
 
+/**
+ * True when the transcript holds at least one message and its latest turn finished.
+ */
+export const hasSettledLatestTurn = (messages: readonly AgentChatMessage[]): boolean =>
+  messages.length > 0 && !hasUnfinishedLatestTurn(messages);
+
 export const canResumeInterruptedTurn = ({
   activityState,
   messages,

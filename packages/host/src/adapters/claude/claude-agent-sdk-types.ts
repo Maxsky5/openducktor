@@ -116,6 +116,7 @@ export type ClaudeSession = {
   lastAssistantText?: string;
   lastAssistantTextFinal?: boolean;
   lastAssistantTextTurnIndex?: number;
+  lastSuccessfulResultTurnIndex?: number;
   model: AgentModelSelection | undefined;
   modelAfterQueuedTurns?: AgentModelSelection | null;
   parentExternalSessionId?: string;

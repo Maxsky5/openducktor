@@ -77,8 +77,13 @@ export const buildClaudeAgentSdkBaseOptions = ({
   processEnv?: NodeJS.ProcessEnv | undefined;
   resumeInterruptedTurn?: boolean;
 }): Options => {
+  const inheritedEnv = sanitizeChildProcessEnvironment(processEnv ?? {});
+  // The private Claude switches must come only from this adapter. An inherited value
+  // would start a hidden continuation for a session that is not a continuation.
+  delete inheritedEnv[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV];
+  delete inheritedEnv[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV];
   const env = {
-    ...sanitizeChildProcessEnvironment(processEnv ?? {}),
+    ...inheritedEnv,
     CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor",
   };
   const options: Options = {

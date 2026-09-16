@@ -10,11 +10,16 @@ import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { AgentOperationsContext, AgentSessionsContext } from "@/state/app-state-contexts";
 import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import { createSendAgentMessage } from "@/state/operations/agent-orchestrator/handlers/send-agent-message";
 import { createSessionTurnMetadata } from "@/state/operations/agent-orchestrator/support/session-turn-metadata";
-import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createSessionMessagesFixture,
+  sessionMessagesToArray,
+} from "@/test-utils/session-message-test-helpers";
 
 const createWorkspaceSessionRecord = (): WorkspaceSession => ({
   id: "draft",
@@ -396,6 +401,93 @@ test("keeps an unconfirmed continuation failure after the Resume action settles"
     expect(view.result.current.persistentResumeError).toBe(
       "The runtime did not confirm the continuation. Inspect the runtime and this session.",
     );
+  } finally {
+    view.unmount();
+    queryClient.clear();
+  }
+});
+
+test("clears an unconfirmed continuation failure when the transcript settles", async () => {
+  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+  const failure = new HostInvokeError("Continuation unconfirmed", {
+    kind: "agent_session_resume",
+    agentSessionResumeFailure: {
+      reason: "runtime_unavailable",
+      sessionRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      },
+      operation: "agent-session.continue-interrupted-turn",
+      message: "The runtime did not confirm the continuation.",
+      nextAction: "Inspect the runtime and this session.",
+    },
+  });
+  const sessionIdentity = {
+    runtimeKind: "opencode" as const,
+    workingDirectory: "/repo/worktree",
+    externalSessionId: "session-1",
+  };
+  const userMessage: AgentChatMessage = {
+    id: "user-1",
+    role: "user",
+    content: "Continue please",
+    timestamp: "2026-09-12T10:00:00.000Z",
+  };
+  const finalAssistantMessage: AgentChatMessage = {
+    id: "assistant-1",
+    role: "assistant",
+    content: "Done",
+    timestamp: "2026-09-12T10:01:00.000Z",
+    meta: { kind: "assistant", isFinal: true },
+  };
+  const store = createAgentSessionsStore("/repo");
+  store.replaceSession(
+    createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      messages: [userMessage],
+    }),
+  );
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const operations = createOperations({
+    sendAgentMessage: async () => {},
+    continueInterruptedTurn: async () => {
+      throw failure;
+    },
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>
+        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+      </AgentSessionsContext>
+    </QueryClientProvider>
+  );
+  const view = renderHook(({ record }) => useWorkspaceSessionChatActions(workspace, record), {
+    wrapper,
+    initialProps: { record: createSessionOneRecord() },
+  });
+
+  try {
+    await act(async () => {
+      view.result.current.resumeInterruptedTurn(sessionIdentity);
+    });
+
+    expect(view.result.current.persistentResumeError).toBe(
+      "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+    );
+
+    await act(async () => {
+      store.updateSession(sessionIdentity, (current) => ({
+        ...current,
+        messages: createSessionMessagesFixture("session-1", [userMessage, finalAssistantMessage]),
+      }));
+    });
+
+    expect(view.result.current.resumeSessionError).toBeNull();
+    expect(view.result.current.persistentResumeError).toBeNull();
   } finally {
     view.unmount();
     queryClient.clear();

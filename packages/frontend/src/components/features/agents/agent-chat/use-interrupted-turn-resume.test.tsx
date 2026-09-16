@@ -24,6 +24,25 @@ type PendingResume = {
   readonly reject: (cause: unknown) => void;
 };
 
+const NO_SELECTION = { sessionKey: null, isLatestTurnSettled: false } as const;
+
+const unconfirmedContinuationFailure = () =>
+  new HostInvokeError("Continuation unconfirmed", {
+    kind: "agent_session_resume",
+    agentSessionResumeFailure: {
+      reason: "runtime_unavailable",
+      sessionRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-a",
+      },
+      operation: "agent-session.continue-interrupted-turn",
+      message: "The runtime did not confirm the continuation.",
+      nextAction: "Inspect the runtime and this session.",
+    },
+  });
+
 const createResumeRecorder = () => {
   const pending: PendingResume[] = [];
   const continueInterruptedTurn = (identity: AgentSessionIdentity): Promise<void> =>
@@ -35,7 +54,7 @@ const createResumeRecorder = () => {
 
 test("keys the loading and failure state to the session that started the resume", async () => {
   const { pending, continueInterruptedTurn } = createResumeRecorder();
-  const view = renderHook(() => useInterruptedTurnResume(continueInterruptedTurn));
+  const view = renderHook(() => useInterruptedTurnResume(continueInterruptedTurn, NO_SELECTION));
 
   try {
     act(() => {
@@ -59,7 +78,7 @@ test("keys the loading and failure state to the session that started the resume"
 
 test("does not start a second resume for the same session while it is pending", () => {
   const { pending, continueInterruptedTurn } = createResumeRecorder();
-  const view = renderHook(() => useInterruptedTurnResume(continueInterruptedTurn));
+  const view = renderHook(() => useInterruptedTurnResume(continueInterruptedTurn, NO_SELECTION));
 
   try {
     act(() => {
@@ -76,7 +95,7 @@ test("does not start a second resume for the same session while it is pending", 
 
 test("keeps a pending resume of another session independent", async () => {
   const { pending, continueInterruptedTurn } = createResumeRecorder();
-  const view = renderHook(() => useInterruptedTurnResume(continueInterruptedTurn));
+  const view = renderHook(() => useInterruptedTurnResume(continueInterruptedTurn, NO_SELECTION));
   const failure = new HostInvokeError("Continuation refused", {
     kind: "agent_session_resume",
     agentSessionResumeFailure: {
@@ -125,22 +144,8 @@ test("keeps a pending resume of another session independent", async () => {
 
 test("keeps an unconfirmed continuation failure after the Resume action settles", async () => {
   const { pending, continueInterruptedTurn } = createResumeRecorder();
-  const view = renderHook(() => useInterruptedTurnResume(continueInterruptedTurn));
-  const failure = new HostInvokeError("Continuation unconfirmed", {
-    kind: "agent_session_resume",
-    agentSessionResumeFailure: {
-      reason: "runtime_unavailable",
-      sessionRef: {
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree",
-        externalSessionId: "session-a",
-      },
-      operation: "agent-session.continue-interrupted-turn",
-      message: "The runtime did not confirm the continuation.",
-      nextAction: "Inspect the runtime and this session.",
-    },
-  });
+  const view = renderHook(() => useInterruptedTurnResume(continueInterruptedTurn, NO_SELECTION));
+  const failure = unconfirmedContinuationFailure();
 
   try {
     act(() => {
@@ -168,6 +173,38 @@ test("keeps an unconfirmed continuation failure after the Resume action settles"
     await act(async () => {
       pending[1]?.resolve();
     });
+  } finally {
+    view.unmount();
+  }
+});
+
+test("clears an unconfirmed continuation failure when the latest turn settles", async () => {
+  const { pending, continueInterruptedTurn } = createResumeRecorder();
+  let isLatestTurnSettled = false;
+  const view = renderHook(() =>
+    useInterruptedTurnResume(continueInterruptedTurn, { sessionKey: keyA, isLatestTurnSettled }),
+  );
+
+  try {
+    act(() => {
+      view.result.current.resume(identityA);
+    });
+
+    await act(async () => {
+      pending[0]?.reject(unconfirmedContinuationFailure());
+    });
+
+    expect(view.result.current.persistentResumeErrorForSession(keyA)).toBe(
+      "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+    );
+
+    isLatestTurnSettled = true;
+    await act(async () => {
+      view.rerender();
+    });
+
+    expect(view.result.current.resumeErrorForSession(keyA)).toBeNull();
+    expect(view.result.current.persistentResumeErrorForSession(keyA)).toBeNull();
   } finally {
     view.unmount();
   }

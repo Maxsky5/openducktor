@@ -38,6 +38,7 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
   lastAssistantTextFinal?: boolean;
   lastAssistantTextModel?: AgentModelSelection;
   lastAssistantTextTurnIndex?: number;
+  lastSuccessfulResultTurnIndex?: number;
   model?: AgentModelSelection | undefined;
   streamAssistantMessageIdsByBlockIndex?: Map<number, string>;
   toolInputsByCallId: Map<string, ClaudeToolInput>;
@@ -78,11 +79,17 @@ export const handleClaudeResultMessage = ({
   const shouldFinalize = shouldFinalizeClaudeTurn(originKind, hasActiveBackgroundWork ? 1 : 0);
   delete session.assistantTurnOriginKind;
   const failed = isFailedClaudeResult(message);
+  const lifecycleOutcome = lifecycleOutcomeForClaudeResult(message);
   const resultText = message.subtype === "success" ? message.result.trim() : "";
   const handledManualCompaction =
     !failed && settleClaudeManualCompactionResult({ emit, result: resultText, session, timestamp });
   if (!handledManualCompaction && shouldFinalize) {
     emitSuccessfulResultText({ emit, message, session, timestamp, completedUserTurnIndex });
+  }
+  if (!failed && !handledManualCompaction && shouldFinalize && lifecycleOutcome === "completed") {
+    // A tool-only result carries no assistant text, so the turn index is the only
+    // record that the latest accepted turn finished.
+    session.lastSuccessfulResultTurnIndex = completedUserTurnIndex;
   }
   if (failed) {
     clearClaudeManualCompaction(session);
@@ -113,7 +120,7 @@ export const handleClaudeResultMessage = ({
     timestamp,
     event: {
       kind: "result",
-      outcome: lifecycleOutcomeForClaudeResult(message),
+      outcome: lifecycleOutcome,
     },
   });
 };

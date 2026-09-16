@@ -45,12 +45,25 @@ const toResumeFailure = (cause: unknown): InterruptedTurnResumeFailure => {
 };
 
 /**
+ * The selected session the resume state belongs to. `sessionKey` is null when no
+ * session is selected, and `isLatestTurnSettled` is true when the transcript shows
+ * the latest turn finished.
+ */
+export type InterruptedTurnResumeTurnState = {
+  readonly sessionKey: string | null;
+  readonly isLatestTurnSettled: boolean;
+};
+
+/**
  * Runs interrupted-turn resumes and keys the loading and failure state by session.
  * A resume that settles after the user selects another session cannot show its
- * progress or its error on the newly selected session.
+ * progress or its error on the newly selected session. A failure is dropped once the
+ * transcript shows the latest turn finished, so a stale notice cannot outlive the
+ * turn it was meant to explain.
  */
 export const useInterruptedTurnResume = (
   continueInterruptedTurn: (identity: AgentSessionIdentity) => Promise<void>,
+  turnState: InterruptedTurnResumeTurnState,
 ): InterruptedTurnResumeController => {
   const mounted = useRef(true);
   useEffect(() => {
@@ -100,6 +113,26 @@ export const useInterruptedTurnResume = (
     },
     [continueInterruptedTurn],
   );
+
+  const clearResumeFailureForSession = useCallback((sessionKey: string): void => {
+    setFailures((current) => {
+      if (!current.has(sessionKey)) {
+        return current;
+      }
+      const next = new Map(current);
+      next.delete(sessionKey);
+      return next;
+    });
+  }, []);
+
+  const { isLatestTurnSettled, sessionKey } = turnState;
+  const hasFailureForSession = sessionKey !== null && failures.has(sessionKey);
+  useEffect(() => {
+    if (sessionKey === null || !isLatestTurnSettled || !hasFailureForSession) {
+      return;
+    }
+    clearResumeFailureForSession(sessionKey);
+  }, [clearResumeFailureForSession, hasFailureForSession, isLatestTurnSettled, sessionKey]);
 
   const isSessionResuming = useCallback(
     (sessionKey: string): boolean => resumingSessionKeys.has(sessionKey),

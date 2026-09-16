@@ -36,6 +36,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type {
   AgentApprovalRequest,
+  AgentChatMessage,
   AgentQuestionRequest,
   AgentSessionIdentity,
 } from "@/types/agent-orchestrator";
@@ -489,6 +490,69 @@ describe("useAgentStudioSessionActions", () => {
       expect(harness.getLatest().persistentResumeError).toBe(
         "The runtime did not confirm the continuation. Inspect the runtime and this session.",
       );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("clears an unconfirmed continuation failure when the selected transcript settles", async () => {
+    const failure = new HostInvokeError("Continuation unconfirmed", {
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "runtime_unavailable",
+        sessionRef: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        },
+        operation: "agent-session.continue-interrupted-turn",
+        message: "The runtime did not confirm the continuation.",
+        nextAction: "Inspect the runtime and this session.",
+      },
+    });
+    const userMessage: AgentChatMessage = {
+      id: "user-1",
+      role: "user",
+      content: "Continue please",
+      timestamp: "2026-09-12T10:00:00.000Z",
+    };
+    const finalAssistantMessage: AgentChatMessage = {
+      id: "assistant-1",
+      role: "assistant",
+      content: "Done",
+      timestamp: "2026-09-12T10:01:00.000Z",
+      meta: { kind: "assistant", isFinal: true },
+    };
+    const args = {
+      ...createBaseArgs(),
+      ...selectedSessionArgs({
+        externalSessionId: "session-1",
+        messages: [userMessage],
+      }),
+      continueInterruptedTurn: async () => {
+        throw failure;
+      },
+    };
+    const harness = createHookHarness(args);
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.onResumeSession();
+      });
+      await harness.waitFor(() => harness.getLatest().persistentResumeError !== null);
+
+      await harness.update({
+        ...args,
+        ...selectedSessionArgs({
+          externalSessionId: "session-1",
+          messages: [userMessage, finalAssistantMessage],
+        }),
+      });
+
+      await harness.waitFor(() => harness.getLatest().persistentResumeError === null);
+      expect(harness.getLatest().resumeSessionError).toBeNull();
     } finally {
       await harness.unmount();
     }

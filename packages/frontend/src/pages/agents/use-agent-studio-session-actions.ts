@@ -12,6 +12,7 @@ import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openduc
 import { useCallback } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
 import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
@@ -261,10 +262,13 @@ export function useAgentStudioSessionActions({
   const canStopSession = selectedSessionIdentity !== null && isSessionWorking;
   const canResumeSession = sessionState.canResumeSession;
 
-  const { resume, isSessionResuming, resumeErrorForSession, persistentResumeErrorForSession } =
-    useInterruptedTurnResume(continueInterruptedTurn);
   const selectedSessionKey =
     selectedSessionIdentity === null ? null : agentSessionIdentityKey(selectedSessionIdentity);
+  const { resume, isSessionResuming, resumeErrorForSession, persistentResumeErrorForSession } =
+    useInterruptedTurnResume(continueInterruptedTurn, {
+      sessionKey: selectedSessionKey,
+      isLatestTurnSettled: hasSettledLatestTurn(loadedSession?.messages.items ?? []),
+    });
   const isResumingSession = selectedSessionKey !== null && isSessionResuming(selectedSessionKey);
   const resumeSessionError =
     selectedSessionKey === null ? null : resumeErrorForSession(selectedSessionKey);

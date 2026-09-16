@@ -52,12 +52,13 @@ export const decideClaudeLiveContinuation = (
     return { kind: "needs_transcript" };
   }
   if (
-    session.lastAssistantTextFinal === true &&
-    session.lastAssistantTextTurnIndex === latestAcceptedTurnIndex
+    session.lastSuccessfulResultTurnIndex === latestAcceptedTurnIndex ||
+    (session.lastAssistantTextFinal === true &&
+      session.lastAssistantTextTurnIndex === latestAcceptedTurnIndex)
   ) {
     return reject(
       "completed_turn",
-      `Claude session '${externalSessionId}' has a final assistant result.`,
+      `Claude session '${externalSessionId}' has a completed latest turn.`,
     );
   }
   return { kind: "allow" };

@@ -101,7 +101,22 @@ describe("decideClaudeLiveContinuation", () => {
       kind: "reject",
       error: {
         reason: "completed_turn",
-        message: "Claude session 'session-1' has a final assistant result.",
+        message: "Claude session 'session-1' has a completed latest turn.",
+      },
+    });
+  });
+
+  test("rejects a completed latest in-process turn without final assistant text", () => {
+    const session = createClaudeSession({
+      acceptedUserMessages: [acceptedUserMessage("user-1")],
+      lastSuccessfulResultTurnIndex: 1,
+    });
+
+    expect(decideClaudeLiveContinuation(session, "session-1")).toMatchObject({
+      kind: "reject",
+      error: {
+        reason: "completed_turn",
+        message: "Claude session 'session-1' has a completed latest turn.",
       },
     });
   });

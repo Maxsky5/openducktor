@@ -15,6 +15,7 @@ import { createClaudeSystemCommands } from "./claude-agent-sdk-system-commands.t
 import {
   buildClaudeAgentSdkBaseOptions,
   buildClaudeAgentSdkOptions,
+  CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV,
   CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV,
 } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
@@ -205,9 +206,19 @@ describe("buildClaudeAgentSdkBaseOptions", () => {
       cwd: process.cwd(),
       resumeInterruptedTurn: true,
     });
+    const inheritedSwitch = buildClaudeAgentSdkBaseOptions({
+      claudeExecutablePath: process.execPath,
+      cwd: process.cwd(),
+      processEnv: {
+        [CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]: "1",
+        [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]: "1",
+      },
+    });
 
     expect(withoutSwitch.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBeUndefined();
     expect(withSwitch.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBe("1");
+    expect(inheritedSwitch.env?.[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]).toBeUndefined();
+    expect(inheritedSwitch.env?.[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]).toBeUndefined();
   });
 });
 
