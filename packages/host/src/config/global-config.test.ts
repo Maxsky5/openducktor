@@ -7,6 +7,16 @@ import {
   upgradePersistedGlobalConfigV2,
 } from "./global-config";
 
+const rejectionMessage = (run: () => void): string => {
+  try {
+    run();
+  } catch (cause) {
+    return cause instanceof Error ? cause.message : String(cause);
+  }
+
+  throw new Error("Expected the config to be rejected");
+};
+
 describe("global config", () => {
   test("creates only current version 3 config", () => {
     const config = createDefaultGlobalConfig();
@@ -196,5 +206,82 @@ describe("global config", () => {
     });
     expect(upgraded.autopilot.alwaysStartQaReviewsFresh).toBe(true);
     expect(upgraded.notifications).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
+  });
+
+  test("reports a missing field for a rejected config", () => {
+    expect(() =>
+      parsePersistedGlobalConfig({
+        version: 3,
+        workspaces: {
+          fairnest: {
+            workspaceId: "fairnest",
+            repoPath: "/repo",
+          },
+        },
+      }),
+    ).toThrow(
+      "workspaces.fairnest.workspaceName: Invalid input: expected string, received undefined (missing)",
+    );
+  });
+
+  test("lists each rejected config field on its own line without raw issue JSON", () => {
+    const message = rejectionMessage(() =>
+      parsePersistedGlobalConfig({
+        version: 3,
+        theme: "blue",
+        workspaces: {
+          fairnest: {
+            workspaceId: "fairnest",
+            workspaceName: null,
+            repoPath: "/repo",
+          },
+          openducktor: {
+            workspaceId: "openducktor",
+            workspaceName: "",
+            repoPath: "/repo",
+          },
+        },
+      }),
+    );
+
+    const lines = message.split("\n");
+    expect(lines).toContain(
+      'theme: Invalid option: expected one of "system"|"light"|"dark" (found "blue")',
+    );
+    expect(lines).toContain(
+      "workspaces.fairnest.workspaceName: Invalid input: expected string, received null (found null)",
+    );
+    expect(lines).toContain(
+      'workspaces.openducktor.workspaceName: Workspace name cannot be blank. (found "")',
+    );
+    expect(message).not.toContain('"code"');
+  });
+
+  test("caps a long list of rejected config fields", () => {
+    const workspaces = Object.fromEntries(
+      Array.from({ length: 7 }, (_, index) => {
+        const workspaceId = `repo-${index}`;
+        return [
+          workspaceId,
+          {
+            workspaceId,
+            workspaceName: null,
+            repoPath: "/repo",
+          },
+        ];
+      }),
+    );
+
+    const message = rejectionMessage(() => parsePersistedGlobalConfig({ version: 3, workspaces }));
+
+    const lines = message.split("\n");
+    expect(lines.filter((line) => line.startsWith("workspaces."))).toHaveLength(5);
+    expect(lines.at(-1)).toMatch(/^\d+ more problems not shown\.$/);
+  });
+
+  test("formats version 2 config validation failures the same way", () => {
+    expect(() => parsePersistedGlobalConfigV2({ version: 2, theme: "blue" })).toThrow(
+      'theme: Invalid option: expected one of "system"|"light"|"dark" (found "blue")',
+    );
   });
 });

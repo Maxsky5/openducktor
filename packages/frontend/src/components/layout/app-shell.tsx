@@ -297,7 +297,9 @@ export const AppShell = memo(function AppShell(): ReactElement {
           role="alert"
         >
           <h1 className="font-semibold">OpenDucktor could not load your workspaces</h1>
-          <p className="text-sm text-muted-foreground">{workspaceLoadError.message}</p>
+          <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+            {workspaceLoadError.message}
+          </p>
           <Button type="button" variant="outline" onClick={retryWorkspaceLoad}>
             Retry
           </Button>

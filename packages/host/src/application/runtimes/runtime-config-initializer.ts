@@ -9,6 +9,7 @@ import {
   type LoadedGlobalConfig,
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
+import { parseConfig } from "../../config/parse-config";
 import { HostOperationError, type HostValidationError } from "../../effect/host-errors";
 import {
   discoverToolFresh,
@@ -68,5 +69,6 @@ export const createRuntimeConfigInitializer =
           ];
         }),
       );
-      return globalConfigSchema.parse({ ...config, agentRuntimes });
+      const payload = { ...config, agentRuntimes };
+      return yield* parseConfig(globalConfigSchema, payload);
     });

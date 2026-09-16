@@ -6,6 +6,7 @@ import {
 } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../effect/host-errors";
+import { configValidationError } from "./config-validation-message";
 
 type PersistedConfigObject = Record<string, JSONType>;
 const persistedConfigObjectSchema = z.record(z.string(), z.json());
@@ -95,29 +96,31 @@ const parseSupportedConfigObject = (
   return payload;
 };
 
-export const parsePersistedGlobalConfig = (payload: JSONType): LoadedGlobalConfig => {
+const parsePersistedConfig = <Output>(
+  payload: JSONType,
+  expectedVersion: 2 | 3,
+  schema: z.ZodType<Output>,
+): Output => {
+  let migrated: PersistedConfigObject;
   try {
-    return globalConfigSchema.parse(migratePersistedConfig(parseSupportedConfigObject(payload, 3)));
+    migrated = migratePersistedConfig(parseSupportedConfigObject(payload, expectedVersion));
   } catch (cause) {
-    throw new HostValidationError({
-      message: cause instanceof Error ? cause.message : String(cause),
-      cause,
-    });
+    throw configValidationError(cause);
   }
+
+  const parsed = schema.safeParse(migrated);
+  if (!parsed.success) {
+    throw configValidationError(parsed.error, migrated);
+  }
+
+  return parsed.data;
 };
 
-export const parsePersistedGlobalConfigV2 = (payload: JSONType): PersistedGlobalConfigV2 => {
-  try {
-    return persistedGlobalConfigV2Schema.parse(
-      migratePersistedConfig(parseSupportedConfigObject(payload, 2)),
-    );
-  } catch (cause) {
-    throw new HostValidationError({
-      message: cause instanceof Error ? cause.message : String(cause),
-      cause,
-    });
-  }
-};
+export const parsePersistedGlobalConfig = (payload: JSONType): LoadedGlobalConfig =>
+  parsePersistedConfig(payload, 3, globalConfigSchema);
+
+export const parsePersistedGlobalConfigV2 = (payload: JSONType): PersistedGlobalConfigV2 =>
+  parsePersistedConfig(payload, 2, persistedGlobalConfigV2Schema);
 
 export const readPersistedGlobalConfigVersion = (payload: JSONType): 2 | 3 => {
   if (!isPersistedConfigObject(payload)) {
@@ -146,9 +149,15 @@ export const upgradePersistedGlobalConfigV2 = (
     ]),
   );
 
-  return globalConfigSchema.parse({
+  const payload = {
     ...config,
     version: 3,
     agentRuntimes,
-  });
+  };
+  const parsed = globalConfigSchema.safeParse(payload);
+  if (!parsed.success) {
+    throw configValidationError(parsed.error, payload);
+  }
+
+  return parsed.data;
 };

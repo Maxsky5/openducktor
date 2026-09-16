@@ -475,6 +475,7 @@ describe("AppShell", () => {
     expect(
       screen.getByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
     ).toBeTruthy();
+    expect(screen.getByText("Workspace list unavailable")).toBeTruthy();
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 

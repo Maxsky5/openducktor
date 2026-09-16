@@ -1,7 +1,11 @@
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { OPENDUCKTOR_CONFIG_DIR_NAMES } from "@openducktor/contracts";
-import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
+import {
+  normalizePathSeparators,
+  normalizeUserPathInput,
+  resolveNormalizedUserPath,
+} from "@openducktor/path-support";
 import { HostResourceError, HostValidationError } from "../effect/host-errors";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
@@ -38,6 +42,24 @@ export const resolveUserPath = (rawPath: string): string => {
     resolveHomeDir: resolveHomeDirectory,
     joinHomePath: (homeDir, relativePath) => path.join(homeDir, relativePath),
   });
+};
+
+export const displayUserPath = (absolutePath: string, homeDir: string = homedir()): string => {
+  if (homeDir.trim().length === 0) {
+    return absolutePath;
+  }
+
+  const relative = path.relative(homeDir, absolutePath);
+  const isOutsideHome =
+    relative.length === 0 ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative);
+  if (isOutsideHome) {
+    return absolutePath;
+  }
+
+  return `~/${normalizePathSeparators(relative)}`;
 };
 
 const resolveConfiguredBaseDir = (rawPath: string): string => {

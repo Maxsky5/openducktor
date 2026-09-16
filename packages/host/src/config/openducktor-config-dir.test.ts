@@ -1,7 +1,11 @@
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { HostValidationError } from "../effect/host-errors";
-import { resolveOpenDucktorBaseDir, resolveUserPath } from "./openducktor-config-dir";
+import {
+  displayUserPath,
+  resolveOpenDucktorBaseDir,
+  resolveUserPath,
+} from "./openducktor-config-dir";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 const PRELOAD_CONFIG_DIR = process.env[OPENDUCKTOR_CONFIG_DIR_ENV];
@@ -99,5 +103,18 @@ describe("OpenDucktor config directory resolution", () => {
     expect(() => resolveUserPath("   ")).toThrow("Path is empty");
     expect(() => resolveUserPath(`""`)).toThrow("Path is empty");
     expect(() => resolveUserPath(`"   "`)).toThrow("Path is empty");
+  });
+
+  test("shortens a displayed path inside the home directory", () => {
+    expect(displayUserPath("/home/dev/.openducktor-local/config.json", "/home/dev")).toBe(
+      "~/.openducktor-local/config.json",
+    );
+  });
+
+  test("keeps a displayed path outside the home directory", () => {
+    expect(displayUserPath("/tmp/odt/config.json", "/home/dev")).toBe("/tmp/odt/config.json");
+    expect(displayUserPath("/home/developer/config.json", "/home/dev")).toBe(
+      "/home/developer/config.json",
+    );
   });
 });
