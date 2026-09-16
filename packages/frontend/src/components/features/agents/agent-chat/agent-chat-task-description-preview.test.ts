@@ -5,7 +5,7 @@ import {
 } from "./agent-chat-task-description-preview";
 
 describe("buildTaskDescriptionPreviewMarkdown", () => {
-  test("keeps a short description unchanged", () => {
+  test("keeps a short description without a diagram unchanged", () => {
     const description = "### Context\n\n- Failure: CI run\n- Test: workspace-session";
     expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
   });
@@ -49,7 +49,25 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
     expect(preview.length).toBeLessThanOrEqual(TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS);
   });
 
-  test("drops a fence that the character budget leaves open", () => {
+  test("renders a diagram fence as code", () => {
+    const description = [
+      "Text before.",
+      "",
+      "```mermaid",
+      "graph TD",
+      "  A --> B",
+      "```",
+      "",
+      "Text after.",
+    ].join("\n");
+    const preview = buildTaskDescriptionPreviewMarkdown(description);
+
+    expect(preview).toBe(
+      ["Text before.", "", "```", "graph TD", "  A --> B", "```", "", "Text after."].join("\n"),
+    );
+  });
+
+  test("renders a diagram fence that the character budget cuts as code", () => {
     const description = [
       "x".repeat(400),
       "",
@@ -62,21 +80,30 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
     const preview = buildTaskDescriptionPreviewMarkdown(description);
 
     expect(preview).toContain("x".repeat(400));
+    expect(preview).toContain("graph TD");
     expect(preview).not.toContain("mermaid");
-    expect(preview).not.toContain("```");
   });
 
-  test("keeps a complete fence inside the budget", () => {
-    const description = [
-      "Text before.",
-      "",
-      "```mermaid",
-      "graph TD",
-      "  A --> B",
-      "```",
-      "",
-      "Text after.",
-    ].join("\n");
+  test("renders a diagram fence in a blockquote or a list item as code", () => {
+    const blockquote = ["> ```mermaid", "> graph TD", ">   A --> B", "> ```"].join("\n");
+    const list = ["- Item", "", "    ```mermaid", "    graph TD", "    ```"].join("\n");
+
+    expect(buildTaskDescriptionPreviewMarkdown(blockquote)).toBe(
+      ["> ```", "> graph TD", ">   A --> B", "> ```"].join("\n"),
+    );
+    expect(buildTaskDescriptionPreviewMarkdown(list)).toBe(
+      ["- Item", "", "    ```", "    graph TD", "    ```"].join("\n"),
+    );
+  });
+
+  test("keeps a fence whose info string rules it out", () => {
+    const description = "```markdown `literal`\nThis remains plain text";
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
+  });
+
+  test("keeps a non-diagram fence unchanged", () => {
+    const description = ["```js", "const answer = 42;", "```"].join("\n");
 
     expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
   });

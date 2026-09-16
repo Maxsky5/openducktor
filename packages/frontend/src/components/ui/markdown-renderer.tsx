@@ -18,7 +18,7 @@ import remarkGfm from "remark-gfm";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
-import { prepareMarkdownRenderContent } from "./markdown-renderer-context";
+import { prepareMarkdownRenderContent } from "./markdown-render-content";
 
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
 const MarkdownRendererRich = lazy(() => import("./markdown-renderer-rich"));

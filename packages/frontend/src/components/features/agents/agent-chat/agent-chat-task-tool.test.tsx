@@ -211,7 +211,7 @@ test("labels a preview image without alt text or a file name", () => {
   expect(document.querySelector("[data-task-id] img")).toBeNull();
 });
 
-test("strips front matter and drops an open diagram fence from the description preview", () => {
+test("strips front matter and renders a diagram fence as code in the description preview", () => {
   const description = [
     "---",
     "priority: high",
@@ -230,8 +230,9 @@ test("strips front matter and drops an open diagram fence from the description p
   const preview = document.querySelector("[data-task-id] .markdown-body");
   expect(preview?.textContent).toContain("Body text here.");
   expect(preview?.textContent).not.toContain("priority: high");
-  expect(preview?.textContent).not.toContain("graph TD");
-  expect(document.querySelector('[data-task-id] [role="alert"]')).toBeNull();
+  expect(preview?.textContent).toContain("graph TD");
+  expect(preview?.querySelector(".language-mermaid")).toBeNull();
+  expect(preview?.querySelector("svg")).toBeNull();
 });
 
 test("does not claim task creation before completion or after failure", () => {

@@ -1,36 +1,45 @@
-import { prepareMarkdownRenderContent } from "@/components/ui/markdown-renderer-context";
+import { isFenceClose, readFenceStart, type OpenCodeFence } from "./agent-chat-code-fence-healing";
+import { prepareMarkdownRenderContent } from "@/components/ui/markdown-render-content";
 
 export const TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS = 480;
 
-const FENCE_LINE_PATTERN = /^ {0,3}(`{3,}|~{3,})/;
+const CONTAINER_PREFIX_PATTERN = /^[\s>]*/;
 
-const dropOpenFence = (markdown: string): string => {
-  const lines = markdown.split("\n");
-  let openFence: string | null = null;
-  let openFenceLine = -1;
-  for (const [index, line] of lines.entries()) {
-    const marker = FENCE_LINE_PATTERN.exec(line)?.[1];
-    if (marker === undefined) {
-      continue;
-    }
-    if (openFence === null) {
-      openFence = marker;
-      openFenceLine = index;
-    } else if (marker.charAt(0) === openFence.charAt(0) && marker.length >= openFence.length) {
-      openFence = null;
-      openFenceLine = -1;
-    }
-  }
-  if (openFenceLine < 0) {
-    return markdown;
-  }
-  return lines.slice(0, openFenceLine).join("\n").trimEnd();
+const isMermaidFence = (fence: OpenCodeFence): boolean =>
+  fence.infoString.trim().split(/\s+/)[0] === "mermaid";
+
+const removeInfoString = (line: string, marker: string): string => {
+  const markerIndex = line.indexOf(marker);
+  return markerIndex < 0 ? line : line.slice(0, markerIndex + marker.length);
+};
+
+const renderDiagramFencesAsCode = (markdown: string): string => {
+  let openFence: OpenCodeFence | null = null;
+  return markdown
+    .split(/\r?\n/)
+    .map((line) => {
+      const scanLine = line.replace(CONTAINER_PREFIX_PATTERN, "");
+      if (openFence !== null) {
+        if (isFenceClose(scanLine, openFence)) {
+          openFence = null;
+        }
+        return line;
+      }
+      const fence = readFenceStart(scanLine);
+      if (fence === null) {
+        return line;
+      }
+      openFence = fence;
+      if (!isMermaidFence(fence)) {
+        return line;
+      }
+      return removeInfoString(line, fence.marker);
+    })
+    .join("\n");
 };
 
 export const buildTaskDescriptionPreviewMarkdown = (description: string): string => {
   const body = prepareMarkdownRenderContent(description, true);
-  if (body.length <= TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS) {
-    return dropOpenFence(body);
-  }
-  return dropOpenFence(body.slice(0, TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS));
+  const bounded = body.slice(0, TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS);
+  return renderDiagramFencesAsCode(bounded);
 };

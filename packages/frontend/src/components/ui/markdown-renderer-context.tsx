@@ -5,7 +5,6 @@ import {
 } from "@openducktor/contracts";
 import { createElement, isValidElement, useEffect, useState, type ReactNode } from "react";
 import { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
-import { splitTaskDescriptionFrontMatter } from "@/components/features/task-description-editor/task-description-front-matter";
 import { errorMessage } from "@/lib/errors";
 import type { ShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
@@ -93,17 +92,6 @@ function TaskAssetImage({
     />
   );
 }
-
-export const prepareMarkdownRenderContent = (
-  markdown: string,
-  stripTaskDescriptionFrontMatter: boolean,
-): string => {
-  if (!stripTaskDescriptionFrontMatter) {
-    return markdown.trim();
-  }
-  const frontMatter = splitTaskDescriptionFrontMatter(markdown);
-  return (frontMatter.kind === "valid" ? frontMatter.body : markdown).trim();
-};
 
 export const createTaskDescriptionComponents = ({
   components,
