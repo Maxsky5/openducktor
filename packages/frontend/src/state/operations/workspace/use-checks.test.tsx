@@ -26,6 +26,7 @@ const reactActEnvironment: typeof globalThis & {
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck => ({
+  pathOk: true,
   gitOk: true,
   gitVersion: "2.45.0",
   runtimes: [{ kind: "opencode", ok: true, executablePath: "/bin/opencode", version: "0.12.0" }],
@@ -468,6 +469,7 @@ describe("use-checks", () => {
       return runtimeCallCount === 1
         ? makeRuntimeCheck()
         : makeRuntimeCheck({
+            pathOk: true,
             gitOk: false,
             gitVersion: null,
             runtimes: [{ kind: "opencode", ok: false, executablePath: null, version: null }],

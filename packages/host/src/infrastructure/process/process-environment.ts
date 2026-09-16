@@ -236,9 +236,10 @@ export const createProcessEnvironment = (
   }
 
   const inheritedPath = pathEnvironmentValue(env, platform);
+  const probeEnv = sanitizeChildProcessEnvironment(env, platform);
   const loginShellPath = readLoginShellPath
-    ? readLoginShellPath(env, shell)
-    : probeLoginShellPath(env, shell, loginShellTimeoutMs);
+    ? readLoginShellPath(probeEnv, shell)
+    : probeLoginShellPath(probeEnv, shell, loginShellTimeoutMs);
   return Effect.either(loginShellPath).pipe(
     Effect.map((result): ProcessEnvironmentResolution => {
       if (result._tag === "Left") {

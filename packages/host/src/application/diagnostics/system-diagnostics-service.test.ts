@@ -214,6 +214,7 @@ describe("createSystemDiagnosticsService", () => {
       repoStoreDiagnostics: createTaskStore(),
     });
     const check = await Effect.runPromise(service.runtimeCheck(true));
+    expect(check.pathOk).toBe(true);
     expect(check.gitOk).toBe(true);
     expect(check.runtimes).toEqual([
       expect.objectContaining({ kind: "opencode", enabled: true, ok: true }),
@@ -348,23 +349,24 @@ describe("createSystemDiagnosticsService", () => {
 
     const check = await Effect.runPromise(service.runtimeCheck(true));
 
+    expect(check.pathOk).toBe(false);
     expect(check.errors).toContain(processEnvironmentError.message);
   });
-  test("runtimeCheck keeps the PATH diagnostic when runtime config initialization fails", async () => {
+  test("runtimeCheck reads config without initialization when PATH is unavailable", async () => {
     const pathError = "Failed to resolve PATH from the interactive login shell.";
+    const readOptions: Array<Parameters<SettingsConfigPort["readConfig"]>[0]> = [];
+    const config = createDefaultGlobalConfig();
+    config.agentRuntimes.codex.enabled = true;
     const settingsConfig = {
       ...createSettingsConfig(null),
-      readConfig: () =>
-        Effect.fail(
-          new HostOperationError({
-            operation: "runtimeConfig.resolveEnvironment",
-            message: pathError,
-          }),
-        ),
+      readConfig: (options?: Parameters<SettingsConfigPort["readConfig"]>[0]) => {
+        readOptions.push(options);
+        return Effect.succeed(config);
+      },
     } satisfies SettingsConfigPort;
     const service = createSystemDiagnosticsServiceForTest({
       pathError,
-      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+      runtimeDefinitionsService: createRuntimeDefinitions(["codex"]),
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig,
       systemCommands: createSystemCommandPort(),
@@ -373,6 +375,11 @@ describe("createSystemDiagnosticsService", () => {
 
     const check = await Effect.runPromise(service.runtimeCheck(true));
 
+    expect(readOptions).toEqual([{ initialize: false }]);
+    expect(check.pathOk).toBe(false);
+    expect(check.runtimes).toContainEqual(
+      expect.objectContaining({ kind: "codex", enabled: true }),
+    );
     expect(check.errors).toContain(pathError);
   });
   test("runtimeCheck does not hide unrelated config failures", async () => {

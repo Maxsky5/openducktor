@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { accessSync, constants } from "node:fs";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
@@ -313,6 +313,43 @@ describe("createProcessEnvironment", () => {
     },
   );
 
+  testIfPosixShellIsAvailable(
+    "keeps user shell variables and removes host control variables from the probe",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "odt-login-shell-env-"));
+      const configRoot = path.join(root, "zsh");
+      const shellPath = path.join(root, "fixture-shell");
+      try {
+        await mkdir(configRoot);
+        await writeFile(path.join(configRoot, ".zshrc"), 'export PATH="/fixture/zdotdir:$PATH"\n');
+        await writeFile(
+          shellPath,
+          '#!/bin/sh\n[ -z "$ODT_HOST_TOKEN" ] || exit 23\n. "$ZDOTDIR/.zshrc"\nexec /bin/sh -c "$2"\n',
+        );
+        await chmod(shellPath, 0o755);
+
+        const resolution = await Effect.runPromise(
+          createProcessEnvironment({
+            baseEnv: {
+              HOME: root,
+              ODT_HOST_TOKEN: "secret",
+              PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+              USER: "fixture",
+              ZDOTDIR: configRoot,
+            },
+            platform: "darwin",
+            readUserShell: () => shellPath,
+          }),
+        );
+
+        expect(resolution.error).toBeNull();
+        expect(resolution.environment.PATH?.split(":")[0]).toBe("/fixture/zdotdir");
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
+
   testIfBashIsAvailable("reads PATH from an interactive Bash login shell", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "odt-bash-login-shell-"));
     try {
@@ -390,7 +427,7 @@ describe("createProcessEnvironment", () => {
       const root = await mkdtemp(path.join(tmpdir(), "odt-invalid-login-shell-"));
       const shellPath = path.join(root, "fixture-shell");
       try {
-        await writeFile(shellPath, '#!/bin/sh\nunset PATH\nexec /bin/sh -c "$2"\n');
+        await writeFile(shellPath, '#!/bin/sh\nunset PATH\neval "$2"\n');
         await chmod(shellPath, 0o755);
 
         const resolution = await Effect.runPromise(

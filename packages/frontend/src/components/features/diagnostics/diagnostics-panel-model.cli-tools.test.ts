@@ -42,6 +42,7 @@ const buildCliToolsModel = ({
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError,
     runtimeCheck: {
+      pathOk: true,
       gitOk: true,
       gitVersion: "git version 2.50.1",
       runtimes: runtimes.map((runtime) => ({ executablePath: null, ...runtime })),
@@ -180,6 +181,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: false,
         gitVersion: null,
         runtimes: [{ kind: "opencode", ok: false, executablePath: null, version: null }],
@@ -229,6 +231,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: false,
         gitVersion: null,
         runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: false, version: null }),
@@ -281,6 +284,7 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
+        pathOk: true,
         gitOk: true,
         gitVersion: "git version 2.50.1",
         runtimes: makeBuiltInRuntimeDiagnostics({
@@ -306,5 +310,32 @@ describe("buildDiagnosticsPanelModel CLI Tools", () => {
     const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
     expect(cliToolsSection?.badge).toEqual({ label: "Available", variant: "success" });
     expect(cliToolsSection?.errors).toEqual([]);
+  });
+
+  test("shows the PATH failure when Git remains available", () => {
+    const pathError = "Failed to resolve PATH from interactive login shell /bin/zsh.";
+    const model = buildDiagnosticsPanelModel({
+      workspaceRepoPath: "/repo",
+      activeWorkspace: makeWorkspace("/repo"),
+      runtimeDefinitions: makeBuiltInRuntimeDefinitions(),
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        pathOk: false,
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        runtimes: makeBuiltInRuntimeDiagnostics({ kind: "opencode", ok: false, version: null }),
+        errors: [pathError],
+      },
+      taskStoreCheck: makeTaskStoreCheck(),
+      runtimeCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
+      runtimeHealthByRuntime: {},
+      isLoadingChecks: false,
+    });
+
+    const cliToolsSection = model.sections.find((section) => section.key === "cli-tools");
+    expect(cliToolsSection?.badge).toEqual({ label: "Issue", variant: "danger" });
+    expect(cliToolsSection?.errors).toEqual([pathError]);
   });
 });

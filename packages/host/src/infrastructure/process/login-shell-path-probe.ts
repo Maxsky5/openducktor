@@ -11,18 +11,17 @@ const MAX_OUTPUT_BYTES = 1024 * 1024;
 const CSH_NAMES = new Set(["csh", "tcsh"]);
 
 const shellEnv = (env: NodeJS.ProcessEnv, shell: string): NodeJS.ProcessEnv => ({
-  HOME: env.HOME,
+  ...env,
   LOGNAME: env.LOGNAME ?? env.USER,
   PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
   SHELL: shell,
   TERM: "dumb",
-  USER: env.USER,
 });
 
 const probeArgs = (shell: string): string[] => [
   // csh and tcsh reject `-ilc`. The login-style argv0 keeps login mode for them.
   CSH_NAMES.has(basename(shell)) ? "-ic" : "-ilc",
-  `printf '${START_MARKER_TEXT}\\0'; /usr/bin/env -0; printf '${END_MARKER_TEXT}\\0'`,
+  `printf '${START_MARKER_TEXT}\\0PATH=%s\\0${END_MARKER_TEXT}\\0' "$PATH"`,
 ];
 
 const readPath = (stdout: Buffer): string | null => {

@@ -1431,6 +1431,7 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     await expect(router.invoke("runtime_check", { force: true })).resolves.toMatchObject({
+      pathOk: false,
       gitOk: true,
       runtimes: [
         { kind: "opencode", ok: false, enabled: false },

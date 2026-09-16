@@ -333,6 +333,7 @@ describe("AgentRuntimesSection", () => {
         agentRuntimes: DEFAULT_AGENT_RUNTIMES,
         runtimeDefinitions: [CLAUDE_RUNTIME_DESCRIPTOR],
         runtimeCheck: {
+          pathOk: true,
           gitOk: true,
           gitVersion: "git version 2.50.0",
           runtimes: [

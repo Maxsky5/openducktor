@@ -42,15 +42,9 @@ export type SystemDiagnosticsError =
   | ToolDiscoveryError;
 const RUNTIME_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
 const loadGlobalConfig = (settingsConfig: SettingsConfigPort, pathError?: string | null) =>
-  settingsConfig.readConfig().pipe(
-    Effect.catchTag("HostOperationError", (error) => {
-      if (pathError && error.operation === "runtimeConfig.resolveEnvironment") {
-        return Effect.succeed(null);
-      }
-      return Effect.fail(error);
-    }),
-    Effect.map((config) => config ?? createDefaultGlobalConfig()),
-  );
+  settingsConfig
+    .readConfig({ initialize: pathError == null })
+    .pipe(Effect.map((config) => config ?? createDefaultGlobalConfig()));
 const buildTaskStoreCheck = (repoStoreHealth: RepoStoreHealth): TaskStoreCheck => {
   const taskStoreError = !repoStoreHealth.isReady ? repoStoreHealth.detail : null;
   return {
@@ -171,6 +165,7 @@ export const createSystemDiagnosticsService = ({
         }
       }
       return {
+        pathOk: pathError == null,
         gitOk,
         gitVersion: gitVersion.version,
         runtimes,
@@ -218,6 +213,7 @@ export const createSystemDiagnosticsService = ({
         errors.push(`task store: ${taskStore.taskStoreError}`);
       }
       return {
+        pathOk: runtime.pathOk,
         gitOk: runtime.gitOk,
         gitVersion: runtime.gitVersion,
         runtimes: runtime.runtimes,
