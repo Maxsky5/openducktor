@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { JSONType } from "zod";
+import { workspaceRecordSchema } from "./git-schemas";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "./notification-schemas";
 import {
   APP_PLATFORM_VALUES,
@@ -346,6 +347,30 @@ describe("config-schemas", () => {
       "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
     );
     expect(() => repoConfigSchema.parse({ ...baseRepoConfigInput, tileColor: "3b82f6" })).toThrow(
+      "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
+    );
+  });
+
+  test("rejects a workspace record whose abbreviation or tile color is malformed", () => {
+    const baseRecord = {
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      abbreviation: null,
+      tileColor: null,
+      repoPath: "/repo",
+      isActive: true,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: null,
+      effectiveWorktreeBasePath: null,
+    };
+
+    expect(workspaceRecordSchema.parse(baseRecord).abbreviation).toBeNull();
+    expect(
+      workspaceRecordSchema.parse({ ...baseRecord, abbreviation: "iOS", tileColor: "#f08c00" }),
+    ).toMatchObject({ abbreviation: "iOS", tileColor: "#f08c00" });
+    expect(() => workspaceRecordSchema.parse({ ...baseRecord, abbreviation: "ABCD" })).toThrow();
+    expect(() => workspaceRecordSchema.parse({ ...baseRecord, tileColor: "blue" })).toThrow(
       "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
     );
   });

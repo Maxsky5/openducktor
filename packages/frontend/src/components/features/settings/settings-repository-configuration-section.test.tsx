@@ -30,6 +30,22 @@ const renderSection = (overrides: Partial<SettingsRepoConfig> = {}) => {
   return { rendered, updaters };
 };
 
+const sectionElement = (overrides: Partial<SettingsRepoConfig>) =>
+  createElement(RepositoryConfigurationSection, {
+    selectedRepoConfig: { ...repoConfig, ...overrides },
+    configuredWorkspaceIds: ["repo", "other-repo"],
+    selectedRepoEffectiveWorktreeBasePath: "/tmp/worktrees",
+    selectedRepoBranches: [] satisfies GitBranch[],
+    selectedRepoBranchesError: null,
+    loadingState: {
+      isLoadingSettings: false,
+      isSaving: false,
+      isLoadingSelectedRepoBranches: false,
+    },
+    onRetrySelectedRepoBranchesLoad: () => {},
+    onUpdateSelectedRepoConfig: () => {},
+  });
+
 enableReactActEnvironment();
 
 const repoConfig: SettingsRepoConfig = {
@@ -130,6 +146,22 @@ describe("RepositoryConfigurationSection", () => {
       fireEvent.change(hexInput, { target: { value: "nothex" } });
       expect(updaters).toHaveLength(1);
       expect(screen.getByRole("alert").textContent).toContain("Enter a 6-digit RGB hex value");
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("drops a rejected hex value when the user switches to a repository of the same color", () => {
+    const rendered = render(sectionElement({ workspaceId: "repo", tileColor: "#f08c00" }));
+
+    try {
+      fireEvent.change(screen.getByLabelText("Hex code"), { target: { value: "nothex" } });
+      expect(screen.getByRole("alert").textContent).toContain("Enter a 6-digit RGB hex value");
+
+      rendered.rerender(sectionElement({ workspaceId: "other-repo", tileColor: "#f08c00" }));
+
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.getByLabelText<HTMLInputElement>("Hex code").value).toBe("f08c00");
     } finally {
       rendered.unmount();
     }

@@ -210,7 +210,10 @@ function RepositoryWorkspaceIdentitySection({
         </div>
       </div>
 
+      {/* Remounting on the selected workspace drops hex text and its error message that belong to
+          the repository the user just left, which a shared color would otherwise keep on screen. */}
       <WorkspaceIdentityFields
+        key={selectedRepoConfig.workspaceId}
         idPrefix="repo-workspace"
         workspaceId={selectedRepoConfig.workspaceId}
         workspaceName={selectedRepoConfig.workspaceName}

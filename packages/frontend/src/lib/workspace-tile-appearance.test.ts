@@ -27,6 +27,14 @@ describe("deriveWorkspaceInitials", () => {
   test("returns a question mark for a blank name", () => {
     expect(deriveWorkspaceInitials("   ")).toBe("?");
   });
+
+  test("keeps a leading letter from any script", () => {
+    expect(deriveWorkspaceInitials("Équipe Mobile")).toBe("ÉM");
+  });
+
+  test("skips leading punctuation on a single word", () => {
+    expect(deriveWorkspaceInitials("_alpha")).toBe("AL");
+  });
 });
 
 describe("resolveAutomaticTileColors", () => {
@@ -120,10 +128,35 @@ describe("tileShadeRamp", () => {
   });
 });
 
+const contrastAgainst = (left: string, right: string): number => {
+  const luminance = (hex: string): number => {
+    const channel = (value: number): number => {
+      const normalized = value / 255;
+      return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+    };
+    return (
+      0.2126 * channel(Number.parseInt(hex.slice(1, 3), 16)) +
+      0.7152 * channel(Number.parseInt(hex.slice(3, 5), 16)) +
+      0.0722 * channel(Number.parseInt(hex.slice(5, 7), 16))
+    );
+  };
+  return (
+    (Math.max(luminance(left), luminance(right)) + 0.05) /
+    (Math.min(luminance(left), luminance(right)) + 0.05)
+  );
+};
+
 describe("tileForegroundColor", () => {
   test("uses dark text on a light color and light text on a dark color", () => {
-    expect(tileForegroundColor("#f8fafc")).toBe("#0f172a");
+    expect(tileForegroundColor("#f8fafc")).toBe("#000000");
     expect(tileForegroundColor("#1e293b")).toBe("#ffffff");
+  });
+
+  test("keeps a color outside the palette readable at a 4.5 contrast ratio", () => {
+    // `#7b7b7b` reached only 4.23 against the softer dark label color used before.
+    for (const hex of ["#7b7b7b", "#777777", "#757575", "#808080", "#1e7abe"]) {
+      expect(contrastAgainst(hex, tileForegroundColor(hex))).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   test("keeps every palette color readable at a 4.5 contrast ratio", () => {
@@ -152,7 +185,7 @@ describe("tileColorFaceStyle", () => {
   test("returns the opaque color with a label color picked by contrast", () => {
     expect(tileColorFaceStyle("#3b82f6")).toEqual({
       backgroundColor: "#3b82f6",
-      color: "#0f172a",
+      color: "#000000",
     });
   });
 
@@ -165,7 +198,7 @@ describe("tileSurfaceStyle", () => {
   test("uses the opaque color and a wide primary border for the active tile", () => {
     expect(tileSurfaceStyle("#3b82f6", { isActive: true })).toEqual({
       backgroundColor: "#3b82f6",
-      color: "#0f172a",
+      color: "#000000",
       outlineWidth: `${ACTIVE_TILE_BORDER_WIDTH_PX}px`,
       outlineStyle: "solid",
       outlineColor: "var(--primary)",
@@ -184,7 +217,7 @@ describe("tileSurfaceStyle", () => {
   test("shows an inactive tile at full strength and leaves it unmarked", () => {
     expect(tileSurfaceStyle("#3b82f6", { isActive: false })).toEqual({
       backgroundColor: "#3b82f6",
-      color: "#0f172a",
+      color: "#000000",
     });
   });
 

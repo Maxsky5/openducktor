@@ -34,19 +34,23 @@ export const deriveWorkspaceInitials = (workspaceName: string): string => {
     return "?";
   }
 
-  const segments = trimmedName.split(/[^A-Za-z0-9]+/).reduce<string[]>((nextSegments, segment) => {
-    const trimmedSegment = segment.trim();
-    if (trimmedSegment.length > 0) {
-      nextSegments.push(trimmedSegment);
-    }
-    return nextSegments;
-  }, []);
+  // Split on anything that is not a letter or a digit in any script, so a name such as
+  // `Équipe Mobile` keeps its leading `É` and `_alpha` drops its leading underscore.
+  const segments = trimmedName
+    .split(/[^\p{L}\p{N}]+/u)
+    .reduce<string[]>((nextSegments, segment) => {
+      const trimmedSegment = segment.trim();
+      if (trimmedSegment.length > 0) {
+        nextSegments.push(trimmedSegment);
+      }
+      return nextSegments;
+    }, []);
 
   if (segments.length >= 2) {
     return `${segments[0]?.[0] ?? ""}${segments[1]?.[0] ?? ""}`.toUpperCase();
   }
 
-  return trimmedName.slice(0, 2).toUpperCase();
+  return (segments[0] ?? trimmedName).slice(0, 2).toUpperCase();
 };
 
 const hashWorkspaceId = (workspaceId: string): number => {
@@ -229,8 +233,11 @@ export const tileShadeRamp = (hex: string): WorkspaceTileShade[] => {
   }));
 };
 
+// Pure black and pure white are the candidates because one of the two always reaches at least a
+// 4.5 contrast ratio against any opaque RGB color. A softer dark, such as slate 900, leaves a band
+// of mid grays that clears neither candidate.
 const LIGHT_TILE_FOREGROUND = "#ffffff";
-const DARK_TILE_FOREGROUND = "#0f172a";
+const DARK_TILE_FOREGROUND = "#000000";
 
 const relativeLuminance = (hex: string): number => {
   const { red, green, blue } = hexToRgb(hex);

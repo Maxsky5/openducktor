@@ -684,5 +684,21 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
         state: { openTaskIds: [42] },
       }),
     ).rejects.toThrow("workspace_replace_agent_studio_state state is invalid");
+    await expect(
+      router.invoke("workspace_add", {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        abbreviation: 42,
+      }),
+    ).rejects.toThrow("abbreviation");
+    await expect(
+      router.invoke("workspace_add", {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        tileColor: false,
+      }),
+    ).rejects.toThrow("tileColor");
   });
 });
