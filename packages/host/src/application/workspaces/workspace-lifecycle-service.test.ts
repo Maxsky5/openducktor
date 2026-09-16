@@ -468,6 +468,8 @@ describe("workspace lifecycle service", () => {
               {
                 workspaceId: "other",
                 workspaceName: "Other",
+                abbreviation: null,
+                tileColor: null,
                 repoPath: "/repos/other",
                 isActive: false,
                 hasConfig: true,
@@ -513,6 +515,8 @@ describe("workspace lifecycle service", () => {
                 workspace: {
                   workspaceId: "other",
                   workspaceName: "Other",
+                  abbreviation: null,
+                  tileColor: null,
                   repoPath: "/repos/other",
                   isActive: false,
                   hasConfig: true,
@@ -606,6 +610,8 @@ describe("workspace lifecycle service", () => {
               {
                 workspaceId: "other",
                 workspaceName: "Other",
+                abbreviation: null,
+                tileColor: null,
                 repoPath: "/managed/ws/task-1/nested",
                 isActive: false,
                 hasConfig: true,
@@ -648,6 +654,8 @@ describe("workspace lifecycle service", () => {
                 workspace: {
                   workspaceId: "other",
                   workspaceName: "Other",
+                  abbreviation: null,
+                  tileColor: null,
                   repoPath: "/managed/ws/task-1/nested",
                   isActive: false,
                   hasConfig: true,

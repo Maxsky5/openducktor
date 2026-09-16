@@ -11,6 +11,8 @@ const workspaceRecord = (
 ): WorkspaceRecord => ({
   workspaceId,
   workspaceName: workspaceId,
+  abbreviation: null,
+  tileColor: null,
   repoPath,
   isActive,
   hasConfig: true,

@@ -105,6 +105,8 @@ describe("OpenRepositoryModal", () => {
     const closedWorkspace = {
       workspaceId: "repo",
       workspaceName: "Closed",
+      abbreviation: null,
+      tileColor: null,
       repoPath: "/closed",
       isActive: false,
       hasConfig: true,
@@ -214,6 +216,8 @@ describe("OpenRepositoryModal", () => {
     const closedWorkspace = {
       workspaceId: "existing",
       workspaceName: "Existing",
+      abbreviation: null,
+      tileColor: null,
       repoPath: "/other",
       isActive: false,
       hasConfig: true,
@@ -256,6 +260,8 @@ describe("OpenRepositoryModal", () => {
     const closedWorkspace = {
       workspaceId: "existing",
       workspaceName: "Existing",
+      abbreviation: null,
+      tileColor: null,
       repoPath: "/repo",
       isActive: false,
       hasConfig: true,
@@ -303,6 +309,8 @@ describe("OpenRepositoryModal", () => {
                 workspace: {
                   workspaceId: "existing",
                   workspaceName: "Existing",
+                  abbreviation: null,
+                  tileColor: null,
                   repoPath: "/repo",
                   isActive: false,
                   hasConfig: true,
