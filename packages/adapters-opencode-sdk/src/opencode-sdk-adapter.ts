@@ -84,7 +84,10 @@ import {
   resolveOpencodePolicyBoundSession,
   synchronizeOpencodeSessionPolicy,
 } from "./opencode-session-binding";
-import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
+import {
+  resolveOpencodeSessionPolicy,
+  type OpencodeSessionPolicy,
+} from "./opencode-session-policy";
 import {
   beginOpencodeUserMessageSend,
   completeOpencodeUserMessageSend,
@@ -171,6 +174,27 @@ export class OpencodeSdkAdapter
       input,
       action,
     });
+  }
+
+  /**
+   * Resolves a session client without registering the session, so the continuation probe
+   * can refuse an ineligible turn before the adapter attaches to the runtime session.
+   */
+  private async resolveContinuationProbeClient(
+    input: ContinueInterruptedAgentTurnInput,
+    policy: OpencodeSessionPolicy,
+  ) {
+    const runtimeClientInput = await this.resolveRuntimeClientInput(
+      input,
+      "continue OpenCode turn",
+    );
+    const client = this.createClient(runtimeClientInput);
+    await requireOpencodeSessionPolicyRuntime({
+      client,
+      policy,
+      workingDirectory: input.workingDirectory,
+    });
+    return client;
   }
 
   getRuntimeDefinition(): RuntimeDescriptor {
@@ -295,7 +319,7 @@ export class OpencodeSdkAdapter
     input: ContinueInterruptedAgentTurnInput,
   ): Promise<AgentSessionSummary> {
     assertOpenCodeRuntimePolicyBinding(input, "continue OpenCode turn");
-    resolveOpencodeSessionPolicy(
+    const policy = resolveOpencodeSessionPolicy(
       input.sessionScope,
       this.getRuntimeDefinition(),
       "continue OpenCode turn",
@@ -310,24 +334,16 @@ export class OpencodeSdkAdapter
         });
       }
     }
-    try {
-      await this.resumeSession(input);
-    } catch (error) {
-      const notFound = toOpencodeSessionNotFoundResumeError(
-        error instanceof Error ? error : null,
-        input.externalSessionId,
-      );
-      if (notFound) {
-        throw notFound;
-      }
-      throw error;
-    }
-    const session = requireSession(this.sessions, input.externalSessionId);
+    // Probe with an unregistered session client so an ineligible turn never registers,
+    // subscribes, or emits a started event for the session.
+    const probeClient = registered
+      ? registered.client
+      : await this.resolveContinuationProbeClient(input, policy);
 
     let probe: Awaited<ReturnType<typeof probeOpencodeInterruptedTurn>>;
     try {
       probe = await probeOpencodeInterruptedTurn({
-        client: session.client,
+        client: probeClient,
         workingDirectory: input.workingDirectory,
         externalSessionId: input.externalSessionId,
       });
@@ -347,6 +363,20 @@ export class OpencodeSdkAdapter
     if (probe.kind !== "unfinished_turn") {
       throw toOpencodeInterruptedTurnResumeError(probe, input.externalSessionId);
     }
+
+    try {
+      await this.resumeSession(input);
+    } catch (error) {
+      const notFound = toOpencodeSessionNotFoundResumeError(
+        error instanceof Error ? error : null,
+        input.externalSessionId,
+      );
+      if (notFound) {
+        throw notFound;
+      }
+      throw error;
+    }
+    const session = requireSession(this.sessions, input.externalSessionId);
 
     const begunSend = beginOpencodeUserMessageSend({
       session,

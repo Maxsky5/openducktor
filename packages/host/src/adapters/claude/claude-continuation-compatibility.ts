@@ -20,7 +20,7 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
  */
 export const CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION = "2.1.251";
 
-export const CLAUDE_VERSION_COMMAND_TIMEOUT_MS = 2_000;
+const CLAUDE_VERSION_COMMAND_TIMEOUT_MS = 2_000;
 
 type ClaudeCliVersion = {
   readonly major: number;

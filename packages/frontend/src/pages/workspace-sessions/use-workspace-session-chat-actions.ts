@@ -3,10 +3,9 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
-import { getAgentSessionResumeFailureNotice } from "@/state/agent-runtime-services";
-import { HostInvokeError } from "@openducktor/host-client";
 import { resolveAgentStudioSendDraftParts } from "@/pages/agents/session-actions/agent-studio-send-draft";
 import { useAgentSessionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
@@ -35,9 +34,6 @@ export function useWorkspaceSessionChatActions(
   const [isStarting, setStarting] = useState(false);
   const [isSavingModel, setSavingModel] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isResumingSession, setResumingSession] = useState(false);
-  const [resumeSessionError, setResumeSessionError] = useState<string | null>(null);
-  const resumingSessionKeyRef = useRef<string | null>(null);
 
   const updateDraftModel = useCallback(
     (selection: AgentModelSelection | null) => {
@@ -105,34 +101,16 @@ export function useWorkspaceSessionChatActions(
     }
   };
 
-  const continueInterruptedTurn = operations.continueInterruptedTurn;
-  const resumeInterruptedTurn = useCallback(
-    (target: Parameters<typeof continueInterruptedTurn>[0]): void => {
-      const sessionKey = agentSessionIdentityKey(target);
-      if (resumingSessionKeyRef.current === sessionKey) {
-        return;
-      }
-      resumingSessionKeyRef.current = sessionKey;
-      void continueInterruptedTurn(target)
-        .catch((cause) => {
-          if (mounted.current) {
-            const notice =
-              cause instanceof HostInvokeError ? getAgentSessionResumeFailureNotice(cause) : null;
-            setResumeSessionError(notice ?? errorMessage(cause));
-          }
-        })
-        .finally(() => {
-          if (resumingSessionKeyRef.current !== sessionKey) {
-            return;
-          }
-          resumingSessionKeyRef.current = null;
-          if (mounted.current) setResumingSession(false);
-        });
-      setResumingSession(true);
-      setResumeSessionError(null);
-    },
-    [continueInterruptedTurn, mounted],
-  );
+  const {
+    resume: resumeInterruptedTurn,
+    isSessionResuming,
+    resumeErrorForSession,
+  } = useInterruptedTurnResume(operations.continueInterruptedTurn);
+  const recordIdentity = workspaceSessionIdentity(record);
+  const recordSessionKey = recordIdentity === null ? null : agentSessionIdentityKey(recordIdentity);
+  const isResumingSession = recordSessionKey !== null && isSessionResuming(recordSessionKey);
+  const resumeSessionError =
+    recordSessionKey === null ? null : resumeErrorForSession(recordSessionKey);
 
   return {
     isSending,

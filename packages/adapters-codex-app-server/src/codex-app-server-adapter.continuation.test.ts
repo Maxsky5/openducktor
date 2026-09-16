@@ -183,6 +183,20 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     expect(methodsOf(calls)).not.toContain("turn/start");
   });
 
+  test("classifies a system-error thread as a probe failure instead of a live turn", async () => {
+    const { adapter, calls } = createContinuationAdapter({
+      threadStatus: { type: "systemError" },
+      latestTurnStatus: "interrupted",
+    });
+
+    await expect(adapter.continueInterruptedTurn(continuationInput())).rejects.toMatchObject({
+      reason: "probe_failed",
+      message: expect.stringContaining("Restart the Codex runtime"),
+    });
+    expect(methodsOf(calls)).not.toContain("thread/resume");
+    expect(methodsOf(calls)).not.toContain("turn/start");
+  });
+
   test("refuses a completed latest turn without starting a turn", async () => {
     const { adapter, calls } = createContinuationAdapter({
       threadStatus: { type: "idle" },

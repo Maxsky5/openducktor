@@ -94,6 +94,86 @@ const hasComposerSendContent = (
 const SEND_PENDING_ITEMS_BADGE_CLASS_NAME =
   "pointer-events-none absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-300 px-1 text-[10px] font-semibold leading-none text-neutral-950";
 
+const AgentChatComposerResumeControl = memo(function AgentChatComposerResumeControl({
+  canResumeSession,
+  isResumingSession,
+  resumeDisabled,
+  resumeSessionError,
+  onResumeSession,
+}: Pick<
+  AgentChatComposerModel,
+  "canResumeSession" | "isResumingSession" | "resumeSessionError" | "onResumeSession"
+> & { resumeDisabled: boolean }): ReactElement | null {
+  if (!canResumeSession && !resumeSessionError) {
+    return null;
+  }
+
+  return (
+    <>
+      {resumeSessionError ? (
+        <p className="max-w-[24rem] text-right text-xs text-destructive" role="alert">
+          {resumeSessionError}
+        </p>
+      ) : null}
+      {canResumeSession ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 gap-1.5 rounded-full px-3 text-xs"
+          disabled={isResumingSession || resumeDisabled}
+          onClick={onResumeSession}
+        >
+          {isResumingSession ? (
+            <LoaderCircle className="size-3.5 animate-spin" />
+          ) : (
+            <Play className="size-3.5" />
+          )}
+          {isResumingSession ? "Resuming" : "Resume"}
+        </Button>
+      ) : null}
+    </>
+  );
+});
+
+const AgentChatComposerSendControl = memo(function AgentChatComposerSendControl({
+  sendDisabled,
+  showSubmittingState,
+  pendingSendItems,
+}: {
+  sendDisabled: boolean;
+  showSubmittingState: boolean;
+  pendingSendItems: AgentChatComposerModel["pendingSendItems"];
+}): ReactElement {
+  return (
+    <div className="relative">
+      <Button
+        type="submit"
+        size="icon"
+        className="size-8 rounded-full"
+        aria-label={showSubmittingState ? "Preparing message" : "Send message"}
+        disabled={sendDisabled}
+      >
+        {showSubmittingState ? (
+          <LoaderCircle className="size-3.5 animate-spin" />
+        ) : (
+          <SendHorizontal className="size-3.5" />
+        )}
+      </Button>
+      {pendingSendItems && pendingSendItems.count > 0 ? (
+        <span
+          aria-label={pendingSendItems.accessibleLabel}
+          className={SEND_PENDING_ITEMS_BADGE_CLASS_NAME}
+          data-testid="agent-chat-send-pending-items-badge"
+          role="status"
+        >
+          {pendingSendItems.count}
+        </span>
+      ) : null}
+    </div>
+  );
+});
+
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onPickAttachments,
   attachmentIntakeDisabled,
@@ -219,28 +299,13 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             />
           </div>
         ) : null}
-        {resumeSessionError ? (
-          <p className="max-w-[24rem] text-right text-xs text-destructive" role="alert">
-            {resumeSessionError}
-          </p>
-        ) : null}
-        {canResumeSession ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 rounded-full px-3 text-xs"
-            disabled={isResumingSession || resumeDisabled}
-            onClick={onResumeSession}
-          >
-            {isResumingSession ? (
-              <LoaderCircle className="size-3.5 animate-spin" />
-            ) : (
-              <Play className="size-3.5" />
-            )}
-            {isResumingSession ? "Resuming" : "Resume"}
-          </Button>
-        ) : null}
+        <AgentChatComposerResumeControl
+          canResumeSession={canResumeSession}
+          isResumingSession={isResumingSession}
+          resumeDisabled={resumeDisabled}
+          resumeSessionError={resumeSessionError}
+          onResumeSession={onResumeSession}
+        />
         {canStopSession ? (
           <Button
             type="button"
@@ -252,31 +317,11 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             <Square className="size-3 fill-current" />
           </Button>
         ) : null}
-        <div className="relative">
-          <Button
-            type="submit"
-            size="icon"
-            className="size-8 rounded-full"
-            aria-label={showSubmittingState ? "Preparing message" : "Send message"}
-            disabled={sendDisabled}
-          >
-            {showSubmittingState ? (
-              <LoaderCircle className="size-3.5 animate-spin" />
-            ) : (
-              <SendHorizontal className="size-3.5" />
-            )}
-          </Button>
-          {pendingSendItems && pendingSendItems.count > 0 ? (
-            <span
-              aria-label={pendingSendItems.accessibleLabel}
-              className={SEND_PENDING_ITEMS_BADGE_CLASS_NAME}
-              data-testid="agent-chat-send-pending-items-badge"
-              role="status"
-            >
-              {pendingSendItems.count}
-            </span>
-          ) : null}
-        </div>
+        <AgentChatComposerSendControl
+          sendDisabled={sendDisabled}
+          showSubmittingState={showSubmittingState}
+          pendingSendItems={pendingSendItems}
+        />
       </div>
     </div>
   );
@@ -625,6 +670,7 @@ const composerInputDisabledFor = ({
   isReadOnly,
   isModelSelectionPending,
   isWaitingInput,
+  isResumingSession,
   busySendBlockedReason,
 }: AgentChatComposerModel): boolean => {
   return (
@@ -632,6 +678,7 @@ const composerInputDisabledFor = ({
     isReadOnly ||
     isModelSelectionPending ||
     isWaitingInput ||
+    isResumingSession ||
     Boolean(busySendBlockedReason)
   );
 };

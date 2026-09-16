@@ -23,7 +23,9 @@ export const createContinueInterruptedTurn = ({
   return async (identity: AgentSessionIdentity): Promise<void> => {
     const session = readSessionSnapshot(identity);
     if (!session) {
-      return;
+      throw new Error(
+        `Session '${identity.externalSessionId}' is no longer loaded. Reload the session, then retry Resume.`,
+      );
     }
     const sessionRef = toBoundRuntimeSessionRef(
       requireWorkspaceRepoPath(workspaceRepoPath),

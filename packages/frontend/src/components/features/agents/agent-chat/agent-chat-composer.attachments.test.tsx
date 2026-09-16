@@ -991,3 +991,32 @@ describe("AgentChatComposer selection controls", () => {
     withSelection.unmount();
   });
 });
+
+describe("AgentChatComposer resume lock", () => {
+  test("locks the composer input while a resume is in flight", () => {
+    const resuming = render(
+      <AgentChatComposer
+        model={{ ...buildModel(), canResumeSession: true, isResumingSession: true }}
+      />,
+    );
+
+    const disabledEditor = screen.getByRole("combobox", { name: "Message composer" });
+    expect(disabledEditor.getAttribute("aria-disabled")).toBe("true");
+    expect(disabledEditor.getAttribute("contenteditable")).toBe("false");
+    expect(screen.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    resuming.unmount();
+
+    const idle = render(
+      <AgentChatComposer
+        model={{ ...buildModel(), canResumeSession: true, isResumingSession: false }}
+      />,
+    );
+
+    const enabledEditor = screen.getByRole("combobox", { name: "Message composer" });
+    expect(enabledEditor.getAttribute("aria-disabled")).toBe("false");
+    expect(enabledEditor.getAttribute("contenteditable")).toBe("true");
+    idle.unmount();
+  });
+});

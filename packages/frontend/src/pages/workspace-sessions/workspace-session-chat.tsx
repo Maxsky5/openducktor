@@ -1,4 +1,8 @@
-import { projectWorkspaceSessionChatState } from "./workspace-session-chat-state";
+import {
+  canInteractWithWorkspaceSession,
+  canResumeWorkspaceSession,
+  projectWorkspaceSessionChatState,
+} from "./workspace-session-chat-state";
 import { useWorkspaceSessionPromptInput } from "./use-workspace-session-prompt-input";
 import type { ChatSettings, ReusablePrompt, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -32,7 +36,6 @@ import {
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
-import { canResumeInterruptedTurn } from "@/lib/agent-session-interrupted-turn";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 
 type WorkspaceSessionChatProps = {
@@ -186,23 +189,21 @@ export function WorkspaceSessionChat({
       },
     },
   });
-  const canResumeSession =
-    identity !== null &&
-    !isStarting &&
-    canResumeInterruptedTurn({
-      activityState,
-      messages: session?.messages.items ?? [],
-      runtimeDescriptor:
-        runtime.allRuntimeDefinitions.find(
-          (definition) => definition.kind === record.runtimeKind,
-        ) ?? null,
-    });
-  const canInteract =
-    readiness.interactionEnabled &&
-    observationReady &&
-    !recordsError &&
-    !targetFault &&
-    !isSavingModel;
+  const canResumeSession = canResumeWorkspaceSession({
+    identity,
+    isStarting,
+    activityState,
+    messages: session?.messages.items ?? [],
+    runtimeDefinitions: runtime.allRuntimeDefinitions,
+    runtimeKind: record.runtimeKind,
+  });
+  const canInteract = canInteractWithWorkspaceSession({
+    runtimeInteractionEnabled: readiness.interactionEnabled,
+    observationReady,
+    recordsError,
+    targetFault,
+    isSavingModel,
+  });
   const approvalActions = useAgentSessionApprovalActions({
     sessionIdentity: identity,
     pendingApprovals,

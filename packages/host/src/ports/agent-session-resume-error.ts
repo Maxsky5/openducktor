@@ -2,7 +2,7 @@ import type { AgentSessionLiveRef, AgentSessionResumeFailureReason } from "@open
 import { InterruptedTurnResumeError } from "@openducktor/core";
 import { HostOperationError } from "../effect/host-errors";
 
-export const agentSessionResumeNextActions = {
+const agentSessionResumeNextActions = {
   unsupported:
     "Use a runtime that supports interrupted-turn resume, or send a new message to start new work.",
   continuation_in_progress: "Wait for the continuation in progress to settle, then retry Resume.",
@@ -47,10 +47,6 @@ export class AgentSessionResumeError extends HostOperationError {
     this.nextAction = input.nextAction ?? agentSessionResumeNextActions[input.reason];
   }
 }
-
-export const agentSessionResumeError = (
-  input: AgentSessionResumeErrorInput,
-): AgentSessionResumeError => new AgentSessionResumeError(input);
 
 /**
  * Maps a runtime adapter refusal or failure to the shared typed resume failure.

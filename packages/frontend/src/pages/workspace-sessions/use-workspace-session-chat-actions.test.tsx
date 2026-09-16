@@ -30,6 +30,13 @@ const createWorkspaceSessionRecord = (): WorkspaceSession => ({
   archivedAt: null,
 });
 
+const createSessionOneRecord = (): WorkspaceSession => ({
+  ...createWorkspaceSessionRecord(),
+  runtimeKind: "opencode",
+  externalSessionId: "session-1",
+  executionTarget: { kind: "local_repo_root", workingDirectory: "/repo/worktree" },
+});
+
 const createOperations = (
   overrides: Pick<AgentOperationsContextValue, "sendAgentMessage" | "continueInterruptedTurn">,
 ): AgentOperationsContextValue => ({
@@ -251,7 +258,7 @@ test("blocks a second resume selection before the first one settles", async () =
   );
   const view = renderHook(({ record }) => useWorkspaceSessionChatActions(workspace, record), {
     wrapper,
-    initialProps: { record: { ...createWorkspaceSessionRecord(), externalSessionId: "native" } },
+    initialProps: { record: createSessionOneRecord() },
   });
 
   try {
@@ -317,7 +324,7 @@ test("shows the host reason and next action when a continuation is refused", asy
   );
   const view = renderHook(({ record }) => useWorkspaceSessionChatActions(workspace, record), {
     wrapper,
-    initialProps: { record: { ...createWorkspaceSessionRecord(), externalSessionId: "native" } },
+    initialProps: { record: createSessionOneRecord() },
   });
 
   try {

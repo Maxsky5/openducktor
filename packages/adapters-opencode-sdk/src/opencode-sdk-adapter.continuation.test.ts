@@ -50,6 +50,33 @@ describe("OpencodeSdkAdapter interrupted-turn continuation", () => {
     });
   });
 
+  test("probes the turn state before registering an unloaded session", async () => {
+    const completedAssistant = {
+      info: {
+        id: "assistant-1",
+        role: "assistant",
+        sessionID: "session-opencode-1",
+        time: { created: 2, completed: 3 },
+      },
+      parts: [],
+    };
+    const mock = makeMockClient({
+      messagesResponse: [userEntry("user-1", 1), completedAssistant],
+    });
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+
+    await expect(
+      adapter.continueInterruptedTurn({
+        ...sessionRuntimeRef("session-opencode-1", { sessionScope }),
+        model: { providerId: "openai", modelId: "gpt-5" },
+      }),
+    ).rejects.toMatchObject({ reason: "completed_turn" });
+
+    expect(mock.session.statusCalls.length).toBeGreaterThan(0);
+    expect(mock.session.getCalls).toHaveLength(0);
+    expect(mock.session.promptAsyncCalls).toHaveLength(0);
+  });
+
   test("reports a missing session as session_not_found", async () => {
     const mock = makeMockClient({ messagesResponse: interruptedMessages() });
     const get = mock.client.session.get;

@@ -61,7 +61,9 @@ export const createClaudeAgentSdkSessionStore = ({
     session.queue.close();
     session.abortController.abort();
     session.query.close();
-    sessions.delete(session.externalSessionId);
+    if (sessions.get(session.externalSessionId) === session) {
+      sessions.delete(session.externalSessionId);
+    }
     session.pendingApprovals.clear();
     session.pendingQuestions.clear();
     for (const listener of closeListeners) {

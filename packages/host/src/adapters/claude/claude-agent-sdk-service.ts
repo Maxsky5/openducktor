@@ -137,14 +137,31 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           const existing = this.sessionStore.get(input.externalSessionId);
           if (existing) {
             yield* checkLiveClaudeContinuationEligibility(existing, input, this.now);
-            this.sessionStore.close(existing);
           } else {
             yield* checkPersistedClaudeContinuationEligibility(input, this.now);
           }
+          // The replacement starts a new CLI process for the same session id. Keep the
+          // attached session until the replacement is created, so a failed continuation
+          // leaves the user with the session they already had.
           return yield* this.createSession(
             input,
             runtimeId,
             continuedClaudeSessionLaunch(scope, input.externalSessionId),
+          ).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                if (existing) {
+                  this.sessionStore.close(existing);
+                }
+              }),
+            ),
+            Effect.tapError(() =>
+              Effect.sync(() => {
+                if (existing) {
+                  this.sessionStore.set(existing);
+                }
+              }),
+            ),
           );
         }),
       ),

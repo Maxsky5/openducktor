@@ -128,7 +128,7 @@ describe("createContinueInterruptedTurn", () => {
     await expect(continueInterruptedTurn(identity)).rejects.toBe(failure);
   });
 
-  test("does nothing when the session is not loaded", async () => {
+  test("rejects a stale continuation when the session is no longer loaded", async () => {
     const { calls, continueInterruptedTurn } = buildDependencies({
       session: null,
       continueInterruptedTurn: async () => {
@@ -136,7 +136,9 @@ describe("createContinueInterruptedTurn", () => {
       },
     });
 
-    await continueInterruptedTurn(identity);
+    await expect(continueInterruptedTurn(identity)).rejects.toThrow(
+      "Session 'session-1' is no longer loaded. Reload the session, then retry Resume.",
+    );
 
     expect(calls).toHaveLength(0);
   });

@@ -24,7 +24,11 @@ import {
   createClaudeSession,
 } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
-import type { ClaudeAgentSdkEventEmitter, ClaudeSession } from "./claude-agent-sdk-types";
+import type {
+  ClaudeAgentSdkEventEmitter,
+  ClaudeSession,
+  ClaudeSessionStore,
+} from "./claude-agent-sdk-types";
 
 const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
   createClaudeSession({
@@ -69,10 +73,13 @@ const createService = (
   session: ClaudeSession | null,
   emit?: ClaudeAgentSdkEventEmitter,
   systemCommands: SystemCommandPort = createClaudeSystemCommands(),
+  existingSessionStore?: ClaudeSessionStore,
 ) => {
-  const sessionStore = createClaudeAgentSdkSessionStore({
-    now: () => "2026-06-25T20:00:00.000Z",
-  });
+  const sessionStore =
+    existingSessionStore ??
+    createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
   if (session) {
     sessionStore.set(session);
   }
@@ -1198,6 +1205,34 @@ describe("continueInterruptedTurn eligibility", () => {
     await expect(
       resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
     ).resolves.toBe("ineligible_turn_state");
+  });
+
+  test("keeps the attached session when the replacement continuation cannot start", async () => {
+    const sessionStore = createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const attached = createSession({
+      acceptedUserMessages: [
+        {
+          messageId: "user-1",
+          parts: [],
+          text: "Continue.",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+    });
+    const closeSession = mock((target: ClaudeSession) => sessionStore.close(target));
+    const service = createService(attached, undefined, undefined, {
+      ...sessionStore,
+      close: closeSession,
+    });
+
+    await expect(
+      Effect.runPromise(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
+    ).rejects.toThrow();
+
+    expect(closeSession).not.toHaveBeenCalled();
+    expect(sessionStore.get("session-1")).toBe(attached);
   });
 
   test("reads the persisted transcript for a reattached live session before continuing", async () => {

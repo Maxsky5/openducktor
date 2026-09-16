@@ -542,7 +542,13 @@ export class CodexAppServerAdapter
         message: `Codex session '${input.externalSessionId}' is waiting for ${thread.status.activeFlags.join(" and ")}.`,
       });
     }
-    if (thread.status.type === "active" || thread.status.type === "systemError") {
+    if (thread.status.type === "systemError") {
+      throw interruptedTurnResumeError({
+        reason: "probe_failed",
+        message: `Codex reported a system error for thread '${input.externalSessionId}'. Restart the Codex runtime, then retry Resume.`,
+      });
+    }
+    if (thread.status.type === "active") {
       throw interruptedTurnResumeError({
         reason: "live_turn",
         message: `Codex session '${input.externalSessionId}' has a live turn.`,

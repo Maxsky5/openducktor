@@ -77,7 +77,7 @@ type OpencodeLiveSessionPendingInputBySessionId = Record<
   }
 >;
 
-export const opencodeSessionStatusSchema = z.discriminatedUnion("type", [
+const opencodeSessionStatusSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("idle") }),
   z.object({
     type: z.literal("retry"),
@@ -98,7 +98,7 @@ export const opencodeSessionStatusSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("busy") }),
 ]);
 
-export const opencodeSessionStatusMapSchema = z.record(z.string(), opencodeSessionStatusSchema);
+const opencodeSessionStatusMapSchema = z.record(z.string(), opencodeSessionStatusSchema);
 type OpencodeSessionStatus = z.output<typeof opencodeSessionStatusSchema>;
 type OpencodeSessionStatusMap = z.output<typeof opencodeSessionStatusMapSchema>;
 

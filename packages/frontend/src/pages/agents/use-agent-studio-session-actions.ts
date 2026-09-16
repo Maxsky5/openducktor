@@ -1,8 +1,5 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { errorMessage } from "@/lib/errors";
-import { getAgentSessionResumeFailureNotice } from "@/state/agent-runtime-services";
-import { HostInvokeError } from "@openducktor/host-client";
 import type {
   GitBranch,
   GitTargetBranch,
@@ -12,9 +9,10 @@ import type {
   TaskCard,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useRef, useState } from "react";
+import { useCallback } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
@@ -262,35 +260,20 @@ export function useAgentStudioSessionActions({
   const canStopSession = selectedSessionIdentity !== null && isSessionWorking;
   const canResumeSession = sessionState.canResumeSession;
 
-  const [isResumingSession, setIsResumingSession] = useState(false);
-  const [resumeSessionError, setResumeSessionError] = useState<string | null>(null);
-  const resumingSessionKeyRef = useRef<string | null>(null);
+  const { resume, isSessionResuming, resumeErrorForSession } =
+    useInterruptedTurnResume(continueInterruptedTurn);
+  const selectedSessionKey =
+    selectedSessionIdentity === null ? null : agentSessionIdentityKey(selectedSessionIdentity);
+  const isResumingSession = selectedSessionKey !== null && isSessionResuming(selectedSessionKey);
+  const resumeSessionError =
+    selectedSessionKey === null ? null : resumeErrorForSession(selectedSessionKey);
 
   const onResumeSession = useCallback((): void => {
     if (selectedSessionIdentity === null) {
       return;
     }
-    const sessionKey = agentSessionIdentityKey(selectedSessionIdentity);
-    if (resumingSessionKeyRef.current === sessionKey) {
-      return;
-    }
-    resumingSessionKeyRef.current = sessionKey;
-    setIsResumingSession(true);
-    setResumeSessionError(null);
-    void continueInterruptedTurn(selectedSessionIdentity)
-      .catch((error) => {
-        const notice =
-          error instanceof HostInvokeError ? getAgentSessionResumeFailureNotice(error) : null;
-        setResumeSessionError(notice ?? errorMessage(error));
-      })
-      .finally(() => {
-        if (resumingSessionKeyRef.current !== sessionKey) {
-          return;
-        }
-        resumingSessionKeyRef.current = null;
-        setIsResumingSession(false);
-      });
-  }, [continueInterruptedTurn, selectedSessionIdentity]);
+    resume(selectedSessionIdentity);
+  }, [resume, selectedSessionIdentity]);
 
   return {
     isStarting,
