@@ -224,3 +224,15 @@ export const tileColorFaceStyle = (hex: string): CSSProperties => ({
   backgroundColor: hex,
   color: tileForegroundColor(hex),
 });
+
+const NO_COLOR_TILE_CLASSES = {
+  active: "bg-primary text-primary-foreground hover:bg-primary",
+  inactive: "bg-workspace-rail-tile hover:bg-workspace-rail-tile",
+} satisfies Record<"active" | "inactive", string>;
+
+/**
+ * Theme classes for a tile whose workspace has no picked color. The primary accent marks the
+ * selected tile, and the card surface keeps every other tile neutral.
+ */
+export const noColorTileClasses = (isActive: boolean): string =>
+  NO_COLOR_TILE_CLASSES[isActive ? "active" : "inactive"];

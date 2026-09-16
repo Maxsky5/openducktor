@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   deriveWorkspaceInitials,
+  noColorTileClasses,
   tileColorFaceStyle,
   tileLabelSizeClass,
 } from "@/lib/workspace-tile-appearance";
@@ -111,19 +112,21 @@ function WorkspaceRailButtonShell({
   const { isSwitchingWorkspace } = interactionState;
   const isInteractionDisabled = isSwitchingWorkspace && !isDragOverlay;
 
-  const showActiveSurface = workspace.isActive && !isDragOverlay;
+  const isActiveWorkspace = workspace.isActive;
+  // The row surface joins the sidebar. The drag preview floats free of the rail, so it has none.
+  const showRowSurface = isActiveWorkspace && !isDragOverlay;
 
   return (
     <div
       ref={shellRef}
-      data-active={workspace.isActive ? "true" : "false"}
+      data-active={isActiveWorkspace ? "true" : "false"}
       data-dragging={isDragSource ? "true" : "false"}
       style={style}
       className={cn(
         // The active row takes the sidebar surface across the full rail width, so it joins the
         // panel next to it and reads as selected whatever color its tile carries.
         "flex touch-none justify-center px-2 py-2",
-        showActiveSurface && "bg-sidebar",
+        showRowSurface && "bg-sidebar",
         isDragSource && !isDragOverlay && "opacity-0",
       )}
       {...dragListeners}
@@ -134,13 +137,9 @@ function WorkspaceRailButtonShell({
         variant="ghost"
         className={cn(
           "size-10 rounded-lg border-none p-0 shadow-sm transition-none",
-          // A workspace without a picked color falls back to the theme default: the primary accent
-          // marks the selected tile, and the card surface keeps every other tile neutral. A picked
-          // color replaces both, so it stays the same in each state.
-          !tileColor &&
-            (workspace.isActive
-              ? "bg-primary text-primary-foreground hover:bg-primary"
-              : "bg-card text-foreground hover:bg-card"),
+          // A picked color replaces the theme classes, so a tile keeps its own color in both
+          // states and in the drag preview.
+          !tileColor && noColorTileClasses(isActiveWorkspace),
           isDragOverlay && "pointer-events-none",
         )}
         style={tileColor ? tileColorFaceStyle(tileColor) : undefined}
@@ -157,7 +156,7 @@ function WorkspaceRailButtonShell({
           if (
             isDragOverlay ||
             shouldSuppressSelection ||
-            workspace.isActive ||
+            isActiveWorkspace ||
             isInteractionDisabled
           ) {
             event.preventDefault();
@@ -288,7 +287,7 @@ export function WorkspaceRail({
   };
 
   return (
-    <aside className="workspace-rail flex h-full w-14 shrink-0 flex-col bg-background">
+    <aside className="workspace-rail flex h-full w-14 shrink-0 flex-col bg-workspace-rail">
       <div className="hide-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto pb-1">
         {workspaces.length > 0 ? (
           <DndContext
