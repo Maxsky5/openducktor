@@ -257,6 +257,44 @@ describe("workspace worktree inventory", () => {
     expect(paths).toEqual(["/managed/ws/task-1"]);
   });
 
+  test("includes a task worktree from a previous managed base", async () => {
+    const worktreePath = "/old-base/task-1";
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath }]),
+      pathExists: (path) => Effect.succeed(path === worktreePath),
+      listTasks: () => Effect.succeed([task("task-1")]),
+    });
+
+    const paths = await Effect.runPromise(
+      collectWorkspaceTaskWorktreePaths(
+        dependencies,
+        repoConfig({ worktreeBasePath: "/new-base" }),
+      ),
+    );
+
+    expect(paths).toEqual([worktreePath]);
+  });
+
+  test("ignores an unrelated registered worktree outside the managed base", async () => {
+    const worktreePath = "/old-base/unrelated";
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "feature/unrelated", worktreePath }]),
+      pathExists: (path) => Effect.succeed(path === worktreePath),
+      listTasks: () => Effect.succeed([task("task-1")]),
+    });
+
+    const paths = await Effect.runPromise(
+      collectWorkspaceTaskWorktreePaths(
+        dependencies,
+        repoConfig({ worktreeBasePath: "/new-base" }),
+      ),
+    );
+
+    expect(paths).toEqual([]);
+  });
+
   test("rejects a missing pending worktree that contains another workspace repository", async () => {
     const dependencies = createDependencies({
       canonicalizePath: (path) =>
@@ -552,16 +590,17 @@ describe("workspace worktree inventory", () => {
     expect(paths).toEqual([]);
   });
 
-  test("rejects a candidate claimed by a session of a workspace with a different base", async () => {
+  test("rejects an old-base worktree claimed by a session of another workspace", async () => {
+    const worktreePath = "/old-base/task-1";
     const dependencies = createDependencies({
       canonicalizePath: (path) => Effect.succeed(path),
-      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath: "/base/task-1" }]),
-      pathExists: () => Effect.succeed(true),
+      listWorktrees: () => Effect.succeed([{ branch: "odt/task-1", worktreePath }]),
+      pathExists: (path) => Effect.succeed(path === worktreePath),
       listTasks: (input) =>
         Effect.succeed(input.repoPath === "/repos/ws" ? [task("task-1")] : [task("other-task")]),
       listAgentSessionsForTasks: (input) =>
         Effect.succeed(
-          input.repoPath === "/repos/other" ? [agentSessions("other-task", "/base/task-1")] : [],
+          input.repoPath === "/repos/other" ? [agentSessions("other-task", worktreePath)] : [],
         ),
       workspaceCatalog: {
         ...catalog(),
@@ -571,12 +610,15 @@ describe("workspace worktree inventory", () => {
 
     const error = await Effect.runPromise(
       Effect.flip(
-        collectWorkspaceTaskWorktreePaths(dependencies, repoConfig({ worktreeBasePath: "/base" })),
+        collectWorkspaceTaskWorktreePaths(
+          dependencies,
+          repoConfig({ worktreeBasePath: "/new-base" }),
+        ),
       ),
     );
 
     expect(error.message).toContain("another workspace also claims it");
-    expect(error.message).toContain("/base/task-1");
+    expect(error.message).toContain(worktreePath);
   });
 
   test("ignores workspaces whose removal already deleted the task store", async () => {

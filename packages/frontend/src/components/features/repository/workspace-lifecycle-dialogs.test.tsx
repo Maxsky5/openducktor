@@ -98,7 +98,9 @@ describe("workspace lifecycle dialogs", () => {
     expect(
       screen.getByText(/The following items are deleted and cannot be recovered:/),
     ).toBeTruthy();
-    const worktreeDescription = screen.getByText(/Leave this unchecked to keep task worktrees/);
+    const worktreeDescription = screen.getByText(
+      /Leave this unchecked to keep task and Workspace Session worktrees/,
+    );
     expect(worktreeDescription).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Remove workspace" }));
@@ -116,7 +118,7 @@ describe("workspace lifecycle dialogs", () => {
     renderDialog(<WorkspaceRemoveDialog workspace={workspace} onOpenChange={() => {}} />);
 
     const descriptionText =
-      "Leave this unchecked to keep task worktrees and their files. If checked, OpenDucktor deletes them with uncommitted and untracked changes. Local branches and committed history remain.";
+      "Leave this unchecked to keep task and Workspace Session worktrees and their files. If checked, OpenDucktor deletes these worktrees with uncommitted and untracked changes. Local branches and committed history remain.";
     fireEvent.click(screen.getByRole("checkbox"));
     expect(screen.getByText(descriptionText)).toBeTruthy();
 

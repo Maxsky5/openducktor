@@ -278,12 +278,12 @@ export function WorkspaceRemoveDialog({
         />
         <div className="flex min-w-0 flex-col gap-1">
           <Label htmlFor="remove-task-worktrees" className="cursor-pointer text-sm font-medium">
-            Remove task worktrees
+            Remove task and Workspace Session worktrees
           </Label>
           <p className="text-xs text-muted-foreground">
-            Leave this unchecked to keep task worktrees and their files. If checked, OpenDucktor
-            deletes them with uncommitted and untracked changes. Local branches and committed
-            history remain.
+            Leave this unchecked to keep task and Workspace Session worktrees and their files. If
+            checked, OpenDucktor deletes these worktrees with uncommitted and untracked changes.
+            Local branches and committed history remain.
           </p>
         </div>
       </div>

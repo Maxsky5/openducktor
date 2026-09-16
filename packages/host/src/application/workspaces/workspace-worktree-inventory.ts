@@ -12,7 +12,10 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { WorkspaceStoragePort } from "../../ports/workspace-storage-port";
-import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
+import {
+  isRelatedTaskBranch,
+  managedWorktreeBaseForRepoConfig,
+} from "../tasks/support/task-cleanup-support";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 
 export type WorkspaceWorktreeInventoryError =
@@ -270,7 +273,17 @@ export const collectWorkspaceTaskWorktreePaths = (
       } else if (yield* dependencies.settingsConfig.pathExists(worktree.worktreePath)) {
         return yield* Effect.fail(canonical.left);
       }
-      inventoryPaths.set(normalizePathForComparison(registeredWorktreePath), worktree.worktreePath);
+      const registeredComparison = normalizePathForComparison(registeredWorktreePath);
+      inventoryPaths.set(registeredComparison, worktree.worktreePath);
+      const task = tasks.find((candidate) =>
+        isRelatedTaskBranch(worktree.branch, repoConfig.branchPrefix, candidate.id),
+      );
+      if (task) {
+        candidates.set(registeredComparison, {
+          path: worktree.worktreePath,
+          taskId: task.id,
+        });
+      }
     }
     const repoPathComparison = normalizePathForComparison(repoPath);
     const seen = new Set<string>();

@@ -1045,11 +1045,10 @@ export const startTypescriptHostBackendEffect = ({
       return stopPromise;
     };
 
-    const cleanupStartedServerEffect = (): Effect.Effect<void> =>
+    const cleanupHostEffect = (): Effect.Effect<void> =>
       Effect.gen(function* () {
         yield* Effect.sync(() => taskEventLeaseManager.dispose());
         const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
-        yield* Effect.sync(() => server.stop(true));
         if (disposeExit._tag === "Failure") {
           const loggingExit = yield* Effect.exit(
             writeWebLogEffect(
@@ -1067,9 +1066,30 @@ export const startTypescriptHostBackendEffect = ({
           }
         }
       });
+    const cleanupStartedServerEffect = (): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        yield* cleanupHostEffect();
+        yield* Effect.sync(() => server.stop(true));
+      });
 
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
+        yield* restore(hostCommandRouter.initialize()).pipe(
+          Effect.catchAll((error) =>
+            Effect.gen(function* () {
+              yield* cleanupHostEffect();
+              return yield* new WebOperationError({
+                operation: "web.host.initialize",
+                message: `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${errorMessage(
+                  error,
+                )}`,
+                cause: error,
+              });
+            }),
+          ),
+          Effect.onInterrupt(cleanupHostEffect),
+        );
+
         server = yield* Effect.try({
           try: () =>
             Bun.serve<TerminalWebSocketData>({
@@ -1102,7 +1122,7 @@ export const startTypescriptHostBackendEffect = ({
               websocket: terminalWebSocketHandler,
             }),
           catch: (cause) => toWebOperationError(cause, "web.host.start-server", { port }),
-        });
+        }).pipe(Effect.tapError(() => cleanupHostEffect()));
 
         if (server.port === undefined) {
           yield* cleanupStartedServerEffect();
@@ -1112,22 +1132,6 @@ export const startTypescriptHostBackendEffect = ({
             details: { port },
           });
         }
-
-        yield* restore(hostCommandRouter.initialize()).pipe(
-          Effect.catchAll((error) =>
-            Effect.gen(function* () {
-              yield* cleanupStartedServerEffect();
-              return yield* new WebOperationError({
-                operation: "web.host.initialize",
-                message: `Failed to initialize the local MCP bridge used for external OpenDucktor discovery: ${errorMessage(
-                  error,
-                )}`,
-                cause: error,
-              });
-            }),
-          ),
-          Effect.onInterrupt(cleanupStartedServerEffect),
-        );
 
         return {
           exited,

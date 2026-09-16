@@ -77,7 +77,11 @@ export const collectTaskDeleteTargets = (
   }
   return tasks.filter((task) => targetIds.has(task.id));
 };
-const isRelatedTaskBranch = (branchName: string, branchPrefix: string, taskId: string): boolean => {
+export const isRelatedTaskBranch = (
+  branchName: string,
+  branchPrefix: string,
+  taskId: string,
+): boolean => {
   const cleanPrefix = branchPrefix.trim().replace(/\/+$/g, "") || DEFAULT_BRANCH_PREFIX;
   const taskPrefix = `${cleanPrefix}/${taskId}`;
   return branchName === taskPrefix || branchName.startsWith(`${taskPrefix}-`);
