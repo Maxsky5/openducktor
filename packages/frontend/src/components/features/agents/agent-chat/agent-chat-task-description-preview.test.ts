@@ -60,6 +60,24 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
     expect(buildTaskDescriptionPreviewMarkdown(description)).toBe("a".repeat(472));
   });
 
+  test("keeps an image token whole when its title contains a closing bracket", () => {
+    const description = `${"a".repeat(470)}![s](u "a)b")`;
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
+  });
+
+  test("keeps a reference-style image token", () => {
+    const description = "![Architecture][diagram]";
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
+  });
+
+  test("keeps a reference-style image token that crosses the character budget", () => {
+    const description = `${"a".repeat(470)}\n\n![Architecture][diagram]`;
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
+  });
+
   test("drops an image token whose closing bracket is too far after the budget", () => {
     const description = `${"a".repeat(470)}![Screenshot](odt-asset:${"9".repeat(400)})`;
 
