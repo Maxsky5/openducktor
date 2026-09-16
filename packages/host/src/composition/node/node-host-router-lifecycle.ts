@@ -126,9 +126,15 @@ export const createNodeHostRouterLifecycle = ({
                   ),
               },
               assets.taskStoreConnectionShutdownStep,
-              { label: "workspace host ownership", run: workspaceHostOwnership.releaseAll },
             ],
             lifecycleLogger,
+          ).pipe(
+            Effect.zipRight(
+              runShutdownSteps(
+                [{ label: "workspace host ownership", run: workspaceHostOwnership.releaseAll }],
+                lifecycleLogger,
+              ),
+            ),
           ),
         );
         if (shutdownResult._tag === "Right") {

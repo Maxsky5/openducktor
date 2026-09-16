@@ -347,6 +347,7 @@ describe("createNodeEffectHostCommandRouter", () => {
 
     expect(exit._tag).toBe("Failure");
     expect(infos).not.toContain("OpenDucktor host services stopped");
+    expect(infos).not.toContain("Stopping workspace host ownership...");
   });
 
   test("preserves shutdown and lifecycle logging failures together", async () => {
