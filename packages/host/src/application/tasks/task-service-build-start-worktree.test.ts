@@ -327,6 +327,38 @@ describe("createTaskService build start worktree handling", () => {
     expect(calls).not.toContainEqual(expect.objectContaining({ type: "copyConfiguredPaths" }));
   });
 
+  test("rejects a new task worktree owned by another workspace before setup", async () => {
+    const calls: unknown[] = [];
+    const worktreePath = "/worktrees/repo/task-1";
+    const dependencies = createDependencies(calls, {
+      getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
+    });
+
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          ...dependencies,
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+          withWorkStartLease: (_repoPath, effect, workingDirectory) =>
+            workingDirectory === worktreePath
+              ? Effect.fail(
+                  new HostValidationError({
+                    field: "workingDirectory",
+                    message: `${worktreePath} belongs to another workspace.`,
+                  }),
+                )
+              : effect,
+        }).buildStart({
+          repoPath: "/repo",
+          taskId: "task-1",
+          runtimeKind: "opencode",
+        }),
+      ),
+    ).rejects.toThrow("belongs to another workspace");
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "createWorktree" }));
+    expect(calls).not.toContainEqual(expect.objectContaining({ type: "copyConfiguredPaths" }));
+  });
+
   test("removes a new worktree when runtime startup fails", async () => {
     const calls: unknown[] = [];
     const dependencies = createDependencies(calls, {

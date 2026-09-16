@@ -141,6 +141,7 @@ export const assembleNodeEffectHostCommandRouter = (
     gitPort: git,
     hostOwnership: workspaceHostOwnership,
     settingsConfig,
+    worktreeFiles,
     workspaceSettingsService,
   });
   const assets = createNodeTaskAssetServices({

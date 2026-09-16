@@ -458,6 +458,22 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.calls).toEqual(["lock", "worktree", "copy", "hook", "save", "unlock"]);
   });
 
+  test("admits the new worktree path before creation", async () => {
+    const h = setup();
+    const targets: Array<string | undefined> = [];
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      withWorkStartLease: (_repoPath, effect, workingDirectory) => {
+        targets.push(workingDirectory);
+        return effect;
+      },
+    });
+
+    await Effect.runPromise(service.create(worktreeInput()));
+
+    expect(targets).toEqual([undefined, h.state.worktree]);
+  });
+
   test("accepts drive-qualified paths from a Windows worktree port", async () => {
     const h = setup();
     h.dependencies.settingsConfig.defaultWorktreeBasePath = () => "C:\\worktrees";

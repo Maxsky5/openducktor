@@ -20,7 +20,6 @@ import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-st
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { RuntimeOrchestratorService } from "../runtimes/runtime-orchestrator-service";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
-import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { WorkspaceOwnershipLock } from "./workspace-ownership-lock";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
@@ -44,7 +43,6 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
     "startSession" | "releaseSession" | "read" | "stopSession"
   >;
   ownershipLock: WorkspaceOwnershipLock;
-  withWorkStartLease: WorkspaceAdmissionService["withWorkStartLease"];
 };
 
 export const createWorkspaceSessionService = (

@@ -82,6 +82,8 @@ describe("git workspace admission", () => {
     const targets: string[] = [];
     const service = createGitServiceDouble({
       commitAll: () => Effect.succeed({ outcome: "committed", commitHash: "abc123", output: "" }),
+      createWorktree: (input) =>
+        Effect.succeed({ branch: input.branch, worktreePath: input.worktreePath }),
       removeWorktree: () => Effect.succeed({ ok: true }),
     });
     const guarded = withGitWorkspaceAdmission(
@@ -102,6 +104,14 @@ describe("git workspace admission", () => {
       }),
     );
     await Effect.runPromise(
+      guarded.createWorktree({
+        repoPath: "/repos/a",
+        worktreePath: "/worktrees/new",
+        branch: "feature/new",
+        createBranch: true,
+      }),
+    );
+    await Effect.runPromise(
       guarded.removeWorktree({
         repoPath: "/repos/a",
         worktreePath: "/worktrees/b",
@@ -109,7 +119,7 @@ describe("git workspace admission", () => {
       }),
     );
 
-    expect(targets).toEqual(["/worktrees/b", "/worktrees/b"]);
+    expect(targets).toEqual(["/worktrees/b", "/worktrees/new", "/worktrees/b"]);
   });
 
   test("does not lease a read call", async () => {

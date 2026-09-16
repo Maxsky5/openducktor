@@ -191,6 +191,7 @@ export const createTaskSessionStartPreparationService = ({
             const worktreePreparation = Effect.scoped(
               Effect.gen(function* () {
                 yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([worktreePath]);
+                const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
                 if (exists) {
                   if (!(yield* dependencies.gitPort.isGitRepository(worktreePath))) {
                     return yield* Effect.fail(
@@ -227,10 +228,7 @@ export const createTaskSessionStartPreparationService = ({
                 }
               }),
             );
-            const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
-            yield* exists
-              ? withWorkStartLease(canonicalRepoPath, worktreePreparation, worktreePath)
-              : worktreePreparation;
+            yield* withWorkStartLease(canonicalRepoPath, worktreePreparation, worktreePath);
             yield* dependencies.runtimeRegistry
               .ensureWorkspaceRuntime({
                 runtimeKind: descriptor.kind,

@@ -6,10 +6,16 @@ import {
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
-import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  type HostPathAccessErrorAggregate,
+} from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
+import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import {
   createGitPortTestDouble,
+  createWorktreeFilePortTestDouble,
   createWorkspaceSettingsServiceTestDouble,
 } from "../../test-support/service-test-doubles";
 import { createWorkspaceAdmissionService } from "./workspace-admission-service";
@@ -75,11 +81,21 @@ const createAdmission = (
     listWorktrees: () => Effect.succeed([]),
     shareGitCommonDirectory: () => Effect.succeed(false),
   }),
+  pathExists: (path: string) => Effect.Effect<boolean, HostPathAccessErrorAggregate> = () =>
+    Effect.succeed(true),
+  resolvePathWithinRoot: WorktreeFilePort["resolvePathWithinRoot"] = (root, candidate) =>
+    Effect.succeed({
+      canonicalPath: candidate,
+      cleanupPath: candidate,
+      isSymlink: false,
+      kind: candidate.startsWith(`${root}/`) ? ("descendant" as const) : ("outside" as const),
+    }),
 ) =>
   createWorkspaceAdmissionService({
     gitPort,
     hostOwnership: { claimWorkspace },
-    settingsConfig: { canonicalizePath },
+    settingsConfig: { canonicalizePath, pathExists },
+    worktreeFiles: createWorktreeFilePortTestDouble({ resolvePathWithinRoot }),
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
       getRepoConfig,
       getRepoConfigByRepoPath: (repoPath) => {
@@ -95,6 +111,55 @@ const createAdmission = (
   });
 
 describe("workspace admission service", () => {
+  test("allows removal of a missing registered worktree", async () => {
+    const admission = createAdmission(
+      catalog({ openWorkspaces: [workspaceRecord("ws", "/repos/ws")] }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+        isRegisteredWorktree: () => Effect.succeed(true),
+        listWorktrees: () => Effect.succeed([]),
+        shareGitCommonDirectory: () => Effect.succeed(true),
+      }),
+      () => Effect.succeed(false),
+    );
+
+    await expect(
+      Effect.runPromise(
+        admission.withWorkStartLease("/repos/ws", Effect.void, "/worktrees/missing"),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  test("rejects a new worktree path owned by another workspace", async () => {
+    const admission = createAdmission(
+      catalog({
+        openWorkspaces: [
+          workspaceRecord("first", "/repos/first"),
+          workspaceRecord("second", "/repos/second"),
+        ],
+      }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        isGitRepository: () => Effect.succeed(true),
+        isRegisteredWorktree: () => Effect.succeed(false),
+        listWorktrees: () => Effect.succeed([]),
+        shareGitCommonDirectory: () => Effect.succeed(false),
+      }),
+      () => Effect.succeed(false),
+    );
+
+    await expect(
+      Effect.runPromise(
+        admission.withWorkStartLease("/repos/first", Effect.void, "/managed/second/new-worktree"),
+      ),
+    ).rejects.toThrow("belongs to workspace /repos/second");
+  });
+
   test("resolves a workspace from a registered worktree", async () => {
     const admission = createAdmission(
       catalog({ openWorkspaces: [workspaceRecord("ws", "/repos/ws")] }),

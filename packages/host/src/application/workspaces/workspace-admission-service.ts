@@ -8,9 +8,11 @@ import {
 } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { GitPort } from "../../ports/git-port";
+import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { WorkspaceHostOwnershipPort } from "../../ports/workspace-host-ownership-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import { createWorkspaceRepoResolver } from "./workspace-repo-resolver";
+import { createProspectiveWorkspaceTargetValidator } from "./workspace-target-ownership";
 
 export type WorkspaceBlockReason = "closed" | "removal";
 export type WorkspaceReservationOperation = "close" | "reopen" | "remove";
@@ -77,6 +79,7 @@ export const createWorkspaceAdmissionService = ({
   gitPort,
   hostOwnership,
   settingsConfig,
+  worktreeFiles,
   workspaceSettingsService,
 }: {
   gitPort: Pick<
@@ -84,7 +87,8 @@ export const createWorkspaceAdmissionService = ({
     "isGitRepository" | "isRegisteredWorktree" | "listWorktrees" | "shareGitCommonDirectory"
   >;
   hostOwnership: Pick<WorkspaceHostOwnershipPort, "claimWorkspace">;
-  settingsConfig: Pick<SettingsConfigPort, "canonicalizePath">;
+  settingsConfig: Pick<SettingsConfigPort, "canonicalizePath" | "pathExists">;
+  worktreeFiles: Pick<WorktreeFilePort, "resolvePathWithinRoot">;
   workspaceSettingsService: Pick<
     WorkspaceSettingsService,
     "getRepoConfig" | "getRepoConfigByRepoPath" | "getWorkspaceCatalog"
@@ -97,6 +101,10 @@ export const createWorkspaceAdmissionService = ({
   let initialized = false;
   const resolveWorkspaceRepoPath = createWorkspaceRepoResolver({
     gitPort,
+    workspaceSettingsService,
+  });
+  const assertProspectiveWorkspaceTarget = createProspectiveWorkspaceTargetValidator({
+    worktreeFiles,
     workspaceSettingsService,
   });
 
@@ -260,6 +268,18 @@ export const createWorkspaceAdmissionService = ({
           field: "workingDirectory",
           cause,
         });
+      const targetExists = yield* settingsConfig
+        .pathExists(workingDirectory)
+        .pipe(Effect.mapError(mapCheckError));
+      if (!targetExists) {
+        const registered = yield* gitPort
+          .isRegisteredWorktree(repoPath, workingDirectory)
+          .pipe(Effect.mapError(mapCheckError));
+        if (!registered) {
+          yield* assertProspectiveWorkspaceTarget(repoPath, workingDirectory);
+        }
+        return;
+      }
       const canonicalWorkingDirectory = yield* settingsConfig
         .canonicalizePath(workingDirectory)
         .pipe(Effect.mapError(mapCheckError));
