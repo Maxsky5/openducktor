@@ -22,7 +22,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
-import { configValidationMessage } from "../../config/config-validation-message";
+import { parseConfig } from "../../config/parse-config";
 import {
   HostInvariantError,
   type HostInvariantErrorAggregate,
@@ -315,14 +315,7 @@ export const saveAndReturnWorkspaceRecord = (
   workspaceId: string,
 ) =>
   Effect.gen(function* () {
-    const parsed = yield* Effect.try({
-      try: () => globalConfigSchema.parse(config),
-      catch: (cause) =>
-        new HostValidationError({
-          message: configValidationMessage(cause, config),
-          cause,
-        }),
-    });
+    const parsed = yield* parseConfig(globalConfigSchema, config);
     yield* settingsConfig.writeConfig(parsed);
     return yield* Effect.try({
       try: () => workspaceRecord(settingsConfig, config, workspaceId),

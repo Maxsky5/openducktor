@@ -9,7 +9,7 @@ import {
   type LoadedGlobalConfig,
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
-import { configValidationMessage } from "../../config/config-validation-message";
+import { parseConfig } from "../../config/parse-config";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   discoverToolFresh,
@@ -70,12 +70,5 @@ export const createRuntimeConfigInitializer =
         }),
       );
       const payload = { ...config, agentRuntimes };
-      return yield* Effect.try({
-        try: () => globalConfigSchema.parse(payload),
-        catch: (cause) =>
-          new HostValidationError({
-            message: configValidationMessage(cause, payload),
-            cause,
-          }),
-      });
+      return yield* parseConfig(globalConfigSchema, payload);
     });

@@ -10,6 +10,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { configValidationMessage } from "../../config/config-validation-message";
+import { parseConfig } from "../../config/parse-config";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { buildAgentStudioStateUpdate } from "./workspace-agent-studio-state";
@@ -171,14 +172,7 @@ const createUnserializedWorkspaceSettingsService = (
       }
 
       config.workspaceOrder = workspaceOrder;
-      const parsed = yield* Effect.try({
-        try: () => globalConfigSchema.parse(config),
-        catch: (cause) =>
-          new HostValidationError({
-            message: configValidationMessage(cause, config),
-            cause,
-          }),
-      });
+      const parsed = yield* parseConfig(globalConfigSchema, config);
       yield* settingsConfig.writeConfig(parsed);
       return yield* Effect.try({
         try: () => workspaceRecordsInEffectiveOrder(settingsConfig, config),
@@ -203,14 +197,7 @@ const createUnserializedWorkspaceSettingsService = (
         );
       }
 
-      return yield* Effect.try({
-        try: () => repoConfigSchema.parse(repoConfig),
-        catch: (cause) =>
-          new HostValidationError({
-            message: configValidationMessage(cause, repoConfig),
-            cause,
-          }),
-      });
+      return yield* parseConfig(repoConfigSchema, repoConfig);
     });
   },
   getRepoConfigByRepoPath(rawRepoPath) {
@@ -380,14 +367,7 @@ const createUnserializedWorkspaceSettingsService = (
       };
       if (snapshot.customAgentRoles !== undefined)
         payload.customAgentRoles = snapshot.customAgentRoles;
-      const nextConfig = yield* Effect.try({
-        try: () => globalConfigSchema.parse(payload),
-        catch: (cause) =>
-          new HostValidationError({
-            message: configValidationMessage(cause, payload),
-            cause,
-          }),
-      });
+      const nextConfig = yield* parseConfig(globalConfigSchema, payload);
 
       yield* settingsConfig.writeConfig(nextConfig);
       return yield* Effect.try({
@@ -412,14 +392,7 @@ const createUnserializedWorkspaceSettingsService = (
           }),
       });
       const payload = { ...config, agentModelFavorites: favorites };
-      const nextConfig = yield* Effect.try({
-        try: () => globalConfigSchema.parse(payload),
-        catch: (cause) =>
-          new HostValidationError({
-            message: configValidationMessage(cause, payload),
-            cause,
-          }),
-      });
+      const nextConfig = yield* parseConfig(globalConfigSchema, payload);
 
       yield* settingsConfig.writeConfig(nextConfig);
       return yield* Effect.try({
