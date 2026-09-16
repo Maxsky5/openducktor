@@ -321,7 +321,8 @@ export const startCodexTurnForSession = async (
 /**
  * Starts one native Codex turn with `input: []` so the runtime continues the saved history
  * without creating a user message. It awaits the native turn admission, so a rejected
- * `turn/start` reaches the caller as a typed continuation failure.
+ * `turn/start` reaches the caller as a typed continuation failure. An admitted turn that
+ * already ended as failed or interrupted is also a continuation failure.
  */
 export const startCodexContinuationTurn = async (
   context: CodexTurnLifecycleContext,
@@ -336,7 +337,12 @@ export const startCodexContinuationTurn = async (
     );
   }
   try {
-    await started.turnStartPromise;
+    const result = await started.turnStartPromise;
+    if (result.turn.status === "failed" || result.turn.status === "interrupted") {
+      throw new Error(
+        `Codex ended the continuation turn for session '${externalSessionId}' as '${result.turn.status}'.`,
+      );
+    }
   } catch (error) {
     if (session && sessionIsRetained(context, session)) {
       context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));

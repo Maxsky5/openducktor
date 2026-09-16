@@ -217,6 +217,18 @@ describe("AgentChatComposer", () => {
     expect(html.slice(resumeTagStart, html.indexOf(">", resumeTagStart))).toContain('disabled=""');
   });
 
+  test("disables resume while a message send is submitting", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: { ...buildModel(), canResumeSession: true, isSending: true },
+      }),
+    );
+
+    expect(html).toContain("Resume");
+    const resumeTagStart = html.lastIndexOf("<button", html.indexOf("Resume"));
+    expect(html.slice(resumeTagStart, html.indexOf(">", resumeTagStart))).toContain('disabled=""');
+  });
+
   test("renders the resume failure notice while the session is still resumable", () => {
     const failed = renderToStaticMarkup(
       createElement(AgentChatComposer, {

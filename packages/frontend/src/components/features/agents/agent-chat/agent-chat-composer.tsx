@@ -519,7 +519,7 @@ function AgentChatComposerFormView({
             onStopSession={onStopSession}
             canResumeSession={canResumeSession}
             isResumingSession={isResumingSession}
-            resumeDisabled={isComposerInputDisabled}
+            resumeDisabled={isComposerInputDisabled || isSubmitting}
             resumeSessionError={resumeSessionError}
             onResumeSession={onResumeSession}
             showSubmittingState={isSubmitting}

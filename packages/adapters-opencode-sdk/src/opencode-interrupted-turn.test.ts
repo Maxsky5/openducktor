@@ -286,6 +286,48 @@ describe("opencode interrupted turn continuation", () => {
     });
   });
 
+  test("reports an unfinished turn when the terminal reply ended in a provider error", async () => {
+    const { client } = createClient({
+      messages: [
+        userEntry("user-1", 1),
+        assistantEntry("assistant-error", 2, { completed: 3, finish: "error" }),
+      ],
+    });
+
+    await expect(probeOpencodeInterruptedTurn(probeInput(client))).resolves.toEqual({
+      kind: "unfinished_turn",
+    });
+  });
+
+  test("reports an unfinished turn when the terminal reply carries an error finish part", async () => {
+    const { client } = createClient({
+      messages: [
+        userEntry("user-1", 1),
+        {
+          info: createOpencodeMessageInfoFixture({
+            id: "assistant-error",
+            role: "assistant",
+            sessionID: "session-1",
+            time: { created: 2, completed: 3 },
+          }),
+          parts: [
+            createOpencodePartFixture({
+              id: "assistant-error-step",
+              sessionID: "session-1",
+              messageID: "assistant-error",
+              type: "step-finish",
+              reason: "error",
+            }),
+          ],
+        },
+      ],
+    });
+
+    await expect(probeOpencodeInterruptedTurn(probeInput(client))).resolves.toEqual({
+      kind: "unfinished_turn",
+    });
+  });
+
   test("reports no unfinished turn when the session holds no user row", async () => {
     const { client } = createClient({ messages: [assistantEntry("assistant-1", 1)] });
 

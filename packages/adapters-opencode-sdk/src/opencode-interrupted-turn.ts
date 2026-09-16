@@ -1,7 +1,6 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { type InterruptedTurnResumeError, interruptedTurnResumeError } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
-import { hasTerminalStopSignalInParts } from "./event-stream/message-events/helpers";
 import {
   opencodeSessionMessagesPayloadSchema,
   type ParsedOpencodeMessage,
@@ -23,9 +22,10 @@ export const isOpencodeContinuationArtifactEntry = (entry: {
   readonly info: Pick<ParsedOpencodeMessage["info"], "role">;
   readonly parts: ReadonlyArray<unknown>;
 }): boolean => entry.info.role === "user" && entry.parts.length === 0;
-
-const hasTerminalAssistantReply = (entry: OpencodeSessionMessageEntry): boolean =>
-  entry.info.role === "assistant" && hasTerminalStopSignalInParts(entry.parts, entry.info.finish);
+const hasFinalAssistantReply = (entry: OpencodeSessionMessageEntry): boolean =>
+  entry.info.role === "assistant" &&
+  (entry.info.finish === "stop" ||
+    entry.parts.some((part) => part.type === "step-finish" && part.reason === "stop"));
 
 export type OpencodeInterruptedTurnProbe =
   | { readonly kind: "unfinished_turn" }
@@ -94,7 +94,7 @@ export const probeOpencodeInterruptedTurn = async (
   const terminalAssistantReply = assistantReplies.findLast(
     (entry) => entry.info.role === "assistant",
   );
-  if (terminalAssistantReply !== undefined && hasTerminalAssistantReply(terminalAssistantReply)) {
+  if (terminalAssistantReply !== undefined && hasFinalAssistantReply(terminalAssistantReply)) {
     return { kind: "completed_turn" };
   }
   return { kind: "unfinished_turn" };
