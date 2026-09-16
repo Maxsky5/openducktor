@@ -131,10 +131,9 @@ export const createTaskDescriptionComponents = ({
     );
   },
   img: ({ alt, className, src, title, ...props }) => {
-    const ImageComponent = components.img;
-    if (ImageComponent) {
-      return createElement(ImageComponent, { ...props, alt, className, src, title });
-    }
+    const callerImage = components.img
+      ? createElement(components.img, { ...props, alt, className, src, title })
+      : null;
     if (src?.startsWith(TASK_ASSET_URI_PREFIX)) {
       if (!parseTaskAssetUri(src)) {
         return (
@@ -143,23 +142,25 @@ export const createTaskDescriptionComponents = ({
           </TaskAssetAlert>
         );
       }
-      if (!taskAssetContext || !resolveTaskAssetSrc) {
+      if (taskAssetContext && resolveTaskAssetSrc) {
         return (
-          <TaskAssetAlert>Image could not be loaded: task context is unavailable.</TaskAssetAlert>
+          <TaskAssetImage
+            context={taskAssetContext}
+            resolveTaskAssetSrc={resolveTaskAssetSrc}
+            src={src}
+            {...(alt === undefined ? {} : { alt })}
+            {...(className === undefined ? {} : { className })}
+            {...(title === undefined ? {} : { title })}
+          />
         );
       }
       return (
-        <TaskAssetImage
-          context={taskAssetContext}
-          resolveTaskAssetSrc={resolveTaskAssetSrc}
-          src={src}
-          {...(alt === undefined ? {} : { alt })}
-          {...(className === undefined ? {} : { className })}
-          {...(title === undefined ? {} : { title })}
-        />
+        callerImage ?? (
+          <TaskAssetAlert>Image could not be loaded: task context is unavailable.</TaskAssetAlert>
+        )
       );
     }
-    return <img alt={alt ?? ""} className={className} src={src} title={title} />;
+    return callerImage ?? <img alt={alt ?? ""} className={className} src={src} title={title} />;
   },
   pre: ({ children, className, ...props }) => {
     const child = Array.isArray(children) ? children[0] : children;
