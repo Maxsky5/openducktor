@@ -33,6 +33,21 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
     expect(preview).toBe("a".repeat(TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS));
   });
 
+  test("does not split a surrogate pair at the character budget", () => {
+    const emoji = "\u{1F600}";
+    const boundary = buildTaskDescriptionPreviewMarkdown(
+      `${"a".repeat(479)}${emoji}${"b".repeat(10)}`,
+    );
+    const exact = buildTaskDescriptionPreviewMarkdown(
+      `${"a".repeat(478)}${emoji}${"b".repeat(10)}`,
+    );
+
+    expect(boundary).toBe("a".repeat(479));
+    expect(/\p{Surrogate}$/u.test(boundary)).toBe(false);
+    expect(exact).toBe(`${"a".repeat(478)}${emoji}`);
+    expect(exact.length).toBe(TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS);
+  });
+
   test("hides a valid front matter block and bounds the body", () => {
     const description = [
       "---",
