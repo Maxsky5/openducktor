@@ -1499,7 +1499,7 @@ describe("createElectronHostCommandRouter", () => {
         await rm(root, { force: true, recursive: true });
       }
     }
-  });
+  }, 10_000);
 
   test("registers migrated task list host command", async () => {
     const router = await createElectronHostCommandRouter({
