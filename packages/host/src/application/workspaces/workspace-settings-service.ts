@@ -2,11 +2,9 @@ import {
   type AgentModelFavorite,
   agentModelFavoritesSchema,
   globalConfigSchema,
-  globalGitConfigSchema,
   isSameAgentModelFavorite,
   repoConfigSchema,
   settingsSnapshotSaveInputSchema,
-  themePreferenceSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { configValidationMessage } from "../../config/config-validation-message";
@@ -295,18 +293,8 @@ const createUnserializedWorkspaceSettingsService = (
           }),
       });
 
-      config.workspaces[workspaceId] = yield* Effect.try({
-        try: () =>
-          repoConfigSchema.parse({
-            ...existing,
-            hooks,
-          }),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      const payload = { ...existing, hooks };
+      config.workspaces[workspaceId] = yield* parseConfig(repoConfigSchema, payload);
       touchRecentWorkspace(config, workspaceId);
       return yield* saveAndReturnWorkspaceRecord(settingsConfig, config, workspaceId);
     });
@@ -327,14 +315,7 @@ const createUnserializedWorkspaceSettingsService = (
   saveSettingsSnapshot(rawSnapshot) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
-      const snapshot = yield* Effect.try({
-        try: () => settingsSnapshotSaveInputSchema.parse(rawSnapshot),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      const snapshot = yield* parseConfig(settingsSnapshotSaveInputSchema, rawSnapshot);
       if (!areAgentModelFavoritesEqual(snapshot.agentModelFavorites, config.agentModelFavorites)) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -383,14 +364,7 @@ const createUnserializedWorkspaceSettingsService = (
   updateAgentModelFavorites(rawFavorites) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
-      const favorites = yield* Effect.try({
-        try: () => agentModelFavoritesSchema.parse(rawFavorites),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      const favorites = yield* parseConfig(agentModelFavoritesSchema, rawFavorites);
       const payload = { ...config, agentModelFavorites: favorites };
       const nextConfig = yield* parseConfig(globalConfigSchema, payload);
 
@@ -408,36 +382,14 @@ const createUnserializedWorkspaceSettingsService = (
   setTheme(theme) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
-      const nextConfig = yield* Effect.try({
-        try: () =>
-          globalConfigSchema.parse({
-            ...config,
-            theme: themePreferenceSchema.parse(theme),
-          }),
-        catch: (cause) =>
-          new HostValidationError({
-            message: configValidationMessage(cause),
-            cause,
-          }),
-      });
+      const nextConfig = yield* parseConfig(globalConfigSchema, { ...config, theme });
       yield* settingsConfig.writeConfig(nextConfig);
     });
   },
   updateGlobalGitConfig(git) {
     return Effect.gen(function* () {
       const config = yield* loadGlobalConfig(settingsConfig);
-      const nextConfig = yield* Effect.try({
-        try: () =>
-          globalConfigSchema.parse({
-            ...config,
-            git: globalGitConfigSchema.parse(git),
-          }),
-        catch: (cause) =>
-          new HostValidationError({
-            message: configValidationMessage(cause),
-            cause,
-          }),
-      });
+      const nextConfig = yield* parseConfig(globalConfigSchema, { ...config, git });
       yield* settingsConfig.writeConfig(nextConfig);
     });
   },

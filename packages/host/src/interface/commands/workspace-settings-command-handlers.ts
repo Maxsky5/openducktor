@@ -13,6 +13,7 @@ import {
 } from "@openducktor/contracts";
 import { z } from "zod";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import { configValidationError } from "../../config/config-validation-message";
 import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import {
@@ -71,6 +72,14 @@ const requireStringArray = (result: z.ZodSafeParseResult<unknown[]>, label: stri
   return result.data.map((entry, index) =>
     requireString(commandInputStringSchema.safeParse(entry), `${label}[${index}]`),
   );
+};
+
+const requireParsedInput = <Output>(result: z.ZodSafeParseResult<Output>): Output => {
+  if (!result.success) {
+    throw configValidationError(result.error);
+  }
+
+  return result.data;
 };
 
 const parseRepoConfigInput = (
@@ -256,8 +265,10 @@ export const createWorkspaceSettingsCommandHandlers = (
           ),
           "workspaceId",
         ),
-        repoHooksSchema.parse(
-          requireObjectArgs("workspace_update_repo_hooks", args, "hooks").hooks,
+        requireParsedInput(
+          repoHooksSchema.safeParse(
+            requireObjectArgs("workspace_update_repo_hooks", args, "hooks").hooks,
+          ),
         ),
       ),
     workspace_get_settings_snapshot: (args) => {
@@ -266,24 +277,33 @@ export const createWorkspaceSettingsCommandHandlers = (
     },
     workspace_save_settings_snapshot: (args) =>
       workspaceSettingsService.saveSettingsSnapshot(
-        settingsSnapshotSaveInputSchema.parse(
-          requireObjectArgs("workspace_save_settings_snapshot", args, "snapshot").snapshot,
+        requireParsedInput(
+          settingsSnapshotSaveInputSchema.safeParse(
+            requireObjectArgs("workspace_save_settings_snapshot", args, "snapshot").snapshot,
+          ),
         ),
       ),
     workspace_update_agent_model_favorites: (args) =>
       workspaceSettingsService.updateAgentModelFavorites(
-        agentModelFavoritesSchema.parse(
-          requireObjectArgs("workspace_update_agent_model_favorites", args, "favorites").favorites,
+        requireParsedInput(
+          agentModelFavoritesSchema.safeParse(
+            requireObjectArgs("workspace_update_agent_model_favorites", args, "favorites")
+              .favorites,
+          ),
         ),
       ),
     set_theme: (args) =>
       workspaceSettingsService.setTheme(
-        themePreferenceSchema.parse(requireObjectArgs("set_theme", args, "theme").theme),
+        requireParsedInput(
+          themePreferenceSchema.safeParse(requireObjectArgs("set_theme", args, "theme").theme),
+        ),
       ),
     workspace_update_global_git_config: (args) =>
       workspaceSettingsService.updateGlobalGitConfig(
-        globalGitConfigSchema.parse(
-          requireObjectArgs("workspace_update_global_git_config", args, "git").git,
+        requireParsedInput(
+          globalGitConfigSchema.safeParse(
+            requireObjectArgs("workspace_update_global_git_config", args, "git").git,
+          ),
         ),
       ),
   }) satisfies HostCommandHandlerDefinitions;
