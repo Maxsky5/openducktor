@@ -1,10 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { TERMINAL_PROTOCOL_VERSION, type TerminalServerMessage } from "@openducktor/contracts";
 import {
   type InteractiveTerminalMount,
   mountInteractiveTerminal,
 } from "./interactive-terminal-mount";
+import * as sharedTerminalBinding from "./shared-terminal-binding";
+import type { TerminalBinding } from "./shared-terminal-binding";
 import type {
   TerminalFrameListener,
   TerminalTransportController,
@@ -72,9 +74,47 @@ const sendStaleBuffer = (listener: TerminalFrameListener, terminalId: string): v
   );
 };
 
+const createLightweightBinding = () => {
+  let output = "";
+  const parsedCallbacks: Array<() => void> = [];
+  const subscription = { dispose: mock(() => undefined) };
+  const terminal = {
+    rows: 24,
+    write: mock((payload: Uint8Array, parsed: () => void) => {
+      output += new TextDecoder().decode(payload);
+      parsedCallbacks.push(parsed);
+    }),
+    onResize: () => subscription,
+    onData: () => subscription,
+    parser: { registerOscHandler: () => subscription },
+    attachCustomKeyEventHandler: () => undefined,
+    scrollToBottom: mock(() => undefined),
+    refresh: mock(() => undefined),
+    focus: mock(() => undefined),
+  };
+  const binding = {
+    terminal,
+    fitAddon: { fit: mock(() => undefined) },
+    resetLinkState: mock(() => undefined),
+    dispose: mock(() => undefined),
+  };
+  return { binding, parsedCallbacks, readOutput: () => output };
+};
+
 describe("retained terminal rendering", () => {
-  test("hydrates output for 96 retained production terminal mounts", async () => {
+  test("hydrates and retains 96 terminal identities through the binding boundary", async () => {
+    const bindings: ReturnType<typeof createLightweightBinding>[] = [];
+    const createBinding = spyOn(sharedTerminalBinding, "createTerminalBinding").mockImplementation(
+      () => {
+        const lightweight = createLightweightBinding();
+        bindings.push(lightweight);
+        // SAFETY: the fake terminal and fit add-on cover every member this test exercises.
+        return Object.assign(Object.create(null), lightweight.binding) as TerminalBinding;
+      },
+    );
     const { controller, listeners } = createController();
+    const releaseEmulator = spyOn(controller, "releaseEmulator");
+    const acknowledge = spyOn(controller, "acknowledge");
     const activeTerminalIds = new Set<string>(["terminal-0"]);
     const hydratedTerminalIds = new Set<string>();
     let finishHydration: () => void = () => undefined;
@@ -121,28 +161,117 @@ describe("retained terminal rendering", () => {
         if (!listener) throw new Error(`Expected ${terminalId} to subscribe.`);
         sendStaleBuffer(listener, terminalId);
       }
+      await Promise.resolve();
+      expect(hydratedTerminalIds.size).toBe(0);
+      expect(acknowledge).not.toHaveBeenCalled();
+      for (const { parsedCallbacks } of bindings) {
+        expect(parsedCallbacks).toHaveLength(1);
+        for (const parsed of parsedCallbacks) parsed();
+      }
       await allHydrated;
 
+      expect(createBinding).toHaveBeenCalledTimes(PRODUCTION_TERMINAL_MOUNT_COUNT);
+      expect(listeners.size).toBe(PRODUCTION_TERMINAL_MOUNT_COUNT);
       expect(retained).toHaveLength(PRODUCTION_TERMINAL_MOUNT_COUNT);
-      for (const current of retained) {
+      for (const [index, current] of retained.entries()) {
         expect(hydratedTerminalIds.has(current.terminalId)).toBe(true);
+        const output = `${current.terminalId} stale log\r\n`.repeat(STALE_BUFFER_LINES);
+        expect(bindings[index]?.readOutput()).toBe(output);
+        expect(acknowledge).toHaveBeenCalledWith(
+          current.terminalId,
+          new TextEncoder().encode(output).byteLength,
+        );
       }
       for (const index of [0, 31, 32, PRODUCTION_TERMINAL_MOUNT_COUNT - 1]) {
         const current = retained[index];
         if (!current) throw new Error("Expected retained terminal.");
         activeTerminalIds.clear();
         activeTerminalIds.add(current.terminalId);
+        const lightweight = bindings[index];
+        if (!lightweight) throw new Error("Expected retained binding.");
+        const { binding } = lightweight;
+        binding.fitAddon.fit.mockClear();
         current.mount.activate(false);
-        await nextFrame();
-        expect(current.container.textContent).toContain(`${current.terminalId} stale log`);
+        current.mount.activate(true);
+        expect(binding.fitAddon.fit).toHaveBeenCalledTimes(2);
+        expect(binding.terminal.refresh).toHaveBeenCalledWith(0, 23);
+        expect(binding.terminal.scrollToBottom).toHaveBeenCalledTimes(1);
+        expect(binding.terminal.focus).toHaveBeenCalledTimes(1);
+        expect(lightweight.readOutput()).toContain(`${current.terminalId} stale log`);
       }
+      expect(createBinding).toHaveBeenCalledTimes(PRODUCTION_TERMINAL_MOUNT_COUNT);
+      expect(listeners.size).toBe(PRODUCTION_TERMINAL_MOUNT_COUNT);
+      expect(releaseEmulator).not.toHaveBeenCalled();
+      for (const { binding } of bindings) expect(binding.dispose).not.toHaveBeenCalled();
+    } finally {
+      for (const { container, mount } of retained) {
+        mount.dispose();
+        mount.dispose();
+        container.remove();
+      }
+      createBinding.mockRestore();
+    }
+    expect(listeners.size).toBe(0);
+    expect(releaseEmulator).toHaveBeenCalledTimes(PRODUCTION_TERMINAL_MOUNT_COUNT);
+    for (const { terminalId } of retained) expect(releaseEmulator).toHaveBeenCalledWith(terminalId);
+    for (const { binding } of bindings) expect(binding.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  test("renders replay output after activating retained real-xterm mounts", async () => {
+    const { controller, listeners } = createController();
+    let activeTerminalId: string | null = null;
+    const retained: Array<{ container: HTMLDivElement; mount: InteractiveTerminalMount }> = [];
+    try {
+      for (const terminalId of ["terminal-first", "terminal-last"]) {
+        const container = document.createElement("div");
+        Object.defineProperties(container, {
+          clientHeight: { value: 400 },
+          clientWidth: { value: 800 },
+        });
+        document.body.append(container);
+        let finishHydration: () => void = () => undefined;
+        const hydrated = new Promise<void>((resolve) => {
+          finishHydration = resolve;
+        });
+        const mount = mountInteractiveTerminal({
+          container,
+          terminalId,
+          controller,
+          isActive: () => activeTerminalId === terminalId,
+          getPlatform: () => "darwin",
+          stageFile: async () => "/tmp/image.png",
+          preparePathInput: async () => "/tmp/image.png",
+          writeClipboard: async () => undefined,
+          onAttention: () => undefined,
+          onLifecycle: () => undefined,
+          onForgotten: () => undefined,
+          onTitleChange: () => undefined,
+          onHydrated: finishHydration,
+          onImageDragActiveChange: () => undefined,
+          onInteractionFailure: (_title, cause) => {
+            throw cause;
+          },
+        });
+        retained.push({ container, mount });
+        expect(container.querySelector(".xterm")).not.toBeNull();
+        const listener = listeners.get(terminalId);
+        if (!listener) throw new Error(`Expected ${terminalId} to subscribe.`);
+        sendStaleBuffer(listener, terminalId);
+        await hydrated;
+        activeTerminalId = terminalId;
+        mount.activate(false);
+        await nextFrame();
+        expect(container.textContent).toContain(`${terminalId} stale log`);
+      }
+      expect(listeners.size).toBe(2);
     } finally {
       for (const { container, mount } of retained) {
         mount.dispose();
         container.remove();
       }
     }
-  }, 30_000);
+    expect(listeners.size).toBe(0);
+  });
 
   test("does not focus a retained terminal after delayed image staging", async () => {
     const { controller } = createController();
