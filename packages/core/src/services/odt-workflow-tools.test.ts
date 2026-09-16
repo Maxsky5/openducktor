@@ -89,6 +89,8 @@ describe("odt workflow tools", () => {
     expect(selection.odt_read_task).toBe(true);
     expect(selection.odt_read_task_assets).toBe(true);
     expect(selection.odt_read_task_documents).toBe(true);
+    expect(selection.odt_search_tasks).toBe(true);
+    expect(selection.odt_create_task).toBe(true);
     expect(selection.odt_set_spec).toBe(true);
     expect(selection.odt_set_plan).toBe(false);
     expect(selection.openducktor_odt_set_spec).toBeUndefined();
@@ -102,6 +104,8 @@ describe("odt workflow tools", () => {
 
     expect(selection.odt_read_task).toBe(true);
     expect(selection.odt_read_task_assets).toBe(true);
+    expect(selection.odt_search_tasks).toBe(true);
+    expect(selection.odt_create_task).toBe(true);
     expect(selection.openducktor_odt_read_task_assets).toBe(true);
     expect(selection["functions.openducktor_odt_read_task_assets"]).toBe(true);
     expect(selection.openducktor_odt_read_task).toBe(true);

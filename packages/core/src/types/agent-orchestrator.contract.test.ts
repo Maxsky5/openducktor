@@ -12,6 +12,8 @@ describe("agent orchestrator role policy contract", () => {
   test("matches the workflow tool catalog", () => {
     const fixture = loadWorkflowContractFixture();
     expect([...fixture.tools].sort()).toEqual([...ODT_WORKFLOW_AGENT_TOOL_NAMES].sort());
+    const grantedTools = new Set(Object.values(AGENT_ROLE_TOOL_POLICY).flat());
+    expect([...grantedTools].sort()).toEqual([...fixture.tools].sort());
   });
 
   test("keeps odt_set_pull_request restricted to Builder sessions", () => {
@@ -21,9 +23,11 @@ describe("agent orchestrator role policy contract", () => {
     expect(AGENT_ROLE_TOOL_POLICY.qa).not.toContain("odt_set_pull_request");
   });
 
-  test("lets every workflow role read referenced task description assets", () => {
+  test("lets every workflow role read task data", () => {
     for (const tools of Object.values(AGENT_ROLE_TOOL_POLICY)) {
+      expect(tools).toContain("odt_read_task");
       expect(tools).toContain("odt_read_task_assets");
+      expect(tools).toContain("odt_read_task_documents");
     }
   });
 

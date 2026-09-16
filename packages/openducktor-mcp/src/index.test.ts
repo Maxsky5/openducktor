@@ -174,6 +174,12 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
       return;
     }
 
+    if (url === "/invoke/odt_create_task") {
+      requests.push({ url, body: await readJsonBody(request) });
+      writeJson(response, taskSummaryPayload);
+      return;
+    }
+
     if (url === "/invoke/odt_read_task_assets") {
       const body = await readJsonBody(request);
       requests.push({ url, body });
@@ -510,6 +516,38 @@ describe("MCP server tool results", () => {
       expect(bridge.requests).not.toContainEqual(
         expect.objectContaining({ url: "/invoke/odt_create_task" }),
       );
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("odt_create_task sends the create input to the host bridge", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_create_task",
+        arguments: {
+          title: "Follow-up",
+          issueType: "task",
+          priority: 2,
+        },
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual(taskSummaryPayload);
+      expect(bridge.requests).toContainEqual({
+        url: "/invoke/odt_create_task",
+        body: {
+          workspaceId: "repo",
+          title: "Follow-up",
+          issueType: "task",
+          priority: 2,
+        },
+      });
     } finally {
       await client.close();
     }

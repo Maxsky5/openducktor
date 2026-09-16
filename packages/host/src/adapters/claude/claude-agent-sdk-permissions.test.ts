@@ -203,7 +203,7 @@ describe("createClaudeCanUseTool", () => {
     expect(session.pendingApprovals.size).toBe(0);
   });
 
-  test("allows task search and create for read-only workflow roles without an interactive approval", async () => {
+  test("allows task search and create for every workflow role without an interactive approval", async () => {
     const cases = [
       { toolName: "mcp__openducktor__odt_search_tasks", toolInput: { status: "open" } },
       {
@@ -211,7 +211,7 @@ describe("createClaudeCanUseTool", () => {
         toolInput: { title: "Follow-up", issueType: "task", priority: 2 },
       },
     ];
-    for (const role of ["spec", "planner", "qa"] as const) {
+    for (const role of ["spec", "planner", "qa", "build"] as const) {
       const events: AgentEvent[] = [];
       const session = createSession(role);
       const canUseTool = createClaudeCanUseTool({

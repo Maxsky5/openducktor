@@ -444,7 +444,7 @@ describe("handleCodexServerRequest", () => {
   });
 
   test.each(["odt_create_task", "odt_search_tasks"])(
-    "automatically approves trusted workflow %s for read-only roles",
+    "automatically approves trusted workflow %s for the spec role",
     async (toolName) => {
       const respondServerRequest = mock(async () => {});
       const pendingInput = new CodexPendingInputState();
