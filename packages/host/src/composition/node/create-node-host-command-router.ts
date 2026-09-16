@@ -288,6 +288,7 @@ export const assembleNodeEffectHostCommandRouter = (
       removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
       removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
     },
+    taskSessionLifecycleCoordinator,
     taskStore,
     workspaceSettingsService,
     worktreeFiles,

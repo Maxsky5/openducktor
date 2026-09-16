@@ -25,6 +25,11 @@ export type WorkspaceWorktreeInventoryDependencies = {
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
 };
 
+const branchMatchesTaskId = (branchName: string, taskId: string): boolean => {
+  const branchLeaf = branchName.slice(branchName.lastIndexOf("/") + 1);
+  return branchLeaf === taskId || branchLeaf.startsWith(`${taskId}-`);
+};
+
 export const collectWorkspaceTaskWorktreePaths = (
   dependencies: WorkspaceWorktreeInventoryDependencies,
   repoConfig: RepoConfig,
@@ -95,6 +100,7 @@ export const collectWorkspaceTaskWorktreePaths = (
     }
 
     const inventory = yield* dependencies.gitPort.listWorktrees(repoPath);
+    const previousPrefixTaskPaths = new Set<string>();
     for (const worktree of inventory) {
       const task = tasks.find((candidate) =>
         isRelatedTaskBranch(worktree.branch, repoConfig.branchPrefix, candidate.id),
@@ -104,6 +110,8 @@ export const collectWorkspaceTaskWorktreePaths = (
           path: worktree.worktreePath,
           taskId: task.id,
         });
+      } else if (tasks.some((candidate) => branchMatchesTaskId(worktree.branch, candidate.id))) {
+        previousPrefixTaskPaths.add(normalizePathForComparison(worktree.worktreePath));
       }
     }
     const inventoryPaths = new Set(
@@ -138,10 +146,7 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (seen.has(canonicalComparison)) {
         continue;
       }
-      const isPendingPath =
-        pendingWorktreePath !== null &&
-        normalizePathForComparison(pendingWorktreePath) === canonicalComparison;
-      if (!isPendingPath && !inventoryPaths.has(canonicalComparison)) {
+      if (!inventoryPaths.has(canonicalComparison)) {
         return yield* Effect.fail(
           new HostValidationError({
             message: `Cannot establish that ${canonicalPath} is a registered worktree of ${repoPath}. Remove it manually, or retry without removing task worktrees.`,
@@ -162,7 +167,10 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (seen.has(normalized)) {
         continue;
       }
-      if (!pathStartsWith(worktree.worktreePath, managedWorktreeBasePath)) {
+      if (
+        !pathStartsWith(worktree.worktreePath, managedWorktreeBasePath) &&
+        !previousPrefixTaskPaths.has(normalized)
+      ) {
         continue;
       }
       if (
@@ -183,7 +191,7 @@ export const collectWorkspaceTaskWorktreePaths = (
     if (unclassifiedPaths.length > 0) {
       return yield* Effect.fail(
         new HostValidationError({
-          message: `Cannot classify registered worktree(s) under ${managedWorktreeBasePath}: ${unclassifiedPaths.join(
+          message: `Cannot classify registered worktree(s) for ${repoPath}: ${unclassifiedPaths.join(
             ", ",
           )}. Remove them manually, or retry without removing task worktrees.`,
           field: "worktreePath",

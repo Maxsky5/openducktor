@@ -8,8 +8,13 @@ export type TaskSessionLifecycleCoordinator = ReturnType<
 
 export const createTaskSessionLifecycleCoordinator = () => {
   const lifecycleLocks = new Set<string>();
+  const workspaceLifecycleLocks = new Set<string>();
   const worktreeGates = new Map<string, Effect.Semaphore>();
   const taskKey = (repoPath: string, taskId: string): string => `${repoPath}\0${taskId}`;
+  const hasTaskLifecycle = (repoPath: string): boolean => {
+    const prefix = `${repoPath}\0`;
+    return [...lifecycleLocks].some((key) => key.startsWith(prefix));
+  };
   const worktreeGate = (path: string): Effect.Semaphore => {
     const pathKey = normalizePathForComparison(path);
     const current = worktreeGates.get(pathKey);
@@ -20,11 +25,36 @@ export const createTaskSessionLifecycleCoordinator = () => {
     worktreeGates.set(pathKey, gate);
     return gate;
   };
+  const acquireWorkspaceLifecycle = (repoPath: string, operation: string) =>
+    Effect.acquireRelease(
+      Effect.gen(function* () {
+        if (workspaceLifecycleLocks.has(repoPath) || hasTaskLifecycle(repoPath)) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: `workspace.${operation}.task_lifecycle_guard`,
+              message: `Cannot ${operation} while a task lifecycle operation is in progress for ${repoPath}. Wait for it to finish and retry.`,
+              details: { repoPath },
+            }),
+          );
+        }
+        workspaceLifecycleLocks.add(repoPath);
+      }),
+      () => Effect.sync(() => workspaceLifecycleLocks.delete(repoPath)),
+    );
 
   return {
     acquireLifecycle(repoPath: string, taskIds: string[], operation: string) {
       return Effect.acquireRelease(
         Effect.gen(function* () {
+          if (workspaceLifecycleLocks.has(repoPath)) {
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: `task.${operation}.lifecycle_guard`,
+                message: `Cannot ${operation} while a workspace lifecycle operation is in progress for ${repoPath}.`,
+                details: { repoPath, taskIds },
+              }),
+            );
+          }
           const existingLifecycle = taskIds.find((taskId) =>
             lifecycleLocks.has(taskKey(repoPath, taskId)),
           );
@@ -47,6 +77,15 @@ export const createTaskSessionLifecycleCoordinator = () => {
               lifecycleLocks.delete(taskKey(repoPath, taskId));
             }
           }),
+      );
+    },
+    runWorkspaceLifecycle<Value, Error, Requirements>(
+      repoPath: string,
+      operation: string,
+      effect: Effect.Effect<Value, Error, Requirements>,
+    ) {
+      return Effect.scoped(
+        acquireWorkspaceLifecycle(repoPath, operation).pipe(Effect.zipRight(effect)),
       );
     },
     acquireWorktreeLifecycle(paths: readonly string[]) {

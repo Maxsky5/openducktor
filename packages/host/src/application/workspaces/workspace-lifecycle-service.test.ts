@@ -14,6 +14,7 @@ import { HostOperationError, HostValidationError } from "../../effect/host-error
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { GitPort } from "../../ports/git-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
+import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import {
   createGitPortTestDouble,
   createSettingsConfigTestDouble,
@@ -138,6 +139,7 @@ const createService = ({
   removeWorkspaceRegistration = () => Effect.succeed(catalog()),
   removeWorkspaceTaskAssets = () => Effect.void,
   removeWorkspaceTaskStore = () => Effect.void,
+  taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator(),
   taskStore = createTaskStoreDouble(),
   listWorktrees = () => Effect.succeed([]),
   isRegisteredWorktree = () => Effect.succeed(true),
@@ -165,6 +167,7 @@ const createService = ({
   removeWorkspaceRegistration?: () => Effect.Effect<WorkspaceCatalog, never>;
   removeWorkspaceTaskAssets?: WorkspaceStoragePort["removeWorkspaceTaskAssets"];
   removeWorkspaceTaskStore?: WorkspaceStoragePort["removeWorkspaceTaskStore"];
+  taskSessionLifecycleCoordinator?: ReturnType<typeof createTaskSessionLifecycleCoordinator>;
   taskStore?: TaskStoreDouble;
   listWorktrees?: GitPort["listWorktrees"];
   isRegisteredWorktree?: () => Effect.Effect<boolean, never>;
@@ -195,6 +198,7 @@ const createService = ({
       resolveConfiguredPath: (path) => path,
     }),
     storage,
+    taskSessionLifecycleCoordinator,
     taskStore,
     workspaceSettingsService: createWorkspaceSettingsServiceTestDouble({
       getRepoConfig,
@@ -263,6 +267,39 @@ describe("workspace lifecycle service", () => {
       repoPath: "/repos/ws",
       workspaceId: "ws",
     });
+  });
+
+  test("closeWorkspace rejects while a task lifecycle operation is active", async () => {
+    const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
+    const closeWorkspace = mock(() => Effect.succeed(catalog()));
+    const service = createService({
+      closeWorkspace,
+      taskSessionLifecycleCoordinator,
+    });
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* taskSessionLifecycleCoordinator.acquireLifecycle(
+            "/repos/ws",
+            ["task-1"],
+            "direct merge",
+          );
+          const result = yield* Effect.either(
+            service.closeWorkspace({
+              workspaceId: "ws",
+              expectedRepoPath: "/repos/ws",
+            }),
+          );
+          expect(result._tag).toBe("Left");
+          if (result._tag === "Left") {
+            expect(result.left.message).toContain("task lifecycle operation is in progress");
+          }
+        }),
+      ),
+    );
+
+    expect(closeWorkspace).not.toHaveBeenCalled();
   });
 
   test("closeWorkspace returns the catalog for an already closed workspace without inspection", async () => {
@@ -534,6 +571,31 @@ describe("workspace lifecycle service", () => {
     expect(result.removedWorktrees).toEqual(["/old-base/task-1"]);
   });
 
+  test("removeWorkspace rejects a registered task worktree from an earlier branch prefix", async () => {
+    const removeWorktree = mock(() => Effect.void);
+    const removeWorkspaceTaskAssets = mock(() => Effect.void);
+    const service = createService({
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      pathExists: (path) => Effect.succeed(path === "/old-base/task-1"),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "old/task-1-title", worktreePath: "/old-base/task-1" }]),
+      removeWorktree,
+      removeWorkspaceTaskAssets,
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: true,
+        }),
+      ),
+    ).rejects.toThrow("Cannot classify registered worktree(s) for /repos/ws");
+    expect(removeWorktree).not.toHaveBeenCalled();
+    expect(removeWorkspaceTaskAssets).not.toHaveBeenCalled();
+  });
+
   test("removeWorkspace keeps a worktree that contains another workspace", async () => {
     const removed: string[] = [];
     const service = createService({
@@ -732,6 +794,37 @@ describe("workspace lifecycle service", () => {
         }),
       ),
     ).rejects.toThrow("Cannot establish that");
+    expect(removeWorkspaceTaskAssets).not.toHaveBeenCalled();
+  });
+
+  test("removeWorkspace rejects a pending path that is no longer a registered worktree", async () => {
+    const removeWorktree = mock(() => Effect.void);
+    const removeWorkspaceTaskAssets = mock(() => Effect.void);
+    const pendingWorktreePath = "/managed/ws/task-1";
+    const service = createService({
+      getRepoConfig: () =>
+        Effect.succeed(
+          repoConfig({
+            removal: removalRecord({ pendingWorktreePath }),
+          }),
+        ),
+      beginWorkspaceRemoval: () => Effect.succeed(removalRecord({ pendingWorktreePath })),
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      listWorktrees: () => Effect.succeed([]),
+      removeWorktree,
+      removeWorkspaceTaskAssets,
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: true,
+        }),
+      ),
+    ).rejects.toThrow("Cannot establish that");
+    expect(removeWorktree).not.toHaveBeenCalled();
     expect(removeWorkspaceTaskAssets).not.toHaveBeenCalled();
   });
 

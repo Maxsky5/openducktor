@@ -20,6 +20,7 @@ import type { AgentSessionLiveStateService } from "../agent-sessions/agent-sessi
 import type { DevServerService } from "../dev-servers/dev-server-service-types";
 import { removeWorktreeAndFilesystemPath } from "../git/worktree-removal";
 import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
+import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import type { TerminalService } from "../terminals/terminal-service";
 import type { WorkspaceAdmissionService } from "./workspace-admission-service";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
@@ -89,6 +90,7 @@ type CreateWorkspaceLifecycleServiceInput = {
   >;
   settingsConfig: SettingsConfigPort;
   storage: WorkspaceStoragePort;
+  taskSessionLifecycleCoordinator: Pick<TaskSessionLifecycleCoordinator, "runWorkspaceLifecycle">;
   taskStore: Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
   workspaceSettingsService: WorkspaceSettingsService;
   worktreeFiles: Pick<
@@ -98,18 +100,13 @@ type CreateWorkspaceLifecycleServiceInput = {
 };
 
 const blockingActivityMessage = (blockers: WorkspaceActivityBlocker[]): string =>
-  `Stop the running work before closing or removing this workspace: ${blockers
-    .map((blocker) => blocker.label)
-    .join("; ")}.`;
-
-const unwrapUnknownError = (cause: unknown): Error =>
-  cause instanceof Error ? cause : new Error(String(cause));
+  `Stop the running work before closing or removing this workspace: ${blockers.map(({ label }) => label).join("; ")}.`;
 
 const toHostOperationError = (operation: string, message: string, cause: unknown) =>
   new HostOperationError({
     operation,
     message,
-    cause: unwrapUnknownError(cause),
+    cause: cause instanceof Error ? cause : new Error(String(cause)),
   });
 
 export const createWorkspaceActivityInspector = ({
@@ -226,6 +223,7 @@ export const createWorkspaceLifecycleService = ({
   gitPort,
   settingsConfig,
   storage,
+  taskSessionLifecycleCoordinator,
   taskStore,
   workspaceSettingsService,
   worktreeFiles,
@@ -282,7 +280,7 @@ export const createWorkspaceLifecycleService = ({
       new HostOperationError({
         operation: `workspace.removeWorkspace.${phase}`,
         message,
-        cause: unwrapUnknownError(cause),
+        cause: cause instanceof Error ? cause : new Error(String(cause)),
         details: { failedPath, phase, removedWorktrees, workspaceId },
       }),
     );
@@ -426,26 +424,31 @@ export const createWorkspaceLifecycleService = ({
         if (repoConfig.closed) {
           return yield* workspaceSettingsService.getWorkspaceCatalog();
         }
-        return yield* runUnderReservation(
-          {
-            operation: "close",
-            repoPath: repoConfig.repoPath,
-            workspaceId: input.workspaceId,
-          },
-          () =>
-            Effect.gen(function* () {
-              yield* assertNoBlockingActivity(repoConfig.repoPath);
-              const catalog = yield* workspaceSettingsService.closeWorkspace(
-                input.workspaceId,
-                input.expectedRepoPath,
-              );
-              admission.blockWorkspace({
-                reason: "closed",
-                repoPath: repoConfig.repoPath,
-                workspaceId: input.workspaceId,
-              });
-              return catalog;
-            }),
+        const canonicalRepoPath = yield* gitPort.canonicalizePath(repoConfig.repoPath);
+        return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
+          canonicalRepoPath,
+          "close",
+          runUnderReservation(
+            {
+              operation: "close",
+              repoPath: repoConfig.repoPath,
+              workspaceId: input.workspaceId,
+            },
+            () =>
+              Effect.gen(function* () {
+                yield* assertNoBlockingActivity(repoConfig.repoPath);
+                const catalog = yield* workspaceSettingsService.closeWorkspace(
+                  input.workspaceId,
+                  input.expectedRepoPath,
+                );
+                admission.blockWorkspace({
+                  reason: "closed",
+                  repoPath: repoConfig.repoPath,
+                  workspaceId: input.workspaceId,
+                });
+                return catalog;
+              }),
+          ),
         );
       });
     },
@@ -476,13 +479,18 @@ export const createWorkspaceLifecycleService = ({
     removeWorkspace(input) {
       return Effect.gen(function* () {
         const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
-        return yield* runUnderReservation(
-          {
-            operation: "remove",
-            repoPath: repoConfig.repoPath,
-            workspaceId: input.workspaceId,
-          },
-          () => executeRemoval(input, repoConfig),
+        const canonicalRepoPath = yield* gitPort.canonicalizePath(repoConfig.repoPath);
+        return yield* taskSessionLifecycleCoordinator.runWorkspaceLifecycle(
+          canonicalRepoPath,
+          "remove",
+          runUnderReservation(
+            {
+              operation: "remove",
+              repoPath: repoConfig.repoPath,
+              workspaceId: input.workspaceId,
+            },
+            () => executeRemoval(input, repoConfig),
+          ),
         );
       });
     },

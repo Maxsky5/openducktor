@@ -92,6 +92,41 @@ test("task lifecycle guard rejects overlap and releases at scope exit", async ()
   ).resolves.toBeUndefined();
 });
 
+test("workspace lifecycle and task lifecycle operations reject overlap", async () => {
+  const coordinator = createTaskSessionLifecycleCoordinator();
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* coordinator.acquireLifecycle("/repo", ["task-1"], "direct merge");
+        const workspaceLifecycle = yield* Effect.either(
+          coordinator.runWorkspaceLifecycle("/repo", "close", Effect.void),
+        );
+        expect(workspaceLifecycle._tag).toBe("Left");
+      }),
+    ),
+  );
+
+  await Effect.runPromise(
+    coordinator.runWorkspaceLifecycle(
+      "/repo",
+      "remove",
+      Effect.gen(function* () {
+        const taskLifecycle = yield* Effect.either(
+          Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "direct merge")),
+        );
+        expect(taskLifecycle._tag).toBe("Left");
+      }),
+    ),
+  );
+
+  await expect(
+    Effect.runPromise(
+      Effect.scoped(coordinator.acquireLifecycle("/repo", ["task-1"], "direct merge")),
+    ),
+  ).resolves.toBeUndefined();
+});
+
 test("constructing a task lifecycle Effect does not reserve the task", async () => {
   const coordinator = createTaskSessionLifecycleCoordinator();
   const start = coordinator.acquireLifecycle("/repo", ["task-1"], "start session");
