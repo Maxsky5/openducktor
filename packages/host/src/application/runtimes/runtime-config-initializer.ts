@@ -10,7 +10,7 @@ import {
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
 import { parseConfig } from "../../config/parse-config";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { HostOperationError, type HostValidationError } from "../../effect/host-errors";
 import {
   discoverToolFresh,
   type ToolDiscoveryDetails,

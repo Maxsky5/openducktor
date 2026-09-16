@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { errorMessage } from "../effect/host-errors";
+import { errorMessage, HostValidationError } from "../effect/host-errors";
 
 export type PayloadValue =
   | string
@@ -15,10 +15,9 @@ export const configValidationMessage = (cause: unknown, payload?: PayloadValue):
     return errorMessage(cause);
   }
 
-  const lines = cause.issues.slice(0, MAX_REPORTED_ISSUES).map((issue) => {
-    const hint = payload === undefined ? "" : formatValueHint(readPathValue(payload, issue.path));
-    return `${formatPath(issue.path)}: ${issue.message}${hint}`;
-  });
+  const lines = cause.issues
+    .slice(0, MAX_REPORTED_ISSUES)
+    .map((issue) => formatIssueLine(issue, payload));
   const remaining = cause.issues.length - MAX_REPORTED_ISSUES;
   if (remaining > 0) {
     lines.push(`${remaining} more ${remaining === 1 ? "problem" : "problems"} not shown.`);
@@ -27,8 +26,19 @@ export const configValidationMessage = (cause: unknown, payload?: PayloadValue):
   return lines.join("\n");
 };
 
+export const configValidationError = (
+  cause: unknown,
+  payload?: PayloadValue,
+): HostValidationError =>
+  new HostValidationError({
+    message: configValidationMessage(cause, payload),
+    cause,
+  });
+
 const MAX_REPORTED_ISSUES = 5;
 const MAX_REPORTED_VALUE_LENGTH = 60;
+
+const nestedIssueSchema = z.object({ issues: z.array(z.object({ message: z.string() })) });
 
 const payloadValueSchema: z.ZodType<PayloadValue> = z.lazy(() =>
   z.union([
@@ -45,6 +55,23 @@ const payloadValueSchema: z.ZodType<PayloadValue> = z.lazy(() =>
 const recordSchema = z.record(z.string(), payloadValueSchema);
 const arraySchema = z.array(payloadValueSchema);
 const scalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
+const formatIssueLine = (issue: z.core.$ZodIssue, payload?: PayloadValue): string => {
+  const path = formatPath(issue.path);
+  const nested = nestedIssueSchema.safeParse(issue);
+  if (nested.success) {
+    return `${path}: ${cleanLine(nested.data.issues[0]?.message ?? issue.message)} (invalid key)`;
+  }
+
+  const reason = cleanLine(issue.message);
+  if (payload === undefined) {
+    return `${path}: ${reason}`;
+  }
+
+  return `${path}: ${reason}${formatValueHint(readPathValue(payload, issue.path))}`;
+};
+
+const cleanLine = (text: string): string => text.replace(/\s+/gu, " ").trim();
 
 const formatPath = (path: readonly PropertyKey[]): string =>
   path.length === 0 ? "config" : path.map((segment) => String(segment)).join(".");

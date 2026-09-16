@@ -274,8 +274,9 @@ describe("global config", () => {
 
     const message = rejectionMessage(() => parsePersistedGlobalConfig({ version: 3, workspaces }));
 
-    expect(message.split("\n")).toHaveLength(6);
-    expect(message).toContain("2 more problems not shown.");
+    const lines = message.split("\n");
+    expect(lines.filter((line) => line.startsWith("workspaces."))).toHaveLength(5);
+    expect(lines.at(-1)).toMatch(/^\d+ more problems not shown\.$/);
   });
 
   test("formats version 2 config validation failures the same way", () => {

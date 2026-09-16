@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { z } from "zod";
-import { HostValidationError } from "../effect/host-errors";
-import { configValidationMessage, type PayloadValue } from "./config-validation-message";
+import type { HostValidationError } from "../effect/host-errors";
+import { configValidationError, type PayloadValue } from "./config-validation-message";
 
 export const parseConfig = <Output>(
   schema: z.ZodType<Output>,
@@ -9,9 +9,5 @@ export const parseConfig = <Output>(
 ): Effect.Effect<Output, HostValidationError> =>
   Effect.try({
     try: () => schema.parse(payload),
-    catch: (cause) =>
-      new HostValidationError({
-        message: configValidationMessage(cause, payload),
-        cause,
-      }),
+    catch: (cause) => configValidationError(cause, payload),
   });

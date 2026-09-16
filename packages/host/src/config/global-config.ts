@@ -5,8 +5,8 @@ import {
   persistedGlobalConfigV2Schema,
 } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
-import { errorMessage, HostValidationError } from "../effect/host-errors";
-import { configValidationMessage } from "./config-validation-message";
+import { HostValidationError } from "../effect/host-errors";
+import { configValidationError } from "./config-validation-message";
 
 type PersistedConfigObject = Record<string, JSONType>;
 const persistedConfigObjectSchema = z.record(z.string(), z.json());
@@ -105,18 +105,12 @@ const parsePersistedConfig = <Output>(
   try {
     migrated = migratePersistedConfig(parseSupportedConfigObject(payload, expectedVersion));
   } catch (cause) {
-    throw new HostValidationError({
-      message: errorMessage(cause),
-      cause,
-    });
+    throw configValidationError(cause);
   }
 
   const parsed = schema.safeParse(migrated);
   if (!parsed.success) {
-    throw new HostValidationError({
-      message: configValidationMessage(parsed.error, migrated),
-      cause: parsed.error,
-    });
+    throw configValidationError(parsed.error, migrated);
   }
 
   return parsed.data;
@@ -162,10 +156,7 @@ export const upgradePersistedGlobalConfigV2 = (
   };
   const parsed = globalConfigSchema.safeParse(payload);
   if (!parsed.success) {
-    throw new HostValidationError({
-      message: configValidationMessage(parsed.error, payload),
-      cause: parsed.error,
-    });
+    throw configValidationError(parsed.error, payload);
   }
 
   return parsed.data;
