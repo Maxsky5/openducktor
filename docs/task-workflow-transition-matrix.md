@@ -18,6 +18,8 @@ This matrix lists every allowed task transition. The backend validates it. The U
 - `odt_qa_approved`: `taskId`, `reportMarkdown`
 - `odt_qa_rejected`: `taskId`, `reportMarkdown`
 
+The public create tool rejects an `issueType` of `epic`.
+
 Call `odt_read_task` first for the returned `task` summary object, including task state, `qaVerdict`, and document presence booleans.
 
 When task Markdown contains `odt-asset:<assetId>` images needed for the work, collect the relevant IDs and call `odt_read_task_assets` once when their raw total is at most 20 MiB. Split only larger sets.

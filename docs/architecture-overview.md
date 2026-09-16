@@ -92,7 +92,7 @@ For an agent tool:
 5. The tool result enters the session stream.
 6. The frontend sees the completed mutation tool and refreshes tasks.
 
-Managed and external MCP clients use the same bridge. The host alone owns SQLite. Repository sessions get all `ODT_MCP_TOOL_NAMES` and use runtime approval rules. Task workflow sessions keep their role tool limits and cannot call public task tools.
+Managed and external MCP clients use the same bridge. The host alone owns SQLite. Repository sessions get all `ODT_MCP_TOOL_NAMES` and use runtime approval rules. Task workflow sessions keep their role tool limits. They can call `odt_create_task` and `odt_search_tasks`, but not `odt_get_workspaces`.
 
 ## Generate a pull request
 

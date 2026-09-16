@@ -95,7 +95,7 @@ Workflow tools on the same server:
 - `odt_qa_approved`
 - `odt_qa_rejected`
 
-Task-bound Spec, Planner, Builder, and QA sessions do not get `odt_get_workspaces`. They can call `odt_create_task` and `odt_search_tasks` in their startup workspace and omit `workspaceId`.
+Task-bound sessions with the Spec Agent, Planner Agent, Builder Agent, or QA Agent role do not get `odt_get_workspaces`. They can call `odt_create_task` and `odt_search_tasks` in their startup workspace and omit `workspaceId`.
 
 ## List workspaces
 
