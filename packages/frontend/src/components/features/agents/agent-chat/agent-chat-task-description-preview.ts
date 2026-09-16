@@ -25,16 +25,21 @@ const findCharacterIndex = (
 
 const findInlineImageEnd = (body: string, openIndex: number, limit: number): number => {
   let depth = 0;
-  let inTitle = false;
+  let titleDelimiter = "";
+  let escaped = false;
   const stop = Math.min(limit, body.length);
   for (let index = openIndex; index < stop; index += 1) {
     const character = body[index];
-    if (inTitle) {
-      if (character === '"') {
-        inTitle = false;
+    if (escaped) {
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (titleDelimiter !== "") {
+      if (character === titleDelimiter) {
+        titleDelimiter = "";
       }
-    } else if (character === '"') {
-      inTitle = true;
+    } else if (character === '"' || character === "'") {
+      titleDelimiter = character;
     } else if (character === "(") {
       depth += 1;
     } else if (character === ")") {

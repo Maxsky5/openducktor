@@ -66,6 +66,18 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
     expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
   });
 
+  test("keeps an image token whole when its title uses single quotes", () => {
+    const description = `${"a".repeat(470)}![s](u 'a)b')`;
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
+  });
+
+  test("keeps an image token whole when its destination holds an escaped bracket", () => {
+    const description = `${"a".repeat(472)}![s](a\\)b)`;
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
+  });
+
   test("keeps a reference-style image token", () => {
     const description = "![Architecture][diagram]";
 
