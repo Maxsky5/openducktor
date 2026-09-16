@@ -330,6 +330,31 @@ describe("createProcessEnvironment", () => {
     },
   );
 
+  testIfPosixShellIsAvailable("keeps an end marker literal in PATH", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "odt-login-shell-marker-"));
+    const shellPath = path.join(root, "fixture-shell");
+    try {
+      await writeFakeLoginShell(shellPath, "/first:/tmp/__OPENDUCKTOR_ENV_END__");
+
+      const resolution = await Effect.runPromise(
+        createProcessEnvironment({
+          baseEnv: { HOME: root, PATH: "/inherited" },
+          platform: "linux",
+          readUserShell: () => shellPath,
+        }),
+      );
+
+      expect(resolution.error).toBeNull();
+      expect(resolution.environment.PATH?.split(":")).toEqual([
+        "/first",
+        "/tmp/__OPENDUCKTOR_ENV_END__",
+        "/inherited",
+      ]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   testIfPosixShellIsAvailable(
     "keeps user shell variables and removes host control variables from the probe",
     async () => {
@@ -497,6 +522,52 @@ describe("createProcessEnvironment", () => {
         });
         expect(resolution.environment.PATH).toBeUndefined();
       } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
+
+  testIfPosixShellIsAvailable(
+    "reports invalid output when a child keeps stdout open after the shell exits",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "odt-markerless-child-shell-"));
+      const shellPath = path.join(root, "fixture-shell");
+      const childPidPath = path.join(root, "child.pid");
+      let childPid: number | null = null;
+      try {
+        await writeFile(
+          shellPath,
+          '#!/bin/sh\nsleep 5 &\nprintf \'%s\' "$!" > "$HOME/child.pid"\nexit 0\n',
+        );
+        await chmod(shellPath, 0o755);
+
+        const resolution = await Effect.runPromise(
+          createProcessEnvironment({
+            baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
+            loginShellTimeoutMs: 5_000,
+            platform: "linux",
+            readUserShell: () => shellPath,
+          }).pipe(
+            Effect.timeoutFail({
+              duration: "1 second",
+              onTimeout: () => new Error("Marker-less shell exit did not finish."),
+            }),
+          ),
+        );
+        const stoppedPid = Number(await readFile(childPidPath, "utf8"));
+        childPid = stoppedPid;
+
+        expect(resolution.error).toMatchObject({
+          _tag: "ProcessEnvironmentError",
+          reason: "invalid_output",
+          shell: shellPath,
+        });
+        expect(resolution.environment.PATH).toBeUndefined();
+        await waitFor(() => processHasStopped(stoppedPid));
+      } finally {
+        if (childPid && !processHasStopped(childPid)) {
+          process.kill(childPid, "SIGKILL");
+        }
         await rm(root, { force: true, recursive: true });
       }
     },

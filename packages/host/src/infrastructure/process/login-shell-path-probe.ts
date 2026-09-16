@@ -6,8 +6,9 @@ import { ProcessEnvironmentError, processEnvironmentError } from "./process-envi
 const START_MARKER_TEXT = "__OPENDUCKTOR_ENV_START__";
 const END_MARKER_TEXT = "__OPENDUCKTOR_ENV_END__";
 const START_MARKER = Buffer.from(`${START_MARKER_TEXT}\0`);
-const END_MARKER = Buffer.from(`${END_MARKER_TEXT}\0`);
+const END_MARKER = Buffer.from(`\0${END_MARKER_TEXT}\0`);
 const MAX_OUTPUT_BYTES = 1024 * 1024;
+const EXIT_DRAIN_MS = 100;
 const CSH_NAMES = new Set(["csh", "tcsh"]);
 
 const shellEnv = (env: NodeJS.ProcessEnv, shell: string): NodeJS.ProcessEnv => ({
@@ -108,8 +109,12 @@ export const probeLoginShellPath = (
     let sawEnd = false;
     let shellExited = false;
     let settled = false;
+    let exitDrainTimer: ReturnType<typeof setTimeout> | undefined;
 
     function cleanUp(): void {
+      if (exitDrainTimer) {
+        clearTimeout(exitDrainTimer);
+      }
       signal.removeEventListener("abort", abort);
       child.removeAllListeners("error");
       child.removeAllListeners("exit");
@@ -143,6 +148,18 @@ export const probeLoginShellPath = (
                 `Failed to resolve PATH from interactive login shell ${shell}: the probe returned no PATH between the environment markers. Check shell startup output and restart OpenDucktor.`,
               ),
             ),
+      );
+    };
+
+    const finishWithoutMarkers = (): void => {
+      finish(
+        Effect.fail(
+          processEnvironmentError(
+            shell,
+            "invalid_output",
+            `Failed to resolve PATH from interactive login shell ${shell}: the probe returned no environment markers. Check shell startup output and restart OpenDucktor.`,
+          ),
+        ),
       );
     };
 
@@ -215,20 +232,16 @@ export const probeLoginShellPath = (
 
       shellExited = true;
       finishWhenReady();
+      if (!settled) {
+        // The shell can exit while one of its jobs keeps stdout open. Give queued output time to drain.
+        exitDrainTimer = setTimeout(finishWithoutMarkers, EXIT_DRAIN_MS);
+      }
     });
     child.once("close", () => {
       if (!shellExited || sawEnd) {
         return;
       }
-      finish(
-        Effect.fail(
-          processEnvironmentError(
-            shell,
-            "invalid_output",
-            `Failed to resolve PATH from interactive login shell ${shell}: the probe returned no environment markers. Check shell startup output and restart OpenDucktor.`,
-          ),
-        ),
-      );
+      finishWithoutMarkers();
     });
   }).pipe(
     Effect.timeoutFail({
