@@ -18,7 +18,7 @@ import remarkGfm from "remark-gfm";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
-import { prepareMarkdownRenderContent } from "./markdown-renderer-context";
+import { prepareMarkdownRenderContent } from "./markdown-render-content";
 
 const PremiumMarkdownRenderer = lazy(() => import("./markdown-renderer-premium"));
 const MarkdownRendererRich = lazy(() => import("./markdown-renderer-rich"));
@@ -46,6 +46,7 @@ type MarkdownRendererProps = {
   fallback?: ReactNode;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
   stripTaskDescriptionFrontMatter?: boolean;
+  lightweight?: boolean;
 };
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -98,6 +99,43 @@ const MarkdownSync = memo(function MarkdownSync({
   );
 });
 
+type MarkdownRendererCandidate = "mermaid" | "math";
+
+type MarkdownTaskAssetProps = Pick<
+  ComponentProps<typeof MarkdownRendererRich>,
+  "taskAssetContext" | "resolveTaskAssetSrc"
+>;
+
+const selectMarkdownCandidate = (
+  content: string,
+  lightweight: boolean,
+): MarkdownRendererCandidate | null => {
+  if (lightweight) {
+    return null;
+  }
+  if (content.includes("mermaid")) {
+    return "mermaid";
+  }
+  if (content.includes("$")) {
+    return "math";
+  }
+  return null;
+};
+
+const resolveTaskAssetProps = (
+  taskAssetContext: MarkdownRendererProps["taskAssetContext"],
+): MarkdownTaskAssetProps => {
+  if (!taskAssetContext) {
+    return {};
+  }
+  const props: MarkdownTaskAssetProps = { taskAssetContext };
+  const resolveTaskAssetSrc = getShellBridge().resolveTaskAssetSrc;
+  if (resolveTaskAssetSrc) {
+    props.resolveTaskAssetSrc = resolveTaskAssetSrc;
+  }
+  return props;
+};
+
 export const MarkdownRenderer = memo(function MarkdownRenderer({
   markdown,
   variant = "document",
@@ -108,6 +146,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   fallback,
   taskAssetContext,
   stripTaskDescriptionFrontMatter = false,
+  lightweight = false,
 }: MarkdownRendererProps): ReactElement | null {
   const components = useMemo(
     () => markdownLinkComponents(MARKDOWN_COMPONENTS[variant], componentOverrides, linkPolicy),
@@ -118,17 +157,10 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     return null;
   }
 
-  const hasMathCandidate = content.includes("$");
-  const hasMermaidCandidate = content.includes("mermaid");
-  const rendersTaskAsset = content.includes(TASK_ASSET_URI_PREFIX);
-  const needsRichRenderer = rendersTaskAsset || taskAssetContext !== undefined;
-  const resolveTaskAssetSrc = taskAssetContext ? getShellBridge().resolveTaskAssetSrc : undefined;
-  const taskAssetProps: Pick<
-    ComponentProps<typeof MarkdownRendererRich>,
-    "taskAssetContext" | "resolveTaskAssetSrc"
-  > = {};
-  if (taskAssetContext) taskAssetProps.taskAssetContext = taskAssetContext;
-  if (resolveTaskAssetSrc) taskAssetProps.resolveTaskAssetSrc = resolveTaskAssetSrc;
+  const candidate = selectMarkdownCandidate(content, lightweight);
+  const needsRichRenderer =
+    taskAssetContext !== undefined || (!lightweight && content.includes(TASK_ASSET_URI_PREFIX));
+  const taskAssetProps = resolveTaskAssetProps(taskAssetContext);
 
   let renderedContent: ReactElement;
   if (needsRichRenderer) {
@@ -161,10 +193,9 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     );
   }
 
-  const CandidateRenderer = hasMermaidCandidate
-    ? MarkdownRendererMermaidCandidate
-    : MarkdownRendererMathCandidate;
-  if (hasMermaidCandidate || hasMathCandidate) {
+  if (candidate !== null) {
+    const CandidateRenderer =
+      candidate === "mermaid" ? MarkdownRendererMermaidCandidate : MarkdownRendererMathCandidate;
     renderedContent = (
       <Suspense fallback={renderedContent}>
         <CandidateRenderer

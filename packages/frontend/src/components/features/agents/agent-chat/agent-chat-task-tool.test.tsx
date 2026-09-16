@@ -19,27 +19,28 @@ const task = (id = "task-1"): PublicTaskSummaryTask => ({
   documents: { hasSpec: false, hasPlan: false, hasQaReport: false },
 });
 
-const renderTool = (tool: string, fields: Partial<ToolMeta>): string =>
-  renderToStaticMarkup(
-    createMessageCardElement({
-      message: {
-        id: "m1",
-        role: "tool",
-        content: "",
-        timestamp: "2026-09-08T10:00:00.000Z",
-        meta: {
-          kind: "tool",
-          partId: "p1",
-          callId: "c1",
-          tool,
-          toolType: "generic",
-          status: "completed",
-          ...fields,
-        },
+const createToolElement = (tool: string, fields: Partial<ToolMeta>) =>
+  createMessageCardElement({
+    message: {
+      id: "m1",
+      role: "tool",
+      content: "",
+      timestamp: "2026-09-08T10:00:00.000Z",
+      meta: {
+        kind: "tool",
+        partId: "p1",
+        callId: "c1",
+        tool,
+        toolType: "generic",
+        status: "completed",
+        ...fields,
       },
-      sessionAgentColors: {},
-    }),
-  );
+    },
+    sessionAgentColors: {},
+  });
+
+const renderTool = (tool: string, fields: Partial<ToolMeta>): string =>
+  renderToStaticMarkup(createToolElement(tool, fields));
 
 test("renders create_task through the real message card as a Kanban-style task", () => {
   const html = renderTool("openducktor_odt_create_task", {
@@ -63,7 +64,7 @@ test("renders create_task through the real message card as a Kanban-style task",
   expect(card?.textContent?.indexOf("Add task search shortcut")).toBeLessThan(
     card?.textContent?.indexOf("task-1") ?? -1,
   );
-  expect(card?.querySelector(".line-clamp-5")?.textContent).toBe(task().description);
+  expect(card?.querySelector(".markdown-body")?.textContent).toBe(task().description);
   const openButton = card?.querySelector('button[aria-label="Open task details"]');
   expect(openButton?.textContent).toBe("Open");
   expect(openButton?.querySelector("svg.lucide-square-arrow-out-up-right")).not.toBeNull();
@@ -142,15 +143,127 @@ test("search shows filters while pending and does not invent a count on failure"
   }
 });
 
-test("keeps the full description in the five-line clamped card", () => {
-  const description = Array.from({ length: 10 }, (_, i) => `Description line ${i + 1}`).join("\n");
+test("renders the description as a bounded markdown preview inside the five-line clamp", () => {
+  const description = ["### Context", "", "- Failure: CI run", "", "b".repeat(4000)].join("\n");
   const html = renderTool("odt_create_task", {
     output: JSON.stringify({ task: { ...task(), description } }),
   });
   const document = new DOMParser().parseFromString(html, "text/html");
-  const paragraph = document.querySelector("[data-task-id] .line-clamp-5");
-  expect(paragraph?.textContent).toBe(description);
-  expect(paragraph?.classList.contains("whitespace-pre-wrap")).toBe(true);
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.classList.contains("line-clamp-5")).toBe(true);
+  expect(preview?.querySelector("h3")?.textContent).toBe("Context");
+  expect(preview?.querySelector("li")?.textContent).toBe("Failure: CI run");
+  expect(preview?.textContent).toContain("b".repeat(200));
+  expect(preview?.textContent).not.toContain("b".repeat(1000));
+  const card = document.querySelector("[data-task-id]");
+  expect(card?.innerHTML).not.toContain("### Context");
+  expect(card?.innerHTML).not.toContain("b".repeat(1000));
+});
+
+test("renders a task asset image as preview alt text without a task context alert", () => {
+  const assetId = "550e8400-e29b-41d4-a716-446655440000";
+  const description = [
+    `![Screenshot](odt-asset:${assetId} "shot.png")`,
+    `![](odt-asset:${assetId} "diagram.png")`,
+    "",
+    "b".repeat(2000),
+  ].join("\n");
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({ task: { ...task(), description } }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.classList.contains("line-clamp-5")).toBe(true);
+  expect(preview?.textContent).toContain("Screenshot");
+  expect(preview?.textContent).toContain("diagram.png");
+  expect(preview?.querySelector("svg.lucide-image")).not.toBeNull();
+  expect(preview?.textContent).not.toContain("b".repeat(1000));
+  expect(html).not.toContain("task context is unavailable");
+  expect(document.querySelector("[data-task-id] img")).toBeNull();
+});
+
+test("labels a malformed task asset reference without a task context alert", () => {
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({
+      task: { ...task(), description: "![](odt-asset:not-a-uuid)" },
+    }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.textContent).toContain("Image");
+  expect(html).not.toContain("task asset reference is invalid");
+  expect(document.querySelector("[data-task-id] img")).toBeNull();
+});
+
+test("keeps a preview image chip when the image token crosses the preview budget", () => {
+  const description = `${"a".repeat(470)}\n\n![Screenshot](odt-asset:550e8400-e29b-41d4-a716-446655440000 "shot.png")`;
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({ task: { ...task(), description } }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.textContent).toContain("Screenshot");
+  expect(preview?.querySelector("svg.lucide-image")).not.toBeNull();
+});
+
+test("renders a description link as text without an anchor", () => {
+  const description = "See [the docs](https://example.com/docs) for details.";
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({ task: { ...task(), description } }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.textContent).toContain("the docs");
+  expect(preview?.querySelector("a[href]")).toBeNull();
+});
+
+test("does not load a remote image in the description preview", () => {
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({
+      task: { ...task(), description: "![Architecture](https://example.com/diagram.png)" },
+    }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.textContent).toContain("Architecture");
+  expect(document.querySelector("[data-task-id] img")).toBeNull();
+});
+
+test("labels a preview image without alt text or a file name", () => {
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({
+      task: { ...task(), description: "![](https://example.com/diagram.png)" },
+    }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.textContent).toContain("Image");
+  expect(document.querySelector("[data-task-id] img")).toBeNull();
+});
+
+test("strips front matter and renders a diagram fence as code in the description preview", () => {
+  const description = [
+    "---",
+    "priority: high",
+    "---",
+    "",
+    "Body text here.",
+    "",
+    "```mermaid",
+    "graph TD",
+    "  A --> B",
+  ].join("\n");
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({ task: { ...task(), description } }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.textContent).toContain("Body text here.");
+  expect(preview?.textContent).not.toContain("priority: high");
+  expect(preview?.textContent).toContain("graph TD");
+  expect(preview?.querySelector(".language-mermaid")).not.toBeNull();
+  expect(preview?.querySelector("section[aria-label='Mermaid diagram']")).toBeNull();
+  expect(preview?.querySelector("svg")).toBeNull();
 });
 
 test("does not claim task creation before completion or after failure", () => {

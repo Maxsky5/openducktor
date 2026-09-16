@@ -3,9 +3,8 @@ import {
   TASK_ASSET_URI_PREFIX,
   type TaskAssetRenderContext,
 } from "@openducktor/contracts";
-import { createElement, isValidElement, useEffect, useState } from "react";
+import { createElement, isValidElement, useEffect, useState, type ReactNode } from "react";
 import { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
-import { splitTaskDescriptionFrontMatter } from "@/components/features/task-description-editor/task-description-front-matter";
 import { errorMessage } from "@/lib/errors";
 import type { ShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
@@ -17,6 +16,17 @@ export const TASK_DESCRIPTION_URL_TRANSFORM: UrlTransform = (url, _key, node) =>
   }
   return defaultUrlTransform(url);
 };
+
+function TaskAssetAlert({ children }: { children: ReactNode }) {
+  return (
+    <span
+      className="my-2 block rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
+      role="alert"
+    >
+      {children}
+    </span>
+  );
+}
 
 function TaskAssetImage({
   alt,
@@ -68,14 +78,7 @@ function TaskAssetImage({
     );
   }
   if (state.status === "error") {
-    return (
-      <span
-        className="my-2 block rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
-        role="alert"
-      >
-        Image could not be loaded: {state.message}
-      </span>
-    );
+    return <TaskAssetAlert>Image could not be loaded: {state.message}</TaskAssetAlert>;
   }
   return (
     <img
@@ -89,17 +92,6 @@ function TaskAssetImage({
     />
   );
 }
-
-export const prepareMarkdownRenderContent = (
-  markdown: string,
-  stripTaskDescriptionFrontMatter: boolean,
-): string => {
-  if (!stripTaskDescriptionFrontMatter) {
-    return markdown.trim();
-  }
-  const frontMatter = splitTaskDescriptionFrontMatter(markdown);
-  return (frontMatter.kind === "valid" ? frontMatter.body : markdown).trim();
-};
 
 export const createTaskDescriptionComponents = ({
   components,
@@ -126,40 +118,39 @@ export const createTaskDescriptionComponents = ({
       </code>
     );
   },
-  img: ({ alt, className, src, title }) => {
+  img: ({ alt, className, src, title, ...props }) => {
+    const callerImage = components.img
+      ? createElement(components.img, { ...props, alt, className, src, title })
+      : null;
     if (src?.startsWith(TASK_ASSET_URI_PREFIX)) {
       if (!parseTaskAssetUri(src)) {
         return (
-          <span
-            className="my-2 block rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
-            role="alert"
-          >
-            Image could not be loaded: the task asset reference is invalid.
-          </span>
+          callerImage ?? (
+            <TaskAssetAlert>
+              Image could not be loaded: the task asset reference is invalid.
+            </TaskAssetAlert>
+          )
         );
       }
-      if (!taskAssetContext || !resolveTaskAssetSrc) {
+      if (taskAssetContext && resolveTaskAssetSrc) {
         return (
-          <span
-            className="my-2 block rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
-            role="alert"
-          >
-            Image could not be loaded: task context is unavailable.
-          </span>
+          <TaskAssetImage
+            context={taskAssetContext}
+            resolveTaskAssetSrc={resolveTaskAssetSrc}
+            src={src}
+            {...(alt === undefined ? {} : { alt })}
+            {...(className === undefined ? {} : { className })}
+            {...(title === undefined ? {} : { title })}
+          />
         );
       }
       return (
-        <TaskAssetImage
-          context={taskAssetContext}
-          resolveTaskAssetSrc={resolveTaskAssetSrc}
-          src={src}
-          {...(alt === undefined ? {} : { alt })}
-          {...(className === undefined ? {} : { className })}
-          {...(title === undefined ? {} : { title })}
-        />
+        callerImage ?? (
+          <TaskAssetAlert>Image could not be loaded: task context is unavailable.</TaskAssetAlert>
+        )
       );
     }
-    return <img alt={alt ?? ""} className={className} src={src} title={title} />;
+    return callerImage ?? <img alt={alt ?? ""} className={className} src={src} title={title} />;
   },
   pre: ({ children, className, ...props }) => {
     const child = Array.isArray(children) ? children[0] : children;
