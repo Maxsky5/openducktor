@@ -14,6 +14,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeQueryFailureSchema",
   "DEVELOPMENT_INSTANCE_ID_PATTERN",
   "OPENDUCKTOR_DEV_INSTANCE_ENV",
+  "OPENDUCKTOR_CONFIG_DIR_NAMES",
   "MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS",
   "acceptedAgentUserMessageSchema",
   "agentAttachmentReferenceSchema",

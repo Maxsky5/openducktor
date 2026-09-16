@@ -5,6 +5,7 @@ import {
   isDevelopmentInstanceId,
   MCP_BRIDGE_PRODUCTION_DISCOVERY_PATH_SEGMENTS,
   mcpBridgeDevelopmentDiscoveryPathSegments,
+  OPENDUCKTOR_CONFIG_DIR_NAMES,
   OPENDUCKTOR_DEV_INSTANCE_ENV,
 } from "@openducktor/contracts";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
@@ -12,10 +13,6 @@ import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/
 const EMPTY_ENV_SENTINELS = new Set(["undefined", "null"]);
 const OPENDUCKTOR_CHANNEL_ENV = "OPENDUCKTOR_CHANNEL";
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
-const DEFAULT_CONFIG_DIR_NAMES = {
-  dev: ".openducktor-dev",
-  production: ".openducktor",
-} as const;
 
 export const normalizeOptionalInput = (value: string | undefined): string | undefined => {
   if (value === undefined) {
@@ -62,8 +59,8 @@ const resolveOpenDucktorBaseDir = (env: NodeJS.ProcessEnv): string => {
   return join(
     resolveHomeDirectory(),
     env[OPENDUCKTOR_CHANNEL_ENV] === "dev"
-      ? DEFAULT_CONFIG_DIR_NAMES.dev
-      : DEFAULT_CONFIG_DIR_NAMES.production,
+      ? OPENDUCKTOR_CONFIG_DIR_NAMES.dev
+      : OPENDUCKTOR_CONFIG_DIR_NAMES.production,
   );
 };
 

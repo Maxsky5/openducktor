@@ -1,13 +1,10 @@
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { OPENDUCKTOR_CONFIG_DIR_NAMES } from "@openducktor/contracts";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 import { HostResourceError, HostValidationError } from "../effect/host-errors";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
-const DEFAULT_CONFIG_DIR_NAMES = {
-  dev: ".openducktor-dev",
-  production: ".openducktor",
-} as const;
 
 export type OpenDucktorConfigDirScope = "dev" | "production" | "test";
 
@@ -67,5 +64,5 @@ export const resolveOpenDucktorBaseDir = (
     return path.join(tmpdir(), `openducktor-test-${process.pid}`);
   }
 
-  return path.join(resolveHomeDirectory(), DEFAULT_CONFIG_DIR_NAMES[scope]);
+  return path.join(resolveHomeDirectory(), OPENDUCKTOR_CONFIG_DIR_NAMES[scope]);
 };

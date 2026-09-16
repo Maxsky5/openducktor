@@ -39,6 +39,7 @@ export type * from "./codex-app-server-result-schemas";
 export * from "./codex-app-server-runtime-schemas";
 export { codexAppServerTurnSchema } from "./codex-app-server-thread-schemas";
 export type * from "./codex-app-server-thread-schemas";
+export * from "./config-directory";
 export * from "./config-schemas";
 export * from "./dev-server-schemas";
 export * from "./development-instance";
