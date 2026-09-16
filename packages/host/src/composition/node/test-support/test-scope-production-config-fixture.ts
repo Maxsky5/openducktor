@@ -1,5 +1,4 @@
 import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import type { WorkspaceSettingsService } from "../../../application/workspaces/workspace-settings-service";
@@ -27,13 +26,17 @@ const taskId = "fixture-task";
 const assetId = "550e8400-e29b-41d4-a716-446655440000";
 
 const run = async (): Promise<TestScopeProductionConfigResult> => {
-  const configDir = path.join(homedir(), ".openducktor");
   const configScenario = process.argv[2];
   if (configScenario !== "direct" && configScenario !== "symlink") {
     throw new Error("Expected a direct or symlink config scenario.");
   }
+  const homeDir = process.argv[3];
+  if (!homeDir || !path.isAbsolute(homeDir)) {
+    throw new Error("Expected an absolute test home directory.");
+  }
+  const configDir = path.join(homeDir, ".openducktor");
   const configuredConfigDir =
-    configScenario === "symlink" ? path.join(homedir(), ".openducktor-test-link") : configDir;
+    configScenario === "symlink" ? path.join(homeDir, ".openducktor-test-link") : configDir;
   const ownersRoot = path.join(configDir, "task-asset-owners");
   const stagingFile = path.join(
     configDir,

@@ -14,6 +14,7 @@ import {
   buildWebLauncherBaseEnv,
   logDuplicateWebTerminationNotice,
   preserveLauncherFailureAfterStop,
+  resolveWebConfigDirScope,
   resolveWebMcpBridgeDiscoveryMode,
   runLauncherEffect,
   runWebSignalShutdown,
@@ -1643,6 +1644,13 @@ describe("buildWebLauncherBaseEnv", () => {
   });
 });
 
+describe("resolveWebConfigDirScope", () => {
+  test("uses the development scope only in workspace mode", () => {
+    expect(resolveWebConfigDirScope(true)).toBe("dev");
+    expect(resolveWebConfigDirScope(false)).toBe("production");
+  });
+});
+
 describe("startWebLauncherHostBackendEffect", () => {
   test("passes the development instance id into the host process env", async () => {
     const startHost = spyOn(backend, "startTypescriptHostBackendEffect").mockReturnValue(
@@ -1668,8 +1676,40 @@ describe("startWebLauncherHostBackendEffect", () => {
       );
 
       const hostOptions = startHost.mock.calls[0]?.[0];
+      expect(hostOptions?.configDirScope).toBe("dev");
       expect(hostOptions?.processEnv?.[OPENDUCKTOR_DEV_INSTANCE_ENV]).toBe("instance-one");
       expect(hostOptions?.processEnv).not.toBe(process.env);
+    } finally {
+      startHost.mockRestore();
+    }
+  });
+
+  test("uses the production config scope outside workspace mode", async () => {
+    const startHost = spyOn(backend, "startTypescriptHostBackendEffect").mockReturnValue(
+      Effect.succeed({
+        port: 23456,
+        exited: Promise.resolve(0),
+        stop: async () => {},
+      }),
+    );
+    try {
+      await Effect.runPromise(
+        startWebLauncherHostBackendEffect({
+          port: 0,
+          frontendOrigin: "http://127.0.0.1:1420",
+          controlToken: "control-token",
+          appToken: "app-token",
+          logger: { error: () => Effect.void, info: () => Effect.void, success: () => Effect.void },
+          onBackgroundFailure: () => {},
+          runtimeDistribution: {
+            mode: "artifact",
+            mcpLauncher: { kind: "executable", executablePath: "/openducktor-mcp" },
+          },
+          workspaceMode: false,
+        }),
+      );
+
+      expect(startHost.mock.calls[0]?.[0].configDirScope).toBe("production");
     } finally {
       startHost.mockRestore();
     }

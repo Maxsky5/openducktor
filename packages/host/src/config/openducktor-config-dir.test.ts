@@ -27,6 +27,14 @@ describe("OpenDucktor config directory resolution", () => {
     },
   );
 
+  test("uses an explicit production path in test scope before file safety checks", () => {
+    expect(
+      resolveOpenDucktorBaseDir("test", {
+        [OPENDUCKTOR_CONFIG_DIR_ENV]: "~/.openducktor",
+      }),
+    ).toBe(path.join(homedir(), ".openducktor"));
+  });
+
   test("returns a test directory when the preload override is absent", () => {
     expect(resolveOpenDucktorBaseDir("test", {})).toBe(
       path.join(tmpdir(), `openducktor-test-${process.pid}`),

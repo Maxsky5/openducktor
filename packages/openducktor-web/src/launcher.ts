@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { OPENDUCKTOR_DEV_INSTANCE_ENV } from "@openducktor/contracts";
-import type { McpBridgeDiscoveryMode } from "@openducktor/host";
+import type { McpBridgeDiscoveryMode, OpenDucktorConfigDirScope } from "@openducktor/host";
 import { Effect } from "effect";
 import { z } from "zod";
 import { parseBasePathEffect } from "./browser-url-validation";
@@ -87,9 +87,12 @@ export type LauncherOptions = CommonLauncherOptions &
 export const resolveWebMcpBridgeDiscoveryMode = (workspaceMode: boolean): McpBridgeDiscoveryMode =>
   workspaceMode ? "development" : "production";
 
+export const resolveWebConfigDirScope = (workspaceMode: boolean): OpenDucktorConfigDirScope =>
+  workspaceMode ? "dev" : "production";
+
 type CommonWebLauncherHostBackendOptions = Omit<
   TypescriptHostBackendOptions,
-  "mcpBridgeDiscoveryMode" | "processEnv"
+  "configDirScope" | "mcpBridgeDiscoveryMode" | "processEnv"
 >;
 
 type WebLauncherDiscoverySelection =
@@ -117,6 +120,7 @@ export const startWebLauncherHostBackendEffect = ({
     : { workspaceMode: false };
   return startTypescriptHostBackendEffect({
     ...hostOptions,
+    configDirScope: resolveWebConfigDirScope(workspaceMode),
     mcpBridgeDiscoveryMode: resolveWebMcpBridgeDiscoveryMode(workspaceMode),
     processEnv: buildWebLauncherBaseEnv(selection),
   });

@@ -19,6 +19,10 @@ const taskAssetFileOwnerSchema = z
   .strict();
 
 export type TaskAssetFileOwner = z.infer<typeof taskAssetFileOwnerSchema>;
+export type TaskAssetOwnerProbeFailure = Readonly<{
+  cause: unknown;
+  owner: TaskAssetFileOwner;
+}>;
 type TaskAssetFileOwnerInput =
   | JSONType
   | {
@@ -110,9 +114,11 @@ export const createTaskAssetFileOwnership = (
   {
     configDir,
     fileChanges,
+    reportProbeFailure,
   }: {
     configDir: string;
     fileChanges: TaskAssetFileChanges;
+    reportProbeFailure(failure: TaskAssetOwnerProbeFailure): Promise<void>;
   },
   dependencies: TaskAssetFileOwnershipDependencies = defaultOwnership(),
 ) => {
@@ -148,7 +154,8 @@ export const createTaskAssetFileOwnership = (
     }
     try {
       return (await dependencies.processStartedAtMs(owner.processId)) > owner.startedAtMs;
-    } catch {
+    } catch (cause) {
+      await reportProbeFailure({ cause, owner });
       return false;
     }
   };

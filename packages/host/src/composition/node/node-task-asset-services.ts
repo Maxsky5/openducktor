@@ -51,6 +51,20 @@ export const createNodeTaskAssetServices = ({
   const filePort = createNodeTaskAssetFilePort({
     configDir: configDir.root,
     configDirScope: configDir.scope,
+    reportProbeFailure: ({ cause, owner }) =>
+      Effect.runPromise(
+        onBackgroundFailure(
+          new HostOperationError({
+            operation: "taskAssets.probeOwner",
+            message: `Could not verify task asset owner '${owner.instanceId}' process ${owner.processId}. OpenDucktor kept its staged files.`,
+            cause,
+            details: {
+              instanceId: owner.instanceId,
+              processId: owner.processId,
+            },
+          }),
+        ),
+      ),
   });
   const taskAssetStagingService = createTaskAssetStagingService(filePort);
   const contextManager = createSqliteTaskRepositoryContextManager({

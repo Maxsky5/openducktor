@@ -17,6 +17,7 @@ import { createTaskAssetFileSafety } from "./filesystem-task-asset-file-safety";
 import {
   createTaskAssetFileOwnership,
   type TaskAssetFileOwnershipDependencies,
+  type TaskAssetOwnerProbeFailure,
 } from "./filesystem-task-asset-ownership";
 import {
   createTaskAssetQuarantineFiles,
@@ -43,16 +44,21 @@ export const createNodeTaskAssetFilePort = (
   {
     configDir,
     configDirScope,
+    reportProbeFailure = rejectProbeFailure,
   }: {
     configDir: string;
     configDirScope: OpenDucktorConfigDirScope;
+    reportProbeFailure?: (failure: TaskAssetOwnerProbeFailure) => Promise<void>;
   },
   ownership?: TaskAssetFileOwnershipDependencies,
 ): TaskAssetFilePort => {
   const files = createTaskAssetFileSafety({ configDir, configDirScope });
   files.assertConfigDir();
   const durableRoot = path.resolve(configDir, "task-assets");
-  const ownerState = createTaskAssetFileOwnership({ configDir, fileChanges: files }, ownership);
+  const ownerState = createTaskAssetFileOwnership(
+    { configDir, fileChanges: files, reportProbeFailure },
+    ownership,
+  );
   const { ownedQuarantineRoot, ownedStagingRoot, quarantineRoot } = ownerState;
   const stagedPath = (workspaceId: string, assetId: string) =>
     path.join(ownedStagingRoot, workspaceId, assetId);
@@ -459,3 +465,7 @@ export const createNodeTaskAssetFilePort = (
     },
   };
 };
+
+function rejectProbeFailure(failure: TaskAssetOwnerProbeFailure): Promise<void> {
+  return Promise.reject(failure.cause);
+}

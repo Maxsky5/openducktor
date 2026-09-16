@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { Cause, Effect, Exit } from "effect";
 import { z } from "zod";
 import { createNodeTaskAssetFilePort } from "./filesystem-task-asset-file-port";
+import type { TaskAssetOwnerProbeFailure } from "./filesystem-task-asset-ownership";
 import type { TestScopeNestedSymlinkResult } from "./test-support/test-scope-nested-symlink-fixture";
 
 const roots: string[] = [];
@@ -29,13 +30,21 @@ const createHarness = async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
   roots.push(configDir);
   const aliveProcessIds = new Set([10_001]);
+  const probeFailures: TaskAssetOwnerProbeFailure[] = [];
   const processStartedAtMs = new Map([[10_001, 10_001]]);
   const createPort = (instanceId: string, processId: number) => {
     if (!processStartedAtMs.has(processId)) {
       processStartedAtMs.set(processId, processId);
     }
     return createNodeTaskAssetFilePort(
-      { configDir, configDirScope: "test" },
+      {
+        configDir,
+        configDirScope: "test",
+        reportProbeFailure: (failure) => {
+          probeFailures.push(failure);
+          return Promise.resolve();
+        },
+      },
       {
         owner: { version: 1, instanceId, processId, startedAtMs: processId },
         processIsAlive: (candidate) => aliveProcessIds.has(candidate),
@@ -54,6 +63,7 @@ const createHarness = async () => {
     configDir,
     createPort,
     port: createPort("10000000-0000-4000-8000-000000000001", 10_001),
+    probeFailures,
     processStartedAtMs,
   };
 };
@@ -405,7 +415,7 @@ describe("node task asset file port", () => {
   }, 1_000);
 
   test("keeps staging when a live owner's start-time probe fails", async () => {
-    const { aliveProcessIds, configDir, createPort, port, processStartedAtMs } =
+    const { aliveProcessIds, configDir, createPort, port, probeFailures, processStartedAtMs } =
       await createHarness();
     await Effect.runPromise(port.stage({ workspaceId, assetId, bytes: new Uint8Array([1]) }));
     processStartedAtMs.delete(10_001);
@@ -413,6 +423,17 @@ describe("node task asset file port", () => {
     const recoveryPort = createPort("10000000-0000-4000-8000-000000000002", 10_002);
 
     expect(await Effect.runPromise(recoveryPort.clearStaging())).toBe(0);
+    expect(probeFailures).toEqual([
+      {
+        cause: expect.objectContaining({
+          message: "Missing process start time for 10001.",
+        }),
+        owner: expect.objectContaining({
+          instanceId: "10000000-0000-4000-8000-000000000001",
+          processId: 10_001,
+        }),
+      },
+    ]);
     await expect(
       readFile(
         path.join(
@@ -428,16 +449,18 @@ describe("node task asset file port", () => {
   });
 
   test.each([
-    ["production root", path.join(homedir(), ".openducktor"), true],
-    ["production child", path.join(homedir(), ".openducktor", "task-test"), true],
-    ["similar sibling prefix", path.join(homedir(), ".openducktor-copy"), false],
+    ["production root", path.join(homedir(), ".openducktor"), "production"],
+    ["production child", path.join(homedir(), ".openducktor", "task-test"), "production"],
+    ["development root", path.join(homedir(), ".openducktor-dev"), "development"],
+    ["development child", path.join(homedir(), ".openducktor-dev", "task-test"), "development"],
+    ["similar sibling prefix", path.join(homedir(), ".openducktor-copy"), null],
   ] as const)(
-    "handles the test-scoped %s before a file operation can run",
-    (_, configDir, rejects) => {
+    "refuses the test-scoped %s before a file operation can run",
+    (_, configDir, blockedScope) => {
       const createPort = () => createNodeTaskAssetFilePort({ configDir, configDirScope: "test" });
-      if (rejects) {
+      if (blockedScope) {
         expect(createPort).toThrow(
-          "Test scope refuses task asset access under the production config directory",
+          `Test scope refuses task asset access under the ${blockedScope} config directory`,
         );
         return;
       }
@@ -446,16 +469,24 @@ describe("node task asset file port", () => {
   );
 
   test.each([
-    ["staged write", "stage", null],
-    ["staged delete", "removeStaged", [7]],
-    ["durable copy", "promote", null],
-    ["durable move", "quarantine", [7]],
+    ["production", "staged write", "stage", null],
+    ["production", "staged delete", "removeStaged", [7]],
+    ["production", "durable copy", "promote", null],
+    ["production", "durable move", "quarantine", [7]],
+    ["development", "staged write", "stage", null],
+    ["development", "staged delete", "removeStaged", [7]],
+    ["development", "durable copy", "promote", null],
+    ["development", "durable move", "quarantine", [7]],
   ] as const)(
-    "refuses a %s through a nested symlink to the production root",
-    async (_, action, expectedBytes) => {
+    "refuses a %s %s through a nested symlink",
+    async (liveScope, _, action, expectedBytes) => {
       const temporaryHome = await mkdtemp(path.join(tmpdir(), "openducktor-nested-guard-"));
       roots.push(temporaryHome);
-      const environment: NodeJS.ProcessEnv = { ...process.env, HOME: temporaryHome };
+      const environment: NodeJS.ProcessEnv = {
+        ...process.env,
+        HOME: temporaryHome,
+        USERPROFILE: temporaryHome,
+      };
       delete environment.OPENDUCKTOR_CONFIG_DIR;
       const child = Bun.spawn({
         cmd: [
@@ -464,6 +495,8 @@ describe("node task asset file port", () => {
             new URL("./test-support/test-scope-nested-symlink-fixture.ts", import.meta.url),
           ),
           action,
+          liveScope,
+          temporaryHome,
         ],
         env: environment,
         stderr: "pipe",
@@ -478,7 +511,7 @@ describe("node task asset file port", () => {
       expect(exitCode, stderr).toBe(0);
       const result = nestedSymlinkResultSchema.parse(JSON.parse(stdout));
       expect(result.error).toContain(
-        "Test scope refuses task asset access under the production config directory",
+        `Test scope refuses task asset access under the ${liveScope} config directory`,
       );
       expect(result.bytes).toEqual(expectedBytes === null ? null : [...expectedBytes]);
     },

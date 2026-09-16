@@ -1,5 +1,4 @@
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import path from "node:path";
 import { Cause, Effect, Exit } from "effect";
 import { z } from "zod";
@@ -25,23 +24,30 @@ const run = async (): Promise<TestScopeNestedSymlinkResult> => {
   ) {
     throw new Error("Expected a stage, removeStaged, promote, or quarantine action.");
   }
-  const productionRoot = path.join(homedir(), ".openducktor");
-  const configDir = path.join(homedir(), ".openducktor-test");
+  const liveScope = process.argv[3];
+  if (liveScope !== "production" && liveScope !== "development") {
+    throw new Error("Expected a production or development config scope.");
+  }
+  const homeDir = process.argv[4];
+  if (!homeDir || !path.isAbsolute(homeDir)) {
+    throw new Error("Expected an absolute test home directory.");
+  }
+  const liveRoot = path.join(
+    homeDir,
+    liveScope === "production" ? ".openducktor" : ".openducktor-dev",
+  );
+  const configDir = path.join(homeDir, ".openducktor-test");
   const usesStaging = action === "stage" || action === "removeStaged";
   const directoryName = usesStaging ? "task-asset-staging" : "task-assets";
-  const productionAsset = usesStaging
-    ? path.join(productionRoot, directoryName, "instances", ownerId, workspaceId, assetId)
-    : path.join(productionRoot, directoryName, workspaceId, taskId, assetId);
-  await mkdir(path.dirname(productionAsset), { recursive: true });
+  const liveAsset = usesStaging
+    ? path.join(liveRoot, directoryName, "instances", ownerId, workspaceId, assetId)
+    : path.join(liveRoot, directoryName, workspaceId, taskId, assetId);
+  await mkdir(path.dirname(liveAsset), { recursive: true });
   if (action === "removeStaged" || action === "quarantine") {
-    await writeFile(productionAsset, new Uint8Array([7]));
+    await writeFile(liveAsset, new Uint8Array([7]));
   }
   await mkdir(configDir, { recursive: true });
-  await symlink(
-    path.join(productionRoot, directoryName),
-    path.join(configDir, directoryName),
-    "dir",
-  );
+  await symlink(path.join(liveRoot, directoryName), path.join(configDir, directoryName), "dir");
 
   const port = createNodeTaskAssetFilePort(
     { configDir, configDirScope: "test" },
@@ -76,7 +82,7 @@ const run = async (): Promise<TestScopeNestedSymlinkResult> => {
     const parsed = z.object({ message: z.string() }).safeParse(source);
     error = parsed.success ? parsed.data.message : String(source);
   }
-  const bytes = await readFile(productionAsset).then(
+  const bytes = await readFile(liveAsset).then(
     (value) => [...value],
     (cause: NodeJS.ErrnoException) => {
       if (cause.code === "ENOENT") {

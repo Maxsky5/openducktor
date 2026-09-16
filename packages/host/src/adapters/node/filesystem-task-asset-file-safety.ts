@@ -13,13 +13,21 @@ export const createTaskAssetFileSafety = ({
   configDir: string;
   configDirScope: OpenDucktorConfigDirScope;
 }) => {
-  const productionRoot =
-    configDirScope === "test" ? resolveSymlinks(resolveOpenDucktorBaseDir("production", {})) : null;
+  const liveRoots =
+    configDirScope === "test"
+      ? (["production", "dev"] as const).map((scope) => ({
+          label: scope === "dev" ? "development" : scope,
+          path: resolveSymlinks(resolveOpenDucktorBaseDir(scope, {})),
+        }))
+      : [];
   const assertPathAllowed = (target: string): void => {
-    if (productionRoot !== null && isWithin(productionRoot, resolveSymlinks(target))) {
-      throw new Error(
-        `Test scope refuses task asset access under the production config directory ${productionRoot}.`,
-      );
+    const resolvedTarget = resolveSymlinks(target);
+    for (const root of liveRoots) {
+      if (isWithin(root.path, resolvedTarget)) {
+        throw new Error(
+          `Test scope refuses task asset access under the ${root.label} config directory ${root.path}.`,
+        );
+      }
     }
   };
   return {

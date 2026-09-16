@@ -37,7 +37,11 @@ test.each([
   async (_, scenario) => {
     const temporaryHome = await mkdtemp(path.join(tmpdir(), "openducktor-production-guard-"));
     roots.push(temporaryHome);
-    const environment: NodeJS.ProcessEnv = { ...process.env, HOME: temporaryHome };
+    const environment: NodeJS.ProcessEnv = {
+      ...process.env,
+      HOME: temporaryHome,
+      USERPROFILE: temporaryHome,
+    };
     delete environment.OPENDUCKTOR_CONFIG_DIR;
     const child = Bun.spawn({
       cmd: [
@@ -46,6 +50,7 @@ test.each([
           new URL("./test-support/test-scope-production-config-fixture.ts", import.meta.url),
         ),
         scenario,
+        temporaryHome,
       ],
       env: environment,
       stderr: "pipe",
