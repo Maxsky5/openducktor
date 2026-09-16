@@ -22,9 +22,15 @@ const createSnapshot = (): SettingsSnapshot =>
         workspaceId: "repo",
         workspaceName: "Repo",
         repoPath: "/repo",
-        defaultRuntimeKind: "codex",
         worktreeBasePath: undefined,
         branchPrefix: "odt",
+        defaultModel: {
+          runtimeKind: "codex",
+          providerId: "codex",
+          modelId: "gpt-5.4",
+          variant: "medium",
+          profileId: "",
+        },
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
         hooks: { preStart: [], postComplete: [] },
@@ -53,7 +59,7 @@ describe("settings runtime availability validation", () => {
 
     expect(validation.errorsByWorkspaceId).toEqual({
       repo: [
-        'Default agent runtime "Codex" is disabled.',
+        'Default Model runtime "Codex" is disabled.',
         'Builder agent runtime "Codex" is disabled.',
       ],
     });
@@ -70,7 +76,7 @@ describe("settings runtime availability validation", () => {
     expect(validation.totalErrorCount).toBe(0);
   });
 
-  test("allows dormant repository runtime references when every runtime is disabled", () => {
+  test("reports a disabled Default Model runtime when every runtime is disabled", () => {
     const snapshotDraft = createSnapshot();
     snapshotDraft.agentRuntimes.opencode.enabled = false;
 
@@ -79,8 +85,10 @@ describe("settings runtime availability validation", () => {
       snapshotDraft,
     });
 
-    expect(validation.errorsByWorkspaceId).toEqual({});
-    expect(validation.totalErrorCount).toBe(0);
+    expect(validation.errorsByWorkspaceId).toEqual({
+      repo: ['Default Model runtime "Codex" is disabled.'],
+    });
+    expect(validation.totalErrorCount).toBe(1);
   });
 
   test("reports an enabled runtime whose saved executable path is invalid", () => {

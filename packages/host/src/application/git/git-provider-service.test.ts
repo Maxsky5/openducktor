@@ -68,14 +68,12 @@ describe("GitProviderService", () => {
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
       git: {},
     });
     const contextRepoConfig = repoConfigSchema.parse({
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
       git: { provider: { id: "github", enabled: false } },
     });
     const repoConfigs = [detectionRepoConfig, contextRepoConfig];
@@ -122,7 +120,6 @@ describe("GitProviderService", () => {
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
       git: {},
     });
     const resolver = await Effect.runPromise(createGitProviderResolver([]));

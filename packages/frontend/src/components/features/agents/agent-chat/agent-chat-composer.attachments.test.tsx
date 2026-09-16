@@ -969,3 +969,21 @@ describe("first-message composer recovery", () => {
     },
   );
 });
+
+describe("AgentChatComposer selection controls", () => {
+  test("disables the agent selector when no model is selected", () => {
+    const withoutSelection = render(
+      <AgentChatComposer model={{ ...buildModel(), selectedModelSelection: null }} />,
+    );
+
+    expect(screen.getByRole("button", { name: "Agent" }).hasAttribute("disabled")).toBe(true);
+    withoutSelection.unmount();
+
+    const withSelection = render(<AgentChatComposer model={buildModel()} />);
+
+    expect(
+      screen.getByRole("button", { name: "Hephaestus (Deep Agent)" }).hasAttribute("disabled"),
+    ).toBe(false);
+    withSelection.unmount();
+  });
+});

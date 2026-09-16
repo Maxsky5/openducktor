@@ -207,9 +207,15 @@ const FILE_SEARCH_RESULTS: AgentFileSearchResult[] = [
 
 const createRepoSettings = (
   specDefault: RepoSettingsInput["agentDefaults"]["spec"] | null,
-  defaultRuntimeKind: RepoSettingsInput["defaultRuntimeKind"] = "opencode",
+  defaultModel: RepoSettingsInput["defaultModel"] = {
+    runtimeKind: "opencode",
+    providerId: "openai",
+    modelId: "gpt-5",
+    variant: "",
+    profileId: "",
+  },
 ): RepoSettingsInput => ({
-  defaultRuntimeKind,
+  defaultModel,
   worktreeBasePath: "",
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -844,7 +850,7 @@ describe("useAgentStudioChatComposer", () => {
             profileId: "build-agent",
           },
         }),
-        repoSettings: createRepoSettings(null, "opencode"),
+        repoSettings: createRepoSettings(null),
         loadCatalog: async () => CODEX_CATALOG,
       }),
       {
@@ -956,7 +962,13 @@ describe("useAgentStudioChatComposer", () => {
     const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const harness = createHookHarness(
       createBaseProps({
-        repoSettings: createRepoSettings(null, "codex"),
+        repoSettings: createRepoSettings(null, {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "",
+          profileId: "",
+        }),
         loadCatalog: async () => CODEX_CATALOG,
         loadFileSearch,
       }),
@@ -1127,7 +1139,7 @@ describe("useAgentStudioChatComposer", () => {
     });
     const harness = createHookHarness(
       createBaseProps({
-        repoSettings: createRepoSettings(null, "opencode"),
+        repoSettings: createRepoSettings(null),
         loadedSession,
         sessionRuntimeData: createSessionRuntimeData({
           modelCatalog: CODEX_CATALOG,
@@ -1433,6 +1445,7 @@ describe("useAgentStudioChatComposer", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
       await harness.waitFor((state) => state.selectedModelSelection?.modelId === "gpt-5");
 
       await harness.run(() => {
@@ -1672,7 +1685,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("invalidates composer catalog and ignores stale repo loads when active repo changes", async () => {
+  test("invalidates the composer catalog, ignores stale repo loads, and drops a default absent from the new catalog", async () => {
     const repoALoad = createDeferred<AgentModelCatalog>();
     const repoBLoad = createDeferred<AgentModelCatalog>();
     const loadCatalog = mock(({ repoPath }: RepoRuntimeRef): Promise<AgentModelCatalog> => {
@@ -1723,7 +1736,11 @@ describe("useAgentStudioChatComposer", () => {
       });
 
       expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
-      expect(harness.getLatest().selectedModelSelection).toBeNull();
+      expect(harness.getLatest().selectedModelSelection).toEqual({
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+      });
 
       await harness.run(async () => {
         repoBLoad.resolve(ALTERNATE_CATALOG);
@@ -1731,12 +1748,22 @@ describe("useAgentStudioChatComposer", () => {
       });
       await harness.waitFor(
         (state) =>
-          state.isSelectionCatalogLoading === false &&
-          state.selectedModelSelection?.modelId === "claude-opus",
+          state.isSelectionCatalogLoading === false && state.selectedModelSelection === null,
       );
 
-      const state = harness.getLatest();
-      expect(state.selectedModelSelection).toEqual({
+      expect(harness.getLatest().selectedModelSelection).toBeNull();
+      expect(harness.getLatest().selectionForNewSession).toBeNull();
+
+      await harness.run(() => {
+        harness.getLatest().modelPicker.onValueChange({
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-opus",
+        });
+      });
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-opus");
+
+      expect(harness.getLatest().selectedModelSelection).toEqual({
         runtimeKind: "opencode",
         providerId: "anthropic",
         modelId: "claude-opus",

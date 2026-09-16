@@ -41,7 +41,6 @@ const baseRepoConfigInput = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
 };
 
 const expectedDefaultChatSettings = {
@@ -264,6 +263,37 @@ describe("config-schemas", () => {
 
   test("requires explicit repo runtime kind", () => {
     expect(() => repoConfigSchema.parse({})).toThrow();
+  });
+
+  test("round-trips the repository default model and strips the legacy runtime kind", () => {
+    const parsed = repoConfigSchema.parse({
+      ...baseRepoConfigInput,
+      defaultModel: {
+        runtimeKind: "claude",
+        providerId: "anthropic",
+        modelId: "claude-sonnet-4",
+        variant: "thinking",
+        profileId: "reviewer",
+      },
+    });
+
+    expect(parsed).not.toHaveProperty("defaultRuntimeKind");
+    expect(parsed.defaultModel).toEqual({
+      runtimeKind: "claude",
+      providerId: "anthropic",
+      modelId: "claude-sonnet-4",
+      variant: "thinking",
+      profileId: "reviewer",
+    });
+  });
+
+  test("treats a null repository default model as no default", () => {
+    const parsed = repoConfigSchema.parse({
+      ...baseRepoConfigInput,
+      defaultModel: null,
+    });
+
+    expect(parsed.defaultModel).toBeUndefined();
   });
 
   test("defaults kanban settings for existing snapshots", () => {

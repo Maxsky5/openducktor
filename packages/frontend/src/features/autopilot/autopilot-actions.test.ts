@@ -35,6 +35,7 @@ import {
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
+import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 const runSessionStartWorkflowMock = mock(
@@ -71,7 +72,6 @@ const createRepoConfig = (): RepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: undefined,
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -135,6 +135,27 @@ const setGitProviderContext = (
   queryClient.setQueryData(repositoryGitProviderContextQueryOptions("/repo").queryKey, context);
 };
 
+const CATALOG: AgentModelCatalog = {
+  models: [
+    {
+      id: "openai",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "gpt-5",
+      modelName: "GPT-5",
+      variants: ["high"],
+    },
+  ],
+  defaultModelsByProvider: {
+    openai: "gpt-5",
+  },
+  profiles: [
+    { id: "planner", label: "Planner", mode: "primary" },
+    { id: "builder", label: "Builder", mode: "primary" },
+    { id: "qa", label: "QA", mode: "primary" },
+  ],
+};
+
 const createExecuteArgs = (task: TaskCard) => {
   const loadTaskSessionRecords = mock(async (): Promise<AgentSessionRecord[]> => []);
 
@@ -148,22 +169,7 @@ const createExecuteArgs = (task: TaskCard) => {
     alwaysStartQaReviewsFresh: false,
     queryClient: createQueryClient(),
     loadTaskSessionRecords,
-    loadRepoRuntimeCatalog: mock(async (): Promise<AgentModelCatalog> => ({
-      models: [
-        {
-          id: "openai",
-          providerId: "openai",
-          providerName: "OpenAI",
-          modelId: "gpt-5",
-          modelName: "GPT-5",
-          variants: ["high"],
-        },
-      ],
-      defaultModelsByProvider: {
-        openai: "gpt-5",
-      },
-      profiles: [{ id: "planner", label: "Planner", mode: "primary" }],
-    })),
+    loadRepoRuntimeCatalog: mock(async (): Promise<AgentModelCatalog> => CATALOG),
     loadRepoRuntimeSlashCommands: mock(async () => ({ commands: [] })),
     loadRepoRuntimeFileSearch: mock(async () => []),
     resolveTaskWorktree: mock(async (): Promise<{ workingDirectory: string } | null> => null),
@@ -525,6 +531,31 @@ describe("autopilot feature helpers", () => {
     );
   });
 
+  test("reuses the fresh catalog from the query cache without another read", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-QA-CACHED", status: "ai_review" }));
+    args.loadRepoRuntimeCatalog.mockImplementation(async (): Promise<AgentModelCatalog> => {
+      throw new Error("The catalog reader must not run for a fresh cached catalog.");
+    });
+    args.queryClient.setQueryData(runtimeCatalogQueryKeys.repo("/repo", "opencode"), CATALOG);
+
+    await executeAutopilotAction({ ...args, actionId: "startQa", alwaysStartQaReviewsFresh: true });
+
+    expect(args.loadRepoRuntimeCatalog).not.toHaveBeenCalled();
+    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: expect.objectContaining({
+          startMode: "fresh",
+          selectedModel: expect.objectContaining({
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+          }),
+        }),
+      }),
+    );
+  });
+
   test("forces a fresh decision for each enabled QA invocation", async () => {
     const args = createExecuteArgs(createTask({ id: "TASK-QA-REPEAT", status: "ai_review" }));
     args.resolveTaskWorktree.mockResolvedValue({
@@ -638,7 +669,9 @@ describe("autopilot feature helpers", () => {
     args.resolveTaskWorktree.mockResolvedValue({
       workingDirectory: "/tmp/repo/current-worktree",
     });
-    args.loadRepoRuntimeCatalog.mockRejectedValue(new Error("catalog failed"));
+    args.loadRepoRuntimeCatalog.mockRejectedValue(
+      new Error("Cannot resolve the selected runtime. Start it from the runtime controls."),
+    );
 
     await expect(
       executeAutopilotAction({
@@ -646,9 +679,39 @@ describe("autopilot feature helpers", () => {
         actionId: "startQa",
         alwaysStartQaReviewsFresh: true,
       }),
-    ).rejects.toThrow("catalog failed");
+    ).rejects.toThrow(
+      "The saved QA default or repository Default Model for runtime opencode could not load. Cannot resolve the selected runtime. Start it from the runtime controls. Update the default in Settings > Repositories > Agents.",
+    );
 
     expect(args.loadTaskSessionRecords).not.toHaveBeenCalled();
+    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
+  });
+
+  test("fails with a named error when no session default model is configured", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-QA-NO-DEFAULT", status: "ai_review" }));
+    args.queryClient.setQueryData(repoConfigQueryOptions("repo").queryKey, {
+      ...createRepoConfig(),
+      defaultModel: undefined,
+      agentDefaults: { spec: undefined, planner: undefined, build: undefined, qa: undefined },
+    });
+
+    await expect(executeAutopilotAction({ ...args, actionId: "startQa" })).rejects.toThrow(
+      "No model is configured for the QA session. Set a QA default or the repository Default Model in Settings > Repositories > Agents.",
+    );
+    expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
+  });
+
+  test("fails with a named error when the configured default model is unavailable", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-QA-UNAVAILABLE", status: "ai_review" }));
+    args.queryClient.setQueryData(repoConfigQueryOptions("repo").queryKey, {
+      ...createRepoConfig(),
+      defaultModel: { runtimeKind: "opencode", providerId: "openai", modelId: "missing-model" },
+      agentDefaults: { spec: undefined, planner: undefined, build: undefined, qa: undefined },
+    });
+
+    await expect(executeAutopilotAction({ ...args, actionId: "startQa" })).rejects.toThrow(
+      "The saved QA default or repository Default Model is not available for runtime opencode. Update it in Settings > Repositories > Agents.",
+    );
     expect(runSessionStartWorkflowMock).not.toHaveBeenCalled();
   });
 

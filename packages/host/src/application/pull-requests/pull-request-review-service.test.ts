@@ -22,7 +22,6 @@ const makeRepoConfig = (providerId: GitProviderId): RepoConfig =>
     workspaceId: "repo",
     workspaceName: "Repo",
     repoPath: "/repo",
-    defaultRuntimeKind: "opencode",
     git: {
       provider: { id: providerId, enabled: true },
     },

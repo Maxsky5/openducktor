@@ -595,6 +595,12 @@ const composerInputDisabledFor = ({
   );
 };
 
+const composerSelectorDisabledFor = (
+  model: AgentChatComposerModel,
+  modelPickerDisabled: boolean,
+): boolean =>
+  model.isSelectionCatalogLoading || modelPickerDisabled || !model.selectedModelSelection;
+
 export function AgentChatComposer({
   model,
   ref,
@@ -614,7 +620,6 @@ export function AgentChatComposer({
     isSessionWorking,
     isModelSelectionPending,
     selectedModelDescriptor,
-    isSelectionCatalogLoading,
     supportsAttachments,
     accentColor: composerAccentColor,
     composerEditorRef,
@@ -749,7 +754,7 @@ export function AgentChatComposer({
   }, [attachmentLayoutKey, syncBottomAfterComposerLayoutRef]);
 
   const modelPickerDisabled = isSubmitting || !isInteractionEnabled || isReadOnly;
-  const selectorDisabled = isSelectionCatalogLoading || modelPickerDisabled;
+  const selectorDisabled = composerSelectorDisabledFor(model, modelPickerDisabled);
 
   const scheduleComposerFocus = useAgentChatComposerFocus({
     composerEditorRef,

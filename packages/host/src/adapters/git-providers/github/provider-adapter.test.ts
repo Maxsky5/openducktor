@@ -13,7 +13,6 @@ const repoConfig = (host = "github.com") =>
     workspaceId: "repo",
     workspaceName: "Repo",
     repoPath: "/repo",
-    defaultRuntimeKind: "opencode",
     git: {
       provider: {
         id: "github",
@@ -70,7 +69,6 @@ describe("GithubProviderAdapter", () => {
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
       git: { provider: { id: "github", enabled: true } },
     });
 
@@ -144,7 +142,6 @@ describe("GithubProviderAdapter", () => {
       workspaceId: "repo",
       workspaceName: "Repo",
       repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
       git: {
         provider: {
           id: "github",

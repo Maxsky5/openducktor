@@ -60,9 +60,9 @@ export const buildState = (overrides: Partial<DevServerGroupState> = {}): DevSer
 });
 
 export const repoSettings: RepoSettingsInput = {
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "",
+  defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
   preStartHooks: [],
   postCompleteHooks: [],

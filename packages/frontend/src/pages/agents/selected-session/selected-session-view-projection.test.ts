@@ -20,9 +20,9 @@ import {
 const repoPath = "/repo";
 const readModelLoadState = readyAgentSessionReadModelLoadState(repoPath);
 const repoSettings = {
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: "",
   branchPrefix: "",
+  defaultModel: null,
   defaultTargetBranch: { remote: "origin", branch: "main" },
   preStartHooks: [],
   postCompleteHooks: [],

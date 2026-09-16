@@ -1,6 +1,7 @@
 import type { AgentModelSelection } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import { type ModelPickerValue } from "@/components/features/agents/model-picker";
+import { coerceVisibleSelectionToCatalog } from "@/features/model-selection/model-selection-state";
 import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
@@ -19,7 +20,11 @@ const onModelPickerOpenChange = (): void => {};
 const noCreationResources = [] as const;
 
 /** Uses the existing model picker and selection policies for both creation and chat. */
-export function useWorkspaceSessionModelPicker(repoPath: string, session?: SessionModelTarget) {
+export function useWorkspaceSessionModelPicker(
+  repoPath: string,
+  session?: SessionModelTarget,
+  defaultSelection?: AgentModelSelection | null,
+) {
   const { availableRuntimeDefinitions, allRuntimeDefinitions, loadRepoRuntimeCatalog } =
     useRuntimeAvailabilityContext();
   const [draftSelection, setDraftSelection] = useState<AgentModelSelection | null>(null);
@@ -40,7 +45,19 @@ export function useWorkspaceSessionModelPicker(repoPath: string, session?: Sessi
   const favoriteState = useAgentModelFavorites({
     saveAgentModelFavorites: host.workspaceUpdateAgentModelFavorites,
   });
-  const selection = session ? session.selection : draftSelection;
+  const creationDefaultSelection = useMemo(() => {
+    const defaultRuntimeKind = defaultSelection?.runtimeKind;
+    if (!defaultSelection || !defaultRuntimeKind) {
+      return null;
+    }
+    const defaultCatalog =
+      resources.find((entry) => entry.runtimeKind === defaultRuntimeKind)?.catalog ?? null;
+    if (!defaultCatalog) {
+      return null;
+    }
+    return coerceVisibleSelectionToCatalog(defaultCatalog, defaultSelection);
+  }, [defaultSelection, resources]);
+  const selection = session ? session.selection : (draftSelection ?? creationDefaultSelection);
   const creationResources = session ? noCreationResources : resources;
   const projected = useMemo(
     () => projectWorkspaceModelResources(definitions, creationResources, selection, session),

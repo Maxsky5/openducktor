@@ -110,7 +110,6 @@ const historyHarness = async (
             workspaceId: "workspace",
             workspaceName: "Workspace",
             repoPath,
-            defaultRuntimeKind: "codex",
             worktreeBasePath: rootKind === "configured" ? managedRoot : undefined,
           }),
         ),

@@ -22,9 +22,15 @@ const createInitialSnapshot = (): SettingsSnapshot =>
         workspaceId: "repo-a",
         workspaceName: "Repo A",
         repoPath: "/repo-a",
-        defaultRuntimeKind: "opencode",
         worktreeBasePath: "/tmp/a",
         branchPrefix: "obp",
+        defaultModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "",
+          profileId: "",
+        },
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},
         hooks: { preStart: [], postComplete: [] },
@@ -203,6 +209,38 @@ describe("useSettingsModalDraftActions", () => {
     await harness.unmount();
   });
 
+  test("updates and clears the selected repository Default Model", async () => {
+    const harness = createHookHarness({
+      selectedWorkspaceId: "repo-a",
+      initialSnapshot: createInitialSnapshot(),
+    });
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.updateSelectedRepoDefaultModel("runtimeKind", "codex");
+      state.updateSelectedRepoDefaultModel("providerId", "openai");
+      state.updateSelectedRepoDefaultModel("modelId", "o3");
+      state.updateSelectedRepoDefaultModel("variant", "high");
+      state.updateSelectedRepoDefaultModel("profileId", "builder");
+    });
+
+    expect(harness.getLatest().snapshotDraft?.workspaces["repo-a"]?.defaultModel).toEqual({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "o3",
+      variant: "high",
+      profileId: "builder",
+    });
+
+    await harness.run((state) => {
+      state.clearSelectedRepoDefaultModel();
+    });
+
+    expect(harness.getLatest().snapshotDraft?.workspaces["repo-a"]?.defaultModel).toBeUndefined();
+
+    await harness.unmount();
+  });
+
   test("preserves the inherited repo default runtime when editing role fields", async () => {
     const initialSnapshot = createInitialSnapshot();
     const selectedRepo = initialSnapshot.workspaces["repo-a"];
@@ -212,7 +250,6 @@ describe("useSettingsModalDraftActions", () => {
 
     initialSnapshot.workspaces["repo-a"] = {
       ...selectedRepo,
-      defaultRuntimeKind: "opencode",
     };
 
     const harness = createHookHarness({

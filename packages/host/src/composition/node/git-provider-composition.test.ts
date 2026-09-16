@@ -29,7 +29,6 @@ test("node composition registers the GitHub provider", async () => {
     workspaceId: "repo",
     workspaceName: "Repo",
     repoPath: "/repo",
-    defaultRuntimeKind: "opencode",
     git: { provider: { id: "github", enabled: true } },
   });
 

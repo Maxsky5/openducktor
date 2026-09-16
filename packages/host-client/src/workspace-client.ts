@@ -9,7 +9,6 @@ import {
   type RepositoryGitProviderContext,
   repositoryGitProviderContextSchema,
   type RepoConfig,
-  type RuntimeKind,
   repoConfigSchema,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
@@ -49,7 +48,6 @@ export type WorkspaceCreateInput = {
   workspaceId: string;
   workspaceName: string;
   repoPath: string;
-  defaultRuntimeKind?: RuntimeKind;
 };
 
 const workspaceAdd = async (

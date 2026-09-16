@@ -105,19 +105,6 @@ export const loadTaskWorktree = async (
   return host.taskWorktreeGet(repoPath, taskId);
 };
 
-export const loadRepoDefaultRuntimeKind = async (
-  workspaceId: string,
-  role: AgentRole,
-  loadRepoConfig: RepoConfigLoader = defaultRepoConfigLoader,
-): Promise<RuntimeKind> => {
-  const config = await loadRepoConfig(workspaceId);
-  const roleDefault = config?.agentDefaults?.[role];
-  return requireConfiguredRuntimeKind(
-    roleDefault?.runtimeKind ?? config?.defaultRuntimeKind,
-    `Runtime kind is not configured for ${role} sessions. Select a ${role} agent runtime or repository default runtime before starting a session.`,
-  );
-};
-
 export const requireConfiguredRuntimeKind = (
   runtimeKind: RuntimeKind | null | undefined,
   contextMessage: string,

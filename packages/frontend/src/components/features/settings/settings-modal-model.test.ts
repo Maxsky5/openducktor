@@ -22,6 +22,7 @@ import {
   togglePromptOverrideEnabled,
   toRoleVariantOptions,
   updatePromptOverrideTemplate,
+  updateRepoDefaultModel,
   updateRoleDefault,
 } from "./settings-modal-model";
 
@@ -64,7 +65,13 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
+  defaultModel: {
+    runtimeKind: "opencode",
+    providerId: "openai",
+    modelId: "gpt-5",
+    variant: "",
+    profileId: "",
+  },
   worktreeBasePath: undefined,
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -109,6 +116,34 @@ describe("settings-modal-model", () => {
       variant: "",
       profileId: "",
     });
+  });
+
+  test("updates the repository default model immutably", () => {
+    const next = updateRepoDefaultModel(
+      {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "",
+        profileId: "",
+      },
+      "profileId",
+      "builder",
+    );
+
+    expect(next).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "",
+      profileId: "builder",
+    });
+  });
+
+  test("skips the repository default model update when no runtime kind exists", () => {
+    expect(
+      updateRepoDefaultModel({ providerId: "openai", modelId: "gpt-5" }, "profileId", "builder"),
+    ).toBeNull();
   });
 
   test("updates and clears role defaults immutably", () => {
@@ -188,7 +223,6 @@ describe("settings-modal-model", () => {
     expect(
       resolveRepoAgentDefaultRuntimeKind({
         selectedRepoConfig: createRepoConfig({
-          defaultRuntimeKind: "opencode",
           agentDefaults: {
             spec: undefined,
             planner: undefined,
@@ -206,7 +240,6 @@ describe("settings-modal-model", () => {
     expect(
       getNeededCatalogRuntimeKinds(
         createRepoConfig({
-          defaultRuntimeKind: "opencode",
           agentDefaults: {
             spec: {
               runtimeKind: "opencode",
@@ -239,7 +272,6 @@ describe("settings-modal-model", () => {
     expect(
       getNeededCatalogRuntimeKinds(
         createRepoConfig({
-          defaultRuntimeKind: "opencode",
           agentDefaults: {
             spec: {
               runtimeKind: "opencode",

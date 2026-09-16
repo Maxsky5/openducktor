@@ -7,7 +7,6 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   workspaceId: "repo-a",
   workspaceName: "Repo A",
   repoPath: "/repo-a",
-  defaultRuntimeKind: "opencode",
   worktreeBasePath: "  /tmp/worktrees  ",
   branchPrefix: "  ",
   defaultTargetBranch: { remote: "origin", branch: "main" },

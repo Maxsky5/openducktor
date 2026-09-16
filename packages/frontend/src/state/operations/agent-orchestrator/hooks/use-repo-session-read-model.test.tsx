@@ -41,7 +41,6 @@ const createReadOnlyRepoConfig = (): RepoConfig => ({
   workspaceId: "/repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "codex",
   branchPrefix: "odt/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},

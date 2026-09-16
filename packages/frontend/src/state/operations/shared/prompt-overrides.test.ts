@@ -9,7 +9,6 @@ const createRepoConfig = (): RepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/repo",
-  defaultRuntimeKind: "opencode",
   branchPrefix: "odt/",
   defaultTargetBranch: {
     remote: "origin",

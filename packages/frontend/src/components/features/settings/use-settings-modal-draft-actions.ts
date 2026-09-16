@@ -7,7 +7,7 @@ import type {
   SettingsSnapshot,
 } from "@openducktor/contracts";
 import { useCallback } from "react";
-import { ensureDraftAgentDefault } from "@/components/features/settings";
+import { ensureDraftAgentDefault, updateRepoDefaultModel } from "./settings-modal-model";
 import type { SettingsSnapshotDraftUpdater } from "./use-settings-modal-snapshot-state";
 
 type UseSettingsModalDraftActionsArgs = {
@@ -58,6 +58,11 @@ export type SettingsModalDraftActions = {
     value: string,
   ) => void;
   clearSelectedRepoAgentDefault: (role: "spec" | "planner" | "build" | "qa") => void;
+  updateSelectedRepoDefaultModel: (
+    field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
+    value: string,
+  ) => void;
+  clearSelectedRepoDefaultModel: () => void;
 };
 
 export const useSettingsModalDraftActions = ({
@@ -219,7 +224,7 @@ export const useSettingsModalDraftActions = ({
         const currentRoleDefault = repoConfig.agentDefaults[role];
         const nextRoleDefault = {
           ...ensureDraftAgentDefault(currentRoleDefault),
-          runtimeKind: currentRoleDefault?.runtimeKind ?? repoConfig.defaultRuntimeKind,
+          runtimeKind: currentRoleDefault?.runtimeKind ?? repoConfig.defaultModel?.runtimeKind,
         };
 
         return {
@@ -250,6 +255,26 @@ export const useSettingsModalDraftActions = ({
     [updateSelectedRepoConfig],
   );
 
+  const updateSelectedRepoDefaultModel = useCallback(
+    (
+      field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
+      value: string,
+    ): void => {
+      updateSelectedRepoConfig((repoConfig) => {
+        const nextDefaultModel = updateRepoDefaultModel(repoConfig.defaultModel, field, value);
+        return nextDefaultModel ? { ...repoConfig, defaultModel: nextDefaultModel } : repoConfig;
+      });
+    },
+    [updateSelectedRepoConfig],
+  );
+
+  const clearSelectedRepoDefaultModel = useCallback((): void => {
+    updateSelectedRepoConfig((repoConfig) => ({
+      ...repoConfig,
+      defaultModel: undefined,
+    }));
+  }, [updateSelectedRepoConfig]);
+
   return {
     updateCustomAgentRoles,
     updateSelectedRepoConfig,
@@ -267,5 +292,7 @@ export const useSettingsModalDraftActions = ({
     updateRepoPromptOverrides,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
+    updateSelectedRepoDefaultModel,
+    clearSelectedRepoDefaultModel,
   };
 };

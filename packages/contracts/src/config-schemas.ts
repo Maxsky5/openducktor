@@ -390,7 +390,7 @@ export const repoConfigSchema = z.object({
   workspaceId: workspaceIdSchema,
   workspaceName: workspaceNameSchema,
   repoPath: trimmedRequiredString("Repository path"),
-  defaultRuntimeKind: runtimeKindSchema,
+  defaultModel: nullableToOptional(agentModelDefaultSchema),
   worktreeBasePath: nullableToOptional(z.string().min(1)),
   branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
   defaultTargetBranch: gitTargetBranchSchema.default({
@@ -435,7 +435,7 @@ export type WorkspaceRepoHooksInput = z.output<typeof workspaceRepoHooksInputSch
 
 export const workspaceRepoConfigInputSchema = repoConfigSchema
   .pick({
-    defaultRuntimeKind: true,
+    defaultModel: true,
     worktreeBasePath: true,
     branchPrefix: true,
     defaultTargetBranch: true,

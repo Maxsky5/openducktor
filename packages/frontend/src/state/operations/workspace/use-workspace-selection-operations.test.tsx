@@ -126,7 +126,6 @@ describe("use-workspace-selection-operations", () => {
           workspaceId: "repo-new",
           workspaceName: "Repo New",
           repoPath: "  /repo-new  ",
-          defaultRuntimeKind: "codex",
         });
       });
 
@@ -134,7 +133,6 @@ describe("use-workspace-selection-operations", () => {
         workspaceId: "repo-new",
         workspaceName: "Repo New",
         repoPath: "/repo-new",
-        defaultRuntimeKind: "codex",
       });
       expect(workspaceList).toHaveBeenCalled();
     } finally {

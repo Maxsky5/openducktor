@@ -430,6 +430,22 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
+  test("disables the runtime profile selector when no model is selected", () => {
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({ selectedModelSelection: null }),
+      }),
+    );
+
+    expect(getFieldButton("session-start-runtime-profile-field").hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(getFieldButton("session-start-variant-field").hasAttribute("disabled")).toBe(true);
+    expect(getFieldButton("session-start-model-picker-field").hasAttribute("disabled")).toBe(false);
+
+    unmount();
+  });
+
   test("keeps existing-session selection visible and model controls enabled in fork mode", () => {
     const { unmount } = render(
       createElement(SessionStartModal, {

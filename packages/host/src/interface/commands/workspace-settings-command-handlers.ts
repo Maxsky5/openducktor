@@ -3,7 +3,6 @@ import {
   customAgentRoleInputSchema,
   globalGitConfigSchema,
   repoHooksSchema,
-  runtimeKindSchema,
   settingsSnapshotSaveInputSchema,
   themePreferenceSchema,
   workspaceRepoConfigInputSchema,
@@ -72,19 +71,6 @@ const requireStringArray = (result: z.ZodSafeParseResult<unknown[]>, label: stri
   return result.data.map((entry, index) =>
     requireString(commandInputStringSchema.safeParse(entry), `${label}[${index}]`),
   );
-};
-
-const optionalRuntimeKind = (record: CommandInputRecord) => {
-  if (record.defaultRuntimeKind === undefined) return undefined;
-  const parsed = runtimeKindSchema.safeParse(record.defaultRuntimeKind);
-  if (!parsed.success) {
-    throw new HostValidationError({
-      message: "defaultRuntimeKind must be a supported runtime kind.",
-      field: "defaultRuntimeKind",
-      cause: parsed.error,
-    });
-  }
-  return parsed.data;
 };
 
 const parseRepoConfigInput = (
@@ -172,7 +158,6 @@ export const createWorkspaceSettingsCommandHandlers = (
     },
     workspace_add: (args) => {
       const record = requireRecord(commandInputRecordSchema.safeParse(args), "workspace_add input");
-      const defaultRuntimeKind = optionalRuntimeKind(record);
       const input: Parameters<typeof workspaceSettingsService.addWorkspace>[0] = {
         workspaceId: requireString(
           commandInputStringSchema.safeParse(record.workspaceId),
@@ -184,9 +169,6 @@ export const createWorkspaceSettingsCommandHandlers = (
         ),
         repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
       };
-      if (defaultRuntimeKind) {
-        input.defaultRuntimeKind = defaultRuntimeKind;
-      }
       return workspaceSettingsService.addWorkspace(input);
     },
     workspace_select: (args) =>

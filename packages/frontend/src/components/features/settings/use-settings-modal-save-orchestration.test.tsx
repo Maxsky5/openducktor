@@ -23,7 +23,6 @@ const createSnapshot = (): SettingsSnapshot =>
         workspaceId: "repo",
         workspaceName: "Repo",
         repoPath: "/repo",
-        defaultRuntimeKind: "opencode",
         branchPrefix: "odt",
         defaultTargetBranch: { remote: "origin", branch: "main" },
         git: {},

@@ -187,7 +187,6 @@ const registerDependencySpies = (): void => {
     workspaceId: "workspace-repo",
     workspaceName: "Repo",
     repoPath: "/repo",
-    defaultRuntimeKind: "opencode",
     branchPrefix: "odt/",
     defaultTargetBranch: { remote: "origin", branch: "main" },
     git: {},

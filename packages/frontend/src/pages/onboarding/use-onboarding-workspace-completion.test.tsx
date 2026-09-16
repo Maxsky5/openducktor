@@ -77,7 +77,6 @@ describe("useOnboardingWorkspaceCompletion", () => {
         workspaceId: "project",
         workspaceName: "Project",
         repoPath: "/repos/project",
-        defaultRuntimeKind: "codex",
       });
       expect(onComplete).toHaveBeenCalledTimes(1);
     } finally {

@@ -11,7 +11,6 @@ const repoConfig: RepoConfig = {
   workspaceId: "repo",
   workspaceName: "Repo",
   repoPath: "/canonical/repo",
-  defaultRuntimeKind: "opencode",
   branchPrefix: "odt",
   defaultTargetBranch: { remote: "origin", branch: "main" },
   git: {},

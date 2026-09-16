@@ -365,9 +365,15 @@ const createBaseArgs = (): HookArgs => {
     },
     reusablePrompts: [],
     repoSettings: {
-      defaultRuntimeKind: "opencode",
       worktreeBasePath: "",
       branchPrefix: "task/",
+      defaultModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "",
+        profileId: "",
+      },
       defaultTargetBranch: { remote: "origin", branch: "main" },
       preStartHooks: [],
       postCompleteHooks: [],
@@ -396,7 +402,6 @@ describe("useAgentStudioSessionActions", () => {
         workspaceId: "repo",
         workspaceName: "Repo",
         repoPath: "/repo",
-        defaultRuntimeKind: "opencode",
         promptOverrides: {},
       });
     host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();

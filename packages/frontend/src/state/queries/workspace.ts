@@ -1,4 +1,5 @@
 import {
+  type AgentModelDefault,
   type ChatSettings,
   chatSettingsSchema,
   type RepoConfig,
@@ -7,7 +8,7 @@ import {
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { normalizeTargetBranch } from "@/lib/target-branch";
-import type { RepoSettingsInput } from "@/types/state-slices";
+import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import { host } from "../operations/host";
 
 type SettingsSnapshotQueryHost = Pick<typeof host, "workspaceGetSettingsSnapshot">;
@@ -29,8 +30,21 @@ export const workspaceQueryKeys = {
   list: () => [...workspaceQueryKeys.all, "list"] as const,
 };
 
+const toRepoAgentDefaultInput = (
+  value: AgentModelDefault | undefined,
+): RepoAgentDefaultInput | null =>
+  value
+    ? {
+        runtimeKind: value.runtimeKind,
+        providerId: value.providerId,
+        modelId: value.modelId,
+        variant: value.variant ?? "",
+        profileId: value.profileId ?? "",
+      }
+    : null;
+
 export const toRepoSettingsInput = (config: RepoConfig): RepoSettingsInput => ({
-  defaultRuntimeKind: config.defaultRuntimeKind,
+  defaultModel: toRepoAgentDefaultInput(config.defaultModel),
   worktreeBasePath: config.worktreeBasePath ?? "",
   branchPrefix: config.branchPrefix,
   defaultTargetBranch: normalizeTargetBranch(config.defaultTargetBranch),
@@ -39,42 +53,10 @@ export const toRepoSettingsInput = (config: RepoConfig): RepoSettingsInput => ({
   devServers: config.devServers ?? [],
   worktreeCopyPaths: config.worktreeCopyPaths ?? [],
   agentDefaults: {
-    spec: config.agentDefaults.spec
-      ? {
-          runtimeKind: config.agentDefaults.spec.runtimeKind,
-          providerId: config.agentDefaults.spec.providerId,
-          modelId: config.agentDefaults.spec.modelId,
-          variant: config.agentDefaults.spec.variant ?? "",
-          profileId: config.agentDefaults.spec.profileId ?? "",
-        }
-      : null,
-    planner: config.agentDefaults.planner
-      ? {
-          runtimeKind: config.agentDefaults.planner.runtimeKind,
-          providerId: config.agentDefaults.planner.providerId,
-          modelId: config.agentDefaults.planner.modelId,
-          variant: config.agentDefaults.planner.variant ?? "",
-          profileId: config.agentDefaults.planner.profileId ?? "",
-        }
-      : null,
-    build: config.agentDefaults.build
-      ? {
-          runtimeKind: config.agentDefaults.build.runtimeKind,
-          providerId: config.agentDefaults.build.providerId,
-          modelId: config.agentDefaults.build.modelId,
-          variant: config.agentDefaults.build.variant ?? "",
-          profileId: config.agentDefaults.build.profileId ?? "",
-        }
-      : null,
-    qa: config.agentDefaults.qa
-      ? {
-          runtimeKind: config.agentDefaults.qa.runtimeKind,
-          providerId: config.agentDefaults.qa.providerId,
-          modelId: config.agentDefaults.qa.modelId,
-          variant: config.agentDefaults.qa.variant ?? "",
-          profileId: config.agentDefaults.qa.profileId ?? "",
-        }
-      : null,
+    spec: toRepoAgentDefaultInput(config.agentDefaults.spec),
+    planner: toRepoAgentDefaultInput(config.agentDefaults.planner),
+    build: toRepoAgentDefaultInput(config.agentDefaults.build),
+    qa: toRepoAgentDefaultInput(config.agentDefaults.qa),
   },
 });
 

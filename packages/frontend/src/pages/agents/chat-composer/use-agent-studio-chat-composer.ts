@@ -43,7 +43,7 @@ import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer
 import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { useChatComposerSubagents } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-subagents";
-import { availableRoleDefaultSelectionFor } from "@/features/session-start/session-start-selection";
+import { availableDefaultSessionSelectionFor } from "@/features/session-start/session-start-selection";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
@@ -198,9 +198,9 @@ export function useAgentStudioChatComposer({
   const repoReadinessState = selectedSession.runtimeReadiness.state;
   const isRepoRuntimeReady = repoReadinessState === "ready";
   const hasSessionTarget = selectedSessionIdentity !== null;
-  const roleDefaultSelection = useMemo(
+  const defaultSelection = useMemo(
     () =>
-      availableRoleDefaultSelectionFor({
+      availableDefaultSessionSelectionFor({
         repoSettings,
         role,
         runtimeDefinitions: availableRuntimeDefinitions,
@@ -210,7 +210,7 @@ export function useAgentStudioChatComposer({
   const { draftSelection, explicitDraftSelection, applyDraftSelection } =
     useDraftModelSelectionState({
       contextKey: workspaceRepoPath,
-      defaultSelection: roleDefaultSelection,
+      defaultSelection,
       isDefaultSelectionReady: repoSettings !== null,
       selectionKey: role,
     });
@@ -219,17 +219,10 @@ export function useAgentStudioChatComposer({
       resolveChatComposerSelectedRuntimeKind({
         selectedSessionModel,
         draftSelection,
-        defaultSelection: roleDefaultSelection,
-        defaultRuntimeKind: repoSettings?.defaultRuntimeKind,
+        defaultSelection,
         runtimeDefinitions: availableRuntimeDefinitions,
       }),
-    [
-      availableRuntimeDefinitions,
-      draftSelection,
-      repoSettings?.defaultRuntimeKind,
-      roleDefaultSelection,
-      selectedSessionModel,
-    ],
+    [availableRuntimeDefinitions, draftSelection, defaultSelection, selectedSessionModel],
   );
   const selectedTargetRuntimeKind = selectedSessionIdentity?.runtimeKind ?? selectedRuntimeKind;
   const selectedTargetRuntimeDefinitions = hasSessionTarget
@@ -432,13 +425,13 @@ export function useAgentStudioChatComposer({
 
     return resolveChatComposerModelSelections({
       source,
-      defaultSelection: roleDefaultSelection,
+      defaultSelection,
     });
   }, [
     composerCatalog,
     draftSelection,
     explicitDraftSelection,
-    roleDefaultSelection,
+    defaultSelection,
     selectedSessionIdentity,
     selectedSessionModel,
     sessionModelCatalog,
