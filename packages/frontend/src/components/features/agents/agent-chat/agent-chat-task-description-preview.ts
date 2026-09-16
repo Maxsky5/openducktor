@@ -3,6 +3,7 @@ import { prepareMarkdownRenderContent } from "@/components/ui/markdown-render-co
 export const TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS = 480;
 
 const IMAGE_TOKEN_START = "![";
+const IMAGE_TOKEN_MAX_EXTENSION = 240;
 
 const isHighSurrogate = (codeUnit: number): boolean => codeUnit >= 0xd800 && codeUnit <= 0xdbff;
 
@@ -13,7 +14,7 @@ const completeImageToken = (body: string, end: number): string => {
     return bounded;
   }
   const closeIndex = body.indexOf(")", end);
-  if (closeIndex === -1) {
+  if (closeIndex === -1 || closeIndex - end > IMAGE_TOKEN_MAX_EXTENSION) {
     return bounded.slice(0, imageStart);
   }
   return body.slice(0, closeIndex + 1);

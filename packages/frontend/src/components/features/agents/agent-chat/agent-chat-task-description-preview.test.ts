@@ -60,6 +60,20 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
     expect(buildTaskDescriptionPreviewMarkdown(description)).toBe("a".repeat(472));
   });
 
+  test("drops an image token whose closing bracket is too far after the budget", () => {
+    const description = `${"a".repeat(470)}![Screenshot](odt-asset:${"9".repeat(400)})`;
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe("a".repeat(470));
+  });
+
+  test("keeps the preview bounded for a megabyte image token", () => {
+    const description = `${"a".repeat(470)}![Screenshot](odt-asset:${"9".repeat(1_000_000)})`;
+    const preview = buildTaskDescriptionPreviewMarkdown(description);
+
+    expect(preview).toBe("a".repeat(470));
+    expect(preview.length).toBeLessThanOrEqual(TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS);
+  });
+
   test("hides a valid front matter block and bounds the body", () => {
     const description = [
       "---",
