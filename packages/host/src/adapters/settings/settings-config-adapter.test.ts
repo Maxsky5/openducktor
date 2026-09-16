@@ -199,9 +199,30 @@ describe("settings config adapter initialization", () => {
           `Invalid config file ${configPath}:`,
           'theme: Invalid option: expected one of "system"|"light"|"dark" (found "blue")',
           "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
-        ].join("\n"),
+        ].join("\n\n"),
       );
       expect(result.left.details).toEqual({ path: configPath });
+    });
+  });
+
+  test("reports an unparsable config file with the path and a recovery hint", async () => {
+    await withTempConfig(async (configPath) => {
+      await writeFile(configPath, "{ not json");
+      const adapter = createSettingsConfigAdapter({ configPath });
+
+      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.either));
+      if (result._tag !== "Left") {
+        throw new Error("Expected a config parse failure");
+      }
+
+      expect(result.left.message.startsWith(`Failed parsing config file ${configPath}:\n\n`)).toBe(
+        true,
+      );
+      expect(
+        result.left.message.endsWith(
+          "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
+        ),
+      ).toBe(true);
     });
   });
 

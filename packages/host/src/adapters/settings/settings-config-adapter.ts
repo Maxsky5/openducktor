@@ -11,7 +11,11 @@ import {
   readPersistedGlobalConfigVersion,
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
-import { resolveOpenDucktorBaseDir, resolveUserPath } from "../../config/openducktor-config-dir";
+import {
+  displayUserPath,
+  resolveOpenDucktorBaseDir,
+  resolveUserPath,
+} from "../../config/openducktor-config-dir";
 import {
   errorMessage,
   HostOperationError,
@@ -54,22 +58,28 @@ const repoId = (repoPath: string): string => {
   return `${slug}-${hash}`;
 };
 
+const CONFIG_FILE_RECOVERY_HINT =
+  "Fix the values in this file, or move it aside to reset OpenDucktor settings.";
+
+const formatConfigFileProblem = (heading: string, problem: string): string =>
+  [heading, problem, CONFIG_FILE_RECOVERY_HINT].join("\n\n");
+
 const invalidConfigFileError = (resolvedConfigPath: string, cause: unknown) => {
+  const configPath = displayUserPath(resolvedConfigPath);
   if (!(cause instanceof HostValidationError)) {
     return new HostOperationError({
       operation: "settingsConfig.parseConfig",
-      message: `Failed parsing config file ${resolvedConfigPath}: ${errorMessage(cause)}`,
+      message: formatConfigFileProblem(
+        `Failed parsing config file ${configPath}:`,
+        errorMessage(cause),
+      ),
       cause,
       details: { path: resolvedConfigPath },
     });
   }
 
   return new HostValidationError({
-    message: [
-      `Invalid config file ${resolvedConfigPath}:`,
-      cause.message,
-      "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
-    ].join("\n"),
+    message: formatConfigFileProblem(`Invalid config file ${configPath}:`, cause.message),
     cause,
     details: { path: resolvedConfigPath },
   });

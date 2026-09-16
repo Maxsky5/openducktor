@@ -40,6 +40,24 @@ export const resolveUserPath = (rawPath: string): string => {
   });
 };
 
+export const displayUserPath = (absolutePath: string, homeDir: string = homedir()): string => {
+  if (homeDir.trim().length === 0) {
+    return absolutePath;
+  }
+
+  const relative = path.relative(homeDir, absolutePath);
+  const isOutsideHome =
+    relative.length === 0 ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative);
+  if (isOutsideHome) {
+    return absolutePath;
+  }
+
+  return `~/${relative}`;
+};
+
 const resolveConfiguredBaseDir = (rawPath: string): string => {
   const normalized = normalizeUserPathInput(rawPath);
   if (!normalized) {
