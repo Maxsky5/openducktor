@@ -26,7 +26,7 @@ The host read service checks the workspace, task, scope, and asset row before it
 
 The browser route requires the app-session cookie. Electron uses a privileged app protocol. Markdown and SQLite do not store runtime URLs.
 
-The chat task card shows a compact preview of the description. An image in the preview appears as a chip with its alt text. The task details view loads the image.
+The chat task card shows a compact preview of the description. An image in the preview appears as a chip with the image alt text or file name. The task details view loads the image.
 
 ## Agent access
 

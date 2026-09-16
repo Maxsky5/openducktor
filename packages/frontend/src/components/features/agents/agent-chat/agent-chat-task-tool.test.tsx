@@ -194,9 +194,44 @@ test("does not load a remote image in the description preview", () => {
     }),
   });
   const document = new DOMParser().parseFromString(html, "text/html");
-  const preview = document.querySelector("[data-task-id] .line-clamp-5");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
   expect(preview?.textContent).toContain("Architecture");
   expect(document.querySelector("[data-task-id] img")).toBeNull();
+});
+
+test("labels a preview image without alt text or a file name", () => {
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({
+      task: { ...task(), description: "![](https://example.com/diagram.png)" },
+    }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.textContent).toContain("Image");
+  expect(document.querySelector("[data-task-id] img")).toBeNull();
+});
+
+test("strips front matter and drops an open diagram fence from the description preview", () => {
+  const description = [
+    "---",
+    "priority: high",
+    "---",
+    "",
+    "Body text here.",
+    "",
+    "```mermaid",
+    "graph TD",
+    "  A --> B",
+  ].join("\n");
+  const html = renderTool("openducktor_odt_create_task", {
+    output: JSON.stringify({ task: { ...task(), description } }),
+  });
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const preview = document.querySelector("[data-task-id] .markdown-body");
+  expect(preview?.textContent).toContain("Body text here.");
+  expect(preview?.textContent).not.toContain("priority: high");
+  expect(preview?.textContent).not.toContain("graph TD");
+  expect(document.querySelector('[data-task-id] [role="alert"]')).toBeNull();
 });
 
 test("does not claim task creation before completion or after failure", () => {

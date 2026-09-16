@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { buildTaskDescriptionPreviewMarkdown } from "./agent-chat-task-description-preview";
-
-const PREVIEW_MAX_CHARACTERS = 480;
+import {
+  buildTaskDescriptionPreviewMarkdown,
+  TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS,
+} from "./agent-chat-task-description-preview";
 
 describe("buildTaskDescriptionPreviewMarkdown", () => {
   test("keeps a short description unchanged", () => {
@@ -12,7 +13,7 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
   test("keeps body text when a short heading precedes a long paragraph", () => {
     const preview = buildTaskDescriptionPreviewMarkdown(`### Context\n${"b".repeat(1000)}`);
 
-    expect(preview).toHaveLength(PREVIEW_MAX_CHARACTERS);
+    expect(preview).toHaveLength(TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS);
     expect(preview.startsWith("### Context\nbbb")).toBe(true);
   });
 
@@ -21,7 +22,7 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
     const description = lines.join("\n");
     const preview = buildTaskDescriptionPreviewMarkdown(description);
 
-    expect(preview).toBe(description.slice(0, PREVIEW_MAX_CHARACTERS));
+    expect(preview).toBe(description.slice(0, TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS));
     expect(preview.split("\n")[0]).toBe("Line 1");
     expect(preview).not.toContain("Line 200");
   });
@@ -29,6 +30,54 @@ describe("buildTaskDescriptionPreviewMarkdown", () => {
   test("cuts a single long line at the character budget", () => {
     const preview = buildTaskDescriptionPreviewMarkdown("a".repeat(1000));
 
-    expect(preview).toBe("a".repeat(PREVIEW_MAX_CHARACTERS));
+    expect(preview).toBe("a".repeat(TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS));
+  });
+
+  test("hides a valid front matter block and bounds the body", () => {
+    const description = [
+      "---",
+      "priority: high",
+      "title: scratch",
+      "---",
+      "",
+      "Body text. ".repeat(60),
+    ].join("\n");
+    const preview = buildTaskDescriptionPreviewMarkdown(description);
+
+    expect(preview.startsWith("Body text.")).toBe(true);
+    expect(preview).not.toContain("priority: high");
+    expect(preview.length).toBeLessThanOrEqual(TASK_DESCRIPTION_PREVIEW_MAX_CHARACTERS);
+  });
+
+  test("drops a fence that the character budget leaves open", () => {
+    const description = [
+      "x".repeat(400),
+      "",
+      "```mermaid",
+      "graph TD",
+      "  A[One] --> B[Two]",
+      "  B[Two] --> C[Three]",
+      "  C[Three] --> D[Four]",
+    ].join("\n");
+    const preview = buildTaskDescriptionPreviewMarkdown(description);
+
+    expect(preview).toContain("x".repeat(400));
+    expect(preview).not.toContain("mermaid");
+    expect(preview).not.toContain("```");
+  });
+
+  test("keeps a complete fence inside the budget", () => {
+    const description = [
+      "Text before.",
+      "",
+      "```mermaid",
+      "graph TD",
+      "  A --> B",
+      "```",
+      "",
+      "Text after.",
+    ].join("\n");
+
+    expect(buildTaskDescriptionPreviewMarkdown(description)).toBe(description);
   });
 });
