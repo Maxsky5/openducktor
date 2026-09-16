@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check, Slash } from "lucide-react";
 import { type CSSProperties, type ReactElement, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,6 +45,7 @@ function TileColorSwatchButton({
   isDisabled,
   onSelect,
   children,
+  showSelectionCheck = true,
 }: {
   style?: CSSProperties;
   className?: string;
@@ -53,6 +54,8 @@ function TileColorSwatchButton({
   isDisabled: boolean;
   onSelect: () => void;
   children?: ReactElement | null;
+  /** The ring already marks the selection on a swatch whose own glyph must stay visible. */
+  showSelectionCheck?: boolean;
 }): ReactElement {
   return (
     <button
@@ -72,7 +75,7 @@ function TileColorSwatchButton({
       )}
     >
       {children}
-      {isSelected ? <Check className="size-4" aria-hidden="true" /> : null}
+      {isSelected && showSelectionCheck ? <Check className="size-4" aria-hidden="true" /> : null}
     </button>
   );
 }
@@ -128,15 +131,21 @@ export function WorkspaceTileColorPicker({
       <div className="grid gap-2">
         <p className="text-sm font-medium text-foreground">Tile color</p>
         <div className="flex flex-wrap items-center gap-2">
+          {/* The default swatch stays neutral and shows a no-color slash. The primary accent would
+              promise a color the rail only shows while the workspace is selected. The slash stays
+              visible when the swatch is selected, and the ring carries the selection instead. */}
           <TileColorSwatchButton
             label="Default"
-            className="bg-primary text-primary-foreground"
+            className="bg-card text-muted-foreground"
             isSelected={!hasColor}
             isDisabled={isDisabled}
+            showSelectionCheck={false}
             onSelect={() => {
               onChangeTileColor(null);
             }}
-          />
+          >
+            <Slash className="size-4" aria-hidden="true" />
+          </TileColorSwatchButton>
 
           {WORKSPACE_TILE_PALETTE.map((entry) => (
             <TileColorSwatchButton

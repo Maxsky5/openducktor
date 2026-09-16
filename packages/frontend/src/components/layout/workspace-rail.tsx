@@ -112,9 +112,6 @@ function WorkspaceRailButtonShell({
   const isInteractionDisabled = isSwitchingWorkspace && !isDragOverlay;
 
   const showActiveSurface = workspace.isActive && !isDragOverlay;
-  // The divider is drawn per row so it can stop at the selected one. The drag preview floats free
-  // of the rail, so it carries no divider either.
-  const showRailDivider = !showActiveSurface && !isDragOverlay;
 
   return (
     <div
@@ -123,12 +120,10 @@ function WorkspaceRailButtonShell({
       data-dragging={isDragSource ? "true" : "false"}
       style={style}
       className={cn(
-        // The border is always reserved so every row keeps the same width, and only its color
-        // changes. The active workspace takes the selected surface across the full rail width, so
-        // it reads as selected whatever color its tile carries.
-        "flex touch-none justify-center border-r border-r-transparent px-2 py-1",
-        showRailDivider && "border-r-border",
-        showActiveSurface && "bg-segmented-selected",
+        // The active row takes the sidebar surface across the full rail width, so it joins the
+        // panel next to it and reads as selected whatever color its tile carries.
+        "flex touch-none justify-center px-2 py-2",
+        showActiveSurface && "bg-sidebar",
         isDragSource && !isDragOverlay && "opacity-0",
       )}
       {...dragListeners}
@@ -139,10 +134,13 @@ function WorkspaceRailButtonShell({
         variant="ghost"
         className={cn(
           "size-10 rounded-lg border-none p-0 shadow-sm transition-none",
-          // A workspace without a picked color keeps the primary accent in both states. The tile
-          // color never changes, so the sidebar surface behind the active row is the only cue for
-          // the selection and nothing else competes with it.
-          !tileColor && "bg-primary text-primary-foreground hover:bg-primary",
+          // A workspace without a picked color falls back to the theme default: the primary accent
+          // marks the selected tile, and the card surface keeps every other tile neutral. A picked
+          // color replaces both, so it stays the same in each state.
+          !tileColor &&
+            (workspace.isActive
+              ? "bg-primary text-primary-foreground hover:bg-primary"
+              : "bg-card text-foreground hover:bg-card"),
           isDragOverlay && "pointer-events-none",
         )}
         style={tileColor ? tileColorFaceStyle(tileColor) : undefined}
@@ -345,7 +343,7 @@ export function WorkspaceRail({
           </DndContext>
         ) : null}
 
-        <div className="flex justify-center border-r border-r-border px-2 py-1">
+        <div className="flex justify-center px-2 py-1">
           <Button
             type="button"
             size="icon"
@@ -358,9 +356,6 @@ export function WorkspaceRail({
             <Plus className="size-5" />
           </Button>
         </div>
-
-        {/* Continues the rail divider past the last row. */}
-        <div className="min-h-0 flex-1 border-r border-r-border" />
       </div>
     </aside>
   );

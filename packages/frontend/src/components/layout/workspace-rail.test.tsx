@@ -153,7 +153,7 @@ describe("WorkspaceRail", () => {
     );
   });
 
-  test("marks the active workspace with a raised surface across the rail", () => {
+  test("joins the active row to the sidebar without a row border", () => {
     workspaceState.workspaces = [
       workspaceRecord("alpha", { workspaceName: "Alpha Repo", tileColor: "#c4dafc" }),
       workspaceRecord("beta", {
@@ -173,15 +173,15 @@ describe("WorkspaceRail", () => {
       return shell;
     };
 
-    expect(shellOf("Beta Repo").className).toContain("bg-segmented-selected");
-    expect(shellOf("Alpha Repo").className).not.toContain("bg-segmented-selected");
-
-    // The rail divider stops at the selected row so its surface joins the panel next to it.
-    expect(shellOf("Beta Repo").className).toContain("border-r-transparent");
-    expect(shellOf("Alpha Repo").className).toContain("border-r-border");
+    // No line sits between the rail and the sidebar. The active row carries the sidebar surface
+    // and joins the panel next to it, and the two panels separate by surface color alone.
+    expect(shellOf("Beta Repo").className).toContain("bg-sidebar");
+    expect(shellOf("Alpha Repo").className).not.toContain("bg-sidebar");
+    expect(shellOf("Beta Repo").className).not.toContain("border-r");
+    expect(shellOf("Alpha Repo").className).not.toContain("border-r");
   });
 
-  test("keeps a workspace without a picked color on the primary accent in both states", () => {
+  test("falls back to the theme surfaces when no color is picked", () => {
     workspaceState.workspaces = [
       workspaceRecord("alpha", { workspaceName: "Alpha Repo", isActive: true }),
       workspaceRecord("beta", { workspaceName: "Beta Repo" }),
@@ -189,11 +189,15 @@ describe("WorkspaceRail", () => {
 
     renderRail();
 
-    for (const name of ["Alpha Repo", "Beta Repo"]) {
-      const tile = screen.getByRole("button", { name });
-      expect(tile.className).toContain("bg-primary");
-      expect(tile.getAttribute("style")).toBeNull();
-    }
+    const activeTile = screen.getByRole("button", { name: "Alpha Repo" });
+    expect(activeTile.className).toContain("bg-primary");
+    expect(activeTile.className).not.toContain("bg-card");
+    expect(activeTile.getAttribute("style")).toBeNull();
+
+    const inactiveTile = screen.getByRole("button", { name: "Beta Repo" });
+    expect(inactiveTile.className).toContain("bg-card");
+    expect(inactiveTile.className).not.toContain("bg-primary");
+    expect(inactiveTile.getAttribute("style")).toBeNull();
   });
 
   test("keeps a backgrounded tile on its own color instead of the selection surface", () => {

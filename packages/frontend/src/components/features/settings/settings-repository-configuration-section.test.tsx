@@ -130,6 +130,31 @@ describe("RepositoryConfigurationSection", () => {
     }
   });
 
+  test("shows the default tile color as a neutral no-color swatch", () => {
+    const withColor = renderSection({ tileColor: "#3b82f6" });
+
+    try {
+      const defaultSwatch = screen.getByRole("button", { name: "Default" });
+      expect(defaultSwatch.className).not.toContain("bg-primary");
+      expect(defaultSwatch.className).toContain("bg-card");
+      expect(defaultSwatch.querySelector(".lucide-slash")).not.toBeNull();
+    } finally {
+      withColor.rendered.unmount();
+    }
+
+    const withDefault = renderSection();
+
+    try {
+      const defaultSwatch = screen.getByRole("button", { name: "Default" });
+      expect(defaultSwatch.getAttribute("aria-pressed")).toBe("true");
+      // The ring marks the selection, and the slash stays visible instead of a centered check.
+      expect(defaultSwatch.querySelector(".lucide-slash")).not.toBeNull();
+      expect(defaultSwatch.querySelector(".lucide-check")).toBeNull();
+    } finally {
+      withDefault.rendered.unmount();
+    }
+  });
+
   test("commits a valid hex value and keeps the previous color on a rejected one", () => {
     const { rendered, updaters } = renderSection({ tileColor: "#3b82f6" });
 
