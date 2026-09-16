@@ -5,8 +5,9 @@ import path from "node:path";
 
 const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-test-"));
 process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
-process.once("beforeExit", () => {
-  void rm(configDir, { force: true, recursive: true });
+const { afterAll } = await import("bun:test");
+afterAll(async () => {
+  await rm(configDir, { force: true, recursive: true });
 });
 
 const frontendRoot = path.resolve(import.meta.dir, "../packages/frontend");

@@ -51,7 +51,8 @@ export function GeneralSettingsSection({
       <SettingsAppUpdatesSection disabled={disabled} />
 
       <div className="rounded-md border border-border bg-muted/60 p-3 text-xs text-muted-foreground">
-        Settings are persisted in <code>~/.openducktor/config.json</code> and saved atomically.
+        Settings are stored as <code>config.json</code> in the active OpenDucktor config directory
+        and saved atomically.
       </div>
     </div>
   );

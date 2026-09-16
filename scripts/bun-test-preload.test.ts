@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { access } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 
@@ -9,7 +10,7 @@ const packageManifestSchema = z.object({
 });
 
 const ROOT = path.resolve(import.meta.dir, "..");
-const PRELOAD = "--preload ../../scripts/bun-test-preload.ts";
+const PRELOAD_PATH = "../../scripts/bun-test-preload.ts";
 
 const workspacePackagePaths = (): string[] =>
   ["apps", "packages", "tools/oxlint"]
@@ -25,12 +26,49 @@ describe("Bun test preload", () => {
     const missingPreload = workspacePackagePaths().flatMap((packagePath) => {
       const manifest = packageManifestSchema.parse(JSON.parse(readFileSync(packagePath, "utf8")));
       const testCommand = manifest.scripts?.test;
-      if (!testCommand?.startsWith("bun test") || testCommand.includes(PRELOAD)) {
+      if (!testCommand?.startsWith("bun test")) {
+        return [];
+      }
+      const bunfigPath = path.join(path.dirname(packagePath), "bunfig.toml");
+      const commandLoadsPreload = testCommand.includes(`--preload ${PRELOAD_PATH}`);
+      const bunfigLoadsPreload =
+        existsSync(bunfigPath) &&
+        readFileSync(bunfigPath, "utf8").includes(`preload = ["${PRELOAD_PATH}"]`);
+      if (commandLoadsPreload || bunfigLoadsPreload) {
         return [];
       }
       return [manifest.name ?? path.relative(ROOT, packagePath)];
     });
 
     expect(missingPreload).toEqual([]);
+  });
+
+  test("removes the test config directory after the suite", async () => {
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "test",
+        "--preload",
+        path.join(ROOT, "scripts/bun-test-preload.ts"),
+        path.join(ROOT, "scripts/test-support/bun-test-preload-fixture.test.ts"),
+      ],
+      cwd: ROOT,
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    const [exitCode, stderr, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+      new Response(child.stdout).text(),
+    ]);
+
+    expect(exitCode, stderr).toBe(0);
+    const match = stdout.match(/test config: (.+)/);
+    expect(match).not.toBeNull();
+    const configDir = match?.[1];
+    if (!configDir) {
+      throw new Error("Expected the fixture to print its test config directory.");
+    }
+    await expect(access(configDir)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
