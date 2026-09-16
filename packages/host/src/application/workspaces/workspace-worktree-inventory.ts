@@ -41,6 +41,11 @@ const presentWorkspaceSessionWorktreePaths = (sessions: WorkspaceSession[]): str
       : [],
   );
 
+const branchMatchesTaskId = (branchName: string, taskId: string): boolean => {
+  const branchLeaf = branchName.slice(branchName.lastIndexOf("/") + 1);
+  return branchLeaf === taskId || branchLeaf.startsWith(`${taskId}-`);
+};
+
 const canonicalizeExistingPath = <E>(
   dependencies: Pick<WorkspaceWorktreeInventoryDependencies, "settingsConfig">,
   canonicalize: Effect.Effect<string, E>,
@@ -263,6 +268,7 @@ export const collectWorkspaceTaskWorktreePaths = (
 
     const inventory = yield* dependencies.gitPort.listWorktrees(repoPath);
     const inventoryPaths = new Map<string, string>();
+    const previousPrefixTaskPaths = new Set<string>();
     for (const worktree of inventory) {
       const canonical = yield* Effect.either(
         dependencies.gitPort.canonicalizePath(worktree.worktreePath),
@@ -283,6 +289,8 @@ export const collectWorkspaceTaskWorktreePaths = (
           path: worktree.worktreePath,
           taskId: task.id,
         });
+      } else if (tasks.some((candidate) => branchMatchesTaskId(worktree.branch, candidate.id))) {
+        previousPrefixTaskPaths.add(registeredComparison);
       }
     }
     const repoPathComparison = normalizePathForComparison(repoPath);
@@ -344,7 +352,10 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (seen.has(normalized)) {
         continue;
       }
-      if (!pathStartsWith(normalized, managedBaseForComparison)) {
+      if (
+        !pathStartsWith(normalized, managedBaseForComparison) &&
+        !previousPrefixTaskPaths.has(normalized)
+      ) {
         continue;
       }
       if (
@@ -365,7 +376,7 @@ export const collectWorkspaceTaskWorktreePaths = (
     if (unclassifiedPaths.length > 0) {
       return yield* Effect.fail(
         new HostValidationError({
-          message: `Cannot classify registered worktree(s) under ${managedWorktreeBasePath}: ${unclassifiedPaths.join(
+          message: `Cannot classify registered worktree(s) for ${repoPath}: ${unclassifiedPaths.join(
             ", ",
           )}. Remove them manually, or retry without removing task worktrees.`,
           field: "worktreePath",

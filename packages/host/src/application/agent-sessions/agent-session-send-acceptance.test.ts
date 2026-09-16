@@ -81,6 +81,7 @@ describe("message acceptance through the command and live adapter modules", () =
       );
       const commands = createAgentSessionCommandService({
         withWorkStartLease: (_repoPath, effect) => effect,
+        ownershipLock: { runExclusive: (effect) => effect },
         runtime: live,
         repositoryPolicy: {
           run: (_ref, _operation, effect) => effect,

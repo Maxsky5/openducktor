@@ -62,6 +62,7 @@ export const createNodeTaskSessionServices = ({
         ),
       taskLifecycle: taskServiceInput.taskSessionLifecycleCoordinator,
       taskSessionStart: createTaskSessionStartPreparationService(taskServiceInput),
+      ownershipLock,
     }),
   };
   return { ...eventServices, agentSessionCommandService };

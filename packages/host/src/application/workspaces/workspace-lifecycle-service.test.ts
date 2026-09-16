@@ -1803,6 +1803,7 @@ describe("workspace lifecycle service", () => {
     const unblockWorkspace = mock(() => {});
     const service = createService({
       admission: { ...createAdmissionDouble(), unblockWorkspace },
+      getRepoConfig: () => Effect.succeed(repoConfig({ closed: true })),
       reopenWorkspace,
     });
 
@@ -1818,9 +1819,41 @@ describe("workspace lifecycle service", () => {
     expect(unblockWorkspace).toHaveBeenCalledWith("ws");
   });
 
+  test("does not reserve or close the task store when the workspace is already open", async () => {
+    const expected = catalog();
+    const reserveWorkspace = mock(() => Effect.void);
+    const closeWorkspaceTaskStore = mock(() => Effect.void);
+    const claimWorkspace = mock(() => Effect.succeed(true));
+    const reopenWorkspace = mock(() => Effect.succeed(expected));
+    const service = createService({
+      admission: { ...createAdmissionDouble(), reserveWorkspace },
+      closeWorkspaceTaskStore,
+      getWorkspaceCatalog: () => Effect.succeed(expected),
+      hostOwnership: {
+        claimWorkspace,
+        releaseWorkspace: () => Effect.void,
+      },
+      reopenWorkspace,
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.reopenWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+        }),
+      ),
+    ).resolves.toEqual(expected);
+    expect(reserveWorkspace).not.toHaveBeenCalled();
+    expect(closeWorkspaceTaskStore).not.toHaveBeenCalled();
+    expect(claimWorkspace).not.toHaveBeenCalled();
+    expect(reopenWorkspace).not.toHaveBeenCalled();
+  });
+
   test("releases a newly claimed workspace when reopen fails", async () => {
     const calls: string[] = [];
     const service = createService({
+      getRepoConfig: () => Effect.succeed(repoConfig({ closed: true })),
       hostOwnership: {
         claimWorkspace: () => Effect.sync(() => (calls.push("claim"), true)),
         releaseWorkspace: () => Effect.sync(() => calls.push("release")),
@@ -1855,6 +1888,7 @@ describe("workspace lifecycle service", () => {
     const releaseWorkspace = mock(() => Effect.void);
     const service = createService({
       admission: { ...createAdmissionDouble(), unblockWorkspace },
+      getRepoConfig: () => Effect.succeed(repoConfig({ closed: true })),
       hostOwnership: {
         claimWorkspace: () => Effect.succeed(false),
         releaseWorkspace,

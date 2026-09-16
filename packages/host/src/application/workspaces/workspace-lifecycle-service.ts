@@ -455,6 +455,7 @@ export const createWorkspaceLifecycleService = ({
       return ownershipLock.runExclusive(
         Effect.gen(function* () {
           const repoConfig = yield* requireTarget(input.workspaceId, input.expectedRepoPath);
+          if (!repoConfig.closed) return yield* workspaceSettingsService.getWorkspaceCatalog();
           return yield* runWorkspaceLifecycleReservation(
             admission,
             hostOwnership,

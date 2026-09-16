@@ -21,6 +21,7 @@ import type {
   TaskLifecycle,
   TaskSessions,
 } from "./task-workflow-session-policy";
+import type { WorkspaceOwnershipLock } from "../workspaces/workspace-ownership-lock";
 import { storeWorkflowSession, toControlSessionRef } from "./task-workflow-session-storage";
 
 export const createStartTaskWorkflowSession =
@@ -31,6 +32,7 @@ export const createStartTaskWorkflowSession =
     tasks,
     taskLifecycle,
     taskSessionStart,
+    ownershipLock,
   }: {
     withWorkStartLease<A, E, R>(
       repoPath: string,
@@ -41,6 +43,7 @@ export const createStartTaskWorkflowSession =
     tasks: TaskSessions;
     taskLifecycle: TaskLifecycle;
     taskSessionStart: TaskSessionStartPreparationService;
+    ownershipLock: WorkspaceOwnershipLock;
   }) =>
   (
     input: AgentWorkflowSessionStartInput,
@@ -181,4 +184,4 @@ export const createStartTaskWorkflowSession =
           ),
         );
       }),
-    );
+    ).pipe(ownershipLock.runExclusive);

@@ -236,6 +236,7 @@ describe("Workspace Session persistence through the shared command module", () =
     events.length = 0;
     const commands = createAgentSessionCommandService({
       withWorkStartLease: (_repoPath, effect) => effect,
+      ownershipLock: { runExclusive: (effect) => effect },
       runtime: live,
       repositoryPolicy: persistence,
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),

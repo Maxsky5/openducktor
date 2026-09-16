@@ -21,6 +21,7 @@ import {
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { TaskSessionStartPreparationService } from "../tasks/worktrees/task-session-start-preparation-service";
+import type { WorkspaceOwnershipLock } from "../workspaces/workspace-ownership-lock";
 import { createStartTaskWorkflowSession } from "./task-workflow-session-start";
 import { storeWorkflowSession, toControlSessionRef } from "./task-workflow-session-storage";
 import type { AgentSessionOperationPolicy } from "./agent-session-operation-policy";
@@ -159,6 +160,7 @@ export const createTaskWorkflowSessionPolicy = ({
   taskLifecycle,
   taskSessionStart,
   persistTaskModel,
+  ownershipLock,
 }: {
   withWorkStartLease: <A, E, R>(
     repoPath: string,
@@ -171,6 +173,7 @@ export const createTaskWorkflowSessionPolicy = ({
   taskLifecycle: TaskLifecycle;
   taskSessionStart: TaskSessionStartPreparationService;
   persistTaskModel: TaskSessionModelPersistence;
+  ownershipLock: WorkspaceOwnershipLock;
 }) => ({
   startWorkflowSession: createStartTaskWorkflowSession({
     withWorkStartLease,
@@ -179,6 +182,7 @@ export const createTaskWorkflowSessionPolicy = ({
     tasks,
     taskLifecycle,
     taskSessionStart,
+    ownershipLock,
   }),
   forkSession: (input: Parameters<RuntimeControl["forkSession"]>[0]) => {
     if (input.sessionScope.kind !== "workflow") {

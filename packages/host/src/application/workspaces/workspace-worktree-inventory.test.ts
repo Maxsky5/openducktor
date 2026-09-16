@@ -276,6 +276,28 @@ describe("workspace worktree inventory", () => {
     expect(paths).toEqual([worktreePath]);
   });
 
+  test("rejects a task worktree from a previous base and branch prefix", async () => {
+    const worktreePath = "/old-base/task-1";
+    const dependencies = createDependencies({
+      canonicalizePath: (path) => Effect.succeed(path),
+      listWorktrees: () => Effect.succeed([{ branch: "old/task-1-title", worktreePath }]),
+      pathExists: (path) => Effect.succeed(path === worktreePath),
+      listTasks: () => Effect.succeed([task("task-1")]),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        collectWorkspaceTaskWorktreePaths(
+          dependencies,
+          repoConfig({ branchPrefix: "new", worktreeBasePath: "/new-base" }),
+        ),
+      ),
+    );
+
+    expect(error.message).toContain("Cannot classify registered worktree(s) for /repos/ws");
+    expect(error.message).toContain(worktreePath);
+  });
+
   test("ignores an unrelated registered worktree outside the managed base", async () => {
     const worktreePath = "/old-base/unrelated";
     const dependencies = createDependencies({
@@ -343,7 +365,7 @@ describe("workspace worktree inventory", () => {
       ),
     );
 
-    expect(error.message).toContain("Cannot classify registered worktree(s) under");
+    expect(error.message).toContain("Cannot classify registered worktree(s) for /repos/ws");
   });
 
   test("propagates a canonicalization failure for a managed base that exists", async () => {
