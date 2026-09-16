@@ -230,10 +230,10 @@ export const createNodeWorkspaceHostOwnership = (
   } = {},
   dependencies: WorkspaceHostOwnershipDependencies = defaultDependencies(),
 ): WorkspaceHostOwnershipPort => {
-  const ownersRoot = path.join(resolveOpenDucktorBaseDir(processEnv), "workspace-host-owners");
+  const configDir = resolveOpenDucktorBaseDir("production", processEnv);
+  const ownersRoot = path.join(configDir, "workspace-host-owners");
   const claims = new Map<string, WorkspaceClaim>();
   const semaphore = Effect.runSync(Effect.makeSemaphore(1));
-
   const claimWorkspace = (workspaceId: string) =>
     semaphore.withPermits(1)(
       Effect.tryPromise({
@@ -360,7 +360,8 @@ export const createNodeWorkspaceOwnershipLock = (
   } = {},
   dependencies: WorkspaceOwnershipLockDependencies = defaultOwnershipLockDependencies(),
 ): WorkspaceOwnershipLock => {
-  const ownersRoot = path.join(resolveOpenDucktorBaseDir(processEnv), "workspace-host-owners");
+  const configDir = resolveOpenDucktorBaseDir("production", processEnv);
+  const ownersRoot = path.join(configDir, "workspace-host-owners");
   const lockTarget = path.join(ownersRoot, "path-ownership");
   const semaphore = Effect.runSync(Effect.makeSemaphore(1));
 

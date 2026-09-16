@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
 import type { WorkspaceSettingsService } from "../../../application/workspaces/workspace-settings-service";
+import { createSettingsConfigTestDouble } from "../../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../../test-support/task-store-test-double";
 import { createNodeTaskAssetServices } from "../node-task-asset-services";
 
@@ -92,6 +93,7 @@ const run = async (): Promise<TestScopeProductionConfigResult> => {
   try {
     const services = createNodeTaskAssetServices({
       configDir: { root: configuredConfigDir, scope: "test" },
+      assertWorkspaceAdmitted: () => Effect.void,
       configuredTaskStore: createTaskStoreTestDouble({
         deleteTask: () =>
           Effect.sync(() => {
@@ -99,8 +101,15 @@ const run = async (): Promise<TestScopeProductionConfigResult> => {
             return true;
           }),
       }),
+      hostOwnership: {
+        claimWorkspace: () => Effect.succeed(true),
+        releaseWorkspace: () => Effect.void,
+      },
+      isWorkspaceRemovalPending: () => false,
       onBackgroundFailure: () => Effect.void,
       processEnv: { OPENDUCKTOR_CONFIG_DIR: configuredConfigDir },
+      settingsConfig: createSettingsConfigTestDouble({}),
+      withAdministrativeAccess: (_workspaceIds, effect) => effect,
       workspaceSettingsService: unusedWorkspaceSettingsService,
     });
     await Effect.runPromise(services.startupSweep());
