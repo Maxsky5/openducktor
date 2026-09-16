@@ -1,16 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import {
-  copyFile,
-  lstat,
-  mkdir,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { taskAssetIdSchema } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
@@ -60,13 +49,10 @@ export const createNodeTaskAssetFilePort = (
   },
   ownership?: TaskAssetFileOwnershipDependencies,
 ): TaskAssetFilePort => {
-  const fileGuard = createTaskAssetFileSafety({ configDir, configDirScope });
-  fileGuard.assertConfigDir();
+  const files = createTaskAssetFileSafety({ configDir, configDirScope });
+  files.assertConfigDir();
   const durableRoot = path.resolve(configDir, "task-assets");
-  const ownerState = createTaskAssetFileOwnership(
-    { configDir, removeRecursively: fileGuard.removeRecursively },
-    ownership,
-  );
+  const ownerState = createTaskAssetFileOwnership({ configDir, fileChanges: files }, ownership);
   const { ownedQuarantineRoot, ownedStagingRoot, quarantineRoot } = ownerState;
   const stagedPath = (workspaceId: string, assetId: string) =>
     path.join(ownedStagingRoot, workspaceId, assetId);
@@ -75,8 +61,8 @@ export const createNodeTaskAssetFilePort = (
   const quarantineFilesForRoot = (root: string, reservedDirectoryNames: readonly string[]) =>
     createTaskAssetQuarantineFiles({
       durableRoot,
+      fileChanges: files,
       quarantineRoot: root,
-      removeRecursively: fileGuard.removeRecursively,
       reservedDirectoryNames,
     });
   const quarantineFiles = quarantineFilesForRoot(ownedQuarantineRoot, []);
@@ -148,8 +134,8 @@ export const createNodeTaskAssetFilePort = (
         yield* tryPromise(
           async () => {
             await ownerState.ensureCurrent();
-            await mkdir(path.dirname(destination), { recursive: true });
-            await writeFile(destination, input.bytes, { flag: "wx", mode: 0o600 });
+            await files.ensureDirectory(path.dirname(destination));
+            await files.writeNew(destination, input.bytes);
           },
           {
             operation: "stage",
@@ -165,7 +151,7 @@ export const createNodeTaskAssetFilePort = (
       return Effect.gen(function* () {
         for (const assetId of input.assetIds) {
           yield* validateStageContext(input.workspaceId, assetId);
-          yield* tryPromise(() => rm(stagedPath(input.workspaceId, assetId), { force: true }), {
+          yield* tryPromise(() => files.remove(stagedPath(input.workspaceId, assetId)), {
             operation: "discard",
             code: "purge",
             phase: "remove_staging_file",
@@ -197,12 +183,8 @@ export const createNodeTaskAssetFilePort = (
         const destination = durablePath(input.workspaceId, input.taskId, input.assetId);
         yield* tryPromise(
           async () => {
-            await mkdir(path.dirname(destination), { recursive: true });
-            await copyFile(
-              stagedPath(input.workspaceId, input.assetId),
-              destination,
-              constants.COPYFILE_EXCL,
-            );
+            await files.ensureDirectory(path.dirname(destination));
+            await files.copyNew(stagedPath(input.workspaceId, input.assetId), destination);
           },
           {
             operation: input.operation,
@@ -237,14 +219,17 @@ export const createNodeTaskAssetFilePort = (
       return Effect.gen(function* () {
         for (const assetId of input.assetIds) {
           yield* validateContext(input.workspaceId, input.taskId, assetId, input.operation);
-          yield* tryPromise(() => unlink(durablePath(input.workspaceId, input.taskId, assetId)), {
-            operation: input.operation,
-            code: "purge",
-            phase: "remove_promoted_file",
-            message: `Failed to remove promoted task asset ${assetId}.`,
-            assetIds: [assetId],
-            taskId: input.taskId,
-          });
+          yield* tryPromise(
+            () => files.unlink(durablePath(input.workspaceId, input.taskId, assetId)),
+            {
+              operation: input.operation,
+              code: "purge",
+              phase: "remove_promoted_file",
+              message: `Failed to remove promoted task asset ${assetId}.`,
+              assetIds: [assetId],
+              taskId: input.taskId,
+            },
+          );
         }
       });
     },
@@ -272,8 +257,8 @@ export const createNodeTaskAssetFilePort = (
           const to = path.join(root, assetId);
           yield* tryPromise(
             async () => {
-              await mkdir(root, { recursive: true });
-              await rename(from, to);
+              await files.ensureDirectory(root);
+              await files.move(from, to);
               moves.push({ from, to });
             },
             {
@@ -291,10 +276,10 @@ export const createNodeTaskAssetFilePort = (
                   tryPromise(
                     async () => {
                       for (const move of moves.toReversed()) {
-                        await mkdir(path.dirname(move.from), { recursive: true });
-                        await rename(move.to, move.from);
+                        await files.ensureDirectory(path.dirname(move.from));
+                        await files.move(move.to, move.from);
                       }
-                      await fileGuard.removeRecursively(root);
+                      await files.removeTree(root);
                     },
                     {
                       operation: input.operation,
@@ -355,7 +340,7 @@ export const createNodeTaskAssetFilePort = (
         yield* writeQuarantineManifest(manifest);
         yield* tryPromise(
           async () => {
-            await rename(taskRoot, to);
+            await files.move(taskRoot, to);
           },
           {
             operation: "delete",

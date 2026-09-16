@@ -113,7 +113,7 @@ export const assembleNodeEffectHostCommandRouter = (
     git,
     localAttachments,
     openInTools,
-    configDirScope,
+    configDir,
     processEnvironment,
     runtimeDistribution,
     runtimeExecutableProbes,
@@ -127,7 +127,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
   const assets = createNodeTaskAssetServices({
-    configDirScope,
+    configDir,
     configuredTaskStore,
     onBackgroundFailure,
     processEnv,

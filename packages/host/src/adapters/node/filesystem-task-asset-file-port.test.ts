@@ -13,8 +13,11 @@ import {
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Cause, Effect, Exit } from "effect";
+import { z } from "zod";
 import { createNodeTaskAssetFilePort } from "./filesystem-task-asset-file-port";
+import type { TestScopeNestedSymlinkResult } from "./test-support/test-scope-nested-symlink-fixture";
 
 const roots: string[] = [];
 
@@ -58,6 +61,10 @@ const createHarness = async () => {
 const workspaceId = "fairnest";
 const taskId = "task-1";
 const assetId = "550e8400-e29b-41d4-a716-446655440000";
+const nestedSymlinkResultSchema = z.object({
+  bytes: z.array(z.number()).nullable(),
+  error: z.string().nullable(),
+}) satisfies z.ZodType<TestScopeNestedSymlinkResult>;
 
 describe("node task asset file port", () => {
   test("promotes, quarantines, restores, and purges within the dedicated namespace", async () => {
@@ -435,6 +442,45 @@ describe("node task asset file port", () => {
         return;
       }
       expect(createPort).not.toThrow();
+    },
+  );
+
+  test.each([
+    ["staged write", "stage", null],
+    ["staged delete", "removeStaged", [7]],
+    ["durable copy", "promote", null],
+    ["durable move", "quarantine", [7]],
+  ] as const)(
+    "refuses a %s through a nested symlink to the production root",
+    async (_, action, expectedBytes) => {
+      const temporaryHome = await mkdtemp(path.join(tmpdir(), "openducktor-nested-guard-"));
+      roots.push(temporaryHome);
+      const environment: NodeJS.ProcessEnv = { ...process.env, HOME: temporaryHome };
+      delete environment.OPENDUCKTOR_CONFIG_DIR;
+      const child = Bun.spawn({
+        cmd: [
+          process.execPath,
+          fileURLToPath(
+            new URL("./test-support/test-scope-nested-symlink-fixture.ts", import.meta.url),
+          ),
+          action,
+        ],
+        env: environment,
+        stderr: "pipe",
+        stdout: "pipe",
+      });
+      const [exitCode, stderr, stdout] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+        new Response(child.stdout).text(),
+      ]);
+
+      expect(exitCode, stderr).toBe(0);
+      const result = nestedSymlinkResultSchema.parse(JSON.parse(stdout));
+      expect(result.error).toContain(
+        "Test scope refuses task asset access under the production config directory",
+      );
+      expect(result.bytes).toEqual(expectedBytes === null ? null : [...expectedBytes]);
     },
   );
 

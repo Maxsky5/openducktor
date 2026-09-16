@@ -88,7 +88,7 @@ const run = async (): Promise<TestScopeProductionConfigResult> => {
 
   try {
     const services = createNodeTaskAssetServices({
-      configDirScope: "test",
+      configDir: { root: configuredConfigDir, scope: "test" },
       configuredTaskStore: createTaskStoreTestDouble({
         deleteTask: () =>
           Effect.sync(() => {

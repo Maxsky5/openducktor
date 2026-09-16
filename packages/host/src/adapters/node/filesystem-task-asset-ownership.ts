@@ -1,12 +1,13 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { link, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { taskAssetIdSchema } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
+import type { TaskAssetFileChanges } from "./filesystem-task-asset-file-safety";
 
 const taskAssetFileOwnerSchema = z
   .object({
@@ -108,10 +109,10 @@ const defaultOwnership = (): TaskAssetFileOwnershipDependencies => ({
 export const createTaskAssetFileOwnership = (
   {
     configDir,
-    removeRecursively,
+    fileChanges,
   }: {
     configDir: string;
-    removeRecursively: (target: string) => Promise<void>;
+    fileChanges: TaskAssetFileChanges;
   },
   dependencies: TaskAssetFileOwnershipDependencies = defaultOwnership(),
 ) => {
@@ -153,15 +154,12 @@ export const createTaskAssetFileOwnership = (
   };
 
   const ensureCurrent = async (): Promise<void> => {
-    await mkdir(ownersRoot, { recursive: true });
+    await fileChanges.ensureDirectory(ownersRoot);
     const marker = ownerMarkerPath(dependencies.owner.instanceId);
     const publication = path.join(ownersRoot, ownerPublicationName(dependencies.owner));
     try {
-      await writeFile(publication, JSON.stringify(dependencies.owner), {
-        flag: "wx",
-        mode: 0o600,
-      });
-      await link(publication, marker);
+      await fileChanges.writeNew(publication, JSON.stringify(dependencies.owner));
+      await fileChanges.link(publication, marker);
     } catch (cause) {
       if (!hasErrorCode(cause, "EEXIST")) {
         throw cause;
@@ -175,7 +173,7 @@ export const createTaskAssetFileOwnership = (
         throw new Error("Task asset owner record conflicts with the current host instance.");
       }
     } finally {
-      await rm(publication, { force: true });
+      await fileChanges.remove(publication);
     }
   };
 
@@ -192,7 +190,7 @@ export const createTaskAssetFileOwnership = (
           throw new Error(`Unexpected task asset owner entry '${entry.name}'.`);
         }
         if (await ownerIsDead(publicationOwner)) {
-          await rm(path.join(ownersRoot, entry.name), { force: true });
+          await fileChanges.remove(path.join(ownersRoot, entry.name));
         }
         continue;
       }
@@ -262,14 +260,14 @@ export const createTaskAssetFileOwnership = (
         if (entry.name === "instances") {
           continue;
         }
-        await removeRecursively(path.join(stagingRoot, entry.name));
+        await fileChanges.removeTree(path.join(stagingRoot, entry.name));
         removed += 1;
       }
     }
     for (const owner of deadOwners) {
       const ownerStagingRoot = path.join(stagingRoot, "instances", owner.instanceId);
       if (await existingStat(ownerStagingRoot)) {
-        await removeRecursively(ownerStagingRoot);
+        await fileChanges.removeTree(ownerStagingRoot);
         removed += 1;
       }
       const ownerQuarantineRoot = quarantineRootFor(owner.instanceId);
@@ -277,8 +275,8 @@ export const createTaskAssetFileOwnership = (
         ? await readdir(ownerQuarantineRoot)
         : [];
       if (quarantineEntries.length === 0) {
-        await removeRecursively(ownerQuarantineRoot);
-        await rm(ownerMarkerPath(owner.instanceId), { force: true });
+        await fileChanges.removeTree(ownerQuarantineRoot);
+        await fileChanges.remove(ownerMarkerPath(owner.instanceId));
       }
     }
     return removed;
@@ -286,13 +284,13 @@ export const createTaskAssetFileOwnership = (
 
   const cleanupCurrent = async (): Promise<void> => {
     await ensureCurrent();
-    await removeRecursively(ownedStagingRoot);
+    await fileChanges.removeTree(ownedStagingRoot);
     const quarantineEntries = (await existingStat(ownedQuarantineRoot))
       ? await readdir(ownedQuarantineRoot)
       : [];
     if (quarantineEntries.length === 0) {
-      await removeRecursively(ownedQuarantineRoot);
-      await rm(ownerMarkerPath(dependencies.owner.instanceId), { force: true });
+      await fileChanges.removeTree(ownedQuarantineRoot);
+      await fileChanges.remove(ownerMarkerPath(dependencies.owner.instanceId));
     }
   };
 

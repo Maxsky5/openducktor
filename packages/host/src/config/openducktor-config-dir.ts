@@ -7,6 +7,10 @@ import { HostResourceError, HostValidationError } from "../effect/host-errors";
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 
 export type OpenDucktorConfigDirScope = "dev" | "production" | "test";
+export type OpenDucktorConfigDir = Readonly<{
+  root: string;
+  scope: OpenDucktorConfigDirScope;
+}>;
 
 const resolveHomeDirectory = (): string => {
   const home = homedir();

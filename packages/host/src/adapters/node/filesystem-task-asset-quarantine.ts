@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { taskAssetIdSchema, taskAssetRenderContextSchema } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { parseJson } from "../../effect/json";
 import type { TaskAssetQuarantine } from "../../ports/task-asset-file-port";
+import type { TaskAssetFileChanges } from "./filesystem-task-asset-file-safety";
 
 export type QuarantineManifest = TaskAssetQuarantine & { version: 1 };
 
@@ -61,13 +62,13 @@ const validateManifest = (value: JSONType): QuarantineManifest => {
 
 export const createTaskAssetQuarantineFiles = ({
   durableRoot,
+  fileChanges,
   quarantineRoot,
-  removeRecursively,
   reservedDirectoryNames,
 }: {
   durableRoot: string;
+  fileChanges: TaskAssetFileChanges;
   quarantineRoot: string;
-  removeRecursively: (target: string) => Promise<void>;
   reservedDirectoryNames: readonly string[];
 }) => {
   const root = (quarantineId: string) => path.join(quarantineRoot, quarantineId);
@@ -103,7 +104,7 @@ export const createTaskAssetQuarantineFiles = ({
     for (const entry of entries) {
       const entryPath = path.join(quarantineRoot, entry.name);
       if (entry.name.startsWith(PUBLICATION_PREFIX) && !ACTIVE_PUBLICATIONS.has(entryPath)) {
-        await removeRecursively(entryPath);
+        await fileChanges.removeTree(entryPath);
         continue;
       }
       if (reservedDirectoryNames.includes(entry.name)) {
@@ -123,7 +124,7 @@ export const createTaskAssetQuarantineFiles = ({
       }
       if (!childNames.includes("manifest.json")) {
         if (childNames.length === 0) {
-          await removeRecursively(entryPath);
+          await fileChanges.removeTree(entryPath);
           continue;
         }
         throw new Error(`Task asset quarantine '${entry.name}' has no manifest.`);
@@ -153,21 +154,21 @@ export const createTaskAssetQuarantineFiles = ({
   return {
     root,
     async write(manifest: QuarantineManifest): Promise<void> {
-      await mkdir(quarantineRoot, { recursive: true });
+      await fileChanges.ensureDirectory(quarantineRoot);
       const publicationRoot = path.join(
         quarantineRoot,
         `${PUBLICATION_PREFIX}${manifest.id}-${randomUUID()}`,
       );
       ACTIVE_PUBLICATIONS.add(publicationRoot);
       try {
-        await mkdir(publicationRoot);
-        await writeFile(path.join(publicationRoot, "manifest.json"), JSON.stringify(manifest), {
-          flag: "wx",
-          mode: 0o600,
-        });
-        await rename(publicationRoot, root(manifest.id));
+        await fileChanges.createDirectory(publicationRoot);
+        await fileChanges.writeNew(
+          path.join(publicationRoot, "manifest.json"),
+          JSON.stringify(manifest),
+        );
+        await fileChanges.move(publicationRoot, root(manifest.id));
       } catch (cause) {
-        await removeRecursively(publicationRoot);
+        await fileChanges.removeTree(publicationRoot);
         throw cause;
       } finally {
         ACTIVE_PUBLICATIONS.delete(publicationRoot);
@@ -175,11 +176,11 @@ export const createTaskAssetQuarantineFiles = ({
     },
     async claim(destinationRoot: string): Promise<string[]> {
       const claimed: string[] = [];
-      await mkdir(destinationRoot, { recursive: true });
+      await fileChanges.ensureDirectory(destinationRoot);
       for (const quarantineId of await listIds({ ignoreMissingEntries: true })) {
         const destinationPath = path.join(destinationRoot, quarantineId);
         try {
-          await rename(root(quarantineId), destinationPath);
+          await fileChanges.move(root(quarantineId), destinationPath);
         } catch (cause) {
           if (!isMissing(cause)) {
             throw cause;
@@ -211,13 +212,13 @@ export const createTaskAssetQuarantineFiles = ({
           throw new Error("Both durable and quarantined task asset paths exist.");
         }
         if (toStat) {
-          await mkdir(path.dirname(move.from), { recursive: true });
-          await rename(move.to, move.from);
+          await fileChanges.ensureDirectory(path.dirname(move.from));
+          await fileChanges.move(move.to, move.from);
         } else if (!fromStat) {
           throw new Error("Neither durable nor quarantined task asset path exists.");
         }
       }
-      await removeRecursively(root(manifest.id));
+      await fileChanges.removeTree(root(manifest.id));
     },
     async purge(quarantineId: string): Promise<void> {
       const quarantinePath = root(quarantineId);
@@ -229,10 +230,10 @@ export const createTaskAssetQuarantineFiles = ({
         if (entry.name === "manifest.json") {
           continue;
         }
-        await removeRecursively(path.join(quarantinePath, entry.name));
+        await fileChanges.removeTree(path.join(quarantinePath, entry.name));
       }
-      await rm(manifestPath(quarantineId), { force: true });
-      await removeRecursively(quarantinePath);
+      await fileChanges.remove(manifestPath(quarantineId));
+      await fileChanges.removeTree(quarantinePath);
     },
   };
 };

@@ -1,5 +1,5 @@
-import { realpathSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { constants, realpathSync } from "node:fs";
+import { copyFile, link, mkdir, rename, rm, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type OpenDucktorConfigDirScope,
@@ -24,12 +24,49 @@ export const createTaskAssetFileSafety = ({
   };
   return {
     assertConfigDir: () => assertPathAllowed(configDir),
-    removeRecursively: async (target: string): Promise<void> => {
+    copyNew: async (source: string, destination: string): Promise<void> => {
+      assertPathAllowed(source);
+      assertPathAllowed(destination);
+      await copyFile(source, destination, constants.COPYFILE_EXCL);
+    },
+    createDirectory: async (target: string): Promise<void> => {
+      assertPathAllowed(target);
+      await mkdir(target);
+    },
+    ensureDirectory: async (target: string): Promise<void> => {
+      assertPathAllowed(target);
+      await mkdir(target, { recursive: true });
+    },
+    link: async (source: string, destination: string): Promise<void> => {
+      assertPathAllowed(source);
+      assertPathAllowed(destination);
+      await link(source, destination);
+    },
+    move: async (source: string, destination: string): Promise<void> => {
+      assertPathAllowed(source);
+      assertPathAllowed(destination);
+      await rename(source, destination);
+    },
+    remove: async (target: string): Promise<void> => {
+      assertPathAllowed(target);
+      await rm(target, { force: true });
+    },
+    removeTree: async (target: string): Promise<void> => {
       assertPathAllowed(target);
       await rm(target, { force: true, recursive: true });
     },
+    unlink: async (target: string): Promise<void> => {
+      assertPathAllowed(target);
+      await unlink(target);
+    },
+    writeNew: async (target: string, contents: string | Uint8Array): Promise<void> => {
+      assertPathAllowed(target);
+      await writeFile(target, contents, { flag: "wx", mode: 0o600 });
+    },
   };
 };
+
+export type TaskAssetFileChanges = ReturnType<typeof createTaskAssetFileSafety>;
 
 function isWithin(directory: string, target: string): boolean {
   const relative = path.relative(directory, target);

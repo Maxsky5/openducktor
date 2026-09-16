@@ -26,6 +26,7 @@ import {
 } from "../../adapters/system/tool-discovery";
 import { createRuntimeConfigInitializer } from "../../application/runtimes/runtime-config-initializer";
 import {
+  type OpenDucktorConfigDir,
   type OpenDucktorConfigDirScope,
   resolveOpenDucktorBaseDir,
 } from "../../config/openducktor-config-dir";
@@ -71,7 +72,7 @@ export type NodeHostDefaultPorts = {
   generatedImageFiles: GeneratedImageFilePort;
   localAttachments: LocalAttachmentPort;
   openInTools: OpenInToolsPort;
-  configDirScope: OpenDucktorConfigDirScope;
+  configDir: OpenDucktorConfigDir;
   processEnvironment: ProcessEnvironmentResolution;
   runtimeDistribution: HostRuntimeDistribution;
   runtimeExecutableProbes: RuntimeExecutableProbesByKind;
@@ -155,9 +156,13 @@ const makeNodeHostDefaultPorts = (
         }
       : yield* createProcessEnvironment(input.processEnvironmentInput);
     const sourceEnv = sourceProcessEnvironment.environment;
+    const configDir: OpenDucktorConfigDir = {
+      root: resolveOpenDucktorBaseDir(input.configDirScope, sourceEnv),
+      scope: input.configDirScope,
+    };
     const processEnv = {
       ...sourceEnv,
-      OPENDUCKTOR_CONFIG_DIR: resolveOpenDucktorBaseDir(input.configDirScope, sourceEnv),
+      OPENDUCKTOR_CONFIG_DIR: configDir.root,
     };
     const processEnvironment = {
       ...sourceProcessEnvironment,
@@ -250,7 +255,7 @@ const makeNodeHostDefaultPorts = (
           localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
           openInTools:
             input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
-          configDirScope: input.configDirScope,
+          configDir,
           processEnvironment,
           runtimeDistribution: input.runtimeDistribution,
           runtimeExecutableProbes,
