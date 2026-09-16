@@ -1,14 +1,17 @@
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import { HostValidationError, type HostValidationErrorAggregate } from "../../effect/host-errors";
+import type { GitPort } from "../../ports/git-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
 export const createProspectiveWorkspaceTargetValidator =
   ({
+    gitPort,
     worktreeFiles,
     workspaceSettingsService,
   }: {
+    gitPort: Pick<GitPort, "listWorktrees">;
     worktreeFiles: Pick<WorktreeFilePort, "resolvePathWithinRoot">;
     workspaceSettingsService: Pick<
       WorkspaceSettingsService,
@@ -26,9 +29,12 @@ export const createProspectiveWorkspaceTargetValidator =
       ];
       for (const workspace of workspaces) {
         if (workspace.workspaceId === sourceWorkspace.workspaceId) continue;
-        const roots = [workspace.repoPath, workspace.effectiveWorktreeBasePath].filter(
-          (root): root is string => root !== null,
-        );
+        const registeredWorktrees = yield* gitPort.listWorktrees(workspace.repoPath);
+        const roots = [
+          workspace.repoPath,
+          workspace.effectiveWorktreeBasePath,
+          ...registeredWorktrees.map((worktree) => worktree.worktreePath),
+        ].filter((root): root is string => root !== null);
         for (const root of roots) {
           const [resolvedRoot, resolvedTarget] = yield* Effect.all([
             worktreeFiles.resolvePathWithinRoot(root, root),

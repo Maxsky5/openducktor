@@ -215,7 +215,11 @@ describe("host-owned Workspace Session lifecycle", () => {
             expect(command).toBe("setup");
             expect(args).toEqual(["--local"]);
             expect(options?.cwd).toBe(state.worktree);
-            return { ok: !state.failHook, stdout: "", stderr: state.failHook ? "hook failed" : "" };
+            return {
+              ok: !state.failHook,
+              stdout: "",
+              stderr: state.failHook ? "hook failed" : "",
+            };
           }),
       },
       runtime: {
@@ -229,7 +233,10 @@ describe("host-owned Workspace Session lifecycle", () => {
               taskId: null,
               role: "workspace",
               workingDirectory: repoPath,
-              runtimeRoute: { type: "local_http", endpoint: "http://localhost:1234" },
+              runtimeRoute: {
+                type: "local_http",
+                endpoint: "http://localhost:1234",
+              },
               startedAt: "2026-09-07T00:00:00Z",
               descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
             };
@@ -391,8 +398,32 @@ describe("host-owned Workspace Session lifecycle", () => {
 
     await Effect.runPromise(service.start({ workspaceId: "fairnest", sessionId: session.id }));
 
-    expect(bindLeaseDepth).toBe(1);
+    expect(bindLeaseDepth).toBe(2);
     expect(leaseDepth).toBe(0);
+  });
+
+  test("admits the saved target before runtime startup", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const workingDirectory = session.executionTarget.workingDirectory;
+    h.calls.length = 0;
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      withWorkStartLease: (_repoPath, effect, target) =>
+        target === workingDirectory
+          ? Effect.fail(
+              new HostValidationError({
+                field: "workingDirectory",
+                message: "The saved target belongs to another workspace.",
+              }),
+            )
+          : effect,
+    });
+
+    await expect(
+      Effect.runPromise(service.start({ workspaceId: "fairnest", sessionId: session.id })),
+    ).rejects.toThrow("belongs to another workspace");
+    expect(h.calls).toEqual([]);
   });
 
   test("No Role supplies no Role prompt and missing Roles fail before resource creation", async () => {
@@ -402,11 +433,18 @@ describe("host-owned Workspace Session lifecycle", () => {
     ).rejects.toThrow("no longer exists");
     expect(h.calls).toEqual([]);
     const created = await Effect.runPromise(
-      h.service.create({ ...input(), customAgentRoleId: null, manualTitle: null }),
+      h.service.create({
+        ...input(),
+        customAgentRoleId: null,
+        manualTitle: null,
+      }),
     );
     expect(created.session.roleSnapshot).toBeNull();
     await Effect.runPromise(
-      h.service.start({ workspaceId: "fairnest", sessionId: created.session.id }),
+      h.service.start({
+        workspaceId: "fairnest",
+        sessionId: created.session.id,
+      }),
     );
     expect(h.starts[0]?.systemPrompt).toBe("");
   });
@@ -490,7 +528,11 @@ describe("host-owned Workspace Session lifecycle", () => {
     await Effect.runPromise(
       h.service.create({
         ...worktreeInput(),
-        worktree: { mode: "from_name", name: "review-ui", branchName: "feature/custom-ui" },
+        worktree: {
+          mode: "from_name",
+          name: "review-ui",
+          branchName: "feature/custom-ui",
+        },
       }),
     );
     expect(h.state.worktree).toBe(
@@ -516,7 +558,11 @@ describe("host-owned Workspace Session lifecycle", () => {
     await Effect.runPromise(
       h.service.create({
         ...worktreeInput(),
-        worktree: { mode: "from_branch", name: "existing-review", branchName: "feature/existing" },
+        worktree: {
+          mode: "from_branch",
+          name: "existing-review",
+          branchName: "feature/existing",
+        },
       }),
     );
     expect(h.state.worktree).toBe(
@@ -534,13 +580,22 @@ describe("host-owned Workspace Session lifecycle", () => {
     h.branches.add("refs/heads/feature/existing");
     h.dependencies.git.listBranches = () =>
       Effect.succeed([
-        { name: "feature/existing", isCurrent: false, isRemote: false, worktreePath: occupied },
+        {
+          name: "feature/existing",
+          isCurrent: false,
+          isRemote: false,
+          worktreePath: occupied,
+        },
       ]);
     const error = await Effect.runPromise(
       Effect.flip(
         h.service.create({
           ...worktreeInput(),
-          worktree: { mode: "from_branch", name: "different-name", branchName: "feature/existing" },
+          worktree: {
+            mode: "from_branch",
+            name: "different-name",
+            branchName: "feature/existing",
+          },
         }),
       ),
     );
@@ -629,7 +684,11 @@ describe("host-owned Workspace Session lifecycle", () => {
           const winner = yield* Effect.forkScoped(
             service.create({
               ...worktreeInput(),
-              worktree: { mode: "from_name", name, branchName: "odt/my-feature" },
+              worktree: {
+                mode: "from_name",
+                name,
+                branchName: "odt/my-feature",
+              },
             }),
           );
           yield* Deferred.succeed(release, undefined);
@@ -672,7 +731,9 @@ describe("host-owned Workspace Session lifecycle", () => {
       },
     });
     await expect(
-      Effect.runPromise(service.create(worktreeInput()), { signal: cancellation.signal }),
+      Effect.runPromise(service.create(worktreeInput()), {
+        signal: cancellation.signal,
+      }),
     ).rejects.toThrow();
     const saved = await Effect.runPromise(service.listActive("fairnest"));
     expect(saved).toHaveLength(1);
@@ -754,7 +815,11 @@ describe("host-owned Workspace Session lifecycle", () => {
       Effect.runPromise(
         h.service.create({
           ...worktreeInput(),
-          worktree: { mode: "from_branch", name: "review", branchName: "missing" },
+          worktree: {
+            mode: "from_branch",
+            name: "review",
+            branchName: "missing",
+          },
         }),
       ),
     ).rejects.toThrow("Local branch no longer exists");
@@ -769,7 +834,11 @@ describe("host-owned Workspace Session lifecycle", () => {
       Effect.runPromise(
         h.service.create({
           ...worktreeInput(),
-          worktree: { mode: "from_branch", name: "review", branchName: "feature/existing" },
+          worktree: {
+            mode: "from_branch",
+            name: "review",
+            branchName: "feature/existing",
+          },
         }),
       ),
     ).rejects.toThrow("Worktree directory already exists");
@@ -872,7 +941,13 @@ describe("host-owned Workspace Session lifecycle", () => {
     const started = await Effect.runPromise(h.service.start(ref));
     h.state.observation = "running";
     await expect(
-      Effect.runPromise(h.service.archive({ ...ref, confirmStop: false, removeWorktree: false })),
+      Effect.runPromise(
+        h.service.archive({
+          ...ref,
+          confirmStop: false,
+          removeWorktree: false,
+        }),
+      ),
     ).rejects.toThrow("Confirm Stop");
     h.state.failStop = true;
     await expect(
@@ -909,7 +984,13 @@ describe("host-owned Workspace Session lifecycle", () => {
       else h.registered.clear();
       h.state.observation = "running";
       await expect(
-        Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: false })),
+        Effect.runPromise(
+          h.service.archive({
+            ...ref,
+            confirmStop: true,
+            removeWorktree: false,
+          }),
+        ),
       ).rejects.toThrow(/saved canonical Git directory|not a registered worktree/);
       expect(h.calls).not.toContain("stop");
       expect(await Effect.runPromise(h.service.get(ref))).toEqual(started.session);
@@ -962,7 +1043,11 @@ describe("host-owned Workspace Session lifecycle", () => {
       const firstRef = { workspaceId: "fairnest", sessionId: first.session.id };
       if (operation === "restore") {
         await Effect.runPromise(
-          h.service.archive({ ...firstRef, confirmStop: true, removeWorktree: true }),
+          h.service.archive({
+            ...firstRef,
+            confirmStop: true,
+            removeWorktree: true,
+          }),
         );
       }
       await Effect.runPromise(
@@ -1127,7 +1212,11 @@ describe("host-owned Workspace Session lifecycle", () => {
           const ref = { workspaceId: "fairnest", sessionId: session.id };
           const archive = yield* Effect.acquireRelease(
             Effect.forkScoped(
-              service.archive({ ...ref, confirmStop: false, removeWorktree: false }),
+              service.archive({
+                ...ref,
+                confirmStop: false,
+                removeWorktree: false,
+              }),
             ),
             () => Deferred.succeed(release, undefined),
           );
@@ -1238,6 +1327,37 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(h.branches.has("refs/heads/odt/my-feature")).toBe(conflict === "branch");
     },
   );
+
+  test("admits a removed worktree target before restore creates it", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    const archived = await Effect.runPromise(
+      h.service.archive({ ...ref, confirmStop: true, removeWorktree: true }),
+    );
+    const workingDirectory = session.executionTarget.workingDirectory;
+    h.calls.length = 0;
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      withWorkStartLease: (_repoPath, effect, target) =>
+        target === workingDirectory
+          ? Effect.fail(
+              new HostValidationError({
+                field: "workingDirectory",
+                message: "The restore target belongs to another workspace.",
+              }),
+            )
+          : effect,
+    });
+
+    await expect(Effect.runPromise(service.restore(ref))).rejects.toThrow(
+      "belongs to another workspace",
+    );
+    expect(h.calls).toEqual([]);
+    expect(h.paths.size).toBe(0);
+    expect(h.branches.size).toBe(0);
+    expect(await Effect.runPromise(service.get(ref))).toEqual(archived);
+  });
 
   test("removes a dirty worktree only after stopping, and restores the same session from the default branch", async () => {
     const h = setup();
@@ -1396,7 +1516,13 @@ describe("host-owned Workspace Session lifecycle", () => {
       const ref = { workspaceId: "fairnest", sessionId: session.id };
       h.state[failure] = true;
       await expect(
-        Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: true })),
+        Effect.runPromise(
+          h.service.archive({
+            ...ref,
+            confirmStop: true,
+            removeWorktree: true,
+          }),
+        ),
       ).rejects.toThrow();
       expect(await Effect.runPromise(h.service.get(ref))).toEqual(session);
       h.state[failure] = false;

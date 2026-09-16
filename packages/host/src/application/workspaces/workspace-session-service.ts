@@ -153,7 +153,9 @@ export const createWorkspaceSessionService = (
                     session,
                   });
                   retainTarget();
-                  return { session: saved } satisfies WorkspaceSessionCreateResult;
+                  return {
+                    session: saved,
+                  } satisfies WorkspaceSessionCreateResult;
                 }),
             );
           }),
@@ -174,73 +176,84 @@ export const createWorkspaceSessionService = (
             });
           }
           if (session.externalSessionId !== null) {
-            return { session, runtimeSession: null } satisfies WorkspaceSessionStartResult;
+            return {
+              session,
+              runtimeSession: null,
+            } satisfies WorkspaceSessionStartResult;
           }
-          yield* validateWorkspaceSessionTarget(
-            dependencies,
+          return yield* dependencies.withWorkStartLease(
             ref.repoPath,
-            session.executionTarget,
-          );
-          yield* runtime.runtimeEnsure({
-            repoPath: ref.repoPath,
-            runtimeKind: session.runtimeKind,
-          });
-          return yield* Effect.uninterruptible(
             Effect.gen(function* () {
-              const startInput: AgentSessionControlStartInput = {
+              yield* validateWorkspaceSessionTarget(
+                dependencies,
+                ref.repoPath,
+                session.executionTarget,
+              );
+              yield* runtime.runtimeEnsure({
                 repoPath: ref.repoPath,
                 runtimeKind: session.runtimeKind,
-                workingDirectory: session.executionTarget.workingDirectory,
-                sessionScope: { kind: "repository" },
-                systemPrompt: session.roleSnapshot?.systemPrompt ?? "",
-              };
-              if (session.selectedModel !== null) startInput.model = session.selectedModel;
-              const runtimeSession = yield* live.startSession(startInput);
-              const saved = yield* Effect.exit(
+              });
+              return yield* Effect.uninterruptible(
                 Effect.gen(function* () {
-                  if (
-                    runtimeSession.runtimeKind !== session.runtimeKind ||
-                    runtimeSession.workingDirectory !== session.executionTarget.workingDirectory
-                  ) {
-                    return yield* new HostValidationError({
-                      field: "runtimeSession",
-                      message:
-                        "Runtime returned a different Workspace Session identity or directory.",
-                    });
-                  }
-                  return yield* store.bindRuntimeSession({
-                    ...ref,
-                    externalSessionId: runtimeSession.externalSessionId,
+                  const startInput: AgentSessionControlStartInput = {
+                    repoPath: ref.repoPath,
+                    runtimeKind: session.runtimeKind,
+                    workingDirectory: session.executionTarget.workingDirectory,
+                    sessionScope: { kind: "repository" },
+                    systemPrompt: session.roleSnapshot?.systemPrompt ?? "",
+                  };
+                  if (session.selectedModel !== null) startInput.model = session.selectedModel;
+                  const runtimeSession = yield* live.startSession(startInput);
+                  const saved = yield* Effect.exit(
+                    Effect.gen(function* () {
+                      if (
+                        runtimeSession.runtimeKind !== session.runtimeKind ||
+                        runtimeSession.workingDirectory !== session.executionTarget.workingDirectory
+                      ) {
+                        return yield* new HostValidationError({
+                          field: "runtimeSession",
+                          message:
+                            "Runtime returned a different Workspace Session identity or directory.",
+                        });
+                      }
+                      return yield* store.bindRuntimeSession({
+                        ...ref,
+                        externalSessionId: runtimeSession.externalSessionId,
+                      });
+                    }),
+                  );
+                  if (Exit.isSuccess(saved))
+                    return {
+                      session: saved.value,
+                      runtimeSession,
+                    } satisfies WorkspaceSessionStartResult;
+                  const released = yield* Effect.exit(
+                    live.releaseSession({
+                      repoPath: ref.repoPath,
+                      runtimeKind: runtimeSession.runtimeKind,
+                      externalSessionId: runtimeSession.externalSessionId,
+                      workingDirectory: runtimeSession.workingDirectory,
+                    }),
+                  );
+                  const releaseMessage = Exit.isFailure(released)
+                    ? `\nLocal runtime release also failed: ${Cause.pretty(released.cause)}`
+                    : "";
+                  return yield* new HostOperationError({
+                    operation: "workspaceSession.start.persist",
+                    message: `Workspace Session start failed: ${Cause.pretty(saved.cause)}\nRuntime history ${runtimeSession.externalSessionId} was retained.${releaseMessage}`,
+                    cause: { save: saved.cause, release: released },
                   });
                 }),
               );
-              if (Exit.isSuccess(saved))
-                return {
-                  session: saved.value,
-                  runtimeSession,
-                } satisfies WorkspaceSessionStartResult;
-              const released = yield* Effect.exit(
-                live.releaseSession({
-                  repoPath: ref.repoPath,
-                  runtimeKind: runtimeSession.runtimeKind,
-                  externalSessionId: runtimeSession.externalSessionId,
-                  workingDirectory: runtimeSession.workingDirectory,
-                }),
-              );
-              const releaseMessage = Exit.isFailure(released)
-                ? `\nLocal runtime release also failed: ${Cause.pretty(released.cause)}`
-                : "";
-              return yield* new HostOperationError({
-                operation: "workspaceSession.start.persist",
-                message: `Workspace Session start failed: ${Cause.pretty(saved.cause)}\nRuntime history ${runtimeSession.externalSessionId} was retained.${releaseMessage}`,
-                cause: { save: saved.cause, release: released },
-              });
             }),
+            session.executionTarget.workingDirectory,
           );
         }).pipe((effect) => withMutationAdmission(input.workspaceId, effect)),
       ),
     setDraftModel: (
-      input: WorkspaceSessionRefInput & { selectedModel: AgentSessionModelSelection },
+      input: WorkspaceSessionRefInput & {
+        selectedModel: AgentSessionModelSelection;
+      },
     ) =>
       operationGate.run(
         input,
@@ -254,7 +267,10 @@ export const createWorkspaceSessionService = (
                 message: "Only an active draft can change its saved model.",
               });
             }
-            return yield* store.setSelectedModel({ ...ref, selectedModel: input.selectedModel });
+            return yield* store.setSelectedModel({
+              ...ref,
+              selectedModel: input.selectedModel,
+            });
           }),
         ),
       ),
@@ -270,7 +286,10 @@ export const createWorkspaceSessionService = (
                 field: "sessionId",
               }),
             );
-          return yield* store.rename({ ...ref, manualTitle: input.manualTitle });
+          return yield* store.rename({
+            ...ref,
+            manualTitle: input.manualTitle,
+          });
         }),
       ),
     archivePreview: (input: WorkspaceSessionRefInput) =>
@@ -345,7 +364,11 @@ export const createWorkspaceSessionService = (
                     ? yield* removeWorkspaceSessionWorktree(dependencies, ref.repoPath, target)
                     : target;
                 return yield* store
-                  .archive({ ...ref, executionTarget, archivedAt: yield* Clock.currentTimeMillis })
+                  .archive({
+                    ...ref,
+                    executionTarget,
+                    archivedAt: yield* Clock.currentTimeMillis,
+                  })
                   .pipe(
                     Effect.mapError(
                       (cause) =>

@@ -199,31 +199,22 @@ export const createWorkspaceLifecycleService = ({
     removedWorktrees: string[],
     failedPath: string | undefined,
     message: string,
-    cause: unknown = new Error(message),
-  ) =>
-    Effect.gen(function* () {
-      const journalResult = yield* Effect.either(
-        persistProgress(workspaceId, phase, removedWorktrees, message),
-      );
-      if (journalResult._tag === "Left") {
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: `workspace.removeWorkspace.${phase}`,
-            message: `${message} The removal progress could not be saved: ${journalResult.left.message}`,
-            cause: unwrapUnknownError(journalResult.left),
-            details: { failedPath, phase, removedWorktrees, workspaceId },
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: `workspace.removeWorkspace.${phase}`,
-          message,
-          cause: unwrapUnknownError(cause),
-          details: { failedPath, phase, removedWorktrees, workspaceId },
-        }),
-      );
-    });
+    cause: WorkspaceLifecycleError | Error = new Error(message),
+  ) => {
+    const failure = (failureMessage: string, failureCause: WorkspaceLifecycleError | Error) =>
+      new HostOperationError({
+        operation: `workspace.removeWorkspace.${phase}`,
+        message: failureMessage,
+        cause: unwrapUnknownError(failureCause),
+        details: { failedPath, phase, removedWorktrees, workspaceId },
+      });
+    return persistProgress(workspaceId, phase, removedWorktrees, message).pipe(
+      Effect.mapError((journalFailure) =>
+        failure(`${message} Progress save failed: ${journalFailure.message}`, journalFailure),
+      ),
+      Effect.zipRight(Effect.fail(failure(message, cause))),
+    );
+  };
 
   const executeRemoval = (input: WorkspaceRemovalInput, repoConfig: RepoConfig) =>
     Effect.gen(function* () {
@@ -233,8 +224,6 @@ export const createWorkspaceLifecycleService = ({
       } else {
         yield* admission.awaitWorkStarts(repoConfig.repoPath);
       }
-      yield* activity.releaseWorkspaceSessions(repoConfig.repoPath);
-      yield* activity.releaseWorkspaceRuntimes(repoConfig.repoPath);
       const preflightWorktreePaths =
         !repoConfig.removal && input.removeTaskWorktrees
           ? yield* collectWorktreePaths(input, repoConfig, null)
@@ -252,6 +241,19 @@ export const createWorkspaceLifecycleService = ({
       });
       const removedWorktrees = [...startedRecord.removedWorktrees];
       let phase = startedRecord.phase;
+      yield* activity.releaseWorkspaceSessions(journaledRepoConfig.repoPath).pipe(
+        Effect.zipRight(activity.releaseWorkspaceRuntimes(journaledRepoConfig.repoPath)),
+        Effect.catchAll((cause) =>
+          failRemovalPhase(
+            input.workspaceId,
+            phase,
+            removedWorktrees,
+            undefined,
+            `Failed to release workspace sessions and runtimes: ${errorMessage(cause)}. Retry removal to continue.`,
+            cause,
+          ),
+        ),
+      );
       if (phase === "worktrees" && startedRecord.removeTaskWorktrees) {
         const managedWorktreeBasePath = managedWorktreeBaseForRepoConfig(
           settingsConfig,
@@ -305,7 +307,10 @@ export const createWorkspaceLifecycleService = ({
                 operation: "workspace.removeWorkspace.worktrees",
                 message: `Cannot journal the pending worktree deletion of ${worktreePath}: ${result.left.message}. Retry removal to continue.`,
                 cause: unwrapUnknownError(result.left),
-                details: { failedPath: worktreePath, workspaceId: input.workspaceId },
+                details: {
+                  failedPath: worktreePath,
+                  workspaceId: input.workspaceId,
+                },
               }),
             );
           }

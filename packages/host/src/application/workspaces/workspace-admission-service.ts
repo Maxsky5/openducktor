@@ -104,6 +104,7 @@ export const createWorkspaceAdmissionService = ({
     workspaceSettingsService,
   });
   const assertProspectiveWorkspaceTarget = createProspectiveWorkspaceTargetValidator({
+    gitPort,
     worktreeFiles,
     workspaceSettingsService,
   });

@@ -813,7 +813,9 @@ describe("createElectronHostCommandRouter", () => {
       await expect(router.invoke("workspace_get_settings_snapshot")).rejects.toThrow(
         diagnostic.message,
       );
-      await expect(readFile(configPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(configPath, "utf8")).rejects.toMatchObject({
+        code: "ENOENT",
+      });
 
       const legacyConfig = JSON.stringify({
         version: 2,
@@ -1071,6 +1073,7 @@ describe("createElectronHostCommandRouter", () => {
   });
 
   test("shows a PATH probe failure in dev server start output", async () => {
+    const taskWorktreePath = "/home/dev/.openducktor/worktrees/repo/task-1";
     const diagnostic = new ProcessEnvironmentError({
       message:
         "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
@@ -1079,7 +1082,11 @@ describe("createElectronHostCommandRouter", () => {
     });
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
-      git: createGit(),
+      git: {
+        ...createGit(),
+        isRegisteredWorktree: (_repoPath, worktreePath) =>
+          Effect.succeed(worktreePath === taskWorktreePath),
+      },
       openInTools: createOpenInTools(),
       processEnvironmentInput: pathFailure(diagnostic),
       settingsConfig: createSettingsConfig(
@@ -1095,20 +1102,27 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     await expect(
-      router.invoke("dev_server_start", { repoPath: "/repo", taskId: "task-1" }),
+      router.invoke("dev_server_start", {
+        repoPath: "/repo",
+        taskId: "task-1",
+      }),
     ).rejects.toThrow(diagnostic.message);
     const state = await router.invoke("dev_server_get_state", {
       repoPath: "/repo",
       taskId: "task-1",
     });
 
-    expect(state.scripts[0]).toMatchObject({ status: "failed", lastError: diagnostic.message });
+    expect(state.scripts[0]).toMatchObject({
+      status: "failed",
+      lastError: diagnostic.message,
+    });
     expect(state.scripts[0]?.bufferedTerminalChunks.map((chunk) => chunk.data)).toContain(
       `${diagnostic.message}\r\n`,
     );
   });
 
   test("blocks an injected dev server process when the user PATH is unavailable", async () => {
+    const taskWorktreePath = "/home/dev/.openducktor/worktrees/repo/task-1";
     const diagnostic = new ProcessEnvironmentError({
       message:
         "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
@@ -1126,7 +1140,11 @@ describe("createElectronHostCommandRouter", () => {
     const router = await createElectronHostCommandRouter({
       devServerProcesses,
       filesystem: createFilesystem(),
-      git: createGit(),
+      git: {
+        ...createGit(),
+        isRegisteredWorktree: (_repoPath, worktreePath) =>
+          Effect.succeed(worktreePath === taskWorktreePath),
+      },
       openInTools: createOpenInTools(),
       processEnvironmentInput: pathFailure(diagnostic),
       settingsConfig: createSettingsConfig(
@@ -1142,7 +1160,10 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     await expect(
-      router.invoke("dev_server_start", { repoPath: "/repo", taskId: "task-1" }),
+      router.invoke("dev_server_start", {
+        repoPath: "/repo",
+        taskId: "task-1",
+      }),
     ).rejects.toThrow(diagnostic.message);
     expect(startCalls).toBe(0);
   });
@@ -1213,7 +1234,10 @@ describe("createElectronHostCommandRouter", () => {
     });
 
     await expect(
-      router.invoke("runtime_ensure", { runtimeKind: "opencode", repoPath: "/repo" }),
+      router.invoke("runtime_ensure", {
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+      }),
     ).rejects.toThrow(
       `Failed to start opencode runtime because the user PATH is unavailable. ${diagnostic.message}`,
     );
@@ -1384,7 +1408,11 @@ describe("createElectronHostCommandRouter", () => {
           id: "github",
           enabled: true,
           autoDetected: false,
-          repository: { host: "github.com", owner: "openai", name: "openducktor" },
+          repository: {
+            host: "github.com",
+            owner: "openai",
+            name: "openducktor",
+          },
         },
       },
     });
@@ -1412,7 +1440,9 @@ describe("createElectronHostCommandRouter", () => {
       name: "openducktor",
     });
     await expect(
-      router.invoke("workspace_get_git_provider_context", { repoPath: "/repo" }),
+      router.invoke("workspace_get_git_provider_context", {
+        repoPath: "/repo",
+      }),
     ).resolves.toMatchObject({
       descriptor: {
         id: "github",
@@ -1514,9 +1544,13 @@ describe("createElectronHostCommandRouter", () => {
           errors: expect.arrayContaining([processEnvironmentError.message]),
         });
         if (fixture.config) {
-          expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({ version: 2 });
+          expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({
+            version: 2,
+          });
         } else {
-          await expect(readFile(configPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+          await expect(readFile(configPath, "utf8")).rejects.toMatchObject({
+            code: "ENOENT",
+          });
         }
       } finally {
         await rm(root, { force: true, recursive: true });

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import {
   createNodeWorkspaceHostOwnership,
   createNodeWorkspaceOwnershipLock,
@@ -42,6 +42,12 @@ await Effect.runPromise(ownershipLock.runExclusive(
       const reader = child.stdout.getReader();
       const firstOutput = await reader.read();
       expect(new TextDecoder().decode(firstOutput.value)).toContain("locked");
+      const staleTime = new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000);
+      await utimes(
+        path.join(configDir, "workspace-host-owners", "path-ownership.lock"),
+        staleTime,
+        staleTime,
+      );
 
       const ownershipLock = createNodeWorkspaceOwnershipLock({
         processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir },
@@ -64,7 +70,9 @@ await Effect.runPromise(ownershipLock.runExclusive(
 
     try {
       const result = await Effect.runPromise(
-        ownershipLock.runExclusive(Effect.fail("expected failure")).pipe(Effect.either),
+        Effect.uninterruptible(ownershipLock.runExclusive(Effect.fail("expected failure"))).pipe(
+          Effect.either,
+        ),
       );
       expect(result._tag).toBe("Left");
       if (result._tag === "Left") {
@@ -73,6 +81,42 @@ await Effect.runPromise(ownershipLock.runExclusive(
       await expect(
         Effect.runPromise(ownershipLock.runExclusive(Effect.void)),
       ).resolves.toBeUndefined();
+    } finally {
+      await rm(configDir, { force: true, recursive: true });
+    }
+  });
+
+  test("reports a compromised workspace path lock through Effect", async () => {
+    const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-owner-"));
+    let onCompromised: ((error: Error) => void) | undefined;
+    const ownershipLock = createNodeWorkspaceOwnershipLock(
+      { processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir } },
+      {
+        identity: {
+          instanceId: "00000000-0000-4000-8000-000000000001",
+          processId: process.pid,
+          startedAtMs: 1_000,
+        },
+        processIsAlive: () => true,
+        processStartedAtMs: async () => 1_000,
+        acquireFileLock: async (_file, options) => {
+          onCompromised = options?.onCompromised;
+          return async () => {};
+        },
+      },
+    );
+    const entered = await Effect.runPromise(Deferred.make<void>());
+
+    try {
+      const running = Effect.runPromise(
+        ownershipLock.runExclusive(
+          Deferred.succeed(entered, undefined).pipe(Effect.zipRight(Effect.never)),
+        ),
+      );
+      await Effect.runPromise(Deferred.await(entered));
+      expect(onCompromised).toBeDefined();
+      expect(() => onCompromised?.(new Error("lock directory changed"))).not.toThrow();
+      await expect(running).rejects.toThrow("workspace path ownership lock was lost");
     } finally {
       await rm(configDir, { force: true, recursive: true });
     }

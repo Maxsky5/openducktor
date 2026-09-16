@@ -106,7 +106,10 @@ const noActivity: WorkspaceActivityPort = {
 };
 
 const activityWith = (
-  blockers: Array<{ kind: "agent-session" | "dev-server" | "terminal"; label: string }>,
+  blockers: Array<{
+    kind: "agent-session" | "dev-server" | "terminal";
+    label: string;
+  }>,
   releaseWorkspaceSessions: WorkspaceActivityPort["releaseWorkspaceSessions"] = () => Effect.void,
   releaseWorkspaceRuntimes: WorkspaceActivityPort["releaseWorkspaceRuntimes"] = () => Effect.void,
 ): WorkspaceActivityPort => ({
@@ -185,7 +188,10 @@ const createService = ({
     workspaceId: string;
     expectedRepoPath: string;
     removeTaskWorktrees: boolean;
-  }) => Effect.Effect<{ record: WorkspaceRemovalRecord; repoConfig: RepoConfig }, never>;
+  }) => Effect.Effect<
+    { record: WorkspaceRemovalRecord; repoConfig: RepoConfig },
+    HostOperationError
+  >;
   recordWorkspaceRemovalProgress?: (input: {
     workspaceId: string;
     phase: "worktrees" | "attachments" | "task_store";
@@ -307,12 +313,18 @@ describe("workspace lifecycle service", () => {
 
   test("closeWorkspace waits for the shared ownership lock", () =>
     expectActionToWaitForOwnershipLock((service) =>
-      service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      service.closeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+      }),
     ));
 
   test("reopenWorkspace waits for the shared ownership lock", () =>
     expectActionToWaitForOwnershipLock((service) =>
-      service.reopenWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      service.reopenWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+      }),
     ));
 
   test("closeWorkspace rejects while work is running and does not persist", async () => {
@@ -328,7 +340,10 @@ describe("workspace lifecycle service", () => {
 
     await expect(
       Effect.runPromise(
-        service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+        service.closeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+        }),
       ),
     ).rejects.toThrow(
       "Stop the running work before closing or removing this workspace: agent session session-1 is running.",
@@ -376,7 +391,10 @@ describe("workspace lifecycle service", () => {
     });
 
     const result = await Effect.runPromise(
-      service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      service.closeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+      }),
     );
 
     expect(result).toEqual(expected);
@@ -416,7 +434,10 @@ describe("workspace lifecycle service", () => {
 
     await expect(
       Effect.runPromise(
-        service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+        service.closeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+        }),
       ),
     ).rejects.toThrow("task store close failed");
     expect(releaseWorkspace).not.toHaveBeenCalled();
@@ -440,7 +461,10 @@ describe("workspace lifecycle service", () => {
 
     await expect(
       Effect.runPromise(
-        service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+        service.closeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+        }),
       ),
     ).rejects.toThrow("owner lock removal failed");
     expect(blockWorkspace).toHaveBeenCalledWith({
@@ -472,7 +496,10 @@ describe("workspace lifecycle service", () => {
     });
 
     const result = await Effect.runPromise(
-      service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      service.closeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+      }),
     );
 
     expect(result).toEqual(expected);
@@ -569,7 +596,10 @@ describe("workspace lifecycle service", () => {
 
   test("removeWorkspace blocks on running dev servers", async () => {
     const beginWorkspaceRemoval = mock(() =>
-      Effect.succeed({ record: removalRecord({ phase: "attachments" }), repoConfig: repoConfig() }),
+      Effect.succeed({
+        record: removalRecord({ phase: "attachments" }),
+        repoConfig: repoConfig(),
+      }),
     );
     const service = createService({
       activity: activityWith([{ kind: "dev-server", label: "dev server for task-1 is running" }]),
@@ -623,7 +653,10 @@ describe("workspace lifecycle service", () => {
 
   test("removeWorkspace rejects a configured task store before journaling and worktree removal", async () => {
     const beginWorkspaceRemoval = mock(() =>
-      Effect.succeed({ record: removalRecord({ phase: "worktrees" }), repoConfig: repoConfig() }),
+      Effect.succeed({
+        record: removalRecord({ phase: "worktrees" }),
+        repoConfig: repoConfig(),
+      }),
     );
     const removeWorktree = mock(() => Effect.void);
     const service = createService({
@@ -724,7 +757,11 @@ describe("workspace lifecycle service", () => {
   });
 
   test("removeWorkspace removes verified task and historical session worktrees", async () => {
-    const removed: Array<{ repoPath: string; worktreePath: string; force: boolean }> = [];
+    const removed: Array<{
+      repoPath: string;
+      worktreePath: string;
+      force: boolean;
+    }> = [];
     const service = createService({
       taskStore: createTaskStoreDouble([taskCard("task-1")], [session("/custom/worktrees/task-1")]),
       listWorktrees: () =>
@@ -747,8 +784,16 @@ describe("workspace lifecycle service", () => {
     );
 
     expect(removed).toEqual([
-      { repoPath: "/repos/ws", worktreePath: "/managed/ws/task-1", force: true },
-      { repoPath: "/repos/ws", worktreePath: "/custom/worktrees/task-1", force: true },
+      {
+        repoPath: "/repos/ws",
+        worktreePath: "/managed/ws/task-1",
+        force: true,
+      },
+      {
+        repoPath: "/repos/ws",
+        worktreePath: "/custom/worktrees/task-1",
+        force: true,
+      },
     ]);
     expect(result.removedWorktrees).toEqual(["/managed/ws/task-1", "/custom/worktrees/task-1"]);
   });
@@ -859,7 +904,7 @@ describe("workspace lifecycle service", () => {
     expect(removeWorkspaceTaskAssets).toHaveBeenCalled();
   });
 
-  test("removeWorkspace releases workspace runtimes after sessions and before the removal record", async () => {
+  test("removeWorkspace releases workspace runtimes after sessions and after the removal record", async () => {
     const calls: string[] = [];
     const service = createService({
       activity: {
@@ -893,7 +938,7 @@ describe("workspace lifecycle service", () => {
       }),
     );
 
-    expect(calls).toEqual(["sessions", "runtimes:/repos/ws", "beginRemoval"]);
+    expect(calls).toEqual(["beginRemoval", "sessions", "runtimes:/repos/ws"]);
   });
 
   test("removeWorkspace releases workspace runtimes on a resumed removal", async () => {
@@ -922,10 +967,17 @@ describe("workspace lifecycle service", () => {
 
   test("removeWorkspace rejects an initial inventory failure before journaling", async () => {
     const progress: Array<{ phase: string; lastFailure: string | null }> = [];
+    const releaseWorkspaceSessions = mock(() => Effect.void);
+    const releaseWorkspaceRuntimes = mock(() => Effect.void);
     const beginWorkspaceRemoval = mock(() =>
       Effect.succeed({ record: removalRecord(), repoConfig: repoConfig() }),
     );
     const service = createService({
+      activity: {
+        ...noActivity,
+        releaseWorkspaceSessions,
+        releaseWorkspaceRuntimes,
+      },
       beginWorkspaceRemoval,
       taskStore: createTaskStoreDouble([taskCard("task-1")]),
       listWorktrees: () =>
@@ -951,7 +1003,78 @@ describe("workspace lifecycle service", () => {
       ),
     ).rejects.toThrow("git worktree list failed");
     expect(beginWorkspaceRemoval).not.toHaveBeenCalled();
+    expect(releaseWorkspaceSessions).not.toHaveBeenCalled();
+    expect(releaseWorkspaceRuntimes).not.toHaveBeenCalled();
     expect(progress).toEqual([]);
+  });
+
+  test("removeWorkspace does not release activity when journaling fails", async () => {
+    const releaseWorkspaceSessions = mock(() => Effect.void);
+    const releaseWorkspaceRuntimes = mock(() => Effect.void);
+    const service = createService({
+      activity: {
+        ...noActivity,
+        releaseWorkspaceSessions,
+        releaseWorkspaceRuntimes,
+      },
+      beginWorkspaceRemoval: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "workspaceSettings.beginWorkspaceRemoval",
+            message: "settings write failed",
+          }),
+        ),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: false,
+        }),
+      ),
+    ).rejects.toThrow("settings write failed");
+    expect(releaseWorkspaceSessions).not.toHaveBeenCalled();
+    expect(releaseWorkspaceRuntimes).not.toHaveBeenCalled();
+  });
+
+  test("removeWorkspace journals an activity release failure", async () => {
+    const progress: Array<{ phase: string; lastFailure: string | null }> = [];
+    const removeWorkspaceTaskStore = mock(() => Effect.void);
+    const service = createService({
+      activity: {
+        ...noActivity,
+        releaseWorkspaceSessions: () =>
+          Effect.fail(
+            new HostOperationError({
+              operation: "workspaceActivity.releaseSessions",
+              message: "session release failed",
+            }),
+          ),
+      },
+      recordWorkspaceRemovalProgress: (input) =>
+        Effect.sync(() => {
+          progress.push({ phase: input.phase, lastFailure: input.lastFailure });
+        }),
+      removeWorkspaceTaskStore,
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.removeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+          removeTaskWorktrees: false,
+        }),
+      ),
+    ).rejects.toThrow("session release failed");
+    expect(progress.at(-1)).toEqual({
+      phase: "task_store",
+      lastFailure:
+        "Failed to release workspace sessions and runtimes: session release failed. Retry removal to continue.",
+    });
+    expect(removeWorkspaceTaskStore).not.toHaveBeenCalled();
   });
 
   test("removeWorkspace reads every inventory workspace with administrative access", async () => {
@@ -1158,7 +1281,10 @@ describe("workspace lifecycle service", () => {
       },
       beginWorkspaceRemoval: () =>
         Effect.succeed({
-          record: removalRecord({ removeTaskWorktrees: false, phase: "task_store" }),
+          record: removalRecord({
+            removeTaskWorktrees: false,
+            phase: "task_store",
+          }),
           repoConfig: repoConfig(),
         }),
       removeWorkspaceTaskStore: () =>
@@ -1554,11 +1680,17 @@ describe("workspace lifecycle service", () => {
               events.push("first-started");
               yield* awaitFirst;
               events.push("first-released");
-              return { record: removalRecord({ phase: "task_store" }), repoConfig: repoConfig() };
+              return {
+                record: removalRecord({ phase: "task_store" }),
+                repoConfig: repoConfig(),
+              };
             })
           : Effect.sync(() => {
               events.push("second-started");
-              return { record: removalRecord({ phase: "task_store" }), repoConfig: repoConfig() };
+              return {
+                record: removalRecord({ phase: "task_store" }),
+                repoConfig: repoConfig(),
+              };
             }),
     });
 
@@ -1646,7 +1778,10 @@ describe("workspace lifecycle service", () => {
 
     await expect(
       Effect.runPromise(
-        service.reopenWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+        service.reopenWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+        }),
       ),
     ).resolves.toEqual(expected);
     expect(reopenWorkspace).toHaveBeenCalledWith("ws", "/repos/ws");
@@ -1675,7 +1810,10 @@ describe("workspace lifecycle service", () => {
 
     await expect(
       Effect.runPromise(
-        service.reopenWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+        service.reopenWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+        }),
       ),
     ).rejects.toThrow("config write failed");
     expect(calls).toEqual(["claim", "reopen", "release"]);
@@ -1703,7 +1841,10 @@ describe("workspace lifecycle service", () => {
 
     await expect(
       Effect.runPromise(
-        service.reopenWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+        service.reopenWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+        }),
       ),
     ).rejects.toThrow("Restart OpenDucktor");
     expect(reopenWorkspace).not.toHaveBeenCalled();
@@ -1738,7 +1879,10 @@ describe("workspace lifecycle service", () => {
     });
 
     await Effect.runPromise(
-      service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+      service.closeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+      }),
     );
 
     expect(calls).toEqual(["reserve", "inspect", "block", "release"]);
@@ -1755,7 +1899,10 @@ describe("workspace lifecycle service", () => {
 
     await expect(
       Effect.runPromise(
-        service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+        service.closeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+        }),
       ),
     ).rejects.toThrow("terminal t1 is running a command");
     expect(releaseReservation).toHaveBeenCalledWith("ws");
@@ -1797,7 +1944,10 @@ describe("workspace lifecycle service", () => {
 
     await expect(
       Effect.runPromise(
-        service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/ws" }),
+        service.closeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/ws",
+        }),
       ),
     ).rejects.toThrow("already in progress for ws");
     expect(closeWorkspace).not.toHaveBeenCalled();
@@ -1809,7 +1959,10 @@ describe("workspace lifecycle service", () => {
 
     await expect(
       Effect.runPromise(
-        service.closeWorkspace({ workspaceId: "ws", expectedRepoPath: "/repos/other" }),
+        service.closeWorkspace({
+          workspaceId: "ws",
+          expectedRepoPath: "/repos/other",
+        }),
       ),
     ).rejects.toThrow("changed since the dialog opened");
     expect(closeWorkspace).not.toHaveBeenCalled();

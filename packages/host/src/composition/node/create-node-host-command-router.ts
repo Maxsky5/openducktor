@@ -42,8 +42,6 @@ import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/w
 import { createTaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { loadGlobalConfig } from "../../application/workspaces/workspace-settings-model";
-import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
-import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
@@ -82,6 +80,7 @@ import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createNodeWorkspaceSessionPersistence } from "./node-workspace-session-persistence";
+import { createNodeWorkspaceAccessServices } from "./node-workspace-access-services";
 import { createOpenCodeRuntimeComposition } from "./opencode-runtime-composition";
 import { createRuntimeActiveSessionResolver } from "./runtime-active-session-resolver";
 import {
@@ -128,22 +127,14 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceOwnershipLock,
   } = defaultPorts;
   const { environment: processEnv, error: processEnvironmentError } = processEnvironment;
-  const workspaceSettingsService = createWorkspaceSettingsService(
-    settingsConfig,
-    workspaceOwnershipLock,
-  );
-  const ownedWorkspaceSettingsService = createWorkspaceSettingsService(
-    settingsConfig,
-    workspaceOwnershipLock,
-    "already-held",
-  );
-  const workspaceAdmissionService = createWorkspaceAdmissionService({
-    gitPort: git,
-    hostOwnership: workspaceHostOwnership,
-    settingsConfig,
-    worktreeFiles,
-    workspaceSettingsService,
-  });
+  const { ownedWorkspaceSettingsService, workspaceAdmissionService, workspaceSettingsService } =
+    createNodeWorkspaceAccessServices({
+      git,
+      settingsConfig,
+      worktreeFiles,
+      workspaceHostOwnership,
+      workspaceOwnershipLock,
+    });
   const assets = createNodeTaskAssetServices({
     configDir,
     assertWorkspaceAdmitted: workspaceAdmissionService.assertTaskStoreAccess,
