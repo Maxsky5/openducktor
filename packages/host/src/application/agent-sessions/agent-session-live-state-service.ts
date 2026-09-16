@@ -377,7 +377,9 @@ export const createAgentSessionLiveStateService = ({
                 reason: "runtime_unavailable",
                 sessionRef: continuationSessionRef(input),
                 operation: "agent-session.continue-interrupted-turn",
-                message: cause.message,
+                message: `${cause.message} The adapter already accepted the continuation, so the runtime can be working on it.`,
+                nextAction:
+                  "Inspect the runtime and this session. Retry Resume only if the turn is still unfinished.",
                 cause,
               }),
           ),

@@ -144,6 +144,7 @@ export const createAgentSessionActions = ({
     workspaceRepoPath,
     adapter,
     readSessionSnapshot,
+    prepareSessionSend,
   });
 
   const pendingInputActions = createPendingInputActions({

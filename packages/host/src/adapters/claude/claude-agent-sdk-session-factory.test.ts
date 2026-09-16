@@ -787,4 +787,77 @@ describe("createClaudeAgentSdkSession", () => {
       cause: expect.objectContaining({ reason: "compatibility_rejected" }),
     });
   });
+
+  test("reports a continuation failure when the stream ends before admission", async () => {
+    const fakeQuery = createClaudeQueryFixture({
+      close: () => {},
+      return: async () => ({ done: true, value: undefined }),
+      async *[Symbol.asyncIterator]() {
+        yield* [];
+      },
+    });
+    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
+
+    try {
+      const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
+      const events: AgentEvent[] = [];
+      const sessionStore = createClaudeAgentSdkSessionStore();
+      const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        onBackgroundFailure: () => Effect.void,
+        resolveMcpBridgeConnection: () => Effect.die("unused"),
+        runtimeDistribution: createArtifactRuntimeDistribution({
+          mcpLauncher: { kind: "executable", executablePath: process.execPath },
+        }),
+        sessionStore,
+        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
+        systemCommands: createClaudeSystemCommands(),
+        toolDiscovery: createToolDiscovery(),
+      };
+
+      await expect(
+        createClaudeAgentSdkSession({
+          emit: (_session, event) => events.push(event),
+          input: {
+            repoPath: process.cwd(),
+            runtimeKind: "claude",
+            workingDirectory: process.cwd(),
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            systemPrompt: "Build",
+          },
+          initialTodos: [],
+          now: () => "2026-06-25T20:00:00.000Z",
+          randomId: () => "id",
+          resolvedDependencies: {
+            claudeExecutablePath: process.execPath,
+            mcpBridgeConnection: {
+              workspaceId: "workspace-1",
+              hostUrl: "http://127.0.0.1:1",
+              hostToken: "bridge-secret-value",
+            },
+            mcpCommand: [process.execPath],
+          },
+          runtimeId: "runtime-1",
+          serviceInput,
+          sessionInput: {
+            externalSessionId: "session-continuation",
+            options: {},
+            resumeInterruptedTurn: true,
+            startedMessage: "Continued build session",
+          },
+          sessionStore,
+        }),
+      ).rejects.toMatchObject({
+        operation: "claudeRuntime.createSession",
+        message:
+          "Claude session 'session-continuation' ended before it admitted the interrupted-turn continuation.",
+        cause: expect.objectContaining({ reason: "continuation_failed" }),
+      });
+
+      expect(sessionStore.get("session-continuation")).toBeUndefined();
+      expect(events.some((event) => event.type === "session_started")).toBe(false);
+    } finally {
+      querySpy.mockRestore();
+    }
+  });
 });

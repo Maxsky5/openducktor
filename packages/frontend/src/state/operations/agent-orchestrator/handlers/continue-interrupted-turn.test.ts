@@ -16,13 +16,20 @@ const identity: AgentSessionIdentity = {
 const buildDependencies = ({
   session,
   continueInterruptedTurn,
+  prepareSessionSend = async () => ({}),
 }: {
   session: AgentSessionState | null;
   continueInterruptedTurn: ContinuationAdapter["continueInterruptedTurn"];
+  prepareSessionSend?: (
+    session: AgentSessionState,
+    options: { prepareWorkflowContext: boolean },
+  ) => Promise<{ systemPrompt?: string }>;
 }) => {
   const calls: unknown[] = [];
+  const preparedContexts: boolean[] = [];
   return {
     calls,
+    preparedContexts,
     continueInterruptedTurn: createContinueInterruptedTurn({
       workspaceRepoPath: "/tmp/repo",
       adapter: {
@@ -32,6 +39,10 @@ const buildDependencies = ({
         },
       },
       readSessionSnapshot: () => session,
+      prepareSessionSend: (target, options) => {
+        preparedContexts.push(options.prepareWorkflowContext);
+        return prepareSessionSend(target, options);
+      },
     }),
   };
 };
@@ -64,6 +75,44 @@ describe("createContinueInterruptedTurn", () => {
       sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       model: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
     });
+  });
+
+  test("continues a workflow session with the prepared workflow prompt", async () => {
+    const session = buildSession({ status: "error" });
+    const { calls, preparedContexts, continueInterruptedTurn } = buildDependencies({
+      session,
+      prepareSessionSend: async () => ({ systemPrompt: "Build the feature" }),
+      continueInterruptedTurn: async () => ({
+        externalSessionId: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        startedAt: "2026-02-22T08:10:00.000Z",
+        status: "running",
+      }),
+    });
+
+    await continueInterruptedTurn(identity);
+
+    expect(preparedContexts).toEqual([true]);
+    expect(calls[0]).toMatchObject({ systemPrompt: "Build the feature" });
+  });
+
+  test("omits the prompt when the preparation returns none", async () => {
+    const { calls, preparedContexts, continueInterruptedTurn } = buildDependencies({
+      session: buildSession({ status: "error" }),
+      continueInterruptedTurn: async () => ({
+        externalSessionId: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        startedAt: "2026-02-22T08:10:00.000Z",
+        status: "running",
+      }),
+    });
+
+    await continueInterruptedTurn(identity);
+
+    expect(preparedContexts).toEqual([true]);
+    expect(calls[0]).not.toHaveProperty("systemPrompt");
   });
 
   test("omits the model when the session has no selection", async () => {

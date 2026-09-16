@@ -41,6 +41,16 @@ export type CreateClaudeAgentSdkSessionInput = {
 };
 
 /**
+ * Distinguishes a stream that ended before admission from one that never admitted
+ * inside the timeout. The first cause is a runtime failure, the second a version mismatch.
+ */
+class ClaudeContinuationStreamEndedError extends Error {
+  constructor(externalSessionId: string) {
+    super(`Claude session '${externalSessionId}' ended before it admitted the continuation.`);
+  }
+}
+
+/**
  * Blocks until the resumed session admits the interrupted-turn continuation.
  * The CLI fails closed when it never starts the hidden continuation turn.
  */
@@ -57,12 +67,17 @@ export const awaitClaudeContinuationAdmission = async (input: {
       `Claude session '${input.externalSessionId}' did not start the interrupted-turn continuation.`,
     );
   } catch (error) {
+    const streamEnded = error instanceof ClaudeContinuationStreamEndedError;
     throw new HostOperationError({
       operation: "claudeRuntime.createSession",
-      message: `Claude session '${input.externalSessionId}' did not start the interrupted-turn continuation within ${input.timeoutMs} ms.`,
+      message: streamEnded
+        ? `Claude session '${input.externalSessionId}' ended before it admitted the interrupted-turn continuation.`
+        : `Claude session '${input.externalSessionId}' did not start the interrupted-turn continuation within ${input.timeoutMs} ms.`,
       cause: interruptedTurnResumeError({
-        reason: "compatibility_rejected",
-        message: `Claude Code did not admit the interrupted-turn continuation for session '${input.externalSessionId}'. Update Claude Code, then retry Resume.`,
+        reason: streamEnded ? "continuation_failed" : "compatibility_rejected",
+        message: streamEnded
+          ? `Claude Code ended the session before it admitted the interrupted-turn continuation for session '${input.externalSessionId}'. Resolve the reported cause, then retry Resume.`
+          : `Claude Code did not admit the interrupted-turn continuation for session '${input.externalSessionId}'. Update Claude Code, then retry Resume.`,
         cause: error,
       }),
       details: {
@@ -177,7 +192,14 @@ export const createClaudeAgentSdkSession = async ({
     }
     if (continuationAdmission) {
       await awaitClaudeContinuationAdmission({
-        admission: continuationAdmission.promise,
+        // Race the admission against the stream itself, so a stream that ends first
+        // reports its own failure instead of waiting for the admission timeout.
+        admission: Promise.race([
+          continuationAdmission.promise,
+          consumption.then(() => {
+            throw new ClaudeContinuationStreamEndedError(session.externalSessionId);
+          }),
+        ]),
         externalSessionId: session.externalSessionId,
         runtimeId,
         timeoutMs: CONTINUATION_ADMISSION_TIMEOUT_MS,
