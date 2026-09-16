@@ -29,6 +29,7 @@ type Harness = {
   stopped: string[];
   archived: Map<string, Set<string>>;
   notifyArchivedChanged(): void;
+  recoverArchived(workspaceId: string): void;
   settle(): Promise<void>;
 };
 
@@ -43,13 +44,29 @@ const createHarness = ({
   const archived = new Map<string, Set<string>>();
   const archivedListeners = new Set<() => void>();
 
+  // The real port reads the record cache, so a read reports a failure only
+  // after the load that failed, and never before the load settles.
+  const archivedLoaded = new Set<string>();
+  const archivedFailed = new Set<string>();
+
   const archivedSessions: WorkspaceActivityArchivedSessionsPort = {
     load: async (workspaceId) => {
+      await Promise.resolve();
       if (failArchivedFor.has(workspaceId)) {
+        archivedFailed.add(workspaceId);
         throw new Error(`archived list unavailable for ${workspaceId}`);
       }
+      archivedLoaded.add(workspaceId);
     },
-    read: (workspaceId) => archived.get(workspaceId) ?? new Set(),
+    read: (workspaceId) => {
+      if (archivedFailed.has(workspaceId)) {
+        return { status: "error", reason: `archived list unavailable for ${workspaceId}` };
+      }
+      if (!archivedLoaded.has(workspaceId)) {
+        return { status: "unknown" };
+      }
+      return { status: "ready", keys: archived.get(workspaceId) ?? new Set() };
+    },
     subscribe: (onChange) => {
       archivedListeners.add(onChange);
       return () => archivedListeners.delete(onChange);
@@ -80,6 +97,11 @@ const createHarness = ({
     stopped,
     archived,
     notifyArchivedChanged: () => {
+      for (const listener of archivedListeners) listener();
+    },
+    recoverArchived: (workspaceId) => {
+      archivedFailed.delete(workspaceId);
+      archivedLoaded.add(workspaceId);
       for (const listener of archivedListeners) listener();
     },
     settle: async () => {
@@ -200,7 +222,7 @@ describe("createWorkspaceActivityObserver", () => {
     });
   });
 
-  test("reports a failed archived list read", async () => {
+  test("reports a failed archived list read and clears it when the read recovers", async () => {
     const harness = createHarness({ failArchivedFor: new Set(["alpha"]) });
     harness.observer.syncWorkspaces([{ workspaceId: "alpha", repoPath: "/alpha" }]);
     await harness.settle();
@@ -209,6 +231,15 @@ describe("createWorkspaceActivityObserver", () => {
     expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
       kind: "unavailable",
       reason: "archived list unavailable for alpha",
+    });
+
+    harness.recoverArchived("alpha");
+
+    expect(harness.observer.getWorkspaceActivity("alpha")).toEqual({
+      kind: "ready",
+      inputRequired: false,
+      error: false,
+      active: false,
     });
   });
 

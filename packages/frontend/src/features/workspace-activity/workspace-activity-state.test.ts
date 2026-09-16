@@ -70,6 +70,12 @@ describe("foldWorkspaceActivityBadges", () => {
     });
   });
 
+  test("skips a live subagent of an archived chat", () => {
+    expect(
+      fold([session("chat"), session("child", { parentKey: "chat", status: "running" })], ["chat"]),
+    ).toEqual({ inputRequired: false, error: false, active: false });
+  });
+
   test("ignores a subagent status but keeps its pending input on the parent", () => {
     expect(
       fold([

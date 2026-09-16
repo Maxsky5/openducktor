@@ -75,6 +75,33 @@ const resolveOwnerKey = (
 };
 
 /**
+ * Decide whether a session belongs to an archived chat.
+ *
+ * A live subagent of an archived chat must not report activity for that chat,
+ * so a session is excluded when its own key or any reachable ancestor key is
+ * archived.
+ */
+const isArchivedBranch = (
+  sessions: ReadonlyMap<string, WorkspaceActivitySession>,
+  archivedSessionKeys: ReadonlySet<string>,
+  key: string,
+): boolean => {
+  let current = key;
+  const visited = new Set([key]);
+  for (;;) {
+    if (archivedSessionKeys.has(current)) {
+      return true;
+    }
+    const parentKey = sessions.get(current)?.parentKey ?? null;
+    if (parentKey === null || visited.has(parentKey) || !sessions.has(parentKey)) {
+      return false;
+    }
+    visited.add(parentKey);
+    current = parentKey;
+  }
+};
+
+/**
  * Reduce the live sessions of one workspace to the three badge booleans.
  *
  * Subagent pending input is attributed to its nearest reported ancestor, the
@@ -86,7 +113,7 @@ export const foldWorkspaceActivityBadges = (
 ): WorkspaceActivityBadges => {
   const counted = new Map<string, WorkspaceActivitySession>();
   for (const [key, session] of sessions) {
-    if (!archivedSessionKeys.has(key)) {
+    if (!isArchivedBranch(sessions, archivedSessionKeys, key)) {
       counted.set(key, session);
     }
   }

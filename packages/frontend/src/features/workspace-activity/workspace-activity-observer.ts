@@ -18,6 +18,17 @@ export type WorkspaceActivityWorkspace = {
 };
 
 /**
+ * Current archived chat state of one workspace, keyed by agent session identity.
+ *
+ * The state is read from the source on every fold instead of being kept by the
+ * observer, so a read that fails and later succeeds clears the tile by itself.
+ */
+export type WorkspaceActivityArchivedSessions =
+  | { status: "unknown" }
+  | { status: "ready"; keys: ReadonlySet<string> }
+  | { status: "error"; reason: string };
+
+/**
  * Archived chat records of a workspace, keyed by agent session identity.
  *
  * Archived chats must not produce a badge, and the workspace session record
@@ -25,7 +36,7 @@ export type WorkspaceActivityWorkspace = {
  */
 export type WorkspaceActivityArchivedSessionsPort = {
   load(workspaceId: string): Promise<void>;
-  read(workspaceId: string): ReadonlySet<string>;
+  read(workspaceId: string): WorkspaceActivityArchivedSessions;
   subscribe(onChange: () => void): () => void;
 };
 
@@ -43,8 +54,6 @@ type Observation = {
   cancelled: boolean;
   stop: (() => void) | null;
   projection: WorkspaceActivityProjection;
-  archivedLoaded: boolean;
-  archivedError: string | null;
 };
 
 /**
@@ -82,20 +91,20 @@ export const createWorkspaceActivityObserver = ({
     if (!observation) {
       return UNKNOWN_WORKSPACE_ACTIVITY;
     }
+    const archived = archivedSessions.read(workspaceId);
     const reason =
-      observation.archivedError ?? observation.projection.unavailableReason ?? sessionRecordsError;
+      (archived.status === "error" ? archived.reason : null) ??
+      observation.projection.unavailableReason ??
+      sessionRecordsError;
     if (reason !== null) {
       return { kind: "unavailable", reason };
     }
-    if (!observation.projection.hasSnapshot || !observation.archivedLoaded) {
+    if (!observation.projection.hasSnapshot || archived.status !== "ready") {
       return UNKNOWN_WORKSPACE_ACTIVITY;
     }
     return {
       kind: "ready",
-      ...foldWorkspaceActivityBadges(
-        observation.projection.sessions,
-        archivedSessions.read(workspaceId),
-      ),
+      ...foldWorkspaceActivityBadges(observation.projection.sessions, archived.keys),
     };
   };
 
@@ -116,27 +125,17 @@ export const createWorkspaceActivityObserver = ({
       cancelled: false,
       stop: null,
       projection: emptyWorkspaceActivityProjection(),
-      archivedLoaded: false,
-      archivedError: null,
     };
     observations.set(workspace.workspaceId, observation);
 
-    void archivedSessions
-      .load(workspace.workspaceId)
-      .then(() => {
-        if (observation.cancelled) {
-          return;
-        }
-        observation.archivedLoaded = true;
+    // The load outcome is read back from the port, which reports both the
+    // archived keys and a failed read, so neither is kept here.
+    const settleArchived = (): void => {
+      if (!observation.cancelled) {
         emit();
-      })
-      .catch((cause: unknown) => {
-        if (observation.cancelled) {
-          return;
-        }
-        observation.archivedError = errorMessage(cause);
-        emit();
-      });
+      }
+    };
+    void archivedSessions.load(workspace.workspaceId).then(settleArchived, settleArchived);
 
     void observe({ repoPath: workspace.repoPath }, (envelope) => {
       if (observation.cancelled) {

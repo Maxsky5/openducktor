@@ -6,6 +6,7 @@ import {
   type WorkspaceActivityArchivedSessionsPort,
 } from "@/features/workspace-activity/workspace-activity-observer";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
 import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import { observeWorkspaceSessionRecords } from "@/state/queries/workspace-session-updates";
@@ -15,8 +16,6 @@ import {
 } from "@/state/queries/workspace-sessions";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import { WorkspaceActivityContext } from "../workspace-activity/workspace-activity-context";
-
-const NO_ARCHIVED_SESSION_KEYS: ReadonlySet<string> = new Set();
 
 const archivedSessionKeysByRecords = new WeakMap<
   readonly WorkspaceSession[],
@@ -58,14 +57,23 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
         });
       },
       read: (workspaceId) => {
-        const records = queryClient.getQueryData<WorkspaceSession[]>(
+        const state = queryClient.getQueryState<WorkspaceSession[]>(
           workspaceSessionQueryKeys.list(workspaceId, true),
         );
-        return records ? toArchivedSessionKeys(records) : NO_ARCHIVED_SESSION_KEYS;
+        if (state?.data) {
+          return { status: "ready", keys: toArchivedSessionKeys(state.data) };
+        }
+        if (state?.status === "error") {
+          return { status: "error", reason: errorMessage(state.error) };
+        }
+        return { status: "unknown" };
       },
       subscribe: (onChange) =>
         queryClient.getQueryCache().subscribe((event) => {
-          if (event.type !== "updated" || event.action.type !== "success") {
+          if (event.type !== "updated") {
+            return;
+          }
+          if (event.action.type !== "success" && event.action.type !== "error") {
             return;
           }
           if (event.query.queryKey[0] === workspaceSessionQueryKeys.all[0]) {
