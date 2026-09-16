@@ -260,4 +260,23 @@ describe("SettingsModalFooter", () => {
       renderer.unmount();
     }
   });
+
+  test("keeps multiline save failures readable", () => {
+    const renderer = renderFooter({
+      errors: {
+        saveError: 'theme: Invalid option (found "blue")\ntags: Too small (found array)',
+        catalogError: null,
+        runtimeExecutablesError: null,
+      },
+    });
+
+    try {
+      const message = screen.getByText(/theme: Invalid option/);
+      expect(message.textContent).toContain("\n");
+      expect(message.className).toContain("whitespace-pre-wrap");
+      expect(message.className).toContain("break-words");
+    } finally {
+      renderer.unmount();
+    }
+  });
 });

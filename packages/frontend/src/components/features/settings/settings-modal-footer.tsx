@@ -35,7 +35,7 @@ export function SettingsModalFooter({
 
       <div className="flex grow items-center gap-2 text-sm">
         {messages.map((message) => (
-          <span key={message.id} className="text-destructive-muted">
+          <span key={message.id} className="whitespace-pre-wrap break-words text-destructive-muted">
             {message.text}
           </span>
         ))}
