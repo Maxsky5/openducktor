@@ -35,6 +35,7 @@ import {
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
+import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 const runSessionStartWorkflowMock = mock(
@@ -134,6 +135,27 @@ const setGitProviderContext = (
   queryClient.setQueryData(repositoryGitProviderContextQueryOptions("/repo").queryKey, context);
 };
 
+const CATALOG: AgentModelCatalog = {
+  models: [
+    {
+      id: "openai",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "gpt-5",
+      modelName: "GPT-5",
+      variants: ["high"],
+    },
+  ],
+  defaultModelsByProvider: {
+    openai: "gpt-5",
+  },
+  profiles: [
+    { id: "planner", label: "Planner", mode: "primary" },
+    { id: "builder", label: "Builder", mode: "primary" },
+    { id: "qa", label: "QA", mode: "primary" },
+  ],
+};
+
 const createExecuteArgs = (task: TaskCard) => {
   const loadTaskSessionRecords = mock(async (): Promise<AgentSessionRecord[]> => []);
 
@@ -147,26 +169,7 @@ const createExecuteArgs = (task: TaskCard) => {
     alwaysStartQaReviewsFresh: false,
     queryClient: createQueryClient(),
     loadTaskSessionRecords,
-    loadRepoRuntimeCatalog: mock(async (): Promise<AgentModelCatalog> => ({
-      models: [
-        {
-          id: "openai",
-          providerId: "openai",
-          providerName: "OpenAI",
-          modelId: "gpt-5",
-          modelName: "GPT-5",
-          variants: ["high"],
-        },
-      ],
-      defaultModelsByProvider: {
-        openai: "gpt-5",
-      },
-      profiles: [
-        { id: "planner", label: "Planner", mode: "primary" },
-        { id: "builder", label: "Builder", mode: "primary" },
-        { id: "qa", label: "QA", mode: "primary" },
-      ],
-    })),
+    loadRepoRuntimeCatalog: mock(async (): Promise<AgentModelCatalog> => CATALOG),
     loadRepoRuntimeSlashCommands: mock(async () => ({ commands: [] })),
     loadRepoRuntimeFileSearch: mock(async () => []),
     resolveTaskWorktree: mock(async (): Promise<{ workingDirectory: string } | null> => null),
@@ -525,6 +528,31 @@ describe("autopilot feature helpers", () => {
     );
     expect(runSessionStartWorkflowMock.mock.calls[0]?.[0].decision).not.toHaveProperty(
       "sourceSession",
+    );
+  });
+
+  test("reuses the fresh catalog from the query cache without another read", async () => {
+    const args = createExecuteArgs(createTask({ id: "TASK-QA-CACHED", status: "ai_review" }));
+    args.loadRepoRuntimeCatalog.mockImplementation(async (): Promise<AgentModelCatalog> => {
+      throw new Error("The catalog reader must not run for a fresh cached catalog.");
+    });
+    args.queryClient.setQueryData(runtimeCatalogQueryKeys.repo("/repo", "opencode"), CATALOG);
+
+    await executeAutopilotAction({ ...args, actionId: "startQa", alwaysStartQaReviewsFresh: true });
+
+    expect(args.loadRepoRuntimeCatalog).not.toHaveBeenCalled();
+    expect(runSessionStartWorkflowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: expect.objectContaining({
+          startMode: "fresh",
+          selectedModel: expect.objectContaining({
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+          }),
+        }),
+      }),
     );
   });
 

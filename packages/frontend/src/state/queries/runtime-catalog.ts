@@ -7,7 +7,7 @@ import type {
   AgentSubagentCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { type QueryKey, queryOptions } from "@tanstack/react-query";
+import { type QueryKey, type QueryClient, queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 
 export const RUNTIME_CATALOG_STALE_TIME_MS = 5 * 60_000;
@@ -81,6 +81,13 @@ export const repoRuntimeCatalogQueryOptions = (
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
     retry: false,
   });
+
+export const loadRepoRuntimeCatalogFromQuery = (
+  queryClient: QueryClient,
+  runtimeRef: RepoRuntimeRef,
+  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>,
+): Promise<AgentModelCatalog> =>
+  queryClient.fetchQuery(repoRuntimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog));
 
 export const repoRuntimeSlashCommandsQueryOptions = (
   runtimeRef: RuntimeWorkingDirectoryRef,

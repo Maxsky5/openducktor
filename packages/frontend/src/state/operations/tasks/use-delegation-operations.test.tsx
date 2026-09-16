@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
-import { clearAppQueryClient } from "@/lib/query-client";
+import { clearAppQueryClient, appQueryClient } from "@/lib/query-client";
+import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -99,6 +100,44 @@ describe("useDelegationOperations", () => {
       });
       expect(buildStart).toHaveBeenCalledWith("/repo", "task-1", "opencode");
       expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-1");
+    } finally {
+      await harness.unmount();
+      configureShellBridge(createUnavailableShellBridge());
+    }
+  });
+
+  test("reuses the fresh catalog from the query cache without another read", async () => {
+    const buildStart = mock(async () => ({
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    }));
+    const refreshTaskData = mock(async () => undefined);
+    const workspaceGetRepoConfig = mock(async () => createRepoConfig());
+    configureShellBridge(
+      createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
+    );
+    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentModelCatalog> => {
+      throw new Error("The catalog reader must not run for a fresh cached catalog.");
+    });
+    const harness = createHookHarness(
+      () =>
+        useDelegationOperations({
+          activeWorkspace,
+          refreshTaskData,
+          loadRepoRuntimeCatalog,
+        }),
+      undefined,
+    );
+    appQueryClient.setQueryData(runtimeCatalogQueryKeys.repo("/repo", "opencode"), CATALOG);
+
+    try {
+      await harness.mount();
+      await expect(
+        harness.run((operations) => operations.delegateTask("task-1")),
+      ).resolves.toBeUndefined();
+
+      expect(loadRepoRuntimeCatalog).not.toHaveBeenCalled();
+      expect(buildStart).toHaveBeenCalledWith("/repo", "task-1", "opencode");
     } finally {
       await harness.unmount();
       configureShellBridge(createUnavailableShellBridge());

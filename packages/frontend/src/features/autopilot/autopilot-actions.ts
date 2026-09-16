@@ -17,6 +17,7 @@ import { gitProviderReadError, pullRequestHealthError } from "@/lib/git-provider
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
+import { loadRepoRuntimeCatalogFromQuery } from "@/state/queries/runtime-catalog";
 import { loadRepoConfigFromQuery, toRepoSettingsInput } from "@/state/queries/workspace";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -150,7 +151,8 @@ const resolveAutopilotSelection = async ({
     role,
     repoSettings: toRepoSettingsInput(repoConfig),
     repoPath: activeWorkspace.repoPath,
-    loadRepoRuntimeCatalog,
+    loadRepoRuntimeCatalog: (runtimeRef) =>
+      loadRepoRuntimeCatalogFromQuery(queryClient, runtimeRef, loadRepoRuntimeCatalog),
   });
 };
 

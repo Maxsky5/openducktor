@@ -3,6 +3,7 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { useCallback } from "react";
 import { resolveRequiredDefaultSessionSelection } from "@/features/session-start/session-start-selection";
 import { appQueryClient } from "@/lib/query-client";
+import { loadRepoRuntimeCatalogFromQuery } from "@/state/queries/runtime-catalog";
 import { loadRepoConfigFromQuery, toRepoSettingsInput } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { host } from "../shared/host";
@@ -54,7 +55,8 @@ const startDelegatedBuild = async (
     role: "build",
     repoSettings: toRepoSettingsInput(repoConfig),
     repoPath,
-    loadRepoRuntimeCatalog,
+    loadRepoRuntimeCatalog: (runtimeRef) =>
+      loadRepoRuntimeCatalogFromQuery(appQueryClient, runtimeRef, loadRepoRuntimeCatalog),
   });
   await host.buildStart(repoPath, taskId, builderSelection.runtimeKind);
 };
