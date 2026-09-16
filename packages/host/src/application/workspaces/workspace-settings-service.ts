@@ -411,10 +411,7 @@ const createUnserializedWorkspaceSettingsService = (
             cause,
           }),
       });
-      const payload = {
-        ...config,
-        agentModelFavorites: favorites,
-      };
+      const payload = { ...config, agentModelFavorites: favorites };
       const nextConfig = yield* Effect.try({
         try: () => globalConfigSchema.parse(payload),
         catch: (cause) =>

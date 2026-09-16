@@ -13,6 +13,7 @@ import {
 } from "../../config/global-config";
 import { resolveOpenDucktorBaseDir, resolveUserPath } from "../../config/openducktor-config-dir";
 import {
+  errorMessage,
   HostOperationError,
   HostValidationError,
   toHostOperationError,
@@ -53,18 +54,26 @@ const repoId = (repoPath: string): string => {
   return `${slug}-${hash}`;
 };
 
-const invalidConfigFileError = (resolvedConfigPath: string, operation: string, cause: unknown) =>
-  cause instanceof HostValidationError
-    ? new HostValidationError({
-        message: [
-          `Invalid config file ${resolvedConfigPath}:`,
-          cause.message,
-          "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
-        ].join("\n"),
-        cause,
-        details: { path: resolvedConfigPath },
-      })
-    : toHostOperationError(cause, operation, { path: resolvedConfigPath });
+const invalidConfigFileError = (resolvedConfigPath: string, cause: unknown) => {
+  if (!(cause instanceof HostValidationError)) {
+    return new HostOperationError({
+      operation: "settingsConfig.parseConfig",
+      message: `Failed parsing config file ${resolvedConfigPath}: ${errorMessage(cause)}`,
+      cause,
+      details: { path: resolvedConfigPath },
+    });
+  }
+
+  return new HostValidationError({
+    message: [
+      `Invalid config file ${resolvedConfigPath}:`,
+      cause.message,
+      "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
+    ].join("\n"),
+    cause,
+    details: { path: resolvedConfigPath },
+  });
+};
 
 export type CreateSettingsConfigAdapterInput = {
   configDir?: string;
@@ -220,37 +229,22 @@ export const createSettingsConfigAdapter = ({
 
         const parsedPayload = yield* Effect.try({
           try: () => parseJson(payload),
-          catch: (cause) =>
-            invalidConfigFileError(resolvedConfigPath, "settingsConfig.parseConfig", cause),
-        }).pipe(
-          Effect.mapError((error) =>
-            error instanceof HostValidationError
-              ? error
-              : new HostOperationError({
-                  operation: "settingsConfig.parseConfig",
-                  message: `Failed parsing config file ${resolvedConfigPath}: ${error.message}`,
-                  cause: error,
-                  details: { path: resolvedConfigPath },
-                }),
-          ),
-        );
+          catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
+        });
         const version = yield* Effect.try({
           try: () => readPersistedGlobalConfigVersion(parsedPayload),
-          catch: (cause) =>
-            invalidConfigFileError(resolvedConfigPath, "settingsConfig.readConfigVersion", cause),
+          catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
         });
         if (version === 3) {
           return yield* Effect.try({
             try: () => parsePersistedGlobalConfig(parsedPayload),
-            catch: (cause) =>
-              invalidConfigFileError(resolvedConfigPath, "settingsConfig.parseConfig", cause),
+            catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
           });
         }
 
         const legacyConfig = yield* Effect.try({
           try: () => parsePersistedGlobalConfigV2(parsedPayload),
-          catch: (cause) =>
-            invalidConfigFileError(resolvedConfigPath, "settingsConfig.parseLegacyConfig", cause),
+          catch: (cause) => invalidConfigFileError(resolvedConfigPath, cause),
         });
         return initialize
           ? yield* initializeOnce(legacyConfig)

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { errorMessage } from "../effect/host-errors";
 
 export type PayloadValue =
   | string
@@ -11,7 +12,7 @@ export type PayloadValue =
 
 export const configValidationMessage = (cause: unknown, payload?: PayloadValue): string => {
   if (!(cause instanceof z.ZodError)) {
-    return cause instanceof Error ? cause.message : String(cause);
+    return errorMessage(cause);
   }
 
   const lines = cause.issues.slice(0, MAX_REPORTED_ISSUES).map((issue) => {
@@ -42,6 +43,7 @@ const payloadValueSchema: z.ZodType<PayloadValue> = z.lazy(() =>
 );
 
 const recordSchema = z.record(z.string(), payloadValueSchema);
+const arraySchema = z.array(payloadValueSchema);
 const scalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
 const formatPath = (path: readonly PropertyKey[]): string =>
@@ -57,7 +59,7 @@ const readPathValue = (payload: PayloadValue, path: readonly PropertyKey[]): Pay
       continue;
     }
 
-    const array = z.array(payloadValueSchema).safeParse(current);
+    const array = arraySchema.safeParse(current);
     if (!array.success) {
       return undefined;
     }

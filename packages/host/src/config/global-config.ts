@@ -5,7 +5,7 @@ import {
   persistedGlobalConfigV2Schema,
 } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
-import { HostValidationError } from "../effect/host-errors";
+import { errorMessage, HostValidationError } from "../effect/host-errors";
 import { configValidationMessage } from "./config-validation-message";
 
 type PersistedConfigObject = Record<string, JSONType>;
@@ -106,7 +106,7 @@ const parsePersistedConfig = <Output>(
     migrated = migratePersistedConfig(parseSupportedConfigObject(payload, expectedVersion));
   } catch (cause) {
     throw new HostValidationError({
-      message: cause instanceof Error ? cause.message : String(cause),
+      message: errorMessage(cause),
       cause,
     });
   }
