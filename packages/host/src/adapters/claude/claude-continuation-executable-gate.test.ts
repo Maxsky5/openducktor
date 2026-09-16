@@ -63,6 +63,8 @@ describe("Claude interrupted-turn resume executable gate", () => {
       patch: 251,
     });
     expect(parseClaudeCliVersion(" 2.2.0 ")).toEqual({ major: 2, minor: 2, patch: 0 });
+    expect(parseClaudeCliVersion("2.1.251-beta.1 (Claude Code)")).toBeNull();
+    expect(parseClaudeCliVersion("2.1.251-custom")).toBeNull();
     expect(parseClaudeCliVersion("not a version")).toBeNull();
     expect(parseClaudeCliVersion(null)).toBeNull();
   });
@@ -72,6 +74,9 @@ describe("Claude interrupted-turn resume executable gate", () => {
     expect(supportsClaudeInterruptedTurnResume(verified)).toBe(true);
     expect(supportsClaudeInterruptedTurnResume(parseClaudeCliVersion("2.1.250"))).toBe(false);
     expect(supportsClaudeInterruptedTurnResume(parseClaudeCliVersion("2.1.252"))).toBe(false);
+    expect(supportsClaudeInterruptedTurnResume(parseClaudeCliVersion("2.1.251-beta.1"))).toBe(
+      false,
+    );
     expect(supportsClaudeInterruptedTurnResume(parseClaudeCliVersion("3.0.0"))).toBe(false);
     expect(supportsClaudeInterruptedTurnResume(null)).toBe(false);
   });

@@ -56,6 +56,7 @@ describe("OpencodeSdkAdapter interrupted-turn continuation", () => {
         id: "assistant-1",
         role: "assistant",
         sessionID: "session-opencode-1",
+        finish: "stop",
         time: { created: 2, completed: 3 },
       },
       parts: [],

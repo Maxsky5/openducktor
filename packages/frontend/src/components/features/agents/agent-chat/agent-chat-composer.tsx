@@ -104,7 +104,7 @@ const AgentChatComposerResumeControl = memo(function AgentChatComposerResumeCont
   AgentChatComposerModel,
   "canResumeSession" | "isResumingSession" | "resumeSessionError" | "onResumeSession"
 > & { resumeDisabled: boolean }): ReactElement | null {
-  if (!canResumeSession && !resumeSessionError) {
+  if (!canResumeSession) {
     return null;
   }
 
@@ -115,23 +115,21 @@ const AgentChatComposerResumeControl = memo(function AgentChatComposerResumeCont
           {resumeSessionError}
         </p>
       ) : null}
-      {canResumeSession ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-8 gap-1.5 rounded-full px-3 text-xs"
-          disabled={isResumingSession || resumeDisabled}
-          onClick={onResumeSession}
-        >
-          {isResumingSession ? (
-            <LoaderCircle className="size-3.5 animate-spin" />
-          ) : (
-            <Play className="size-3.5" />
-          )}
-          {isResumingSession ? "Resuming" : "Resume"}
-        </Button>
-      ) : null}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-8 gap-1.5 rounded-full px-3 text-xs"
+        disabled={isResumingSession || resumeDisabled}
+        onClick={onResumeSession}
+      >
+        {isResumingSession ? (
+          <LoaderCircle className="size-3.5 animate-spin" />
+        ) : (
+          <Play className="size-3.5" />
+        )}
+        {isResumingSession ? "Resuming" : "Resume"}
+      </Button>
     </>
   );
 });

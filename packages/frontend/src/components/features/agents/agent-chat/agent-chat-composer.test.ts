@@ -217,18 +217,35 @@ describe("AgentChatComposer", () => {
     expect(html.slice(resumeTagStart, html.indexOf(">", resumeTagStart))).toContain('disabled=""');
   });
 
-  test("renders the resume failure notice and hides resume when unavailable", () => {
+  test("renders the resume failure notice while the session is still resumable", () => {
     const failed = renderToStaticMarkup(
       createElement(AgentChatComposer, {
-        model: { ...buildModel(), resumeSessionError: "Continuation failed" },
+        model: {
+          ...buildModel(),
+          canResumeSession: true,
+          resumeSessionError: "Continuation failed",
+        },
       }),
     );
-    const hidden = renderToStaticMarkup(createElement(AgentChatComposer, { model: buildModel() }));
 
     expect(failed).toContain('role="alert"');
     expect(failed).toContain("Continuation failed");
-    expect(failed).not.toContain(">Resume<");
-    expect(hidden).not.toContain(">Resume<");
+    expect(failed).toContain("Resume");
+  });
+
+  test("drops the resume failure notice once the session is no longer resumable", () => {
+    const stale = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          canResumeSession: false,
+          resumeSessionError: "Continuation failed",
+        },
+      }),
+    );
+
+    expect(stale).not.toContain('role="alert"');
+    expect(stale).not.toContain("Continuation failed");
   });
 
   test("hides stop and context widgets when not available", () => {

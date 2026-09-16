@@ -44,16 +44,32 @@ const continuationArtifactEntry = (id: string, createdAt: number) => ({
 const assistantEntry = (
   id: string,
   createdAt: number,
-  { completed }: { completed?: number } = {},
-) => ({
-  info: createOpencodeMessageInfoFixture({
+  { completed, finish }: { completed?: number; finish?: string } = {},
+) => {
+  const terminalFinish = finish ?? (completed === undefined ? undefined : "stop");
+  const infoInput = {
     id,
-    role: "assistant",
+    role: "assistant" as const,
     sessionID: "session-1",
     time: completed === undefined ? { created: createdAt } : { created: createdAt, completed },
-  }),
-  parts: [],
-});
+  };
+  return {
+    info: createOpencodeMessageInfoFixture(
+      terminalFinish === undefined ? infoInput : { ...infoInput, finish: terminalFinish },
+    ),
+    parts:
+      terminalFinish === "stop"
+        ? [
+            createOpencodePartFixture({
+              id: `${id}-step`,
+              sessionID: "session-1",
+              messageID: id,
+              type: "step-finish",
+            }),
+          ]
+        : [],
+  };
+};
 
 const createClient = ({
   status = "idle",
@@ -195,6 +211,78 @@ describe("opencode interrupted turn continuation", () => {
 
     await expect(probeOpencodeInterruptedTurn(probeInput(client))).resolves.toEqual({
       kind: "completed_turn",
+    });
+  });
+
+  test("reports a completed turn from a terminal stop part without a finish field", async () => {
+    const { client } = createClient({
+      messages: [
+        userEntry("user-1", 1),
+        {
+          info: createOpencodeMessageInfoFixture({
+            id: "assistant-1",
+            role: "assistant",
+            sessionID: "session-1",
+            time: { created: 2, completed: 3 },
+          }),
+          parts: [
+            createOpencodePartFixture({
+              id: "assistant-1-step",
+              sessionID: "session-1",
+              messageID: "assistant-1",
+              type: "step-finish",
+            }),
+          ],
+        },
+      ],
+    });
+
+    await expect(probeOpencodeInterruptedTurn(probeInput(client))).resolves.toEqual({
+      kind: "completed_turn",
+    });
+  });
+
+  test("reports an unfinished turn when only an intermediate tool-loop reply is terminal", async () => {
+    const { client } = createClient({
+      messages: [
+        userEntry("user-1", 1),
+        {
+          info: createOpencodeMessageInfoFixture({
+            id: "assistant-tool-calls",
+            role: "assistant",
+            sessionID: "session-1",
+            finish: "tool-calls",
+            time: { created: 2, completed: 3 },
+          }),
+          parts: [
+            createOpencodePartFixture({
+              id: "assistant-tool-calls-step",
+              sessionID: "session-1",
+              messageID: "assistant-tool-calls",
+              type: "step-finish",
+              reason: "tool-calls",
+            }),
+          ],
+        },
+        assistantEntry("assistant-final", 4),
+      ],
+    });
+
+    await expect(probeOpencodeInterruptedTurn(probeInput(client))).resolves.toEqual({
+      kind: "unfinished_turn",
+    });
+  });
+
+  test("reports an unfinished turn when the terminal reply stopped on a tool call", async () => {
+    const { client } = createClient({
+      messages: [
+        userEntry("user-1", 1),
+        assistantEntry("assistant-tool-calls", 2, { completed: 3, finish: "tool-calls" }),
+      ],
+    });
+
+    await expect(probeOpencodeInterruptedTurn(probeInput(client))).resolves.toEqual({
+      kind: "unfinished_turn",
     });
   });
 
