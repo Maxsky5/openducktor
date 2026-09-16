@@ -9,14 +9,14 @@ export const formatOdtToolArgs = (toolName: AgentToolName): string => {
   const args = Object.entries(schema.properties ?? {})
     // Workflow sessions use the startup workspace and never pass workspaceId.
     .filter(([name]) => name !== "workspaceId")
-    .map(
-      ([name, property]) =>
-        `"${name}"${required.has(name) ? "" : "?"}: ${formatToolArgType(property)}`,
-    );
+    .map(([name, property]) => {
+      const type = formatToolArgType(property, `${toolName}.${name}`);
+      return `"${name}"${required.has(name) ? "" : "?"}: ${type}`;
+    });
   return `${toolName}({${args.join(", ")}})`;
 };
 
-const formatToolArgType = (schema: JsonSchemaNode): string => {
+const formatToolArgType = (schema: JsonSchemaNode, context: string): string => {
   if (schema.const !== undefined) {
     return JSON.stringify(schema.const);
   }
@@ -25,10 +25,10 @@ const formatToolArgType = (schema: JsonSchemaNode): string => {
   }
   const union = schema.anyOf ?? schema.oneOf;
   if (union) {
-    return union.map(formatToolArgType).join("|");
+    return union.map((member) => formatToolArgType(member, context)).join("|");
   }
   if (schema.type === "array") {
-    return `${formatToolArgType(schema.items ?? {})}[]`;
+    return `${formatToolArgType(schema.items ?? {}, `${context}[]`)}[]`;
   }
   if (schema.type === "integer" || schema.type === "number") {
     return "number";
@@ -39,7 +39,9 @@ const formatToolArgType = (schema: JsonSchemaNode): string => {
   if (schema.type === "string") {
     return "string";
   }
-  throw new Error(`Unsupported workflow tool argument schema: ${JSON.stringify(schema)}`);
+  throw new Error(
+    `Unsupported workflow tool argument schema for ${context}: ${JSON.stringify(schema)}`,
+  );
 };
 
 type JsonSchemaNode = {

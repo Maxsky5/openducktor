@@ -197,9 +197,10 @@ export const ReadTaskDocumentsInputSchema = z
   });
 export type ReadTaskDocumentsInput = z.infer<typeof ReadTaskDocumentsInputSchema>;
 
+const publicEpicRejectionReason = "Epic creation is not supported by the public MCP create tool.";
+
 const publicIssueTypeSchema = z.enum(["task", "feature", "bug"], {
-  error:
-    "issueType must be task, feature, or bug. Epic creation is not supported by the public MCP create tool.",
+  error: `issueType must be task, feature, or bug. ${publicEpicRejectionReason}`,
 });
 const activeTaskStatusSchema = z.enum([
   "open",
@@ -289,7 +290,7 @@ export const CreateTaskInputSchema = z
     workspaceId: workspaceScopedToolWorkspaceIdSchema,
     title: z.string().trim().min(1).describe("Task title."),
     issueType: publicIssueTypeSchema.describe(
-      "Issue type. Allowed values: task, feature, bug. Epic is not supported by the public MCP create tool.",
+      `Issue type. Allowed values: task, feature, bug. ${publicEpicRejectionReason}`,
     ),
     priority: taskPrioritySchema.describe(
       "Task priority. Valid values: 0 (P0 Critical), 1 (P1 High), 2 (P2 Normal), 3 (P3 Low), 4 (P4 Very low).",
