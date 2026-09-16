@@ -70,6 +70,43 @@ describe("handleClaudeSdkMessage result events", () => {
     expect(session.lastSuccessfulResultTurnIndex).toBe(1);
     expect(session.lastAssistantTextFinal).toBeUndefined();
     expect(events).toContainEqual(expect.objectContaining({ type: "session_idle" }));
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_message",
+        message: "",
+      }),
+    );
+  });
+
+  test("leaves a deferred tool result without a final assistant marker", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("running");
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
+    session.activeSdkUserTurnCount = 1;
+    session.pendingUserTurnCount = 1;
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "",
+        terminal_reason: "tool_deferred",
+        stop_reason: "tool_use",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    });
+
+    expect(session.lastSuccessfulResultTurnIndex).toBeUndefined();
+    expect(events).not.toContainEqual(expect.objectContaining({ type: "assistant_message" }));
   });
 
   test("closes the active SDK user turn on terminal results while queued turns remain pending", () => {

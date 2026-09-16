@@ -70,15 +70,15 @@ export const assertRuntimeContextCompatibleWithSession = (
   session: CodexSessionState,
   input: PolicyBoundSessionRef,
   action = "apply runtime context",
+  toConflictError?: (message: string) => Error,
 ): void => {
   const transition = resolveAgentSessionAssociationTransition(
     session.summary.sessionAssociation,
     input.sessionScope ?? { kind: "unbound" },
   );
   if (transition.kind === "conflict") {
-    throw new Error(
-      `Cannot ${action} for Codex session '${session.threadId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`,
-    );
+    const message = `Cannot ${action} for Codex session '${session.threadId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`;
+    throw toConflictError?.(message) ?? new Error(message);
   }
 };
 

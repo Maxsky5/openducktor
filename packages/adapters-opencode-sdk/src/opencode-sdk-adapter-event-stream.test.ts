@@ -659,6 +659,60 @@ describe("OpencodeSdkAdapter event stream", () => {
     expect(toolPartEvent.part.error).toContain("Task not found");
   });
 
+  test("emits an empty final assistant message for a completed tool-only turn", async () => {
+    const streamEvents: TestGlobalEventPayload[] = [
+      createOpencodeMessageEventGroupFixture({
+        info: {
+          id: "assistant-tool-only",
+          role: "assistant",
+          sessionID: "session-opencode-1",
+          time: {
+            created: Date.parse("2026-02-17T12:00:06Z"),
+            completed: Date.parse("2026-02-17T12:00:08Z"),
+          },
+          finish: "stop",
+        },
+        parts: [
+          {
+            id: "tool-only-part",
+            sessionID: "session-opencode-1",
+            messageID: "assistant-tool-only",
+            callID: "call-tool-only",
+            type: "tool",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { command: "ls" },
+              output: "",
+            },
+          },
+        ],
+      }),
+    ];
+
+    const mock = makeMockClient({ streamEvents });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
+      events.push(event);
+    });
+    await flushAsync();
+
+    const assistantMessages = events.filter((entry) => entry.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]).toMatchObject({
+      type: "assistant_message",
+      messageId: "assistant-tool-only",
+      message: "",
+    });
+  });
+
   test("maps flattened MCP tool error JSON output as error status", async () => {
     const streamEvents: TestGlobalEventPayload[] = [
       sessionStatusEvent({ type: "busy" }, "session-opencode-1"),

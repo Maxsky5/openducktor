@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { ContinueInterruptedAgentTurnInput } from "@openducktor/core";
+import {
+  type ContinueInterruptedAgentTurnInput,
+  workflowAgentSessionScope,
+} from "@openducktor/core";
 import {
   codexSessionRuntimeRef,
   codexThreadFixture,
@@ -206,6 +209,27 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     const snapshots = adapter.listLiveSessionSnapshots("runtime-live");
     expect(snapshots.map((snapshot) => snapshot.ref.externalSessionId)).toEqual(["thread-1"]);
     expect(snapshots[0]?.startedAt).toBe(resumed.startedAt);
+  });
+
+  test("rejects a continuation whose session scope conflicts with the attached session", async () => {
+    const { adapter, calls } = createContinuationAdapter({
+      threadStatus: { type: "idle" },
+      latestTurnStatus: "interrupted",
+    });
+    await adapter.resumeSession(continuationInput());
+    calls.length = 0;
+
+    await expect(
+      adapter.continueInterruptedTurn(
+        continuationInput({ sessionScope: workflowAgentSessionScope("task-2", "build") }),
+      ),
+    ).rejects.toMatchObject({
+      reason: "identity_mismatch",
+      message: expect.stringContaining("does not match the requested"),
+    });
+
+    expect(methodsOf(calls)).not.toContain("thread/resume");
+    expect(methodsOf(calls)).not.toContain("turn/start");
   });
 
   test("refuses a live thread without starting a turn", async () => {

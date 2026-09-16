@@ -245,16 +245,13 @@ export const maybeEmitCompletedAssistantMessage = (
 
   const text = readTextFromParts(assistantParts);
   const visible = sanitizeAssistantMessage(text);
-  if (visible.length === 0) {
-    session.pendingCompletedAssistantMessageIds.delete(input.messageId);
-    return true;
-  }
-
   if (session.emittedAssistantMessageIds.has(input.messageId)) {
     session.pendingCompletedAssistantMessageIds.delete(input.messageId);
     return true;
   }
 
+  // A text-less turn still emits the final message, so transcript readers keep the
+  // terminal signal for the resume affordance and the settled-turn cleanup.
   const event: Parameters<EventStreamRuntime["emit"]>[1] = {
     type: "assistant_message",
     externalSessionId: runtime.externalSessionId,

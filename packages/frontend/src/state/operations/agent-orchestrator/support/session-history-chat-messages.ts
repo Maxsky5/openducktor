@@ -353,7 +353,7 @@ export const historyToChatMessages = (
 
     const shouldRenderPrimaryMessage =
       (message.role !== "assistant" || assistantTextMessageIndexes.length === 0) &&
-      (content.length > 0 || userDisplayParts.length > 0);
+      (content.length > 0 || userDisplayParts.length > 0 || isFinalAssistantMessage);
     if (shouldRenderPrimaryMessage) {
       let meta: AgentChatMessage["meta"] | undefined;
       if (message.role === "assistant") {

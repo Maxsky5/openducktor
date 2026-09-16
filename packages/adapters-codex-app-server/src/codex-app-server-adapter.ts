@@ -511,6 +511,9 @@ export class CodexAppServerAdapter
           message: `Codex session '${input.externalSessionId}' is registered to repo '${currentRef.repoPath}' and working directory '${currentRef.workingDirectory}'.`,
         });
       }
+      assertRuntimeContextCompatibleWithSession(current, input, "continue Codex turn", (message) =>
+        interruptedTurnResumeError({ reason: "identity_mismatch", message }),
+      );
     }
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "continue Codex turn");

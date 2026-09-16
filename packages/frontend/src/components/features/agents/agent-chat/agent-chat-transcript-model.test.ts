@@ -456,6 +456,29 @@ describe("agent chat transcript model", () => {
     expect(rows[0]?.key).toBe(`${sessionKey}:0:assistant-live`);
   });
 
+  test("buildAgentChatTranscriptModel hides a final assistant message without content", () => {
+    const session = buildSession({
+      messages: [
+        buildMessage("assistant", "", {
+          id: "assistant-settled",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+            durationMs: 2_400,
+          },
+        }),
+      ],
+      pendingQuestions: [],
+    });
+    const sessionKey = agentSessionIdentityKey(session);
+
+    const rows = buildAgentChatTranscriptModel(session, { showThinkingMessages: true }).rows;
+
+    expect(rows.map((row) => row.kind)).toEqual(["turn_duration"]);
+    expect(rows[0]?.key).toBe(`${sessionKey}:0:assistant-settled:duration`);
+  });
+
   test("buildAgentChatTranscriptModel keeps streaming metadata independent of session activity", () => {
     const sharedMessages = [
       buildMessage("assistant", "Working", {

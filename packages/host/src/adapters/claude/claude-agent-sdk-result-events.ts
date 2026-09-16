@@ -90,6 +90,9 @@ export const handleClaudeResultMessage = ({
     // A tool-only result carries no assistant text, so the turn index is the only
     // record that the latest accepted turn finished.
     session.lastSuccessfulResultTurnIndex = completedUserTurnIndex;
+    if (resultText.length === 0) {
+      emitFinalAssistantMarker({ emit, message, session, timestamp });
+    }
   }
   if (failed) {
     clearClaudeManualCompaction(session);
@@ -206,6 +209,23 @@ export const emitClaudePermissionDeniedToolPart = ({
     externalSessionId: session.externalSessionId,
     timestamp,
     part: createClaudeCompletedToolPart(completedToolInput),
+  });
+};
+
+const emitFinalAssistantMarker = ({
+  emit,
+  message,
+  session,
+  timestamp,
+}: ClaudeResultEventInput): void => {
+  // The empty final assistant message keeps a text-less turn terminal for transcript
+  // readers, such as the resume affordance and the settled-turn cleanup.
+  emit({
+    type: "assistant_message",
+    externalSessionId: session.externalSessionId,
+    timestamp,
+    messageId: message.uuid,
+    message: "",
   });
 };
 

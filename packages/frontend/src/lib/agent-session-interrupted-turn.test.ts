@@ -3,6 +3,7 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   canResumeInterruptedTurn,
+  hasSettledLatestTurn,
   hasUnfinishedLatestTurn,
 } from "./agent-session-interrupted-turn";
 
@@ -28,6 +29,12 @@ const assistantDraft = message({
 const assistantFinal = message({
   role: "assistant",
   content: "Done",
+  meta: { kind: "assistant", isFinal: true },
+});
+const assistantFinalWithoutContent = message({
+  id: "assistant-final-empty",
+  role: "assistant",
+  content: "",
   meta: { kind: "assistant", isFinal: true },
 });
 const toolOutput = message({
@@ -62,6 +69,22 @@ const nonResumableDescriptor = {
     },
   },
 };
+
+describe("tool-only turns", () => {
+  test("treat a final assistant message without content as settled", () => {
+    const messages = [userMessage, toolOutput, assistantFinalWithoutContent];
+
+    expect(hasUnfinishedLatestTurn(messages)).toBe(false);
+    expect(hasSettledLatestTurn(messages)).toBe(true);
+  });
+
+  test("reports an unfinished turn while no final assistant message exists", () => {
+    const messages = [userMessage, toolOutput];
+
+    expect(hasUnfinishedLatestTurn(messages)).toBe(true);
+    expect(hasSettledLatestTurn(messages)).toBe(false);
+  });
+});
 
 describe("hasUnfinishedLatestTurn", () => {
   test("reports an unfinished turn for a trailing user message", () => {
@@ -123,6 +146,16 @@ describe("canResumeInterruptedTurn", () => {
         activityState: "idle",
         messages: [userMessage],
         runtimeDescriptor: null,
+      }),
+    ).toBe(false);
+  });
+
+  test("rejects a settled tool-only transcript", () => {
+    expect(
+      canResumeInterruptedTurn({
+        activityState: "idle",
+        messages: [userMessage, toolOutput, assistantFinalWithoutContent],
+        runtimeDescriptor: resumableDescriptor,
       }),
     ).toBe(false);
   });
