@@ -1821,6 +1821,7 @@ describe("event-stream", () => {
         session.messageMetadataById.set(pendingMessageId, {
           timestamp: "2026-02-22T12:00:00.000Z",
           hasStopSignal: true,
+          hasSuccessfulStopSignal: true,
         });
         setMessagePart(session, pendingPart);
         const values = session.partsById.values.bind(session.partsById);
@@ -1871,7 +1872,7 @@ describe("event-stream", () => {
     expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
   });
 
-  test("emits session_idle for error-finished assistant turns with visible provider errors", async () => {
+  test("keeps error-finished assistant turns unfinalized for a later resume", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession([
       makeAssistantMessageUpdatedEvent({
         messageId: "assistant-message-provider-error",
@@ -1883,16 +1884,28 @@ describe("event-stream", () => {
       makeSessionIdleEvent(),
     ]);
 
-    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
-    expect(assistantMessages).toHaveLength(1);
-    if (assistantMessages[0]?.type !== "assistant_message") {
-      throw new Error("Expected assistant_message event");
-    }
-    expect(assistantMessages[0].message).toBe(
-      "Error from provider (Console Go): Upstream request failed",
+    expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
+    const streamedText = emitted.find(
+      (event) => event.type === "assistant_part" && event.part.kind === "text",
     );
+    expect(streamedText).toBeDefined();
     expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
     expect(sessionRecord.streamTurnStatus).toBe("idle");
+  });
+
+  test("does not finalize an error-finished assistant turn without text", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-empty-error",
+        finish: "error",
+        completedAt: 1,
+        text: "",
+        partId: "text-empty-error-1",
+      }),
+      makeSessionIdleEvent(),
+    ]);
+
+    expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
   });
 
   test("does not emit session_idle or final assistant_message when completion lacks a stop signal", async () => {

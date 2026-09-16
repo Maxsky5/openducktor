@@ -16,6 +16,7 @@ import { flushPendingSubagentInputEventsForSession, markSessionActive } from "..
 import { flushPendingBackgroundTaskResultSubagentParts } from "./background-task-result";
 import {
   getKnownMessageParts,
+  hasSuccessfulStopSignalInParts,
   hasTerminalStopSignalInParts,
   isAssistantMessage,
   updateMessageMetadata,
@@ -204,6 +205,7 @@ export const maybeEmitCompletedAssistantMessage = (
     timestamp?: string;
     info?: ParsedOpencodeMessage["info"];
     hasStopSignal?: boolean;
+    hasSuccessfulStopSignal?: boolean;
   },
 ): boolean => {
   const { session } = runtime;
@@ -225,11 +227,16 @@ export const maybeEmitCompletedAssistantMessage = (
     input.hasStopSignal === true ||
     existingMetadata?.hasStopSignal === true ||
     hasTerminalStopSignalInParts(assistantParts, undefined);
+  const hasSuccessfulStopSignal =
+    input.hasSuccessfulStopSignal === true ||
+    existingMetadata?.hasSuccessfulStopSignal === true ||
+    hasSuccessfulStopSignalInParts(assistantParts, undefined);
   const timestamp = input.timestamp ?? existingMetadata?.timestamp ?? runtime.now();
 
   const metadataUpdates: Parameters<typeof updateMessageMetadata>[2] = {
     timestamp,
     hasStopSignal,
+    hasSuccessfulStopSignal,
   };
   if (assistantModel) {
     metadataUpdates.model = assistantModel;
@@ -239,7 +246,12 @@ export const maybeEmitCompletedAssistantMessage = (
   }
   updateMessageMetadata(runtime, input.messageId, metadataUpdates);
 
-  if (!hasStopSignal || assistantParts.length === 0 || !isStreamTurnIdle(session)) {
+  if (
+    !hasStopSignal ||
+    !hasSuccessfulStopSignal ||
+    assistantParts.length === 0 ||
+    !isStreamTurnIdle(session)
+  ) {
     return false;
   }
 
@@ -250,8 +262,10 @@ export const maybeEmitCompletedAssistantMessage = (
     return true;
   }
 
-  // A text-less turn still emits the final message, so transcript readers keep the
-  // terminal signal for the resume affordance and the settled-turn cleanup.
+  // A text-less turn still emits the final message when the finish is successful, so
+  // transcript readers keep the terminal signal for the resume affordance and the
+  // settled-turn cleanup. An error finish stays unfinalized: the interrupted-turn
+  // probe accepts it as resumable.
   const event: Parameters<EventStreamRuntime["emit"]>[1] = {
     type: "assistant_message",
     externalSessionId: runtime.externalSessionId,
