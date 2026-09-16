@@ -10,7 +10,6 @@ export type OdtToolAliasResolver = (canonicalToolName: OdtToolName) => readonly 
 
 export const ODT_READ_TOOL_NAMES = [
   ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
-  "odt_search_tasks",
   ...ODT_WORKFLOW_READ_TOOL_NAMES,
 ] as const satisfies readonly OdtToolName[];
 

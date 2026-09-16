@@ -235,7 +235,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     if (!workflowAllowedTools) {
       throw new Error("Expected workflow ODT tool policy in the Claude MCP environment.");
     }
-    expect(workflowAllowedTools.split(",")).not.toEqual(
+    expect(workflowAllowedTools.split(",")).toEqual(
       expect.arrayContaining(["odt_create_task", "odt_search_tasks"]),
     );
     expect(openducktorEnv).not.toHaveProperty("ODT_HOST_TOKEN");
@@ -302,7 +302,7 @@ describe("buildClaudeAgentSdkOptions", () => {
       throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
     }
     expect(openducktorServer.env?.ODT_ALLOWED_TOOLS).toBe(
-      "odt_read_task,odt_read_task_assets,odt_read_task_documents,odt_set_spec",
+      "odt_read_task,odt_read_task_assets,odt_read_task_documents,odt_search_tasks,odt_create_task,odt_set_spec",
     );
     session.abortController.abort();
   });

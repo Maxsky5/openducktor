@@ -70,6 +70,27 @@ describe("workflow-tool-permissions", () => {
     }
   });
 
+  test("allows task search and create, with their aliases, for every workflow role", () => {
+    for (const role of agentRoleValues) {
+      const rules = buildRoleScopedPermissionRules({
+        role,
+        runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      });
+
+      for (const permission of [
+        "odt_search_tasks",
+        "odt_create_task",
+        "openducktor_odt_search_tasks",
+        "functions.openducktor_odt_search_tasks",
+        "openducktor_odt_create_task",
+        "functions.openducktor_odt_create_task",
+      ]) {
+        expect(findFinalExactAction(rules, permission)).toBe("allow");
+      }
+      expect(findFinalExactAction(rules, "odt_get_workspaces")).toBe("deny");
+    }
+  });
+
   test("builds runtime-provided read-only permission rules plus allow-specific odt permissions for spec role", () => {
     const rules = buildRoleScopedPermissionRules({
       role: "spec",
@@ -99,30 +120,8 @@ describe("workflow-tool-permissions", () => {
       pattern: "*",
       action: "deny",
     });
-    expect(rules).toContainEqual({ permission: "odt_create_task", pattern: "*", action: "deny" });
-    expect(rules).toContainEqual({ permission: "odt_search_tasks", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({
       permission: "odt_get_workspaces",
-      pattern: "*",
-      action: "deny",
-    });
-    expect(rules).toContainEqual({
-      permission: "openducktor_odt_create_task",
-      pattern: "*",
-      action: "deny",
-    });
-    expect(rules).toContainEqual({
-      permission: "functions.openducktor_odt_create_task",
-      pattern: "*",
-      action: "deny",
-    });
-    expect(rules).toContainEqual({
-      permission: "openducktor_odt_search_tasks",
-      pattern: "*",
-      action: "deny",
-    });
-    expect(rules).toContainEqual({
-      permission: "functions.openducktor_odt_search_tasks",
       pattern: "*",
       action: "deny",
     });

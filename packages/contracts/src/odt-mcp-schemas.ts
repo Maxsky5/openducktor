@@ -197,7 +197,11 @@ export const ReadTaskDocumentsInputSchema = z
   });
 export type ReadTaskDocumentsInput = z.infer<typeof ReadTaskDocumentsInputSchema>;
 
-const publicIssueTypeSchema = z.enum(["task", "feature", "bug"]);
+const publicEpicRejectionReason = "Epic creation is not supported by the public MCP create tool.";
+
+const publicIssueTypeSchema = z.enum(["task", "feature", "bug"], {
+  error: `issueType must be task, feature, or bug. ${publicEpicRejectionReason}`,
+});
 const activeTaskStatusSchema = z.enum([
   "open",
   "spec_ready",
@@ -286,7 +290,7 @@ export const CreateTaskInputSchema = z
     workspaceId: workspaceScopedToolWorkspaceIdSchema,
     title: z.string().trim().min(1).describe("Task title."),
     issueType: publicIssueTypeSchema.describe(
-      "Issue type. Allowed values: task, feature, bug. Epic is not supported by the public MCP create tool.",
+      `Issue type. Allowed values: task, feature, bug. ${publicEpicRejectionReason}`,
     ),
     priority: taskPrioritySchema.describe(
       "Task priority. Valid values: 0 (P0 Critical), 1 (P1 High), 2 (P2 Normal), 3 (P3 Low), 4 (P4 Very low).",
@@ -350,6 +354,8 @@ export const ODT_TOOL_SCHEMAS = {
 } as const satisfies Record<OdtToolName, z.ZodTypeAny>;
 
 export const ODT_WORKFLOW_TOOL_SCHEMAS = {
+  odt_create_task: ODT_TOOL_SCHEMAS.odt_create_task,
+  odt_search_tasks: ODT_TOOL_SCHEMAS.odt_search_tasks,
   odt_read_task: ODT_TOOL_SCHEMAS.odt_read_task,
   odt_read_task_assets: ODT_TOOL_SCHEMAS.odt_read_task_assets,
   odt_read_task_documents: ODT_TOOL_SCHEMAS.odt_read_task_documents,
@@ -370,8 +376,6 @@ export type WorkflowAgentBlockedOdtToolName =
 
 export const ODT_WORKFLOW_AGENT_BLOCKED_TOOL_SCHEMAS = {
   odt_get_workspaces: ODT_TOOL_SCHEMAS.odt_get_workspaces,
-  odt_create_task: ODT_TOOL_SCHEMAS.odt_create_task,
-  odt_search_tasks: ODT_TOOL_SCHEMAS.odt_search_tasks,
 } as const;
 
 export type WorkspaceScopedOdtToolName = Exclude<

@@ -533,7 +533,7 @@ describe("session-start-workflow", () => {
       sendAgentMessage.mock.calls[0]?.[1]?.find((part) => part.kind === "text")?.text ?? "";
     expect(sentText).toContain("Requested changes from human review:");
     expect(sentText).toContain("Update the acceptance criteria and rerun the desktop tests.");
-    expect(sentText).toContain("Use taskId TASK-3 for every odt_* tool call.");
+    expect(sentText).toContain("Use taskId TASK-3 for every task-bound odt_* tool call.");
   });
 
   test("holds fresh kickoff starts until the kickoff message send owns status", async () => {

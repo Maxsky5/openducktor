@@ -7,14 +7,18 @@ This matrix lists every allowed task transition. The backend validates it. The U
 - `odt_read_task`: `taskId`
 - `odt_read_task_assets`: `taskId`, `assetIds`
 - `odt_read_task_documents`: `taskId`, `includeSpec?`, `includePlan?`, `includeQaReport?`
+- `odt_search_tasks`: `priority?`, `issueType?`, `status?`, `title?`, `tags?`, `limit?`
+- `odt_create_task`: `title`, `issueType`, `priority`, `description?`, `labels?`, `aiReviewEnabled?`
 - `odt_set_spec`: `taskId`, `markdown`
-- `odt_set_plan`: `taskId`, `markdown`, `subtasks?`
+- `odt_set_plan`: `taskId`, `markdown`
 - `odt_build_blocked`: `taskId`, `reason`
 - `odt_build_resumed`: `taskId`
 - `odt_build_completed`: `taskId`, `summary?`
 - `odt_set_pull_request`: `taskId`, `providerId`, `number`
 - `odt_qa_approved`: `taskId`, `reportMarkdown`
 - `odt_qa_rejected`: `taskId`, `reportMarkdown`
+
+The public create tool rejects an `issueType` of `epic`.
 
 Call `odt_read_task` first for the returned `task` summary object, including task state, `qaVerdict`, and document presence booleans.
 
