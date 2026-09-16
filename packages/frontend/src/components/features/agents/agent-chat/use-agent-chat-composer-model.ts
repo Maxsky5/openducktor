@@ -13,7 +13,6 @@ import { deriveAgentChatComposerModelState } from "./agent-chat-composer-model-s
 import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
 
 type StopAgentSession = (session: AgentSessionIdentity) => Promise<void>;
-type ContinueInterruptedTurn = (session: AgentSessionIdentity) => Promise<void>;
 type AgentChatComposerSelectedSession = AgentSessionIdentity & {
   selectedModel: AgentModelSelection | null;
 };
@@ -38,10 +37,7 @@ export type AgentChatComposerConfig = {
   busySendBlockedReason: string | null;
   canStopSession: boolean;
   stopAgentSession: StopAgentSession;
-  canResumeSession: boolean;
   isResumingSession: boolean;
-  resumeSessionError: string | null;
-  continueInterruptedTurn: ContinueInterruptedTurn;
   isReadOnly: boolean;
   readOnlyReason: string | null;
   pendingSendItems?: AgentChatComposerModel["pendingSendItems"];
@@ -170,16 +166,7 @@ export function useAgentChatComposerModel({
       canStopSession: composer.canStopSession,
       onStopSession: () =>
         invokeStopAgentSession(composer.selectedSession, composer.stopAgentSession),
-      canResumeSession: composer.canResumeSession,
       isResumingSession: composer.isResumingSession,
-      resumeSessionError: composer.resumeSessionError,
-      onResumeSession: () => {
-        const selectedSession = composer.selectedSession;
-        if (!selectedSession) {
-          return;
-        }
-        void composer.continueInterruptedTurn(selectedSession).catch(() => undefined);
-      },
       composerFormRef,
       composerEditorRef,
       onComposerEditorInput: resizeComposerEditor,

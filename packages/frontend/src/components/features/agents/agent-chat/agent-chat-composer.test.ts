@@ -96,10 +96,7 @@ const buildModel = () => ({
     outputLimit: 8_000,
   },
   canStopSession: true,
-  canResumeSession: false,
   isResumingSession: false,
-  resumeSessionError: null,
-  onResumeSession: () => {},
   onStopSession: () => {},
   composerFormRef: createRef<HTMLFormElement>(),
   composerEditorRef: createRef<HTMLDivElement>(),
@@ -187,77 +184,15 @@ describe("AgentChatComposer", () => {
     expect(html).not.toContain("@ for subagents");
   });
 
-  test("renders the resume action and its pending label", () => {
-    const idle = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: { ...buildModel(), canResumeSession: true },
-      }),
-    );
-    const pending = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: { ...buildModel(), canResumeSession: true, isResumingSession: true },
-      }),
-    );
-
-    expect(idle).toContain("Resume");
-    expect(idle).not.toContain("Resuming");
-    expect(pending).toContain("Resuming");
-    expect(pending).toContain("disabled");
-  });
-
-  test("disables resume while shared interaction is disabled", () => {
+  test("does not render an interrupted-turn resume action in the composer", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
-        model: { ...buildModel(), canResumeSession: true, isInteractionEnabled: false },
+        model: { ...buildModel(), isResumingSession: true },
       }),
     );
 
-    expect(html).toContain("Resume");
-    const resumeTagStart = html.lastIndexOf("<button", html.indexOf("Resume"));
-    expect(html.slice(resumeTagStart, html.indexOf(">", resumeTagStart))).toContain('disabled=""');
-  });
-
-  test("disables resume while a message send is submitting", () => {
-    const html = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: { ...buildModel(), canResumeSession: true, isSending: true },
-      }),
-    );
-
-    expect(html).toContain("Resume");
-    const resumeTagStart = html.lastIndexOf("<button", html.indexOf("Resume"));
-    expect(html.slice(resumeTagStart, html.indexOf(">", resumeTagStart))).toContain('disabled=""');
-  });
-
-  test("renders the resume failure notice while the session is still resumable", () => {
-    const failed = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: {
-          ...buildModel(),
-          canResumeSession: true,
-          resumeSessionError: "Continuation failed",
-        },
-      }),
-    );
-
-    expect(failed).toContain('role="alert"');
-    expect(failed).toContain("Continuation failed");
-    expect(failed).toContain("Resume");
-  });
-
-  test("drops the resume failure notice once the session is no longer resumable", () => {
-    const stale = renderToStaticMarkup(
-      createElement(AgentChatComposer, {
-        model: {
-          ...buildModel(),
-          canResumeSession: false,
-          resumeSessionError: "Continuation failed",
-        },
-      }),
-    );
-
-    expect(stale).not.toContain('role="alert"');
-    expect(stale).not.toContain("Continuation failed");
+    expect(html).not.toContain("Resume");
+    expect(html).not.toContain("Resuming");
   });
 
   test("hides stop and context widgets when not available", () => {

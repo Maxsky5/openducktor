@@ -95,10 +95,7 @@ const buildModel = () => ({
   accentColor: undefined,
   contextUsage: null,
   canStopSession: false,
-  canResumeSession: false,
   isResumingSession: false,
-  resumeSessionError: null,
-  onResumeSession: () => {},
   onStopSession: SHARED_CALLBACKS.onStopSession,
   composerFormRef: createRef<HTMLFormElement>(),
   composerEditorRef: createRef<HTMLDivElement>(),
@@ -995,9 +992,7 @@ describe("AgentChatComposer selection controls", () => {
 describe("AgentChatComposer resume lock", () => {
   test("locks the composer input while a resume is in flight", () => {
     const resuming = render(
-      <AgentChatComposer
-        model={{ ...buildModel(), canResumeSession: true, isResumingSession: true }}
-      />,
+      <AgentChatComposer model={{ ...buildModel(), isResumingSession: true }} />,
     );
 
     const disabledEditor = screen.getByRole("combobox", { name: "Message composer" });
@@ -1009,9 +1004,7 @@ describe("AgentChatComposer resume lock", () => {
     resuming.unmount();
 
     const idle = render(
-      <AgentChatComposer
-        model={{ ...buildModel(), canResumeSession: true, isResumingSession: false }}
-      />,
+      <AgentChatComposer model={{ ...buildModel(), isResumingSession: false }} />,
     );
 
     const enabledEditor = screen.getByRole("combobox", { name: "Message composer" });

@@ -4,6 +4,7 @@ import { type MutableRefObject, type RefObject, useCallback, useMemo, useState }
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type {
   AgentChatEmptyStateModel,
+  AgentChatInterruptedTurnResumeModel,
   AgentChatRuntimePresentation,
   AgentChatThreadModel,
   AgentChatTranscriptPresentation,
@@ -45,6 +46,7 @@ type UseAgentChatThreadModelArgs = {
   sessionAccentColor?: string | undefined;
   pendingQuestions: AgentChatPendingQuestionActions;
   approvals: AgentChatPendingApprovalActions;
+  interruptedTurnResume?: AgentChatInterruptedTurnResumeModel | undefined;
   sessionAgentColors: Record<string, string>;
   subagentPendingApprovalCountBySessionKey: Record<string, number> | undefined;
   subagentPendingQuestionCountBySessionKey: Record<string, number> | undefined;
@@ -68,6 +70,7 @@ export function useAgentChatThreadModel({
   sessionAccentColor,
   pendingQuestions,
   approvals,
+  interruptedTurnResume,
   sessionAgentColors,
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
@@ -122,6 +125,7 @@ export function useAgentChatThreadModel({
       isSubmittingApprovalByRequestId: approvals.isSubmittingByRequestId,
       approvalReplyErrorByRequestId: approvals.errorByRequestId,
       onReplyApproval: approvals.onReply,
+      interruptedTurnResume,
       sessionAuxiliaryError,
       todoPanelCollapsed: activeTodoPanelCollapsed,
       onToggleTodoPanel: handleToggleTodoPanel,
@@ -138,6 +142,7 @@ export function useAgentChatThreadModel({
       emptyState,
       handleToggleTodoPanel,
       interactionEnabled,
+      interruptedTurnResume,
       isSessionWorking,
       messagesContainerRef,
       modelCatalog,

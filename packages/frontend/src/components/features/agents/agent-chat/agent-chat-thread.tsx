@@ -12,6 +12,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
@@ -114,6 +115,8 @@ const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
 
 type AgentChatBottomStackProps = {
   externalSessionId: string;
+  interruptedTurnResume: AgentChatThreadModel["interruptedTurnResume"];
+  resumeDisabled: boolean;
   pendingQuestions: AgentChatThreadModel["pendingQuestionRequests"];
   pendingApprovals: AgentChatThreadModel["pendingApprovalRequests"];
   todos: readonly AgentSessionTodoItem[];
@@ -208,6 +211,8 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
 
 const AgentChatBottomStack = memo(function AgentChatBottomStack({
   externalSessionId,
+  interruptedTurnResume,
+  resumeDisabled,
   pendingQuestions,
   pendingApprovals,
   todos,
@@ -236,6 +241,15 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
         shouldAddComposerGap ? "pb-3" : "pb-0",
       )}
     >
+      {interruptedTurnResume ? (
+        <AgentChatInterruptedTurnResume
+          isPending={interruptedTurnResume.isPending}
+          error={interruptedTurnResume.error}
+          disabled={resumeDisabled}
+          onResume={interruptedTurnResume.onResume}
+        />
+      ) : null}
+
       {pendingQuestions.map((request) => (
         <AgentSessionQuestionCard
           key={`${externalSessionId}:${request.requestId}`}
@@ -290,6 +304,21 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
   );
 });
 
+const resolveHasBottomStack = (input: {
+  hasSession: boolean;
+  hasWaitingInput: boolean;
+  hasVisibleTodo: boolean;
+  sessionAuxiliaryError: string | null;
+  runtimeStatusMessage: string | null;
+  hasInterruptedTurnResume: boolean;
+}): boolean =>
+  input.hasSession &&
+  (input.hasWaitingInput ||
+    input.hasVisibleTodo ||
+    input.sessionAuxiliaryError !== null ||
+    input.runtimeStatusMessage !== null ||
+    input.hasInterruptedTurnResume);
+
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
     transcript,
@@ -313,6 +342,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isSubmittingApprovalByRequestId,
     approvalReplyErrorByRequestId,
     onReplyApproval,
+    interruptedTurnResume,
     sessionAuxiliaryError,
     isSessionWorking,
     todoPanelCollapsed,
@@ -363,9 +393,14 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const hasWaitingInput = pendingQuestionRequests.length > 0 || pendingApprovalRequests.length > 0;
   const runtimeStatusMessage = isSessionWorking && session ? session.runtimeStatusMessage : null;
   const transcriptEmptyState = session === null ? emptyState : null;
-  const hasBottomStack = Boolean(
-    session && (hasWaitingInput || hasVisibleTodo || sessionAuxiliaryError || runtimeStatusMessage),
-  );
+  const hasBottomStack = resolveHasBottomStack({
+    hasSession: Boolean(session),
+    hasWaitingInput,
+    hasVisibleTodo,
+    sessionAuxiliaryError,
+    runtimeStatusMessage,
+    hasInterruptedTurnResume: interruptedTurnResume !== undefined,
+  });
 
   const resolveRowRef = useCallback(
     (rowKey: string) => {
@@ -450,6 +485,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
           <div ref={bottomStackRef}>
             <AgentChatBottomStack
               externalSessionId={session.externalSessionId}
+              interruptedTurnResume={interruptedTurnResume}
+              resumeDisabled={!isInteractionEnabled || isSending || isStarting}
               pendingQuestions={pendingQuestionRequests}
               pendingApprovals={pendingApprovalRequests}
               todos={todos}

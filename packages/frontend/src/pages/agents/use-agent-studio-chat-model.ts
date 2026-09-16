@@ -1,9 +1,10 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { resolveAgentSessionAccentColor } from "@/components/features/agents/agent-accent-color";
 import type {
+  AgentChatInterruptedTurnResumeModel,
   AgentChatModel,
   AgentChatPendingSendItems,
 } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -328,15 +329,27 @@ export function useAgentStudioChatModel({
     [draftPersistence, draftStateKey],
   );
   const onResumeSession = sessionActions.onResumeSession;
-  const continueInterruptedTurn = useCallback((): Promise<void> => {
-    onResumeSession();
-    return Promise.resolve();
-  }, [onResumeSession]);
   const reviewCommentComposer = useAgentStudioReviewCommentComposerAdapter({
     draftScope: composer.draftScope,
     draftStateKey,
     onSend: sessionActions.onSend,
   });
+  const interruptedTurnResume = useMemo<AgentChatInterruptedTurnResumeModel | undefined>(
+    () =>
+      sessionActions.canResumeSession
+        ? {
+            isPending: sessionActions.isResumingSession,
+            error: sessionActions.resumeSessionError,
+            onResume: onResumeSession,
+          }
+        : undefined,
+    [
+      onResumeSession,
+      sessionActions.canResumeSession,
+      sessionActions.isResumingSession,
+      sessionActions.resumeSessionError,
+    ],
+  );
   const pendingSendItems = useMemo<AgentChatPendingSendItems | null>(() => {
     const count = reviewCommentComposer.pendingInlineCommentCount;
     if (count <= 0) {
@@ -366,10 +379,7 @@ export function useAgentStudioChatModel({
       busySendBlockedReason: sessionActions.busySendBlockedReason,
       canStopSession: sessionActions.canStopSession,
       stopAgentSession: sessionActions.stopAgentSession,
-      canResumeSession: sessionActions.canResumeSession,
       isResumingSession: sessionActions.isResumingSession,
-      resumeSessionError: sessionActions.resumeSessionError,
-      continueInterruptedTurn,
       isReadOnly: surfaceState.composerReadOnly,
       readOnlyReason: surfaceState.composerReadOnlyReason,
       draftScope: composerDraftScope,
@@ -449,11 +459,8 @@ export function useAgentStudioChatModel({
     surfaceState.composerReadOnly,
     surfaceState.composerReadOnlyReason,
     sessionActions.busySendBlockedReason,
-    sessionActions.canResumeSession,
     sessionActions.canStopSession,
-    continueInterruptedTurn,
     sessionActions.isResumingSession,
-    sessionActions.resumeSessionError,
     sessionActions.isSending,
     sessionActions.isSessionWorking,
     sessionActions.isStarting,
@@ -480,6 +487,7 @@ export function useAgentStudioChatModel({
     sessionAccentColor,
     pendingQuestions,
     approvals,
+    interruptedTurnResume,
     composer: composerConfig,
     sessionAgentColors: modelSelection.agentAccentColorsByProfileId,
     subagentPendingApprovalCountBySessionKey,

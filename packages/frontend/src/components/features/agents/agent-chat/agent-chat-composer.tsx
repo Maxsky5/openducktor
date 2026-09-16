@@ -1,4 +1,4 @@
-import { Bot, BrainCog, LoaderCircle, Paperclip, Play, SendHorizontal, Square } from "lucide-react";
+import { Bot, BrainCog, LoaderCircle, Paperclip, SendHorizontal, Square } from "lucide-react";
 import {
   memo,
   type ReactElement,
@@ -94,46 +94,6 @@ const hasComposerSendContent = (
 const SEND_PENDING_ITEMS_BADGE_CLASS_NAME =
   "pointer-events-none absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-300 px-1 text-[10px] font-semibold leading-none text-neutral-950";
 
-const AgentChatComposerResumeControl = memo(function AgentChatComposerResumeControl({
-  canResumeSession,
-  isResumingSession,
-  resumeDisabled,
-  resumeSessionError,
-  onResumeSession,
-}: Pick<
-  AgentChatComposerModel,
-  "canResumeSession" | "isResumingSession" | "resumeSessionError" | "onResumeSession"
-> & { resumeDisabled: boolean }): ReactElement | null {
-  if (!canResumeSession) {
-    return null;
-  }
-
-  return (
-    <>
-      {resumeSessionError ? (
-        <p className="max-w-[24rem] text-right text-xs text-destructive" role="alert">
-          {resumeSessionError}
-        </p>
-      ) : null}
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="h-8 gap-1.5 rounded-full px-3 text-xs"
-        disabled={isResumingSession || resumeDisabled}
-        onClick={onResumeSession}
-      >
-        {isResumingSession ? (
-          <LoaderCircle className="size-3.5 animate-spin" />
-        ) : (
-          <Play className="size-3.5" />
-        )}
-        {isResumingSession ? "Resuming" : "Resume"}
-      </Button>
-    </>
-  );
-});
-
 const AgentChatComposerSendControl = memo(function AgentChatComposerSendControl({
   sendDisabled,
   showSubmittingState,
@@ -188,11 +148,6 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   contextUsage,
   canStopSession,
   onStopSession,
-  canResumeSession,
-  isResumingSession,
-  resumeDisabled,
-  resumeSessionError,
-  onResumeSession,
   showSubmittingState,
   sendDisabled,
   pendingSendItems,
@@ -212,11 +167,6 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   contextUsage: AgentChatComposerModel["contextUsage"];
   canStopSession: boolean;
   onStopSession: AgentChatComposerModel["onStopSession"];
-  canResumeSession: boolean;
-  isResumingSession: boolean;
-  resumeDisabled: boolean;
-  resumeSessionError: string | null;
-  onResumeSession: AgentChatComposerModel["onResumeSession"];
   showSubmittingState: boolean;
   sendDisabled: boolean;
   pendingSendItems: AgentChatComposerModel["pendingSendItems"];
@@ -297,13 +247,6 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             />
           </div>
         ) : null}
-        <AgentChatComposerResumeControl
-          canResumeSession={canResumeSession}
-          isResumingSession={isResumingSession}
-          resumeDisabled={resumeDisabled}
-          resumeSessionError={resumeSessionError}
-          onResumeSession={onResumeSession}
-        />
         {canStopSession ? (
           <Button
             type="button"
@@ -420,10 +363,6 @@ function AgentChatComposerFormView({
     contextUsage,
     canStopSession,
     onStopSession,
-    canResumeSession,
-    isResumingSession,
-    resumeSessionError,
-    onResumeSession,
     composerFormRef,
     composerEditorRef,
     onComposerEditorInput,
@@ -517,11 +456,6 @@ function AgentChatComposerFormView({
             contextUsage={contextUsage}
             canStopSession={canStopSession}
             onStopSession={onStopSession}
-            canResumeSession={canResumeSession}
-            isResumingSession={isResumingSession}
-            resumeDisabled={isComposerInputDisabled || isSubmitting}
-            resumeSessionError={resumeSessionError}
-            onResumeSession={onResumeSession}
             showSubmittingState={isSubmitting}
             sendDisabled={sendDisabled}
             pendingSendItems={pendingSendItems}

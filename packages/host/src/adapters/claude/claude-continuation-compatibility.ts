@@ -8,8 +8,8 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 /**
- * Claude Code release that owns the classifier for `CLAUDE_CODE_RESUME_INTERRUPTED_TURN`.
- * OpenDucktor verifies only this release; a different version is unverified and fails closed.
+ * Claude Code release that owns the classifier for `CLAUDE_CODE_RESUME_INTERRUPTED_TURN` and
+ * the release the pinned SDK bundle ships. A different version is unverified and fails closed.
  *
  * Bump checklist:
  * 1. Change this value.
@@ -19,6 +19,17 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
  * 3. Change the adapter code when the CLI contract changed.
  */
 export const CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION = "2.1.251";
+
+/**
+ * Claude Code releases whose binary carries the verified continuation contract: the
+ * `CLAUDE_CODE_RESUME_INTERRUPTED_TURN` switch, the hidden continuation text, and the `isMeta`
+ * marker. OpenDucktor verified 2.1.239 by inspecting the released binary. A release that is
+ * not listed fails closed until someone verifies it.
+ */
+const CLAUDE_INTERRUPTED_TURN_RESUME_SUPPORTED_VERSIONS = [
+  CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION,
+  "2.1.239",
+] as const;
 
 const CLAUDE_VERSION_COMMAND_TIMEOUT_MS = 2_000;
 
@@ -36,6 +47,12 @@ const parseVersionPrefix = (value: string): ClaudeCliVersion | null => {
   return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) };
 };
 
+const toVersionKey = (version: ClaudeCliVersion): string =>
+  `${version.major}.${version.minor}.${version.patch}`;
+
+const formatSupportedClaudeInterruptedTurnResumeVersions = (): string =>
+  CLAUDE_INTERRUPTED_TURN_RESUME_SUPPORTED_VERSIONS.join(" or ");
+
 /**
  * Reads the version that `claude --version` prints, for example `2.1.251 (Claude Code)`.
  */
@@ -43,15 +60,14 @@ export const parseClaudeCliVersion = (output: string | null): ClaudeCliVersion |
   output === null ? null : parseVersionPrefix(output);
 
 export const supportsClaudeInterruptedTurnResume = (version: ClaudeCliVersion | null): boolean => {
-  const verified = parseVersionPrefix(CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION);
-  if (version === null || verified === null) {
+  if (version === null) {
     return false;
   }
-  return (
-    version.major === verified.major &&
-    version.minor === verified.minor &&
-    version.patch === verified.patch
-  );
+  const key = toVersionKey(version);
+  return CLAUDE_INTERRUPTED_TURN_RESUME_SUPPORTED_VERSIONS.some((supported) => {
+    const parsed = parseVersionPrefix(supported);
+    return parsed !== null && toVersionKey(parsed) === key;
+  });
 };
 
 /**
@@ -124,8 +140,8 @@ export const assertClaudeInterruptedTurnResumeCompatible = (input: {
             sessionRef: input.sessionRef,
             message:
               output === null
-                ? `Cannot read the version of the Claude executable '${input.executablePath}'. OpenDucktor verified interrupted-turn resume with Claude Code ${CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION}.`
-                : `Claude Code '${output.trim()}' at '${input.executablePath}' is not the verified interrupted-turn resume release. OpenDucktor verified interrupted-turn resume with Claude Code ${CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION}.`,
+                ? `Cannot read the version of the Claude executable '${input.executablePath}'. OpenDucktor verified interrupted-turn resume with Claude Code ${formatSupportedClaudeInterruptedTurnResumeVersions()}.`
+                : `Claude Code '${output.trim()}' at '${input.executablePath}' is not a verified interrupted-turn resume release. OpenDucktor verified interrupted-turn resume with Claude Code ${formatSupportedClaudeInterruptedTurnResumeVersions()}.`,
           }),
         );
       }),

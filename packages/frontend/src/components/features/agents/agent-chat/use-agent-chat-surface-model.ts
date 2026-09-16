@@ -5,6 +5,7 @@ import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-stat
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type {
   AgentChatEmptyStateModel,
+  AgentChatInterruptedTurnResumeModel,
   AgentChatRuntimePresentation,
   AgentChatSurfaceModel,
   AgentChatTranscriptPresentation,
@@ -39,6 +40,7 @@ type UseAgentChatSurfaceModelArgs = {
   sessionAccentColor?: string | undefined;
   pendingQuestions: AgentChatPendingQuestionActions;
   approvals: AgentChatPendingApprovalActions;
+  interruptedTurnResume?: AgentChatInterruptedTurnResumeModel | undefined;
   composer?: AgentChatComposerConfig;
   sessionAgentColors?: Record<string, string>;
   subagentPendingApprovalCountBySessionKey?: Record<string, number>;
@@ -59,6 +61,7 @@ export function useAgentChatSurfaceModel({
   sessionAccentColor,
   pendingQuestions,
   approvals,
+  interruptedTurnResume,
   composer,
   sessionAgentColors,
   subagentPendingApprovalCountBySessionKey,
@@ -112,6 +115,7 @@ export function useAgentChatSurfaceModel({
     sessionAccentColor,
     pendingQuestions,
     approvals,
+    interruptedTurnResume,
     sessionAgentColors: resolvedSessionAgentColors,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,

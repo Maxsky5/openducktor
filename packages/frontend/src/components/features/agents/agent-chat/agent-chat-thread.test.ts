@@ -676,6 +676,78 @@ describe("AgentChatThread", () => {
     rendered.unmount();
   });
 
+  test("renders the interrupted-turn resume row in the bottom stack and resumes on click", async () => {
+    const onResume = mock(() => {});
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          transcript: buildSessionTranscript(buildSession()),
+          interruptedTurnResume: {
+            isPending: false,
+            error: null,
+            onResume,
+          },
+        },
+      }),
+    );
+    await act(flush);
+
+    const scrollRegion = rendered.container.querySelector(".agent-chat-scroll-region");
+    const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
+
+    expect(scrollRegion?.textContent).not.toContain("This turn stopped before it finished.");
+    expect(bottomStack?.textContent).toContain("This turn stopped before it finished.");
+    expect(bottomStack?.textContent).toContain("Resume continues from where it stopped");
+
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+
+    expect(onResume).toHaveBeenCalledTimes(1);
+    rendered.unmount();
+  });
+
+  test("disables the interrupted-turn resume row while shared interaction is disabled", async () => {
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          isInteractionEnabled: false,
+          transcript: buildSessionTranscript(buildSession()),
+          interruptedTurnResume: {
+            isPending: false,
+            error: null,
+            onResume: () => {},
+          },
+        },
+      }),
+    );
+    await act(flush);
+
+    expect(screen.getByRole("button", { name: "Resume" }).hasAttribute("disabled")).toBe(true);
+    rendered.unmount();
+  });
+
+  test("renders the interrupted-turn resume failure in the bottom stack", async () => {
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          transcript: buildSessionTranscript(buildSession()),
+          interruptedTurnResume: {
+            isPending: false,
+            error: "Continuation failed",
+            onResume: () => {},
+          },
+        },
+      }),
+    );
+    await act(flush);
+
+    const bottomStack = rendered.container.querySelector(".agent-chat-bottom-stack");
+    expect(bottomStack?.textContent).toContain("Continuation failed");
+    rendered.unmount();
+  });
+
   test("uses the Codex runtime accent for no-profile session todos", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {

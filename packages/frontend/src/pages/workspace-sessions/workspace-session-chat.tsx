@@ -265,6 +265,18 @@ export function WorkspaceSessionChat({
       isSubmittingByRequestId: questionActions.isSubmittingQuestionByRequestId,
       onSubmit: questionActions.onSubmitQuestionAnswers,
     },
+    interruptedTurnResume:
+      canResumeSession && canInteract
+        ? {
+            isPending: actions.isResumingSession,
+            error: actions.resumeSessionError,
+            onResume: () => {
+              if (identity) {
+                actions.resumeInterruptedTurn(identity);
+              }
+            },
+          }
+        : undefined,
     composer: {
       displayedSessionKey: sessionKey,
       selectedSession: identity ? { ...identity, selectedModel } : null,
@@ -278,13 +290,7 @@ export function WorkspaceSessionChat({
       busySendBlockedReason: null,
       canStopSession,
       stopAgentSession: operations.stopAgentSession,
-      canResumeSession: canResumeSession && canInteract,
       isResumingSession: actions.isResumingSession,
-      resumeSessionError: actions.resumeSessionError,
-      continueInterruptedTurn: (target) => {
-        actions.resumeInterruptedTurn(target);
-        return Promise.resolve();
-      },
       isReadOnly,
       readOnlyReason,
       draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },

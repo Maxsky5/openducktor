@@ -69,9 +69,10 @@ describe("Claude interrupted-turn resume executable gate", () => {
     expect(parseClaudeCliVersion(null)).toBeNull();
   });
 
-  test("accepts only the verified release", () => {
+  test("accepts only the verified releases", () => {
     const verified = parseClaudeCliVersion(CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION);
     expect(supportsClaudeInterruptedTurnResume(verified)).toBe(true);
+    expect(supportsClaudeInterruptedTurnResume(parseClaudeCliVersion("2.1.239"))).toBe(true);
     expect(supportsClaudeInterruptedTurnResume(parseClaudeCliVersion("2.1.250"))).toBe(false);
     expect(supportsClaudeInterruptedTurnResume(parseClaudeCliVersion("2.1.252"))).toBe(false);
     expect(supportsClaudeInterruptedTurnResume(parseClaudeCliVersion("2.1.251-beta.1"))).toBe(
@@ -114,7 +115,7 @@ describe("Claude interrupted-turn resume executable gate", () => {
       reason: "compatibility_rejected",
       sessionRef,
       message:
-        "Claude Code '2.1.250 (Claude Code)' at '/usr/local/bin/claude' is not the verified interrupted-turn resume release. OpenDucktor verified interrupted-turn resume with Claude Code 2.1.251.",
+        "Claude Code '2.1.250 (Claude Code)' at '/usr/local/bin/claude' is not a verified interrupted-turn resume release. OpenDucktor verified interrupted-turn resume with Claude Code 2.1.251 or 2.1.239.",
     });
   });
 
@@ -150,7 +151,7 @@ describe("Claude interrupted-turn resume executable gate", () => {
     expect(failure).toMatchObject({
       reason: "compatibility_rejected",
       message:
-        "Cannot read the version of the Claude executable '/usr/local/bin/claude'. OpenDucktor verified interrupted-turn resume with Claude Code 2.1.251.",
+        "Cannot read the version of the Claude executable '/usr/local/bin/claude'. OpenDucktor verified interrupted-turn resume with Claude Code 2.1.251 or 2.1.239.",
     });
   });
 
