@@ -89,6 +89,8 @@ export type WorkspaceAddInput = {
   repoPath: string;
   workspaceId: string;
   workspaceName: string;
+  abbreviation?: string;
+  tileColor?: string;
 };
 export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
@@ -177,6 +179,8 @@ const workspaceRecordFromRepo = (
   return workspaceRecordSchema.parse({
     workspaceId: repo.workspaceId,
     workspaceName: repo.workspaceName,
+    abbreviation: repo.abbreviation ?? null,
+    tileColor: repo.tileColor ?? null,
     repoPath: repo.repoPath,
     iconDataUrl: null,
     isActive: config.activeWorkspace === workspaceId,

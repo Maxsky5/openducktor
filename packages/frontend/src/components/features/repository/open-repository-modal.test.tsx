@@ -102,6 +102,8 @@ describe("OpenRepositoryModal", () => {
     const recentWorkspace = {
       workspaceId: "existing",
       workspaceName: "Existing",
+      abbreviation: null,
+      tileColor: null,
       repoPath: "/other",
       isActive: true,
       hasConfig: true,

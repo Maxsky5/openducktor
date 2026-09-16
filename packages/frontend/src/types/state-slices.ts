@@ -45,6 +45,8 @@ export type WorkspaceSelectionOperationsInput = {
   workspaceId: string;
   workspaceName: string;
   repoPath: string;
+  abbreviation?: string;
+  tileColor?: string;
 };
 
 export type ActiveWorkspace = Pick<WorkspaceRecord, "workspaceId" | "workspaceName" | "repoPath">;

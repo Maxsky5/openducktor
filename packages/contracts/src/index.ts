@@ -68,6 +68,7 @@ export * from "./skill-schemas";
 export * from "./slash-command-schemas";
 export * from "./spec-template";
 export { withMaxUtf16Length } from "./string-schemas";
+export * from "./workspace-identity-schemas";
 export * from "./subagent-schemas";
 export * from "./system-open-schemas";
 export * from "./task-asset-schemas";

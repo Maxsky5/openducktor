@@ -32,6 +32,8 @@ test("the task card opens and closes the real detail sheet without leaving chat"
     activeWorkspace: {
       workspaceId: "workspace-a",
       workspaceName: "Workspace A",
+      abbreviation: null,
+      tileColor: null,
       repoPath: "/repo-a",
       isActive: true,
       hasConfig: true,

@@ -17,6 +17,9 @@
   --card: oklch(1 0 0); /* white */
   --card-foreground: oklch(0.129 0.042 264.695);
 
+  --workspace-rail: var(--background); /* rail sits on the page surface */
+  --workspace-rail-tile: var(--card); /* tile stays lighter than the rail */
+
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.129 0.042 264.695);
 
@@ -150,6 +153,9 @@
   --card: oklch(0.208 0.042 265.755); /* ~slate-900 */
   --card-foreground: oklch(0.968 0.007 247.896);
 
+  --workspace-rail: var(--card); /* rail lifts to the card surface */
+  --workspace-rail-tile: var(--muted); /* tile stays lighter than the rail */
+
   --popover: oklch(0.208 0.042 265.755);
   --popover-foreground: oklch(0.968 0.007 247.896);
 
@@ -268,6 +274,8 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-workspace-rail: var(--workspace-rail);
+  --color-workspace-rail-tile: var(--workspace-rail-tile);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);

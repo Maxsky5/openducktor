@@ -15,6 +15,8 @@ const workspaceRecord = (
 ): WorkspaceRecord => ({
   workspaceId,
   workspaceName: options.workspaceName ?? workspaceId.toUpperCase(),
+  abbreviation: options.abbreviation ?? null,
+  tileColor: options.tileColor ?? null,
   repoPath: options.repoPath ?? `/${workspaceId}`,
   iconDataUrl: options.iconDataUrl,
   isActive: options.isActive ?? false,
@@ -116,6 +118,39 @@ describe("WorkspaceRail", () => {
     expect(selectWorkspaceMock).toHaveBeenCalledTimes(1);
     expect(selectWorkspaceMock).toHaveBeenCalledWith("beta");
     expect(openRepositoryModal).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows the abbreviation exactly as the user typed it", () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", { workspaceName: "Alpha Repo", abbreviation: "iOS" }),
+      workspaceRecord("beta", { workspaceName: "Beta Repo" }),
+    ];
+
+    const html = renderRailMarkup();
+
+    expect(html).toContain(">iOS<");
+    expect(html).toContain(">BR<");
+    expect(html).toContain('aria-label="Alpha Repo"');
+  });
+
+  test("paints every tile with its picked color at full strength", () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", {
+        workspaceName: "Alpha Repo",
+        tileColor: "#3b82f6",
+        isActive: true,
+      }),
+      workspaceRecord("beta", { workspaceName: "Beta Repo", tileColor: "#f43f5e" }),
+    ];
+
+    renderRail();
+
+    expect(screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("style")).toContain(
+      "background-color: #3b82f6",
+    );
+    expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("style")).toContain(
+      "background-color: #f43f5e",
+    );
   });
 
   test("keeps buttons interactive-looking while a workspace switch is pending", () => {

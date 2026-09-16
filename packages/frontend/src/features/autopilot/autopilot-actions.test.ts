@@ -112,6 +112,8 @@ const createQueryClient = (): QueryClient => {
   const workspace: WorkspaceRecord = {
     workspaceId: "repo",
     workspaceName: "Repo",
+    abbreviation: null,
+    tileColor: null,
     repoPath: "/repo",
     isActive: true,
     hasConfig: true,

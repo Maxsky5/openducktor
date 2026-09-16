@@ -233,6 +233,8 @@ describe("settings modal content", () => {
         {
           workspaceId: "repo",
           workspaceName: "Repo",
+          abbreviation: null,
+          tileColor: null,
           repoPath: "/repo",
           isActive: true,
           hasConfig: true,
@@ -302,6 +304,8 @@ describe("settings modal content", () => {
     const workspace = {
       workspaceId: "repo",
       workspaceName: "Repo",
+      abbreviation: null,
+      tileColor: null,
       repoPath: "/repo",
       isActive: true,
       hasConfig: true,

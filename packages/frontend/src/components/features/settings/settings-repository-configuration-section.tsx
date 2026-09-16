@@ -7,6 +7,7 @@ import { FolderPickerDialog } from "@/components/features/repository/folder-pick
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { WorkspaceIdentityFields } from "@/components/features/workspace-identity/workspace-identity-fields";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { resolveFolderPickerInitialPath } from "./settings-repository-configuration-section-model";
 
@@ -203,6 +204,29 @@ function RepositoryWorkspaceIdentitySection({
           />
         </div>
       </div>
+
+      {/* Remounting on the selected workspace drops hex text and its error message that belong to
+          the repository the user just left, which a shared color would otherwise keep on screen. */}
+      <WorkspaceIdentityFields
+        key={selectedRepoConfig.workspaceId}
+        idPrefix="repo-workspace"
+        workspaceName={selectedRepoConfig.workspaceName}
+        abbreviation={selectedRepoConfig.abbreviation ?? null}
+        tileColor={selectedRepoConfig.tileColor ?? null}
+        isDisabled={isDisabled}
+        onChangeAbbreviation={(abbreviation) => {
+          onUpdateSelectedRepoConfig((repoConfig) => ({
+            ...repoConfig,
+            abbreviation,
+          }));
+        }}
+        onChangeTileColor={(nextTileColor) => {
+          onUpdateSelectedRepoConfig((repoConfig) => ({
+            ...repoConfig,
+            tileColor: nextTileColor ?? undefined,
+          }));
+        }}
+      />
 
       <div className="grid gap-2">
         <Label htmlFor="repo-path">Repository path</Label>

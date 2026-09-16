@@ -28,6 +28,8 @@ const workspaceState = {
   activeWorkspace: {
     workspaceId: "workspace-1",
     workspaceName: "Workspace",
+    abbreviation: null,
+    tileColor: null,
     repoPath: "/repo",
     isActive: true,
     hasConfig: true,

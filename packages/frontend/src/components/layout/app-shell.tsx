@@ -230,7 +230,7 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
             )}
           </aside>
 
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
             <main
               data-main-scroll-container="true"
               className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"

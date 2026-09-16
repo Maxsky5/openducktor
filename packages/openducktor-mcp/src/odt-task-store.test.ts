@@ -168,6 +168,8 @@ describe("OdtTaskStore", () => {
             {
               workspaceId: "repo",
               workspaceName: "Repo",
+              abbreviation: null,
+              tileColor: null,
               repoPath: "/repo",
               isActive: true,
               hasConfig: true,
@@ -188,6 +190,8 @@ describe("OdtTaskStore", () => {
         {
           workspaceId: "repo",
           workspaceName: "Repo",
+          abbreviation: null,
+          tileColor: null,
           repoPath: "/repo",
           isActive: true,
           hasConfig: true,

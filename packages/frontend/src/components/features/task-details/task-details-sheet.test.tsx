@@ -22,6 +22,8 @@ const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   activeWorkspace: {
     workspaceId: "workspace-a",
     workspaceName: "Workspace A",
+    abbreviation: null,
+    tileColor: null,
     repoPath: "/repo-a",
     isActive: true,
     hasConfig: true,

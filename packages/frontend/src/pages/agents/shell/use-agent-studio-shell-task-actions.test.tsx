@@ -11,6 +11,8 @@ const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const activeWorkspace: HookArgs["activeWorkspace"] = {
   workspaceId: "workspace-repo",
   workspaceName: "Repo",
+  abbreviation: null,
+  tileColor: null,
   repoPath: "/repo",
   isActive: true,
   hasConfig: true,

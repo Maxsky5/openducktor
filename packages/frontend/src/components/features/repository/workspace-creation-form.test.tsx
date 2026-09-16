@@ -127,6 +127,8 @@ const renderForm = ({
           {
             workspaceId: "existing",
             workspaceName: "Existing",
+            abbreviation: null,
+            tileColor: null,
             repoPath: "/repo",
             isActive: true,
             hasConfig: true,
@@ -229,6 +231,41 @@ describe("WorkspaceCreationForm", () => {
     });
     deferred.resolve();
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  });
+
+  test("sends a picked abbreviation and tile color with the new workspace", async () => {
+    const addWorkspace = mock(async () => {});
+    renderForm({ addWorkspace });
+    await chooseRepository();
+
+    fireEvent.change(screen.getByLabelText("Abbreviation"), { target: { value: " iOS " } });
+    fireEvent.click(screen.getByRole("button", { name: "Blue (#3b82f6)" }));
+    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
+
+    await waitFor(() => expect(addWorkspace).toHaveBeenCalledTimes(1));
+    expect(addWorkspace).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      workspaceId: "repo",
+      workspaceName: "repo",
+      abbreviation: "iOS",
+      tileColor: "#3b82f6",
+    });
+  });
+
+  test("omits the abbreviation and tile color when the user picks neither", async () => {
+    const addWorkspace = mock(async () => {});
+    renderForm({ addWorkspace });
+    await chooseRepository();
+
+    expect(screen.getByLabelText<HTMLInputElement>("Abbreviation").placeholder).toBe("RE");
+    fireEvent.click(screen.getByRole("button", { name: /^open repository$/i }));
+
+    await waitFor(() => expect(addWorkspace).toHaveBeenCalledTimes(1));
+    expect(addWorkspace).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      workspaceId: "repo",
+      workspaceName: "repo",
+    });
   });
 
   test("starts one repository add when two submit events arrive before a rerender", async () => {

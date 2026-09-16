@@ -425,6 +425,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "repoDevServerScriptSchema",
   "repoGitConfigSchema",
   "repoHooksSchema",
+  "workspaceAbbreviationSchema",
+  "workspaceAbbreviationValueSchema",
   "workspaceAgentStudioActiveTaskSchema",
   "workspaceAgentStudioStateSchema",
   "gitRebaseBranchRequestSchema",
@@ -621,7 +623,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "validatePromptTemplatePlaceholders",
   "validateSpecMarkdown",
   "withMaxUtf16Length",
+  "WORKSPACE_ABBREVIATION_MAX_LENGTH",
   "WORKSPACE_ID_PATTERN",
+  "WORKSPACE_TILE_COLOR_PATTERN",
   "workspaceFileGitStatusSchema",
   "workspaceFileTreeEntrySchema",
   "workspaceFileTreeSchema",
@@ -636,6 +640,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "workspaceTextFileWriteFailureSchema",
   "workspaceTextFileWriteInputSchema",
   "workspaceTextFileWriteResultSchema",
+  "workspaceTileColorSchema",
+  "workspaceTileColorValueSchema",
 ] as const;
 
 describe("contracts exports contract", () => {

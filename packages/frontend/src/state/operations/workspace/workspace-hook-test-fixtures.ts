@@ -4,6 +4,8 @@ import type { WorkspaceOperationsHostClient } from "./workspace-operations-types
 export const workspace = (repoPath: string, isActive = false): WorkspaceRecord => ({
   workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
   workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+  abbreviation: null,
+  tileColor: null,
   repoPath,
   iconDataUrl: null,
   isActive,

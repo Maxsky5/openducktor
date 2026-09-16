@@ -18,6 +18,8 @@ import {
 const workspace = (path: string, isActive = false): WorkspaceRecord => ({
   workspaceId: path.split("/").filter(Boolean).at(-1) ?? "repo",
   workspaceName: path.split("/").filter(Boolean).at(-1) ?? "repo",
+  abbreviation: null,
+  tileColor: null,
   repoPath: path,
   isActive,
   hasConfig: true,

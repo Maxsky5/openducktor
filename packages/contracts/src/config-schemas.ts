@@ -9,6 +9,10 @@ import {
 } from "./notification-schemas";
 import { repoPromptOverridesSchema } from "./prompt-schemas";
 import { workspaceAgentStudioStateSchema } from "./workspace-agent-studio-state-schemas";
+import {
+  workspaceAbbreviationSchema,
+  workspaceTileColorSchema,
+} from "./workspace-identity-schemas";
 import { customAgentRoleSchema } from "./workspace-session-schemas";
 
 export const DEFAULT_BRANCH_PREFIX = "odt";
@@ -389,6 +393,8 @@ export const workspaceNameSchema = trimmedRequiredString("Workspace name");
 export const repoConfigSchema = z.object({
   workspaceId: workspaceIdSchema,
   workspaceName: workspaceNameSchema,
+  abbreviation: nullableToOptional(workspaceAbbreviationSchema),
+  tileColor: nullableToOptional(workspaceTileColorSchema),
   repoPath: trimmedRequiredString("Repository path"),
   defaultModel: nullableToOptional(agentModelDefaultSchema),
   worktreeBasePath: nullableToOptional(z.string().min(1)),

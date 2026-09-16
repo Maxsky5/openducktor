@@ -94,6 +94,8 @@ const createHookHarness = (initialArgs: HookArgs) => {
 const createWorkspaceRecord = (path = "/repo-a") => ({
   workspaceId: path.replace(/^\//, "").replaceAll("/", "-"),
   workspaceName: path.split("/").filter(Boolean).at(-1) ?? "repo",
+  abbreviation: null,
+  tileColor: null,
   repoPath: path,
   isActive: true,
   hasConfig: true,

@@ -215,6 +215,8 @@ let workspaceState: Pick<
   activeWorkspace: {
     workspaceId: "workspace-repo",
     workspaceName: "Repo",
+    abbreviation: null,
+    tileColor: null,
     repoPath: "/repo",
     isActive: true,
     hasConfig: true,
@@ -666,6 +668,8 @@ beforeEach(async () => {
     activeWorkspace: {
       workspaceId: "workspace-repo",
       workspaceName: "Repo",
+      abbreviation: null,
+      tileColor: null,
       repoPath: "/repo",
       isActive: true,
       hasConfig: true,

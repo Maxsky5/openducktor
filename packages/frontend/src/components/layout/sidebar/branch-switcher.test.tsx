@@ -25,6 +25,8 @@ const resetBranchState = (): void => {
     activeWorkspace: {
       workspaceId: "workspace-repo",
       workspaceName: "Repo",
+      abbreviation: null,
+      tileColor: null,
       repoPath: "/repo",
       isActive: true,
       hasConfig: true,
@@ -348,6 +350,8 @@ describe("BranchSwitcher", () => {
           activeWorkspace: {
             workspaceId: "workspace-repo-b",
             workspaceName: "Repo B",
+            abbreviation: null,
+            tileColor: null,
             repoPath: "/repo-b",
             isActive: true,
             hasConfig: true,

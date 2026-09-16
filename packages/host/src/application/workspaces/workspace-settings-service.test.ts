@@ -435,6 +435,37 @@ describe("createWorkspaceSettingsService", () => {
     });
     expect(records[1]?.effectiveWorktreeBasePath).toBe("/home/dev/.openducktor/worktrees/repo-a");
   });
+  test("reports the stored abbreviation and tile color and leaves them null when unset", async () => {
+    const service = createWorkspaceSettingsService(
+      createFakeSettingsConfig({
+        config: globalConfig({
+          activeWorkspace: "repo-a",
+          workspaceOrder: ["repo-a", "repo-b"],
+          workspaces: {
+            "repo-a": {
+              ...repoConfig("repo-a", "/repos/a"),
+              abbreviation: "iOS",
+              tileColor: "#f08c00",
+            },
+            "repo-b": repoConfig("repo-b", "/repos/b"),
+          },
+        }),
+      }),
+    );
+
+    const records = await Effect.runPromise(service.listWorkspaces());
+
+    expect(records[0]).toMatchObject({
+      workspaceId: "repo-a",
+      abbreviation: "iOS",
+      tileColor: "#f08c00",
+    });
+    expect(records[1]).toMatchObject({
+      workspaceId: "repo-b",
+      abbreviation: null,
+      tileColor: null,
+    });
+  });
   test("adds, selects, and reorders configured workspaces", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({
@@ -475,6 +506,80 @@ describe("createWorkspaceSettingsService", () => {
       workspaceOrder: ["repo-b", "repo-a"],
       recentWorkspaces: ["repo-a", "repo-b"],
     });
+  });
+  test("stores an abbreviation and a tile color given at workspace creation", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+        workspaceOrder: ["repo-a"],
+      }),
+      existingPaths: new Set(["/repos/b", "/repos/b/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const added = await Effect.runPromise(
+      service.addWorkspace({
+        workspaceId: "repo-b",
+        workspaceName: "Repo B",
+        repoPath: "/repos/b",
+        abbreviation: " iOS ",
+        tileColor: "#F08C00",
+      }),
+    );
+
+    expect(added).toMatchObject({ abbreviation: "iOS", tileColor: "#f08c00" });
+    expect(settingsConfig.writtenConfigs.at(-1)?.workspaces["repo-b"]).toMatchObject({
+      abbreviation: "iOS",
+      tileColor: "#f08c00",
+    });
+  });
+  test("leaves a new workspace on its automatic abbreviation and color when none is given", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+        workspaceOrder: ["repo-a"],
+      }),
+      existingPaths: new Set(["/repos/b", "/repos/b/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const added = await Effect.runPromise(
+      service.addWorkspace({
+        workspaceId: "repo-b",
+        workspaceName: "Repo B",
+        repoPath: "/repos/b",
+      }),
+    );
+
+    expect(added).toMatchObject({ abbreviation: null, tileColor: null });
+  });
+  test("rejects a tile color given at workspace creation that is not a hex value", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        workspaces: { "repo-a": repoConfig("repo-a", "/repos/a") },
+        workspaceOrder: ["repo-a"],
+      }),
+      existingPaths: new Set(["/repos/b", "/repos/b/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+
+    const failure = await Effect.runPromise(
+      Effect.either(
+        service.addWorkspace({
+          workspaceId: "repo-b",
+          workspaceName: "Repo B",
+          repoPath: "/repos/b",
+          tileColor: "blue",
+        }),
+      ),
+    );
+
+    expect(failure._tag).toBe("Left");
+    if (failure._tag === "Left") {
+      expect(String(failure.left.message)).toContain(
+        "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
+      );
+    }
   });
   test("rejects duplicate workspace repo paths", async () => {
     const service = createWorkspaceSettingsService(
@@ -696,6 +801,72 @@ describe("createWorkspaceSettingsService", () => {
     expect(settingsConfig.writtenConfigs[0]?.chat).toEqual(explicitChatSettings);
     expect(settingsConfig.writtenConfigs[0]?.appearance).toEqual(explicitAppearanceSettings);
   });
+  test("persists a workspace abbreviation and tile color through a settings snapshot save", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo",
+        workspaceOrder: ["repo"],
+        workspaces: { repo: repoConfig("repo", "/repos/repo") },
+      }),
+      existingPaths: new Set(["/repos/repo", "/repos/repo/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+    const repoSnapshot = snapshot.workspaces.repo;
+    if (!repoSnapshot) {
+      throw new Error("expected repo workspace snapshot");
+    }
+
+    const records = await Effect.runPromise(
+      service.saveSettingsSnapshot({
+        ...snapshot,
+        workspaces: {
+          repo: { ...repoSnapshot, abbreviation: "iOS", tileColor: "#F08C00" },
+        },
+      }),
+    );
+
+    expect(records[0]).toMatchObject({ abbreviation: "iOS", tileColor: "#f08c00" });
+    expect(settingsConfig.writtenConfigs[0]?.workspaces.repo).toMatchObject({
+      abbreviation: "iOS",
+      tileColor: "#f08c00",
+    });
+  });
+
+  test("rejects a stored tile color that is not a 6-digit RGB hex value", async () => {
+    const settingsConfig = createFakeSettingsConfig({
+      config: globalConfig({
+        activeWorkspace: "repo",
+        workspaceOrder: ["repo"],
+        workspaces: { repo: repoConfig("repo", "/repos/repo") },
+      }),
+      existingPaths: new Set(["/repos/repo", "/repos/repo/.git"]),
+    });
+    const service = createWorkspaceSettingsService(settingsConfig);
+    const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
+    const repoSnapshot = snapshot.workspaces.repo;
+    if (!repoSnapshot) {
+      throw new Error("expected repo workspace snapshot");
+    }
+
+    const failure = await Effect.runPromise(
+      Effect.either(
+        service.saveSettingsSnapshot({
+          ...snapshot,
+          workspaces: { repo: { ...repoSnapshot, tileColor: "blue" } },
+        }),
+      ),
+    );
+
+    expect(failure._tag).toBe("Left");
+    if (failure._tag === "Left") {
+      expect(String(failure.left.message)).toContain(
+        "Tile color must be a 6-digit RGB hex value, such as #3b82f6.",
+      );
+    }
+    expect(settingsConfig.writtenConfigs).toHaveLength(0);
+  });
+
   test("replaces only the selected workspace Agent Studio state", async () => {
     const settingsConfig = createFakeSettingsConfig({
       config: globalConfig({

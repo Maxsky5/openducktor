@@ -241,6 +241,8 @@ const createAgentSessionWorkspaceSettingsService = (
           {
             workspaceId: "repo",
             workspaceName: "Repo",
+            abbreviation: null,
+            tileColor: null,
             repoPath: workspace.repoPath,
             iconDataUrl: null,
             isActive: true,

@@ -169,6 +169,18 @@ export const createWorkspaceSettingsCommandHandlers = (
         ),
         repoPath: requireString(commandInputStringSchema.safeParse(record.repoPath), "repoPath"),
       };
+      if (record.abbreviation !== undefined) {
+        input.abbreviation = requireString(
+          commandInputStringSchema.safeParse(record.abbreviation),
+          "abbreviation",
+        );
+      }
+      if (record.tileColor !== undefined) {
+        input.tileColor = requireString(
+          commandInputStringSchema.safeParse(record.tileColor),
+          "tileColor",
+        );
+      }
       return workspaceSettingsService.addWorkspace(input);
     },
     workspace_select: (args) =>

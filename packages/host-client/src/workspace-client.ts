@@ -48,6 +48,8 @@ export type WorkspaceCreateInput = {
   workspaceId: string;
   workspaceName: string;
   repoPath: string;
+  abbreviation?: string;
+  tileColor?: string;
 };
 
 const workspaceAdd = async (

@@ -41,6 +41,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             return {
               workspaceId: "repo",
               workspaceName: "repo",
+              abbreviation: null,
+              tileColor: null,
               repoPath: "/repo",
               iconDataUrl: null,
               isActive: true,
@@ -65,6 +67,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             return {
               workspaceId: "repo",
               workspaceName: "repo",
+              abbreviation: null,
+              tileColor: null,
               repoPath: "/repo",
               iconDataUrl: null,
               isActive: true,
@@ -157,6 +161,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             return {
               workspaceId: "repo",
               workspaceName: "repo",
+              abbreviation: null,
+              tileColor: null,
               repoPath: "/repo",
               iconDataUrl: null,
               isActive: true,
@@ -181,6 +187,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             return {
               workspaceId: "repo",
               workspaceName: "repo",
+              abbreviation: null,
+              tileColor: null,
               repoPath: "/repo",
               iconDataUrl: null,
               isActive: true,
@@ -205,6 +213,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             return {
               workspaceId: "repo",
               workspaceName: "repo",
+              abbreviation: null,
+              tileColor: null,
               repoPath: "/repo",
               iconDataUrl: null,
               isActive: true,
@@ -357,6 +367,22 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       workspaceName: "repo",
       repoPath: "/repo",
     });
+    await expect(
+      router.invoke("workspace_add", {
+        workspaceId: "repo",
+        workspaceName: "repo",
+        repoPath: "/repo",
+        abbreviation: "iOS",
+        tileColor: "#f08c00",
+      }),
+    ).resolves.toMatchObject({ workspaceId: "repo" });
+    expect(addedWorkspaceInputs.at(-1)).toEqual({
+      workspaceId: "repo",
+      workspaceName: "repo",
+      repoPath: "/repo",
+      abbreviation: "iOS",
+      tileColor: "#f08c00",
+    });
     await expect(router.invoke("workspace_select", { workspaceId: "repo" })).resolves.toMatchObject(
       { workspaceId: "repo" },
     );
@@ -439,6 +465,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     ).resolves.toBeUndefined();
     expect(calls).toEqual([
       "listWorkspaces",
+      "addWorkspace",
       "addWorkspace",
       "selectWorkspace",
       "reorderWorkspaces",
@@ -657,5 +684,21 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
         state: { openTaskIds: [42] },
       }),
     ).rejects.toThrow("workspace_replace_agent_studio_state state is invalid");
+    await expect(
+      router.invoke("workspace_add", {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        abbreviation: 42,
+      }),
+    ).rejects.toThrow("abbreviation");
+    await expect(
+      router.invoke("workspace_add", {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        tileColor: false,
+      }),
+    ).rejects.toThrow("tileColor");
   });
 });

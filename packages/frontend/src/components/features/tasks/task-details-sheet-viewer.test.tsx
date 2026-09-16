@@ -18,6 +18,8 @@ import TaskDetailsSheetViewer from "./task-details-sheet-viewer";
 const activeWorkspace = {
   workspaceId: "workspace-a",
   workspaceName: "Workspace A",
+  abbreviation: null,
+  tileColor: null,
   repoPath: "/repo-a",
 };
 const createWorkspaceState = (): WorkspaceStateContextValue => ({
