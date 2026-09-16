@@ -270,10 +270,13 @@ describe("OpencodeSdkAdapter event stream", () => {
     await flushAsync();
 
     expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(2);
-    expect(events.filter((entry) => entry.type === "assistant_message")).toHaveLength(1);
     expect(events.filter((entry) => entry.type === "assistant_part")).toHaveLength(0);
     expect(events.filter((entry) => entry.type === "assistant_delta")).toHaveLength(0);
     expect(events.filter((entry) => entry.type === "session_idle")).toHaveLength(0);
+
+    const assistantMessages = events.filter((entry) => entry.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(2);
+    expect(assistantMessages.at(-1)).toMatchObject({ message: "All done" });
   });
 
   test("emits the final assistant message when idle-preserved parts arrive after terminal metadata", async () => {
@@ -333,11 +336,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     expect(events.filter((entry) => entry.type === "assistant_delta")).toHaveLength(0);
 
     const assistantMessages = events.filter((entry) => entry.type === "assistant_message");
-    expect(assistantMessages).toHaveLength(1);
-    if (assistantMessages[0]?.type !== "assistant_message") {
+    expect(assistantMessages).toHaveLength(2);
+    if (assistantMessages.at(-1)?.type !== "assistant_message") {
       throw new Error("Expected assistant_message event");
     }
-    expect(assistantMessages[0].message).toBe("Recovered final output");
+    expect(assistantMessages.at(-1)?.message).toBe("Recovered final output");
     expect(events.filter((entry) => entry.type === "session_idle")).toHaveLength(0);
   });
 

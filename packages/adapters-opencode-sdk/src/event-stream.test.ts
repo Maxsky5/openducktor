@@ -1840,7 +1840,7 @@ describe("event-stream", () => {
     ]);
   });
 
-  test("emits session_idle for stop-finished assistant turns without visible text", async () => {
+  test("emits session_idle and an empty final marker for stop-finished assistant turns without visible text", async () => {
     const emitted = await runEventStream([
       {
         type: "message.updated",
@@ -1869,7 +1869,12 @@ describe("event-stream", () => {
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(1);
-    expect(emitted.some((event) => event.type === "assistant_message")).toBe(false);
+    const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]).toMatchObject({
+      messageId: "assistant-message-stop-only",
+      message: "",
+    });
   });
 
   test("keeps error-finished assistant turns unfinalized for a later resume", async () => {
@@ -2073,7 +2078,8 @@ describe("event-stream", () => {
     ]);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
-    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages).toHaveLength(2);
+    expect(assistantMessages.at(-1)).toMatchObject({ message: "Done after idle" });
     expect(emitted.filter((event) => event.type === "assistant_part")).toHaveLength(0);
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(1);
@@ -2274,11 +2280,11 @@ describe("event-stream", () => {
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
-    expect(assistantMessages).toHaveLength(1);
-    if (assistantMessages[0]?.type !== "assistant_message") {
+    expect(assistantMessages).toHaveLength(2);
+    if (assistantMessages.at(-1)?.type !== "assistant_message") {
       throw new Error("Expected assistant_message event");
     }
-    expect(assistantMessages[0].message).toBe("Recovered final output");
+    expect(assistantMessages.at(-1)?.message).toBe("Recovered final output");
 
     const idleEvents = emitted.filter((event) => event.type === "session_idle");
     expect(idleEvents).toHaveLength(1);
@@ -2315,11 +2321,11 @@ describe("event-stream", () => {
     expect(emitted.filter((event) => event.type === "assistant_delta")).toHaveLength(0);
 
     const assistantMessages = emitted.filter((event) => event.type === "assistant_message");
-    expect(assistantMessages).toHaveLength(1);
-    if (assistantMessages[0]?.type !== "assistant_message") {
+    expect(assistantMessages).toHaveLength(2);
+    if (assistantMessages.at(-1)?.type !== "assistant_message") {
       throw new Error("Expected assistant_message event");
     }
-    expect(assistantMessages[0].message).toBe("Recovered");
+    expect(assistantMessages.at(-1)?.message).toBe("Recovered");
   });
 
   test("emits a final assistant message when a later step-finish part carries the stop signal", async () => {

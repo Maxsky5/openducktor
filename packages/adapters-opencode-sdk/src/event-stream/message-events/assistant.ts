@@ -246,26 +246,37 @@ export const maybeEmitCompletedAssistantMessage = (
   }
   updateMessageMetadata(runtime, input.messageId, metadataUpdates);
 
-  if (
-    !hasStopSignal ||
-    !hasSuccessfulStopSignal ||
-    assistantParts.length === 0 ||
-    !isStreamTurnIdle(session)
-  ) {
+  if (!hasStopSignal || !hasSuccessfulStopSignal || !isStreamTurnIdle(session)) {
     return false;
   }
 
   const text = readTextFromParts(assistantParts);
   const visible = sanitizeAssistantMessage(text);
+  if (visible.length === 0) {
+    // A text-less or partless turn emits the final marker once, so transcript readers
+    // keep the terminal signal for the resume affordance and the settled-turn cleanup.
+    // The marker stays out of emittedAssistantMessageIds, so a late text part can
+    // still replace the row at the reader. An error finish stays unfinalized: the
+    // interrupted-turn probe accepts it as resumable.
+    if (!session.pendingCompletedAssistantMessageIds.has(input.messageId)) {
+      return false;
+    }
+    session.pendingCompletedAssistantMessageIds.delete(input.messageId);
+    runtime.emit(runtime.externalSessionId, {
+      type: "assistant_message",
+      externalSessionId: runtime.externalSessionId,
+      timestamp,
+      messageId: input.messageId,
+      message: "",
+    });
+    return true;
+  }
+
   if (session.emittedAssistantMessageIds.has(input.messageId)) {
     session.pendingCompletedAssistantMessageIds.delete(input.messageId);
     return true;
   }
 
-  // A text-less turn still emits the final message when the finish is successful, so
-  // transcript readers keep the terminal signal for the resume affordance and the
-  // settled-turn cleanup. An error finish stays unfinalized: the interrupted-turn
-  // probe accepts it as resumable.
   const event: Parameters<EventStreamRuntime["emit"]>[1] = {
     type: "assistant_message",
     externalSessionId: runtime.externalSessionId,
