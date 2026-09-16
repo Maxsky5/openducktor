@@ -13,7 +13,6 @@ import {
   createClaudeSystemCommands,
   createRecordingClaudeSystemCommands,
 } from "./claude-agent-sdk-system-commands.test-support";
-import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
 import {
   checkLiveClaudeContinuationEligibility,
@@ -22,56 +21,33 @@ import {
 import {
   createClaudeContextUsageResponse,
   createClaudeQueryFixture,
+  createClaudeSession,
 } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import type { ClaudeAgentSdkEventEmitter, ClaudeSession } from "./claude-agent-sdk-types";
 
-const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
-  acceptedUserMessages: [],
-  activeSdkUserTurnCount: 0,
-  abortController: new AbortController(),
-  activity: "idle",
-  externalSessionId: "session-1",
-  input: {
-    repoPath: "/repo/",
-    runtimeKind: "claude",
-    workingDirectory: "/repo/worktree/",
-    externalSessionId: "session-1",
-    runtimePolicy: { kind: "claude" },
-    sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-    systemPrompt: "Build",
-  },
-  model: undefined,
-  pendingApprovals: new Map(),
-  pendingQuestions: new Map(),
-  queuedSdkMessages: [],
-  pendingUserTurnCount: 0,
-  query: createClaudeQueryFixture({
-    close: mock(() => {}),
-  }),
-  queue: new AsyncInputQueue(),
-  runtimeId: "runtime-1",
-  startedAt: "2026-06-25T20:00:00.000Z",
-  summary: {
-    externalSessionId: "session-1",
-    runtimeKind: "claude",
-    workingDirectory: "/repo/worktree/",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-    startedAt: "2026-06-25T20:00:00.000Z",
-    status: "idle",
-  },
-  streamAssistantMessageOrdinal: 0,
-  streamAssistantMessageIdsByBlockIndex: new Map(),
-  subagentMessageIdsByTaskId: new Map(),
-  subagentTaskIdsByToolUseId: new Map(),
-  toolEndedAtMsByCallId: new Map(),
-  toolInputsByCallId: new Map(),
-  toolMessageIdsByCallId: new Map(),
-  toolNamesByCallId: new Map(),
-  toolStartedAtMsByCallId: new Map(),
-  todosById: new Map(),
-  ...overrides,
-});
+const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
+  createClaudeSession({
+    input: {
+      repoPath: "/repo/",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/worktree/",
+      externalSessionId: "session-1",
+      runtimePolicy: { kind: "claude" },
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      systemPrompt: "Build",
+    },
+    runtimeId: "runtime-1",
+    summary: {
+      externalSessionId: "session-1",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/worktree/",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      startedAt: "2026-06-25T20:00:00.000Z",
+      status: "idle",
+    },
+    ...overrides,
+  });
 
 const listClaudeMcpTokenDirectories = async (): Promise<Set<string>> =>
   new Set((await readdir(tmpdir())).filter((name) => name.startsWith("openducktor-claude-mcp-")));

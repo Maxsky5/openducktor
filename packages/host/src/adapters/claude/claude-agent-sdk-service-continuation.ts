@@ -1,8 +1,13 @@
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
-import type { ContinueInterruptedAgentTurnInput, ResumeAgentSessionInput } from "@openducktor/core";
+import type {
+  AgentSessionHistoryMessage,
+  ContinueInterruptedAgentTurnInput,
+  ResumeAgentSessionInput,
+} from "@openducktor/core";
 import {
   AgentRuntimeQueryError,
   interruptedTurnResumeError,
+  type InterruptedTurnResumeError,
   type InterruptedTurnResumeFailureReason,
 } from "@openducktor/core";
 import { Effect } from "effect";
@@ -15,9 +20,9 @@ import { AgentSessionResumeError } from "../../ports/agent-session-resume-error"
 import { loadClaudeHistory } from "./claude-agent-sdk-catalog";
 import { assertClaudeInterruptedTurnResumeCompatible } from "./claude-continuation-compatibility";
 import {
-  assertClaudeContinuationEligible,
-  assertClaudePersistedContinuationEligible,
-  claudeLiveContinuationNeedsTranscript,
+  type ClaudeContinuationDecision,
+  decideClaudeContinuation,
+  decideClaudePersistedContinuation,
 } from "./claude-agent-sdk-continuation";
 import {
   claudeLiveHistoryContext,
@@ -27,6 +32,34 @@ import { resolveClaudeExecutable } from "./claude-agent-sdk-runtime";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import type { ClaudeSession, CreateClaudeAgentSdkServiceInput } from "./claude-agent-sdk-types";
 import { fromPromise } from "./claude-agent-sdk-utils";
+
+const continuationOperation = "claudeRuntime.continueInterruptedTurn";
+
+const failClaudeContinuation = (error: InterruptedTurnResumeError) =>
+  Effect.fail(toHostOperationError(error, continuationOperation));
+
+const finishClaudeContinuationDecision = (decision: ClaudeContinuationDecision) =>
+  decision.kind === "reject" ? failClaudeContinuation(decision.error) : Effect.void;
+
+/**
+ * Reads the persisted transcript for a continuation. The read covers the full
+ * transcript, subagent imports included, because the installed SDK exposes no tail
+ * read. Resume is user-initiated, so the cost stays acceptable.
+ */
+const readClaudeContinuationTranscript = async (
+  input: ResumeAgentSessionInput,
+  now: () => string,
+  liveContext?: ClaudeLiveHistoryContext,
+): Promise<readonly AgentSessionHistoryMessage[]> => {
+  try {
+    return await loadClaudeHistory(input, now, liveContext);
+  } catch (cause) {
+    throw interruptedTurnResumeError({
+      ...classifyPersistedClaudeContinuationFailure(cause, input.externalSessionId),
+      cause,
+    });
+  }
+};
 
 /**
  * Rejects a continuation that the registered live session cannot start. The live state
@@ -39,7 +72,7 @@ export const checkLiveClaudeContinuationEligibility = (
   input: ResumeAgentSessionInput,
   now: () => string,
 ) =>
-  fromPromise("claudeRuntime.continueInterruptedTurn", async () => {
+  fromPromise(continuationOperation, async () => {
     try {
       assertClaudeSessionRef(session, input, "continue interrupted turn");
     } catch (cause) {
@@ -52,14 +85,10 @@ export const checkLiveClaudeContinuationEligibility = (
       }
       throw cause;
     }
-    assertClaudeContinuationEligible(session, input.externalSessionId);
-  }).pipe(
-    Effect.flatMap(() =>
-      claudeLiveContinuationNeedsTranscript(session)
-        ? checkClaudeContinuationHistoryEligibility(input, now, claudeLiveHistoryContext(session))
-        : Effect.void,
-    ),
-  );
+    return decideClaudeContinuation(session, input.externalSessionId, () =>
+      readClaudeContinuationTranscript(input, now, claudeLiveHistoryContext(session)),
+    );
+  }).pipe(Effect.flatMap(finishClaudeContinuationDecision));
 
 type PersistedContinuationFailure = {
   readonly reason: InterruptedTurnResumeFailureReason;
@@ -97,32 +126,6 @@ export const classifyPersistedClaudeContinuationFailure = (
   };
 };
 
-const checkClaudeContinuationHistoryEligibility = (
-  input: ResumeAgentSessionInput,
-  now: () => string,
-  liveContext?: ClaudeLiveHistoryContext,
-) =>
-  fromPromise("claudeRuntime.continueInterruptedTurn", () =>
-    loadClaudeHistory(input, now, liveContext),
-  ).pipe(
-    Effect.catchAll((cause) =>
-      Effect.fail(
-        toHostOperationError(
-          interruptedTurnResumeError({
-            ...classifyPersistedClaudeContinuationFailure(cause, input.externalSessionId),
-            cause,
-          }),
-          "claudeRuntime.continueInterruptedTurn",
-        ),
-      ),
-    ),
-    Effect.flatMap((history) =>
-      fromPromise("claudeRuntime.continueInterruptedTurn", async () => {
-        assertClaudePersistedContinuationEligible(history, input.externalSessionId);
-      }),
-    ),
-  );
-
 /**
  * Rejects an interrupted-turn resume after a restart, when no live session entry exists.
  * The check reads the persisted transcript because the CLI classifier is not available yet.
@@ -130,7 +133,13 @@ const checkClaudeContinuationHistoryEligibility = (
 export const checkPersistedClaudeContinuationEligibility = (
   input: ResumeAgentSessionInput,
   now: () => string,
-) => checkClaudeContinuationHistoryEligibility(input, now);
+) =>
+  fromPromise(continuationOperation, async () =>
+    decideClaudePersistedContinuation(
+      await readClaudeContinuationTranscript(input, now),
+      input.externalSessionId,
+    ),
+  ).pipe(Effect.flatMap(finishClaudeContinuationDecision));
 
 /**
  * Binds the interrupted-turn continuation to the executable the runtime will run.
@@ -140,20 +149,19 @@ export const assertClaudeContinuationExecutableCompatible = (
   serviceInput: CreateClaudeAgentSdkServiceInput,
   input: ContinueInterruptedAgentTurnInput,
 ) => {
-  const operation = "claudeRuntime.continueInterruptedTurn";
   const sessionRef = {
     repoPath: input.repoPath,
     runtimeKind: input.runtimeKind,
     workingDirectory: input.workingDirectory,
     externalSessionId: input.externalSessionId,
   } satisfies AgentSessionLiveRef;
-  return resolveClaudeExecutable(serviceInput, operation).pipe(
+  return resolveClaudeExecutable(serviceInput, continuationOperation).pipe(
     Effect.mapError(
       (cause) =>
         new AgentSessionResumeError({
           reason: "runtime_unavailable",
           sessionRef,
-          operation,
+          operation: continuationOperation,
           message: `Cannot resolve the Claude executable for interrupted-turn resume: ${cause.message}`,
           cause,
         }),

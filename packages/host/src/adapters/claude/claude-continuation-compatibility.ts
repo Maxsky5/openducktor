@@ -10,7 +10,13 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 /**
  * Claude Code release that owns the classifier for `CLAUDE_CODE_RESUME_INTERRUPTED_TURN`.
  * OpenDucktor verifies only this release; a different version is unverified and fails closed.
- * Keep this value in step with `claude-continuation-compatibility.test.ts`.
+ *
+ * Bump checklist:
+ * 1. Change this value.
+ * 2. Run `bun test ./src/adapters/claude/claude-continuation-compatibility.test.ts` in
+ *    `packages/host`. The test pins the SDK manifest version, the bundled CLI checksum, the
+ *    resume switch, and the hidden continuation turn.
+ * 3. Change the adapter code when the CLI contract changed.
  */
 export const CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION = "2.1.251";
 

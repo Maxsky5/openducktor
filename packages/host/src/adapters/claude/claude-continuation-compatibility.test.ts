@@ -126,8 +126,9 @@ describe("Claude interrupted-turn resume compatibility", () => {
       `The installed @anthropic-ai/claude-agent-sdk ships CLI version ${manifest.version}, but ` +
         `the interrupted-turn resume contract was verified against ` +
         `${SUPPORTED_CLAUDE_CLI_VERSION}. Verify the CLI classifier that reads ` +
-        `${CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV}, update SUPPORTED_CLAUDE_CLI_VERSION, and ` +
-        `adjust packages/host/src/adapters/claude when the behavior changed.`,
+        `${CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV}, update ` +
+        `CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION, and adjust ` +
+        `packages/host/src/adapters/claude when the behavior changed.`,
     ).toBe(SUPPORTED_CLAUDE_CLI_VERSION);
   });
 
