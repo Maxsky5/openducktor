@@ -111,6 +111,29 @@ describe("OpencodeSdkAdapter interrupted-turn continuation", () => {
     expect(mock.session.promptAsyncCalls).toHaveLength(0);
   });
 
+  test("rejects a continuation whose session scope conflicts with the attached session", async () => {
+    const mock = makeMockClient({ messagesResponse: interruptedMessages() });
+    const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });
+    const ref = sessionRuntimeRef("session-opencode-1", { sessionScope });
+    await adapter.resumeSession(ref);
+    const statusCallsAfterResume = mock.session.statusCalls.length;
+    const getCallsAfterResume = mock.session.getCalls.length;
+
+    await expect(
+      adapter.continueInterruptedTurn({
+        ...ref,
+        sessionScope: workflowAgentSessionScope("task-2", "build"),
+      }),
+    ).rejects.toMatchObject({
+      reason: "identity_mismatch",
+      message: expect.stringContaining("does not match the requested"),
+    });
+
+    expect(mock.session.statusCalls.length).toBe(statusCallsAfterResume);
+    expect(mock.session.getCalls.length).toBe(getCallsAfterResume);
+    expect(mock.session.promptAsyncCalls).toHaveLength(0);
+  });
+
   test("prefers the request model and system prompt over the loaded session values", async () => {
     const mock = makeMockClient({ messagesResponse: interruptedMessages() });
     const adapter = new OpencodeSdkAdapter({ createClient: () => mock.client });

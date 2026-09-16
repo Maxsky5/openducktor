@@ -80,6 +80,7 @@ import { createOpenCodeMessageId } from "./opencode-message-id";
 import {
   applyRuntimeContextToSession,
   applySessionPolicy,
+  assertRuntimeContextCompatibleWithSession,
   requireOpencodeSessionPolicyRuntime,
   resolveOpencodePolicyBoundSession,
   synchronizeOpencodeSessionPolicy,
@@ -333,6 +334,12 @@ export class OpencodeSdkAdapter
           message: `OpenCode session '${input.externalSessionId}' is registered to repo '${registeredRef.repoPath}' and working directory '${registeredRef.workingDirectory}'.`,
         });
       }
+      assertRuntimeContextCompatibleWithSession(
+        registered,
+        input,
+        "continue OpenCode turn",
+        (message) => interruptedTurnResumeError({ reason: "identity_mismatch", message }),
+      );
     }
     // Probe with an unregistered session client so an ineligible turn never registers,
     // subscribes, or emits a started event for the session.
