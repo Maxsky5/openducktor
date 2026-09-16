@@ -41,7 +41,7 @@ describe("settings config adapter initialization", () => {
     });
   });
 
-  test("syncs the config file and directory before reporting success", async () => {
+  test("syncs config contents and POSIX directory metadata before reporting success", async () => {
     await withTempConfig(async (configPath) => {
       const realOpen = fs.open;
       const syncedPaths: string[] = [];
@@ -62,9 +62,11 @@ describe("settings config adapter initialization", () => {
         openFile.mockRestore();
       }
 
-      expect(syncedPaths).toHaveLength(2);
+      expect(syncedPaths).toHaveLength(process.platform === "win32" ? 1 : 2);
       expect(syncedPaths[0]).toContain(".config.json.tmp-");
-      expect(syncedPaths[1]).toBe(process.platform === "win32" ? configPath : dirname(configPath));
+      if (process.platform !== "win32") {
+        expect(syncedPaths[1]).toBe(dirname(configPath));
+      }
     });
   });
 

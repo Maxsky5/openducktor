@@ -169,11 +169,12 @@ const persistGlobalConfig = (resolvedConfigPath: string, baseDir: string, config
         },
       );
       yield* Effect.tryPromise(() => rename(tempPath, resolvedConfigPath));
-      const syncPath = process.platform === "win32" ? resolvedConfigPath : baseDir;
-      yield* withFileHandle(
-        () => open(syncPath, "r"),
-        (handle) => handle.sync(),
-      );
+      if (process.platform !== "win32") {
+        yield* withFileHandle(
+          () => open(baseDir, "r"),
+          (handle) => handle.sync(),
+        );
+      }
     }).pipe(
       Effect.mapError((cause) =>
         toHostOperationError(cause, "settingsConfig.writeConfig", {
