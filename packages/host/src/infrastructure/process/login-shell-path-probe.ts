@@ -114,6 +114,7 @@ export const probeLoginShellPath = (
       signal.removeEventListener("abort", abort);
       child.removeAllListeners("error");
       child.removeAllListeners("exit");
+      child.removeAllListeners("close");
       child.stdout?.removeAllListeners("data");
     }
 
@@ -215,6 +216,20 @@ export const probeLoginShellPath = (
 
       shellExited = true;
       finishWhenReady();
+    });
+    child.once("close", () => {
+      if (!shellExited || sawEnd) {
+        return;
+      }
+      finish(
+        Effect.fail(
+          processEnvironmentError(
+            shell,
+            "invalid_output",
+            `Failed to resolve PATH from interactive login shell ${shell}: the probe returned no environment markers. Check shell startup output and restart OpenDucktor.`,
+          ),
+        ),
+      );
     });
   }).pipe(
     Effect.timeoutFail({

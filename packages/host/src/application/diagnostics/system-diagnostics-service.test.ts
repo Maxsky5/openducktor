@@ -350,6 +350,56 @@ describe("createSystemDiagnosticsService", () => {
 
     expect(check.errors).toContain(processEnvironmentError.message);
   });
+  test("runtimeCheck keeps the PATH diagnostic when runtime config initialization fails", async () => {
+    const pathError = "Failed to resolve PATH from the interactive login shell.";
+    const settingsConfig = {
+      ...createSettingsConfig(null),
+      readConfig: () =>
+        Effect.fail(
+          new HostOperationError({
+            operation: "runtimeConfig.resolveEnvironment",
+            message: pathError,
+          }),
+        ),
+    } satisfies SettingsConfigPort;
+    const service = createSystemDiagnosticsServiceForTest({
+      pathError,
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig,
+      systemCommands: createSystemCommandPort(),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await Effect.runPromise(service.runtimeCheck(true));
+
+    expect(check.errors).toContain(pathError);
+  });
+  test("runtimeCheck does not hide unrelated config failures", async () => {
+    const settingsError = new HostOperationError({
+      operation: "settingsConfig.readConfig",
+      message: "Failed to read settings.",
+    });
+    const settingsConfig = {
+      ...createSettingsConfig(null),
+      readConfig: () => Effect.fail(settingsError),
+    } satisfies SettingsConfigPort;
+    const service = createSystemDiagnosticsServiceForTest({
+      pathError: "Failed to resolve PATH from the interactive login shell.",
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig,
+      systemCommands: createSystemCommandPort(),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const result = await Effect.runPromise(service.runtimeCheck(true).pipe(Effect.either));
+
+    expect(result._tag).toBe("Left");
+    if (result._tag === "Left") {
+      expect(result.left).toBe(settingsError);
+    }
+  });
   test("taskStoreCheck delegates active repo store readiness through the task store", async () => {
     const blockingHealth: RepoStoreHealth = {
       category: "database_unavailable",

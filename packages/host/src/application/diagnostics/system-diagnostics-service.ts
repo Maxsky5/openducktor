@@ -41,10 +41,16 @@ export type SystemDiagnosticsError =
   | TaskStoreError
   | ToolDiscoveryError;
 const RUNTIME_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
-const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
-  Effect.gen(function* () {
-    return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
-  });
+const loadGlobalConfig = (settingsConfig: SettingsConfigPort, pathError?: string | null) =>
+  settingsConfig.readConfig().pipe(
+    Effect.catchTag("HostOperationError", (error) => {
+      if (pathError && error.operation === "runtimeConfig.resolveEnvironment") {
+        return Effect.succeed(null);
+      }
+      return Effect.fail(error);
+    }),
+    Effect.map((config) => config ?? createDefaultGlobalConfig()),
+  );
 const buildTaskStoreCheck = (repoStoreHealth: RepoStoreHealth): TaskStoreCheck => {
   const taskStoreError = !repoStoreHealth.isReady ? repoStoreHealth.detail : null;
   return {
@@ -174,7 +180,7 @@ export const createSystemDiagnosticsService = ({
   const runtimeCheck = (forceRefresh?: boolean) =>
     Effect.gen(function* () {
       const force = forceRefresh ?? false;
-      const config = yield* loadGlobalConfig(settingsConfig);
+      const config = yield* loadGlobalConfig(settingsConfig, pathError);
       const configSignature = runtimeConfigSignature(config);
       if (!force && cachedRuntimeCheck) {
         const now = yield* Clock.currentTimeMillis;

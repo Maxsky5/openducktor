@@ -59,6 +59,7 @@ describe("createProcessEnvironment", () => {
       baseEnv: { PATH: "/usr/bin:/bin" },
       platform: "darwin",
       readLoginShellPath: loginShellPath("/opt/homebrew/bin:/usr/bin"),
+      readUserShell: () => process.execPath,
     });
 
     expect(env.PATH?.split(":")).toEqual(["/opt/homebrew/bin", "/usr/bin", "/bin"]);
@@ -69,6 +70,7 @@ describe("createProcessEnvironment", () => {
       baseEnv: { PATH: "/usr/bin:/bin" },
       platform: "linux",
       readLoginShellPath: loginShellPath("/home/dev/.local/bin:/usr/bin"),
+      readUserShell: () => process.execPath,
     });
 
     expect(env.PATH?.split(":")).toEqual(["/home/dev/.local/bin", "/usr/bin", "/bin"]);
@@ -99,6 +101,7 @@ describe("createProcessEnvironment", () => {
       baseEnv,
       platform: "darwin",
       readLoginShellPath: loginShellPath("/opt/homebrew/bin"),
+      readUserShell: () => process.execPath,
     });
 
     expect(baseEnv.PATH).toBe("/usr/bin:/bin");
@@ -396,6 +399,41 @@ describe("createProcessEnvironment", () => {
             platform: "linux",
             readUserShell: () => shellPath,
           }),
+        );
+
+        expect(resolution.error).toMatchObject({
+          _tag: "ProcessEnvironmentError",
+          reason: "invalid_output",
+          shell: shellPath,
+        });
+        expect(resolution.environment.PATH).toBeUndefined();
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
+
+  testIfPosixShellIsAvailable(
+    "reports invalid output when the shell exits cleanly without markers",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "odt-markerless-login-shell-"));
+      const shellPath = path.join(root, "fixture-shell");
+      try {
+        await writeFile(shellPath, "#!/bin/sh\nexit 0\n");
+        await chmod(shellPath, 0o755);
+
+        const resolution = await Effect.runPromise(
+          createProcessEnvironment({
+            baseEnv: { HOME: root, PATH: "/gui/bin:/usr/bin" },
+            loginShellTimeoutMs: 5_000,
+            platform: "linux",
+            readUserShell: () => shellPath,
+          }).pipe(
+            Effect.timeoutFail({
+              duration: "1 second",
+              onTimeout: () => new Error("Marker-less shell exit did not finish."),
+            }),
+          ),
         );
 
         expect(resolution.error).toMatchObject({

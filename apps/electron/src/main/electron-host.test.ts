@@ -1446,6 +1446,60 @@ describe("createElectronHostCommandRouter", () => {
     });
   });
 
+  test("reports PATH failure without creating or migrating runtime config", async () => {
+    const processEnvironmentError = new ProcessEnvironmentError({
+      message:
+        "Failed to resolve PATH from interactive login shell /bin/zsh: the probe timed out after 5000 ms. Check shell startup files for commands that wait for input.",
+      reason: "timed_out",
+      shell: "/bin/zsh",
+    });
+    const fixtures = [
+      { name: "missing", config: null },
+      {
+        name: "version 2",
+        config: {
+          version: 2,
+          agentRuntimes: {
+            opencode: { enabled: false },
+            codex: { enabled: true },
+            claude: { enabled: false },
+          },
+        },
+      },
+    ] as const;
+
+    for (const fixture of fixtures) {
+      const root = await mkdtemp(path.join(tmpdir(), `odt-path-diagnostic-${fixture.name}-`));
+      const configPath = path.join(root, "config.json");
+      try {
+        if (fixture.config) {
+          await writeFile(configPath, JSON.stringify(fixture.config));
+        }
+        const router = await createElectronHostCommandRouter({
+          filesystem: createFilesystem(),
+          git: createGit(),
+          openInTools: createOpenInTools(),
+          processEnvironmentInput: pathFailure(processEnvironmentError, {
+            OPENDUCKTOR_CONFIG_DIR: root,
+          }),
+          runtimeHealth: createRuntimeHealth(),
+          systemCommands: createSystemCommands(),
+        });
+
+        await expect(router.invoke("runtime_check", { force: true })).resolves.toMatchObject({
+          errors: expect.arrayContaining([processEnvironmentError.message]),
+        });
+        if (fixture.config) {
+          expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({ version: 2 });
+        } else {
+          await expect(readFile(configPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+        }
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    }
+  });
+
   test("registers migrated task list host command", async () => {
     const router = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),

@@ -119,6 +119,7 @@ const createRouter = (input: {
     mcpBridgeDiscoveryMode: "production",
     mcpHostBridge: createMcpHostBridge(),
     onBackgroundFailure: input.onBackgroundFailure ?? (() => Effect.void),
+    processEnv: { ...process.env },
     taskEventPublicationReporter: { report: () => Effect.void },
     runtimeDistribution: createRuntimeDistribution(),
     runtimeRegistry: input.runtimeRegistry ?? createRuntimeRegistry(),
