@@ -27,13 +27,16 @@ export const createProspectiveWorkspaceTargetValidator =
         ...catalog.closedWorkspaces,
         ...catalog.incompleteRemovals.map((removal) => removal.workspace),
       ];
+      const sourceRoot = normalizePathForComparison(sourceWorkspace.repoPath);
       for (const workspace of workspaces) {
         if (workspace.workspaceId === sourceWorkspace.workspaceId) continue;
         const registeredWorktrees = yield* gitPort.listWorktrees(workspace.repoPath);
         const roots = [
           workspace.repoPath,
           workspace.effectiveWorktreeBasePath,
-          ...registeredWorktrees.map((worktree) => worktree.worktreePath),
+          ...registeredWorktrees
+            .map((worktree) => worktree.worktreePath)
+            .filter((worktreePath) => normalizePathForComparison(worktreePath) !== sourceRoot),
         ].filter((root): root is string => root !== null);
         for (const root of roots) {
           const [resolvedRoot, resolvedTarget] = yield* Effect.all([

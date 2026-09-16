@@ -197,6 +197,34 @@ describe("workspace admission service", () => {
     ).rejects.toThrow("belongs to workspace /repos/second");
   });
 
+  test("allows a missing target below the source root when workspaces share a repository", async () => {
+    const admission = createAdmission(
+      catalog({
+        openWorkspaces: [
+          workspaceRecord("first", "/repos/first"),
+          workspaceRecord("second", "/repos/second"),
+        ],
+      }),
+      undefined,
+      undefined,
+      undefined,
+      createGitPortTestDouble({
+        listWorktrees: () =>
+          Effect.succeed([
+            { branch: "first", worktreePath: "/repos/first" },
+            { branch: "second", worktreePath: "/repos/second" },
+          ]),
+      }),
+      () => Effect.succeed(false),
+    );
+
+    await expect(
+      Effect.runPromise(
+        admission.withWorkStartLease("/repos/first", Effect.void, "/repos/first/new-worktree"),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   test("resolves a workspace from a registered worktree", async () => {
     const admission = createAdmission(
       catalog({ openWorkspaces: [workspaceRecord("ws", "/repos/ws")] }),
