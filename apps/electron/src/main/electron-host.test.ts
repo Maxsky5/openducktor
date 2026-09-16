@@ -227,6 +227,7 @@ const createGit = (): GitPort => ({
       upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
     }),
   createWorktree: () => Effect.succeed(undefined),
+  isRegisteredWorktree: () => Effect.succeed(false),
   removeWorktree: () => Effect.succeed(undefined),
   deleteLocalBranch: () => Effect.succeed(undefined),
   isAncestor: () => Effect.succeed(true),
