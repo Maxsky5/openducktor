@@ -217,6 +217,82 @@ export function useWorkspaceCreation({
   };
 }
 
+function WorkspaceRepositoryChooser({
+  controller,
+}: {
+  controller: WorkspaceCreationController;
+}): ReactElement {
+  const hasRepoPath = controller.repoPath !== "";
+  return (
+    <Button
+      type="button"
+      size={hasRepoPath ? "default" : "lg"}
+      variant={hasRepoPath ? "outline" : "default"}
+      className={hasRepoPath ? "w-fit" : undefined}
+      onClick={controller.openPicker}
+    >
+      <FolderOpen data-icon="inline-start" />
+      {hasRepoPath ? "Choose different repository" : "Choose repository folder"}
+    </Button>
+  );
+}
+
+function WorkspaceRepositoryFields({
+  controller,
+}: {
+  controller: WorkspaceCreationController;
+}): ReactElement {
+  const invalidWorkspaceId = controller.validationError?.startsWith("Workspace ID") ?? false;
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="workspace-repo-path">Repository path</Label>
+        <Input id="workspace-repo-path" value={controller.repoPath} readOnly />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="workspace-id">Workspace ID</Label>
+        <Input
+          id="workspace-id"
+          value={controller.workspaceId}
+          aria-invalid={invalidWorkspaceId}
+          onChange={(event) => controller.updateWorkspaceId(event.currentTarget.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="workspace-name">Workspace name</Label>
+        <Input
+          id="workspace-name"
+          value={controller.workspaceName}
+          onChange={(event) => controller.updateWorkspaceName(event.currentTarget.value)}
+        />
+      </div>
+      <WorkspaceIdentityFields
+        idPrefix="workspace-create"
+        workspaceName={controller.workspaceName}
+        abbreviation={controller.abbreviation || null}
+        tileColor={controller.tileColor}
+        isDisabled={controller.busy}
+        onChangeAbbreviation={controller.updateAbbreviation}
+        onChangeTileColor={controller.updateTileColor}
+      />
+    </div>
+  );
+}
+
+function WorkspaceCreationError({
+  controller,
+}: {
+  controller: WorkspaceCreationController;
+}): ReactElement | null {
+  const message = controller.error ?? controller.validationError;
+  if (!message) return null;
+  return (
+    <p className="text-sm text-destructive" role="alert">
+      {message}
+    </p>
+  );
+}
+
 export function WorkspaceCreationFields({
   controller,
   picker,
@@ -225,64 +301,17 @@ export function WorkspaceCreationFields({
   picker?: ReactNode;
 }): ReactElement {
   const showInlinePicker = picker !== undefined && controller.pickerOpen;
+  const showRepositoryFields = controller.repoPath !== "" && !controller.pickerOpen;
 
   return (
     <fieldset disabled={controller.busy} className="flex min-w-0 flex-col gap-4">
-      {!showInlinePicker ? (
-        <Button
-          type="button"
-          size={controller.repoPath ? "default" : "lg"}
-          variant={controller.repoPath ? "outline" : "default"}
-          className={controller.repoPath ? "w-fit" : undefined}
-          onClick={controller.openPicker}
-        >
-          <FolderOpen data-icon="inline-start" />
-          {controller.repoPath ? "Choose different repository" : "Choose repository folder"}
-        </Button>
-      ) : null}
+      {!showInlinePicker ? <WorkspaceRepositoryChooser controller={controller} /> : null}
 
       {showInlinePicker ? picker : null}
 
-      {controller.repoPath && !controller.pickerOpen ? (
-        <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="workspace-repo-path">Repository path</Label>
-            <Input id="workspace-repo-path" value={controller.repoPath} readOnly />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="workspace-id">Workspace ID</Label>
-            <Input
-              id="workspace-id"
-              value={controller.workspaceId}
-              aria-invalid={controller.validationError?.startsWith("Workspace ID") ?? false}
-              onChange={(event) => controller.updateWorkspaceId(event.currentTarget.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="workspace-name">Workspace name</Label>
-            <Input
-              id="workspace-name"
-              value={controller.workspaceName}
-              onChange={(event) => controller.updateWorkspaceName(event.currentTarget.value)}
-            />
-          </div>
-          <WorkspaceIdentityFields
-            idPrefix="workspace-create"
-            workspaceName={controller.workspaceName}
-            abbreviation={controller.abbreviation || null}
-            tileColor={controller.tileColor}
-            isDisabled={controller.busy}
-            onChangeAbbreviation={controller.updateAbbreviation}
-            onChangeTileColor={controller.updateTileColor}
-          />
-        </div>
-      ) : null}
+      {showRepositoryFields ? <WorkspaceRepositoryFields controller={controller} /> : null}
 
-      {controller.error || controller.validationError ? (
-        <p className="text-sm text-destructive" role="alert">
-          {controller.error ?? controller.validationError}
-        </p>
-      ) : null}
+      <WorkspaceCreationError controller={controller} />
     </fieldset>
   );
 }
