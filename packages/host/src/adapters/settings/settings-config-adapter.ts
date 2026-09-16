@@ -11,6 +11,7 @@ import {
   readPersistedGlobalConfigVersion,
   upgradePersistedGlobalConfigV2,
 } from "../../config/global-config";
+import { configValidationMessage } from "../../config/config-validation-message";
 import {
   displayUserPath,
   resolveOpenDucktorBaseDir,
@@ -64,9 +65,21 @@ const CONFIG_FILE_RECOVERY_HINT =
 const formatConfigFileProblem = (heading: string, problem: string): string =>
   [heading, problem, CONFIG_FILE_RECOVERY_HINT].join("\n\n");
 
+const configFileProblem = (cause: unknown): string | null => {
+  if (cause instanceof HostValidationError) {
+    return cause.message;
+  }
+  if (cause instanceof z.ZodError) {
+    return configValidationMessage(cause);
+  }
+
+  return null;
+};
+
 const invalidConfigFileError = (resolvedConfigPath: string, cause: unknown) => {
   const configPath = displayUserPath(resolvedConfigPath);
-  if (!(cause instanceof HostValidationError)) {
+  const problem = configFileProblem(cause);
+  if (problem === null) {
     return new HostOperationError({
       operation: "settingsConfig.parseConfig",
       message: formatConfigFileProblem(
@@ -79,7 +92,7 @@ const invalidConfigFileError = (resolvedConfigPath: string, cause: unknown) => {
   }
 
   return new HostValidationError({
-    message: formatConfigFileProblem(`Invalid config file ${configPath}:`, cause.message),
+    message: formatConfigFileProblem(`Invalid config file ${configPath}:`, problem),
     cause,
     details: { path: resolvedConfigPath },
   });

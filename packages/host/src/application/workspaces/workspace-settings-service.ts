@@ -211,7 +211,7 @@ const createUnserializedWorkspaceSettingsService = (
         try: () => buildAgentStudioStateUpdate(config, workspaceId, rawState),
         catch: (cause) =>
           new HostValidationError({
-            message: configValidationMessage(cause),
+            message: configValidationMessage(cause, rawState),
             cause,
           }),
       });

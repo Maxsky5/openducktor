@@ -674,7 +674,12 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           globalPromptOverrides: {},
         },
       }),
-    ).rejects.toThrow("Invalid option");
+    ).rejects.toThrow(
+      /appearance\.horizontalScrollbarVisibility: Invalid option.*\(found "auto"\)/,
+    );
+    await expect(router.invoke("set_theme", { theme: "blue" })).rejects.toThrow(
+      /config: Invalid option.*\(found "blue"\)/,
+    );
     await expect(router.invoke("workspace_select")).rejects.toThrow(
       "workspace_select expects argument 'workspaceId'.",
     );

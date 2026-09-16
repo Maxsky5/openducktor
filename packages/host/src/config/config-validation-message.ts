@@ -56,6 +56,11 @@ const recordSchema = z.record(z.string(), payloadValueSchema);
 const arraySchema = z.array(payloadValueSchema);
 const scalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
+export const toPayloadValue = <Value>(value: Value): PayloadValue | undefined => {
+  const parsed = payloadValueSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+};
+
 const formatIssueLine = (issue: z.core.$ZodIssue, payload?: PayloadValue): string => {
   const path = formatPath(issue.path);
   const nested = nestedIssueSchema.safeParse(issue);

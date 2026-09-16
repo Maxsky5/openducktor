@@ -226,6 +226,27 @@ describe("settings config adapter initialization", () => {
     });
   });
 
+  test("reports a config value that JSON cannot represent as a validation failure", async () => {
+    await withTempConfig(async (configPath) => {
+      await writeFile(configPath, '{"version": 3, "theme": 1e400}');
+      const adapter = createSettingsConfigAdapter({ configPath });
+
+      const result = await Effect.runPromise(adapter.readConfig().pipe(Effect.either));
+      if (result._tag !== "Left" || !(result.left instanceof HostValidationError)) {
+        throw new Error("Expected a config validation failure");
+      }
+
+      expect(result.left.message).toBe(
+        [
+          `Invalid config file ${configPath}:`,
+          "config: Invalid input",
+          "Fix the values in this file, or move it aside to reset OpenDucktor settings.",
+        ].join("\n\n"),
+      );
+      expect(result.left.message).not.toContain('"code"');
+    });
+  });
+
   test("round trips a legacy GitHub provider through only the canonical provider shape", async () => {
     await withTempConfig(async (configPath) => {
       await writeFile(
