@@ -18,12 +18,12 @@ export const runWorkspaceLifecycleReservation = <A, E, R>(
     admission.reserveWorkspace(input),
     () =>
       hostOwnership.claimWorkspace(input.workspaceId).pipe(
-        Effect.zipRight(
+        Effect.flatMap((claimAcquired) =>
           input.operation === "reopen"
             ? Effect.uninterruptibleMask((restore) =>
                 Effect.gen(function* () {
                   const exit = yield* Effect.exit(restore(use()));
-                  if (Exit.isFailure(exit)) {
+                  if (Exit.isFailure(exit) && claimAcquired) {
                     yield* hostOwnership.releaseWorkspace(input.workspaceId);
                   }
                   return yield* Exit.matchEffect(exit, {

@@ -168,6 +168,7 @@ export const createWorkspaceAdmissionService = ({
             cause,
           }),
       ),
+      Effect.asVoid,
     );
 
   const persistedBlock = (repoConfig: RepoConfig): BlockedWorkspace | undefined => {
@@ -272,12 +273,7 @@ export const createWorkspaceAdmissionService = ({
         .pathExists(workingDirectory)
         .pipe(Effect.mapError(mapCheckError));
       if (!targetExists) {
-        const registered = yield* gitPort
-          .isRegisteredWorktree(repoPath, workingDirectory)
-          .pipe(Effect.mapError(mapCheckError));
-        if (!registered) {
-          yield* assertProspectiveWorkspaceTarget(repoPath, workingDirectory);
-        }
+        yield* assertProspectiveWorkspaceTarget(repoPath, workingDirectory);
         return;
       }
       const canonicalWorkingDirectory = yield* settingsConfig

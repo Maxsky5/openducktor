@@ -211,7 +211,7 @@ export const createNodeWorkspaceHostOwnership = (
       Effect.tryPromise({
         try: async () => {
           if (claims.has(workspaceId)) {
-            return;
+            return false;
           }
 
           await mkdir(ownersRoot, { recursive: true });
@@ -253,6 +253,7 @@ export const createNodeWorkspaceHostOwnership = (
             throw cause;
           }
           claims.set(workspaceId, { owner, ownerPath, release });
+          return true;
         },
         catch: (cause) =>
           mapClaimError(cause, workspaceId, path.join(ownersRoot, ownerFileName(workspaceId))),

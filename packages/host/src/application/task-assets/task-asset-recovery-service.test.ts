@@ -13,7 +13,7 @@ const updateQuarantine: TaskAssetQuarantine = {
 };
 
 const hostOwnership = {
-  claimWorkspace: () => Effect.void,
+  claimWorkspace: () => Effect.succeed(true),
   releaseWorkspace: () => Effect.void,
 };
 
@@ -246,7 +246,8 @@ describe("task asset recovery service", () => {
     const events: string[] = [];
     const service = createTaskAssetRecoveryService({
       hostOwnership: {
-        claimWorkspace: (workspaceId) => Effect.sync(() => events.push(`claim:${workspaceId}`)),
+        claimWorkspace: (workspaceId) =>
+          Effect.sync(() => (events.push(`claim:${workspaceId}`), true)),
         releaseWorkspace: (workspaceId) => Effect.sync(() => events.push(`release:${workspaceId}`)),
       },
       isWorkspaceRemovalPending: () => false,

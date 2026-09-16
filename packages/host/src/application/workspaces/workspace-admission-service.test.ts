@@ -47,8 +47,9 @@ const createAdmission = (
   workspaceCatalog: WorkspaceCatalog,
   canonicalizePath: (path: string) => Effect.Effect<string, HostOperationErrorAggregate> = (path) =>
     Effect.succeed(path),
-  claimWorkspace: (workspaceId: string) => Effect.Effect<void, HostOperationErrorAggregate> = () =>
-    Effect.void,
+  claimWorkspace: (
+    workspaceId: string,
+  ) => Effect.Effect<boolean, HostOperationErrorAggregate> = () => Effect.succeed(true),
   getRepoConfig: (workspaceId: string) => Effect.Effect<RepoConfig, never> = (workspaceId) => {
     const removal = workspaceCatalog.incompleteRemovals.find(
       (entry) => entry.workspace.workspaceId === workspaceId,
@@ -133,7 +134,7 @@ describe("workspace admission service", () => {
     ).resolves.toBeUndefined();
   });
 
-  test("rejects a new worktree path owned by another workspace", async () => {
+  test("rejects a missing registered worktree owned by another workspace", async () => {
     const admission = createAdmission(
       catalog({
         openWorkspaces: [
@@ -146,7 +147,7 @@ describe("workspace admission service", () => {
       undefined,
       createGitPortTestDouble({
         isGitRepository: () => Effect.succeed(true),
-        isRegisteredWorktree: () => Effect.succeed(false),
+        isRegisteredWorktree: () => Effect.succeed(true),
         listWorktrees: () => Effect.succeed([]),
         shareGitCommonDirectory: () => Effect.succeed(false),
       }),
@@ -395,7 +396,7 @@ describe("workspace admission service", () => {
   });
 
   test("blocks all task store access for closed workspaces without claiming them", async () => {
-    const claimWorkspace = mock((_workspaceId: string) => Effect.void);
+    const claimWorkspace = mock((_workspaceId: string) => Effect.succeed(true));
     const admission = createAdmission(
       catalog({
         closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")],
@@ -607,6 +608,7 @@ describe("workspace admission service", () => {
       mock((workspaceId) =>
         Effect.sync(() => {
           events.push(`claim:${workspaceId}`);
+          return true;
         }),
       ),
     );
@@ -624,7 +626,7 @@ describe("workspace admission service", () => {
   });
 
   test("claims cross-process ownership before task store access", async () => {
-    const claimWorkspace = mock((_workspaceId: string) => Effect.void);
+    const claimWorkspace = mock((_workspaceId: string) => Effect.succeed(true));
     const admission = createAdmission(catalog(), (path) => Effect.succeed(path), claimWorkspace);
 
     await Effect.runPromise(

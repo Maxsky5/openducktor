@@ -169,7 +169,7 @@ const createService = ({
   resolvedPathKind = "descendant" as const,
   ownershipLock = createWorkspaceOwnershipLock(),
   hostOwnership = {
-    claimWorkspace: () => Effect.void,
+    claimWorkspace: () => Effect.succeed(true),
     releaseWorkspace: () => Effect.void,
   },
   clearRepoRuntimeStartupStatuses = () => Effect.void,
@@ -370,7 +370,7 @@ describe("workspace lifecycle service", () => {
       closeWorkspaceTaskStore,
       closeWorkspace,
       hostOwnership: {
-        claimWorkspace: () => Effect.void,
+        claimWorkspace: () => Effect.succeed(true),
         releaseWorkspace,
       },
     });
@@ -409,7 +409,7 @@ describe("workspace lifecycle service", () => {
           }),
         ),
       hostOwnership: {
-        claimWorkspace: () => Effect.void,
+        claimWorkspace: () => Effect.succeed(true),
         releaseWorkspace,
       },
     });
@@ -427,7 +427,7 @@ describe("workspace lifecycle service", () => {
     const service = createService({
       admission: { ...createAdmissionDouble(), blockWorkspace },
       hostOwnership: {
-        claimWorkspace: () => Effect.void,
+        claimWorkspace: () => Effect.succeed(true),
         releaseWorkspace: () =>
           Effect.fail(
             new HostOperationError({
@@ -466,7 +466,7 @@ describe("workspace lifecycle service", () => {
       getRepoConfig: () => Effect.succeed(repoConfig({ closed: true })),
       getWorkspaceCatalog: () => Effect.succeed(expected),
       hostOwnership: {
-        claimWorkspace: () => Effect.void,
+        claimWorkspace: () => Effect.succeed(true),
         releaseWorkspace,
       },
     });
@@ -513,7 +513,7 @@ describe("workspace lifecycle service", () => {
           calls.push(`clearRuntimeStatus:${repoPath}`);
         }),
       hostOwnership: {
-        claimWorkspace: () => Effect.void,
+        claimWorkspace: () => Effect.succeed(true),
         releaseWorkspace: (workspaceId) =>
           Effect.sync(() => {
             calls.push(`releaseOwnership:${workspaceId}`);
@@ -1078,7 +1078,7 @@ describe("workspace lifecycle service", () => {
     const removeWorkspaceRegistration = mock(() => Effect.succeed(catalog()));
     const service = createService({
       hostOwnership: {
-        claimWorkspace: () => Effect.void,
+        claimWorkspace: () => Effect.succeed(true),
         releaseWorkspace: () =>
           Effect.fail(
             new HostOperationError({
@@ -1657,7 +1657,7 @@ describe("workspace lifecycle service", () => {
     const calls: string[] = [];
     const service = createService({
       hostOwnership: {
-        claimWorkspace: () => Effect.sync(() => calls.push("claim")),
+        claimWorkspace: () => Effect.sync(() => (calls.push("claim"), true)),
         releaseWorkspace: () => Effect.sync(() => calls.push("release")),
       },
       reopenWorkspace: () =>
@@ -1684,8 +1684,13 @@ describe("workspace lifecycle service", () => {
   test("keeps a workspace closed when its task store cannot close", async () => {
     const reopenWorkspace = mock(() => Effect.succeed(catalog()));
     const unblockWorkspace = mock(() => {});
+    const releaseWorkspace = mock(() => Effect.void);
     const service = createService({
       admission: { ...createAdmissionDouble(), unblockWorkspace },
+      hostOwnership: {
+        claimWorkspace: () => Effect.succeed(false),
+        releaseWorkspace,
+      },
       closeWorkspaceTaskStore: () =>
         Effect.fail(
           new HostOperationError({
@@ -1703,6 +1708,7 @@ describe("workspace lifecycle service", () => {
     ).rejects.toThrow("Restart OpenDucktor");
     expect(reopenWorkspace).not.toHaveBeenCalled();
     expect(unblockWorkspace).not.toHaveBeenCalled();
+    expect(releaseWorkspace).not.toHaveBeenCalled();
   });
 
   test("reserves the workspace before the activity check and releases after close", async () => {

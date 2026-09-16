@@ -9,7 +9,7 @@ export type WorkspaceHostOwnershipError =
   | HostValidationErrorAggregate;
 
 export type WorkspaceHostOwnershipPort = {
-  claimWorkspace(workspaceId: string): Effect.Effect<void, WorkspaceHostOwnershipError>;
+  claimWorkspace(workspaceId: string): Effect.Effect<boolean, WorkspaceHostOwnershipError>;
   releaseWorkspace(workspaceId: string): Effect.Effect<void, HostOperationErrorAggregate>;
   releaseAll(): Effect.Effect<void, HostOperationErrorAggregate>;
 };

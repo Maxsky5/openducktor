@@ -126,11 +126,10 @@ setInterval(() => {}, 60_000);`,
     const second = createNodeWorkspaceHostOwnership(options);
 
     try {
-      await Effect.runPromise(first.claimWorkspace("workspace-1"));
+      await expect(Effect.runPromise(first.claimWorkspace("workspace-1"))).resolves.toBe(true);
+      await expect(Effect.runPromise(first.claimWorkspace("workspace-1"))).resolves.toBe(false);
       await Effect.runPromise(first.releaseWorkspace("workspace-1"));
-      await expect(
-        Effect.runPromise(second.claimWorkspace("workspace-1")),
-      ).resolves.toBeUndefined();
+      await expect(Effect.runPromise(second.claimWorkspace("workspace-1"))).resolves.toBe(true);
       await Effect.runPromise(second.releaseAll());
     } finally {
       await rm(configDir, { force: true, recursive: true });
@@ -194,9 +193,7 @@ setInterval(() => {}, 60_000);`,
     );
 
     try {
-      await expect(
-        Effect.runPromise(ownership.claimWorkspace(workspaceId)),
-      ).resolves.toBeUndefined();
+      await expect(Effect.runPromise(ownership.claimWorkspace(workspaceId))).resolves.toBe(true);
       await expect(Effect.runPromise(ownership.releaseAll())).resolves.toBeUndefined();
     } finally {
       await rm(configDir, { force: true, recursive: true });
@@ -267,9 +264,7 @@ setInterval(() => {}, 60_000);`,
     );
 
     try {
-      await expect(
-        Effect.runPromise(ownership.claimWorkspace(workspaceId)),
-      ).resolves.toBeUndefined();
+      await expect(Effect.runPromise(ownership.claimWorkspace(workspaceId))).resolves.toBe(true);
       await expect(Effect.runPromise(ownership.releaseAll())).resolves.toBeUndefined();
     } finally {
       await rm(configDir, { force: true, recursive: true });
