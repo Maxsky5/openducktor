@@ -46,6 +46,12 @@ export const collectWorkspaceTaskWorktreePaths = (
     const otherWorkspacePaths = new Set(
       otherWorkspaces.map((workspace) => normalizePathForComparison(workspace.repoPath)),
     );
+    const overlapsOtherWorkspace = (candidatePath: string): boolean =>
+      otherWorkspaces.some(
+        (workspace) =>
+          pathStartsWith(candidatePath, workspace.repoPath) ||
+          pathStartsWith(workspace.repoPath, candidatePath),
+      );
     const sharedBaseWorkspaces = otherWorkspaces.filter(
       (workspace) =>
         workspace.effectiveWorktreeBasePath !== null &&
@@ -95,7 +101,8 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (
         candidateComparison === repoPathComparison ||
         otherWorkspacePaths.has(candidateComparison) ||
-        otherWorkspaceClaims.has(candidateComparison)
+        otherWorkspaceClaims.has(candidateComparison) ||
+        overlapsOtherWorkspace(candidate.path)
       ) {
         continue;
       }
@@ -107,7 +114,8 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (
         canonicalComparison === repoPathComparison ||
         otherWorkspacePaths.has(canonicalComparison) ||
-        otherWorkspaceClaims.has(canonicalComparison)
+        otherWorkspaceClaims.has(canonicalComparison) ||
+        overlapsOtherWorkspace(canonicalPath)
       ) {
         continue;
       }
@@ -141,7 +149,11 @@ export const collectWorkspaceTaskWorktreePaths = (
       if (!pathStartsWith(worktree.worktreePath, managedWorktreeBasePath)) {
         continue;
       }
-      if (normalized === repoPathComparison || otherWorkspacePaths.has(normalized)) {
+      if (
+        normalized === repoPathComparison ||
+        otherWorkspacePaths.has(normalized) ||
+        overlapsOtherWorkspace(worktree.worktreePath)
+      ) {
         continue;
       }
       if (otherWorkspaceClaims.has(normalized)) {

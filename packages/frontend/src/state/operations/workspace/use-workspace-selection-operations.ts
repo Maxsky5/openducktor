@@ -122,6 +122,7 @@ export function useWorkspaceSelectionOperations({
   const [isSwitchingWorkspace, setIsSwitchingWorkspace] = useState(false);
   const workspaceSwitchVersionRef = useRef(0);
   const workspaceReorderVersionRef = useRef(0);
+  const workspaceLifecycleInFlightRef = useRef(false);
   const activeWorkspaceRef = useRef(activeWorkspace);
   const workspaceListQuery = useQuery(workspaceListQueryOptions(hostClient));
   const workspaceCatalogQuery = useQuery(workspaceCatalogQueryOptions(hostClient));
@@ -400,14 +401,25 @@ export function useWorkspaceSelectionOperations({
 
   const runLifecycleAction = useCallback(
     async (run: () => Promise<{ title: string; description: string }>): Promise<void> => {
+      if (workspaceLifecycleInFlightRef.current) {
+        throw new Error("A workspace action is already in progress. Wait for it to finish.");
+      }
+      workspaceLifecycleInFlightRef.current = true;
       workspaceSwitchVersionRef.current += 1;
       workspaceReorderVersionRef.current += 1;
       setIsSwitchingWorkspace(true);
       try {
         const success = await run();
-        await refreshWorkspaceCachesAfterMutation();
+        try {
+          await refreshWorkspaceCachesAfterMutation();
+        } catch (error) {
+          toast.error("Workspace changed, but workspace refresh failed", {
+            description: errorMessage(error),
+          });
+        }
         toast.success(success.title, { description: success.description });
       } finally {
+        workspaceLifecycleInFlightRef.current = false;
         setIsSwitchingWorkspace(false);
       }
     },

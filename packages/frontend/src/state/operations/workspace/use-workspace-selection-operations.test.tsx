@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { taskQueryKeys } from "../../queries/tasks";
@@ -629,6 +629,84 @@ describe("use-workspace-selection-operations", () => {
 
       expect(listCalls).toBe(2);
       expect(catalogCalls).toBe(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("rejects a second lifecycle action while the first action is pending", async () => {
+    const closeStarted = createDeferred<void>();
+    const closeResult =
+      createDeferred<Awaited<ReturnType<typeof workspaceHost.workspaceCatalogGet>>>();
+    workspaceHost.workspaceClose = mock(async () => {
+      closeStarted.resolve();
+      return closeResult.promise;
+    });
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      const first = harness.run((value) =>
+        value.closeWorkspace({ workspaceId: "repo", expectedRepoPath: "/repo" }),
+      );
+      await closeStarted.promise;
+
+      await expect(
+        harness.run((value) =>
+          value.reopenWorkspace({ workspaceId: "repo", expectedRepoPath: "/repo" }),
+        ),
+      ).rejects.toThrow("A workspace action is already in progress");
+
+      closeResult.resolve({
+        openWorkspaces: [],
+        closedWorkspaces: [workspace("/repo")],
+        incompleteRemovals: [],
+      });
+      await first;
+      expect(workspaceHost.workspaceClose).toHaveBeenCalledTimes(1);
+    } finally {
+      closeResult.resolve({
+        openWorkspaces: [],
+        closedWorkspaces: [workspace("/repo")],
+        incompleteRemovals: [],
+      });
+      await harness.unmount();
+    }
+  });
+
+  test("keeps a committed lifecycle action successful when cache refresh fails", async () => {
+    workspaceHost.workspaceClose = mock(async () => ({
+      openWorkspaces: [],
+      closedWorkspaces: [workspace("/repo")],
+      incompleteRemovals: [],
+    }));
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      spyOn(queryClient, "invalidateQueries").mockImplementation(async () => {
+        throw new Error("Workspace refresh failed");
+      });
+
+      await expect(
+        harness.run((value) =>
+          value.closeWorkspace({ workspaceId: "repo", expectedRepoPath: "/repo" }),
+        ),
+      ).resolves.toBeUndefined();
+      expect(harness.getLatest().closedWorkspaces).toEqual([workspace("/repo")]);
     } finally {
       await harness.unmount();
     }

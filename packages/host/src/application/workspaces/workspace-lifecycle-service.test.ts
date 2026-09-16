@@ -442,6 +442,47 @@ describe("workspace lifecycle service", () => {
     expect(result.removedWorktrees).toEqual([]);
   });
 
+  test("removeWorkspace keeps a worktree that contains another workspace", async () => {
+    const removed: string[] = [];
+    const service = createService({
+      getWorkspaceCatalog: () =>
+        Effect.succeed(
+          catalog({
+            openWorkspaces: [
+              {
+                workspaceId: "other",
+                workspaceName: "Other",
+                repoPath: "/managed/ws/task-1/nested",
+                isActive: false,
+                hasConfig: true,
+                configuredWorktreeBasePath: null,
+                defaultWorktreeBasePath: "/managed/other",
+                effectiveWorktreeBasePath: "/managed/other",
+              },
+            ],
+          }),
+        ),
+      taskStore: createTaskStoreDouble([taskCard("task-1")]),
+      listWorktrees: () =>
+        Effect.succeed([{ branch: "odt/task-1", worktreePath: "/managed/ws/task-1" }]),
+      removeWorktree: (_repoPath, worktreePath) =>
+        Effect.sync(() => {
+          removed.push(worktreePath);
+        }),
+    });
+
+    const { result } = await Effect.runPromise(
+      service.removeWorkspace({
+        workspaceId: "ws",
+        expectedRepoPath: "/repos/ws",
+        removeTaskWorktrees: true,
+      }),
+    );
+
+    expect(removed).toEqual([]);
+    expect(result.removedWorktrees).toEqual([]);
+  });
+
   test("removeWorkspace resumes after a recorded worktree was deleted", async () => {
     const removed: string[] = [];
     const service = createService({
