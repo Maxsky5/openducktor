@@ -278,7 +278,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     },
   );
 
-  test("creates from_name from a dirty checkout and archives it with worktree and branch removal", async () => {
+  test("creates from_name from a dirty checkout with copy, hook, and dirty-source isolation", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     await writeFile(path.join(repoPath, "tracked.txt"), "uncommitted\n");
     await writeFile(path.join(repoPath, "staged.txt"), "staged\n");
@@ -291,7 +291,6 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       ...h.createInput,
       worktree: { mode: "from_name", name: "different-directory-name", branchName },
     });
-    const ref = { workspaceId: "fairnest", sessionId: session.id };
     const directory = session.executionTarget.workingDirectory;
     expect(await readFile(path.join(directory, "tracked.txt"), "utf8")).toBe("committed\n");
     expect(await readFile(path.join(repoPath, "tracked.txt"), "utf8")).toBe("uncommitted\n");
@@ -309,14 +308,55 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       path.join(root, "worktrees", "workspace-sessions", "different-directory-name"),
     );
     expect(h.starts).toEqual([]);
+  });
+
+  test("archives a from_name session and removes its worktree and branch", async () => {
+    const h = setup({ hooks: false });
+    const branchName = "feature/archive-review";
+    const directory = path.join(root, "worktrees", "workspace-sessions", "archive-review");
+    gitCommand("worktree", "add", "-b", branchName, directory);
+    gitCommand(
+      "-C",
+      directory,
+      ...commitIdentity,
+      "commit",
+      "--allow-empty",
+      "-m",
+      "Branch-only commit",
+    );
     await writeFile(path.join(directory, "tracked.txt"), "discard this edit\n");
     await writeFile(path.join(directory, "untracked.txt"), "discard this file\n");
-    const archived = await h.router.invoke("workspace_session_archive", {
+    const archived = await Effect.runPromise(
+      createSqliteWorkspaceSessionStore(database.contextProvider).create({
+        workspaceId: "fairnest",
+        repoPath,
+        session: {
+          id: crypto.randomUUID(),
+          runtimeKind: "opencode",
+          externalSessionId: null,
+          executionTarget: {
+            kind: "local_worktree",
+            workingDirectory: directory,
+            branchName,
+            worktreeState: "present",
+          },
+          roleSnapshot: null,
+          selectedModel: null,
+          generatedTitle: null,
+          manualTitle: null,
+          createdAt: 1,
+          updatedAt: 2,
+          archivedAt: null,
+        },
+      }),
+    );
+    const ref = { workspaceId: "fairnest", sessionId: archived.id };
+    const result = await h.router.invoke("workspace_session_archive", {
       ...ref,
       confirmStop: true,
       removeWorktree: true,
     });
-    expect(archived.executionTarget).toMatchObject({
+    expect(result.executionTarget).toMatchObject({
       kind: "local_worktree",
       branchName,
       worktreeState: "removed",
@@ -326,7 +366,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     await expect(readFile(path.join(directory, "tracked.txt"), "utf8")).rejects.toThrow();
     expect(
       await h.router.invoke("workspace_session_list_archived", { workspaceId: "fairnest" }),
-    ).toEqual([archived]);
+    ).toEqual([result]);
   });
 
   test("restores an archived removed-worktree session from the current default branch", async () => {
