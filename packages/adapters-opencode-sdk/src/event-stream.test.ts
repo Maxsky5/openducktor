@@ -1877,6 +1877,35 @@ describe("event-stream", () => {
     });
   });
 
+  test("emits the final assistant message before session_idle when completion metadata arrives after the idle", async () => {
+    const emitted = await runEventStream([
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-late-metadata",
+        info: { modelID: "claude-sonnet", providerID: "anthropic" },
+      }),
+      makeMessagePartUpdatedEvent({
+        messageId: "assistant-message-late-metadata",
+        partId: "text-late-metadata-1",
+        text: "Final streamed answer",
+      }),
+      makeAssistantStepFinishPartUpdatedEvent({
+        messageId: "assistant-message-late-metadata",
+        partId: "step-late-metadata-1",
+      }),
+      makeSessionIdleEvent(),
+      makeAssistantMessageUpdatedEvent({
+        messageId: "assistant-message-late-metadata",
+        finish: "stop",
+        completedAt: 2,
+      }),
+    ]);
+
+    const settleOrder = emitted
+      .filter((event) => event.type === "assistant_message" || event.type === "session_idle")
+      .map((event) => event.type);
+    expect(settleOrder).toEqual(["assistant_message", "session_idle"]);
+  });
+
   test("keeps error-finished assistant turns unfinalized for a later resume", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession([
       makeAssistantMessageUpdatedEvent({

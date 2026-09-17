@@ -246,6 +246,13 @@ export const maybeEmitCompletedAssistantMessage = (
   }
   updateMessageMetadata(runtime, input.messageId, metadataUpdates);
 
+  if (hasSuccessfulStopSignal) {
+    // Known parts can prove the successful stop before the message metadata carries it.
+    // Register the completion now, so a later settle event flushes the final message
+    // ahead of session_idle instead of letting transcript readers see an unfinished turn.
+    updateAssistantMessageCompletionState(runtime, input.messageId, true);
+  }
+
   if (!hasStopSignal || !hasSuccessfulStopSignal || !isStreamTurnIdle(session)) {
     return false;
   }
