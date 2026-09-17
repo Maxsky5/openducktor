@@ -233,11 +233,18 @@ function SortableWorkspaceRailButton({
         />
       </ContextMenuTrigger>
       <ContextMenuContent className="w-52">
-        <ContextMenuItem onSelect={() => onRequestCloseWorkspace(workspace)}>
+        <ContextMenuItem
+          className="cursor-pointer"
+          onSelect={() => onRequestCloseWorkspace(workspace)}
+        >
           <EyeOff />
           Close workspace
         </ContextMenuItem>
-        <ContextMenuItem variant="destructive" onSelect={() => onRequestRemoveWorkspace(workspace)}>
+        <ContextMenuItem
+          className="cursor-pointer"
+          variant="destructive"
+          onSelect={() => onRequestRemoveWorkspace(workspace)}
+        >
           <Trash2 />
           Remove workspace
         </ContextMenuItem>

@@ -65,7 +65,7 @@ type LifecycleDialogProps = {
 function RepositoryPath({ path }: { path: string }): ReactElement {
   return (
     <div className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground shadow-sm">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
         <FolderGit2 aria-hidden="true" className="size-4" />
       </span>
       <div className="min-w-0">
@@ -177,7 +177,7 @@ export function WorkspaceCloseDialog({
     >
       <RepositoryPath path={workspace.repoPath} />
       <div className="flex gap-3 rounded-lg border border-border bg-card p-3">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
           <EyeOff aria-hidden="true" className="size-4" />
         </span>
         <div className="flex min-w-0 flex-col gap-1">
@@ -229,15 +229,15 @@ export function WorkspaceRemoveDialog({
         </p>
         <p>The repository directory, Git branches, and committed history stay on disk.</p>
       </div>
-      <div className="flex items-start gap-3 rounded-lg border border-border bg-card p-3">
+      <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
         <Checkbox
           id="remove-task-worktrees"
-          className="mt-0.5"
+          className="size-5 rounded-md border-2 border-muted-foreground/70 bg-background shadow-none data-[state=checked]:border-destructive data-[state=checked]:bg-destructive data-[state=checked]:text-destructive-foreground"
           checked={removeTaskWorktrees}
           disabled={submit.submitting}
           onCheckedChange={(checked) => setRemoveTaskWorktrees(checked === true)}
         />
-        <div className="flex flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-1">
           <Label htmlFor="remove-task-worktrees" className="cursor-pointer leading-5">
             Remove task worktrees
           </Label>
@@ -300,19 +300,19 @@ export function WorkspaceRemovalRecoveryDialog({
           : " Task worktrees are kept."}
       </p>
       {canKeepTaskWorktrees ? (
-        <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
+        <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
           <Checkbox
             id="retry-remove-task-worktrees"
-            className="mt-0.5"
+            className="size-5 rounded-md border-2 border-muted-foreground/70 bg-background shadow-none data-[state=checked]:border-destructive data-[state=checked]:bg-destructive data-[state=checked]:text-destructive-foreground"
             checked={removeTaskWorktrees}
             disabled={submit.submitting}
             onCheckedChange={(checked) => setRemoveTaskWorktrees(checked === true)}
           />
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="retry-remove-task-worktrees" className="cursor-pointer">
+          <div className="flex min-w-0 flex-col gap-1">
+            <Label htmlFor="retry-remove-task-worktrees" className="cursor-pointer leading-5">
               Remove task worktrees
             </Label>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs leading-5 text-muted-foreground">
               Clear this option to keep task worktrees and continue removal.
             </p>
           </div>

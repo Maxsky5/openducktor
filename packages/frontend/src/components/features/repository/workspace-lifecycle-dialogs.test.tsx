@@ -42,6 +42,14 @@ test("workspace close uses the standard layout and eye-off icon", () => {
   expect(within(dialog).getByText("/repos/openducktor")).toBeTruthy();
   expect(within(dialog).getByText("Only the workspace rail entry is hidden.")).toBeTruthy();
 
+  const repositoryIconSurface = dialog.querySelector(".lucide-folder-git-2")?.parentElement;
+  const closeInfoIconSurface = within(dialog).getByText("Only the workspace rail entry is hidden.")
+    .parentElement?.previousElementSibling;
+  expect(repositoryIconSurface?.className).toContain("bg-muted");
+  expect(repositoryIconSurface?.className).toContain("text-foreground");
+  expect(closeInfoIconSurface?.className).toContain("bg-muted");
+  expect(closeInfoIconSurface?.className).toContain("text-foreground");
+
   const cancelButton = within(dialog).getByRole("button", { name: "Cancel" });
   const closeButton = within(dialog).getByRole("button", { name: "Close workspace" });
   expect(closeButton.querySelector(".lucide-eye-off")).not.toBeNull();
@@ -62,9 +70,12 @@ test("workspace removal uses the destructive layout and trash icon", () => {
 
   expect(within(dialog).getByText("Repository")).toBeTruthy();
   expect(within(dialog).getByText("/repos/openducktor")).toBeTruthy();
-  expect(
-    within(dialog).getByRole("checkbox", { name: "Remove task worktrees" }).className,
-  ).toContain("mt-0.5");
+  const worktreeCheckbox = within(dialog).getByRole("checkbox", {
+    name: "Remove task worktrees",
+  });
+  expect(worktreeCheckbox.className).toContain("size-5");
+  expect(worktreeCheckbox.className).toContain("border-2");
+  expect(worktreeCheckbox.parentElement?.className).toContain("items-center");
   expect(
     within(dialog).getByText(
       "OpenDucktor will delete the workspace settings, all tasks, workflow documents, saved sessions, and managed attachments.",

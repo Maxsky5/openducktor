@@ -139,7 +139,10 @@ describe("WorkspaceRail", () => {
     fireEvent.contextMenu(screen.getByRole("button", { name: "Alpha Repo" }));
 
     const closeItem = await screen.findByRole("menuitem", { name: "Close workspace" });
+    const removeItem = screen.getByRole("menuitem", { name: "Remove workspace" });
     expect(closeItem.querySelector(".lucide-eye-off")).not.toBeNull();
+    expect(closeItem.className).toContain("cursor-pointer");
+    expect(removeItem.className).toContain("cursor-pointer");
   });
 
   test("shows the abbreviation exactly as the user typed it", () => {
