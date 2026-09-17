@@ -87,8 +87,8 @@ Task documents use a 60 second stale time for normal views. Workflow refreshes f
 One query key must map to one query function. TanStack Query keeps one options object per query, and the last observer that sets options wins.
 
 - A conditional read keeps its real key and query function. It turns off with `enabled: false` and keeps cached data.
-- A read with no target uses `skippedQueryOptions`. Its key stays in the reserved `skipped` key segment, and the query module that owns the live keys exports the skipped options.
-- A skipped read that shares its key with a live read breaks `invalidateQueries` and `refetch`. They can run the skipped query function, and the read fails with `Missing queryFn`.
+- A read with no target uses `skippedQueryOptions`. Its key must not equal a live key. Use the reserved `skipped` key segment in the module that owns the live keys.
+- A skipped read that shares its key with a live read breaks `invalidateQueries` and `refetch`: the next refetch runs the skipped query function and fails with `Missing queryFn`.
 
 ## Mutations
 
