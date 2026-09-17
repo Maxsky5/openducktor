@@ -1,8 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import type {
+  AgentRuntimeCatalog,
   AgentSessionHistoryMessage,
   AgentSessionScope,
-  AgentSkillReference,
 } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
@@ -16,6 +16,7 @@ import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
+  createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -368,7 +369,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
-  test("shows Claude history before the separate skill catalog resolves", async () => {
+  test("shows Claude history before the runtime catalog resolves", async () => {
     const history: AgentSessionHistoryMessage[] = [
       {
         messageId: "user-skill-1",
@@ -381,11 +382,11 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       },
     ];
     const readSessionHistory = mock(async () => history);
-    let resolveSkills: ((catalog: { skills: AgentSkillReference[] }) => void) | undefined;
-    const loadRepoRuntimeSkills = mock(
+    let resolveCatalog: ((catalog: AgentRuntimeCatalog) => void) | undefined;
+    const loadRepoRuntimeCatalog = mock(
       () =>
-        new Promise<{ skills: AgentSkillReference[] }>((resolve) => {
-          resolveSkills = resolve;
+        new Promise<AgentRuntimeCatalog>((resolve) => {
+          resolveCatalog = resolve;
         }),
     );
     const queryClient = createQueryClient();
@@ -396,7 +397,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryClientProvider client={queryClient}>
         <RuntimeDefinitionsContext.Provider
-          value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeSkills })}
+          value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
         >
           <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
             {children}
@@ -429,16 +430,20 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         parts: [{ kind: "text", text: "/grill-me" }],
       });
 
-      resolveSkills?.({
-        skills: [
-          {
-            id: "grill-me",
-            name: "grill-me",
-            path: "grill-me",
-            title: "grill-me",
+      resolveCatalog?.(
+        createRuntimeCatalogFixture({
+          skills: {
+            skills: [
+              {
+                id: "grill-me",
+                name: "grill-me",
+                path: "grill-me",
+                title: "grill-me",
+              },
+            ],
           },
-        ],
-      });
+        }),
+      );
       await harness.waitFor((state) => {
         const meta = state.session?.messages.items[0]?.meta;
         return (

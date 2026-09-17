@@ -86,6 +86,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       catalogRef: {
         repoPath: "/repo",
         runtimeKind: "opencode",
+        workingDirectory: "/repo",
       },
       todosRef: {
         repoPath: "/repo",
@@ -111,6 +112,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       catalogRef: {
         repoPath: "/repo",
         runtimeKind: "opencode",
+        workingDirectory: "/repo",
       },
       todosRef: null,
     });
@@ -129,6 +131,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       catalogRef: {
         repoPath: "/repo",
         runtimeKind: "opencode",
+        workingDirectory: "/repo",
       },
       todosRef: {
         repoPath: "/repo",
@@ -156,6 +159,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       catalogRef: {
         repoPath: "/repo",
         runtimeKind: "opencode",
+        workingDirectory: "/repo",
       },
       todosRef: {
         repoPath: "/repo",
@@ -181,6 +185,7 @@ describe("resolveSessionRuntimeDataRefs", () => {
       catalogRef: {
         repoPath: "/repo",
         runtimeKind: "opencode",
+        workingDirectory: "/repo",
       },
       todosRef: {
         repoPath: "/repo",

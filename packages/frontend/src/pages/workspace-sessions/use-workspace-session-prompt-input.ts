@@ -58,17 +58,17 @@ export function useWorkspaceSessionPromptInput({
     promptInputRuntime,
     runtimeSupportsSlashCommands: support.runtimeSupportsSlashCommands,
     reusablePrompts,
-    loadSlashCommandsForRepo: runtime.loadRepoRuntimeSlashCommands,
+    loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
   });
   const skills = useChatComposerSkills({
     promptInputRuntime,
     supportsSkillReferences: support.supportsSkillReferences,
-    loadSkillsForRepo: runtime.loadRepoRuntimeSkills,
+    loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
   });
   const subagents = useChatComposerSubagents({
     promptInputRuntime,
     supportsSubagentReferences: support.supportsSubagentReferences,
-    loadSubagentsForRepo: runtime.loadRepoRuntimeSubagents,
+    loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
   });
   const searchFiles = useMemo(
     () =>

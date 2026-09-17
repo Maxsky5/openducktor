@@ -24,10 +24,7 @@ import type {
 export type CodexSessionController = Pick<
   CodexAppServerAdapter,
   | "resolveSessionParent"
-  | "listAvailableModels"
-  | "listAvailableSlashCommands"
-  | "listAvailableSkills"
-  | "listAvailableSubagents"
+  | "loadRuntimeCatalog"
   | "searchFiles"
   | "loadSessionHistory"
   | "loadSessionTodos"

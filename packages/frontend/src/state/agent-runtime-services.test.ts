@@ -103,8 +103,9 @@ describe("agent runtime services", () => {
     const { runtimeCatalogOperations } = createAgentRuntimeServices();
 
     await expect(
-      runtimeCatalogOperations.loadRepoRuntimeCatalog({
+      runtimeCatalogOperations.loadRuntimeCatalog({
         repoPath: "/repo",
+        workingDirectory: "/repo",
         // @ts-expect-error This negative test verifies rejection of an unknown runtime kind.
         runtimeKind: "test-runtime",
       }),
@@ -243,15 +244,18 @@ describe("agent runtime services", () => {
     }
   });
 
-  test("routes all nine queries through the host for every runtime", async () => {
+  test("routes every catalog and session query through the host for every runtime", async () => {
     const calls: { command: string; args: unknown }[] = [];
     const client = createHostClient(async (command, args, schema) => {
       calls.push({ command, args });
-      if (command.endsWith("list_models"))
-        return schema.parse({ models: [], defaultModelsByProvider: {} });
-      if (command.endsWith("list_slash_commands")) return schema.parse({ commands: [] });
-      if (command.endsWith("list_skills")) return schema.parse({ skills: [] });
-      if (command.endsWith("list_subagents")) return schema.parse({ subagents: [] });
+      if (command.endsWith("load_catalog")) {
+        return schema.parse({
+          models: {
+            status: "available",
+            catalog: { models: [], defaultModelsByProvider: {} },
+          },
+        });
+      }
       return schema.parse([]);
     });
     const { agentEngine } = createAgentRuntimeServices(client);
@@ -262,7 +266,8 @@ describe("agent runtime services", () => {
         workingDirectory: "/remote/repo/worktree",
         externalSessionId: "native-session",
       };
-      const policy =
+      // SAFETY: The test builds the loader input for the codex runtime policy contract.
+      const policy = (
         runtimeKind === "codex"
           ? ({
               ...ref,
@@ -278,24 +283,16 @@ describe("agent runtime services", () => {
                 },
               },
             } as const)
-          : runtimeKind === "claude"
-            ? ({ ...ref, runtimeKind, runtimePolicy: { kind: runtimeKind } } as const)
-            : ({ ...ref, runtimeKind, runtimePolicy: { kind: runtimeKind } } as const);
-      await agentEngine.listAvailableModels({ repoPath: ref.repoPath, runtimeKind });
-      await agentEngine.listAvailableSlashCommands({
+          : ({ ...ref, runtimeKind, runtimePolicy: { kind: runtimeKind } } as const)
+      ) as Parameters<typeof agentEngine.loadSessionHistory>[0];
+      const catalog = await agentEngine.loadRuntimeCatalog({
         repoPath: ref.repoPath,
         workingDirectory: ref.workingDirectory,
         runtimeKind,
       });
-      await agentEngine.listAvailableSkills({
-        repoPath: ref.repoPath,
-        workingDirectory: ref.workingDirectory,
-        runtimeKind,
-      });
-      await agentEngine.listAvailableSubagents({
-        repoPath: ref.repoPath,
-        workingDirectory: ref.workingDirectory,
-        runtimeKind,
+      expect(catalog.models).toEqual({
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {} },
       });
       await agentEngine.searchFiles({
         repoPath: ref.repoPath,
@@ -311,20 +308,24 @@ describe("agent runtime services", () => {
         workingDirectory: ref.workingDirectory,
         runtimeKind,
       });
-      expect(calls.slice(-9).map(({ command }) => command)).toEqual([
-        "agent_runtime_list_models",
-        "agent_runtime_list_slash_commands",
-        "agent_runtime_list_skills",
-        "agent_runtime_list_subagents",
+      expect(calls.slice(-6).map(({ command }) => command)).toEqual([
+        "agent_runtime_load_catalog",
         "agent_runtime_search_files",
         "agent_runtime_load_session_history",
         "agent_runtime_load_session_todos",
         "agent_runtime_load_session_diff",
         "agent_runtime_file_status",
       ]);
+      expect(calls.at(-6)?.args).toEqual({
+        input: {
+          repoPath: "/remote/repo",
+          runtimeKind,
+          workingDirectory: "/remote/repo/worktree",
+        },
+      });
       expect(calls.at(-4)?.args).toEqual({ input: { ...policy, limit: 5 } });
       expect(calls.at(-2)?.args).toEqual({ input: { ...ref, runtimeHistoryAnchor: "turn-1" } });
     }
-    expect(calls).toHaveLength(27);
+    expect(calls).toHaveLength(18);
   });
 });

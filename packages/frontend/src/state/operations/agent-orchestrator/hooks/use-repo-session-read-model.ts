@@ -824,17 +824,11 @@ export const useRepoSessionReadModel = ({
                 runtimeKind: envelope.scope.runtimeKind,
                 workingDirectory: envelope.scope.workingDirectory,
               };
-        const invalidations = [
-          queryClient.invalidateQueries({
-            queryKey: runtimeCatalogQueryKeys.repoSkillsScope(catalogScope),
-          }),
-          queryClient.invalidateQueries({
-            queryKey: runtimeCatalogQueryKeys.repoSlashCommandsScope(catalogScope),
-          }),
-        ];
         runOrchestratorSideEffect(
           "agent-session-live-invalidate-catalog",
-          Promise.all(invalidations),
+          queryClient.invalidateQueries({
+            queryKey: runtimeCatalogQueryKeys.catalogScope(catalogScope),
+          }),
           {
             tags: {
               repoPath: envelope.scope.repoPath,
@@ -853,14 +847,10 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "slash_command_catalog_updated") {
-        queryClient.setQueryData(
-          runtimeCatalogQueryKeys.repoSlashCommands(envelope.scope),
-          envelope.catalog,
-        );
         runOrchestratorSideEffect(
-          "agent-session-live-invalidate-skills",
+          "agent-session-live-invalidate-catalog",
           queryClient.invalidateQueries({
-            queryKey: runtimeCatalogQueryKeys.repoSkillsScope(envelope.scope),
+            queryKey: runtimeCatalogQueryKeys.catalogScope(envelope.scope),
           }),
           {
             tags: {

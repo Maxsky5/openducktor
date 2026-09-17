@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { isRepoStoreReady } from "@/lib/repo-store-health";
 import type { ScheduleTask } from "@/lib/scheduling";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "@/types/diagnostics";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import type { ActiveWorkspace, RefreshRepoRuntimeHealthOptions } from "@/types/state-slices";
 import {
   type ChecksQueryDependencies,
   checksQueryKeys,
@@ -27,7 +27,9 @@ type UseChecksArgs = {
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingRepoRuntimeHealth: boolean;
-  refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
+  refreshRepoRuntimeHealth: (
+    options?: RefreshRepoRuntimeHealthOptions,
+  ) => Promise<RepoRuntimeHealthMap>;
   runtimeCheck?: ChecksQueryDependencies["runtimeCheck"];
   taskStoreCheck?: ChecksQueryDependencies["taskStoreCheck"];
   scheduleTask?: ScheduleTask;
@@ -112,7 +114,7 @@ export function useChecks({
       const [runtimeResult, taskStoreResult, runtimeHealthResult] = await Promise.allSettled([
         refreshRuntimeCheck(true),
         refreshTaskStoreCheckForRepo(activeRepoPath, true),
-        refreshRepoRuntimeHealth(),
+        refreshRepoRuntimeHealth({ reloadCatalogs: true }),
       ]);
 
       if (runtimeResult.status === "rejected") {

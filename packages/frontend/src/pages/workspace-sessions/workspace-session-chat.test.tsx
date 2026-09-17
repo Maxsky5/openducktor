@@ -120,10 +120,12 @@ const createWorkspaceChatHarness = ({
     runtimeSettingsError: null,
     hasRuntimeSettingsSnapshot: true,
     refreshRuntimeSettings: async () => {},
-    loadRepoRuntimeCatalog: async () => ({ models: [], defaultModelsByProvider: {} }),
-    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-    loadRepoRuntimeSkills: async () => ({ skills: [] }),
-    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
+    loadRepoRuntimeCatalog: async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {} },
+      },
+    }),
     loadRepoRuntimeFileSearch: async () => [],
   };
   const health = { opencode: createRepoRuntimeHealthFixture() };

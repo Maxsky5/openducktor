@@ -37,10 +37,10 @@ test("refreshes runtime queries while the initial task snapshot is still loading
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  const modelsKey = ["runtime-catalog", "/repo", "opencode"];
+  const modelsKey = ["runtime-catalog", "catalog", "/repo", "opencode", "/repo"];
   const historyKey = ["agent-session-history", "/repo", "opencode", "/repo/worktree", "session"];
   const todosKey = ["agent-session-todos", "/repo", "opencode", "/repo/worktree", "session"];
-  const unrelatedKey = ["runtime-catalog", "/repo", "codex"];
+  const unrelatedKey = ["runtime-catalog", "catalog", "/repo", "codex", "/repo"];
   for (const key of [modelsKey, historyKey, unrelatedKey]) client.setQueryData(key, ["cached"]);
   await client
     .fetchQuery({
@@ -82,8 +82,8 @@ test("refreshes runtime queries while the initial task snapshot is still loading
 
 test("ignores a runtime startup completion after the user switches repositories", async () => {
   const client = new QueryClient();
-  const oldKey = ["runtime-catalog", "/repo", "opencode"];
-  const newKey = ["runtime-catalog", "/other", "opencode"];
+  const oldKey = ["runtime-catalog", "catalog", "/repo", "opencode", "/repo"];
+  const newKey = ["runtime-catalog", "catalog", "/other", "opencode", "/other"];
   client.setQueryData(oldKey, ["old"]);
   client.setQueryData(newKey, ["other"]);
   const startup = Promise.withResolvers<RuntimeInstanceSummary>();

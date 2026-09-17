@@ -1,14 +1,19 @@
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSkillCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
+import type {
+  AgentRuntimeCatalog,
+  AgentSkillCatalog,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import {
-  repoRuntimeSkillsQueryOptions,
   runtimeCatalogQueryKeys,
+  runtimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerSkills } from "./use-chat-composer-skills";
 
@@ -18,6 +23,9 @@ const wrapper = ({ children }: PropsWithChildren) =>
   createElement(QueryProvider, { useIsolatedClient: true }, children);
 
 const EMPTY_CATALOG: AgentSkillCatalog = { skills: [] };
+const emptyCatalogFixture: AgentRuntimeCatalog = createRuntimeCatalogFixture({
+  skills: EMPTY_CATALOG,
+});
 
 const sessionRuntimeRef: RuntimeWorkingDirectoryRef = {
   repoPath: "/repo",
@@ -32,14 +40,14 @@ const sessionRuntime: ChatComposerPromptInputRuntime = {
 };
 
 const useSkillsWithLiveReader = (args: Parameters<typeof useChatComposerSkills>[0]) => ({
-  liveQuery: useQuery(repoRuntimeSkillsQueryOptions(sessionRuntimeRef, args.loadSkillsForRepo)),
+  liveQuery: useQuery(runtimeCatalogQueryOptions(sessionRuntimeRef, args.loadRuntimeCatalog)),
   composer: useChatComposerSkills(args),
   queryClient: useQueryClient(),
 });
 
 describe("useChatComposerSkills", () => {
   test("surfaces session-scoped runtime context errors without querying skills", async () => {
-    const loadSkillsForRepo = mock(async () => EMPTY_CATALOG);
+    const loadRuntimeCatalog = mock(async () => emptyCatalogFixture);
     const harness = createHookHarness(
       useChatComposerSkills,
       {
@@ -49,7 +57,7 @@ describe("useChatComposerSkills", () => {
           error: "Selected session runtime context is missing working directory.",
         },
         supportsSkillReferences: true,
-        loadSkillsForRepo,
+        loadRuntimeCatalog,
       },
       { wrapper },
     );
@@ -57,7 +65,7 @@ describe("useChatComposerSkills", () => {
     try {
       await harness.mount();
 
-      expect(loadSkillsForRepo).not.toHaveBeenCalled();
+      expect(loadRuntimeCatalog).not.toHaveBeenCalled();
       expect(harness.getLatest().skills).toEqual([]);
       expect(harness.getLatest().skillsError).toBe(
         "Selected session runtime context is missing working directory.",
@@ -68,13 +76,13 @@ describe("useChatComposerSkills", () => {
   });
 
   test("does not query skills when skill references are unsupported", async () => {
-    const loadSkillsForRepo = mock(async () => EMPTY_CATALOG);
+    const loadRuntimeCatalog = mock(async () => emptyCatalogFixture);
     const harness = createHookHarness(
       useChatComposerSkills,
       {
         promptInputRuntime: sessionRuntime,
         supportsSkillReferences: false,
-        loadSkillsForRepo,
+        loadRuntimeCatalog,
       },
       { wrapper },
     );
@@ -82,7 +90,7 @@ describe("useChatComposerSkills", () => {
     try {
       await harness.mount();
 
-      expect(loadSkillsForRepo).not.toHaveBeenCalled();
+      expect(loadRuntimeCatalog).not.toHaveBeenCalled();
       expect(harness.getLatest()).toEqual({
         skillCatalog: EMPTY_CATALOG,
         skills: [],
@@ -94,14 +102,14 @@ describe("useChatComposerSkills", () => {
     }
   });
 
-  test("keeps the live skills key fetchable while the composer skips it", async () => {
-    const loadSkillsForRepo = mock(async () => EMPTY_CATALOG);
+  test("keeps the live catalog key fetchable while the composer skips it", async () => {
+    const loadRuntimeCatalog = mock(async () => emptyCatalogFixture);
     const harness = createHookHarness(
       useSkillsWithLiveReader,
       {
         promptInputRuntime: sessionRuntime,
         supportsSkillReferences: false,
-        loadSkillsForRepo,
+        loadRuntimeCatalog,
       },
       { wrapper },
     );
@@ -112,13 +120,13 @@ describe("useChatComposerSkills", () => {
 
       await harness.run(({ queryClient }) =>
         queryClient.invalidateQueries({
-          queryKey: runtimeCatalogQueryKeys.repoSkills(sessionRuntimeRef),
+          queryKey: runtimeCatalogQueryKeys.catalog(sessionRuntimeRef),
           exact: true,
         }),
       );
 
-      expect(loadSkillsForRepo).toHaveBeenCalledTimes(2);
-      expect(harness.getLatest().liveQuery.data).toEqual(EMPTY_CATALOG);
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().liveQuery.data).toEqual(emptyCatalogFixture);
     } finally {
       await harness.unmount();
     }
@@ -134,13 +142,14 @@ describe("useChatComposerSkills", () => {
         },
       ],
     };
-    const loadSkillsForRepo = mock(async () => catalog);
+    const catalogFixture = createRuntimeCatalogFixture({ skills: catalog });
+    const loadRuntimeCatalog = mock(async () => catalogFixture);
     const harness = createHookHarness(
       useChatComposerSkills,
       {
         promptInputRuntime: sessionRuntime,
         supportsSkillReferences: true,
-        loadSkillsForRepo,
+        loadRuntimeCatalog,
       },
       { wrapper },
     );
@@ -149,7 +158,7 @@ describe("useChatComposerSkills", () => {
       await harness.mount();
       await harness.waitFor((state) => state.skills.length === 1);
 
-      expect(loadSkillsForRepo).toHaveBeenCalledWith({
+      expect(loadRuntimeCatalog).toHaveBeenCalledWith({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo/worktree",

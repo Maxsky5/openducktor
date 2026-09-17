@@ -6,6 +6,8 @@ import {
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
+  AgentRuntimeCatalogRead,
+  AgentRuntimeCatalogSurfaceRead,
   AgentSlashCommandCatalog,
   AgentSubagentCatalog,
 } from "@openducktor/core";
@@ -17,6 +19,7 @@ import {
   opencodeFileSearchPayloadSchema,
   opencodeSlashCommandListPayloadSchema,
   type ParsedOpencodeAgent,
+  type ParsedOpencodeSlashCommand,
 } from "./opencode-ingress";
 import { mapProviderListToCatalog } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
@@ -96,21 +99,10 @@ const toFileSearchResults = (
   return payload.map((entry) => toFileSearchResult(entry, workingDirectory));
 };
 
-export const listAvailableModels = async (
-  createClient: ClientFactoryFor<"app" | "config">,
-  input: OpencodeRuntimeClientInput,
-): Promise<AgentModelCatalog> => {
-  const client = createClient({
-    runtimeEndpoint: input.runtimeEndpoint,
-    workingDirectory: input.workingDirectory,
-  });
-  const response = await client.config.providers({
-    directory: input.workingDirectory,
-  });
-  const providerData = unwrapData(response, "list configured providers");
-  const agentsData = await readAgentList(client, input.workingDirectory);
-  const baseCatalog = mapProviderListToCatalog(providerData);
-  const rawAgents = agentsData
+const toOpencodeProfiles = (
+  agentsData: ParsedOpencodeAgent[],
+): NonNullable<AgentModelCatalog["profiles"]> =>
+  agentsData
     .map((agent) => {
       const resolvedColor = resolveAgentColor(agent.name, agent.color, agent.native);
       const profile: NonNullable<AgentModelCatalog["profiles"]>[number] & { label: string } = {
@@ -134,99 +126,132 @@ export const listAvailableModels = async (
     })
     .sort((a, b) => a.label.localeCompare(b.label));
 
-  return {
-    ...baseCatalog,
-    profiles: rawAgents,
-  };
+const toOpencodeSubagentCatalog = (agentsData: ParsedOpencodeAgent[]): AgentSubagentCatalog => {
+  const subagents = agentsData
+    .map((agent) => {
+      const trimmedName = agent.name.trim();
+      if (agent.hidden === true || agent.mode === "primary") {
+        return null;
+      }
+
+      const trimmedDescription = agent.description?.trim();
+      const subagent: NonNullable<AgentSubagentCatalog["subagents"]>[number] & {
+        label: string;
+      } = {
+        id: trimmedName,
+        name: trimmedName,
+        label: trimmedName,
+      };
+      if (trimmedDescription) {
+        subagent.description = trimmedDescription;
+      }
+      return subagent;
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .sort((left, right) => left.label.localeCompare(right.label));
+
+  return subagentCatalogSchema.parse({ subagents });
 };
 
-export const listAvailableSubagents = async (
-  createClient: ClientFactoryFor<"app">,
-  input: OpencodeRuntimeClientInput,
-): Promise<AgentSubagentCatalog> => {
+const toOpencodeSlashCommandCatalog = (
+  commands: ParsedOpencodeSlashCommand[],
+): AgentSlashCommandCatalog => {
+  const catalogCommands = commands
+    .map((command) => {
+      const entry: AgentSlashCommandCatalog["commands"][number] = {
+        id: command.name,
+        trigger: command.name,
+        title: command.name,
+        hints: command.hints,
+      };
+      if (command.description) {
+        entry.description = command.description;
+      }
+      if (command.source) {
+        entry.source = command.source;
+      }
+      return entry;
+    })
+    .sort((left, right) => left.trigger.localeCompare(right.trigger));
+
+  return slashCommandCatalogSchema.parse({
+    commands: [
+      MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+      ...catalogCommands.filter((command) => command.trigger.toLowerCase() !== "compact"),
+    ],
+  });
+};
+
+type OpencodeRuntimeCatalogInput = OpencodeRuntimeClientInput & {
+  repoPath: string;
+};
+
+const readCatalogSurface = async <Catalog>(
+  read: () => Promise<Catalog>,
+): Promise<AgentRuntimeCatalogSurfaceRead<Catalog>> => {
   try {
-    const client = createClient({
-      runtimeEndpoint: input.runtimeEndpoint,
-      workingDirectory: input.workingDirectory,
-    });
-    const agentsData = await readAgentList(client, input.workingDirectory);
-    const subagents = agentsData
-      .map((agent) => {
-        const trimmedName = agent.name.trim();
-        if (agent.hidden === true || agent.mode === "primary") {
-          return null;
-        }
-
-        const trimmedDescription = agent.description?.trim();
-        const subagent: NonNullable<AgentSubagentCatalog["subagents"]>[number] & {
-          label: string;
-        } = {
-          id: trimmedName,
-          name: trimmedName,
-          label: trimmedName,
-        };
-        if (trimmedDescription) {
-          subagent.description = trimmedDescription;
-        }
-        return subagent;
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-      .sort((left, right) => left.label.localeCompare(right.label));
-
-    return subagentCatalogSchema.parse({ subagents });
-  } catch (error) {
-    throw toOpenCodeRequestError("list subagents", error);
+    return { status: "available", catalog: await read() };
+  } catch (cause) {
+    return { status: "failed", cause };
   }
 };
 
-export const listAvailableSlashCommands = async (
-  createClient: ClientFactoryFor<"command">,
-  input: OpencodeRuntimeClientInput,
-): Promise<AgentSlashCommandCatalog> => {
-  try {
-    const client = createClient({
-      runtimeEndpoint: input.runtimeEndpoint,
-      workingDirectory: input.workingDirectory,
-    });
-    const parsedPayload = opencodeSlashCommandListPayloadSchema.safeParse(
-      unwrapData(
+export const loadRuntimeCatalog = async (
+  createClient: ClientFactoryFor<"app" | "config" | "command">,
+  input: OpencodeRuntimeCatalogInput,
+): Promise<AgentRuntimeCatalogRead> => {
+  const client = createClient({
+    runtimeEndpoint: input.runtimeEndpoint,
+    workingDirectory: input.workingDirectory,
+  });
+  const agentLists = new Map<string, Promise<ParsedOpencodeAgent[]>>();
+  const readAgents = (directory: string): Promise<ParsedOpencodeAgent[]> => {
+    const loaded = agentLists.get(directory);
+    if (loaded) {
+      return loaded;
+    }
+    const pending = readAgentList(client, directory);
+    agentLists.set(directory, pending);
+    return pending;
+  };
+  const readModels = async (): Promise<AgentModelCatalog> => {
+    const response = await client.config.providers({ directory: input.repoPath });
+    const providerData = unwrapData(response, "list configured providers");
+    return {
+      ...mapProviderListToCatalog(providerData),
+      profiles: toOpencodeProfiles(await readAgents(input.repoPath)),
+    };
+  };
+  const readSlashCommands = async (): Promise<AgentSlashCommandCatalog> => {
+    try {
+      const payload = unwrapData(
         await client.command.list({ directory: input.workingDirectory }),
         "list slash commands",
-      ),
-    );
-    if (!parsedPayload.success) {
-      throw new Error("Invalid slash command payload: expected an array.");
+      );
+      const parsedPayload = opencodeSlashCommandListPayloadSchema.safeParse(payload);
+      if (!parsedPayload.success) {
+        throw new Error("Invalid slash command payload: expected an array.");
+      }
+      return toOpencodeSlashCommandCatalog(parsedPayload.data);
+    } catch (error) {
+      throw toOpenCodeRequestError("list slash commands", error);
     }
-    const payload = parsedPayload.data;
+  };
+  const readSubagents = async (): Promise<AgentSubagentCatalog> => {
+    try {
+      return toOpencodeSubagentCatalog(await readAgents(input.workingDirectory));
+    } catch (error) {
+      throw toOpenCodeRequestError("list subagents", error);
+    }
+  };
 
-    const commands = payload
-      .map((command) => {
-        const entry: AgentSlashCommandCatalog["commands"][number] = {
-          id: command.name,
-          trigger: command.name,
-          title: command.name,
-          hints: command.hints,
-        };
-        if (command.description) {
-          entry.description = command.description;
-        }
-        if (command.source) {
-          entry.source = command.source;
-        }
-        return [entry];
-      })
-      .flat()
-      .sort((left, right) => left.trigger.localeCompare(right.trigger));
+  const [models, slashCommands, subagents] = await Promise.all([
+    readCatalogSurface(readModels),
+    readCatalogSurface(readSlashCommands),
+    readCatalogSurface(readSubagents),
+  ]);
 
-    return slashCommandCatalogSchema.parse({
-      commands: [
-        MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
-        ...commands.filter((command) => command.trigger.toLowerCase() !== "compact"),
-      ],
-    });
-  } catch (error) {
-    throw toOpenCodeRequestError("list slash commands", error);
-  }
+  return { models, slashCommands, subagents };
 };
 
 export const searchFiles = async (

@@ -33,9 +33,6 @@ const createWrapper = ({ children }: PropsWithChildren): ReactElement =>
         loadRepoRuntimeCatalog: async () => {
           throw new Error("catalog loader not configured");
         },
-        loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-        loadRepoRuntimeSkills: async () => ({ skills: [] }),
-        loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
         loadRepoRuntimeFileSearch: async () => [],
       },
       children,

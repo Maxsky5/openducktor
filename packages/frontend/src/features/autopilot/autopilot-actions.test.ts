@@ -7,7 +7,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { executeAutopilotAction } from "@/features/autopilot/autopilot-actions";
 import {
@@ -31,6 +31,7 @@ import {
 import {
   createGitProviderContextFixture,
   createDeferred,
+  createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
@@ -158,6 +159,8 @@ const CATALOG: AgentModelCatalog = {
   ],
 };
 
+const runtimeCatalogFixture = createRuntimeCatalogFixture({ models: CATALOG });
+
 const createExecuteArgs = (task: TaskCard) => {
   const loadTaskSessionRecords = mock(async (): Promise<AgentSessionRecord[]> => []);
 
@@ -171,8 +174,7 @@ const createExecuteArgs = (task: TaskCard) => {
     alwaysStartQaReviewsFresh: false,
     queryClient: createQueryClient(),
     loadTaskSessionRecords,
-    loadRepoRuntimeCatalog: mock(async (): Promise<AgentModelCatalog> => CATALOG),
-    loadRepoRuntimeSlashCommands: mock(async () => ({ commands: [] })),
+    loadRepoRuntimeCatalog: mock(async (): Promise<AgentRuntimeCatalog> => runtimeCatalogFixture),
     loadRepoRuntimeFileSearch: mock(async () => []),
     resolveTaskWorktree: mock(async (): Promise<{ workingDirectory: string } | null> => null),
     runSessionStartWorkflow: runSessionStartWorkflowMock,
@@ -535,10 +537,17 @@ describe("autopilot feature helpers", () => {
 
   test("reuses the fresh catalog from the query cache without another read", async () => {
     const args = createExecuteArgs(createTask({ id: "TASK-QA-CACHED", status: "ai_review" }));
-    args.loadRepoRuntimeCatalog.mockImplementation(async (): Promise<AgentModelCatalog> => {
+    args.loadRepoRuntimeCatalog.mockImplementation(async (): Promise<AgentRuntimeCatalog> => {
       throw new Error("The catalog reader must not run for a fresh cached catalog.");
     });
-    args.queryClient.setQueryData(runtimeCatalogQueryKeys.repo("/repo", "opencode"), CATALOG);
+    args.queryClient.setQueryData(
+      runtimeCatalogQueryKeys.catalog({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+      }),
+      runtimeCatalogFixture,
+    );
 
     await executeAutopilotAction({ ...args, actionId: "startQa", alwaysStartQaReviewsFresh: true });
 

@@ -156,7 +156,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalQaGetReport = host.qaGetReport;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
     const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
@@ -172,10 +172,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
       sendCalls += 1;
       return acceptedUserMessageForInput(input);
     };
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -225,7 +226,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.qaGetReport = originalQaGetReport;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
       OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
@@ -235,15 +236,16 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
 
     host.agentSessionsList = async () => [{ ...persistedSessionFixture }];
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
     const liveStream = createLiveSessionStreamFixture([
       createAgentSessionLiveSnapshotFixture({
@@ -277,7 +279,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.agentSessionsList = originalAgentSessionsList;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
     }
   });
 
@@ -290,7 +292,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalQaGetReport = host.qaGetReport;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
     const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
 
@@ -306,10 +308,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
       sendCalls += 1;
       return acceptedUserMessageForInput(input);
     };
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
@@ -357,7 +360,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.qaGetReport = originalQaGetReport;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
       OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
@@ -379,7 +382,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
     const originalWorkflowStart = host.agentSessionWorkflowStart;
 
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
     host.specGet = async () => ({ markdown: "", updatedAt: null });
@@ -428,10 +431,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
       sessionStored.resolve();
       return summary;
     };
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
 
@@ -505,7 +509,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
       host.agentSessionWorkflowStart = originalWorkflowStart;
 
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
     }
   });
@@ -526,7 +530,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalBuildStart = host.buildStart;
     const originalWorkflowStart = host.agentSessionWorkflowStart;
 
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
     host.specGet = async () => ({ markdown: "", updatedAt: null });
@@ -569,10 +573,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
       ];
       return summary;
     };
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
 
@@ -641,7 +646,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.buildStart = originalBuildStart;
       host.agentSessionWorkflowStart = originalWorkflowStart;
 
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
     }
   });
@@ -659,7 +664,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
-    const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
+    const originalLoadRuntimeCatalog = OpencodeSdkAdapter.prototype.loadRuntimeCatalog;
 
     host.agentSessionsList = async () => [
       {
@@ -702,10 +707,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
     };
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
-    OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+    OpencodeSdkAdapter.prototype.loadRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: { models: [], defaultModelsByProvider: {}, profiles: [] },
+      },
     });
 
     const liveStream = createLiveSessionStreamFixture([createAgentSessionLiveSnapshotFixture()]);
@@ -770,7 +776,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       OpencodeSdkAdapter.prototype.startSession = originalStartSession;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
-      OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
+      OpencodeSdkAdapter.prototype.loadRuntimeCatalog = originalLoadRuntimeCatalog;
     }
   });
 

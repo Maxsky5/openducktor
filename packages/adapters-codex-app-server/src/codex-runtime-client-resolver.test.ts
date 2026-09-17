@@ -16,9 +16,13 @@ test("reports workspace runtime failures without session identity", async () => 
   });
 
   await expect(
-    adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" }),
+    adapter.loadRuntimeCatalog({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+    }),
   ).rejects.toThrow(
-    "runtime 'runtime-wrong-route' is missing required route contract 'stdio' for repo '/repo' while attempting to list available models",
+    "runtime 'runtime-wrong-route' is missing required route contract 'stdio' for repo '/repo' while attempting to load runtime catalog",
   );
   expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
   expect(transportFactory).toHaveBeenCalledTimes(0);

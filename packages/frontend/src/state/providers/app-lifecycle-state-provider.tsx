@@ -1,6 +1,7 @@
 import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import { hostBridge, hostClient } from "@/lib/host-client";
+import { useRuntimeCatalogBootstrap } from "@/state/lifecycle/use-runtime-catalog-bootstrap";
 import { createAgentSessionViewSync } from "@/state/queries/agent-session-view-sync";
 import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
 import { createTaskStreamController } from "@/state/tasks/task-stream-controller";
@@ -54,8 +55,8 @@ export function AppLifecycleStateProvider({
     "AppLifecycleStateProvider",
   );
   const { refreshBranches, clearBranchData } = useWorkspaceOperationsContext();
-  const { availableRuntimeDefinitions } = useRuntimeAvailabilityContext();
-  const { refreshRepoRuntimeHealth } = useRepoRuntimeHealthContext();
+  const { availableRuntimeDefinitions, loadRepoRuntimeCatalog } = useRuntimeAvailabilityContext();
+  const { refreshRepoRuntimeHealth, runtimeHealthByRuntime } = useRepoRuntimeHealthContext();
   const { refreshTaskStoreCheckForRepo } = useChecksOperationsContext();
   const { loadWorkspaceTasks } = useTaskControlContext();
   const sessionStore = useAgentSessionsContext();
@@ -78,6 +79,13 @@ export function AppLifecycleStateProvider({
       }, taskStreamSink),
     [sessionStore, taskStreamSink],
   );
+
+  useRuntimeCatalogBootstrap({
+    activeWorkspace,
+    enabledRuntimeDefinitions: availableRuntimeDefinitions,
+    runtimeHealthByRuntime,
+    loadRepoRuntimeCatalog,
+  });
 
   useAppLifecycle({
     activeWorkspace,

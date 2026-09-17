@@ -1,13 +1,12 @@
-import type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
+import type { RepoRuntimeRef } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
-  AgentModelCatalog,
-  AgentSkillCatalog,
-  AgentSlashCommandCatalog,
-  AgentSubagentCatalog,
+  AgentRuntimeCatalog,
+  AgentRuntimeCatalogSurface,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { type QueryKey, type QueryClient, queryOptions } from "@tanstack/react-query";
+import { errorMessage } from "@/lib/errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 
@@ -16,43 +15,27 @@ export const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
 
 export const runtimeCatalogQueryKeys = {
   all: ["runtime-catalog"] as const,
-  repo: (repoPath: string, runtimeKind: RuntimeKind) =>
-    [...runtimeCatalogQueryKeys.all, repoPath, runtimeKind] as const,
-  repoSlashCommandsScope: ({
-    repoPath,
-    runtimeKind,
-    workingDirectory,
-  }: RepoRuntimeRef & { workingDirectory?: string }) =>
+  catalog: ({ repoPath, runtimeKind, workingDirectory }: RuntimeWorkingDirectoryRef) =>
     [
       ...runtimeCatalogQueryKeys.all,
-      "slash-commands",
-      normalizeWorkingDirectory(repoPath),
-      runtimeKind,
-      ...(workingDirectory !== undefined ? [normalizeWorkingDirectory(workingDirectory)] : []),
-    ] as const,
-  repoSlashCommands: (runtimeRef: RuntimeWorkingDirectoryRef) =>
-    runtimeCatalogQueryKeys.repoSlashCommandsScope(runtimeRef),
-  repoSkillsScope: ({
-    repoPath,
-    runtimeKind,
-    workingDirectory,
-  }: RepoRuntimeRef & { workingDirectory?: string }) =>
-    [
-      ...runtimeCatalogQueryKeys.all,
-      "skills",
-      normalizeWorkingDirectory(repoPath),
-      runtimeKind,
-      ...(workingDirectory !== undefined ? [normalizeWorkingDirectory(workingDirectory)] : []),
-    ] as const,
-  repoSkills: (runtimeRef: RuntimeWorkingDirectoryRef) =>
-    runtimeCatalogQueryKeys.repoSkillsScope(runtimeRef),
-  repoSubagents: ({ repoPath, runtimeKind, workingDirectory }: RuntimeWorkingDirectoryRef) =>
-    [
-      ...runtimeCatalogQueryKeys.all,
-      "subagents",
+      "catalog",
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
       normalizeWorkingDirectory(workingDirectory),
+    ] as const,
+  repoCatalogScope: (repoPath: string) =>
+    [...runtimeCatalogQueryKeys.all, "catalog", normalizeWorkingDirectory(repoPath)] as const,
+  catalogScope: ({
+    repoPath,
+    runtimeKind,
+    workingDirectory,
+  }: RepoRuntimeRef & {
+    workingDirectory?: string;
+  }) =>
+    [
+      ...runtimeCatalogQueryKeys.repoCatalogScope(repoPath),
+      runtimeKind,
+      ...(workingDirectory !== undefined ? [normalizeWorkingDirectory(workingDirectory)] : []),
     ] as const,
   repoFileSearch: (
     { repoPath, runtimeKind, workingDirectory }: RuntimeWorkingDirectoryRef,
@@ -68,61 +51,53 @@ export const runtimeCatalogQueryKeys = {
     ] as const,
 };
 
-export const repoRuntimeCatalogQueryOptions = (
-  runtimeRef: RepoRuntimeRef,
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>,
+export const runtimeCatalogQueryOptions = (
+  runtimeRef: RuntimeWorkingDirectoryRef,
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>,
 ) =>
-  queryOptions<AgentModelCatalog, Error, AgentModelCatalog, QueryKey>({
-    queryKey: runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind),
-    queryFn: (): Promise<AgentModelCatalog> =>
-      loadRepoRuntimeCatalog({
-        repoPath: runtimeRef.repoPath,
-        runtimeKind: runtimeRef.runtimeKind,
-      }),
+  queryOptions<AgentRuntimeCatalog, Error, AgentRuntimeCatalog, QueryKey>({
+    queryKey: runtimeCatalogQueryKeys.catalog(runtimeRef),
+    queryFn: (): Promise<AgentRuntimeCatalog> => loadRuntimeCatalog(runtimeRef),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
     retry: false,
   });
 
-export const loadRepoRuntimeCatalogFromQuery = (
+export const skippedRuntimeCatalogQueryOptions = () =>
+  skippedQueryOptions<AgentRuntimeCatalog>({
+    queryKey: [...runtimeCatalogQueryKeys.all, SKIPPED_QUERY_KEY_SEGMENT, "catalog"],
+    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+  });
+
+export const loadRuntimeCatalogFromQuery = (
   queryClient: QueryClient,
-  runtimeRef: RepoRuntimeRef,
-  loadRepoRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>,
-): Promise<AgentModelCatalog> =>
-  queryClient.fetchQuery(repoRuntimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog));
-
-export const repoRuntimeSlashCommandsQueryOptions = (
   runtimeRef: RuntimeWorkingDirectoryRef,
-  loadRepoRuntimeSlashCommands: (
-    runtimeRef: RuntimeWorkingDirectoryRef,
-  ) => Promise<AgentSlashCommandCatalog>,
-) =>
-  queryOptions<AgentSlashCommandCatalog, Error, AgentSlashCommandCatalog, QueryKey>({
-    queryKey: runtimeCatalogQueryKeys.repoSlashCommands(runtimeRef),
-    queryFn: (): Promise<AgentSlashCommandCatalog> => loadRepoRuntimeSlashCommands(runtimeRef),
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>,
+): Promise<AgentRuntimeCatalog> =>
+  queryClient.fetchQuery(runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog));
 
-export const repoRuntimeSkillsQueryOptions = (
-  runtimeRef: RuntimeWorkingDirectoryRef,
-  loadRepoRuntimeSkills: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>,
-) =>
-  queryOptions<AgentSkillCatalog, Error, AgentSkillCatalog, QueryKey>({
-    queryKey: runtimeCatalogQueryKeys.repoSkills(runtimeRef),
-    queryFn: (): Promise<AgentSkillCatalog> => loadRepoRuntimeSkills(runtimeRef),
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
+export type ResolvedRuntimeCatalogSurface<Catalog> = {
+  catalog: Catalog | null;
+  error: string | null;
+};
 
-export const repoRuntimeSubagentsQueryOptions = (
-  runtimeRef: RuntimeWorkingDirectoryRef,
-  loadRepoRuntimeSubagents: (
-    runtimeRef: RuntimeWorkingDirectoryRef,
-  ) => Promise<AgentSubagentCatalog>,
-) =>
-  queryOptions<AgentSubagentCatalog, Error, AgentSubagentCatalog, QueryKey>({
-    queryKey: runtimeCatalogQueryKeys.repoSubagents(runtimeRef),
-    queryFn: (): Promise<AgentSubagentCatalog> => loadRepoRuntimeSubagents(runtimeRef),
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
+export const resolveRuntimeCatalogSurface = <Catalog>(
+  surface: AgentRuntimeCatalogSurface<Catalog> | undefined,
+  cause: unknown,
+): ResolvedRuntimeCatalogSurface<Catalog> => {
+  if (surface?.status === "available") {
+    return {
+      catalog: surface.catalog,
+      error: cause !== null && cause !== undefined ? errorMessage(cause) : null,
+    };
+  }
+  if (surface?.status === "failed") {
+    return { catalog: null, error: surface.message };
+  }
+  if (cause !== null && cause !== undefined) {
+    return { catalog: null, error: errorMessage(cause) };
+  }
+  return { catalog: null, error: null };
+};
 
 export const repoRuntimeFileSearchQueryOptions = (
   runtimeRef: RuntimeWorkingDirectoryRef,
@@ -137,21 +112,3 @@ export const repoRuntimeFileSearchQueryOptions = (
     queryFn: (): Promise<AgentFileSearchResult[]> => loadRepoRuntimeFileSearch(runtimeRef, query),
     staleTime: RUNTIME_FILE_SEARCH_STALE_TIME_MS,
   });
-
-const skippedRuntimeCatalogQueryOptions = <TData>(family: string) =>
-  skippedQueryOptions<TData>({
-    queryKey: [...runtimeCatalogQueryKeys.all, SKIPPED_QUERY_KEY_SEGMENT, family],
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
-
-export const skippedRepoRuntimeCatalogQueryOptions = () =>
-  skippedRuntimeCatalogQueryOptions<AgentModelCatalog>("models");
-
-export const skippedRepoRuntimeSkillsQueryOptions = () =>
-  skippedRuntimeCatalogQueryOptions<AgentSkillCatalog>("skills");
-
-export const skippedRepoRuntimeSlashCommandsQueryOptions = () =>
-  skippedRuntimeCatalogQueryOptions<AgentSlashCommandCatalog>("slash-commands");
-
-export const skippedRepoRuntimeSubagentsQueryOptions = () =>
-  skippedRuntimeCatalogQueryOptions<AgentSubagentCatalog>("subagents");

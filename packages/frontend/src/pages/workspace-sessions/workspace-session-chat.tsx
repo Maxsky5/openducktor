@@ -16,7 +16,6 @@ import { useAgentSessionApprovalActions } from "@/components/features/agents/age
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
-import { errorMessage } from "@/lib/errors";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
@@ -30,8 +29,9 @@ import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestr
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import {
-  repoRuntimeCatalogQueryOptions,
+  resolveRuntimeCatalogSurface,
   runtimeCatalogQueryKeys,
+  runtimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -103,15 +103,21 @@ export function WorkspaceSessionChat({
     loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
     readSessionTodos: operations.readSessionTodos,
   });
+  const runtimeRef = useMemo(
+    () => ({
+      repoPath: workspace.repoPath,
+      runtimeKind: record.runtimeKind,
+      workingDirectory: record.executionTarget.workingDirectory,
+    }),
+    [record.executionTarget.workingDirectory, record.runtimeKind, workspace.repoPath],
+  );
   const catalogQuery = useQuery({
-    ...repoRuntimeCatalogQueryOptions(
-      { repoPath: workspace.repoPath, runtimeKind: record.runtimeKind },
-      runtime.loadRepoRuntimeCatalog,
-    ),
+    ...runtimeCatalogQueryOptions(runtimeRef, runtime.loadRepoRuntimeCatalog),
     enabled: runtimeReadiness.state === "ready",
   });
-  const modelCatalog = catalogQuery.data ?? null;
-  const catalogError = catalogQuery.error ? errorMessage(catalogQuery.error) : null;
+  const modelSurface = resolveRuntimeCatalogSurface(catalogQuery.data?.models, catalogQuery.error);
+  const modelCatalog = modelSurface.catalog;
+  const catalogError = modelSurface.error;
   const isLoadingModelCatalog = catalogQuery.isFetching;
   useSelectedSessionHistoryLoad({
     session: isStarting ? null : session,
@@ -124,9 +130,9 @@ export function WorkspaceSessionChat({
   const retryModelCatalog = useCallback(
     () =>
       queryClient.invalidateQueries({
-        queryKey: runtimeCatalogQueryKeys.repo(workspace.repoPath, record.runtimeKind),
+        queryKey: runtimeCatalogQueryKeys.catalog(runtimeRef),
       }),
-    [queryClient, record.runtimeKind, workspace.repoPath],
+    [queryClient, runtimeRef],
   );
   const modelTarget = useMemo(
     () => ({

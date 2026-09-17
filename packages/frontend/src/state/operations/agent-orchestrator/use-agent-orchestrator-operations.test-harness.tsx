@@ -204,9 +204,6 @@ const createRuntimeDefinitionsContextValue = () => {
     loadRepoRuntimeCatalog: async () => {
       throw new Error("Test runtime catalog loader was not configured.");
     },
-    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-    loadRepoRuntimeSkills: async () => ({ skills: [] }),
-    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
     loadRepoRuntimeFileSearch: async () => [],
   };
 };

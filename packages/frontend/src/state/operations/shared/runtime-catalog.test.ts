@@ -1,9 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type {
-  AgentCatalogPort,
   AgentFileSearchResult,
   AgentModelCatalog,
+  AgentRuntimeCatalog,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
   AgentSubagentCatalog,
@@ -107,6 +107,14 @@ const subagentCatalogFixture: AgentSubagentCatalog = {
   ],
 };
 
+const runtimeCatalogFixture: AgentRuntimeCatalog = {
+  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+  models: { status: "available", catalog: catalogFixture },
+  slashCommands: { status: "available", catalog: slashCommandCatalogFixture },
+  skills: { status: "available", catalog: skillCatalogFixture },
+  subagents: { status: "available", catalog: subagentCatalogFixture },
+};
+
 const fileSearchResultsFixture: AgentFileSearchResult[] = [
   {
     id: "src/main.ts",
@@ -116,139 +124,67 @@ const fileSearchResultsFixture: AgentFileSearchResult[] = [
   },
 ];
 
-const createAdapter = (overrides: Partial<AgentCatalogPort> = {}): AgentCatalogPort => ({
-  listAvailableModels: async () => catalogFixture,
-  listAvailableSlashCommands: async () => slashCommandCatalogFixture,
-  listAvailableSkills: async () => skillCatalogFixture,
-  listAvailableSubagents: async () => subagentCatalogFixture,
-  searchFiles: async () => fileSearchResultsFixture,
+type RuntimeCatalogHostClient = Parameters<typeof createHostRuntimeCatalogOperations>[0];
+
+const createHostClient = (
+  overrides: Partial<RuntimeCatalogHostClient> = {},
+): RuntimeCatalogHostClient => ({
+  agentRuntimeLoadCatalog: async () => runtimeCatalogFixture,
+  agentRuntimeSearchFiles: async () => fileSearchResultsFixture,
+  repoRuntimeHealthStatus: (...args) => host.repoRuntimeHealthStatus(...args),
   ...overrides,
 });
 
-const createOperations = (adapter: AgentCatalogPort) =>
-  createHostRuntimeCatalogOperations({
-    repoRuntimeHealthStatus: (...args) => host.repoRuntimeHealthStatus(...args),
-    agentRuntimeListModels: adapter.listAvailableModels,
-    agentRuntimeListSlashCommands: adapter.listAvailableSlashCommands,
-    agentRuntimeListSkills: adapter.listAvailableSkills,
-    agentRuntimeListSubagents: adapter.listAvailableSubagents,
-    agentRuntimeSearchFiles: adapter.searchFiles,
-  });
+const createOperations = (hostClient: RuntimeCatalogHostClient) =>
+  createHostRuntimeCatalogOperations(hostClient);
 
 describe("runtime-catalog", () => {
-  test("loads repo model catalog from runtime coordinates", async () => {
-    const listAvailableModels = mock(async () => catalogFixture);
+  test("loads the combined runtime catalog from runtime coordinates", async () => {
+    const agentRuntimeLoadCatalog = mock(async () => runtimeCatalogFixture);
     const operations = createOperations(
-      createAdapter({
-        listAvailableModels,
+      createHostClient({
+        agentRuntimeLoadCatalog,
       }),
     );
 
     await expect(
-      operations.loadRepoRuntimeCatalog({
+      operations.loadRuntimeCatalog({
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
       }),
-    ).resolves.toEqual(catalogFixture);
-    expect(listAvailableModels).toHaveBeenCalledWith({
+    ).resolves.toEqual(runtimeCatalogFixture);
+    expect(agentRuntimeLoadCatalog).toHaveBeenCalledWith({
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/worktree",
     });
   });
 
-  test("propagates adapter runtime resolution failures", async () => {
-    const listAvailableModels = mock(async () => {
+  test("propagates host catalog failures", async () => {
+    const agentRuntimeLoadCatalog = mock(async () => {
       throw new Error("No live repo runtime found for repo '/tmp/repo' and runtime 'opencode'.");
     });
     const operations = createOperations(
-      createAdapter({
-        listAvailableModels,
+      createHostClient({
+        agentRuntimeLoadCatalog,
       }),
     );
 
     await expect(
-      operations.loadRepoRuntimeCatalog({
+      operations.loadRuntimeCatalog({
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
       }),
     ).rejects.toThrow("No live repo runtime found for repo '/tmp/repo' and runtime 'opencode'.");
-    expect(listAvailableModels).toHaveBeenCalledWith({
-      repoPath: "/tmp/repo",
-      runtimeKind: "opencode",
-    });
-  });
-
-  test("loads slash commands from runtime coordinates", async () => {
-    const listAvailableSlashCommands = mock(async () => slashCommandCatalogFixture);
-    const operations = createOperations(
-      createAdapter({
-        listAvailableSlashCommands,
-      }),
-    );
-
-    await expect(
-      operations.loadRepoRuntimeSlashCommands({
-        repoPath: "/tmp/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-    ).resolves.toEqual(slashCommandCatalogFixture);
-    expect(listAvailableSlashCommands).toHaveBeenCalledWith({
-      repoPath: "/tmp/repo",
-      runtimeKind: "opencode",
-      workingDirectory: "/tmp/repo/worktree",
-    });
-  });
-
-  test("loads skills from runtime working-directory coordinates", async () => {
-    const listAvailableSkills = mock(async () => skillCatalogFixture);
-    const operations = createOperations(
-      createAdapter({
-        listAvailableSkills,
-      }),
-    );
-
-    await expect(
-      operations.loadRepoRuntimeSkills({
-        repoPath: "/tmp/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-    ).resolves.toEqual(skillCatalogFixture);
-    expect(listAvailableSkills).toHaveBeenCalledWith({
-      repoPath: "/tmp/repo",
-      runtimeKind: "opencode",
-      workingDirectory: "/tmp/repo/worktree",
-    });
-  });
-
-  test("loads subagents from runtime working-directory coordinates", async () => {
-    const listAvailableSubagents = mock(async () => subagentCatalogFixture);
-    const operations = createOperations(
-      createAdapter({
-        listAvailableSubagents,
-      }),
-    );
-
-    await expect(
-      operations.loadRepoRuntimeSubagents({
-        repoPath: "/tmp/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-    ).resolves.toEqual(subagentCatalogFixture);
-    expect(listAvailableSubagents).toHaveBeenCalledWith({
-      repoPath: "/tmp/repo",
-      runtimeKind: "opencode",
-      workingDirectory: "/tmp/repo/worktree",
-    });
   });
 
   test("loads repo file search from runtime working-directory coordinates", async () => {
-    const searchFiles = mock(async () => fileSearchResultsFixture);
+    const agentRuntimeSearchFiles = mock(async () => fileSearchResultsFixture);
     const operations = createOperations(
-      createAdapter({
-        searchFiles,
+      createHostClient({
+        agentRuntimeSearchFiles,
       }),
     );
 
@@ -262,7 +198,7 @@ describe("runtime-catalog", () => {
         "src",
       ),
     ).resolves.toEqual(fileSearchResultsFixture);
-    expect(searchFiles).toHaveBeenCalledWith({
+    expect(agentRuntimeSearchFiles).toHaveBeenCalledWith({
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/worktree",
@@ -276,7 +212,7 @@ describe("runtime-catalog", () => {
     host.repoRuntimeHealthStatus = repoRuntimeHealthStatus;
 
     try {
-      const operations = createOperations(createAdapter());
+      const operations = createOperations(createHostClient());
       const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
 
       expect(repoRuntimeHealthStatus).toHaveBeenCalledWith("/tmp/repo", "opencode");

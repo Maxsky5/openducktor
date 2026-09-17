@@ -807,7 +807,7 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("listAvailableSlashCommands forwards runtime inputs to the catalog loader", async () => {
+  test("loadRuntimeCatalog forwards runtime inputs to the catalog loader", async () => {
     const list = mock(async () => ({
       data: [
         {
@@ -828,7 +828,7 @@ describe("opencode-sdk-adapter", () => {
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
-    const catalog = await adapter.listAvailableSlashCommands({
+    const catalog = await adapter.loadRuntimeCatalog({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/task-1",
@@ -839,18 +839,21 @@ describe("opencode-sdk-adapter", () => {
       workingDirectory: "/repo/worktrees/task-1",
     });
     expect(list).toHaveBeenCalledWith({ directory: "/repo/worktrees/task-1" });
-    expect(catalog).toEqual({
-      commands: [
-        MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
-        {
-          id: "review",
-          trigger: "review",
-          title: "review",
-          description: "Review changes",
-          source: "command",
-          hints: [],
-        },
-      ],
+    expect(catalog.slashCommands).toEqual({
+      status: "available",
+      catalog: {
+        commands: [
+          MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+          {
+            id: "review",
+            trigger: "review",
+            title: "review",
+            description: "Review changes",
+            source: "command",
+            hints: [],
+          },
+        ],
+      },
     });
   });
 
@@ -867,7 +870,7 @@ describe("opencode-sdk-adapter", () => {
       },
     });
 
-    await adapter.listAvailableSlashCommands({
+    await adapter.loadRuntimeCatalog({
       repoPath: `${defaultRepoPath}/`,
       runtimeKind: "opencode",
       workingDirectory: `${defaultRepoPath}/`,
@@ -879,7 +882,7 @@ describe("opencode-sdk-adapter", () => {
     });
   });
 
-  test("listAvailableSlashCommands rejects stdio runtime connections before creating a client", async () => {
+  test("loadRuntimeCatalog rejects stdio runtime connections before creating a client", async () => {
     const createClient = mock((): never => {
       throw new Error("Client creation must not run for a stdio runtime connection.");
     });
@@ -890,7 +893,7 @@ describe("opencode-sdk-adapter", () => {
     });
 
     await expect(
-      adapter.listAvailableSlashCommands({
+      adapter.loadRuntimeCatalog({
         repoPath: defaultRepoPath,
         runtimeKind: "opencode",
         workingDirectory: defaultRepoPath,
@@ -925,7 +928,7 @@ describe("opencode-sdk-adapter", () => {
     expect(createClient).toHaveBeenCalledTimes(0);
   });
 
-  test("listAvailableSubagents forwards runtime inputs to the catalog loader", async () => {
+  test("loadRuntimeCatalog forwards runtime inputs to the catalog loader for subagents", async () => {
     const agents = mock(async () => ({
       data: [
         {
@@ -941,7 +944,7 @@ describe("opencode-sdk-adapter", () => {
     const createClient: () => OpencodeClient = mock(() => ({ app: { agents } }));
     const adapter = new OpencodeSdkAdapter({ createClient, now: () => "2026-02-22T12:00:00.000Z" });
 
-    const catalog = await adapter.listAvailableSubagents({
+    const catalog = await adapter.loadRuntimeCatalog({
       repoPath: defaultRepoPath,
       runtimeKind: "opencode",
       workingDirectory: defaultWorkingDirectory,
@@ -952,15 +955,18 @@ describe("opencode-sdk-adapter", () => {
       workingDirectory: "/repo",
     });
     expect(agents).toHaveBeenCalledWith({ directory: "/repo" });
-    expect(catalog).toEqual({
-      subagents: [
-        {
-          id: "reviewer",
-          name: "reviewer",
-          label: "reviewer",
-          description: "Review changes",
-        },
-      ],
+    expect(catalog.subagents).toEqual({
+      status: "available",
+      catalog: {
+        subagents: [
+          {
+            id: "reviewer",
+            name: "reviewer",
+            label: "reviewer",
+            description: "Review changes",
+          },
+        ],
+      },
     });
   });
 

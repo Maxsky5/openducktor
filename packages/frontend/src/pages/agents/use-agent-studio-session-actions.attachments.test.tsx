@@ -126,10 +126,15 @@ const createHookHarness = (initialProps: HookArgs) => {
                   availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
                   refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
                   loadRepoRuntimeCatalog: async () => ({
-                    runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-                    models: [],
-                    defaultModelsByProvider: {},
-                    profiles: [],
+                    models: {
+                      status: "available",
+                      catalog: {
+                        runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+                        models: [],
+                        defaultModelsByProvider: {},
+                        profiles: [],
+                      },
+                    },
                   }),
                 }),
               },

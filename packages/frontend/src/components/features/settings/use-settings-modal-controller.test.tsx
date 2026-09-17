@@ -5,14 +5,13 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   knownRuntimeKindValues,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type RepoRuntimeRef,
   type RuntimeExecutableCheck,
   type RuntimeKind,
   type SettingsSnapshot,
   type SettingsSnapshotSaveInput,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@/lib/query-client";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -109,7 +108,9 @@ const createHookHarness = (
   open: boolean,
   shouldLoadCatalog = false,
   options?: {
-    loadRepoRuntimeCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+    loadRepoRuntimeCatalog?: (
+      runtimeRef: RuntimeWorkingDirectoryRef,
+    ) => Promise<AgentRuntimeCatalog>;
     requiredRepoPath?: string | null;
     runtimeDefinitionsError?: string | null;
     isLoadingRuntimeDefinitions?: boolean;
@@ -191,9 +192,6 @@ const createHookHarness = (
       (async () => {
         throw new Error("catalog loading is not configured for this test");
       }),
-    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-    loadRepoRuntimeSkills: async () => ({ skills: [] }),
-    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
     loadRepoRuntimeFileSearch: async () => [],
   } satisfies React.ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
@@ -796,9 +794,14 @@ describe("useSettingsModalController", () => {
 
   test("does not enable catalog loading unless the agents section requests it", async () => {
     const loadRepoRuntimeCatalog = mock(async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+      models: {
+        status: "available" as const,
+        catalog: {
+          models: [],
+          defaultModelsByProvider: {},
+          profiles: [],
+        },
+      },
     }));
 
     const harness = createHookHarness(true, false, { loadRepoRuntimeCatalog });
@@ -815,6 +818,7 @@ describe("useSettingsModalController", () => {
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
       repoPath: "/repo",
       runtimeKind: "opencode",
+      workingDirectory: "/repo",
     });
 
     await harness.unmount();
@@ -1008,9 +1012,14 @@ describe("useSettingsModalController", () => {
 
   test("recalculates catalog runtime kinds when the selected repo changes", async () => {
     const loadRepoRuntimeCatalog = mock(async () => ({
-      models: [],
-      defaultModelsByProvider: {},
-      profiles: [],
+      models: {
+        status: "available" as const,
+        catalog: {
+          models: [],
+          defaultModelsByProvider: {},
+          profiles: [],
+        },
+      },
     }));
 
     const harness = createHookHarness(true, true, { loadRepoRuntimeCatalog });
@@ -1029,6 +1038,7 @@ describe("useSettingsModalController", () => {
     expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
       repoPath: "/repo-two",
       runtimeKind: "opencode",
+      workingDirectory: "/repo-two",
     });
 
     await harness.unmount();

@@ -5,10 +5,7 @@ import type {
   AgentSessionScope,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
-  ListAgentModelsInput,
-  ListAgentSkillsInput,
-  ListAgentSlashCommandsInput,
-  ListAgentSubagentsInput,
+  ListAgentRuntimeCatalogInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
@@ -26,11 +23,8 @@ import { Effect } from "effect";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import {
-  listClaudeModels,
-  listClaudeSkills,
-  listClaudeSlashCommands,
-  listClaudeSubagents,
   loadClaudeHistory,
+  loadClaudeRuntimeCatalog,
 } from "./claude-agent-sdk-catalog";
 import {
   type ClaudeWorkspaceFileSearch,
@@ -210,24 +204,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  listAvailableModels(input: ListAgentModelsInput) {
-    return fromPromise("claudeRuntime.listAvailableModels", () =>
-      listClaudeModels(input, this.input.processEnv, this.input.claudeExecutablePath),
-    );
-  }
-  listAvailableSlashCommands(input: ListAgentSlashCommandsInput) {
-    return fromPromise("claudeRuntime.listAvailableSlashCommands", () =>
-      listClaudeSlashCommands(input, this.input.processEnv, this.input.claudeExecutablePath),
-    );
-  }
-  listAvailableSkills(input: ListAgentSkillsInput) {
-    return fromPromise("claudeRuntime.listAvailableSkills", () =>
-      listClaudeSkills(input, this.input.processEnv, this.input.claudeExecutablePath),
-    );
-  }
-  listAvailableSubagents(input: ListAgentSubagentsInput) {
-    return fromPromise("claudeRuntime.listAvailableSubagents", () =>
-      listClaudeSubagents(input, this.input.processEnv, this.input.claudeExecutablePath),
+  loadRuntimeCatalog(input: ListAgentRuntimeCatalogInput) {
+    return fromPromise("claudeRuntime.loadRuntimeCatalog", () =>
+      loadClaudeRuntimeCatalog(input, this.input.processEnv, this.input.claudeExecutablePath),
     );
   }
 

@@ -5,6 +5,8 @@ import type {
   AgentModelDescriptor as ContractsAgentModelDescriptor,
   AgentRole as ContractsAgentRole,
   AgentRuntimeEvent as ContractsAgentRuntimeEvent,
+  AgentRuntimeCatalog as ContractsAgentRuntimeCatalog,
+  AgentRuntimeCatalogSurface as ContractsAgentRuntimeCatalogSurface,
   AgentSessionActivity as ContractsAgentSessionActivity,
   AgentSessionContextUsage as ContractsAgentSessionContextUsage,
   AgentSessionLiveEnvelope as ContractsAgentSessionLiveEnvelope,
@@ -76,6 +78,8 @@ export type AgentModelSelection = ContractsAgentTranscriptModelSelection;
 export type AgentModelDescriptor = ContractsAgentModelDescriptor;
 export type AgentDescriptor = ContractsAgentDescriptor;
 export type AgentModelCatalog = ContractsAgentModelCatalog;
+export type AgentRuntimeCatalog = ContractsAgentRuntimeCatalog;
+export type AgentRuntimeCatalogSurface<Catalog> = ContractsAgentRuntimeCatalogSurface<Catalog>;
 
 export type AgentRuntimeCapabilities = RuntimeCapabilities;
 export type AgentRuntimeDefinition = RuntimeDescriptor;

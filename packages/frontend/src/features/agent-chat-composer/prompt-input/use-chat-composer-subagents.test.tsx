@@ -1,9 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSubagentCatalog } from "@openducktor/core";
+import type { AgentSubagentCatalog, AgentRuntimeCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerSubagents } from "./use-chat-composer-subagents";
 
@@ -13,6 +14,9 @@ const wrapper = ({ children }: PropsWithChildren) =>
   createElement(QueryProvider, { useIsolatedClient: true }, children);
 
 const EMPTY_CATALOG: AgentSubagentCatalog = { subagents: [] };
+const catalogFixture: AgentRuntimeCatalog = createRuntimeCatalogFixture({
+  subagents: EMPTY_CATALOG,
+});
 
 const sessionRuntime: ChatComposerPromptInputRuntime = {
   state: "available",
@@ -26,20 +30,13 @@ const sessionRuntime: ChatComposerPromptInputRuntime = {
 
 describe("useChatComposerSubagents", () => {
   test("does not query when subagent references are unsupported", async () => {
-    const loadSubagentsForRepo = mock(async () => ({
-      subagents: [
-        {
-          id: "reviewer",
-          name: "reviewer",
-        },
-      ],
-    }));
+    const loadRuntimeCatalog = mock(async () => catalogFixture);
     const harness = createHookHarness(
       useChatComposerSubagents,
       {
         promptInputRuntime: sessionRuntime,
         supportsSubagentReferences: false,
-        loadSubagentsForRepo,
+        loadRuntimeCatalog,
       },
       { wrapper },
     );
@@ -47,7 +44,7 @@ describe("useChatComposerSubagents", () => {
     try {
       await harness.mount();
 
-      expect(loadSubagentsForRepo).not.toHaveBeenCalled();
+      expect(loadRuntimeCatalog).not.toHaveBeenCalled();
       expect(harness.getLatest()).toMatchObject({
         subagentCatalog: EMPTY_CATALOG,
         subagents: [],
@@ -60,7 +57,7 @@ describe("useChatComposerSubagents", () => {
   });
 
   test("keeps waiting runtimes silent until a runtime ref is available", async () => {
-    const loadSubagentsForRepo = mock(async () => EMPTY_CATALOG);
+    const loadRuntimeCatalog = mock(async () => catalogFixture);
     const harness = createHookHarness(
       useChatComposerSubagents,
       {
@@ -70,7 +67,7 @@ describe("useChatComposerSubagents", () => {
           message: "File search is unavailable until the runtime is ready.",
         },
         supportsSubagentReferences: true,
-        loadSubagentsForRepo,
+        loadRuntimeCatalog,
       },
       { wrapper },
     );
@@ -78,7 +75,7 @@ describe("useChatComposerSubagents", () => {
     try {
       await harness.mount();
 
-      expect(loadSubagentsForRepo).not.toHaveBeenCalled();
+      expect(loadRuntimeCatalog).not.toHaveBeenCalled();
       expect(harness.getLatest()).toMatchObject({
         subagentCatalog: EMPTY_CATALOG,
         subagents: [],
@@ -91,7 +88,7 @@ describe("useChatComposerSubagents", () => {
   });
 
   test("surfaces session-scoped runtime context errors without querying subagents", async () => {
-    const loadSubagentsForRepo = mock(async () => EMPTY_CATALOG);
+    const loadRuntimeCatalog = mock(async () => catalogFixture);
     const harness = createHookHarness(
       useChatComposerSubagents,
       {
@@ -101,7 +98,7 @@ describe("useChatComposerSubagents", () => {
           error: "Selected session runtime context is missing working directory.",
         },
         supportsSubagentReferences: true,
-        loadSubagentsForRepo,
+        loadRuntimeCatalog,
       },
       { wrapper },
     );
@@ -109,7 +106,7 @@ describe("useChatComposerSubagents", () => {
     try {
       await harness.mount();
 
-      expect(loadSubagentsForRepo).not.toHaveBeenCalled();
+      expect(loadRuntimeCatalog).not.toHaveBeenCalled();
       expect(harness.getLatest().subagents).toEqual([]);
       expect(harness.getLatest().subagentsError).toBe(
         "Selected session runtime context is missing working directory.",
@@ -129,13 +126,14 @@ describe("useChatComposerSubagents", () => {
         },
       ],
     };
-    const loadSubagentsForRepo = mock(async () => catalog);
+    const catalogFixture = createRuntimeCatalogFixture({ subagents: catalog });
+    const loadRuntimeCatalog = mock(async () => catalogFixture);
     const harness = createHookHarness(
       useChatComposerSubagents,
       {
         promptInputRuntime: sessionRuntime,
         supportsSubagentReferences: true,
-        loadSubagentsForRepo,
+        loadRuntimeCatalog,
       },
       { wrapper },
     );
@@ -144,7 +142,7 @@ describe("useChatComposerSubagents", () => {
       await harness.mount();
       await harness.waitFor((state) => state.subagents.length === 1);
 
-      expect(loadSubagentsForRepo).toHaveBeenCalledWith({
+      expect(loadRuntimeCatalog).toHaveBeenCalledWith({
         repoPath: "/repo",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",

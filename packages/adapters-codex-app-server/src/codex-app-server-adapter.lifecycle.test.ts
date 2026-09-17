@@ -71,13 +71,16 @@ describe("CodexAppServerAdapter lifecycle", () => {
       transportFactory: () => transport,
     });
 
-    const catalog = await adapter.listAvailableModels({
+    const catalog = await adapter.loadRuntimeCatalog({
       repoPath: "/repo",
       runtimeKind: "codex",
+      workingDirectory: "/repo",
     });
 
-    expect(catalog.runtime?.kind).toBe("codex");
-    expect(transport.calls.map((call) => call.method)).toEqual(["model/list"]);
+    expect(
+      catalog.models?.status === "available" ? catalog.models.catalog.runtime?.kind : undefined,
+    ).toBe("codex");
+    expect(transport.calls.map((call) => call.method)).toEqual(["model/list", "skills/list"]);
   });
 
   test("returns the Codex runtime definition", () => {
@@ -159,13 +162,20 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("lists models through the required live runtime id", async () => {
     const { adapter, transports, requireRepoRuntime } = createHarness();
 
-    const catalog = await adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" });
+    const catalog = await adapter.loadRuntimeCatalog({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+    });
 
-    expect(catalog.runtime?.kind).toBe("codex");
+    expect(
+      catalog.models?.status === "available" ? catalog.models.catalog.runtime?.kind : undefined,
+    ).toBe("codex");
     expect(requireRepoRuntime).toHaveBeenCalledTimes(1);
     expect(transports.has("runtime-live")).toBe(true);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
       "model/list",
+      "skills/list",
     ]);
   });
 
@@ -837,7 +847,11 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
 
     await expect(
-      adapter.listAvailableModels({ repoPath: "/repo", runtimeKind: "codex" }),
+      adapter.loadRuntimeCatalog({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+      }),
     ).rejects.toThrow("No live repo runtime found for repo '/repo' and runtime 'codex'.");
   });
 

@@ -6,7 +6,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
@@ -26,6 +26,7 @@ import { withMockedToast } from "@/test-utils/mock-toast";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   type AgentSessionFixtureOverrides,
+  createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import {
@@ -149,8 +150,10 @@ const createClaudeModalCatalog = (): AgentModelCatalog => ({
   profiles: [],
 });
 
-const createModalCatalogForRuntime = (runtimeRef: RepoRuntimeRef): AgentModelCatalog =>
-  runtimeRef.runtimeKind === "claude" ? createClaudeModalCatalog() : createModalCatalog();
+const createModalCatalogForRuntime = (runtimeRef: RepoRuntimeRef): AgentRuntimeCatalog =>
+  createRuntimeCatalogFixture({
+    models: runtimeRef.runtimeKind === "claude" ? createClaudeModalCatalog() : createModalCatalog(),
+  });
 
 const createInternalModalHookHarness = (initialProps: HookArgs) => {
   const checksStateContextValue = createChecksStateContextValue();
@@ -216,9 +219,6 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
                   ],
                   loadRepoRuntimeCatalog: async (runtimeRef) =>
                     createModalCatalogForRuntime(runtimeRef),
-                  loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-                  loadRepoRuntimeSkills: async () => ({ skills: [] }),
-                  loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
                   loadRepoRuntimeFileSearch: async () => [],
                 },
               },

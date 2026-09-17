@@ -1,5 +1,10 @@
-import type { RepoRuntimeRef, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type {
+  AgentModelCatalog,
+  AgentRuntimeCatalog,
+  AgentSessionStartMode,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import {
   filterRuntimeDefinitionsForStartMode,
@@ -16,7 +21,7 @@ import {
 type UseSessionStartModalRuntimeStateArgs = {
   initialCatalog: AgentModelCatalog | null | undefined;
   isOpen: boolean;
-  loadCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+  loadCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   runtimeDefinitions: RuntimeDescriptor[];
   selectedStartMode: AgentSessionStartMode;
   workspaceRepoPath: string | null;

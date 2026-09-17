@@ -27,20 +27,20 @@ import type {
   AgentModelCatalog,
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
+  AgentRuntimeCatalogRead,
+  AgentRuntimeCatalogSurfaceRead,
   AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
   AgentSkillCatalog,
+  AgentSlashCommandCatalog,
   AgentWorkspaceInspectionPort,
   EventUnsubscribe,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
-  ListAgentModelsInput,
-  ListAgentSkillsInput,
-  ListAgentSlashCommandsInput,
-  ListAgentSubagentsInput,
+  ListAgentRuntimeCatalogInput,
   ListSessionRuntimeSnapshotsInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
@@ -202,6 +202,16 @@ const toLivePendingQuestion = (
   requestId: request.requestId,
   questions: toCodexToolQuestions(request.questions),
 });
+
+const readCatalogSurface = async <Catalog>(
+  read: () => Promise<Catalog>,
+): Promise<AgentRuntimeCatalogSurfaceRead<Catalog>> => {
+  try {
+    return { status: "available", catalog: await read() };
+  } catch (cause) {
+    return { status: "failed", cause };
+  }
+};
 
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -366,11 +376,6 @@ export class CodexAppServerAdapter
       );
     }
     return respondServerRequest;
-  }
-
-  async listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog> {
-    const { client, runtimeId } = await this.runtimeClients.resolve(input, "list available models");
-    return toCatalog(await this.models.list(client, runtimeId));
   }
 
   private clearThreadInventory(runtimeId: string): void {
@@ -748,23 +753,27 @@ export class CodexAppServerAdapter
     flushQueuedUserMessagesLaterImpl(this.turnLifecycleContext(), activeTurn);
   }
 
-  async listAvailableSlashCommands(_input: ListAgentSlashCommandsInput) {
-    return slashCommandCatalogSchema.parse({
-      commands: [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
-    });
-  }
+  async loadRuntimeCatalog(input: ListAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "load runtime catalog");
+    const readModels = async (): Promise<AgentModelCatalog> =>
+      toCatalog(await this.models.list(client, runtimeId));
+    const readSlashCommands = async (): Promise<AgentSlashCommandCatalog> =>
+      slashCommandCatalogSchema.parse({
+        commands: [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
+      });
+    const readSkills = async (): Promise<AgentSkillCatalog> => {
+      const response = await client.skillsList({
+        cwds: [input.workingDirectory],
+        forceReload: false,
+      });
+      return toCodexSkillCatalog(response);
+    };
 
-  async listAvailableSkills(input: ListAgentSkillsInput): Promise<AgentSkillCatalog> {
-    const { client } = await this.runtimeClients.resolve(input, "list available skills");
-    const response = await client.skillsList({
-      cwds: [input.workingDirectory],
-      forceReload: false,
-    });
-    return toCodexSkillCatalog(response);
-  }
-
-  async listAvailableSubagents(_input: ListAgentSubagentsInput) {
-    return unsupported("listAvailableSubagents");
+    return {
+      models: await readCatalogSurface(readModels),
+      slashCommands: await readCatalogSurface(readSlashCommands),
+      skills: await readCatalogSurface(readSkills),
+    };
   }
 
   async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {

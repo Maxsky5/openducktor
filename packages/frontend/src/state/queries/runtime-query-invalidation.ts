@@ -23,10 +23,7 @@ export const invalidateRuntimeQueries = async (
 const matchesRuntime = (key: QueryKey, scope: RepoRuntimeRef): boolean => {
   const repoPath = normalizeWorkingDirectory(scope.repoPath);
   if (key[0] === runtimeCatalogQueryKeys.all[0]) {
-    return (
-      (key[1] === repoPath && key[2] === scope.runtimeKind) ||
-      (key[2] === repoPath && key[3] === scope.runtimeKind)
-    );
+    return key[2] === repoPath && key[3] === scope.runtimeKind;
   }
   return (
     (key[0] === agentSessionHistoryQueryKeys.all[0] ||

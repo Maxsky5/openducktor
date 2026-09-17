@@ -24,14 +24,8 @@ export const createClaudeRuntimeQueryAdapter = (
   return {
     resolveSessionParent: (input) =>
       read("read session parent", input, () => service.resolveSessionParent(input)),
-    listAvailableModels: (input) =>
-      read("list models", input, () => service.listAvailableModels(input)),
-    listAvailableSlashCommands: (input) =>
-      read("list slash commands", input, () => service.listAvailableSlashCommands(input)),
-    listAvailableSkills: (input) =>
-      read("list skills", input, () => service.listAvailableSkills(input)),
-    listAvailableSubagents: (input) =>
-      read("list subagents", input, () => service.listAvailableSubagents(input)),
+    loadRuntimeCatalog: (input) =>
+      read("load runtime catalog", input, () => service.loadRuntimeCatalog(input)),
     searchFiles: (input) => read("search files", input, () => service.searchFiles(input)),
     loadSessionHistory: (input) =>
       read("load session history", input, () => service.loadSessionHistory(input)),

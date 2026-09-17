@@ -14,67 +14,78 @@ import { hostInvokeFailureFromError } from "../router/host-invoke-failure";
 import { createAgentRuntimeQueryCommandHandlers } from "./agent-runtime-query-command-handlers";
 
 const input = { repoPath: "/remote/repo", runtimeKind: "opencode" } as const;
+const directoryInput = { ...input, workingDirectory: "/remote/repo" } as const;
+const modelsCatalog = {
+  models: [],
+  defaultModelsByProvider: {},
+};
 const handlers = createAgentRuntimeQueryCommandHandlers({
   ...unexpectedRuntimeQueries,
-  listAvailableModels: () => Effect.succeed({ models: [], defaultModelsByProvider: {} }),
+  loadRuntimeCatalog: () =>
+    Effect.succeed({ models: { status: "available" as const, catalog: modelsCatalog } }),
 });
 
 for (const invalid of [
   undefined,
   {},
-  { input: { ...input, endpoint: "http://127.0.0.1:7777" } },
-  { input, runtimeId: "client-selected" },
-  { input: { ...input, runtimeKind: "other" } },
+  { input: { ...directoryInput, endpoint: "http://127.0.0.1:7777" } },
+  { input: directoryInput, runtimeId: "client-selected" },
+  { input: { ...directoryInput, runtimeKind: "other" } },
 ]) {
   test(`rejects invalid query envelope ${JSON.stringify(invalid)}`, async () => {
-    const error = await Effect.runPromise(Effect.flip(handlers.agent_runtime_list_models(invalid)));
+    const error = await Effect.runPromise(
+      Effect.flip(handlers.agent_runtime_load_catalog(invalid)),
+    );
     expect(hostInvokeFailureFromError(error)).toMatchObject({
       kind: "runtime_query",
-      runtimeQueryFailure: { code: "invalid_input", operation: "agent_runtime_list_models" },
+      runtimeQueryFailure: { code: "invalid_input", operation: "agent_runtime_load_catalog" },
     });
   });
 }
 
-test("returns normalized catalog data through the shared command", async () => {
-  expect(await Effect.runPromise(handlers.agent_runtime_list_models({ input }))).toEqual({
-    models: [],
-    defaultModelsByProvider: {},
+test("returns the combined catalog through the shared command", async () => {
+  expect(
+    await Effect.runPromise(handlers.agent_runtime_load_catalog({ input: directoryInput })),
+  ).toEqual({
+    models: { status: "available", catalog: modelsCatalog },
   });
 });
 
 test("rejects a catalog describing the wrong runtime", async () => {
   const handlers = createAgentRuntimeQueryCommandHandlers({
     ...unexpectedRuntimeQueries,
-    listAvailableModels: () =>
+    loadRuntimeCatalog: () =>
       Effect.succeed({
         runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-        models: [],
-        defaultModelsByProvider: {},
+        models: { status: "available" as const, catalog: modelsCatalog },
       }),
   });
   const error = await Effect.runPromise(
-    Effect.flip(handlers.agent_runtime_list_models({ input: { ...input, runtimeKind: "codex" } })),
+    Effect.flip(
+      handlers.agent_runtime_load_catalog({
+        input: { ...directoryInput, runtimeKind: "codex" },
+      }),
+    ),
   );
   expect(error.failure.code).toBe("invalid_runtime_response");
 });
 
-test("fails a malformed catalog without affecting other catalog commands", async () => {
+test("rejects a malformed combined catalog response", async () => {
   const handlers = createAgentRuntimeQueryCommandHandlers({
     ...unexpectedRuntimeQueries,
     // SAFETY: Invalid catalog data tests host response checks.
-    listAvailableModels: () =>
-      Effect.succeed({ models: [{ id: "broken" }], defaultModelsByProvider: {} } as never),
-    listAvailableSkills: () => Effect.succeed({ skills: [] }),
+    loadRuntimeCatalog: () =>
+      Effect.succeed({
+        models: { status: "available", catalog: { models: [{ id: "broken" }] } },
+      } as never),
   });
   expect(
-    (await Effect.runPromise(Effect.flip(handlers.agent_runtime_list_models({ input })))).failure
-      .code,
+    (
+      await Effect.runPromise(
+        Effect.flip(handlers.agent_runtime_load_catalog({ input: directoryInput })),
+      )
+    ).failure.code,
   ).toBe("invalid_runtime_response");
-  expect(
-    await Effect.runPromise(
-      handlers.agent_runtime_list_skills({ input: { ...input, workingDirectory: "/remote/repo" } }),
-    ),
-  ).toEqual({ skills: [] });
 });
 
 test("preserves actionable native query failures without leaking native connection details", async () => {
@@ -87,11 +98,11 @@ test("preserves actionable native query failures without leaking native connecti
   ] as const) {
     const queries = createRuntimeQueryAdapter({
       ...unexpectedNativeRuntimeQueries,
-      listAvailableModels: async () => {
+      loadRuntimeCatalog: async () => {
         throw cause;
       },
     });
-    const error = await Effect.runPromise(Effect.flip(queries.listAvailableModels(input)));
+    const error = await Effect.runPromise(Effect.flip(queries.loadRuntimeCatalog(directoryInput)));
     const wire = hostInvokeFailureFromError(error);
     expect(wire).toMatchObject({
       kind: "runtime_query",
@@ -102,7 +113,7 @@ test("preserves actionable native query failures without leaking native connecti
   }
 });
 
-test("exposes only the nine normalized query commands", () => {
+test("exposes only the normalized query commands", () => {
   expect(Object.keys(handlers).sort()).toEqual(
     Object.values(AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS)
       .map((contract) => contract.command)

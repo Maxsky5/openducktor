@@ -87,6 +87,8 @@ const opencodeSlashCommandSchema = z.object({
 
 export const opencodeSlashCommandListPayloadSchema = z.array(opencodeSlashCommandSchema);
 
+export type ParsedOpencodeSlashCommand = z.infer<typeof opencodeSlashCommandSchema>;
+
 export const opencodeFileSearchPayloadSchema = z.array(z.string());
 
 const modelCostSchema = z.object({

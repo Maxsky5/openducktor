@@ -1,7 +1,7 @@
 import {
+  type AgentRuntimeCatalog,
   type AgentSessionHistoryMessage,
   type AgentSessionScope,
-  type AgentSkillCatalog,
   describeAgentSessionScope,
   type PolicyBoundSessionRef,
   resolveAgentSessionAssociationTransition,
@@ -26,7 +26,8 @@ import {
 } from "@/state/queries/agent-session-history";
 import {
   RUNTIME_CATALOG_STALE_TIME_MS,
-  repoRuntimeSkillsQueryOptions,
+  resolveRuntimeCatalogSurface,
+  runtimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
@@ -68,7 +69,7 @@ export function useRuntimeTranscriptSessionHistory({
   liveSession,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
   const { readSessionHistory, replyAgentApproval, answerAgentQuestion } = useAgentOperations();
-  const { loadRepoRuntimeSkills } = useRuntimeDefinitionsContext();
+  const { loadRepoRuntimeCatalog } = useRuntimeDefinitionsContext();
   const queryClient = useQueryClient();
   const targetExternalSessionId = target?.externalSessionId ?? null;
   const targetRuntimeKind = target?.runtimeKind ?? null;
@@ -153,9 +154,10 @@ export function useRuntimeTranscriptSessionHistory({
       repoReadinessState === "ready" &&
       targetRuntimeKind === "claude" &&
       runtimeSessionRef !== null
-      ? repoRuntimeSkillsQueryOptions(runtimeSessionRef, loadRepoRuntimeSkills)
+      ? runtimeCatalogQueryOptions(runtimeSessionRef, loadRepoRuntimeCatalog)
       : skippedTranscriptSkillsQueryOptions,
   );
+  const skillSurface = resolveRuntimeCatalogSurface(skillsQuery.data?.skills, skillsQuery.error);
   const session = useMemo(() => {
     let transcriptSession: AgentChatTranscriptSession | null = null;
     if (matchingSession !== null) {
@@ -171,9 +173,9 @@ export function useRuntimeTranscriptSessionHistory({
       });
     }
     return transcriptSession
-      ? withClaudeSkillMentions(transcriptSession, skillsQuery.data?.skills ?? [])
+      ? withClaudeSkillMentions(transcriptSession, skillSurface.catalog?.skills ?? [])
       : null;
-  }, [historyQuery.data, matchingSession, shouldLoadHistory, skillsQuery.data, stableTarget]);
+  }, [historyQuery.data, matchingSession, shouldLoadHistory, skillSurface.catalog, stableTarget]);
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (scopeResult.kind === "conflict") {
       return { kind: "failed", message: scopeResult.message };
@@ -269,7 +271,7 @@ const skippedRuntimeSessionRefQueryOptions = skippedQueryOptions<PolicyBoundSess
   refetchOnWindowFocus: false,
 });
 
-const skippedTranscriptSkillsQueryOptions = skippedQueryOptions<AgentSkillCatalog>({
+const skippedTranscriptSkillsQueryOptions = skippedQueryOptions<AgentRuntimeCatalog>({
   queryKey: ["runtime-transcript-skills", "skipped"] as const,
   staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
 });

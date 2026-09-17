@@ -10,7 +10,7 @@ import {
   type TaskCard,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentRuntimeCatalog } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type RenderResult, fireEvent, render, waitFor } from "@testing-library/react";
 import { act, type ComponentProps, type ReactElement } from "react";
@@ -101,36 +101,41 @@ const publishSessionStartedMock = mock(() => {});
 const publishSessionErrorMock = mock(async () => true);
 const reportSessionNotificationFailureMock = mock(() => {});
 let toastSpies: Array<{ mockRestore(): void }> = [];
-const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentModelCatalog> => ({
-  runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-  models: [
-    {
-      id: "openai/gpt-5",
-      providerId: "openai",
-      providerName: "OpenAI",
-      modelId: "gpt-5",
-      modelName: "GPT-5",
-      variants: ["default", "high"],
-      contextWindow: 200_000,
-      outputLimit: 8_192,
+const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentRuntimeCatalog> => ({
+  models: {
+    status: "available",
+    catalog: {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT-5",
+          variants: ["default", "high"],
+          contextWindow: 200_000,
+          outputLimit: 8_192,
+        },
+      ],
+      defaultModelsByProvider: {
+        openai: "gpt-5",
+      },
+      profiles: [
+        {
+          name: "spec-agent",
+          mode: "primary",
+          hidden: false,
+          color: "#f59e0b",
+        },
+        {
+          name: "build-agent",
+          mode: "primary",
+          hidden: false,
+        },
+      ],
     },
-  ],
-  defaultModelsByProvider: {
-    openai: "gpt-5",
   },
-  profiles: [
-    {
-      name: "spec-agent",
-      mode: "primary",
-      hidden: false,
-      color: "#f59e0b",
-    },
-    {
-      name: "build-agent",
-      mode: "primary",
-      hidden: false,
-    },
-  ],
 }));
 
 const notificationContextValue = {
@@ -664,9 +669,6 @@ const renderPage = async (
                                   refreshRuntimeSettings: async () => {},
                                   refreshRuntimeDefinitions: async () => [...RUNTIME_DEFINITIONS],
                                   loadRepoRuntimeCatalog: loadRepoRuntimeCatalogMock,
-                                  loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-                                  loadRepoRuntimeSkills: async () => ({ skills: [] }),
-                                  loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
                                   loadRepoRuntimeFileSearch: async () => [],
                                 }}
                               >

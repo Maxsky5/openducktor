@@ -38,10 +38,7 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
   readonly service: Pick<
     ClaudeAgentSdkService,
     | "resolveSessionParent"
-    | "listAvailableModels"
-    | "listAvailableSlashCommands"
-    | "listAvailableSkills"
-    | "listAvailableSubagents"
+    | "loadRuntimeCatalog"
     | "searchFiles"
     | "loadSessionHistory"
     | "loadSessionTodos"

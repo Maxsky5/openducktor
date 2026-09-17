@@ -1,15 +1,16 @@
-import type { RepoRuntimeRef } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { useCallback } from "react";
 import { resolveRequiredDefaultSessionSelection } from "@/features/session-start/session-start-selection";
 import { appQueryClient } from "@/lib/query-client";
-import { loadRepoRuntimeCatalogFromQuery } from "@/state/queries/runtime-catalog";
+import { loadRuntimeCatalogFromQuery } from "@/state/queries/runtime-catalog";
 import { loadRepoConfigFromQuery, toRepoSettingsInput } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
 
-type RepoRuntimeCatalogLoader = (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+type RepoRuntimeCatalogLoader = (
+  runtimeRef: RuntimeWorkingDirectoryRef,
+) => Promise<AgentRuntimeCatalog>;
 
 type UseDelegationOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -56,7 +57,7 @@ const startDelegatedBuild = async (
     repoSettings: toRepoSettingsInput(repoConfig),
     repoPath,
     loadRepoRuntimeCatalog: (runtimeRef) =>
-      loadRepoRuntimeCatalogFromQuery(appQueryClient, runtimeRef, loadRepoRuntimeCatalog),
+      loadRuntimeCatalogFromQuery(appQueryClient, runtimeRef, loadRepoRuntimeCatalog),
   });
   await host.buildStart(repoPath, taskId, builderSelection.runtimeKind);
 };

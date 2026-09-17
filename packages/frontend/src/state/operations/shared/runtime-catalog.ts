@@ -1,23 +1,15 @@
 import type { HostClient } from "@openducktor/host-client";
-import type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
-  AgentModelCatalog,
-  AgentSkillCatalog,
-  AgentSlashCommandCatalog,
-  AgentSubagentCatalog,
+  AgentRuntimeCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
 export type RuntimeCatalogOperations = {
-  loadRepoRuntimeCatalog(runtimeRef: RepoRuntimeRef): Promise<AgentModelCatalog>;
-  loadRepoRuntimeSlashCommands(
-    runtimeRef: RuntimeWorkingDirectoryRef,
-  ): Promise<AgentSlashCommandCatalog>;
-  loadRepoRuntimeSkills(runtimeRef: RuntimeWorkingDirectoryRef): Promise<AgentSkillCatalog>;
-  loadRepoRuntimeSubagents(runtimeRef: RuntimeWorkingDirectoryRef): Promise<AgentSubagentCatalog>;
+  loadRuntimeCatalog(runtimeRef: RuntimeWorkingDirectoryRef): Promise<AgentRuntimeCatalog>;
   loadRepoRuntimeFileSearch(
     runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
@@ -31,19 +23,10 @@ export type RuntimeCatalogOperations = {
 export const createHostRuntimeCatalogOperations = (
   hostClient: Pick<
     HostClient,
-    | "agentRuntimeListModels"
-    | "agentRuntimeListSlashCommands"
-    | "agentRuntimeListSkills"
-    | "agentRuntimeListSubagents"
-    | "agentRuntimeSearchFiles"
-    | "repoRuntimeHealthStatus"
+    "agentRuntimeLoadCatalog" | "agentRuntimeSearchFiles" | "repoRuntimeHealthStatus"
   > = host,
 ): RuntimeCatalogOperations => ({
-  loadRepoRuntimeCatalog: async (runtimeRef) => hostClient.agentRuntimeListModels(runtimeRef),
-  loadRepoRuntimeSlashCommands: async (runtimeRef) =>
-    hostClient.agentRuntimeListSlashCommands(runtimeRef),
-  loadRepoRuntimeSkills: async (runtimeRef) => hostClient.agentRuntimeListSkills(runtimeRef),
-  loadRepoRuntimeSubagents: async (runtimeRef) => hostClient.agentRuntimeListSubagents(runtimeRef),
+  loadRuntimeCatalog: async (runtimeRef) => hostClient.agentRuntimeLoadCatalog(runtimeRef),
   loadRepoRuntimeFileSearch: async (runtimeRef, query) =>
     hostClient.agentRuntimeSearchFiles({
       ...runtimeRef,

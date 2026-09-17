@@ -115,11 +115,16 @@ type TestContextOverrides = {
   repoRuntimeHealthContext?: Partial<ReturnType<typeof createRepoRuntimeHealthContextValue>>;
 };
 const emptyCatalog = {
-  providers: [],
-  models: [],
-  variants: [],
-  profiles: [],
-  defaultModelsByProvider: {},
+  models: {
+    status: "available" as const,
+    catalog: {
+      providers: [],
+      models: [],
+      variants: [],
+      profiles: [],
+      defaultModelsByProvider: {},
+    },
+  },
 };
 
 const createTask = (id: string) => createTaskCardFixture({ id, title: id });
@@ -1409,6 +1414,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
         repoPath: "/repo",
         runtimeKind: "opencode",
+        workingDirectory: "/repo",
       });
       expect(readSessionTodos).toHaveBeenCalledWith(
         expect.objectContaining({

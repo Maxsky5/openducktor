@@ -1,9 +1,10 @@
-import type { RepoRuntimeRef, ReusablePrompt, RuntimeDescriptor } from "@openducktor/contracts";
+import type { ReusablePrompt, RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
+  AgentRuntimeCatalog,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
   AgentSubagentCatalog,
@@ -64,10 +65,7 @@ type UseAgentStudioChatComposerArgs = {
     selection: AgentModelSelection | null,
   ) => Promise<void> | void;
   favoriteState: ModelPickerFavoriteState;
-  loadCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
-  loadSlashCommands?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSlashCommandCatalog>;
-  loadSkills?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSkillCatalog>;
-  loadSubagents?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentSubagentCatalog>;
+  loadCatalog?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   loadFileSearch?: (
     runtimeRef: RuntimeWorkingDirectoryRef,
     query: string,
@@ -167,26 +165,17 @@ export function useAgentStudioChatComposer({
   updateAgentSessionModel,
   favoriteState,
   loadCatalog,
-  loadSlashCommands,
-  loadSkills,
-  loadSubagents,
   loadFileSearch,
 }: UseAgentStudioChatComposerArgs): AgentStudioChatComposerState {
   const {
     availableRuntimeDefinitions,
     allRuntimeDefinitions,
     loadRepoRuntimeCatalog,
-    loadRepoRuntimeSlashCommands,
-    loadRepoRuntimeSkills,
-    loadRepoRuntimeSubagents,
     loadRepoRuntimeFileSearch,
   } = useRuntimeAvailabilityContext();
   const queryClient = useQueryClient();
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const loadCatalogForRepo = pickLoader(loadCatalog, loadRepoRuntimeCatalog);
-  const loadSlashCommandsForRepo = pickLoader(loadSlashCommands, loadRepoRuntimeSlashCommands);
-  const loadSkillsForRepo = pickLoader(loadSkills, loadRepoRuntimeSkills);
-  const loadSubagentsForRepo = pickLoader(loadSubagents, loadRepoRuntimeSubagents);
   const loadFileSearchForRepo = pickLoader(loadFileSearch, loadRepoRuntimeFileSearch);
   const loadedSession = selectedSession.loadedSession;
   const selectedSessionIdentity = selectedSession.identity;
@@ -347,13 +336,17 @@ export function useAgentStudioChatComposer({
           isAvailable: true,
           unavailableReason: "The current session model catalog is unavailable.",
           retry: async (): Promise<void> => {
-            if (!workspaceRepoPath) {
+            if (!workspaceRepoPath || !selectedSessionIdentity) {
               throw new Error(
-                "A repository path is required to refresh the session model catalog.",
+                "A repository path and session are required to refresh the session model catalog.",
               );
             }
             await queryClient.invalidateQueries({
-              queryKey: runtimeCatalogQueryKeys.repo(workspaceRepoPath, descriptor.kind),
+              queryKey: runtimeCatalogQueryKeys.catalog({
+                repoPath: workspaceRepoPath,
+                runtimeKind: descriptor.kind,
+                workingDirectory: selectedSessionIdentity.workingDirectory,
+              }),
               exact: true,
             });
           },
@@ -388,18 +381,18 @@ export function useAgentStudioChatComposer({
     promptInputRuntime,
     runtimeSupportsSlashCommands,
     reusablePrompts,
-    loadSlashCommandsForRepo,
+    loadRuntimeCatalog: loadCatalogForRepo,
   });
   const { skillCatalog, skills, skillsError, isSkillsLoading } = useChatComposerSkills({
     promptInputRuntime,
     supportsSkillReferences,
-    loadSkillsForRepo,
+    loadRuntimeCatalog: loadCatalogForRepo,
   });
   const { subagentCatalog, subagents, subagentsError, isSubagentsLoading } =
     useChatComposerSubagents({
       promptInputRuntime,
       supportsSubagentReferences,
-      loadSubagentsForRepo,
+      loadRuntimeCatalog: loadCatalogForRepo,
     });
   const {
     selectionCatalog,

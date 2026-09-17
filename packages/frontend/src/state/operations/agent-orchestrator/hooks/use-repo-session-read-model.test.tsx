@@ -2202,7 +2202,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("invalidates repo-scoped skills and slash commands from the ordered stream", async () => {
+  test("invalidates the combined catalog from the ordered stream", async () => {
     const state = createState((emit) => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
@@ -2222,18 +2222,16 @@ describe("useRepoSessionReadModel", () => {
         });
       });
 
+      expect(invalidateQueries).toHaveBeenCalledTimes(1);
       expect(invalidateQueries).toHaveBeenNthCalledWith(1, {
-        queryKey: ["runtime-catalog", "skills", "/repo", "codex"],
-      });
-      expect(invalidateQueries).toHaveBeenNthCalledWith(2, {
-        queryKey: ["runtime-catalog", "slash-commands", "/repo", "codex"],
+        queryKey: ["runtime-catalog", "catalog", "/repo", "codex"],
       });
     } finally {
       await state.harness.unmount();
     }
   });
 
-  test("replaces the slash-command cache from the authoritative ordered stream payload", async () => {
+  test("invalidates the combined catalog from the authoritative ordered stream payload", async () => {
     const state = createState((emit) => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
@@ -2267,16 +2265,16 @@ describe("useRepoSessionReadModel", () => {
       });
 
       expect(
-        state.queryClient.getQueryData<typeof catalog>([
+        state.queryClient.getQueryData([
           "runtime-catalog",
           "slash-commands",
           "/repo",
           "claude",
           "/repo/worktree",
         ]),
-      ).toEqual(catalog);
+      ).toBeUndefined();
       expect(invalidateQueries).toHaveBeenCalledWith({
-        queryKey: ["runtime-catalog", "skills", "/repo", "claude", "/repo/worktree"],
+        queryKey: ["runtime-catalog", "catalog", "/repo", "claude", "/repo/worktree"],
       });
     } finally {
       await state.harness.unmount();

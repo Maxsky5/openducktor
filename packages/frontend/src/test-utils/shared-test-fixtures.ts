@@ -16,6 +16,13 @@ import {
   type TaskCard,
   type TaskStoreCheck,
 } from "@openducktor/contracts";
+import type {
+  AgentModelCatalog,
+  AgentRuntimeCatalog,
+  AgentSkillCatalog,
+  AgentSlashCommandCatalog,
+  AgentSubagentCatalog,
+} from "@openducktor/core";
 import type { WorkspaceActivityObserver } from "@/features/workspace-activity/workspace-activity-observer";
 import {
   UNKNOWN_WORKSPACE_ACTIVITY,
@@ -31,6 +38,35 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
+
+export type RuntimeCatalogFixtureSurfaces = {
+  models?: AgentModelCatalog;
+  slashCommands?: AgentSlashCommandCatalog;
+  skills?: AgentSkillCatalog;
+  subagents?: AgentSubagentCatalog;
+};
+
+export const createRuntimeCatalogFixture = ({
+  models,
+  slashCommands,
+  skills,
+  subagents,
+}: RuntimeCatalogFixtureSurfaces = {}): AgentRuntimeCatalog => {
+  const catalog: AgentRuntimeCatalog = {};
+  if (models !== undefined) {
+    catalog.models = { status: "available", catalog: models };
+  }
+  if (slashCommands !== undefined) {
+    catalog.slashCommands = { status: "available", catalog: slashCommands };
+  }
+  if (skills !== undefined) {
+    catalog.skills = { status: "available", catalog: skills };
+  }
+  if (subagents !== undefined) {
+    catalog.subagents = { status: "available", catalog: subagents };
+  }
+  return catalog;
+};
 
 const BASE_TASK_STORE_CHECK_FIXTURE: TaskStoreCheck = {
   taskStoreOk: true,

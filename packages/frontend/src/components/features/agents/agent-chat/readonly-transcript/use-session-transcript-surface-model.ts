@@ -7,8 +7,9 @@ import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession, useAgentSessionVisiblePendingInput } from "@/state/app-state-provider";
 import {
-  repoRuntimeCatalogQueryOptions,
-  skippedRepoRuntimeCatalogQueryOptions,
+  resolveRuntimeCatalogSurface,
+  runtimeCatalogQueryOptions,
+  skippedRuntimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import { deriveAgentChatReadiness } from "../agent-chat-readiness";
@@ -70,14 +71,22 @@ export function useSessionTranscriptSurfaceModel({
   const sessionKey = target ? agentSessionIdentityKey(target) : null;
   const runtimeRef =
     workspaceRepoPath && target
-      ? { repoPath: workspaceRepoPath, runtimeKind: target.runtimeKind }
+      ? {
+          repoPath: workspaceRepoPath,
+          runtimeKind: target.runtimeKind,
+          workingDirectory: target.workingDirectory,
+        }
       : null;
   const modelCatalogQuery = useQuery({
     ...(runtimeRef
-      ? repoRuntimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog)
-      : skippedRepoRuntimeCatalogQueryOptions()),
+      ? runtimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog)
+      : skippedRuntimeCatalogQueryOptions()),
     enabled: runtimeRef !== null && runtimeReadiness.state === "ready",
   });
+  const modelSurface = resolveRuntimeCatalogSurface(
+    modelCatalogQuery.data?.models,
+    modelCatalogQuery.error,
+  );
   const runtimeBlockedAction = useMemo(
     () => ({
       label: "Recheck",
@@ -149,7 +158,7 @@ export function useSessionTranscriptSurfaceModel({
   );
 
   const model = useAgentChatSurfaceModel({
-    modelCatalog: modelCatalogQuery.data ?? null,
+    modelCatalog: modelSurface.catalog,
     transcript,
     chatSettings,
     sessionAuxiliaryError: transcriptSurfaceState.loadError,

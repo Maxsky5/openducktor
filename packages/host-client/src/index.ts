@@ -224,14 +224,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentSessionLiveClient.agentSessionLiveReplyQuestion.bind(agentSessionLiveClient),
     agentRuntimeFileStatus:
       agentRuntimeQueryClient.agentRuntimeFileStatus.bind(agentRuntimeQueryClient),
-    agentRuntimeListModels:
-      agentRuntimeQueryClient.agentRuntimeListModels.bind(agentRuntimeQueryClient),
-    agentRuntimeListSkills:
-      agentRuntimeQueryClient.agentRuntimeListSkills.bind(agentRuntimeQueryClient),
-    agentRuntimeListSlashCommands:
-      agentRuntimeQueryClient.agentRuntimeListSlashCommands.bind(agentRuntimeQueryClient),
-    agentRuntimeListSubagents:
-      agentRuntimeQueryClient.agentRuntimeListSubagents.bind(agentRuntimeQueryClient),
+    agentRuntimeLoadCatalog:
+      agentRuntimeQueryClient.agentRuntimeLoadCatalog.bind(agentRuntimeQueryClient),
     agentRuntimeLoadSessionDiff:
       agentRuntimeQueryClient.agentRuntimeLoadSessionDiff.bind(agentRuntimeQueryClient),
     agentRuntimeLoadSessionHistory:

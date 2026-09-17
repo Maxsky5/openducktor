@@ -1,5 +1,9 @@
-import type { RepoRuntimeRef, RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionRuntimePolicy, PolicyBoundSessionRef } from "@openducktor/core";
+import type { RuntimeDescriptor } from "@openducktor/contracts";
+import type {
+  AgentSessionRuntimePolicy,
+  PolicyBoundSessionRef,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { toRuntimeSessionRefWithPolicy } from "./session-runtime-ref";
@@ -14,7 +18,11 @@ export type SessionRuntimeDataTarget = {
 export type SessionRuntimeDataRefs =
   | { kind: "none" }
   | { kind: "unavailable"; error: string }
-  | { kind: "available"; catalogRef: RepoRuntimeRef; todosRef: PolicyBoundSessionRef | null };
+  | {
+      kind: "available";
+      catalogRef: RuntimeWorkingDirectoryRef;
+      todosRef: PolicyBoundSessionRef | null;
+    };
 
 export type ResolveSessionRuntimeDataRefsInput = {
   repoPath: string | null;
@@ -57,9 +65,10 @@ export const resolveSessionRuntimeDataRefs = ({
     };
   }
 
-  const catalogRef: RepoRuntimeRef = {
+  const catalogRef: RuntimeWorkingDirectoryRef = {
     repoPath,
     runtimeKind: selectedSession.identity.runtimeKind,
+    workingDirectory: selectedSession.identity.workingDirectory,
   };
 
   if (!runtimeSupportsTodos(runtimeDefinitions, selectedSession.identity)) {

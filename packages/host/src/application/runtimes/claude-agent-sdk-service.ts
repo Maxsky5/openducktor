@@ -3,19 +3,13 @@ import type {
   AcceptedAgentUserMessage,
   AgentEvent,
   AgentFileSearchResult,
-  AgentModelCatalog,
+  AgentRuntimeCatalogRead,
   AgentSessionHistoryMessage,
   AgentSessionSummary,
   AgentSessionTodoItem,
-  AgentSkillCatalog,
-  AgentSlashCommandCatalog,
-  AgentSubagentCatalog,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
-  ListAgentModelsInput,
-  ListAgentSkillsInput,
-  ListAgentSlashCommandsInput,
-  ListAgentSubagentsInput,
+  ListAgentRuntimeCatalogInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
@@ -63,18 +57,9 @@ export type ClaudeAgentSdkService = {
     runtimeId: string,
   ): Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
   releaseSession(input: SessionRef): Effect.Effect<void, ClaudeAgentSdkServiceError>;
-  listAvailableModels(
-    input: ListAgentModelsInput,
-  ): Effect.Effect<AgentModelCatalog, ClaudeAgentSdkServiceError>;
-  listAvailableSlashCommands(
-    input: ListAgentSlashCommandsInput,
-  ): Effect.Effect<AgentSlashCommandCatalog, ClaudeAgentSdkServiceError>;
-  listAvailableSkills(
-    input: ListAgentSkillsInput,
-  ): Effect.Effect<AgentSkillCatalog, ClaudeAgentSdkServiceError>;
-  listAvailableSubagents(
-    input: ListAgentSubagentsInput,
-  ): Effect.Effect<AgentSubagentCatalog, ClaudeAgentSdkServiceError>;
+  loadRuntimeCatalog(
+    input: ListAgentRuntimeCatalogInput,
+  ): Effect.Effect<AgentRuntimeCatalogRead, ClaudeAgentSdkServiceError>;
   searchFiles(
     input: SearchAgentFilesInput,
   ): Effect.Effect<AgentFileSearchResult[], ClaudeAgentSdkServiceError>;

@@ -3,8 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import type { RepoRuntimeHealthCheck, RepoRuntimeHealthMap } from "@/types/diagnostics";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import type { ActiveWorkspace, RefreshRepoRuntimeHealthOptions } from "@/types/state-slices";
 import { classifyDiagnosticsQueryError, repoRuntimeHealthQueryOptions } from "../../queries/checks";
+import { runtimeCatalogQueryKeys } from "../../queries/runtime-catalog";
 
 type UseRepoRuntimeHealthArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -18,7 +19,9 @@ type UseRepoRuntimeHealthArgs = {
 type UseRepoRuntimeHealthResult = {
   activeRepoRuntimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingRepoRuntimeHealth: boolean;
-  refreshRepoRuntimeHealth: () => Promise<RepoRuntimeHealthMap>;
+  refreshRepoRuntimeHealth: (
+    options?: RefreshRepoRuntimeHealthOptions,
+  ) => Promise<RepoRuntimeHealthMap>;
 };
 
 const buildRuntimeHealthQueryErrorMap = (
@@ -80,23 +83,33 @@ export function useRepoRuntimeHealth({
     enabled: activeRepoPath !== null && runtimeDefinitions.length > 0,
   });
 
-  const refreshRepoRuntimeHealth = useCallback(async (): Promise<RepoRuntimeHealthMap> => {
-    if (!activeRepoPath || runtimeDefinitions.length === 0) {
-      return {};
-    }
+  const refreshRepoRuntimeHealth = useCallback(
+    async (options?: RefreshRepoRuntimeHealthOptions): Promise<RepoRuntimeHealthMap> => {
+      if (!activeRepoPath || runtimeDefinitions.length === 0) {
+        return {};
+      }
 
-    const queryOptions = repoRuntimeHealthQueryOptions(
-      activeRepoPath,
-      runtimeDefinitions,
-      checkRepoRuntimeHealth,
-    );
-    await queryClient.invalidateQueries({
-      queryKey: queryOptions.queryKey,
-      exact: true,
-      refetchType: "none",
-    });
-    return queryClient.fetchQuery(queryOptions);
-  }, [activeRepoPath, checkRepoRuntimeHealth, queryClient, runtimeDefinitions]);
+      const queryOptions = repoRuntimeHealthQueryOptions(
+        activeRepoPath,
+        runtimeDefinitions,
+        checkRepoRuntimeHealth,
+      );
+      await queryClient.invalidateQueries({
+        queryKey: queryOptions.queryKey,
+        exact: true,
+        refetchType: "none",
+      });
+      const runtimeHealth = await queryClient.fetchQuery(queryOptions);
+      if (options?.reloadCatalogs) {
+        await queryClient.invalidateQueries({
+          queryKey: runtimeCatalogQueryKeys.repoCatalogScope(activeRepoPath),
+          refetchType: "none",
+        });
+      }
+      return runtimeHealth;
+    },
+    [activeRepoPath, checkRepoRuntimeHealth, queryClient, runtimeDefinitions],
+  );
 
   const activeRepoRuntimeHealthByRuntime = useMemo((): RepoRuntimeHealthMap => {
     if (activeRepoPath === null) {

@@ -5,13 +5,13 @@ import { invalidateRuntimeQueries } from "./runtime-query-invalidation";
 test("runtime replacement invalidates its catalogs and session reads, including old in-flight reads", async () => {
   const client = new QueryClient();
   const keys = [
-    ["runtime-catalog", "/repo", "opencode"],
-    ["runtime-catalog", "skills", "/repo", "opencode", "/repo/worktree"],
+    ["runtime-catalog", "catalog", "/repo", "opencode", "/repo"],
+    ["runtime-catalog", "catalog", "/repo", "opencode", "/repo/worktree"],
     ["runtime-catalog", "file-search", "/repo", "opencode", "/repo/worktree", "file"],
     ["agent-session-todos", "/repo", "opencode", "/repo/worktree", "session"],
     ["agent-session-history", "/repo", "opencode", "/repo/worktree", "session"],
   ];
-  const unrelated = ["runtime-catalog", "/repo", "codex"];
+  const unrelated = ["runtime-catalog", "catalog", "/repo", "codex", "/repo"];
   for (const key of [...keys, unrelated]) client.setQueryData(key, ["cached"]);
   const oldRead = Promise.withResolvers<string[]>();
   const pending = client

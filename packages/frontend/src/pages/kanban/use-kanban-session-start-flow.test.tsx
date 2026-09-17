@@ -21,7 +21,10 @@ import {
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/shared/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createRuntimeCatalogFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionSummaryFixture,
@@ -155,10 +158,8 @@ const createHookHarness = (initialProps: HookArgs) => {
                   hasRuntimeSettingsSnapshot: true,
                   refreshRuntimeSettings: async () => {},
                   refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-                  loadRepoRuntimeCatalog: async () => createModalCatalog(),
-                  loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-                  loadRepoRuntimeSkills: async () => ({ skills: [] }),
-                  loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
+                  loadRepoRuntimeCatalog: async () =>
+                    createRuntimeCatalogFixture({ models: createModalCatalog() }),
                   loadRepoRuntimeFileSearch: async () => [],
                 },
               },

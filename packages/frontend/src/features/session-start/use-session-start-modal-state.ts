@@ -1,13 +1,10 @@
-import type {
-  GitBranch,
-  RepoRuntimeRef,
-  RuntimeDescriptor,
-  RuntimeKind,
-} from "@openducktor/contracts";
+import type { GitBranch, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
+  AgentRuntimeCatalog,
   AgentSessionStartMode,
+  RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import { resolveAgentAccentColor } from "@/components/features/agents/agent-accent-color";
@@ -46,7 +43,7 @@ type UseSessionStartModalStateArgs = {
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
   initialCatalog?: AgentModelCatalog | null;
-  loadCatalog?: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
+  loadCatalog?: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   workspaceRepoPath: string | null;
 };
 

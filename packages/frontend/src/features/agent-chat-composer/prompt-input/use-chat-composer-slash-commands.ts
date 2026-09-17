@@ -5,6 +5,7 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type {
+  AgentRuntimeCatalog,
   AgentSlashCommand,
   AgentSlashCommandCatalog,
   RuntimeWorkingDirectoryRef,
@@ -13,8 +14,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
 import {
-  repoRuntimeSlashCommandsQueryOptions,
-  skippedRepoRuntimeSlashCommandsQueryOptions,
+  resolveRuntimeCatalogSurface,
+  runtimeCatalogQueryOptions,
+  skippedRuntimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
@@ -61,25 +63,27 @@ export const useChatComposerSlashCommands = ({
   promptInputRuntime,
   runtimeSupportsSlashCommands,
   reusablePrompts,
-  loadSlashCommandsForRepo,
+  loadRuntimeCatalog,
 }: {
   promptInputRuntime: ChatComposerPromptInputRuntime;
   runtimeSupportsSlashCommands: boolean;
   reusablePrompts: ReusablePrompt[];
-  loadSlashCommandsForRepo: (
-    runtimeRef: RuntimeWorkingDirectoryRef,
-  ) => Promise<AgentSlashCommandCatalog>;
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 }) => {
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
   const slashCommandsQuery = useQuery({
     ...(runtimeRef
-      ? repoRuntimeSlashCommandsQueryOptions(runtimeRef, loadSlashCommandsForRepo)
-      : skippedRepoRuntimeSlashCommandsQueryOptions()),
+      ? runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog)
+      : skippedRuntimeCatalogQueryOptions()),
     enabled: runtimeRef !== null && runtimeSupportsSlashCommands,
   });
+  const surface = resolveRuntimeCatalogSurface(
+    slashCommandsQuery.data?.slashCommands,
+    slashCommandsQuery.error,
+  );
   const runtimeSlashCommandCatalog =
-    promptInputRuntime.state === "available" ? (slashCommandsQuery.data ?? null) : null;
+    promptInputRuntime.state === "available" ? surface.catalog : null;
   const reusablePromptSlashCommands = useMemo(
     () => reusablePrompts.map(toReusablePromptSlashCommand),
     [reusablePrompts],
@@ -109,8 +113,7 @@ export const useChatComposerSlashCommands = ({
   if (runtimeSupportsSlashCommands && promptInputRuntime.state === "unavailable") {
     slashCommandsError = promptInputRuntime.error;
   } else if (runtimeSupportsSlashCommands && promptInputRuntime.state === "available") {
-    slashCommandsError =
-      slashCommandsQuery.error instanceof Error ? slashCommandsQuery.error.message : null;
+    slashCommandsError = surface.error;
     isSlashCommandsLoading = slashCommandsQuery.isLoading;
   }
 

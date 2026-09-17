@@ -6,11 +6,7 @@ import type {
 
 export const unexpectedRuntimeQueries = {
   resolveSessionParent: () => Effect.dieMessage("Unexpected query: resolveSessionParent"),
-  listAvailableModels: () => Effect.dieMessage("Unexpected query: listAvailableModels"),
-  listAvailableSlashCommands: () =>
-    Effect.dieMessage("Unexpected query: listAvailableSlashCommands"),
-  listAvailableSkills: () => Effect.dieMessage("Unexpected query: listAvailableSkills"),
-  listAvailableSubagents: () => Effect.dieMessage("Unexpected query: listAvailableSubagents"),
+  loadRuntimeCatalog: () => Effect.dieMessage("Unexpected query: loadRuntimeCatalog"),
   searchFiles: () => Effect.dieMessage("Unexpected query: searchFiles"),
   loadSessionHistory: () => Effect.dieMessage("Unexpected query: loadSessionHistory"),
   loadSessionTodos: () => Effect.dieMessage("Unexpected query: loadSessionTodos"),
@@ -22,17 +18,8 @@ export const unexpectedNativeRuntimeQueries = {
   resolveSessionParent: async () => {
     throw new Error("Unexpected query: resolveSessionParent");
   },
-  listAvailableModels: async () => {
-    throw new Error("Unexpected query: listAvailableModels");
-  },
-  listAvailableSlashCommands: async () => {
-    throw new Error("Unexpected query: listAvailableSlashCommands");
-  },
-  listAvailableSkills: async () => {
-    throw new Error("Unexpected query: listAvailableSkills");
-  },
-  listAvailableSubagents: async () => {
-    throw new Error("Unexpected query: listAvailableSubagents");
+  loadRuntimeCatalog: async () => {
+    throw new Error("Unexpected query: loadRuntimeCatalog");
   },
   searchFiles: async () => {
     throw new Error("Unexpected query: searchFiles");
