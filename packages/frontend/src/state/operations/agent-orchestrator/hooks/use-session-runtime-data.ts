@@ -13,16 +13,13 @@ import { useMemo } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import {
-  agentSessionTodosQueryKeys,
-  SESSION_TODOS_STALE_TIME_MS,
   sessionTodosQueryOptions,
+  skippedSessionTodosQueryOptions,
 } from "@/state/queries/agent-session-todos";
 import {
-  RUNTIME_CATALOG_STALE_TIME_MS,
   repoRuntimeCatalogQueryOptions,
-  runtimeCatalogQueryKeys,
+  skippedRepoRuntimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
-import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import {
   EMPTY_SELECTED_SESSION_RUNTIME_DATA,
@@ -44,18 +41,6 @@ type UseSessionRuntimeDataArgs = {
   loadRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   readSessionTodos: (session: PolicyBoundSessionRef) => Promise<AgentSessionTodoItem[]>;
 };
-
-const skippedSessionTodosQueryOptions = () =>
-  skippedQueryOptions<AgentSessionTodoItem[]>({
-    queryKey: agentSessionTodosQueryKeys.all,
-    staleTime: SESSION_TODOS_STALE_TIME_MS,
-  });
-
-const skippedRuntimeCatalogQueryOptions = () =>
-  skippedQueryOptions<AgentModelCatalog>({
-    queryKey: runtimeCatalogQueryKeys.all,
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
 
 export const useSessionRuntimeData = ({
   repoPath,
@@ -164,7 +149,7 @@ export const useSessionRuntimeData = ({
   const catalogQuery = useQuery({
     ...(catalogRef
       ? repoRuntimeCatalogQueryOptions(catalogRef, loadRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions()),
+      : skippedRepoRuntimeCatalogQueryOptions()),
     enabled: catalogRef !== null && isRuntimeReady,
     notifyOnChangeProps: ["data", "error", "isFetching"],
   });

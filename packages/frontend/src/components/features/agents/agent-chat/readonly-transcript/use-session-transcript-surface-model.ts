@@ -1,4 +1,4 @@
-import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
+import type { AgentSessionTodoItem } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -7,11 +7,9 @@ import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession, useAgentSessionVisiblePendingInput } from "@/state/app-state-provider";
 import {
-  RUNTIME_CATALOG_STALE_TIME_MS,
   repoRuntimeCatalogQueryOptions,
-  runtimeCatalogQueryKeys,
+  skippedRepoRuntimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
-import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import { deriveAgentChatReadiness } from "../agent-chat-readiness";
 import { resolveAgentChatRuntimePresentation } from "../agent-chat-runtime-presentation";
@@ -77,10 +75,7 @@ export function useSessionTranscriptSurfaceModel({
   const modelCatalogQuery = useQuery({
     ...(runtimeRef
       ? repoRuntimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog)
-      : skippedQueryOptions<AgentModelCatalog>({
-          queryKey: runtimeCatalogQueryKeys.all,
-          staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-        })),
+      : skippedRepoRuntimeCatalogQueryOptions()),
     enabled: runtimeRef !== null && runtimeReadiness.state === "ready",
   });
   const runtimeBlockedAction = useMemo(

@@ -9,6 +9,7 @@ import type {
 } from "@openducktor/core";
 import { type QueryKey, type QueryClient, queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 
 export const RUNTIME_CATALOG_STALE_TIME_MS = 5 * 60_000;
 export const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
@@ -136,3 +137,21 @@ export const repoRuntimeFileSearchQueryOptions = (
     queryFn: (): Promise<AgentFileSearchResult[]> => loadRepoRuntimeFileSearch(runtimeRef, query),
     staleTime: RUNTIME_FILE_SEARCH_STALE_TIME_MS,
   });
+
+const skippedRuntimeCatalogQueryOptions = <TData>(family: string) =>
+  skippedQueryOptions<TData>({
+    queryKey: [...runtimeCatalogQueryKeys.all, SKIPPED_QUERY_KEY_SEGMENT, family],
+    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+  });
+
+export const skippedRepoRuntimeCatalogQueryOptions = () =>
+  skippedRuntimeCatalogQueryOptions<AgentModelCatalog>("models");
+
+export const skippedRepoRuntimeSkillsQueryOptions = () =>
+  skippedRuntimeCatalogQueryOptions<AgentSkillCatalog>("skills");
+
+export const skippedRepoRuntimeSlashCommandsQueryOptions = () =>
+  skippedRuntimeCatalogQueryOptions<AgentSlashCommandCatalog>("slash-commands");
+
+export const skippedRepoRuntimeSubagentsQueryOptions = () =>
+  skippedRuntimeCatalogQueryOptions<AgentSubagentCatalog>("subagents");

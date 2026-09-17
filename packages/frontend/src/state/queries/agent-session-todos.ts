@@ -7,11 +7,13 @@ import type {
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 
 export const SESSION_TODOS_STALE_TIME_MS = 30_000;
 
 export const agentSessionTodosQueryKeys = {
   all: ["agent-session-todos"] as const,
+  skipped: ["agent-session-todos", SKIPPED_QUERY_KEY_SEGMENT] as const,
   identity: ({ repoPath, runtimeKind, workingDirectory, externalSessionId }: SessionRef) =>
     [
       ...agentSessionTodosQueryKeys.all,
@@ -36,6 +38,12 @@ export const sessionTodosQueryOptions = (
   queryOptions<AgentSessionTodoItem[], Error, AgentSessionTodoItem[], QueryKey>({
     queryKey: agentSessionTodosQueryKeys.todos(session),
     queryFn: (): Promise<AgentSessionTodoItem[]> => readSessionTodos(session),
+    staleTime: SESSION_TODOS_STALE_TIME_MS,
+  });
+
+export const skippedSessionTodosQueryOptions = () =>
+  skippedQueryOptions<AgentSessionTodoItem[]>({
+    queryKey: agentSessionTodosQueryKeys.skipped,
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });
 

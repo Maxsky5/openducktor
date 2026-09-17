@@ -1,9 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionTodoItem, PolicyBoundSessionRef } from "@openducktor/core";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, skipToken } from "@tanstack/react-query";
 import {
   agentSessionTodosQueryKeys,
   sessionTodosQueryOptions,
+  skippedSessionTodosQueryOptions,
   updateSessionTodosQueryData,
 } from "./agent-session-todos";
 
@@ -40,6 +41,16 @@ describe("agent session todos queries", () => {
       ),
     ).toEqual([{ ...todoFixture, status: "completed" }]);
   });
+  test("keeps the skipped todos read off live session keys", () => {
+    const skippedOptions = skippedSessionTodosQueryOptions();
+    const skippedKey = Array.from(skippedOptions.queryKey);
+
+    expect(skippedOptions.queryFn).toBe(skipToken);
+    expect(skippedKey).toEqual(["agent-session-todos", "skipped"]);
+    expect(skippedKey).not.toEqual(Array.from(agentSessionTodosQueryKeys.todos(sessionRefFixture)));
+    expect(skippedKey).not.toEqual(Array.from(agentSessionTodosQueryKeys.all));
+  });
+
   test("keeps absent, repository, and workflow session scopes distinct", () => {
     expect(agentSessionTodosQueryKeys.todos(sessionRefFixture)).toEqual([
       "agent-session-todos",

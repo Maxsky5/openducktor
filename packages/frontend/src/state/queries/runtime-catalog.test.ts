@@ -8,13 +8,18 @@ import type {
   AgentSlashCommandCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, skipToken } from "@tanstack/react-query";
+import { SKIPPED_QUERY_KEY_SEGMENT } from "./skipped-query";
 import {
   repoRuntimeCatalogQueryOptions,
   repoRuntimeFileSearchQueryOptions,
   repoRuntimeSkillsQueryOptions,
   repoRuntimeSlashCommandsQueryOptions,
   runtimeCatalogQueryKeys,
+  skippedRepoRuntimeCatalogQueryOptions,
+  skippedRepoRuntimeSkillsQueryOptions,
+  skippedRepoRuntimeSlashCommandsQueryOptions,
+  skippedRepoRuntimeSubagentsQueryOptions,
 } from "./runtime-catalog";
 
 const repoRuntimeRefFixture: RepoRuntimeRef = {
@@ -108,5 +113,32 @@ describe("runtime catalog queries", () => {
 
     expect(results).toEqual([fileSearchFixture]);
     expect(searchFiles).toHaveBeenCalledWith(workingDirectoryRefFixture, "index");
+  });
+
+  test("keeps every skipped catalog read on a dedicated skipToken key", () => {
+    const skippedOptions = [
+      skippedRepoRuntimeCatalogQueryOptions(),
+      skippedRepoRuntimeSkillsQueryOptions(),
+      skippedRepoRuntimeSlashCommandsQueryOptions(),
+      skippedRepoRuntimeSubagentsQueryOptions(),
+    ];
+    const liveKeys = [
+      runtimeCatalogQueryKeys.repo("/repo", "opencode"),
+      runtimeCatalogQueryKeys.repoSkills(workingDirectoryRefFixture),
+      runtimeCatalogQueryKeys.repoSlashCommands(workingDirectoryRefFixture),
+      runtimeCatalogQueryKeys.repoSubagents(workingDirectoryRefFixture),
+      runtimeCatalogQueryKeys.repoFileSearch(workingDirectoryRefFixture, "index"),
+    ];
+
+    for (const options of skippedOptions) {
+      expect(options.queryFn).toBe(skipToken);
+      expect(options.queryKey[1]).toBe(SKIPPED_QUERY_KEY_SEGMENT);
+    }
+    for (const key of liveKeys) {
+      expect(key[1]).not.toBe(SKIPPED_QUERY_KEY_SEGMENT);
+    }
+    expect(new Set(skippedOptions.map((options) => JSON.stringify(options.queryKey))).size).toBe(
+      skippedOptions.length,
+    );
   });
 });

@@ -54,6 +54,33 @@ describe("useChatComposerSkills", () => {
     }
   });
 
+  test("does not query skills when skill references are unsupported", async () => {
+    const loadSkillsForRepo = mock(async () => EMPTY_CATALOG);
+    const harness = createHookHarness(
+      useChatComposerSkills,
+      {
+        promptInputRuntime: sessionRuntime,
+        supportsSkillReferences: false,
+        loadSkillsForRepo,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadSkillsForRepo).not.toHaveBeenCalled();
+      expect(harness.getLatest()).toEqual({
+        skillCatalog: EMPTY_CATALOG,
+        skills: [],
+        skillsError: null,
+        isSkillsLoading: false,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reads session-scoped skills using the session working directory", async () => {
     const catalog: AgentSkillCatalog = {
       skills: [

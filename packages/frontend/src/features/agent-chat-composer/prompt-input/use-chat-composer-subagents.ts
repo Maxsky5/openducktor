@@ -1,20 +1,12 @@
 import type { AgentSubagentCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import {
-  RUNTIME_CATALOG_STALE_TIME_MS,
   repoRuntimeSubagentsQueryOptions,
-  runtimeCatalogQueryKeys,
+  skippedRepoRuntimeSubagentsQueryOptions,
 } from "@/state/queries/runtime-catalog";
-import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
 const EMPTY_SUBAGENT_CATALOG: AgentSubagentCatalog = { subagents: [] };
-
-const skippedSubagentsQueryOptions = () =>
-  skippedQueryOptions<AgentSubagentCatalog>({
-    queryKey: runtimeCatalogQueryKeys.all,
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
 
 type UseChatComposerSubagentsArgs = {
   promptInputRuntime: ChatComposerPromptInputRuntime;
@@ -32,7 +24,7 @@ export const useChatComposerSubagents = ({
   const subagentsQuery = useQuery({
     ...(runtimeRef
       ? repoRuntimeSubagentsQueryOptions(runtimeRef, loadSubagentsForRepo)
-      : skippedSubagentsQueryOptions()),
+      : skippedRepoRuntimeSubagentsQueryOptions()),
     enabled: runtimeRef !== null && supportsSubagentReferences,
   });
 
