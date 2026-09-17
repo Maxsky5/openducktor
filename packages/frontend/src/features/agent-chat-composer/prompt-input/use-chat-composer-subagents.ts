@@ -10,11 +10,9 @@ import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-inpu
 
 const EMPTY_SUBAGENT_CATALOG: AgentSubagentCatalog = { subagents: [] };
 
-const skippedSubagentsQueryOptions = (runtimeRef: RuntimeWorkingDirectoryRef | null) =>
+const skippedSubagentsQueryOptions = () =>
   skippedQueryOptions<AgentSubagentCatalog>({
-    queryKey: runtimeRef
-      ? runtimeCatalogQueryKeys.repoSubagents(runtimeRef)
-      : runtimeCatalogQueryKeys.all,
+    queryKey: runtimeCatalogQueryKeys.all,
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
@@ -31,11 +29,12 @@ export const useChatComposerSubagents = ({
 }: UseChatComposerSubagentsArgs) => {
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
-  const subagentsQuery = useQuery(
-    supportsSubagentReferences && runtimeRef
+  const subagentsQuery = useQuery({
+    ...(runtimeRef
       ? repoRuntimeSubagentsQueryOptions(runtimeRef, loadSubagentsForRepo)
-      : skippedSubagentsQueryOptions(runtimeRef),
-  );
+      : skippedSubagentsQueryOptions()),
+    enabled: runtimeRef !== null && supportsSubagentReferences,
+  });
 
   let catalog = EMPTY_SUBAGENT_CATALOG;
   let error: string | null = null;

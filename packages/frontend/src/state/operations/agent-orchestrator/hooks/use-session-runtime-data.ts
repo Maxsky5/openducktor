@@ -45,17 +45,15 @@ type UseSessionRuntimeDataArgs = {
   readSessionTodos: (session: PolicyBoundSessionRef) => Promise<AgentSessionTodoItem[]>;
 };
 
-const skippedSessionTodosQueryOptions = (session: PolicyBoundSessionRef | null) =>
+const skippedSessionTodosQueryOptions = () =>
   skippedQueryOptions<AgentSessionTodoItem[]>({
-    queryKey: session ? agentSessionTodosQueryKeys.todos(session) : agentSessionTodosQueryKeys.all,
+    queryKey: agentSessionTodosQueryKeys.all,
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });
 
-const skippedRuntimeCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
+const skippedRuntimeCatalogQueryOptions = () =>
   skippedQueryOptions<AgentModelCatalog>({
-    queryKey: runtimeRef
-      ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
-      : runtimeCatalogQueryKeys.all,
+    queryKey: runtimeCatalogQueryKeys.all,
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
@@ -164,17 +162,19 @@ export const useSessionRuntimeData = ({
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
 
   const catalogQuery = useQuery({
-    ...(catalogRef && isRuntimeReady
+    ...(catalogRef
       ? repoRuntimeCatalogQueryOptions(catalogRef, loadRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions(catalogRef)),
+      : skippedRuntimeCatalogQueryOptions()),
+    enabled: catalogRef !== null && isRuntimeReady,
     notifyOnChangeProps: ["data", "error", "isFetching"],
   });
 
-  const todosQuery = useQuery(
-    todosRef && isRuntimeReady
+  const todosQuery = useQuery({
+    ...(todosRef
       ? sessionTodosQueryOptions(todosRef, readSessionTodos)
-      : skippedSessionTodosQueryOptions(todosRef),
-  );
+      : skippedSessionTodosQueryOptions()),
+    enabled: todosRef !== null && isRuntimeReady,
+  });
 
   return useMemo(() => {
     if (runtimeDataRefs.kind === "none") {

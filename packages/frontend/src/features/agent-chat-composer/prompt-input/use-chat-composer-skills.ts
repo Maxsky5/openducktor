@@ -10,11 +10,9 @@ import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-inpu
 
 const EMPTY_SKILL_CATALOG: AgentSkillCatalog = { skills: [] };
 
-const skippedSkillsQueryOptions = (runtimeRef: RuntimeWorkingDirectoryRef | null) =>
+const skippedSkillsQueryOptions = () =>
   skippedQueryOptions<AgentSkillCatalog>({
-    queryKey: runtimeRef
-      ? runtimeCatalogQueryKeys.repoSkills(runtimeRef)
-      : runtimeCatalogQueryKeys.all,
+    queryKey: runtimeCatalogQueryKeys.all,
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
@@ -31,11 +29,12 @@ export const useChatComposerSkills = ({
 }: UseChatComposerSkillsArgs) => {
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
-  const skillsQuery = useQuery(
-    supportsSkillReferences && runtimeRef
+  const skillsQuery = useQuery({
+    ...(runtimeRef
       ? repoRuntimeSkillsQueryOptions(runtimeRef, loadSkillsForRepo)
-      : skippedSkillsQueryOptions(runtimeRef),
-  );
+      : skippedSkillsQueryOptions()),
+    enabled: runtimeRef !== null && supportsSkillReferences,
+  });
 
   let catalog = EMPTY_SKILL_CATALOG;
   let error: string | null = null;

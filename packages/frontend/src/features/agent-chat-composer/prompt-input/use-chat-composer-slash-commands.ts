@@ -59,11 +59,9 @@ export const filterSlashCommandsForComposerScope = (
     ? commands
     : commands.filter((command) => !isManualSessionCompactionSlashCommand(command));
 
-const skippedSlashCommandsQueryOptions = (runtimeRef: RuntimeWorkingDirectoryRef | null) =>
+const skippedSlashCommandsQueryOptions = () =>
   skippedQueryOptions<AgentSlashCommandCatalog>({
-    queryKey: runtimeRef
-      ? runtimeCatalogQueryKeys.repoSlashCommands(runtimeRef)
-      : runtimeCatalogQueryKeys.all,
+    queryKey: runtimeCatalogQueryKeys.all,
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
@@ -82,11 +80,12 @@ export const useChatComposerSlashCommands = ({
 }) => {
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
-  const slashCommandsQuery = useQuery(
-    runtimeSupportsSlashCommands && runtimeRef
+  const slashCommandsQuery = useQuery({
+    ...(runtimeRef
       ? repoRuntimeSlashCommandsQueryOptions(runtimeRef, loadSlashCommandsForRepo)
-      : skippedSlashCommandsQueryOptions(runtimeRef),
-  );
+      : skippedSlashCommandsQueryOptions()),
+    enabled: runtimeRef !== null && runtimeSupportsSlashCommands,
+  });
   const runtimeSlashCommandCatalog =
     promptInputRuntime.state === "available" ? (slashCommandsQuery.data ?? null) : null;
   const reusablePromptSlashCommands = useMemo(

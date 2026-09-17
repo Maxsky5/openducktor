@@ -82,6 +82,14 @@ Use `prefetchQuery` to warm the cache for a read that the user is likely to need
 
 Task documents use a 60 second stale time for normal views. Workflow refreshes force a new fetch through `packages/frontend/src/state/queries/documents.ts` so an external ODT write appears without polling.
 
+## Disabled reads
+
+One query key must map to one query function. TanStack Query keeps one options object per query, and the last observer that sets options wins.
+
+- A conditional read keeps its real key and query function, and turns the read off with `enabled: false`. The observer then keeps cached data and a stale mark.
+- `skippedQueryOptions` uses `skipToken` and belongs only to a key that no enabled read uses.
+- A skipped read that shares a key with an enabled read makes `invalidateQueries` and `refetch` fetch with `skipToken`, and the read fails with `Missing queryFn`.
+
 ## Mutations
 
 Do not depend on a background refetch for correct state.

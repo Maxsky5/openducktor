@@ -74,16 +74,15 @@ export function useSessionTranscriptSurfaceModel({
     workspaceRepoPath && target
       ? { repoPath: workspaceRepoPath, runtimeKind: target.runtimeKind }
       : null;
-  const modelCatalogQuery = useQuery(
-    runtimeRef && runtimeReadiness.state === "ready"
+  const modelCatalogQuery = useQuery({
+    ...(runtimeRef
       ? repoRuntimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog)
       : skippedQueryOptions<AgentModelCatalog>({
-          queryKey: runtimeRef
-            ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
-            : runtimeCatalogQueryKeys.all,
+          queryKey: runtimeCatalogQueryKeys.all,
           staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-        }),
-  );
+        })),
+    enabled: runtimeRef !== null && runtimeReadiness.state === "ready",
+  });
   const runtimeBlockedAction = useMemo(
     () => ({
       label: "Recheck",
