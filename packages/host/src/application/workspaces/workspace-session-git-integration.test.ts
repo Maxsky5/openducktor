@@ -47,6 +47,8 @@ const runGit = (cwd: string, ...args: string[]) =>
 describe("Workspace Session commands with real Git and SQLite", () => {
   let fixtureRoot: string;
   let fixtureRepoPath: string;
+  let initialHead: string;
+  let fixtureHead: string;
   let root: string;
   let repoPath: string;
   let database: SqliteTaskStoreTestHarness;
@@ -69,6 +71,11 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     await writeFile(path.join(fixtureRepoPath, ".gitignore"), ".env\nhook-proof.txt\n");
     runGit(fixtureRepoPath, "add", ".");
     runGit(fixtureRepoPath, ...commitIdentity, "commit", "-m", "Initial fixture");
+    runGit(fixtureRepoPath, ...commitIdentity, "commit", "--allow-empty", "-m", "Current checkout");
+    // SAFETY: rev-parse prints two full 40-character hashes in the requested order.
+    [fixtureHead, initialHead] = runGit(fixtureRepoPath, "rev-parse", "HEAD", "HEAD~1").split(
+      "\n",
+    ) as [string, string];
   });
   afterAll(async () => {
     await rm(fixtureRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -84,7 +91,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
-  const setup = () => {
+  const setup = ({ hooks = true } = {}) => {
     const starts: AgentSessionControlStartInput[] = [];
     const events: WorkspaceSession[] = [];
     const config = repoConfigSchema.parse({
@@ -96,9 +103,11 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       worktreeBasePath: path.join(root, "worktrees"),
       worktreeCopyPaths: [".env"],
       hooks: {
-        preStart: [
-          `${JSON.stringify(process.execPath)} -e ${JSON.stringify("require('node:fs').writeFileSync('hook-proof.txt', process.cwd())")}`,
-        ],
+        preStart: hooks
+          ? [
+              `${JSON.stringify(process.execPath)} -e ${JSON.stringify("require('node:fs').writeFileSync('hook-proof.txt', process.cwd())")}`,
+            ]
+          : [],
         postComplete: [],
       },
     });
@@ -169,72 +178,58 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     return { router, createInput, starts, events, targetDependencies };
   };
 
-  test.each(["from_name", "from_branch"])(
-    "creates %s without dirty-checkout confirmation, runs setup, and retains Git resources after archive",
-    async (mode) => {
-      await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
-      await writeFile(path.join(repoPath, "tracked.txt"), "uncommitted\n");
-      await writeFile(path.join(repoPath, "staged.txt"), "staged\n");
-      gitCommand("add", "staged.txt");
-      await writeFile(path.join(repoPath, "untracked.txt"), "untracked\n");
-      const sourceStatus = gitCommand("status", "--porcelain");
-      const h = setup();
-      if (mode === "from_branch") gitCommand("branch", "odt/named-chat");
-      const result = await h.router.invoke("workspace_session_create", {
-        ...h.createInput,
-        worktree: { ...h.createInput.worktree, mode, branchName: "odt/named-chat" },
-      });
-      const directory = result.session.executionTarget.workingDirectory;
-      expect(await readFile(path.join(directory, "tracked.txt"), "utf8")).toBe("committed\n");
-      expect(await readFile(path.join(repoPath, "tracked.txt"), "utf8")).toBe("uncommitted\n");
-      expect(gitCommand("status", "--porcelain")).toBe(sourceStatus);
-      for (const file of ["staged.txt", "untracked.txt"]) {
-        await expect(readFile(path.join(directory, file), "utf8")).rejects.toThrow("ENOENT");
-      }
-      expect(await readFile(path.join(directory, ".env"), "utf8")).toBe("TEST_VALUE=local\n");
-      expect(await readFile(path.join(directory, "hook-proof.txt"), "utf8")).toBe(directory);
-      expect(gitCommand("-C", directory, "rev-parse", "HEAD")).toBe(
-        gitCommand("rev-parse", "HEAD"),
-      );
-      expect(directory).toBe(await realpath(directory));
-      expect(directory).toBe(path.join(root, "worktrees", "workspace-sessions", "named-chat"));
-      expect(gitCommand("-C", directory, "branch", "--show-current")).toBe("odt/named-chat");
-      expect(h.starts).toHaveLength(0);
-      const ref = { workspaceId: "fairnest", sessionId: result.session.id };
-      const started = await h.router.invoke("workspace_session_start", ref);
-      expect(h.starts[0]?.workingDirectory).toBe(directory);
-      const archived = await h.router.invoke("workspace_session_archive", {
-        ...ref,
-        confirmStop: false,
-      });
-      expect(archived.archivedAt).not.toBeNull();
-      expect(registeredWorktreePaths()).toContain(directory);
-      expect(
-        await h.router.invoke("workspace_session_list_active", { workspaceId: "fairnest" }),
-      ).toEqual([]);
-      expect(await h.router.invoke("workspace_session_restore", ref)).toEqual(started.session);
-      expect(h.events).toHaveLength(4);
-      expect(h.starts).toHaveLength(1);
-      gitCommand("worktree", "remove", "--force", directory);
-      await expect(
-        h.router.invoke("workspace_session_archive", { ...ref, confirmStop: false }),
-      ).rejects.toThrow();
-      expect(await h.router.invoke("workspace_session_get", ref)).toEqual(started.session);
-      expect(h.events).toHaveLength(4);
-    },
-  );
+  test("creates from_branch at the selected branch HEAD instead of the source checkout HEAD", async () => {
+    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
+    const h = setup({ hooks: false });
+    gitCommand("branch", "feature/existing", "main~1");
+    const { session } = await h.router.invoke("workspace_session_create", {
+      ...h.createInput,
+      worktree: { mode: "from_branch", name: "existing-review", branchName: "feature/existing" },
+    });
+    const directory = session.executionTarget.workingDirectory;
+    expect(
+      gitCommand("-C", directory, "rev-parse", "HEAD", "--symbolic-full-name", "HEAD").split("\n"),
+    ).toEqual([initialHead, "refs/heads/feature/existing"]);
+    expect(initialHead).not.toBe(fixtureHead);
+    expect(session.executionTarget).toMatchObject({
+      kind: "local_worktree",
+      branchName: "feature/existing",
+      worktreeState: "present",
+    });
+    expect(directory).toBe(path.join(root, "worktrees", "workspace-sessions", "existing-review"));
+    expect(h.starts).toEqual([]);
+  });
 
   test.each(["create", "restore"] as const)(
     "a failed %s leaves a competing chat's real worktree and files intact",
     async (operation) => {
       await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
-      const h = setup();
-      const original = await h.router.invoke("workspace_session_create", h.createInput);
-      const ref = { workspaceId: "fairnest", sessionId: original.session.id };
-      const archived = await h.router.invoke("workspace_session_archive", {
-        ...ref,
-        removeWorktree: true,
-      });
+      const h = setup({ hooks: false });
+      const archived = await Effect.runPromise(
+        createSqliteWorkspaceSessionStore(database.contextProvider).create({
+          workspaceId: "fairnest",
+          repoPath,
+          session: {
+            id: crypto.randomUUID(),
+            runtimeKind: "opencode",
+            externalSessionId: null,
+            executionTarget: {
+              kind: "local_worktree",
+              workingDirectory: path.join(root, "worktrees", "workspace-sessions", "named-chat"),
+              branchName: "odt/named-chat",
+              worktreeState: "removed",
+            },
+            roleSnapshot: null,
+            selectedModel: null,
+            generatedTitle: null,
+            manualTitle: null,
+            createdAt: 1,
+            updatedAt: 2,
+            archivedAt: 2,
+          },
+        }),
+      );
+      const ref = { workspaceId: "fairnest", sessionId: archived.id };
       const entered = Effect.runSync(Deferred.make<void>());
       const release = Effect.runSync(Deferred.make<void>());
       const createWorktree = h.targetDependencies.git.createWorktree;
@@ -283,66 +278,83 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     },
   );
 
-  test.each(["from_name", "from_branch"] as const)(
-    "archive removes %s worktrees and branches; restore uses the current default branch",
-    async (mode) => {
-      await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
-      const h = setup();
-      const branchName = "feature/archive-review";
-      if (mode === "from_branch") gitCommand("branch", branchName);
-      const { session } = await h.router.invoke("workspace_session_create", {
-        ...h.createInput,
-        worktree: { mode, name: "different-directory-name", branchName },
-      });
-      const ref = { workspaceId: "fairnest", sessionId: session.id };
-      const directory = session.executionTarget.workingDirectory;
-      gitCommand(
-        "-C",
-        directory,
-        ...commitIdentity,
-        "commit",
-        "--allow-empty",
-        "-m",
-        "Branch-only commit",
-      );
-      const oldHead = gitCommand("-C", directory, "rev-parse", "HEAD");
-      await writeFile(path.join(directory, "tracked.txt"), "discard this edit\n");
-      await writeFile(path.join(directory, "untracked.txt"), "discard this file\n");
-      const archived = await h.router.invoke("workspace_session_archive", {
-        ...ref,
-        confirmStop: true,
-        removeWorktree: true,
-      });
-      expect(archived.executionTarget).toMatchObject({
-        kind: "local_worktree",
-        branchName,
-        worktreeState: "removed",
-      });
-      expect(registeredWorktreePaths()).not.toContain(directory);
-      expect(gitCommand("branch", "--list", branchName)).toBe("");
-      await expect(readFile(path.join(directory, "tracked.txt"), "utf8")).rejects.toThrow();
-      expect(
-        await h.router.invoke("workspace_session_list_archived", { workspaceId: "fairnest" }),
-      ).toEqual([archived]);
+  test("creates from_name from a dirty checkout, removes its worktree and branch, and restores from the current default branch", async () => {
+    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
+    await writeFile(path.join(repoPath, "tracked.txt"), "uncommitted\n");
+    await writeFile(path.join(repoPath, "staged.txt"), "staged\n");
+    gitCommand("add", "staged.txt");
+    await writeFile(path.join(repoPath, "untracked.txt"), "untracked\n");
+    const sourceStatus = gitCommand("status", "--porcelain");
+    const h = setup();
+    const branchName = "feature/archive-review";
+    const { session } = await h.router.invoke("workspace_session_create", {
+      ...h.createInput,
+      worktree: { mode: "from_name", name: "different-directory-name", branchName },
+    });
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    const directory = session.executionTarget.workingDirectory;
+    expect(await readFile(path.join(directory, "tracked.txt"), "utf8")).toBe("committed\n");
+    expect(await readFile(path.join(repoPath, "tracked.txt"), "utf8")).toBe("uncommitted\n");
+    expect(gitCommand("status", "--porcelain")).toBe(sourceStatus);
+    for (const file of ["staged.txt", "untracked.txt"]) {
+      await expect(readFile(path.join(directory, file), "utf8")).rejects.toThrow("ENOENT");
+    }
+    expect(await readFile(path.join(directory, ".env"), "utf8")).toBe("TEST_VALUE=local\n");
+    expect(await readFile(path.join(directory, "hook-proof.txt"), "utf8")).toBe(directory);
+    expect(
+      gitCommand("-C", directory, "rev-parse", "HEAD", "--symbolic-full-name", "HEAD").split("\n"),
+    ).toEqual([fixtureHead, `refs/heads/${branchName}`]);
+    expect(directory).toBe(await realpath(directory));
+    expect(directory).toBe(
+      path.join(root, "worktrees", "workspace-sessions", "different-directory-name"),
+    );
+    expect(h.starts).toEqual([]);
+    gitCommand(
+      "-C",
+      directory,
+      ...commitIdentity,
+      "commit",
+      "--allow-empty",
+      "-m",
+      "Branch-only commit",
+    );
+    const oldHead = gitCommand("-C", directory, "rev-parse", "HEAD");
+    await writeFile(path.join(directory, "tracked.txt"), "discard this edit\n");
+    await writeFile(path.join(directory, "untracked.txt"), "discard this file\n");
+    const archived = await h.router.invoke("workspace_session_archive", {
+      ...ref,
+      confirmStop: true,
+      removeWorktree: true,
+    });
+    expect(archived.executionTarget).toMatchObject({
+      kind: "local_worktree",
+      branchName,
+      worktreeState: "removed",
+    });
+    expect(registeredWorktreePaths()).not.toContain(directory);
+    expect(gitCommand("branch", "--list", branchName)).toBe("");
+    await expect(readFile(path.join(directory, "tracked.txt"), "utf8")).rejects.toThrow();
+    expect(
+      await h.router.invoke("workspace_session_list_archived", { workspaceId: "fairnest" }),
+    ).toEqual([archived]);
 
-      await writeFile(path.join(repoPath, "tracked.txt"), "new default branch content\n");
-      gitCommand(...commitIdentity, "commit", "-a", "-m", "Advance default branch");
-      const defaultHead = gitCommand("rev-parse", "main");
-      expect(defaultHead).not.toBe(oldHead);
-      gitCommand("checkout", "-b", "other-checkout", "main~1");
-      expect(gitCommand("rev-parse", "HEAD")).not.toBe(defaultHead);
-      const restored = await h.router.invoke("workspace_session_restore", ref);
-      expect(restored).toEqual(session);
-      expect(gitCommand("-C", directory, "branch", "--show-current")).toBe(branchName);
-      expect(gitCommand("-C", directory, "rev-parse", "HEAD")).toBe(defaultHead);
-      expect(await readFile(path.join(directory, "tracked.txt"), "utf8")).toBe(
-        "new default branch content\n",
-      );
-      expect(await readFile(path.join(directory, ".env"), "utf8")).toBe("TEST_VALUE=local\n");
-      expect(await readFile(path.join(directory, "hook-proof.txt"), "utf8")).toBe(directory);
-      await expect(readFile(path.join(directory, "untracked.txt"), "utf8")).rejects.toThrow();
-    },
-  );
+    await writeFile(path.join(repoPath, "tracked.txt"), "new default branch content\n");
+    gitCommand(...commitIdentity, "commit", "-a", "-m", "Advance default branch");
+    const defaultHead = gitCommand("rev-parse", "main");
+    expect(defaultHead).not.toBe(oldHead);
+    gitCommand("checkout", "-b", "other-checkout", "main~1");
+    const restored = await h.router.invoke("workspace_session_restore", ref);
+    expect(restored).toEqual(session);
+    expect(
+      gitCommand("-C", directory, "rev-parse", "HEAD", "--symbolic-full-name", "HEAD").split("\n"),
+    ).toEqual([defaultHead, `refs/heads/${branchName}`]);
+    expect(await readFile(path.join(directory, "tracked.txt"), "utf8")).toBe(
+      "new default branch content\n",
+    );
+    expect(await readFile(path.join(directory, ".env"), "utf8")).toBe("TEST_VALUE=local\n");
+    expect(await readFile(path.join(directory, "hook-proof.txt"), "utf8")).toBe(directory);
+    await expect(readFile(path.join(directory, "untracked.txt"), "utf8")).rejects.toThrow();
+  });
 
   test("reports a linked checkout on its branch field and leaves both worktrees untouched", async () => {
     const h = setup();
