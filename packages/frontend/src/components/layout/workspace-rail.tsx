@@ -53,10 +53,8 @@ import {
   WorkspaceRemovalRecoveryDialog,
   WorkspaceRemoveDialog,
 } from "../features/repository/workspace-lifecycle-dialogs";
-import {
-  WorkspaceRailActivityBadges,
-  workspaceActivityBadges,
-} from "./workspace-rail-activity-badges";
+import { WorkspaceRailActivityBadges } from "./workspace-rail-activity-badges";
+import { workspaceActivityBadges } from "./workspace-rail-activity-badges-model";
 
 const DRAG_DISTANCE_PX = 6;
 
