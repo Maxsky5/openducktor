@@ -49,6 +49,14 @@ const agentSessionLiveSnapshotIdentityKeys = (
 const isTerminalSessionStatus = (status: AgentSessionState["status"]): boolean =>
   status === "stopped" || status === "error";
 
+/**
+ * True when a live snapshot reports the session as settled. A settling snapshot must not
+ * overtake the transcript events the host published before it, or readers see a settled
+ * session whose last turn still has no final assistant message.
+ */
+export const isSettlingLiveSessionSnapshot = (snapshot: AgentSessionLiveSnapshot): boolean =>
+  agentSessionStatusFromActivity(snapshot.activity) === "idle";
+
 const projectObservedSessionActivity = (
   current: Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt">,
   observedStatus: AgentSessionState["status"],

@@ -1,6 +1,7 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as approvalPolicy from "../session-read-model/pending-approval-policy";
 import * as workspaceRecords from "../session-read-model/workspace-session-records";
+import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRefreshInput,
@@ -24,7 +25,14 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
+import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
+import { canResumeInterruptedTurn } from "@/lib/agent-session-interrupted-turn";
+import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
+import {
+  createAgentSessionTranscriptEventConsumer,
+  type AgentSessionTranscriptEventConsumer,
+} from "../events/session-transcript-events";
+import { createSessionTurnState } from "../support/session-turn-state";
 import type { AgentSessionLiveFrontendPort } from "./use-repo-session-read-model";
 import { useRepoSessionReadModel } from "./use-repo-session-read-model";
 
@@ -151,6 +159,7 @@ const createState = (
   };
   const transcriptEvents: AgentSessionTranscriptEventConsumer = {
     handle: mock(() => undefined),
+    flushSession: mock(() => undefined),
     close: mock(() => undefined),
   };
   const recoverTranscriptGap = mock(async (_message: string) => undefined);
@@ -171,6 +180,7 @@ const createState = (
   return {
     callOrder,
     resetWorkspace: sessionStore.resetWorkspace,
+    replaceSession: sessionStore.replaceSession,
     getSession: () =>
       sessionStore.getSessionSnapshot({
         externalSessionId: record.externalSessionId,
@@ -291,6 +301,7 @@ describe("useRepoSessionReadModel", () => {
     const observed: Array<{ status: string | undefined; questions: number | undefined }> = [];
     state.props.transcriptEvents = {
       close: () => {},
+      flushSession: () => {},
       handle: (event) => {
         observed.push({
           status: state.getStoredSession(event.sessionRef)?.status,
@@ -346,6 +357,97 @@ describe("useRepoSessionReadModel", () => {
       state.queryClient.clear();
     }
   });
+  test("a settling session snapshot applies the queued final assistant message first", async () => {
+    const state = createState((emit) =>
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot({ activity: "running" })] }),
+    );
+    const transcriptEvents = createAgentSessionTranscriptEventConsumer(
+      {
+        readSession: (identity) => state.getStoredSession(identity),
+        ensureSession: (identity, createSession) => {
+          const current = state.getStoredSession(identity);
+          if (current) {
+            return current;
+          }
+          const nextSession = createSession();
+          state.replaceSession(nextSession);
+          return nextSession;
+        },
+        updateSession: state.updateSession,
+        updateSessionTodos: () => undefined,
+        sessionTurnState: createSessionTurnState(),
+      },
+      { batchWindowMs: 60_000 },
+    );
+    state.props.transcriptEvents = transcriptEvents;
+    const ref = snapshot().ref;
+    const resumeCardVisible = (): boolean =>
+      canResumeInterruptedTurn({
+        activityState: getAgentSessionActivityStateFromSession(state.getSession()!),
+        messages: sessionMessagesToArray(state.getSession()!),
+        runtimeDescriptor: CODEX_RUNTIME_DESCRIPTOR,
+      });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      state.emit({
+        type: "transcript_event",
+        event: {
+          type: "user_message",
+          messageId: "user-1",
+          message: "Do the thing",
+          parts: [{ kind: "text", text: "Do the thing" }],
+          state: "read",
+          timestamp: "2026-07-16T08:00:01.000Z",
+          externalSessionId: ref.externalSessionId,
+          sessionRef: ref,
+        },
+      });
+      state.emit({
+        type: "transcript_event",
+        event: {
+          type: "assistant_part",
+          part: {
+            kind: "text",
+            partId: "part-1",
+            messageId: "assistant-1",
+            text: "Partial answer",
+            completed: false,
+            synthetic: false,
+          },
+          timestamp: "2026-07-16T08:00:02.000Z",
+          externalSessionId: ref.externalSessionId,
+          sessionRef: ref,
+        },
+      });
+      state.emit({
+        type: "transcript_event",
+        event: {
+          type: "assistant_message",
+          messageId: "assistant-1",
+          message: "Final answer",
+          timestamp: "2026-07-16T08:00:03.000Z",
+          externalSessionId: ref.externalSessionId,
+          sessionRef: ref,
+        },
+      });
+      expect(sessionMessagesToArray(state.getSession()!).at(-1)?.content).toBe("Do the thing");
+
+      state.emit({ type: "session_upsert", session: snapshot({ activity: "idle" }) });
+
+      expect(sessionMessagesToArray(state.getSession()!).at(-1)).toMatchObject({
+        content: "Final answer",
+        meta: { kind: "assistant", isFinal: true },
+      });
+      expect(resumeCardVisible()).toBe(false);
+    } finally {
+      transcriptEvents.close();
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
   test("keeps text updates out of approval and target scans with 200 mixed sessions", async () => {
     const workflowRecords = Array.from({ length: 100 }, (_, index) => ({
       ...record,
@@ -1822,6 +1924,7 @@ describe("useRepoSessionReadModel", () => {
     });
     const refreshedTranscriptEvents: AgentSessionTranscriptEventConsumer = {
       handle: mock(() => undefined),
+      flushSession: mock(() => undefined),
       close: mock(() => undefined),
     };
     const refreshedRecoverTranscriptGap = mock(async (_message: string) => undefined);

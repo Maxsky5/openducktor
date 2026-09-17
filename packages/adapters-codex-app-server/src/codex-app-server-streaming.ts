@@ -657,13 +657,20 @@ export const handleCodexPendingNotifications = async (
           emitUnlinkedSpawnFailures(context, session, timestamp);
         }
         const liveStatus = codexThreadStatusSnapshot(notification.params.status);
-        context.setSessionLiveStatus(session, liveStatus);
+        const hasBufferedFinalAgentMessage = Boolean(
+          activeTurn &&
+          isIdleStatus &&
+          activeTurn.turnId !== undefined &&
+          context.completedAgentMessagesByTurnKey.has(
+            codexTurnKey(session.threadId, activeTurn.turnId),
+          ),
+        );
+        if (!hasBufferedFinalAgentMessage) {
+          context.setSessionLiveStatus(session, liveStatus);
+        }
+        // The held message still owes the transcript its turn-ending evidence, so keep the
+        // previous status too. Turn completion applies the idle status after the flush.
         if (activeTurn && isIdleStatus) {
-          const hasBufferedFinalAgentMessage =
-            activeTurn.turnId !== undefined &&
-            context.completedAgentMessagesByTurnKey.has(
-              codexTurnKey(session.threadId, activeTurn.turnId),
-            );
           if (!hasBufferedFinalAgentMessage) {
             emitCodexSessionEvent(context, session.threadId, {
               type: "session_idle",
