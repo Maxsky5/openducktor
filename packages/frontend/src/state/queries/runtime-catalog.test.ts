@@ -137,8 +137,7 @@ describe("runtime catalog queries", () => {
     for (const key of liveKeys) {
       expect(key[1]).not.toBe(SKIPPED_QUERY_KEY_SEGMENT);
     }
-    expect(new Set(skippedOptions.map((options) => JSON.stringify(options.queryKey))).size).toBe(
-      skippedOptions.length,
-    );
+    const skippedFamilies = skippedOptions.map((options) => options.queryKey[2]);
+    expect(new Set(skippedFamilies).size).toBe(skippedOptions.length);
   });
 });

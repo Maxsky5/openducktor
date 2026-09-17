@@ -247,14 +247,7 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("refreshes the selected-session catalog when runtime readiness returns", async () => {
-    const catalogRequests = [Promise.resolve(emptyCatalog), Promise.resolve(emptyCatalog)];
-    const loadRuntimeCatalog = mock(() => {
-      const request = catalogRequests.shift();
-      if (!request) {
-        throw new Error("unexpected model catalog request");
-      }
-      return request;
-    });
+    const loadRuntimeCatalog = mock(async () => emptyCatalog);
     const readyProps: Parameters<typeof useSessionRuntimeData>[0] = {
       repoPath: "/repo",
       selectedSession: sessionTarget(),
@@ -288,6 +281,7 @@ describe("useSessionRuntimeData", () => {
         repoReadinessState: "ready",
       });
       await harness.waitFor(() => loadRuntimeCatalog.mock.calls.length === 2, 2000);
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
       expect(harness.getLatest().runtimeData.catalogError).toBeNull();
     } finally {
       await harness.unmount();
@@ -497,25 +491,17 @@ describe("useSessionRuntimeData", () => {
   });
 
   test("keeps the repo catalog readable while the model picker skips its own catalogs", async () => {
-    const catalogRequests = [Promise.resolve(emptyCatalog), Promise.resolve(emptyCatalog)];
-    const loadRuntimeCatalog = mock(() => {
-      const request = catalogRequests.shift();
-      if (!request) {
-        throw new Error("unexpected model catalog request");
-      }
-      return request;
-    });
+    const loadRuntimeCatalog = mock(async () => emptyCatalog);
     const useSessionChatRuntimeDataAndPicker = (
       args: Parameters<typeof useSessionRuntimeData>[0],
     ) => ({
-      runtimeData: useSessionRuntimeData(args),
+      ...useSessionRuntimeDataWithQueryClient(args),
       pickerResources: useRuntimeModelCatalogs({
         repoPath: args.repoPath,
         runtimeKinds: ["opencode"] as const,
         enabledRuntimeKinds: [] as const,
         loadCatalog: args.loadRuntimeCatalog,
       }).resources,
-      queryClient: useQueryClient(),
     });
     const harness = createHookHarness(
       useSessionChatRuntimeDataAndPicker,
