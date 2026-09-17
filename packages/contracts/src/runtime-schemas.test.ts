@@ -1380,6 +1380,41 @@ describe("runtime schemas", () => {
     );
   });
 
+  test("runtime lifecycle requires an explicit interrupted-turn resume capability", () => {
+    const { supportsInterruptedTurnResume: _omitted, ...lifecycleWithoutResume } =
+      OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle;
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      capabilities: withRuntimeCapabilities({
+        sessionLifecycle: lifecycleWithoutResume,
+      }),
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+
+    expect(result.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ["capabilities", "sessionLifecycle", "supportsInterruptedTurnResume"],
+        }),
+      ]),
+    );
+
+    for (const descriptor of [
+      OPENCODE_RUNTIME_DESCRIPTOR,
+      CODEX_RUNTIME_DESCRIPTOR,
+      CLAUDE_RUNTIME_DESCRIPTOR,
+    ]) {
+      const parsed = runtimeDescriptorSchema.parse(descriptor);
+      expect(parsed.capabilities.sessionLifecycle.supportsInterruptedTurnResume).toEqual(
+        expect.any(Boolean),
+      );
+    }
+  });
+
   test("runtime descriptor accepts item history and structured approval semantics", () => {
     const itemHistoryDescriptor = runtimeDescriptorSchema.parse({
       kind: "opencode",
@@ -1400,6 +1435,7 @@ describe("runtime schemas", () => {
           supportsListLiveSessions: true,
           supportsQueuedUserMessages: true,
           supportsPendingInputSnapshots: true,
+          supportsInterruptedTurnResume: true,
         },
         history: {
           loadable: true,

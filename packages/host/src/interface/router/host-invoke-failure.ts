@@ -1,6 +1,7 @@
-import type { HostInvokeFailure } from "@openducktor/contracts";
+import type { AgentSessionResumeFailure, HostInvokeFailure } from "@openducktor/contracts";
 import { RuntimeQueryError } from "../../ports/runtime-query-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { WorkspaceTextFileWriteError } from "../../application/filesystem/workspace-text-file-service";
 import {
   TerminalServiceError,
@@ -16,6 +17,19 @@ export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | 
   }
   if (cause instanceof AgentSessionMessageAcceptedError) {
     return cause.failure;
+  }
+  if (cause instanceof AgentSessionResumeError) {
+    const agentSessionResumeFailure: AgentSessionResumeFailure = {
+      reason: cause.reason,
+      sessionRef: cause.sessionRef,
+      operation: cause.resumeOperation,
+      message: cause.message,
+      nextAction: cause.nextAction,
+    };
+    if (cause.cause instanceof Error) {
+      agentSessionResumeFailure.cause = cause.cause.message;
+    }
+    return { kind: "agent_session_resume", agentSessionResumeFailure };
   }
   if (cause instanceof HostValidationError && cause.field === "confirmStop") {
     return { kind: "workspace_session_confirmation", field: cause.field };

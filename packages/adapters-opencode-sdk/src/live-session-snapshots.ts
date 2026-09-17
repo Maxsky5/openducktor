@@ -120,7 +120,7 @@ const toOpencodeRuntimeActivity = (
   }
 };
 
-const toOpencodeSessionStatusMap = (
+export const toOpencodeSessionStatusMap = (
   payload: Record<string, SessionStatus>,
   directory: string,
 ): OpencodeSessionStatusMap => {

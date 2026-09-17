@@ -47,6 +47,7 @@ export type CodexSessionController = Pick<
   | "releaseRuntime"
   | "startSession"
   | "resumeSession"
+  | "continueInterruptedTurn"
   | "forkSession"
   | "sendUserMessage"
   | "updateSessionModel"

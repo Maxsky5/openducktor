@@ -35,6 +35,7 @@ import type {
   AgentSkillCatalog,
   AgentWorkspaceInspectionPort,
   EventUnsubscribe,
+  ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
   ListAgentModelsInput,
   ListAgentSkillsInput,
@@ -64,8 +65,13 @@ import {
 } from "@openducktor/core";
 import { requireCodexPendingRequestKey } from "./codex-app-server-approvals";
 import { codexApprovalResponseForRequest } from "./codex-app-server-requests";
-import { type ActiveCodexTurn, unsupported } from "./codex-app-server-shared";
+import {
+  type ActiveCodexTurn,
+  isCodexThreadNotLoadedError,
+  unsupported,
+} from "./codex-app-server-shared";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
+import { interruptedTurnResumeError } from "@openducktor/core";
 import type { CodexThreadInventory, CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
 import { CodexContextUsageLoader } from "./codex-context-usage-loader";
@@ -112,6 +118,7 @@ import {
 import {
   type CodexTurnLifecycleContext,
   flushQueuedUserMessagesLater as flushQueuedUserMessagesLaterImpl,
+  startCodexContinuationTurn,
   startCodexTurnForSession,
 } from "./codex-turn-lifecycle";
 import { assertCodexUserMessagePartsSupported } from "./codex-user-inputs";
@@ -134,6 +141,13 @@ import type {
 } from "./types";
 
 export { createCodexAppServerClient } from "./app-server-client";
+
+const codexContinuationFailed = (externalSessionId: string, cause: unknown) =>
+  interruptedTurnResumeError({
+    reason: "continuation_failed",
+    message: `Codex could not continue the interrupted turn for session '${externalSessionId}': ${cause instanceof Error ? cause.message : String(cause)}`,
+    cause,
+  });
 
 const toLivePendingApproval = (
   request: AgentPendingApprovalRequest,
@@ -477,6 +491,157 @@ export class CodexAppServerAdapter
     }
 
     return summary;
+  }
+
+  async continueInterruptedTurn(
+    input: ContinueInterruptedAgentTurnInput,
+  ): Promise<AgentSessionSummary> {
+    assertCodexRuntimePolicyBinding(input, "continue Codex turn");
+    const sessionPolicy = resolveCodexSessionScopePolicy(
+      input.sessionScope,
+      input.runtimePolicy,
+      "continue Codex turn",
+    );
+    const current = this.localSessions.get(input.externalSessionId);
+    if (current) {
+      const currentRef = codexSessionRef(current);
+      if (!agentSessionRefsEqual(currentRef, input)) {
+        throw interruptedTurnResumeError({
+          reason: "identity_mismatch",
+          message: `Codex session '${input.externalSessionId}' is registered to repo '${currentRef.repoPath}' and working directory '${currentRef.workingDirectory}'.`,
+        });
+      }
+      assertRuntimeContextCompatibleWithSession(current, input, "continue Codex turn", (message) =>
+        interruptedTurnResumeError({ reason: "identity_mismatch", message }),
+      );
+    }
+    const model = requireModelSelection(input.model);
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "continue Codex turn");
+    await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
+    await this.models.validate(client, runtimeId, model);
+
+    let thread: Awaited<ReturnType<typeof client.threadRead>>["thread"];
+    try {
+      ({ thread } = await client.threadRead({
+        threadId: input.externalSessionId,
+        includeTurns: true,
+      }));
+    } catch (cause) {
+      if (isCodexThreadNotLoadedError(cause)) {
+        throw interruptedTurnResumeError({
+          reason: "session_not_found",
+          message: `Codex thread '${input.externalSessionId}' no longer exists on the runtime.`,
+          cause,
+        });
+      }
+      throw interruptedTurnResumeError({
+        reason: "probe_failed",
+        message: `Cannot read the Codex thread for session '${input.externalSessionId}': ${cause instanceof Error ? cause.message : String(cause)}`,
+        cause,
+      });
+    }
+    if (thread.id !== input.externalSessionId || thread.cwd !== input.workingDirectory) {
+      throw interruptedTurnResumeError({
+        reason: "identity_mismatch",
+        message: `Codex thread '${input.externalSessionId}' does not match the stored working directory '${input.workingDirectory}'.`,
+      });
+    }
+    if (thread.status.type === "active" && thread.status.activeFlags.length > 0) {
+      throw interruptedTurnResumeError({
+        reason: "waiting_input",
+        message: `Codex session '${input.externalSessionId}' is waiting for ${thread.status.activeFlags.join(" and ")}.`,
+      });
+    }
+    if (thread.status.type === "systemError") {
+      throw interruptedTurnResumeError({
+        reason: "probe_failed",
+        message: `Codex reported a system error for thread '${input.externalSessionId}'. Restart the Codex runtime, then retry Resume.`,
+      });
+    }
+    if (thread.status.type === "active") {
+      throw interruptedTurnResumeError({
+        reason: "live_turn",
+        message: `Codex session '${input.externalSessionId}' has a live turn.`,
+      });
+    }
+    const liveSnapshot = this.listLiveSessionSnapshots(runtimeId).find(
+      (snapshot) => snapshot.ref.externalSessionId === input.externalSessionId,
+    );
+    if (
+      liveSnapshot &&
+      (liveSnapshot.pendingApprovals.length > 0 || liveSnapshot.pendingQuestions.length > 0)
+    ) {
+      throw interruptedTurnResumeError({
+        reason: "waiting_input",
+        message: `Codex session '${input.externalSessionId}' is waiting for a pending approval or question.`,
+      });
+    }
+    const latestTurn = thread.turns.at(-1);
+    if (!latestTurn) {
+      throw interruptedTurnResumeError({
+        reason: "ineligible_turn_state",
+        message: `Codex session '${input.externalSessionId}' has no turn to continue.`,
+      });
+    }
+    if (latestTurn.status === "completed") {
+      throw interruptedTurnResumeError({
+        reason: "completed_turn",
+        message: `Codex session '${input.externalSessionId}' has a completed latest turn.`,
+      });
+    }
+
+    const policy = sessionPolicy.runtimePolicy;
+    this.options.logSessionPolicy?.(
+      codexPolicyLogEntry({
+        operation: "thread/resume",
+        policy,
+        runtimeId,
+        threadId: input.externalSessionId,
+        workingDirectory: input.workingDirectory,
+      }),
+    );
+    const threadResumeInput: CodexAppServerThreadResumeParams = {
+      ...codexTransportPolicy(policy),
+      config: sessionPolicy.threadConfig,
+      threadId: input.externalSessionId,
+      cwd: input.workingDirectory,
+      excludeTurns: true,
+      model: toTransportModelSelection(model).model,
+    };
+    if (input.systemPrompt) {
+      threadResumeInput.developerInstructions = input.systemPrompt;
+    }
+    const response = await client.threadResume(threadResumeInput);
+    this.clearThreadInventory(runtimeId);
+    const session = sessionStateFromThreadResume(input, runtimeId, model, response);
+    if (sessionPolicy.kind === "repository") {
+      session.summary = { ...session.summary, title: sessionPolicy.title };
+    }
+    const previous = this.localSessions.get(input.externalSessionId);
+    this.localSessions.remember(session);
+    if (sessionPolicy.kind === "repository") {
+      try {
+        await client.threadSetName({
+          threadId: session.threadId,
+          name: sessionPolicy.title,
+        });
+      } catch (cause) {
+        // A replacement that cannot be prepared must not stay registered as a live
+        // session, or the host would show a running session without a consumer.
+        if (previous) {
+          this.localSessions.remember(previous);
+        } else {
+          this.localSessions.release(session.threadId);
+        }
+        throw codexContinuationFailed(input.externalSessionId, cause);
+      }
+    }
+    try {
+      await startCodexContinuationTurn(this.turnLifecycleContext(), input.externalSessionId, model);
+    } catch (cause) {
+      throw codexContinuationFailed(input.externalSessionId, cause);
+    }
+    return session.summary;
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {

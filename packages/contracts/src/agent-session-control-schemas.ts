@@ -113,9 +113,13 @@ export const agentWorkflowSessionStartInputSchema = z
   });
 export type AgentWorkflowSessionStartInput = z.infer<typeof agentWorkflowSessionStartInputSchema>;
 
+export const agentSessionResumeModeSchema = z.enum(["reattach", "continue_interrupted_turn"]);
+export type AgentSessionResumeMode = z.infer<typeof agentSessionResumeModeSchema>;
+
 export const agentSessionControlResumeInputSchema = agentSessionLiveRefSchema
   .extend({
     sessionScope: agentSessionScopeSchema,
+    resumeMode: agentSessionResumeModeSchema,
     model: agentModelSelectionSchema.optional(),
     systemPrompt: z.string().optional(),
   })

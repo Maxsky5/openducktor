@@ -49,6 +49,11 @@ describe("invokeStopAgentSession", () => {
 describe("useAgentChatSurfaceModel", () => {
   test("models a non-workflow chat from caller-owned inputs without app providers", () => {
     const transcriptTarget = sessionIdentity("standalone-session");
+    const interruptedTurnResume = {
+      isPending: false,
+      error: null,
+      onResume: () => {},
+    };
     const session = {
       ...transcriptTarget,
       activityState: null,
@@ -96,10 +101,12 @@ describe("useAgentChatSurfaceModel", () => {
           errorByRequestId: {},
           onReply: async () => {},
         },
+        interruptedTurnResume,
       }),
     );
 
     expect(rendered.result.current.thread.transcript).toBe(transcript);
+    expect(rendered.result.current.thread.interruptedTurnResume).toBe(interruptedTurnResume);
     expect(rendered.result.current.thread.runtimePresentation).toBe(runtimePresentation);
     expect(rendered.result.current.thread.isInteractionEnabled).toBe(true);
     expect(rendered.result.current.thread.canSubmitQuestionAnswers).toBe(true);

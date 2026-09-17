@@ -38,6 +38,7 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession & {
   lastAssistantTextFinal?: boolean;
   lastAssistantTextModel?: AgentModelSelection;
   lastAssistantTextTurnIndex?: number;
+  lastSuccessfulResultTurnIndex?: number;
   model?: AgentModelSelection | undefined;
   streamAssistantMessageIdsByBlockIndex?: Map<number, string>;
   toolInputsByCallId: Map<string, ClaudeToolInput>;
@@ -78,11 +79,20 @@ export const handleClaudeResultMessage = ({
   const shouldFinalize = shouldFinalizeClaudeTurn(originKind, hasActiveBackgroundWork ? 1 : 0);
   delete session.assistantTurnOriginKind;
   const failed = isFailedClaudeResult(message);
+  const lifecycleOutcome = lifecycleOutcomeForClaudeResult(message);
   const resultText = message.subtype === "success" ? message.result.trim() : "";
   const handledManualCompaction =
     !failed && settleClaudeManualCompactionResult({ emit, result: resultText, session, timestamp });
   if (!handledManualCompaction && shouldFinalize) {
     emitSuccessfulResultText({ emit, message, session, timestamp, completedUserTurnIndex });
+  }
+  if (!failed && !handledManualCompaction && shouldFinalize && lifecycleOutcome === "completed") {
+    // A tool-only result carries no assistant text, so the turn index is the only
+    // record that the latest accepted turn finished.
+    session.lastSuccessfulResultTurnIndex = completedUserTurnIndex;
+    if (resultText.length === 0) {
+      emitFinalAssistantMarker({ emit, message, session, timestamp });
+    }
   }
   if (failed) {
     clearClaudeManualCompaction(session);
@@ -113,7 +123,7 @@ export const handleClaudeResultMessage = ({
     timestamp,
     event: {
       kind: "result",
-      outcome: lifecycleOutcomeForClaudeResult(message),
+      outcome: lifecycleOutcome,
     },
   });
 };
@@ -199,6 +209,23 @@ export const emitClaudePermissionDeniedToolPart = ({
     externalSessionId: session.externalSessionId,
     timestamp,
     part: createClaudeCompletedToolPart(completedToolInput),
+  });
+};
+
+const emitFinalAssistantMarker = ({
+  emit,
+  message,
+  session,
+  timestamp,
+}: ClaudeResultEventInput): void => {
+  // The empty final assistant message keeps a text-less turn terminal for transcript
+  // readers, such as the resume affordance and the settled-turn cleanup.
+  emit({
+    type: "assistant_message",
+    externalSessionId: session.externalSessionId,
+    timestamp,
+    messageId: message.uuid,
+    message: "",
   });
 };
 

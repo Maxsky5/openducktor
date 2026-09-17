@@ -54,6 +54,45 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
     ]);
   });
 
+  test("keeps a final assistant message without content so the turn stays terminal", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "tool-only-turn",
+          role: "assistant",
+          timestamp: "2026-09-11T12:00:00.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "tool",
+              messageId: "tool-only-turn",
+              partId: "p-tool",
+              callId: "c-tool",
+              tool: "bash",
+              toolType: "bash",
+              status: "completed",
+            },
+            {
+              kind: "step",
+              messageId: "tool-only-turn",
+              partId: "p-step-finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      { role: "build" },
+    );
+
+    const assistantMessage = messages.find((message) => message.role === "assistant");
+    expect(assistantMessage).toMatchObject({
+      content: "",
+      meta: expect.objectContaining({ kind: "assistant", isFinal: true }),
+    });
+    expect(messages.some((message) => message.role === "tool")).toBe(true);
+  });
+
   test("maps the computer use action from hydrated tool parts", () => {
     const computerUse = {
       action: "Click the button",

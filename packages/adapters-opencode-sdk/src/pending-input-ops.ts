@@ -5,7 +5,11 @@ import type {
   ReplyApprovalInput,
   ReplyQuestionInput,
 } from "@openducktor/core";
-import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2/client";
+import type {
+  OpencodeClient,
+  PermissionRequest,
+  QuestionRequest,
+} from "@opencode-ai/sdk/v2/client";
 import { z } from "zod";
 import {
   normalizeOpenCodeApprovalRequest,
@@ -116,23 +120,16 @@ const normalizePendingQuestion = (
   return { requestId: input.id, questions };
 };
 
-export const listOpencodeLiveSessionPendingInput = async (
-  createClient: ClientFactory,
-  input: {
-    runtimeEndpoint: string;
-    workingDirectory: string;
-  },
+const listPendingInputBySession = async (
+  client: OpencodeClient,
+  workingDirectory: string,
 ): Promise<OpencodeLiveSessionPendingInputBySessionId> => {
-  const client = createClient({
-    runtimeEndpoint: input.runtimeEndpoint,
-    workingDirectory: input.workingDirectory,
-  });
   const [permissionResponse, questionResponse] = await Promise.all([
     client.permission.list({
-      directory: input.workingDirectory,
+      directory: workingDirectory,
     }),
     client.question.list({
-      directory: input.workingDirectory,
+      directory: workingDirectory,
     }),
   ]);
   const permissions = unwrapData(permissionResponse, "list pending permissions");
@@ -163,6 +160,35 @@ export const listOpencodeLiveSessionPendingInput = async (
   }
 
   return bySession;
+};
+
+/** Reads the pending approvals and questions for one exact session. */
+export const listOpencodeSessionPendingInput = async (
+  client: OpencodeClient,
+  input: {
+    workingDirectory: string;
+    externalSessionId: string;
+  },
+): Promise<{
+  approvals: AgentPendingApprovalRequest[];
+  questions: AgentPendingQuestionRequest[];
+}> => {
+  const bySession = await listPendingInputBySession(client, input.workingDirectory);
+  return bySession[input.externalSessionId] ?? { approvals: [], questions: [] };
+};
+
+export const listOpencodeLiveSessionPendingInput = async (
+  createClient: ClientFactory,
+  input: {
+    runtimeEndpoint: string;
+    workingDirectory: string;
+  },
+): Promise<OpencodeLiveSessionPendingInputBySessionId> => {
+  const client = createClient({
+    runtimeEndpoint: input.runtimeEndpoint,
+    workingDirectory: input.workingDirectory,
+  });
+  return listPendingInputBySession(client, input.workingDirectory);
 };
 
 export const replyApproval = async (

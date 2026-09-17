@@ -50,6 +50,7 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
     supportsListLiveSessions: true,
     supportsQueuedUserMessages: true,
     supportsPendingInputSnapshots: true,
+    supportsInterruptedTurnResume: true,
   },
   history: {
     loadable: true,
@@ -127,6 +128,7 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     supportsListLiveSessions: true,
     supportsQueuedUserMessages: true,
     supportsPendingInputSnapshots: true,
+    supportsInterruptedTurnResume: true,
   },
   history: {
     loadable: true,
@@ -221,6 +223,7 @@ export const CLAUDE_RUNTIME_CAPABILITIES = {
     supportsListLiveSessions: true,
     supportsQueuedUserMessages: true,
     supportsPendingInputSnapshots: true,
+    supportsInterruptedTurnResume: true,
   },
   history: {
     loadable: true,

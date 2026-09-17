@@ -234,7 +234,16 @@ describe("CodexAppServerAdapter streaming", () => {
 
   test("waits for turn completion timing before flushing a final assistant message", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
-    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+    const mutations: CodexLiveSessionMutation[] = [];
+    const { adapter, transports } = createHarness(
+      {
+        subscribeEvents,
+        onLiveSessionMutation: (mutation) => {
+          mutations.push(mutation);
+        },
+      },
+      { deferTurnStart: true },
+    );
 
     await adapter.startSession(codexStartSessionInput());
     const events: AgentEvent[] = [];
@@ -279,6 +288,7 @@ describe("CodexAppServerAdapter streaming", () => {
         tokenUsage: codexTokenUsageFixture(321),
       },
     });
+    mutations.length = 0;
     emitNotification({
       method: "thread/status/changed",
       params: {
@@ -290,6 +300,9 @@ describe("CodexAppServerAdapter streaming", () => {
 
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
     expect(events.some((event) => event.type === "session_idle")).toBe(false);
+    expect(
+      mutations.flatMap((mutation) => mutation.snapshots.map((snapshot) => snapshot.activity)),
+    ).not.toContain("idle");
 
     emitNotification({
       method: "turn/completed",
@@ -319,6 +332,12 @@ describe("CodexAppServerAdapter streaming", () => {
     expect(sessionIdleIndex).toBeGreaterThan(assistantMessageIndex);
     expect(events.filter((event) => event.type === "assistant_message")).toHaveLength(1);
     expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
+    expect(
+      mutations.flatMap((mutation) => mutation.snapshots.map((snapshot) => snapshot.activity)),
+    ).toContain("idle");
+    expect(
+      mutations.flatMap((mutation) => mutation.transcriptEvents.map((event) => event.type)),
+    ).toContain("assistant_message");
     unsubscribe();
   });
 

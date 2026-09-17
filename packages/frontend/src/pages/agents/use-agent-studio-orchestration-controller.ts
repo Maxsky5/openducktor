@@ -45,6 +45,7 @@ type AgentStudioOrchestrationActionsContext = {
   openTaskDetails: () => void;
   runSessionStartWorkflow: RunSessionStartWorkflow;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
+  continueInterruptedTurn: AgentOperationsContextValue["continueInterruptedTurn"];
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
   loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
   updateAgentSessionModel: AgentOperationsContextValue["updateAgentSessionModel"];
@@ -266,6 +267,7 @@ export function useAgentStudioOrchestrationController({
     scheduleQueryUpdate,
     runSessionStartWorkflow,
     sendAgentMessage,
+    continueInterruptedTurn,
     stopAgentSession,
     updateAgentSessionModel,
     humanRequestChangesTask,
@@ -343,6 +345,11 @@ export function useAgentStudioOrchestrationController({
     canUseKickoffPrompt,
     kickoffLabel,
     canStopSession,
+    canResumeSession,
+    isResumingSession,
+    resumeSessionError,
+    persistentResumeError,
+    onResumeSession,
     startLaunchKickoff,
     onSend,
     onSubmitQuestionAnswers,
@@ -374,6 +381,7 @@ export function useAgentStudioOrchestrationController({
     workspaceRepoPath,
     runSessionStartWorkflow,
     sendAgentMessage,
+    continueInterruptedTurn,
     humanRequestChangesTask,
     setTaskTargetBranch,
     replyAgentApproval,
@@ -455,6 +463,11 @@ export function useAgentStudioOrchestrationController({
       canUseKickoffPrompt,
       kickoffLabel,
       canStopSession,
+      canResumeSession,
+      isResumingSession,
+      resumeSessionError,
+      persistentResumeError,
+      onResumeSession,
       startLaunchKickoff,
       onSend,
       handleWorkflowStepSelect,

@@ -1,4 +1,8 @@
-import { projectWorkspaceSessionChatState } from "./workspace-session-chat-state";
+import {
+  canInteractWithWorkspaceSession,
+  canResumeWorkspaceSession,
+  projectWorkspaceSessionChatState,
+} from "./workspace-session-chat-state";
 import { useWorkspaceSessionPromptInput } from "./use-workspace-session-prompt-input";
 import type { ChatSettings, ReusablePrompt, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -185,12 +189,21 @@ export function WorkspaceSessionChat({
       },
     },
   });
-  const canInteract =
-    readiness.interactionEnabled &&
-    observationReady &&
-    !recordsError &&
-    !targetFault &&
-    !isSavingModel;
+  const canResumeSession = canResumeWorkspaceSession({
+    identity,
+    isStarting,
+    activityState,
+    messages: session?.messages.items ?? [],
+    runtimeDefinitions: runtime.allRuntimeDefinitions,
+    runtimeKind: record.runtimeKind,
+  });
+  const canInteract = canInteractWithWorkspaceSession({
+    runtimeInteractionEnabled: readiness.interactionEnabled,
+    observationReady,
+    recordsError,
+    targetFault,
+    isSavingModel,
+  });
   const approvalActions = useAgentSessionApprovalActions({
     sessionIdentity: identity,
     pendingApprovals,
@@ -233,6 +246,7 @@ export function WorkspaceSessionChat({
         runtimeData.runtimePolicyError,
         runtimeData.todosError,
         catalogError,
+        canResumeSession && canInteract ? null : actions.persistentResumeError,
       ].find((error) => error != null) ?? null,
     interactionEnabled: canInteract,
     runtimePresentation,
@@ -252,6 +266,18 @@ export function WorkspaceSessionChat({
       isSubmittingByRequestId: questionActions.isSubmittingQuestionByRequestId,
       onSubmit: questionActions.onSubmitQuestionAnswers,
     },
+    interruptedTurnResume:
+      canResumeSession && canInteract
+        ? {
+            isPending: actions.isResumingSession,
+            error: actions.resumeSessionError,
+            onResume: () => {
+              if (identity) {
+                actions.resumeInterruptedTurn(identity);
+              }
+            },
+          }
+        : undefined,
     composer: {
       displayedSessionKey: sessionKey,
       selectedSession: identity ? { ...identity, selectedModel } : null,
@@ -265,6 +291,7 @@ export function WorkspaceSessionChat({
       busySendBlockedReason: null,
       canStopSession,
       stopAgentSession: operations.stopAgentSession,
+      isResumingSession: actions.isResumingSession,
       isReadOnly,
       readOnlyReason,
       draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },

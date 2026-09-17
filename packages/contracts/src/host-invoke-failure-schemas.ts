@@ -7,6 +7,35 @@ import { sessionHistoryFailureSchema } from "./session-history-failure-schemas";
 import { taskAssetFailureSchema } from "./task-asset-schemas";
 import { terminalFailureSchema } from "./terminal-schemas";
 
+export const agentSessionResumeFailureReasonSchema = z.enum([
+  "unsupported",
+  "continuation_in_progress",
+  "live_turn",
+  "waiting_input",
+  "completed_turn",
+  "ineligible_turn_state",
+  "runtime_unavailable",
+  "session_not_found",
+  "identity_mismatch",
+  "probe_failed",
+  "compatibility_rejected",
+  "continuation_failed",
+]);
+export type AgentSessionResumeFailureReason = z.infer<typeof agentSessionResumeFailureReasonSchema>;
+
+export const agentSessionResumeFailureSchema = z
+  .object({
+    reason: agentSessionResumeFailureReasonSchema,
+    sessionRef: agentSessionLiveRefSchema,
+    operation: z.string().trim().min(1),
+    message: z.string().trim().min(1),
+    nextAction: z.string().trim().min(1),
+    cause: z.string().trim().min(1).optional(),
+  })
+  .strict();
+
+export type AgentSessionResumeFailure = z.infer<typeof agentSessionResumeFailureSchema>;
+
 export const hostInvokeFailureSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("workspace_session_validation"),
@@ -41,6 +70,12 @@ export const hostInvokeFailureSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("session_history"),
       sessionHistoryFailure: sessionHistoryFailureSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("agent_session_resume"),
+      agentSessionResumeFailure: agentSessionResumeFailureSchema,
     })
     .strict(),
   z

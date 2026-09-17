@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
   AgentSessionScope,
+  ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
   ListAgentModelsInput,
   ListAgentSkillsInput,
@@ -33,10 +34,12 @@ import {
   searchClaudeWorkspaceFiles,
 } from "./claude-agent-sdk-catalog";
 import {
+  type ClaudeContextUsageDependencies,
   flushClaudeLiveContextUsageRefresh,
-  readClaudeContextUsageFromQuery,
+  loadClaudeSessionContextUsage,
 } from "./claude-agent-sdk-context-usage";
 import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
+import { claudeLiveHistoryContext } from "./claude-agent-sdk-history-loader";
 import {
   prepareClaudeApprovalReply,
   prepareClaudeQuestionReply,
@@ -46,6 +49,7 @@ import { createClaudeAgentSdkSession } from "./claude-agent-sdk-session-factory"
 import { applyClaudeSessionModel, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
   type ClaudeSessionLaunchInput,
+  continuedClaudeSessionLaunch,
   forkedClaudeSessionLaunch,
   freshClaudeSessionLaunch,
   requireClaudeOpenDucktorMcpForScope,
@@ -53,6 +57,12 @@ import {
   resumedClaudeSessionLaunch,
 } from "./claude-agent-sdk-session-policy";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
+import {
+  assertClaudeContinuationExecutableCompatible,
+  checkLiveClaudeContinuationEligibility,
+  checkPersistedClaudeContinuationEligibility,
+  resolveFailedClaudeContinuationSession,
+} from "./claude-agent-sdk-service-continuation";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { loadClaudeTodos } from "./claude-agent-sdk-todos";
@@ -67,16 +77,10 @@ import type {
 } from "./claude-agent-sdk-types";
 import { fromPromise, unsupported } from "./claude-agent-sdk-utils";
 
-type ClaudeAgentSdkServiceDependencies = {
-  loadDetachedSessionContextUsage: (
-    input: Omit<Parameters<typeof loadClaudeDetachedSessionContextUsage>[0], "createQuery">,
-  ) => ReturnType<typeof loadClaudeDetachedSessionContextUsage>;
-};
-
 type SessionScope = AgentSessionScope;
 type SendInput = SendAgentUserMessageInput;
 
-const defaultClaudeAgentSdkServiceDependencies: ClaudeAgentSdkServiceDependencies = {
+const defaultClaudeAgentSdkServiceDependencies: ClaudeContextUsageDependencies = {
   loadDetachedSessionContextUsage: (input) =>
     loadClaudeDetachedSessionContextUsage({ ...input, createQuery: query }),
 };
@@ -88,7 +92,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   constructor(
     private readonly input: CreateClaudeAgentSdkServiceInput,
-    private readonly dependencies: ClaudeAgentSdkServiceDependencies,
+    private readonly dependencies: ClaudeContextUsageDependencies,
   ) {
     this.now = input.now ?? (() => new Date().toISOString());
     this.randomId = input.randomId ?? randomUUID;
@@ -123,6 +127,47 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         }
         return this.resume(input, runtimeId, scope);
       }),
+    );
+  }
+
+  continueInterruptedTurn(input: ContinueInterruptedAgentTurnInput, runtimeId: string) {
+    return requireClaudeSessionScope(input.sessionScope, "continue interrupted Claude turn").pipe(
+      Effect.flatMap((scope) =>
+        Effect.gen(this, function* () {
+          yield* assertClaudeContinuationExecutableCompatible(this.input, input);
+          const existing = this.sessionStore.get(input.externalSessionId);
+          if (existing) {
+            yield* checkLiveClaudeContinuationEligibility(existing, input, this.now);
+          } else {
+            yield* checkPersistedClaudeContinuationEligibility(input, this.now);
+          }
+          // The replacement starts a new CLI process for the same session id. Keep the
+          // attached session until the replacement is created, so a failed continuation
+          // leaves the user with the session they already had. A session whose stream
+          // ended in the meantime has no consumer, so it is dropped instead of restored.
+          return yield* this.createSession(
+            input,
+            runtimeId,
+            continuedClaudeSessionLaunch(scope, input.externalSessionId),
+          ).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                if (existing) {
+                  this.sessionStore.close(existing);
+                }
+              }),
+            ),
+            Effect.mapError((cause) =>
+              resolveFailedClaudeContinuationSession({
+                cause,
+                existing,
+                externalSessionId: input.externalSessionId,
+                sessionStore: this.sessionStore,
+              }),
+            ),
+          );
+        }),
+      ),
     );
   }
 
@@ -202,23 +247,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   loadSessionHistory(input: LoadAgentSessionHistoryInput) {
     const { target, session } = resolveClaudeQuerySession(this.sessionStore, input);
-    const liveContext =
-      session && !target.subpath
-        ? {
-            source:
-              "externalSessionId" in session.input || "parentExternalSessionId" in session.input
-                ? ("persisted" as const)
-                : ("fresh" as const),
-            userMessages: session.acceptedUserMessages.map((message) => ({
-              ...message,
-              state: session.queuedSdkMessages.some(
-                (queuedMessage) => queuedMessage.uuid === message.messageId,
-              )
-                ? ("queued" as const)
-                : ("read" as const),
-            })),
-          }
-        : undefined;
+    const liveContext = session && !target.subpath ? claudeLiveHistoryContext(session) : undefined;
     return fromPromise("claudeRuntime.loadSessionHistory", () =>
       loadClaudeHistory(input, this.now, liveContext),
     );
@@ -233,46 +262,11 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   loadSessionContextUsage(input: LoadAgentSessionHistoryInput) {
-    return Effect.gen(this, function* () {
-      const target = parseClaudeTranscriptTarget(input.externalSessionId);
-      if (target.subpath) {
-        return null;
-      }
-      const session = this.sessionStore.get(target.sessionId);
-      if (session) {
-        return yield* fromPromise("claudeRuntime.loadSessionContextUsage", async () => {
-          assertClaudeSessionRef(
-            session,
-            { ...input, externalSessionId: session.externalSessionId },
-            "load session context usage",
-          );
-          if (input.sessionScope) {
-            await requireClaudeOpenDucktorMcpForScope(input.sessionScope, session.query, {
-              externalSessionId: session.externalSessionId,
-              runtimeId: session.runtimeId,
-            });
-          }
-          const usage = await readClaudeContextUsageFromQuery(session.query);
-          return usage ? { totalTokens: usage.usedTokens, contextWindow: usage.maxTokens } : null;
-        });
-      }
-      const claudeExecutablePath = yield* resolveClaudeExecutable(
-        this.input,
-        "claudeRuntime.loadSessionContextUsage",
-      );
-      const detachedUsageInput: Parameters<
-        ClaudeAgentSdkServiceDependencies["loadDetachedSessionContextUsage"]
-      >[0] = {
-        claudeExecutablePath,
-        externalSessionId: target.sessionId,
-        workingDirectory: input.workingDirectory,
-      };
-      if (this.input.processEnv) {
-        detachedUsageInput.processEnv = this.input.processEnv;
-      }
-      return yield* fromPromise("claudeRuntime.loadSessionContextUsage", () =>
-        this.dependencies.loadDetachedSessionContextUsage(detachedUsageInput),
-      );
+    return loadClaudeSessionContextUsage({
+      input,
+      serviceInput: this.input,
+      dependencies: this.dependencies,
+      sessionStore: this.sessionStore,
     });
   }
 
@@ -483,7 +477,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
 export const createClaudeAgentSdkService = (
   input: CreateClaudeAgentSdkServiceInput,
-  dependencies: ClaudeAgentSdkServiceDependencies = defaultClaudeAgentSdkServiceDependencies,
+  dependencies: ClaudeContextUsageDependencies = defaultClaudeAgentSdkServiceDependencies,
 ): ClaudeAgentSdkService => new ClaudeAgentSdkServiceImpl(input, dependencies);
 
 export type { ClaudeAgentSdkService, CreateClaudeAgentSdkServiceInput };

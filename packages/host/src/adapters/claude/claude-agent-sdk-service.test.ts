@@ -1,66 +1,57 @@
 import { describe, expect, mock, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { AgentRuntimeQueryError, InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
-import { HostDependencyError } from "../../effect/host-errors";
+import { HostDependencyError, HostOperationError } from "../../effect/host-errors";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
+import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
+import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
-import { AsyncInputQueue } from "./claude-agent-sdk-queue";
+import {
+  createClaudeSystemCommands,
+  createRecordingClaudeSystemCommands,
+} from "./claude-agent-sdk-system-commands.test-support";
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
+import {
+  checkLiveClaudeContinuationEligibility,
+  classifyPersistedClaudeContinuationFailure,
+} from "./claude-agent-sdk-service-continuation";
 import {
   createClaudeContextUsageResponse,
   createClaudeQueryFixture,
+  createClaudeSession,
 } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
-import type { ClaudeAgentSdkEventEmitter, ClaudeSession } from "./claude-agent-sdk-types";
+import type {
+  ClaudeAgentSdkEventEmitter,
+  ClaudeSession,
+  ClaudeSessionStore,
+} from "./claude-agent-sdk-types";
 
-const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
-  acceptedUserMessages: [],
-  activeSdkUserTurnCount: 0,
-  abortController: new AbortController(),
-  activity: "idle",
-  externalSessionId: "session-1",
-  input: {
-    repoPath: "/repo/",
-    runtimeKind: "claude",
-    workingDirectory: "/repo/worktree/",
-    externalSessionId: "session-1",
-    runtimePolicy: { kind: "claude" },
-    sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-    systemPrompt: "Build",
-  },
-  model: undefined,
-  pendingApprovals: new Map(),
-  pendingQuestions: new Map(),
-  queuedSdkMessages: [],
-  pendingUserTurnCount: 0,
-  query: createClaudeQueryFixture({
-    close: mock(() => {}),
-  }),
-  queue: new AsyncInputQueue(),
-  runtimeId: "runtime-1",
-  startedAt: "2026-06-25T20:00:00.000Z",
-  summary: {
-    externalSessionId: "session-1",
-    runtimeKind: "claude",
-    workingDirectory: "/repo/worktree/",
-    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
-    startedAt: "2026-06-25T20:00:00.000Z",
-    status: "idle",
-  },
-  streamAssistantMessageOrdinal: 0,
-  streamAssistantMessageIdsByBlockIndex: new Map(),
-  subagentMessageIdsByTaskId: new Map(),
-  subagentTaskIdsByToolUseId: new Map(),
-  toolEndedAtMsByCallId: new Map(),
-  toolInputsByCallId: new Map(),
-  toolMessageIdsByCallId: new Map(),
-  toolNamesByCallId: new Map(),
-  toolStartedAtMsByCallId: new Map(),
-  todosById: new Map(),
-  ...overrides,
-});
+const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
+  createClaudeSession({
+    input: {
+      repoPath: "/repo/",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/worktree/",
+      externalSessionId: "session-1",
+      runtimePolicy: { kind: "claude" },
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      systemPrompt: "Build",
+    },
+    runtimeId: "runtime-1",
+    summary: {
+      externalSessionId: "session-1",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/worktree/",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      startedAt: "2026-06-25T20:00:00.000Z",
+      status: "idle",
+    },
+    ...overrides,
+  });
 
 const listClaudeMcpTokenDirectories = async (): Promise<Set<string>> =>
   new Set((await readdir(tmpdir())).filter((name) => name.startsWith("openducktor-claude-mcp-")));
@@ -78,10 +69,17 @@ const expectNoNewClaudeMcpTokenDirectories = async (before: Set<string>): Promis
   expect(created).toEqual([]);
 };
 
-const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEventEmitter) => {
-  const sessionStore = createClaudeAgentSdkSessionStore({
-    now: () => "2026-06-25T20:00:00.000Z",
-  });
+const createService = (
+  session: ClaudeSession | null,
+  emit?: ClaudeAgentSdkEventEmitter,
+  systemCommands: SystemCommandPort = createClaudeSystemCommands(),
+  existingSessionStore?: ClaudeSessionStore,
+) => {
+  const sessionStore =
+    existingSessionStore ??
+    createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
   if (session) {
     sessionStore.set(session);
   }
@@ -99,11 +97,20 @@ const createService = (session: ClaudeSession | null, emit?: ClaudeAgentSdkEvent
     }),
     sessionStore,
     settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
+    systemCommands,
     toolDiscovery: {
       discoverTool: () => Effect.die("unused"),
       resolveTool: () => Effect.die("unused"),
-      resolveToolPath: () => Effect.die("unused"),
-      validateToolPath: () => Effect.die("unused"),
+      resolveToolPath: (toolId) =>
+        toolId === "claude" ? Effect.succeed(process.execPath) : Effect.die("unused"),
+      validateToolPath: (toolId, executablePath) =>
+        toolId === "claude" && executablePath === process.execPath
+          ? Effect.succeed({
+              displayLabel: "Saved path",
+              path: executablePath,
+              sourceCategory: "provided_path" as const,
+            })
+          : Effect.die("unused"),
     },
   };
   if (emit) {
@@ -338,6 +345,7 @@ describe("createClaudeAgentSdkService", () => {
         }),
         sessionStore,
         settingsConfig: createFixedRuntimeSettingsConfig("claude", "/usr/local/bin/claude"),
+        systemCommands: createClaudeSystemCommands(),
         toolDiscovery: {
           discoverTool: () => Effect.die("unused"),
           resolveTool: () => {
@@ -534,6 +542,7 @@ describe("createClaudeAgentSdkService", () => {
       }),
       settingsConfig: createFixedRuntimeSettingsConfig("claude", "/usr/local/bin/claude"),
       sessionStore,
+      systemCommands: createClaudeSystemCommands(),
       toolDiscovery: {
         discoverTool: () => Effect.die("unused"),
         resolveTool: () => Effect.die("unused"),
@@ -1010,5 +1019,324 @@ describe("createClaudeAgentSdkService", () => {
       ).rejects.toThrow(invalid.message);
       expect(session.pendingQuestions.has("question-1")).toBe(true);
     }
+  });
+});
+
+describe("continueInterruptedTurn eligibility", () => {
+  const continuationInput = {
+    repoPath: "/repo/",
+    runtimeKind: "claude" as const,
+    workingDirectory: "/repo/worktree/",
+    externalSessionId: "session-1",
+    runtimePolicy: { kind: "claude" as const },
+    sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
+  };
+
+  const continuationFailureReason = async (operation: Effect.Effect<unknown, unknown, never>) => {
+    const failure = await Effect.runPromise(Effect.flip(operation));
+    if (!(failure instanceof AgentSessionResumeError)) {
+      throw new Error(`Expected an AgentSessionResumeError, received: ${String(failure)}`);
+    }
+    return failure.reason;
+  };
+
+  const resumeFailureReason = async (operation: Effect.Effect<unknown, unknown, never>) => {
+    const failure = await Effect.runPromise(Effect.flip(operation));
+    if (!(failure instanceof HostOperationError)) {
+      throw new Error(`Expected a host operation failure, received: ${String(failure)}`);
+    }
+    if (!(failure.cause instanceof InterruptedTurnResumeError)) {
+      throw new Error(`Expected a typed resume failure, received: ${String(failure.cause)}`);
+    }
+    return failure.cause.reason;
+  };
+
+  test("reports a missing persisted session as session_not_found", async () => {
+    const service = createService(null);
+
+    await expect(
+      resumeFailureReason(
+        service.continueInterruptedTurn(
+          { ...continuationInput, workingDirectory: "/missing-worktree" },
+          "runtime-claude",
+        ),
+      ),
+    ).resolves.toBe("session_not_found");
+  });
+
+  test("reports a persisted working-directory mismatch as identity_mismatch", () => {
+    expect(
+      classifyPersistedClaudeContinuationFailure(
+        new AgentRuntimeQueryError(
+          "scope_mismatch",
+          "The Claude session belongs to another working directory. Select the matching session.",
+        ),
+        "session-1",
+      ),
+    ).toEqual({
+      reason: "identity_mismatch",
+      message:
+        "Cannot continue Claude session 'session-1': The Claude session belongs to another working directory. Select the matching session.",
+    });
+  });
+
+  test("keeps an unclassified persisted-history failure as probe_failed", () => {
+    expect(
+      classifyPersistedClaudeContinuationFailure(
+        new Error("transcript store unavailable"),
+        "session-1",
+      ),
+    ).toEqual({
+      reason: "probe_failed",
+      message:
+        "Cannot read the persisted Claude transcript for session 'session-1': transcript store unavailable",
+    });
+  });
+
+  test("reports a registered-session identity mismatch as identity_mismatch", async () => {
+    const service = createService(
+      createSession({
+        input: {
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/other-worktree/",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: "Build",
+        },
+      }),
+    );
+
+    await expect(
+      resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
+    ).resolves.toBe("identity_mismatch");
+  });
+
+  test("refuses a continuation when the Claude executable is older than the verified version", async () => {
+    const service = createService(
+      null,
+      undefined,
+      createClaudeSystemCommands("2.1.250 (Claude Code)"),
+    );
+
+    await expect(
+      continuationFailureReason(
+        service.continueInterruptedTurn(continuationInput, "runtime-claude"),
+      ),
+    ).resolves.toBe("compatibility_rejected");
+  });
+
+  test("refuses a continuation when the Claude executable reports no version", async () => {
+    const service = createService(null, undefined, createClaudeSystemCommands(null));
+
+    await expect(
+      continuationFailureReason(
+        service.continueInterruptedTurn(continuationInput, "runtime-claude"),
+      ),
+    ).resolves.toBe("compatibility_rejected");
+  });
+
+  test("refuses a continuation when the Claude executable is a later unverified release", async () => {
+    const service = createService(
+      null,
+      undefined,
+      createClaudeSystemCommands("2.1.252 (Claude Code)"),
+    );
+
+    await expect(
+      continuationFailureReason(
+        service.continueInterruptedTurn(continuationInput, "runtime-claude"),
+      ),
+    ).resolves.toBe("compatibility_rejected");
+  });
+
+  test("checks the resolved Claude executable before continuing a turn", async () => {
+    const { systemCommands, versionCalls } = createRecordingClaudeSystemCommands();
+    const service = createService(null, undefined, systemCommands);
+
+    await resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude"));
+
+    expect(versionCalls).toEqual([[process.execPath, ["--version"], { timeoutMs: 2_000 }]]);
+  });
+
+  test("refuses a live continuation that waits for pending input", async () => {
+    const session = createSession({
+      pendingApprovals: new Map([
+        [
+          "approval-1",
+          {
+            event: {
+              type: "approval_required",
+              externalSessionId: "session-1",
+              timestamp: "2026-06-25T20:00:00.000Z",
+              requestId: "approval-1",
+              requestType: "command_execution",
+              title: "Approve Bash",
+              tool: { name: "Bash", input: { command: "cat /etc/passwd" } },
+              mutation: "read_only",
+            },
+            resolve: () => {},
+          },
+        ],
+      ]),
+    });
+    const service = createService(session);
+
+    await expect(
+      resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
+    ).resolves.toBe("waiting_input");
+  });
+
+  test("refuses a fresh live session without a user turn as ineligible_turn_state", async () => {
+    const service = createService(
+      createSession({
+        input: {
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          systemPrompt: "Build",
+        },
+      }),
+    );
+
+    await expect(
+      resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
+    ).resolves.toBe("ineligible_turn_state");
+  });
+
+  test("keeps the attached session when the replacement continuation cannot start", async () => {
+    const sessionStore = createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const attached = createSession({
+      acceptedUserMessages: [
+        {
+          messageId: "user-1",
+          parts: [],
+          text: "Continue.",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+    });
+    const closeSession = mock((target: ClaudeSession) => sessionStore.close(target));
+    const service = createService(attached, undefined, undefined, {
+      ...sessionStore,
+      close: closeSession,
+    });
+
+    await expect(
+      Effect.runPromise(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
+    ).rejects.toThrow();
+
+    expect(closeSession).not.toHaveBeenCalled();
+    expect(sessionStore.get("session-1")).toBe(attached);
+  });
+
+  test("drops an attached stopped session when the replacement continuation cannot start", async () => {
+    const sessionStore = createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const attached = createSession({
+      activity: "stopped",
+      acceptedUserMessages: [
+        {
+          messageId: "user-1",
+          parts: [],
+          text: "Continue.",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+    });
+    const closeSession = mock((target: ClaudeSession) => sessionStore.close(target));
+    const service = createService(attached, undefined, undefined, {
+      ...sessionStore,
+      close: closeSession,
+    });
+
+    await expect(
+      resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
+    ).resolves.toBe("session_not_found");
+
+    expect(closeSession).toHaveBeenCalledWith(attached);
+    expect(sessionStore.get("session-1")).toBeUndefined();
+  });
+
+  test("reads the persisted transcript for a reattached live session before continuing", async () => {
+    const service = createService(
+      createSession({
+        input: {
+          repoPath: "/missing-worktree",
+          runtimeKind: "claude",
+          workingDirectory: "/missing-worktree",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        },
+      }),
+    );
+
+    await expect(
+      resumeFailureReason(
+        service.continueInterruptedTurn(
+          {
+            ...continuationInput,
+            repoPath: "/missing-worktree",
+            workingDirectory: "/missing-worktree",
+          },
+          "runtime-claude",
+        ),
+      ),
+    ).resolves.toBe("session_not_found");
+  });
+
+  test("accepts a live session whose latest in-process turn is unfinished", async () => {
+    const session = createSession({
+      acceptedUserMessages: [
+        {
+          messageId: "user-1",
+          parts: [],
+          text: "Continue.",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+    });
+
+    await expect(
+      Effect.runPromise(
+        checkLiveClaudeContinuationEligibility(
+          session,
+          continuationInput,
+          () => "2026-06-25T20:00:02.000Z",
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  test("refuses a live session whose latest in-process turn completed", async () => {
+    const session = createSession({
+      acceptedUserMessages: [
+        {
+          messageId: "user-1",
+          parts: [],
+          text: "Continue.",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+      lastAssistantTextFinal: true,
+      lastAssistantTextTurnIndex: 1,
+    });
+
+    await expect(
+      resumeFailureReason(
+        checkLiveClaudeContinuationEligibility(
+          session,
+          continuationInput,
+          () => "2026-06-25T20:00:02.000Z",
+        ),
+      ),
+    ).resolves.toBe("completed_turn");
   });
 });

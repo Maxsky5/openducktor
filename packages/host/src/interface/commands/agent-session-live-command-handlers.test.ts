@@ -114,6 +114,8 @@ const createHarness = async (
         resumes.push(input);
         return controlSummary(input, input.externalSessionId);
       }),
+    continueInterruptedTurn: (input) =>
+      Effect.sync(() => controlSummary(input, input.externalSessionId)),
     forkSession: (input) =>
       Effect.sync(() => {
         forks.push(input);
@@ -261,6 +263,7 @@ describe("createAgentSessionLiveCommandHandlers", () => {
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
       sessionScope,
+      resumeMode: "reattach",
     };
     const forkInput = {
       repoPath: "/repo",

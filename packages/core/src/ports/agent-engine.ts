@@ -135,6 +135,8 @@ export type StartAgentSessionInput = RuntimeWorkingDirectoryRef &
 
 export type ResumeAgentSessionInput = PolicyBoundSessionControlRef;
 
+export type ContinueInterruptedAgentTurnInput = PolicyBoundSessionControlRef;
+
 export type ForkAgentSessionInput = StartAgentSessionInput & {
   parentExternalSessionId: ExternalSessionId;
   runtimeHistoryAnchor?: RuntimeHistoryAnchor;
@@ -261,6 +263,9 @@ export interface AgentSessionLivePort {
 export interface AgentSessionControlPort {
   startSession(input: AgentSessionControlStartInput): Promise<AgentSessionControlSummary>;
   resumeSession(input: AgentSessionControlResumeInput): Promise<AgentSessionControlSummary>;
+  continueInterruptedTurn(
+    input: Omit<AgentSessionControlResumeInput, "resumeMode">,
+  ): Promise<AgentSessionControlSummary>;
   releaseSession(input: SessionRef): Promise<void>;
   forkSession(input: AgentSessionControlForkInput): Promise<AgentSessionControlSummary>;
   updateSessionModel(input: UpdateControlledAgentSessionModelInput): Promise<void>;
@@ -272,6 +277,7 @@ export interface AgentSessionControlPort {
 export interface AgentRuntimeSessionControlPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
+  continueInterruptedTurn(input: ContinueInterruptedAgentTurnInput): Promise<AgentSessionSummary>;
   releaseSession(input: SessionRef): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
   updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void>;

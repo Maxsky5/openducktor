@@ -76,6 +76,28 @@ export const hasMessageStopSignal = (input: {
   return hasTerminalStopSignalInParts(input.parts, input.finish);
 };
 
+const isSuccessfulAssistantFinish = (value: string | undefined): boolean => value === "stop";
+
+export const hasSuccessfulStopSignalInParts = (
+  parts: ParsedOpencodePart[],
+  finish: string | undefined,
+): boolean => {
+  if (isSuccessfulAssistantFinish(finish)) {
+    return true;
+  }
+
+  return parts.some(
+    (part) => part.type === "step-finish" && isTerminalStepFinishReason(part.reason),
+  );
+};
+
+export const hasSuccessfulMessageStopSignal = (input: {
+  finish: string | undefined;
+  parts: ParsedOpencodePart[];
+}): boolean => {
+  return hasSuccessfulStopSignalInParts(input.parts, input.finish);
+};
+
 export const isAssistantMessageSettled = (input: {
   messageCompletedAt: number | undefined;
   hasStopSignal: boolean;
@@ -92,6 +114,7 @@ export const updateMessageMetadata = (
     parentId?: string;
     text?: string;
     hasStopSignal?: boolean;
+    hasSuccessfulStopSignal?: boolean;
     totalTokens?: number;
     displayParts?: SessionMessageMetadata["displayParts"];
   },
@@ -104,6 +127,8 @@ export const updateMessageMetadata = (
   const parentId = updates.parentId ?? previous?.parentId;
   const text = updates.text ?? previous?.text;
   const hasStopSignal = updates.hasStopSignal ?? previous?.hasStopSignal;
+  const hasSuccessfulStopSignal =
+    updates.hasSuccessfulStopSignal ?? previous?.hasSuccessfulStopSignal;
   const totalTokens = updates.totalTokens ?? previous?.totalTokens;
   const displayParts = updates.displayParts ?? previous?.displayParts;
 
@@ -119,6 +144,9 @@ export const updateMessageMetadata = (
   }
   if (hasStopSignal !== undefined) {
     metadata.hasStopSignal = hasStopSignal;
+  }
+  if (hasSuccessfulStopSignal !== undefined) {
+    metadata.hasSuccessfulStopSignal = hasSuccessfulStopSignal;
   }
   if (totalTokens !== undefined) {
     metadata.totalTokens = totalTokens;

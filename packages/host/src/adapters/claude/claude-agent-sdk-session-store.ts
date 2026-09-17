@@ -16,7 +16,7 @@ export type CreateClaudeAgentSdkSessionStoreInput = {
   now?: () => string;
 };
 
-const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
+export const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
   session.activity === "running" ||
   session.sdkState === "running" ||
   session.sdkState === "requires_action" ||
@@ -25,6 +25,9 @@ const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
   session.queuedSdkMessages.length > 0 ||
   session.pendingApprovals.size > 0 ||
   session.pendingQuestions.size > 0;
+
+export const isClaudeSessionStopped = (session: ClaudeSession): boolean =>
+  session.activity === "stopped";
 
 export const createClaudeAgentSdkSessionStore = ({
   emit,
@@ -61,7 +64,9 @@ export const createClaudeAgentSdkSessionStore = ({
     session.queue.close();
     session.abortController.abort();
     session.query.close();
-    sessions.delete(session.externalSessionId);
+    if (sessions.get(session.externalSessionId) === session) {
+      sessions.delete(session.externalSessionId);
+    }
     session.pendingApprovals.clear();
     session.pendingQuestions.clear();
     for (const listener of closeListeners) {

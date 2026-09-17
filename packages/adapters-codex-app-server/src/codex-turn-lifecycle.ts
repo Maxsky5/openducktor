@@ -154,13 +154,18 @@ const emitTurnStartErrorLater = (
   });
 };
 
-export const startCodexTurnForSession = async (
+type CodexTurnStart = {
+  readonly acceptedUserMessage: AcceptedAgentUserMessage | null;
+  readonly turnStartPromise: ReturnType<CodexAppServerClient["turnStart"]> | null;
+};
+
+const runCodexTurn = async (
   context: CodexTurnLifecycleContext,
   externalSessionId: string,
   parts: AgentUserMessagePart[],
-  acceptedUserMessage: AcceptedAgentUserMessage,
+  acceptedUserMessage: AcceptedAgentUserMessage | null,
   requestedModel?: AgentModelSelection,
-): Promise<AcceptedAgentUserMessage> => {
+): Promise<CodexTurnStart> => {
   const session = context.sessions.get(externalSessionId);
   if (!session) {
     throw new Error(`Unknown Codex session '${externalSessionId}'.`);
@@ -171,9 +176,14 @@ export const startCodexTurnForSession = async (
 
   const existingActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
   if (existingActiveTurn && !existingActiveTurn.isTurnSettled()) {
+    if (!acceptedUserMessage) {
+      throw new Error(
+        `Codex session '${externalSessionId}' already has an active turn and cannot start a continuation.`,
+      );
+    }
     const accepted = await steerActiveTurn(context, existingActiveTurn, parts, acceptedUserMessage);
     if (accepted) {
-      return accepted;
+      return { acceptedUserMessage: accepted, turnStartPromise: null };
     }
 
     const latestActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
@@ -278,7 +288,65 @@ export const startCodexTurnForSession = async (
     });
   activeTurnState.turnStartPromise = turnStartPromise;
 
-  context.emitUserMessage(acceptedUserMessage, parts);
-  emitTurnStartErrorLater(context, session, turnStartPromise);
-  return acceptedUserMessage;
+  if (acceptedUserMessage) {
+    context.emitUserMessage(acceptedUserMessage, parts);
+  }
+  return { acceptedUserMessage, turnStartPromise };
+};
+
+export const startCodexTurnForSession = async (
+  context: CodexTurnLifecycleContext,
+  externalSessionId: string,
+  parts: AgentUserMessagePart[],
+  acceptedUserMessage: AcceptedAgentUserMessage,
+  requestedModel?: AgentModelSelection,
+): Promise<AcceptedAgentUserMessage> => {
+  const started = await runCodexTurn(
+    context,
+    externalSessionId,
+    parts,
+    acceptedUserMessage,
+    requestedModel,
+  );
+  if (!started.acceptedUserMessage) {
+    throw new Error(`Codex session '${externalSessionId}' did not accept the user message.`);
+  }
+  const session = context.sessions.get(externalSessionId);
+  if (session && started.turnStartPromise) {
+    emitTurnStartErrorLater(context, session, started.turnStartPromise);
+  }
+  return started.acceptedUserMessage;
+};
+
+/**
+ * Starts one native Codex turn with `input: []` so the runtime continues the saved history
+ * without creating a user message. It awaits the native turn admission, so a rejected
+ * `turn/start` reaches the caller as a typed continuation failure. An admitted turn that
+ * already ended as failed or interrupted is also a continuation failure.
+ */
+export const startCodexContinuationTurn = async (
+  context: CodexTurnLifecycleContext,
+  externalSessionId: string,
+  requestedModel?: AgentModelSelection,
+): Promise<void> => {
+  const session = context.sessions.get(externalSessionId);
+  const started = await runCodexTurn(context, externalSessionId, [], null, requestedModel);
+  if (!started.turnStartPromise) {
+    throw new Error(
+      `Codex session '${externalSessionId}' did not start a native continuation turn.`,
+    );
+  }
+  try {
+    const result = await started.turnStartPromise;
+    if (result.turn.status === "failed" || result.turn.status === "interrupted") {
+      throw new Error(
+        `Codex ended the continuation turn for session '${externalSessionId}' as '${result.turn.status}'.`,
+      );
+    }
+  } catch (error) {
+    if (session && sessionIsRetained(context, session)) {
+      context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
+    }
+    throw error;
+  }
 };

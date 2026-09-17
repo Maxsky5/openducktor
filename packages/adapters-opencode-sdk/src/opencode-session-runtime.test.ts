@@ -796,6 +796,9 @@ describe("OpenCode session runtime connection", () => {
       if (signal.type !== "session_event" || signal.event.type !== "assistant_message") {
         return;
       }
+      if (signal.event.message.length === 0) {
+        return;
+      }
       messages.push(signal.event.message);
       if (signal.event.message === "Buffered transcript") {
         resolveFirstStarted();
@@ -916,7 +919,7 @@ describe("OpenCode session runtime connection", () => {
 
     expect(sessionStatuses).toEqual(["busy"]);
     expect(transcriptEventTypes).toContain("session_idle");
-    expect(transcriptEventTypes).not.toContain("assistant_message");
+    expect(transcriptEventTypes).toContain("assistant_message");
     await prepared.release();
   });
 

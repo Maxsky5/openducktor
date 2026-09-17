@@ -181,6 +181,7 @@ export const runtimeSessionLifecycleCapabilitiesSchema = z
     supportsListLiveSessions: z.boolean(),
     supportsQueuedUserMessages: z.boolean(),
     supportsPendingInputSnapshots: z.boolean(),
+    supportsInterruptedTurnResume: z.boolean(),
   })
   .strict();
 export type RuntimeSessionLifecycleCapabilities = z.infer<
@@ -540,6 +541,7 @@ export const runtimeCapabilityKeyValues = [
   "sessionLifecycle.supportedStartModes",
   "sessionLifecycle.supportsSessionFork",
   "sessionLifecycle.supportsQueuedUserMessages",
+  "sessionLifecycle.supportsInterruptedTurnResume",
   "history.fidelity",
   "history.replay",
   "approvals.supportedRequestTypes",
@@ -630,6 +632,7 @@ export const runtimeCapabilityClasses = {
   "sessionLifecycle.supportedStartModes": "baseline",
   "sessionLifecycle.supportsSessionFork": "launch_scoped",
   "sessionLifecycle.supportsQueuedUserMessages": "optional_enhancement",
+  "sessionLifecycle.supportsInterruptedTurnResume": "launch_scoped",
   "history.fidelity": "launch_scoped",
   "history.replay": "launch_scoped",
   "approvals.supportedRequestTypes": "workflow",

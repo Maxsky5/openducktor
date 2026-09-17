@@ -46,6 +46,7 @@ export type SessionMessageMetadata = {
   parentId?: string;
   text?: string;
   hasStopSignal?: boolean;
+  hasSuccessfulStopSignal?: boolean;
   totalTokens?: number;
   displayParts?: AgentUserMessageDisplayPart[];
 };

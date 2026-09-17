@@ -3,6 +3,7 @@ import { generatedImageMetadataSessionKey } from "@/state/queries/agent-generate
 import type {
   AgentRepositorySessionStartInput,
   AgentSessionLiveRef,
+  AgentSessionResumeFailureReason,
   RuntimeInstanceSummary,
   RuntimeKind,
 } from "@openducktor/contracts";
@@ -66,6 +67,8 @@ const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
       return hostClient.agentSessionControlStart(startInput);
     },
     resumeSession: (input) => hostClient.agentSessionControlResume(input),
+    continueInterruptedTurn: (input) =>
+      hostClient.agentSessionControlResume({ ...input, resumeMode: "continue_interrupted_turn" }),
     releaseSession: (input) => hostClient.agentSessionControlRelease(input),
     forkSession: (input) => hostClient.agentSessionControlFork(input),
     listRuntimeDefinitions: () => Object.values(RUNTIME_DESCRIPTORS_BY_KIND),
@@ -117,6 +120,25 @@ const toAcceptedAgentUserMessage = (
     acceptedMessage.model = acceptedModel;
   }
   return acceptedMessage;
+};
+
+export type AgentSessionResumeFailureNotice = {
+  readonly reason: AgentSessionResumeFailureReason;
+  readonly text: string;
+};
+
+/**
+ * Turns a typed resume failure into the reason and the text the chat shows beside Resume.
+ * The host message names the cause, and the next action names the fix.
+ */
+export const getAgentSessionResumeFailureNotice = (
+  error: HostInvokeError,
+): AgentSessionResumeFailureNotice | null => {
+  if (error.failure?.kind !== "agent_session_resume") {
+    return null;
+  }
+  const { message, nextAction, reason } = error.failure.agentSessionResumeFailure;
+  return { reason, text: `${message} ${nextAction}` };
 };
 
 export const getAcceptedMessageAfterSendFailure = (

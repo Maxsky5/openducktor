@@ -28,17 +28,24 @@ import {
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
-import { type HostError, HostInvariantError, HostValidationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostInvariantError,
+  HostResourceError,
+  HostValidationError,
+} from "../../effect/host-errors";
 import type { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterBinding,
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterRegistryPort,
+  AgentSessionControlContinueInterruptedTurnInput,
   AgentSessionRuntimeAdapterPort,
   AgentSessionLiveAdapterScope,
 } from "../../ports/agent-session-live-adapter-port";
 import type { AgentSessionPersistencePort } from "../../ports/agent-session-persistence-port";
+import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
 import {
   type AgentSessionLiveEnvelopePublisher,
@@ -82,6 +89,9 @@ export type AgentSessionLiveStateService = {
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly resumeSession: (
     input: AgentSessionControlResumeInput,
+  ) => Effect.Effect<AgentSessionControlSummary, HostError>;
+  readonly continueInterruptedTurn: (
+    input: AgentSessionControlContinueInterruptedTurnInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly forkSession: (
     input: AgentSessionControlForkInput,
@@ -134,6 +144,8 @@ export const createAgentSessionLiveStateService = ({
         : operation(input);
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
   const refreshGate = createLiveStateCoordinator();
+  // Transient admission guard that spans the probe and the native continuation for one session.
+  const continuationsInFlight = new Set<string>();
   const executionEpisodes = createAgentSessionExecutionEpisodes();
   const publishEnvelopeResult = createAgentSessionLiveEnvelopePublisher(
     publish,
@@ -196,6 +208,40 @@ export const createAgentSessionLiveStateService = ({
     publishEnvelope,
     listSnapshots,
   });
+
+  const continuationSessionRef = (
+    input: AgentSessionControlContinueInterruptedTurnInput,
+  ): AgentSessionLiveRef => ({
+    repoPath: input.repoPath,
+    runtimeKind: input.runtimeKind,
+    workingDirectory: input.workingDirectory,
+    externalSessionId: input.externalSessionId,
+  });
+
+  const toContinuationResolutionError = (
+    cause: HostError,
+    input: AgentSessionControlContinueInterruptedTurnInput,
+  ): HostError => {
+    if (cause instanceof HostResourceError && cause.resource === "agent_session_control_adapter") {
+      return new AgentSessionResumeError({
+        reason: "unsupported",
+        sessionRef: continuationSessionRef(input),
+        operation: "agent-session.continue-interrupted-turn",
+        message: cause.message,
+        cause,
+      });
+    }
+    if (cause instanceof HostResourceError && cause.resource === "agent_session_live_adapter") {
+      return new AgentSessionResumeError({
+        reason: "runtime_unavailable",
+        sessionRef: continuationSessionRef(input),
+        operation: "agent-session.continue-interrupted-turn",
+        message: cause.message,
+        cause,
+      });
+    }
+    return cause;
+  };
 
   const runControl = <A>(
     scope: AgentSessionLiveAdapterScope,
@@ -299,6 +345,47 @@ export const createAgentSessionLiveStateService = ({
     ),
     resumeSession: withStartAdmission((input) =>
       runControl(input, (adapter) => adapter.resumeSession(input)),
+    ),
+    continueInterruptedTurn: withStartAdmission((input) =>
+      Effect.gen(function* () {
+        const adapter = yield* adapterRegistry
+          .resolveControlForScope(input)
+          .pipe(Effect.mapError((cause) => toContinuationResolutionError(cause, input)));
+        const continuationKey = [
+          adapter.binding.runtimeId,
+          input.externalSessionId,
+          input.workingDirectory,
+        ].join("\u0000");
+        if (continuationsInFlight.has(continuationKey)) {
+          return yield* Effect.fail(
+            new AgentSessionResumeError({
+              reason: "continuation_in_progress",
+              sessionRef: continuationSessionRef(input),
+              operation: "agent-session.continue-interrupted-turn",
+              message: `Session '${input.externalSessionId}' already has a continuation in progress. Wait for it to settle, then retry Resume.`,
+            }),
+          );
+        }
+        continuationsInFlight.add(continuationKey);
+        const summary = yield* adapter
+          .continueInterruptedTurn(input)
+          .pipe(Effect.ensuring(Effect.sync(() => continuationsInFlight.delete(continuationKey))));
+        yield* lifecycle.requireAttached(adapter.binding).pipe(
+          Effect.mapError(
+            (cause) =>
+              new AgentSessionResumeError({
+                reason: "runtime_unavailable",
+                sessionRef: continuationSessionRef(input),
+                operation: "agent-session.continue-interrupted-turn",
+                message: `${cause.message} The adapter already accepted the continuation, so the runtime can be working on it.`,
+                nextAction:
+                  "Inspect the runtime and this session. Retry Resume only if the turn is still unfinished.",
+                cause,
+              }),
+          ),
+        );
+        return summary;
+      }),
     ),
     forkSession: withStartAdmission((input) =>
       runControl(input, (adapter) => adapter.forkSession(input)),

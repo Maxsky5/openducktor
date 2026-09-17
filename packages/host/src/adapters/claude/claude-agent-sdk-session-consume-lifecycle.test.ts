@@ -623,4 +623,46 @@ describe("consumeClaudeSession lifecycle", () => {
     ).toEqual(["session_error", "session_context_updated", "session_finished"]);
     expect(backgroundFailures).toEqual([]);
   });
+
+  test("marks a stream that ended after a replacement took the store key as stopped", async () => {
+    const events: AgentEvent[] = [];
+    const sessionStore = createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:02.000Z",
+    });
+    const session = createClaudeSession({
+      activity: "running",
+      query: claudeQueryWithMessages([
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: "a1b2c3d4-0000-4000-8000-000000000001",
+          session_id: "session-1",
+          timestamp: "2026-06-25T20:00:01.000Z",
+          message: {
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            stop_reason: null,
+            content: [{ type: "text", text: "Working..." }],
+          },
+        }),
+      ]),
+    });
+    const replacement = createClaudeSession({ activity: "running" });
+    sessionStore.set(session);
+    const emit: ClaudeAgentSdkEventEmitter = (_target, event): void => {
+      events.push(event);
+      sessionStore.set(replacement);
+    };
+
+    await consumeClaudeSession({
+      session,
+      sessionStore,
+      now: () => "2026-06-25T20:00:02.000Z",
+      emit,
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+    });
+
+    expect(session.activity).toBe("stopped");
+    expect(sessionStore.get(session.externalSessionId)).toBe(replacement);
+    expect(events.some((event) => event.type === "session_finished")).toBe(false);
+  });
 });

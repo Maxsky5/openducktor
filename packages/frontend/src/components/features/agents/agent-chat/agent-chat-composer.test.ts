@@ -96,6 +96,7 @@ const buildModel = () => ({
     outputLimit: 8_000,
   },
   canStopSession: true,
+  isResumingSession: false,
   onStopSession: () => {},
   composerFormRef: createRef<HTMLFormElement>(),
   composerEditorRef: createRef<HTMLDivElement>(),
@@ -181,6 +182,17 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("/ for commands");
     expect(html).not.toContain("@ for files");
     expect(html).not.toContain("@ for subagents");
+  });
+
+  test("does not render an interrupted-turn resume action in the composer", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: { ...buildModel(), isResumingSession: true },
+      }),
+    );
+
+    expect(html).not.toContain("Resume");
+    expect(html).not.toContain("Resuming");
   });
 
   test("hides stop and context widgets when not available", () => {

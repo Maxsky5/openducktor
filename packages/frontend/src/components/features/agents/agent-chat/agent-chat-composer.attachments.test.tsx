@@ -95,6 +95,7 @@ const buildModel = () => ({
   accentColor: undefined,
   contextUsage: null,
   canStopSession: false,
+  isResumingSession: false,
   onStopSession: SHARED_CALLBACKS.onStopSession,
   composerFormRef: createRef<HTMLFormElement>(),
   composerEditorRef: createRef<HTMLDivElement>(),
@@ -985,5 +986,30 @@ describe("AgentChatComposer selection controls", () => {
       screen.getByRole("button", { name: "Hephaestus (Deep Agent)" }).hasAttribute("disabled"),
     ).toBe(false);
     withSelection.unmount();
+  });
+});
+
+describe("AgentChatComposer resume lock", () => {
+  test("locks the composer input while a resume is in flight", () => {
+    const resuming = render(
+      <AgentChatComposer model={{ ...buildModel(), isResumingSession: true }} />,
+    );
+
+    const disabledEditor = screen.getByRole("combobox", { name: "Message composer" });
+    expect(disabledEditor.getAttribute("aria-disabled")).toBe("true");
+    expect(disabledEditor.getAttribute("contenteditable")).toBe("false");
+    expect(screen.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    resuming.unmount();
+
+    const idle = render(
+      <AgentChatComposer model={{ ...buildModel(), isResumingSession: false }} />,
+    );
+
+    const enabledEditor = screen.getByRole("combobox", { name: "Message composer" });
+    expect(enabledEditor.getAttribute("aria-disabled")).toBe("false");
+    expect(enabledEditor.getAttribute("contenteditable")).toBe("true");
+    idle.unmount();
   });
 });

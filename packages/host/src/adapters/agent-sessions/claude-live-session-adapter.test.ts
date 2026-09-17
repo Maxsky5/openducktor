@@ -3,14 +3,16 @@ import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-ada
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND, repoConfigSchema } from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/core";
+import { interruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
+import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import type {
   ClaudeAgentSdkService,
   ClaudePendingInputResolution,
 } from "../../application/runtimes/claude-agent-sdk-service";
 import type { RuntimeWorkingDirectoryDependencies } from "../../application/runtimes/runtime-working-directory";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
@@ -118,8 +120,16 @@ type MutationBarrier = {
   release: ReturnType<typeof deferred<void>>;
 };
 
+type MutableClaudePreparerInput = Omit<
+  Parameters<typeof createClaudeLiveSessionAdapterPreparer>[0],
+  "resumeInterruptedTurnEnabled"
+> & {
+  resumeInterruptedTurnEnabled?: boolean;
+};
+
 const createHarness = async (
   workingDirectoryDependenciesOverride: RuntimeWorkingDirectoryDependencies = workingDirectoryDependencies,
+  options: { resumeInterruptedTurnEnabled?: boolean } = {},
 ) => {
   const changes: AgentSessionLiveAdapterChange[] = [];
   const eventHub = createClaudeAgentSdkEventHub();
@@ -128,6 +138,8 @@ const createHarness = async (
   let forkSessionImpl: ClaudeAgentSdkService["forkSession"] = () =>
     Effect.die("forkSession was not configured");
   let resumeSessionImpl: ClaudeAgentSdkService["resumeSession"] = () => Effect.succeed(summary);
+  let continueInterruptedTurnImpl: ClaudeAgentSdkService["continueInterruptedTurn"] = () =>
+    Effect.succeed(summary);
   let loadSessionContextUsageImpl: ClaudeAgentSdkService["loadSessionContextUsage"] = () =>
     Effect.die("loadSessionContextUsage was not configured");
   let sendUserMessageImpl: ClaudeAgentSdkService["sendUserMessage"] = () =>
@@ -171,6 +183,10 @@ const createHarness = async (
       input: Parameters<ClaudeAgentSdkService["resumeSession"]>[0],
       runtimeId: string,
     ) => resumeSessionImpl(input, runtimeId),
+    continueInterruptedTurn: (
+      input: Parameters<ClaudeAgentSdkService["continueInterruptedTurn"]>[0],
+      runtimeId: string,
+    ) => continueInterruptedTurnImpl(input, runtimeId),
     loadSessionContextUsage: (
       input: Parameters<ClaudeAgentSdkService["loadSessionContextUsage"]>[0],
     ) => loadSessionContextUsageImpl(input),
@@ -228,7 +244,7 @@ const createHarness = async (
         );
       }),
   };
-  const prepare = createClaudeLiveSessionAdapterPreparer({
+  const prepareInput: MutableClaudePreparerInput = {
     eventHub,
     liveSessionLifecycle,
     service,
@@ -237,7 +253,11 @@ const createHarness = async (
         externalSessionId === session.externalSessionId ? session : undefined,
     },
     workingDirectoryDependencies: workingDirectoryDependenciesOverride,
-  });
+  };
+  if (options.resumeInterruptedTurnEnabled !== undefined) {
+    prepareInput.resumeInterruptedTurnEnabled = options.resumeInterruptedTurnEnabled;
+  }
+  const prepare = createClaudeLiveSessionAdapterPreparer(prepareInput);
   const prepared = await Effect.runPromise(prepare(runtime));
   await Effect.runPromise(prepared.startForwarding());
   return {
@@ -252,6 +272,11 @@ const createHarness = async (
     },
     setResumeSession: (implementation: ClaudeAgentSdkService["resumeSession"]) => {
       resumeSessionImpl = implementation;
+    },
+    setContinueInterruptedTurn: (
+      implementation: ClaudeAgentSdkService["continueInterruptedTurn"],
+    ) => {
+      continueInterruptedTurnImpl = implementation;
     },
     setLoadSessionContextUsage: (
       implementation: ClaudeAgentSdkService["loadSessionContextUsage"],
@@ -297,12 +322,111 @@ const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[])
   changes.flatMap((change) => (change.type === "transcript_event" ? [change.event.type] : []));
 
 describe("Claude host live-session adapter", () => {
+  test("delegates interrupted-turn resume to the Claude service when the gate is on", async () => {
+    const harness = await createHarness(workingDirectoryDependencies, {
+      resumeInterruptedTurnEnabled: true,
+    });
+    const calls: Array<{ input: unknown; runtimeId: string }> = [];
+    harness.setContinueInterruptedTurn((input, runtimeId) => {
+      calls.push({ input, runtimeId });
+      return Effect.succeed(summary);
+    });
+
+    const result = await Effect.runPromise(
+      harness.adapter.continueInterruptedTurn({
+        ...startInput,
+        externalSessionId: "session-1",
+      }),
+    );
+
+    expect(result).toMatchObject({
+      externalSessionId: "session-1",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/worktree",
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.input).toMatchObject({
+      repoPath: "/repo",
+      externalSessionId: "session-1",
+      workingDirectory: "/repo/worktree",
+      runtimeKind: "claude",
+      runtimePolicy: { kind: "claude" },
+      systemPrompt: "Build",
+    });
+  });
+
+  test("maps a native continuation identity mismatch to the typed resume failure", async () => {
+    const harness = await createHarness(workingDirectoryDependencies, {
+      resumeInterruptedTurnEnabled: true,
+    });
+    harness.setContinueInterruptedTurn(() =>
+      Effect.fail(
+        toHostOperationError(
+          interruptedTurnResumeError({
+            reason: "identity_mismatch",
+            message:
+              "Cannot continue interrupted turn Claude session 'session-1' from repo '/repo' and working directory '/repo/worktree'.",
+          }),
+          "claudeRuntime.continueInterruptedTurn",
+        ),
+      ),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        harness.adapter.continueInterruptedTurn({
+          ...startInput,
+          externalSessionId: "session-1",
+        }),
+      ),
+    );
+
+    expect(failure).toBeInstanceOf(AgentSessionResumeError);
+    expect(failure).toMatchObject({
+      reason: "identity_mismatch",
+      operation: "claude-live-session.continue-interrupted-turn",
+      nextAction:
+        "Reopen the session from the session list so the stored identity matches, then retry Resume.",
+    });
+  });
+
+  test("fails interrupted-turn resume with a typed unsupported error when the gate is off", async () => {
+    const harness = await createHarness(workingDirectoryDependencies, {
+      resumeInterruptedTurnEnabled: false,
+    });
+    let delegateCalls = 0;
+    harness.setContinueInterruptedTurn(() => {
+      delegateCalls += 1;
+      return Effect.succeed(summary);
+    });
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        harness.adapter.continueInterruptedTurn({
+          ...startInput,
+          externalSessionId: "session-1",
+        }),
+      ),
+    );
+
+    expect(failure).toMatchObject({
+      reason: "unsupported",
+      operation: "claude-live-session.continue-interrupted-turn",
+    });
+    expect(failure.message).toContain("Interrupted-turn resume is disabled");
+    expect(delegateCalls).toBe(0);
+  });
+
   test.each(["user_message", "session_status"])(
     "retains acceptance when %s publication fails",
     async (eventType) => {
       const harness = await createHarness();
       await Effect.runPromise(
-        harness.adapter.resumeSession({ ...startInput, externalSessionId: "session-1" }),
+        harness.adapter.resumeSession({
+          resumeMode: "reattach",
+          ...startInput,
+          externalSessionId: "session-1",
+        }),
       );
       let sends = 0;
       harness.setSendUserMessage((input) =>
@@ -388,7 +512,11 @@ describe("Claude host live-session adapter", () => {
 
     await Effect.runPromise(harness.adapter.startSession(repositoryInput));
     await Effect.runPromise(
-      harness.adapter.resumeSession({ ...repositoryInput, externalSessionId: "session-1" }),
+      harness.adapter.resumeSession({
+        resumeMode: "reattach",
+        ...repositoryInput,
+        externalSessionId: "session-1",
+      }),
     );
     await Effect.runPromise(
       harness.adapter.forkSession({
@@ -450,6 +578,7 @@ describe("Claude host live-session adapter", () => {
       harness.adapter.startSession(outsideWorkspaceInput).pipe(Effect.asVoid),
       harness.adapter
         .resumeSession({
+          resumeMode: "reattach",
           ...outsideWorkspaceInput,
           externalSessionId: "session-1",
         })
@@ -732,6 +861,7 @@ describe("Claude host live-session adapter", () => {
 
     await Effect.runPromise(
       harness.adapter.resumeSession({
+        resumeMode: "reattach",
         ...startInput,
         externalSessionId: "session-1",
       }),
@@ -767,6 +897,7 @@ describe("Claude host live-session adapter", () => {
 
     await Effect.runPromise(
       harness.adapter.resumeSession({
+        resumeMode: "reattach",
         ...startInput,
         externalSessionId: "session-1",
       }),
@@ -808,6 +939,7 @@ describe("Claude host live-session adapter", () => {
 
     await Effect.runPromise(
       harness.adapter.resumeSession({
+        resumeMode: "reattach",
         ...startInput,
         externalSessionId: "session-1",
       }),
@@ -1128,6 +1260,7 @@ describe("Claude host live-session adapter", () => {
 
     await Effect.runPromise(
       harness.adapter.resumeSession({
+        resumeMode: "reattach",
         ...startInput,
         externalSessionId: "session-1",
       }),

@@ -37,6 +37,7 @@ export type AgentChatComposerConfig = {
   busySendBlockedReason: string | null;
   canStopSession: boolean;
   stopAgentSession: StopAgentSession;
+  isResumingSession: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
   pendingSendItems?: AgentChatComposerModel["pendingSendItems"];
@@ -165,6 +166,7 @@ export function useAgentChatComposerModel({
       canStopSession: composer.canStopSession,
       onStopSession: () =>
         invokeStopAgentSession(composer.selectedSession, composer.stopAgentSession),
+      isResumingSession: composer.isResumingSession,
       composerFormRef,
       composerEditorRef,
       onComposerEditorInput: resizeComposerEditor,

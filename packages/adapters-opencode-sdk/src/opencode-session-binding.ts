@@ -45,19 +45,19 @@ export const applySessionPolicy = async (input: {
   }
 };
 
-const assertRuntimeContextCompatibleWithSession = (
+export const assertRuntimeContextCompatibleWithSession = (
   session: SessionRecord,
   input: PolicyBoundSessionRef,
   action: string,
+  toConflictError?: (message: string) => Error,
 ): void => {
   const transition = resolveAgentSessionAssociationTransition(
     session.summary.sessionAssociation,
     input.sessionScope ?? { kind: "unbound" },
   );
   if (transition.kind === "conflict") {
-    throw new Error(
-      `Cannot ${action} for OpenCode session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`,
-    );
+    const message = `Cannot ${action} for OpenCode session '${session.externalSessionId}' because its registered ${describeAgentSessionScope(transition.previous)} does not match the requested ${describeAgentSessionScope(transition.incoming)}.`;
+    throw toConflictError?.(message) ?? new Error(message);
   }
 };
 

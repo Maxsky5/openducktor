@@ -9,6 +9,7 @@ import type { AgentSessionSummary, AgentUserMessagePart } from "@openducktor/cor
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import { type HostError, toHostOperationError } from "../../effect/host-errors";
+import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
 import type {
   AgentSessionControlAdapterPort,
@@ -130,6 +131,35 @@ export const createOpenCodeSessionControlAdapter = ({
       }
       return runControlSummary("opencode-live-session.resume-session", () =>
         connection.resumeSession(request),
+      );
+    },
+    continueInterruptedTurn: (input) => {
+      const sessionRef = toSessionRef(input);
+      const request: Parameters<typeof connection.continueInterruptedTurn>[0] = {
+        ...sessionRef,
+        runtimeKind: "opencode",
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: input.sessionScope,
+      };
+      if (input.model) {
+        request.model = input.model;
+      }
+      if (input.systemPrompt) {
+        request.systemPrompt = input.systemPrompt;
+      }
+      return serializeSessionSend(
+        refKey(sessionRef),
+        runControlSummary("opencode-live-session.continue-interrupted-turn", () =>
+          connection.continueInterruptedTurn(request),
+        ),
+      ).pipe(
+        Effect.mapError((cause) =>
+          toAgentSessionResumeError(
+            cause,
+            sessionRef,
+            "opencode-live-session.continue-interrupted-turn",
+          ),
+        ),
       );
     },
     forkSession: (input) => {

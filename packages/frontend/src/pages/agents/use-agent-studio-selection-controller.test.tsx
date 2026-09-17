@@ -225,6 +225,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
     }),
     sendAgentMessage: async () => undefined,
     stopAgentSession: async () => undefined,
+    continueInterruptedTurn: async () => undefined,
     updateAgentSessionModel: async () => undefined,
     replyAgentApproval: async () => undefined,
     answerAgentQuestion: async () => undefined,

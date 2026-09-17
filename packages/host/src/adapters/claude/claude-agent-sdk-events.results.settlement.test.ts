@@ -47,7 +47,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     expect(session.pendingUserTurnCount).toBe(0);
     expect(session.activity).toBe("idle");
     expect(readSdkState(session)).toBe("idle");
-    expect(events.map((event) => event.type)).toEqual(["session_idle"]);
+    expect(events.map((event) => event.type)).toEqual(["assistant_message", "session_idle"]);
 
     handleClaudeSdkMessage({
       ...commonInput,
@@ -62,7 +62,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     });
 
     expect(session.activity).toBe("idle");
-    expect(events.map((event) => event.type)).toEqual(["session_idle"]);
+    expect(events.map((event) => event.type)).toEqual(["assistant_message", "session_idle"]);
     expect(events.at(-1)).toEqual(
       expect.objectContaining({
         type: "session_idle",
@@ -99,7 +99,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     expect(session.pendingUserTurnCount).toBe(0);
     expect(session.activity).toBe("idle");
     expect(readSdkState(session)).toBe("idle");
-    expect(events.map((event) => event.type)).toEqual(["session_idle"]);
+    expect(events.map((event) => event.type)).toEqual(["assistant_message", "session_idle"]);
   });
 
   test("settles a completed result immediately when SDK idle arrived before the result", () => {
@@ -148,7 +148,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
 
     expect(session.activity).toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
-    expect(events.map((event) => event.type)).toEqual(["session_idle"]);
+    expect(events.map((event) => event.type)).toEqual(["assistant_message", "session_idle"]);
   });
 
   test("emits repeated same-text result-only replies for separate user turns", () => {
@@ -256,7 +256,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
 
     expect(session.pendingUserTurnCount).toBe(1);
     expect(session.activity).toBe("running");
-    expect(events.map((event) => event.type)).toEqual([]);
+    expect(events.map((event) => event.type)).toEqual(["assistant_message"]);
   });
 
   test("marks the parent idle when Claude waits for background work", () => {
@@ -290,7 +290,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     expect(session.activity).toBe("idle");
     expect(readSdkState(session)).toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
-    expect(events.map((event) => event.type)).toEqual(["session_idle"]);
+    expect(events.map((event) => event.type)).toEqual(["assistant_message", "session_idle"]);
   });
 
   test("settles tool-deferred Claude results on the next SDK idle event", () => {

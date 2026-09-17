@@ -10,11 +10,74 @@ import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { AgentOperationsContext, AgentSessionsContext } from "@/state/app-state-contexts";
 import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import { createSendAgentMessage } from "@/state/operations/agent-orchestrator/handlers/send-agent-message";
 import { createSessionTurnMetadata } from "@/state/operations/agent-orchestrator/support/session-turn-metadata";
-import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createSessionMessagesFixture,
+  sessionMessagesToArray,
+} from "@/test-utils/session-message-test-helpers";
+
+const createWorkspaceSessionRecord = (): WorkspaceSession => ({
+  id: "draft",
+  runtimeKind: "codex",
+  externalSessionId: null,
+  executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
+  selectedModel: null,
+  roleSnapshot: null,
+  generatedTitle: null,
+  manualTitle: null,
+  createdAt: 1000,
+  updatedAt: 1000,
+  archivedAt: null,
+});
+
+const createSessionOneRecord = (): WorkspaceSession => ({
+  ...createWorkspaceSessionRecord(),
+  runtimeKind: "opencode",
+  externalSessionId: "session-1",
+  executionTarget: { kind: "local_repo_root", workingDirectory: "/repo/worktree" },
+});
+
+const createOperations = (
+  overrides: Pick<AgentOperationsContextValue, "sendAgentMessage" | "continueInterruptedTurn">,
+): AgentOperationsContextValue => ({
+  describeGeneratedImages: async () => {
+    throw new Error("Unexpected image metadata read");
+  },
+  beginGeneratedImageBatch: async () => {
+    throw new Error("Unexpected image batch");
+  },
+  releaseGeneratedImageBatch: async () => {
+    throw new Error("Unexpected image batch release");
+  },
+  readGeneratedImage: async () => {
+    throw new Error("Unexpected image read");
+  },
+  readSessionTodos: async () => {
+    throw new Error("Unexpected todos read");
+  },
+  readSessionHistory: async () => {
+    throw new Error("Unexpected history read");
+  },
+  loadAgentSessionHistory: async () => {
+    throw new Error("Unexpected history load");
+  },
+  loadAgentSessionContext: async () => {
+    throw new Error("Unexpected context read");
+  },
+  startAgentSession: async () => {
+    throw new Error("Unexpected workflow start");
+  },
+  stopAgentSession: async () => {},
+  updateAgentSessionModel: () => {},
+  replyAgentApproval: async () => {},
+  answerAgentQuestion: async () => {},
+  ...overrides,
+});
 
 test.each([
   ["rejected", false],
@@ -25,19 +88,7 @@ test.each([
   "first send preserves the %s result, already bound=%s",
   async (outcome, alreadyBound) => {
     const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
-    const draftRecord: WorkspaceSession = {
-      id: "draft",
-      runtimeKind: "codex",
-      externalSessionId: null,
-      executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
-      selectedModel: null,
-      roleSnapshot: null,
-      generatedTitle: null,
-      manualTitle: null,
-      createdAt: 1000,
-      updatedAt: 1000,
-      archivedAt: null,
-    };
+    const draftRecord = createWorkspaceSessionRecord();
     const boundRecord = { ...draftRecord, externalSessionId: "native" };
     const store = createAgentSessionsStore("/repo");
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -96,40 +147,10 @@ test.each([
         },
       },
     });
-    const operations: AgentOperationsContextValue = {
-      describeGeneratedImages: async () => {
-        throw new Error("Unexpected image metadata read");
-      },
-      beginGeneratedImageBatch: async () => {
-        throw new Error("Unexpected image batch");
-      },
-      releaseGeneratedImageBatch: async () => {
-        throw new Error("Unexpected image batch release");
-      },
-      readGeneratedImage: async () => {
-        throw new Error("Unexpected image read");
-      },
-      readSessionTodos: async () => {
-        throw new Error("Unexpected todos read");
-      },
-      readSessionHistory: async () => {
-        throw new Error("Unexpected history read");
-      },
-      loadAgentSessionHistory: async () => {
-        throw new Error("Unexpected history load");
-      },
-      loadAgentSessionContext: async () => {
-        throw new Error("Unexpected context read");
-      },
-      startAgentSession: async () => {
-        throw new Error("Unexpected workflow start");
-      },
+    const operations = createOperations({
       sendAgentMessage,
-      stopAgentSession: async () => {},
-      updateAgentSessionModel: () => {},
-      replyAgentApproval: async () => {},
-      answerAgentQuestion: async () => {},
-    };
+      continueInterruptedTurn: async () => undefined,
+    });
     configureShellBridge(
       createShellBridgeFixture({
         client: {
@@ -217,3 +238,258 @@ test.each([
     }
   },
 );
+
+test("blocks a second resume selection before the first one settles", async () => {
+  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+  const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let resolveContinuation = (): void => {};
+  let continuations = 0;
+  const operations = createOperations({
+    sendAgentMessage: async () => {},
+    continueInterruptedTurn: () => {
+      continuations += 1;
+      return new Promise<void>((resolve) => {
+        resolveContinuation = resolve;
+      });
+    },
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>
+        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+      </AgentSessionsContext>
+    </QueryClientProvider>
+  );
+  const view = renderHook(({ record }) => useWorkspaceSessionChatActions(workspace, record), {
+    wrapper,
+    initialProps: { record: createSessionOneRecord() },
+  });
+
+  try {
+    act(() => {
+      view.result.current.resumeInterruptedTurn({
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      });
+      view.result.current.resumeInterruptedTurn({
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      });
+    });
+
+    expect(continuations).toBe(1);
+    expect(view.result.current.isResumingSession).toBe(true);
+
+    await act(async () => {
+      resolveContinuation();
+    });
+
+    expect(view.result.current.isResumingSession).toBe(false);
+    expect(continuations).toBe(1);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+  }
+});
+
+test("shows the host reason and next action when a continuation is refused", async () => {
+  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+  const failure = new HostInvokeError("Continuation refused", {
+    kind: "agent_session_resume",
+    agentSessionResumeFailure: {
+      reason: "completed_turn",
+      sessionRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      },
+      operation: "agent-session.continue-interrupted-turn",
+      message: "OpenCode session 'session-1' has a completed latest turn.",
+      nextAction: "Send a new message to start new work.",
+    },
+  });
+  const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const operations = createOperations({
+    sendAgentMessage: async () => {},
+    continueInterruptedTurn: async () => {
+      throw failure;
+    },
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>
+        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+      </AgentSessionsContext>
+    </QueryClientProvider>
+  );
+  const view = renderHook(({ record }) => useWorkspaceSessionChatActions(workspace, record), {
+    wrapper,
+    initialProps: { record: createSessionOneRecord() },
+  });
+
+  try {
+    await act(async () => {
+      view.result.current.resumeInterruptedTurn({
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      });
+    });
+
+    expect(view.result.current.resumeSessionError).toBe(
+      "OpenCode session 'session-1' has a completed latest turn. Send a new message to start new work.",
+    );
+    expect(view.result.current.persistentResumeError).toBeNull();
+    expect(view.result.current.isResumingSession).toBe(false);
+  } finally {
+    view.unmount();
+    queryClient.clear();
+  }
+});
+
+test("keeps an unconfirmed continuation failure after the Resume action settles", async () => {
+  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+  const failure = new HostInvokeError("Continuation unconfirmed", {
+    kind: "agent_session_resume",
+    agentSessionResumeFailure: {
+      reason: "runtime_unavailable",
+      sessionRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      },
+      operation: "agent-session.continue-interrupted-turn",
+      message: "The runtime did not confirm the continuation.",
+      nextAction: "Inspect the runtime and this session.",
+    },
+  });
+  const store = createAgentSessionsStore("/repo");
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const operations = createOperations({
+    sendAgentMessage: async () => {},
+    continueInterruptedTurn: async () => {
+      throw failure;
+    },
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>
+        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+      </AgentSessionsContext>
+    </QueryClientProvider>
+  );
+  const view = renderHook(({ record }) => useWorkspaceSessionChatActions(workspace, record), {
+    wrapper,
+    initialProps: { record: createSessionOneRecord() },
+  });
+
+  try {
+    await act(async () => {
+      view.result.current.resumeInterruptedTurn({
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      });
+    });
+
+    expect(view.result.current.persistentResumeError).toBe(
+      "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+    );
+  } finally {
+    view.unmount();
+    queryClient.clear();
+  }
+});
+
+test("clears an unconfirmed continuation failure when the transcript settles", async () => {
+  const workspace = { workspaceId: "workspace", workspaceName: "Workspace", repoPath: "/repo" };
+  const failure = new HostInvokeError("Continuation unconfirmed", {
+    kind: "agent_session_resume",
+    agentSessionResumeFailure: {
+      reason: "runtime_unavailable",
+      sessionRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+      },
+      operation: "agent-session.continue-interrupted-turn",
+      message: "The runtime did not confirm the continuation.",
+      nextAction: "Inspect the runtime and this session.",
+    },
+  });
+  const sessionIdentity = {
+    runtimeKind: "opencode" as const,
+    workingDirectory: "/repo/worktree",
+    externalSessionId: "session-1",
+  };
+  const userMessage: AgentChatMessage = {
+    id: "user-1",
+    role: "user",
+    content: "Continue please",
+    timestamp: "2026-09-12T10:00:00.000Z",
+  };
+  const finalAssistantMessage: AgentChatMessage = {
+    id: "assistant-1",
+    role: "assistant",
+    content: "Done",
+    timestamp: "2026-09-12T10:01:00.000Z",
+    meta: { kind: "assistant", isFinal: true },
+  };
+  const store = createAgentSessionsStore("/repo");
+  store.replaceSession(
+    createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      messages: [userMessage],
+    }),
+  );
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const operations = createOperations({
+    sendAgentMessage: async () => {},
+    continueInterruptedTurn: async () => {
+      throw failure;
+    },
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <AgentSessionsContext value={store}>
+        <AgentOperationsContext value={operations}>{children}</AgentOperationsContext>
+      </AgentSessionsContext>
+    </QueryClientProvider>
+  );
+  const view = renderHook(({ record }) => useWorkspaceSessionChatActions(workspace, record), {
+    wrapper,
+    initialProps: { record: createSessionOneRecord() },
+  });
+
+  try {
+    await act(async () => {
+      view.result.current.resumeInterruptedTurn(sessionIdentity);
+    });
+
+    expect(view.result.current.persistentResumeError).toBe(
+      "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+    );
+
+    await act(async () => {
+      store.updateSession(sessionIdentity, (current) => ({
+        ...current,
+        messages: createSessionMessagesFixture("session-1", [userMessage, finalAssistantMessage]),
+      }));
+    });
+
+    expect(view.result.current.resumeSessionError).toBeNull();
+    expect(view.result.current.persistentResumeError).toBeNull();
+  } finally {
+    view.unmount();
+    queryClient.clear();
+  }
+});

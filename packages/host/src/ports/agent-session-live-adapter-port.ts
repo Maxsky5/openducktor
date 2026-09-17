@@ -145,12 +145,20 @@ type AgentSessionLiveAdapterBase = {
   readonly releaseRuntime: () => Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError>;
 };
 
+export type AgentSessionControlContinueInterruptedTurnInput = Omit<
+  AgentSessionControlResumeInput,
+  "resumeMode"
+>;
+
 export type AgentSessionControlAdapterPort = {
   readonly startSession: (
     input: AgentSessionControlStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly resumeSession: (
     input: AgentSessionControlResumeInput,
+  ) => Effect.Effect<AgentSessionControlSummary, HostError>;
+  readonly continueInterruptedTurn: (
+    input: AgentSessionControlContinueInterruptedTurnInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly forkSession: (
     input: AgentSessionControlForkInput,

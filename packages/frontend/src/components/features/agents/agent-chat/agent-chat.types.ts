@@ -105,6 +105,12 @@ export type AgentChatRuntimePresentation = {
   supportedApprovalReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
 };
 
+export type AgentChatInterruptedTurnResumeModel = {
+  isPending: boolean;
+  error: string | null;
+  onResume: () => void;
+};
+
 export type AgentChatThreadModel = {
   modelCatalog: AgentModelCatalog | null;
   transcript: AgentChatTranscriptPresentation;
@@ -128,6 +134,7 @@ export type AgentChatThreadModel = {
   isSubmittingApprovalByRequestId: Record<string, boolean>;
   approvalReplyErrorByRequestId: Record<string, string>;
   onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
+  interruptedTurnResume?: AgentChatInterruptedTurnResumeModel | undefined;
   sessionAuxiliaryError: string | null;
   todoPanelCollapsed: boolean;
   onToggleTodoPanel: () => void;
@@ -200,6 +207,7 @@ export type AgentChatComposerModel = {
   } | null;
   canStopSession: boolean;
   onStopSession: () => void;
+  isResumingSession: boolean;
   composerFormRef: RefObject<HTMLFormElement | null>;
   composerEditorRef: RefObject<HTMLDivElement | null>;
   onComposerEditorInput: () => void;

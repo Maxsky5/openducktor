@@ -1,12 +1,18 @@
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
-import type { WorkspaceSession } from "@openducktor/contracts";
+import type { RuntimeDescriptor, WorkspaceSession } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { workspaceSessionTitle } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+import { canResumeInterruptedTurn } from "@/lib/agent-session-interrupted-turn";
 import {
   getAgentSessionActivityStateFromSession,
   isAgentSessionActivityWorking,
 } from "@/lib/agent-session-activity-state";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { OptionalAgentSessionActivityState } from "@/types/agent-session-activity";
+import type {
+  AgentChatMessage,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
 import {
@@ -14,6 +20,50 @@ import {
   derivePendingSelectedSessionTranscriptState,
   type AgentSessionTranscriptState,
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+
+export const resolveRuntimeDefinition = (
+  runtimeDefinitions: readonly RuntimeDescriptor[],
+  runtimeKind: WorkspaceSession["runtimeKind"],
+): RuntimeDescriptor | null =>
+  runtimeDefinitions.find((definition) => definition.kind === runtimeKind) ?? null;
+
+export const canResumeWorkspaceSession = ({
+  identity,
+  isStarting,
+  activityState,
+  messages,
+  runtimeDefinitions,
+  runtimeKind,
+}: {
+  identity: AgentSessionIdentity | null;
+  isStarting: boolean;
+  activityState: OptionalAgentSessionActivityState;
+  messages: readonly AgentChatMessage[];
+  runtimeDefinitions: readonly RuntimeDescriptor[];
+  runtimeKind: WorkspaceSession["runtimeKind"];
+}): boolean =>
+  identity !== null &&
+  !isStarting &&
+  canResumeInterruptedTurn({
+    activityState,
+    messages,
+    runtimeDescriptor: resolveRuntimeDefinition(runtimeDefinitions, runtimeKind),
+  });
+
+export const canInteractWithWorkspaceSession = ({
+  runtimeInteractionEnabled,
+  observationReady,
+  recordsError,
+  targetFault,
+  isSavingModel,
+}: {
+  runtimeInteractionEnabled: boolean;
+  observationReady: boolean;
+  recordsError: string | null;
+  targetFault: AgentSessionTransientFault | null;
+  isSavingModel: boolean;
+}): boolean =>
+  runtimeInteractionEnabled && observationReady && !recordsError && !targetFault && !isSavingModel;
 
 export function projectWorkspaceSessionChatState({
   record,

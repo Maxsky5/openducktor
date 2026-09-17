@@ -44,6 +44,7 @@ type ClaudeStringPropertySource =
   | undefined;
 
 export const INIT_TIMEOUT_MS = 60_000;
+export const CONTINUATION_ADMISSION_TIMEOUT_MS = 30_000;
 export const FILE_SEARCH_LIMIT = 30;
 export const FILE_SEARCH_MAX_VISITED = 4_000;
 export const IGNORED_DIRECTORIES = new Set([

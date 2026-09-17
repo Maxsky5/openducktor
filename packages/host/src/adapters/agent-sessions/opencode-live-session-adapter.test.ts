@@ -78,6 +78,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     );
     await Effect.runPromise(
       prepared.adapter.resumeSession({
+        resumeMode: "reattach",
         ...ref,
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       }),
@@ -104,6 +105,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const adapter = prepared.adapter;
     await Effect.runPromise(
       adapter.resumeSession({
+        resumeMode: "reattach",
         ...ref,
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       }),
@@ -266,6 +268,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const adapter = prepared.adapter;
     await Effect.runPromise(
       adapter.resumeSession({
+        resumeMode: "reattach",
         ...ref,
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       }),
@@ -380,6 +383,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     );
     await Effect.runPromise(
       prepared.adapter.resumeSession({
+        resumeMode: "reattach",
         ...ref,
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       }),
@@ -495,6 +499,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const adapter = prepared.adapter;
     await Effect.runPromise(
       adapter.resumeSession({
+        resumeMode: "reattach",
         ...ref,
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       }),
@@ -566,8 +571,12 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     const firstAdapter = first.adapter;
     const secondAdapter = second.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
-    await Effect.runPromise(firstAdapter.resumeSession({ ...ref, sessionScope }));
-    await Effect.runPromise(secondAdapter.resumeSession({ ...secondRef, sessionScope }));
+    await Effect.runPromise(
+      firstAdapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
+    await Effect.runPromise(
+      secondAdapter.resumeSession({ resumeMode: "reattach", ...secondRef, sessionScope }),
+    );
     await Effect.runPromise(first.startForwarding());
     await Effect.runPromise(second.startForwarding());
     await firstHarness.emit({
@@ -652,6 +661,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
     await Effect.runPromise(
       prepared.adapter.resumeSession({
+        resumeMode: "reattach",
         ...ref,
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       }),
@@ -785,6 +795,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
     await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
     await Effect.runPromise(
       prepared.adapter.resumeSession({
+        resumeMode: "reattach",
         ...ref,
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       }),

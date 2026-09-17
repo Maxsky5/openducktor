@@ -19,6 +19,8 @@ export type PreparedSessionSend = {
   systemPrompt?: string;
 };
 
+export type PrepareSessionSend = ReturnType<typeof createPrepareSessionSend>;
+
 const STALE_SEND_PREPARATION_ERROR = "Workspace changed while preparing session send.";
 
 const findSessionTask = (tasks: TaskCard[], taskId: string): TaskCard => {

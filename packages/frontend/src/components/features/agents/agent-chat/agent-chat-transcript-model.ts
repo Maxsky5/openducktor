@@ -122,6 +122,14 @@ const appendMessageRows = (
     });
   }
 
+  if (
+    message.role === "assistant" &&
+    message.meta?.kind === "assistant" &&
+    message.content.length === 0
+  ) {
+    return rowKey;
+  }
+
   rows.push({
     kind: "message",
     key: rowKey,

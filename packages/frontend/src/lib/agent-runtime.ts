@@ -169,6 +169,8 @@ export const runtimeSupportsCapability = (
       return runtimeDescriptor.capabilities.sessionLifecycle.supportsSessionFork;
     case "sessionLifecycle.supportsQueuedUserMessages":
       return runtimeDescriptor.capabilities.sessionLifecycle.supportsQueuedUserMessages;
+    case "sessionLifecycle.supportsInterruptedTurnResume":
+      return runtimeDescriptor.capabilities.sessionLifecycle.supportsInterruptedTurnResume;
     case "history.fidelity":
       return runtimeDescriptor.capabilities.history.fidelity !== "none";
     case "history.replay":

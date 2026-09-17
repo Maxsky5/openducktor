@@ -270,10 +270,13 @@ describe("OpencodeSdkAdapter event stream", () => {
     await flushAsync();
 
     expect(events.filter((entry) => entry.type === "session_status")).toHaveLength(2);
-    expect(events.filter((entry) => entry.type === "assistant_message")).toHaveLength(1);
     expect(events.filter((entry) => entry.type === "assistant_part")).toHaveLength(0);
     expect(events.filter((entry) => entry.type === "assistant_delta")).toHaveLength(0);
     expect(events.filter((entry) => entry.type === "session_idle")).toHaveLength(0);
+
+    const assistantMessages = events.filter((entry) => entry.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(2);
+    expect(assistantMessages.at(-1)).toMatchObject({ message: "All done" });
   });
 
   test("emits the final assistant message when idle-preserved parts arrive after terminal metadata", async () => {
@@ -333,11 +336,11 @@ describe("OpencodeSdkAdapter event stream", () => {
     expect(events.filter((entry) => entry.type === "assistant_delta")).toHaveLength(0);
 
     const assistantMessages = events.filter((entry) => entry.type === "assistant_message");
-    expect(assistantMessages).toHaveLength(1);
-    if (assistantMessages[0]?.type !== "assistant_message") {
+    expect(assistantMessages).toHaveLength(2);
+    if (assistantMessages.at(-1)?.type !== "assistant_message") {
       throw new Error("Expected assistant_message event");
     }
-    expect(assistantMessages[0].message).toBe("Recovered final output");
+    expect(assistantMessages.at(-1)?.message).toBe("Recovered final output");
     expect(events.filter((entry) => entry.type === "session_idle")).toHaveLength(0);
   });
 
@@ -657,6 +660,60 @@ describe("OpencodeSdkAdapter event stream", () => {
     }
     expect(toolPartEvent.part.status).toBe("error");
     expect(toolPartEvent.part.error).toContain("Task not found");
+  });
+
+  test("emits an empty final assistant message for a completed tool-only turn", async () => {
+    const streamEvents: TestGlobalEventPayload[] = [
+      createOpencodeMessageEventGroupFixture({
+        info: {
+          id: "assistant-tool-only",
+          role: "assistant",
+          sessionID: "session-opencode-1",
+          time: {
+            created: Date.parse("2026-02-17T12:00:06Z"),
+            completed: Date.parse("2026-02-17T12:00:08Z"),
+          },
+          finish: "stop",
+        },
+        parts: [
+          {
+            id: "tool-only-part",
+            sessionID: "session-opencode-1",
+            messageID: "assistant-tool-only",
+            callID: "call-tool-only",
+            type: "tool",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { command: "ls" },
+              output: "",
+            },
+          },
+        ],
+      }),
+    ];
+
+    const mock = makeMockClient({ streamEvents });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const events: AgentEvent[] = [];
+    await startDefaultSession(adapter, "spec");
+
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
+      events.push(event);
+    });
+    await flushAsync();
+
+    const assistantMessages = events.filter((entry) => entry.type === "assistant_message");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]).toMatchObject({
+      type: "assistant_message",
+      messageId: "assistant-tool-only",
+      message: "",
+    });
   });
 
   test("maps flattened MCP tool error JSON output as error status", async () => {

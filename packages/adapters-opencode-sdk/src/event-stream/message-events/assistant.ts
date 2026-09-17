@@ -16,6 +16,7 @@ import { flushPendingSubagentInputEventsForSession, markSessionActive } from "..
 import { flushPendingBackgroundTaskResultSubagentParts } from "./background-task-result";
 import {
   getKnownMessageParts,
+  hasSuccessfulStopSignalInParts,
   hasTerminalStopSignalInParts,
   isAssistantMessage,
   updateMessageMetadata,
@@ -204,6 +205,7 @@ export const maybeEmitCompletedAssistantMessage = (
     timestamp?: string;
     info?: ParsedOpencodeMessage["info"];
     hasStopSignal?: boolean;
+    hasSuccessfulStopSignal?: boolean;
   },
 ): boolean => {
   const { session } = runtime;
@@ -225,11 +227,16 @@ export const maybeEmitCompletedAssistantMessage = (
     input.hasStopSignal === true ||
     existingMetadata?.hasStopSignal === true ||
     hasTerminalStopSignalInParts(assistantParts, undefined);
+  const hasSuccessfulStopSignal =
+    input.hasSuccessfulStopSignal === true ||
+    existingMetadata?.hasSuccessfulStopSignal === true ||
+    hasSuccessfulStopSignalInParts(assistantParts, undefined);
   const timestamp = input.timestamp ?? existingMetadata?.timestamp ?? runtime.now();
 
   const metadataUpdates: Parameters<typeof updateMessageMetadata>[2] = {
     timestamp,
     hasStopSignal,
+    hasSuccessfulStopSignal,
   };
   if (assistantModel) {
     metadataUpdates.model = assistantModel;
@@ -239,14 +246,36 @@ export const maybeEmitCompletedAssistantMessage = (
   }
   updateMessageMetadata(runtime, input.messageId, metadataUpdates);
 
-  if (!hasStopSignal || assistantParts.length === 0 || !isStreamTurnIdle(session)) {
+  if (hasSuccessfulStopSignal) {
+    // Known parts can prove the successful stop before the message metadata carries it.
+    // Register the completion now, so a later settle event flushes the final message
+    // ahead of session_idle instead of letting transcript readers see an unfinished turn.
+    updateAssistantMessageCompletionState(runtime, input.messageId, true);
+  }
+
+  if (!hasStopSignal || !hasSuccessfulStopSignal || !isStreamTurnIdle(session)) {
     return false;
   }
 
   const text = readTextFromParts(assistantParts);
   const visible = sanitizeAssistantMessage(text);
   if (visible.length === 0) {
+    // A text-less or partless turn emits the final marker once, so transcript readers
+    // keep the terminal signal for the resume affordance and the settled-turn cleanup.
+    // The marker stays out of emittedAssistantMessageIds, so a late text part can
+    // still replace the row at the reader. An error finish stays unfinalized: the
+    // interrupted-turn probe accepts it as resumable.
+    if (!session.pendingCompletedAssistantMessageIds.has(input.messageId)) {
+      return false;
+    }
     session.pendingCompletedAssistantMessageIds.delete(input.messageId);
+    runtime.emit(runtime.externalSessionId, {
+      type: "assistant_message",
+      externalSessionId: runtime.externalSessionId,
+      timestamp,
+      messageId: input.messageId,
+      message: "",
+    });
     return true;
   }
 

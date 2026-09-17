@@ -21,12 +21,17 @@ export type ClaudeSessionLaunchInput = {
   externalSessionId: string;
   options: Pick<Options, "forkSession" | "resume" | "sessionId">;
   parentExternalSessionId?: string;
+  /**
+   * Adds CLAUDE_CODE_RESUME_INTERRUPTED_TURN=1 so the bundled CLI classifies the
+   * transcript tail and starts its hidden continuation turn.
+   */
+  resumeInterruptedTurn?: boolean;
   startedMessage: string;
-  title: string;
+  title?: string;
 };
 
 const sessionPresentation = (
-  action: "Forked" | "Resumed" | "Started",
+  action: "Continued" | "Forked" | "Resumed" | "Started",
   scope: AgentSessionScope,
 ) => ({
   startedMessage: `${action} ${scope.kind === "repository" ? "repository" : scope.role} session`,
@@ -49,6 +54,20 @@ export const resumedClaudeSessionLaunch = (
   externalSessionId,
   ...sessionPresentation("Resumed", scope),
   options: { resume: externalSessionId },
+});
+
+/**
+ * Relaunches a stored Claude session with the interrupted-turn resume switch.
+ * The working directory, role, model, system prompt, and session identity stay unchanged.
+ */
+export const continuedClaudeSessionLaunch = (
+  scope: AgentSessionScope,
+  externalSessionId: string,
+): ClaudeSessionLaunchInput => ({
+  externalSessionId,
+  ...sessionPresentation("Continued", scope),
+  options: { resume: externalSessionId },
+  resumeInterruptedTurn: true,
 });
 
 export const forkedClaudeSessionLaunch = (

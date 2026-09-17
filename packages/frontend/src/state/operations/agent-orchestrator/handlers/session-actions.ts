@@ -9,6 +9,7 @@ import type { LoadSettingsSnapshotForRuntimePolicy } from "../support/session-ru
 import type { SessionTurnState } from "../support/session-turn-state";
 import type { PendingInputActionDependencies } from "./pending-input-actions";
 import { createPendingInputActions } from "./pending-input-actions";
+import { createContinueInterruptedTurn } from "./continue-interrupted-turn";
 import { createPrepareSessionSend } from "./prepare-session-send";
 import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
@@ -139,6 +140,13 @@ export const createAgentSessionActions = ({
     refreshStoppedWorkflowSession,
   });
 
+  const continueInterruptedTurn = createContinueInterruptedTurn({
+    workspaceRepoPath,
+    adapter,
+    readSessionSnapshot,
+    prepareSessionSend,
+  });
+
   const pendingInputActions = createPendingInputActions({
     workspaceRepoPath,
     liveSessionHost,
@@ -159,6 +167,7 @@ export const createAgentSessionActions = ({
     sendAgentMessage,
     startAgentSession,
     stopAgentSession,
+    continueInterruptedTurn,
     updateAgentSessionModel: modelActions.updateAgentSessionModel,
     replyAgentApproval: pendingInputActions.replyAgentApproval,
     answerAgentQuestion: pendingInputActions.answerAgentQuestion,

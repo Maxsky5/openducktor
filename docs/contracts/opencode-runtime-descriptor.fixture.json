@@ -48,7 +48,8 @@
       "forkTargets": ["session"],
       "supportsListLiveSessions": true,
       "supportsQueuedUserMessages": true,
-      "supportsPendingInputSnapshots": true
+      "supportsPendingInputSnapshots": true,
+      "supportsInterruptedTurnResume": true
     },
     "history": {
       "loadable": true,

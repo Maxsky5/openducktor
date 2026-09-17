@@ -94,6 +94,44 @@ const hasComposerSendContent = (
 const SEND_PENDING_ITEMS_BADGE_CLASS_NAME =
   "pointer-events-none absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-300 px-1 text-[10px] font-semibold leading-none text-neutral-950";
 
+const AgentChatComposerSendControl = memo(function AgentChatComposerSendControl({
+  sendDisabled,
+  showSubmittingState,
+  pendingSendItems,
+}: {
+  sendDisabled: boolean;
+  showSubmittingState: boolean;
+  pendingSendItems: AgentChatComposerModel["pendingSendItems"];
+}): ReactElement {
+  return (
+    <div className="relative">
+      <Button
+        type="submit"
+        size="icon"
+        className="size-8 rounded-full"
+        aria-label={showSubmittingState ? "Preparing message" : "Send message"}
+        disabled={sendDisabled}
+      >
+        {showSubmittingState ? (
+          <LoaderCircle className="size-3.5 animate-spin" />
+        ) : (
+          <SendHorizontal className="size-3.5" />
+        )}
+      </Button>
+      {pendingSendItems && pendingSendItems.count > 0 ? (
+        <span
+          aria-label={pendingSendItems.accessibleLabel}
+          className={SEND_PENDING_ITEMS_BADGE_CLASS_NAME}
+          data-testid="agent-chat-send-pending-items-badge"
+          role="status"
+        >
+          {pendingSendItems.count}
+        </span>
+      ) : null}
+    </div>
+  );
+});
+
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onPickAttachments,
   attachmentIntakeDisabled,
@@ -220,31 +258,11 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             <Square className="size-3 fill-current" />
           </Button>
         ) : null}
-        <div className="relative">
-          <Button
-            type="submit"
-            size="icon"
-            className="size-8 rounded-full"
-            aria-label={showSubmittingState ? "Preparing message" : "Send message"}
-            disabled={sendDisabled}
-          >
-            {showSubmittingState ? (
-              <LoaderCircle className="size-3.5 animate-spin" />
-            ) : (
-              <SendHorizontal className="size-3.5" />
-            )}
-          </Button>
-          {pendingSendItems && pendingSendItems.count > 0 ? (
-            <span
-              aria-label={pendingSendItems.accessibleLabel}
-              className={SEND_PENDING_ITEMS_BADGE_CLASS_NAME}
-              data-testid="agent-chat-send-pending-items-badge"
-              role="status"
-            >
-              {pendingSendItems.count}
-            </span>
-          ) : null}
-        </div>
+        <AgentChatComposerSendControl
+          sendDisabled={sendDisabled}
+          showSubmittingState={showSubmittingState}
+          pendingSendItems={pendingSendItems}
+        />
       </div>
     </div>
   );
@@ -584,6 +602,7 @@ const composerInputDisabledFor = ({
   isReadOnly,
   isModelSelectionPending,
   isWaitingInput,
+  isResumingSession,
   busySendBlockedReason,
 }: AgentChatComposerModel): boolean => {
   return (
@@ -591,6 +610,7 @@ const composerInputDisabledFor = ({
     isReadOnly ||
     isModelSelectionPending ||
     isWaitingInput ||
+    isResumingSession ||
     Boolean(busySendBlockedReason)
   );
 };

@@ -20,6 +20,7 @@ const buildComposerConfig = (
   waitingInputPlaceholder: null,
   busySendBlockedReason: null,
   canStopSession: false,
+  isResumingSession: false,
   stopAgentSession: async () => {},
   isReadOnly: false,
   readOnlyReason: null,

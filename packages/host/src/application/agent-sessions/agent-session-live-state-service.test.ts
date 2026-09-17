@@ -1248,6 +1248,7 @@ describe("createAgentSessionLiveStateService", () => {
           resumeInput = input;
           return summary;
         }),
+      continueInterruptedTurn: () => Effect.dieMessage("unexpected continue"),
       forkSession: () => Effect.dieMessage("unexpected fork"),
       sendUserMessage: () => Effect.dieMessage("unexpected send"),
       updateSessionModel: () => Effect.dieMessage("unexpected model update"),
@@ -1264,8 +1265,125 @@ describe("createAgentSessionLiveStateService", () => {
       sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
     };
 
-    await expect(Effect.runPromise(service.resumeSession(input))).resolves.toEqual(summary);
-    expect(resumeInput).toEqual(input);
+    await expect(
+      Effect.runPromise(service.resumeSession({ ...input, resumeMode: "reattach" })),
+    ).resolves.toEqual(summary);
+    expect(resumeInput).toEqual({ ...input, resumeMode: "reattach" });
+  });
+
+  test("admits one interrupted-turn continuation per session and releases the guard", async () => {
+    const { service } = createHarness();
+    const summary = {
+      externalSessionId: "persisted-session",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/persisted-session",
+      startedAt: "2026-07-16T10:00:00.000Z",
+      status: "running" as const,
+    };
+    const continuationStarted = await Effect.runPromise(Deferred.make<void>());
+    const releaseContinuation = await Effect.runPromise(Deferred.make<void>());
+    const continuationInputs: unknown[] = [];
+    const adapter = {
+      ...fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [] }),
+      queries: unexpectedRuntimeQueries,
+      supportsSessionControl: true,
+      startSession: () => Effect.dieMessage("unexpected start"),
+      resumeSession: () => Effect.dieMessage("unexpected resume"),
+      continueInterruptedTurn: (input: { externalSessionId: string; workingDirectory: string }) => {
+        continuationInputs.push(input);
+        return Effect.gen(function* () {
+          yield* Deferred.succeed(continuationStarted, undefined);
+          yield* Deferred.await(releaseContinuation);
+          return summary;
+        });
+      },
+      forkSession: () => Effect.dieMessage("unexpected fork"),
+      sendUserMessage: () => Effect.dieMessage("unexpected send"),
+      updateSessionModel: () => Effect.dieMessage("unexpected model update"),
+      stopSession: () => Effect.dieMessage("unexpected stop"),
+      releaseSession: () => Effect.dieMessage("unexpected release"),
+    } satisfies AgentSessionRuntimeAdapterPort;
+    await Effect.runPromise(service.registerRuntimeAdapter(adapter));
+
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/persisted-session",
+      externalSessionId: "persisted-session",
+      sessionScope: { kind: "repository" as const },
+    };
+    const first = Effect.runPromise(service.continueInterruptedTurn(input));
+    await Effect.runPromise(Deferred.await(continuationStarted));
+
+    const blocked = await expectHostFailure(service.continueInterruptedTurn(input));
+    expect(blocked).toMatchObject({ reason: "continuation_in_progress" });
+    expect(continuationInputs).toHaveLength(1);
+
+    await Effect.runPromise(Deferred.succeed(releaseContinuation, undefined));
+    await expect(first).resolves.toMatchObject({ externalSessionId: "persisted-session" });
+
+    await expect(Effect.runPromise(service.continueInterruptedTurn(input))).resolves.toMatchObject({
+      externalSessionId: "persisted-session",
+    });
+    expect(continuationInputs).toHaveLength(2);
+  });
+
+  test("classifies a missing live runtime as runtime_unavailable", async () => {
+    const { service } = createHarness();
+
+    const failure = await expectHostFailure(
+      service.continueInterruptedTurn({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/missing-session",
+        externalSessionId: "missing-session",
+        sessionScope: { kind: "repository" },
+      }),
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      reason: "runtime_unavailable",
+      operation: "agent-session.continue-interrupted-turn",
+      sessionRef: {
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/missing-session",
+        externalSessionId: "missing-session",
+      },
+      nextAction: "Restore or restart the runtime for this session, then retry Resume.",
+    });
+  });
+
+  test("classifies a runtime without session control as unsupported", async () => {
+    const { service } = createHarness();
+    await Effect.runPromise(
+      service.registerRuntimeAdapter(
+        fakeAdapter({
+          runtimeId: "runtime-without-control",
+          runtimeKind: "opencode",
+          snapshots: () => [],
+        }),
+      ),
+    );
+
+    const failure = await expectHostFailure(
+      service.continueInterruptedTurn({
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/persisted-session",
+        externalSessionId: "persisted-session",
+        sessionScope: { kind: "repository" },
+      }),
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      reason: "unsupported",
+      operation: "agent-session.continue-interrupted-turn",
+      nextAction:
+        "Use a runtime that supports interrupted-turn resume, or send a new message to start new work.",
+    });
   });
 
   test("routes unloaded session controls through the repository runtime scope", async () => {
@@ -1289,6 +1407,7 @@ describe("createAgentSessionLiveStateService", () => {
       supportsSessionControl: true,
       startSession: () => Effect.dieMessage("unexpected start"),
       resumeSession: () => Effect.dieMessage("unexpected resume"),
+      continueInterruptedTurn: () => Effect.dieMessage("unexpected continue"),
       forkSession: () => Effect.dieMessage("unexpected fork"),
       sendUserMessage: (input) =>
         Effect.sync(() => {
@@ -1336,6 +1455,7 @@ describe("createAgentSessionLiveStateService", () => {
       workingDirectory: "/repo",
       externalSessionId: "repository-session",
       sessionScope: { kind: "repository" as const },
+      resumeMode: "reattach" as const,
     };
     const expectMissingRoute = async (effect: Effect.Effect<unknown, HostError>) => {
       const error = await expectHostFailure(effect);

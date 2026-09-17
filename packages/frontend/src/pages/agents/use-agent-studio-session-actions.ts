@@ -1,4 +1,5 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type {
   GitBranch,
   GitTargetBranch,
@@ -11,6 +12,8 @@ import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openduc
 import { useCallback } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
+import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
@@ -65,6 +68,7 @@ type UseAgentStudioSessionActionsArgs = {
   workspaceRepoPath: string | null;
   runSessionStartWorkflow: RunSessionStartWorkflow;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
+  continueInterruptedTurn: AgentOperationsContextValue["continueInterruptedTurn"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
@@ -90,6 +94,11 @@ export type UseAgentStudioSessionActionsResult = {
   canUseKickoffPrompt: boolean;
   kickoffLabel: string;
   canStopSession: boolean;
+  canResumeSession: boolean;
+  isResumingSession: boolean;
+  resumeSessionError: string | null;
+  persistentResumeError: string | null;
+  onResumeSession: () => void;
   startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<AgentChatSendResult>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
@@ -124,6 +133,7 @@ export function useAgentStudioSessionActions({
   workspaceRepoPath,
   runSessionStartWorkflow,
   sendAgentMessage,
+  continueInterruptedTurn,
   humanRequestChangesTask,
   setTaskTargetBranch,
   replyAgentApproval,
@@ -250,6 +260,27 @@ export function useAgentStudioSessionActions({
   });
   const kickoffLabel = LAUNCH_ACTION_LABELS[launchActionId];
   const canStopSession = selectedSessionIdentity !== null && isSessionWorking;
+  const canResumeSession = sessionState.canResumeSession;
+
+  const selectedSessionKey =
+    selectedSessionIdentity === null ? null : agentSessionIdentityKey(selectedSessionIdentity);
+  const { resume, isSessionResuming, resumeErrorForSession, persistentResumeErrorForSession } =
+    useInterruptedTurnResume(continueInterruptedTurn, {
+      sessionKey: selectedSessionKey,
+      isLatestTurnSettled: hasSettledLatestTurn(loadedSession?.messages.items ?? []),
+    });
+  const isResumingSession = selectedSessionKey !== null && isSessionResuming(selectedSessionKey);
+  const resumeSessionError =
+    selectedSessionKey === null ? null : resumeErrorForSession(selectedSessionKey);
+  const persistentResumeError =
+    selectedSessionKey === null ? null : persistentResumeErrorForSession(selectedSessionKey);
+
+  const onResumeSession = useCallback((): void => {
+    if (selectedSessionIdentity === null) {
+      return;
+    }
+    resume(selectedSessionIdentity);
+  }, [resume, selectedSessionIdentity]);
 
   return {
     isStarting,
@@ -266,6 +297,11 @@ export function useAgentStudioSessionActions({
     canUseKickoffPrompt,
     kickoffLabel,
     canStopSession,
+    canResumeSession,
+    isResumingSession,
+    resumeSessionError,
+    persistentResumeError,
+    onResumeSession,
     startLaunchKickoff,
     onSend,
     onSubmitQuestionAnswers,

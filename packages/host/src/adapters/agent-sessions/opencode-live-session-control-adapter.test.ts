@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { interruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
+import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import { createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter";
 import {
@@ -66,6 +68,7 @@ describe("OpenCode live session controls", () => {
     try {
       await Effect.runPromise(
         prepared.adapter.resumeSession({
+          resumeMode: "reattach",
           ...ref,
           externalSessionId: "controlled-session",
           sessionScope: controlSummary.sessionAssociation,
@@ -79,6 +82,46 @@ describe("OpenCode live session controls", () => {
       ]);
       expect(snapshots[0]?.parentExternalSessionId).toBeUndefined();
       expect(snapshots[0]).not.toHaveProperty("sessionAssociation");
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
+  test("forwards the prepared model and system prompt to a continuation", async () => {
+    const harness = createRuntimeHarness();
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    const model = {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "medium",
+    };
+
+    try {
+      await Effect.runPromise(
+        prepared.adapter.continueInterruptedTurn({
+          ...ref,
+          externalSessionId: "controlled-session",
+          sessionScope: controlSummary.sessionAssociation,
+          model,
+          systemPrompt: "Keep the stored plan.",
+        }),
+      );
+
+      expect(harness.controlCalls).toContainEqual({
+        operation: "continue",
+        input: expect.objectContaining({
+          externalSessionId: "controlled-session",
+          model,
+          systemPrompt: "Keep the stored plan.",
+        }),
+      });
     } finally {
       await Effect.runPromise(prepared.adapter.releaseRuntime());
     }
@@ -121,6 +164,45 @@ describe("OpenCode live session controls", () => {
     }
   });
 
+  test("maps a native continuation identity mismatch to the typed resume failure", async () => {
+    const harness = createRuntimeHarness({
+      continueInterruptedTurnError: interruptedTurnResumeError({
+        reason: "identity_mismatch",
+        message:
+          "OpenCode session 'controlled-session' is registered to repo '/repo' and working directory '/repo/other-worktree'.",
+      }),
+    });
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+
+    try {
+      const failure = await Effect.runPromise(
+        Effect.flip(
+          prepared.adapter.continueInterruptedTurn({
+            ...ref,
+            externalSessionId: "controlled-session",
+            sessionScope: controlSummary.sessionAssociation,
+          }),
+        ),
+      );
+
+      expect(failure).toBeInstanceOf(AgentSessionResumeError);
+      expect(failure).toMatchObject({
+        reason: "identity_mismatch",
+        operation: "opencode-live-session.continue-interrupted-turn",
+        nextAction:
+          "Reopen the session from the session list so the stored identity matches, then retry Resume.",
+      });
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
   test("returns metadata-only controls while the host retains runtime state", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
@@ -149,6 +231,7 @@ describe("OpenCode live session controls", () => {
     });
     await Effect.runPromise(
       adapter.resumeSession({
+        resumeMode: "reattach",
         ...controlRef,
         sessionScope: startInput.sessionScope,
       }),
@@ -197,6 +280,7 @@ describe("OpenCode live session controls", () => {
     });
     await Effect.runPromise(
       adapter.resumeSession({
+        resumeMode: "reattach",
         ...controlRef,
         sessionScope: startInput.sessionScope,
       }),
@@ -252,9 +336,16 @@ describe("OpenCode live session controls", () => {
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
-    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
     await Effect.runPromise(
-      adapter.resumeSession({ ...ref, externalSessionId: "session-2", sessionScope }),
+      adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
+    await Effect.runPromise(
+      adapter.resumeSession({
+        resumeMode: "reattach",
+        ...ref,
+        externalSessionId: "session-2",
+        sessionScope,
+      }),
     );
     publishedChanges.length = 0;
     const sending = Effect.runPromise(
@@ -377,9 +468,16 @@ describe("OpenCode live session controls", () => {
     );
     const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
-    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
     await Effect.runPromise(
-      adapter.resumeSession({ ...ref, externalSessionId: "session-2", sessionScope }),
+      adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
+    await Effect.runPromise(
+      adapter.resumeSession({
+        resumeMode: "reattach",
+        ...ref,
+        externalSessionId: "session-2",
+        sessionScope,
+      }),
     );
     const send = (externalSessionId: string) =>
       Effect.runPromise(
@@ -427,6 +525,93 @@ describe("OpenCode live session controls", () => {
     }
   });
 
+  test("holds a send out of a session while the interrupted-turn continuation runs", async () => {
+    let releaseContinuation: () => void = () => undefined;
+    const continuationBarrier = new Promise<void>((resolve) => {
+      releaseContinuation = resolve;
+    });
+    let resolveContinuationStarted: () => void = () => undefined;
+    const continuationStarted = new Promise<void>((resolve) => {
+      resolveContinuationStarted = resolve;
+    });
+    let resolveSendStarted: () => void = () => undefined;
+    const sendStarted = new Promise<void>((resolve) => {
+      resolveSendStarted = resolve;
+    });
+    const harness = createRuntimeHarness({
+      continueInterruptedTurnBarrier: continuationBarrier,
+      onContinueInterruptedTurn: resolveContinuationStarted,
+      onSendUserMessage: resolveSendStarted,
+    });
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    const adapter = prepared.adapter;
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    await Effect.runPromise(
+      adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
+    await Effect.runPromise(
+      adapter.resumeSession({
+        resumeMode: "reattach",
+        ...ref,
+        externalSessionId: "session-2",
+        sessionScope,
+      }),
+    );
+    const send = (externalSessionId: string) =>
+      Effect.runPromise(
+        adapter.sendUserMessage({
+          ...ref,
+          externalSessionId,
+          sessionScope,
+          parts: [{ kind: "text", text: "Hello" }],
+        }),
+      );
+
+    const continuation = Effect.runPromise(
+      adapter.continueInterruptedTurn({ ...ref, sessionScope }),
+    );
+
+    try {
+      await continuationStarted;
+
+      const queued = send("session-1");
+      expect(
+        await Promise.race([
+          sendStarted.then(() => "started" as const),
+          new Promise<"queued">((resolve) => setTimeout(() => resolve("queued"), 100)),
+        ]),
+      ).toBe("queued");
+
+      const other = send("session-2");
+      expect(
+        await Promise.race([
+          sendStarted.then(() => "started" as const),
+          new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 500)),
+        ]),
+      ).toBe("started");
+
+      releaseContinuation();
+      await continuation;
+      await queued;
+      await other;
+
+      expect(
+        harness.controlCalls
+          .filter((call) => call.operation === "continue" || call.operation === "send")
+          .map((call) => `${call.operation}:${call.input.externalSessionId}`),
+      ).toEqual(["continue:session-1", "send:session-2", "send:session-1"]);
+    } finally {
+      releaseContinuation();
+      await continuation.catch(() => undefined);
+      await Effect.runPromise(adapter.releaseRuntime());
+    }
+  });
+
   test("accepts a send result that arrives after live state is released", async () => {
     let resolveSendStarted: () => void = () => undefined;
     let releaseSend: () => void = () => undefined;
@@ -450,7 +635,9 @@ describe("OpenCode live session controls", () => {
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
-    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
+    await Effect.runPromise(
+      adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
     const sending = Effect.runPromise(
       adapter.sendUserMessage({
         ...ref,
@@ -524,6 +711,7 @@ describe("OpenCode live session controls", () => {
       } else if (operation === "resume") {
         await Effect.runPromise(
           adapter.resumeSession({
+            resumeMode: "reattach",
             ...controlRef,
             sessionScope,
           }),
@@ -604,9 +792,16 @@ describe("OpenCode live session controls", () => {
     await Effect.runPromise(prepared.startForwarding());
     const adapter = prepared.adapter;
     const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
-    await Effect.runPromise(adapter.resumeSession({ ...ref, sessionScope }));
     await Effect.runPromise(
-      adapter.resumeSession({ ...ref, externalSessionId: "session-2", sessionScope }),
+      adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
+    await Effect.runPromise(
+      adapter.resumeSession({
+        resumeMode: "reattach",
+        ...ref,
+        externalSessionId: "session-2",
+        sessionScope,
+      }),
     );
     publishedChanges.length = 0;
 
@@ -667,6 +862,7 @@ describe("OpenCode live session controls", () => {
     const adapter = prepared.adapter;
     await Effect.runPromise(
       adapter.resumeSession({
+        resumeMode: "reattach",
         ...ref,
         sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
       }),

@@ -20,19 +20,19 @@ const input = {
 };
 const payload = { mime: "image/png" as const, byteLength: 3, base64: "AAAA" };
 const binding = { runtimeId: "runtime", runtimeKind: "codex" as const, repoPath: "/repo" };
-const definitions = {
-  listRuntimeDefinitions: () => [
-    {
-      ...RUNTIME_DESCRIPTORS_BY_KIND.codex,
-      capabilities: {
-        ...RUNTIME_DESCRIPTORS_BY_KIND.codex.capabilities,
-        optionalSurfaces: {
-          ...RUNTIME_DESCRIPTORS_BY_KIND.codex.capabilities.optionalSurfaces,
-          supportsImageGeneration: true,
-        },
-      },
+const codexImageDefinition = {
+  ...RUNTIME_DESCRIPTORS_BY_KIND.codex,
+  capabilities: {
+    ...RUNTIME_DESCRIPTORS_BY_KIND.codex.capabilities,
+    optionalSurfaces: {
+      ...RUNTIME_DESCRIPTORS_BY_KIND.codex.capabilities.optionalSurfaces,
+      supportsImageGeneration: true,
     },
-  ],
+  },
+};
+const definitions = {
+  listRuntimeDefinitions: () => [codexImageDefinition],
+  listEffectiveRuntimeDefinitions: () => Effect.succeed([codexImageDefinition]),
 };
 
 test("reads through the scoped adapter without live snapshot or resume and rejects forged command fields", async () => {
@@ -133,7 +133,10 @@ test("unsupported capability prevents source and file reads", async () => {
   const service = createGeneratedImageReadService(
     createLiveSessionAdapterRegistry(),
     { read: () => Effect.dieMessage("unexpected file read") },
-    { listRuntimeDefinitions: () => [] },
+    {
+      listRuntimeDefinitions: () => [],
+      listEffectiveRuntimeDefinitions: () => Effect.succeed([]),
+    },
   );
   await expect(Effect.runPromise(service.read(input))).rejects.toThrow("does not support");
 });

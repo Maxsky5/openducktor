@@ -49,12 +49,13 @@ export const controlSummary = {
 };
 
 type ControlCall = {
-  [Operation in "start" | "resume" | "fork" | "send" | "model" | "stop" | "release"]: {
+  [Operation in "start" | "resume" | "continue" | "fork" | "send" | "model" | "stop" | "release"]: {
     operation: Operation;
     input: Parameters<
       OpencodeSessionRuntimeConnection[{
         start: "startSession";
         resume: "resumeSession";
+        continue: "continueInterruptedTurn";
         fork: "forkSession";
         send: "sendUserMessage";
         model: "updateSessionModel";
@@ -63,7 +64,7 @@ type ControlCall = {
       }[Operation]]
     >[0];
   };
-}["start" | "resume" | "fork" | "send" | "model" | "stop" | "release"];
+}["start" | "resume" | "continue" | "fork" | "send" | "model" | "stop" | "release"];
 
 type RuntimeHarness = {
   readonly prepareRuntime: PrepareOpencodeSessionRuntime;
@@ -78,6 +79,9 @@ type RuntimeHarness = {
 
 export const createRuntimeHarness = (
   options: {
+    readonly continueInterruptedTurnError?: Error;
+    readonly continueInterruptedTurnBarrier?: Promise<void>;
+    readonly onContinueInterruptedTurn?: () => void;
     readonly sendUserMessageBarrier?: Promise<void>;
     readonly onSendUserMessage?: () => void;
     readonly sessionFailures?: OpencodeRuntimeSnapshotFailure[];
@@ -119,6 +123,20 @@ export const createRuntimeHarness = (
     },
     resumeSession: async (input) => {
       controlCalls.push({ operation: "resume", input });
+      return {
+        ...controlSummary,
+        externalSessionId: input.externalSessionId,
+        workingDirectory: input.workingDirectory,
+        sessionAssociation: input.sessionScope,
+      };
+    },
+    continueInterruptedTurn: async (input) => {
+      controlCalls.push({ operation: "continue", input });
+      if (options.continueInterruptedTurnError) {
+        throw options.continueInterruptedTurnError;
+      }
+      options.onContinueInterruptedTurn?.();
+      await options.continueInterruptedTurnBarrier;
       return {
         ...controlSummary,
         externalSessionId: input.externalSessionId,

@@ -28,6 +28,7 @@ import {
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
+import { HostInvokeError } from "@openducktor/host-client";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import {
   type AgentSessionFixtureOverrides,
@@ -35,6 +36,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type {
   AgentApprovalRequest,
+  AgentChatMessage,
   AgentQuestionRequest,
   AgentSessionIdentity,
 } from "@/types/agent-orchestrator";
@@ -384,6 +386,7 @@ const createBaseArgs = (): HookArgs => {
     },
     runSessionStartWorkflow: createRunSessionStartWorkflow(),
     sendAgentMessage: async () => {},
+    continueInterruptedTurn: async () => undefined,
     humanRequestChangesTask: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
@@ -411,6 +414,180 @@ describe("useAgentStudioSessionActions", () => {
   afterEach(() => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+  });
+
+  test("shows the host reason and next action when the runtime refuses a continuation", async () => {
+    const failure = new HostInvokeError("Continuation refused", {
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "completed_turn",
+        sessionRef: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        },
+        operation: "agent-session.continue-interrupted-turn",
+        message: "OpenCode session 'session-1' has a completed latest turn.",
+        nextAction: "Send a new message to start new work.",
+      },
+    });
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      ...selectedSessionArgs(),
+      continueInterruptedTurn: async () => {
+        throw failure;
+      },
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.onResumeSession();
+      });
+      await harness.waitFor(() => harness.getLatest().resumeSessionError !== null);
+
+      expect(harness.getLatest().resumeSessionError).toBe(
+        "OpenCode session 'session-1' has a completed latest turn. Send a new message to start new work.",
+      );
+      expect(harness.getLatest().isResumingSession).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps an unconfirmed continuation failure for the chat surface", async () => {
+    const failure = new HostInvokeError("Continuation unconfirmed", {
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "runtime_unavailable",
+        sessionRef: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        },
+        operation: "agent-session.continue-interrupted-turn",
+        message: "The runtime did not confirm the continuation.",
+        nextAction: "Inspect the runtime and this session.",
+      },
+    });
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      ...selectedSessionArgs(),
+      continueInterruptedTurn: async () => {
+        throw failure;
+      },
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.onResumeSession();
+      });
+      await harness.waitFor(() => harness.getLatest().persistentResumeError !== null);
+
+      expect(harness.getLatest().persistentResumeError).toBe(
+        "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("clears an unconfirmed continuation failure when the selected transcript settles", async () => {
+    const failure = new HostInvokeError("Continuation unconfirmed", {
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "runtime_unavailable",
+        sessionRef: {
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+        },
+        operation: "agent-session.continue-interrupted-turn",
+        message: "The runtime did not confirm the continuation.",
+        nextAction: "Inspect the runtime and this session.",
+      },
+    });
+    const userMessage: AgentChatMessage = {
+      id: "user-1",
+      role: "user",
+      content: "Continue please",
+      timestamp: "2026-09-12T10:00:00.000Z",
+    };
+    const finalAssistantMessage: AgentChatMessage = {
+      id: "assistant-1",
+      role: "assistant",
+      content: "Done",
+      timestamp: "2026-09-12T10:01:00.000Z",
+      meta: { kind: "assistant", isFinal: true },
+    };
+    const args = {
+      ...createBaseArgs(),
+      ...selectedSessionArgs({
+        externalSessionId: "session-1",
+        messages: [userMessage],
+      }),
+      continueInterruptedTurn: async () => {
+        throw failure;
+      },
+    };
+    const harness = createHookHarness(args);
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.onResumeSession();
+      });
+      await harness.waitFor(() => harness.getLatest().persistentResumeError !== null);
+
+      await harness.update({
+        ...args,
+        ...selectedSessionArgs({
+          externalSessionId: "session-1",
+          messages: [userMessage, finalAssistantMessage],
+        }),
+      });
+
+      await harness.waitFor(() => harness.getLatest().persistentResumeError === null);
+      expect(harness.getLatest().resumeSessionError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("blocks a second resume selection before the first one renders", async () => {
+    let resolveContinuation = (): void => {};
+    const continueInterruptedTurn = mock(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveContinuation = resolve;
+        }),
+    );
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      ...selectedSessionArgs(),
+      continueInterruptedTurn,
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.onResumeSession();
+        state.onResumeSession();
+      });
+
+      expect(continueInterruptedTurn).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().isResumingSession).toBe(true);
+
+      resolveContinuation();
+      await harness.waitFor(() => harness.getLatest().isResumingSession === false);
+      expect(continueInterruptedTurn).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("prepares a message-first session target without starting or sending", async () => {
@@ -2009,6 +2186,7 @@ describe("direct prepared submission", () => {
       setTaskTargetBranch: persist,
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     });
     try {
       await harness.mount();
@@ -2046,6 +2224,7 @@ describe("direct prepared submission", () => {
       setTaskTargetBranch: persist,
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     });
     try {
       await harness.mount();
@@ -2070,6 +2249,7 @@ describe("direct prepared submission", () => {
       selectedTask: createTask({ targetBranchError: "Invalid task target branch" }),
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     });
     try {
       await harness.mount();
@@ -2095,6 +2275,7 @@ describe("direct prepared submission", () => {
       repoSettings: null,
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     });
     try {
       await harness.mount();
@@ -2133,6 +2314,7 @@ describe("direct prepared submission", () => {
         }),
         runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
         sendAgentMessage: send,
+        continueInterruptedTurn: async () => undefined,
       };
       const harness = createHookHarness(args);
       await harness.mount();
@@ -2182,6 +2364,7 @@ describe("direct prepared submission", () => {
       ...createBaseArgs(),
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     };
     const harness = createHookHarness(args);
     await harness.mount();
@@ -2197,6 +2380,7 @@ describe("direct prepared submission", () => {
       ...args,
       selectedSession: selectedSessionFromIdentity(sessionIdentity("kept")),
       sendAgentMessage: async () => {},
+      continueInterruptedTurn: async () => undefined,
     });
     await harness.run(async (state) => {
       expect(await state.onSend(createComposerDraft("recover me"))).toBe(true);
@@ -2216,6 +2400,7 @@ describe("prepared composer catalog refresh", () => {
         ...createBaseArgs(),
         runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
         sendAgentMessage: send,
+        continueInterruptedTurn: async () => undefined,
       };
       let catalog = args.newSessionCatalog!;
       const loadCatalog = async () => catalog;
@@ -2299,6 +2484,7 @@ describe("direct submission context isolation", () => {
       scheduleQueryUpdate: navigation,
       runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
       sendAgentMessage: send,
+      continueInterruptedTurn: async () => undefined,
     };
     const harness = createHookHarness(args);
     try {
@@ -2339,6 +2525,7 @@ describe("direct submission context isolation", () => {
         scheduleQueryUpdate: navigation,
         runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession: start }),
         sendAgentMessage: send,
+        continueInterruptedTurn: async () => undefined,
       };
       const harness = createHookHarness(args);
       let submitted!: Promise<AgentChatSendResult>;

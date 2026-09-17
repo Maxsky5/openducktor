@@ -160,6 +160,19 @@ describe("createClaudeAgentSdkSessionStore", () => {
     expect(closedSessionIds).toEqual(["session-1"]);
   });
 
+  test("keeps the replacement registered when the replaced session closes", () => {
+    const store = createClaudeAgentSdkSessionStore();
+    const replaced = createSession();
+    const replacement = createSession();
+    store.set(replaced);
+    store.set(replacement);
+
+    store.close(replaced);
+
+    expect(replaced.query.close).toHaveBeenCalled();
+    expect(store.get("session-1")).toBe(replacement);
+  });
+
   test("does not report idle Claude sessions as live work for reset guards", async () => {
     const store = createClaudeAgentSdkSessionStore();
     store.set(

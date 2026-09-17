@@ -115,6 +115,7 @@ const buildModel = () => ({
     onSelectVariant: () => {},
     contextUsage: null,
     canStopSession: false,
+    isResumingSession: false,
     onStopSession: () => {},
     composerFormRef: createRef<HTMLFormElement>(),
     composerEditorRef: createRef<HTMLDivElement>(),

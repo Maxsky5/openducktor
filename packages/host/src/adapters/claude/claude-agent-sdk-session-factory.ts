@@ -1,5 +1,6 @@
-import { type Options, query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentSessionSummary, AgentSessionTodoItem } from "@openducktor/core";
+import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { type AgentSessionSummary, type AgentSessionTodoItem } from "@openducktor/core";
+import { interruptedTurnResumeError } from "@openducktor/core";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   buildClaudeAgentSdkOptions,
@@ -7,7 +8,10 @@ import {
 } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { consumeClaudeSession, renameClaudeSessionIfNeeded } from "./claude-agent-sdk-session-io";
-import { requireClaudeOpenDucktorMcpForScope } from "./claude-agent-sdk-session-policy";
+import {
+  type ClaudeSessionLaunchInput,
+  requireClaudeOpenDucktorMcpForScope,
+} from "./claude-agent-sdk-session-policy";
 import { createClaudeSessionSummary } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEventEmitter,
@@ -17,7 +21,11 @@ import type {
   ClaudeSessionStore,
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
-import { INIT_TIMEOUT_MS, withTimeout } from "./claude-agent-sdk-utils";
+import {
+  CONTINUATION_ADMISSION_TIMEOUT_MS,
+  INIT_TIMEOUT_MS,
+  withTimeout,
+} from "./claude-agent-sdk-utils";
 
 export type CreateClaudeAgentSdkSessionInput = {
   emit: ClaudeAgentSdkEventEmitter;
@@ -28,14 +36,56 @@ export type CreateClaudeAgentSdkSessionInput = {
   resolvedDependencies: ClaudeAgentSdkOptionsDependencies;
   runtimeId: string;
   serviceInput: CreateClaudeAgentSdkServiceInput;
-  sessionInput: {
-    externalSessionId: string;
-    options: Pick<Options, "forkSession" | "resume" | "sessionId">;
-    parentExternalSessionId?: string;
-    startedMessage: string;
-    title?: string;
-  };
+  sessionInput: ClaudeSessionLaunchInput;
   sessionStore: ClaudeSessionStore;
+};
+
+/**
+ * Distinguishes a stream that ended before admission from one that never admitted
+ * inside the timeout. The first cause is a runtime failure, the second a version mismatch.
+ */
+class ClaudeContinuationStreamEndedError extends Error {
+  constructor(externalSessionId: string) {
+    super(`Claude session '${externalSessionId}' ended before it admitted the continuation.`);
+  }
+}
+
+/**
+ * Blocks until the resumed session admits the interrupted-turn continuation.
+ * The CLI fails closed when it never starts the hidden continuation turn.
+ */
+export const awaitClaudeContinuationAdmission = async (input: {
+  admission: Promise<void>;
+  externalSessionId: string;
+  runtimeId: string;
+  timeoutMs: number;
+}): Promise<void> => {
+  try {
+    await withTimeout(
+      input.admission,
+      input.timeoutMs,
+      `Claude session '${input.externalSessionId}' did not start the interrupted-turn continuation.`,
+    );
+  } catch (error) {
+    const streamEnded = error instanceof ClaudeContinuationStreamEndedError;
+    throw new HostOperationError({
+      operation: "claudeRuntime.createSession",
+      message: streamEnded
+        ? `Claude session '${input.externalSessionId}' ended before it admitted the interrupted-turn continuation.`
+        : `Claude session '${input.externalSessionId}' did not start the interrupted-turn continuation within ${input.timeoutMs} ms.`,
+      cause: interruptedTurnResumeError({
+        reason: streamEnded ? "continuation_failed" : "compatibility_rejected",
+        message: streamEnded
+          ? `Claude Code ended the session before it admitted the interrupted-turn continuation for session '${input.externalSessionId}'. Resolve the reported cause, then retry Resume.`
+          : `Claude Code did not admit the interrupted-turn continuation for session '${input.externalSessionId}'. Update Claude Code, then retry Resume.`,
+        cause: error,
+      }),
+      details: {
+        externalSessionId: input.externalSessionId,
+        runtimeId: input.runtimeId,
+      },
+    });
+  }
 };
 
 export const createClaudeAgentSdkSession = async ({
@@ -100,6 +150,7 @@ export const createClaudeAgentSdkSession = async ({
       randomId,
       resolvedDependencies,
       emit,
+      resumeInterruptedTurn: sessionInput.resumeInterruptedTurn === true,
       sessionOptions,
     });
     sdkQuery = query({ prompt: queue, options });
@@ -110,13 +161,19 @@ export const createClaudeAgentSdkSession = async ({
   }
   const session: ClaudeSession = Object.assign(sessionContext, { query: sdkQuery });
   sessionStore.set(session);
-  const consumption = consumeClaudeSession({
+  const isContinuation = sessionInput.resumeInterruptedTurn === true;
+  const continuationAdmission = isContinuation ? Promise.withResolvers<void>() : null;
+  const consumptionInput: Parameters<typeof consumeClaudeSession>[0] = {
     session,
     sessionStore,
     now,
     emit,
     onBackgroundFailure: serviceInput.onBackgroundFailure,
-  });
+  };
+  if (continuationAdmission) {
+    consumptionInput.onContinuationAdmission = () => continuationAdmission.resolve();
+  }
+  const consumption = consumeClaudeSession(consumptionInput);
   try {
     await withTimeout(
       sdkQuery.initializationResult(),
@@ -132,6 +189,22 @@ export const createClaudeAgentSdkSession = async ({
         session,
         title: sessionInput.title,
       });
+    }
+    if (continuationAdmission) {
+      await awaitClaudeContinuationAdmission({
+        // Race the admission against the stream itself, so a stream that ends first
+        // reports its own failure instead of waiting for the admission timeout.
+        admission: Promise.race([
+          continuationAdmission.promise,
+          consumption.then(() => {
+            throw new ClaudeContinuationStreamEndedError(session.externalSessionId);
+          }),
+        ]),
+        externalSessionId: session.externalSessionId,
+        runtimeId,
+        timeoutMs: CONTINUATION_ADMISSION_TIMEOUT_MS,
+      });
+      session.activity = "running";
     }
   } catch (error) {
     if (sessionStore.get(session.externalSessionId) === session) {
@@ -151,7 +224,7 @@ export const createClaudeAgentSdkSession = async ({
       },
     });
   }
-  summary.status = "idle";
+  summary.status = isContinuation ? "running" : "idle";
   const timestamp = now();
   emit(session, {
     type: "session_started",
@@ -159,10 +232,12 @@ export const createClaudeAgentSdkSession = async ({
     timestamp,
     message: sessionInput.startedMessage,
   });
-  emit(session, {
-    type: "session_idle",
-    externalSessionId: session.externalSessionId,
-    timestamp,
-  });
+  if (!isContinuation) {
+    emit(session, {
+      type: "session_idle",
+      externalSessionId: session.externalSessionId,
+      timestamp,
+    });
+  }
   return summary;
 };

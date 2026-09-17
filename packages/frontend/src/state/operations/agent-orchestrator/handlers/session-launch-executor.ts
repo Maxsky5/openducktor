@@ -101,6 +101,7 @@ const callPreparedRuntimeLaunch = (
         workingDirectory: launch.workingDirectory,
         sessionScope: launch.sessionAssociation,
         externalSessionId: launch.externalSessionId,
+        resumeMode: "reattach",
       };
       if (launch.selectedModel) {
         input.model = launch.selectedModel;

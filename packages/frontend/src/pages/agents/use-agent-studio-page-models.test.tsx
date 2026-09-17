@@ -240,6 +240,11 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     canUseKickoffPrompt: false,
     kickoffLabel: "Start Spec",
     canStopSession: true,
+    canResumeSession: false,
+    isResumingSession: false,
+    resumeSessionError: null,
+    persistentResumeError: null,
+    onResumeSession: () => {},
     startLaunchKickoff: async () => {},
     onSend: async () => true,
     stopAgentSession: async () => {},
@@ -582,6 +587,50 @@ describe("useAgentStudioPageModels", () => {
     expect(harness.getLatest().agentChatModel.thread.sessionAuxiliaryError).toContain(
       "todos unavailable",
     );
+
+    await harness.unmount();
+  });
+
+  test("keeps an unconfirmed continuation failure in the chat error when Resume is unavailable", async () => {
+    const harness = createHookHarness(
+      createHookArgs({
+        sessionActions: {
+          canResumeSession: false,
+          persistentResumeError:
+            "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    expect(harness.getLatest().agentChatModel.thread.sessionAuxiliaryError).toContain(
+      "The runtime did not confirm the continuation.",
+    );
+
+    await harness.unmount();
+  });
+
+  test("leaves an unconfirmed continuation failure to the Resume action while Resume is available", async () => {
+    const harness = createHookHarness(
+      createHookArgs({
+        sessionActions: {
+          canResumeSession: true,
+          resumeSessionError:
+            "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+          persistentResumeError:
+            "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const thread = harness.getLatest().agentChatModel.thread;
+    expect(thread.interruptedTurnResume?.error).toBe(
+      "The runtime did not confirm the continuation. Inspect the runtime and this session.",
+    );
+    expect(thread.sessionAuxiliaryError).toBeNull();
 
     await harness.unmount();
   });

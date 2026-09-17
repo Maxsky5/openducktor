@@ -29,6 +29,7 @@ export type ClaudeEventSession = {
   lastAssistantTextFinal?: boolean;
   lastAssistantTextModel?: AgentModelSelection;
   lastAssistantTextTurnIndex?: number;
+  lastSuccessfulResultTurnIndex?: number;
   model?: AgentModelSelection | undefined;
   pendingSubagentAssistantMessage?: {
     messageId: string;

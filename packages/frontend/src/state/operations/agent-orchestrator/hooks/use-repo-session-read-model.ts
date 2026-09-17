@@ -35,6 +35,7 @@ import type { AgentSessionTranscriptEventConsumer } from "../events/session-tran
 import {
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
+  isSettlingLiveSessionSnapshot,
 } from "../session-read-model/agent-session-live-projection";
 import {
   applyWorkflowSessionRecords,
@@ -206,6 +207,9 @@ export const useRepoSessionReadModel = ({
   const handleTranscriptEvent = useEffectEvent(
     (event: Parameters<AgentSessionTranscriptEventConsumer["handle"]>[0]) =>
       transcriptEvents.handle(event),
+  );
+  const flushTranscriptSession = useEffectEvent((ref: AgentSessionLiveRef) =>
+    transcriptEvents.flushSession(ref),
   );
   const recoverTranscriptHistory = useEffectEvent((message: string) =>
     recoverTranscriptGap(message),
@@ -779,7 +783,13 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
-        clearSessionFault(envelope.type === "session_upsert" ? envelope.session.ref : envelope.ref);
+        const upsert = envelope.type === "session_upsert";
+        clearSessionFault(upsert ? envelope.session.ref : envelope.ref);
+        if (upsert && isSettlingLiveSessionSnapshot(envelope.session)) {
+          // Apply the session's queued transcript events first, so a settled snapshot
+          // cannot render an unfinished last turn.
+          flushTranscriptSession(envelope.session.ref);
+        }
         commitProjected((current) =>
           applyWorkspaceRecords(
             pruneVanishedWorkflowRecords(applyAgentSessionLiveDelta({ current, envelope })),

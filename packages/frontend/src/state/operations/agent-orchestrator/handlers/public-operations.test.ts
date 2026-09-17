@@ -45,6 +45,7 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
     }),
     sendAgentMessage: async () => {},
     stopAgentSession: async () => {},
+    continueInterruptedTurn: async () => undefined,
     updateAgentSessionModel: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
@@ -175,6 +176,7 @@ describe("agent-orchestrator-public-operations", () => {
         stopAgentSession: async () => {
           throw new Error("stop failed");
         },
+        continueInterruptedTurn: async () => undefined,
       }),
     });
 

@@ -1,3 +1,4 @@
+import type { AgentSessionControlContinueInterruptedTurnInput } from "../../ports/agent-session-live-adapter-port";
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlForkInput,
@@ -121,6 +122,25 @@ export const toClaudeStartInput = (
 
 export const toClaudeResumeInput = (
   input: AgentSessionControlResumeInput,
+): ResumeAgentSessionInput => {
+  const result: ResumeAgentSessionInput = {
+    repoPath: input.repoPath,
+    workingDirectory: input.workingDirectory,
+    externalSessionId: input.externalSessionId,
+    sessionScope: input.sessionScope,
+    ...CLAUDE_RUNTIME_POLICY_BINDING,
+  };
+  if (input.model !== undefined) {
+    result.model = input.model;
+  }
+  if (input.systemPrompt !== undefined) {
+    result.systemPrompt = input.systemPrompt;
+  }
+  return result;
+};
+
+export const toClaudeContinueInput = (
+  input: AgentSessionControlContinueInterruptedTurnInput,
 ): ResumeAgentSessionInput => {
   const result: ResumeAgentSessionInput = {
     repoPath: input.repoPath,

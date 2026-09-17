@@ -1,13 +1,20 @@
+import type { LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
+import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
+import { resolveClaudeExecutable } from "./claude-agent-sdk-runtime";
+import { requireClaudeOpenDucktorMcpForScope } from "./claude-agent-sdk-session-policy";
+import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import type {
   ClaudeAgentSdkEvent,
   ClaudeAgentSdkEventEmitter,
   ClaudeSession,
+  ClaudeSessionStore,
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
+import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { contextUsageFromClaudeControlResponse } from "./claude-agent-sdk-usage";
-import { withTimeout } from "./claude-agent-sdk-utils";
+import { fromPromise, withTimeout } from "./claude-agent-sdk-utils";
 import type { ClaudeSdkMessageProjection } from "./claude-agent-sdk-message-projection";
 
 export const CLAUDE_CONTEXT_USAGE_TIMEOUT_MS = 30_000;
@@ -197,3 +204,62 @@ export const shouldRefreshClaudeContextUsageForMessage = (
   }
   return readStreamEventType(message) === "message_stop";
 };
+
+export type ClaudeContextUsageDependencies = {
+  loadDetachedSessionContextUsage: (
+    input: Omit<Parameters<typeof loadClaudeDetachedSessionContextUsage>[0], "createQuery">,
+  ) => ReturnType<typeof loadClaudeDetachedSessionContextUsage>;
+};
+
+export const loadClaudeSessionContextUsage = ({
+  input,
+  serviceInput,
+  dependencies,
+  sessionStore,
+}: {
+  input: LoadAgentSessionHistoryInput;
+  serviceInput: CreateClaudeAgentSdkServiceInput;
+  dependencies: ClaudeContextUsageDependencies;
+  sessionStore: ClaudeSessionStore;
+}) =>
+  Effect.gen(function* () {
+    const target = parseClaudeTranscriptTarget(input.externalSessionId);
+    if (target.subpath) {
+      return null;
+    }
+    const session = sessionStore.get(target.sessionId);
+    if (session) {
+      return yield* fromPromise("claudeRuntime.loadSessionContextUsage", async () => {
+        assertClaudeSessionRef(
+          session,
+          { ...input, externalSessionId: session.externalSessionId },
+          "load session context usage",
+        );
+        if (input.sessionScope) {
+          await requireClaudeOpenDucktorMcpForScope(input.sessionScope, session.query, {
+            externalSessionId: session.externalSessionId,
+            runtimeId: session.runtimeId,
+          });
+        }
+        const usage = await readClaudeContextUsageFromQuery(session.query);
+        return usage ? { totalTokens: usage.usedTokens, contextWindow: usage.maxTokens } : null;
+      });
+    }
+    const claudeExecutablePath = yield* resolveClaudeExecutable(
+      serviceInput,
+      "claudeRuntime.loadSessionContextUsage",
+    );
+    const detachedUsageInput: Parameters<
+      ClaudeContextUsageDependencies["loadDetachedSessionContextUsage"]
+    >[0] = {
+      claudeExecutablePath,
+      externalSessionId: target.sessionId,
+      workingDirectory: input.workingDirectory,
+    };
+    if (serviceInput.processEnv) {
+      detachedUsageInput.processEnv = serviceInput.processEnv;
+    }
+    return yield* fromPromise("claudeRuntime.loadSessionContextUsage", () =>
+      dependencies.loadDetachedSessionContextUsage(detachedUsageInput),
+    );
+  });

@@ -37,6 +37,19 @@ export type ClaudeAgentSdkOptionsDependencies = {
   mcpCommand: string[];
 };
 
+/**
+ * Private bundled CLI switch. It is absent from the public SDK type contract,
+ * so it stays a named constant behind the host compatibility gate.
+ */
+export const CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV = "CLAUDE_CODE_RESUME_INTERRUPTED_TURN";
+
+/**
+ * Private bundled CLI switch that makes the CLI emit `session_state_changed` frames.
+ * The continuation admission waits for the running state, so the continuation launch
+ * sets it.
+ */
+export const CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV = "CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS";
+
 type BuildClaudeAgentSdkOptionsInput = {
   input: ClaudeSessionInput;
   session: ClaudeSessionContext;
@@ -46,6 +59,7 @@ type BuildClaudeAgentSdkOptionsInput = {
   randomId: () => string;
   emit: ClaudeAgentSdkEventEmitter;
   resolvedDependencies: ClaudeAgentSdkOptionsDependencies;
+  resumeInterruptedTurn?: boolean;
 };
 
 const CLAUDE_OPENDUCKTOR_MCP_TOKEN_FILE_ENV = "ODT_HOST_TOKEN_FILE";
@@ -56,17 +70,31 @@ export const buildClaudeAgentSdkBaseOptions = ({
   claudeExecutablePath,
   cwd,
   processEnv,
+  resumeInterruptedTurn = false,
 }: {
   claudeExecutablePath: string;
   cwd: string;
   processEnv?: NodeJS.ProcessEnv | undefined;
+  resumeInterruptedTurn?: boolean;
 }): Options => {
+  const inheritedEnv = sanitizeChildProcessEnvironment(processEnv ?? {});
+  // The private Claude switches must come only from this adapter. An inherited value
+  // would start a hidden continuation for a session that is not a continuation.
+  delete inheritedEnv[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV];
+  delete inheritedEnv[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV];
+  const env = {
+    ...inheritedEnv,
+    CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor",
+  };
   const options: Options = {
     cwd,
-    env: {
-      ...sanitizeChildProcessEnvironment(processEnv ?? {}),
-      CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor",
-    },
+    env: resumeInterruptedTurn
+      ? {
+          ...env,
+          [CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]: "1",
+          [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]: "1",
+        }
+      : env,
     skills: "all",
     tools: { type: "preset", preset: "claude_code" },
   };
@@ -80,6 +108,7 @@ export const buildClaudeAgentSdkOptions = async ({
   now,
   randomId,
   resolvedDependencies,
+  resumeInterruptedTurn,
   serviceInput,
   session,
   sessionOptions,
@@ -114,6 +143,7 @@ export const buildClaudeAgentSdkOptions = async ({
       claudeExecutablePath: resolvedDependencies.claudeExecutablePath,
       cwd: input.workingDirectory,
       processEnv: serviceInput.processEnv,
+      resumeInterruptedTurn: resumeInterruptedTurn === true,
     }),
     additionalDirectories: [input.workingDirectory],
     ...sessionOptions,

@@ -52,3 +52,15 @@ export const readClaudeQueuedPrompt = (entry: ClaudeHistoryMessage): string | nu
 export const isClaudeMetaHistoryMessage = (entry: ClaudeHistoryMessage): boolean => {
   return entry.isMeta === true || entry.interruptedByShutdown === true;
 };
+
+const claudeMetaStreamFlagSchema = z.looseObject({ isSynthetic: z.boolean().optional() });
+
+/**
+ * Reads the hidden-turn flag from a live SDK message. The CLI stores its "Continue from
+ * where you left off." turn with `isMeta` and maps that field to `isSynthetic` on the
+ * live stream, so the live predicate must read the wire field.
+ */
+export const isClaudeMetaStreamMessage = (message: SDKMessage | SessionStoreEntry): boolean => {
+  const parsed = claudeMetaStreamFlagSchema.safeParse(message);
+  return parsed.success && parsed.data.isSynthetic === true;
+};

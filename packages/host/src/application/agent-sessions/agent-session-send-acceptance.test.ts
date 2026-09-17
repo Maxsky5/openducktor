@@ -76,7 +76,11 @@ describe("message acceptance through the command and live adapter modules", () =
         }),
       );
       await Effect.runPromise(
-        prepared.adapter.resumeSession({ ...ref, sessionScope: { kind: "repository" } }),
+        prepared.adapter.resumeSession({
+          resumeMode: "reattach",
+          ...ref,
+          sessionScope: { kind: "repository" },
+        }),
       );
       const commands = createAgentSessionCommandService({
         runtime: live,

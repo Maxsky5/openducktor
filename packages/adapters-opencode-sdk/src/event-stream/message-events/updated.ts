@@ -10,6 +10,7 @@ import {
 import {
   getKnownMessageParts,
   hasMessageStopSignal,
+  hasSuccessfulMessageStopSignal,
   isAssistantMessage,
   isAssistantMessageSettled,
   suppressCompactionMessage,
@@ -58,8 +59,12 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
   updateMessageMetadata(runtime, messageId, metadataUpdates);
 
   const isAssistantRole = isAssistantMessage(runtime, messageId, role);
+  const assistantMessageParts = isAssistantRole ? getKnownMessageParts(runtime, messageId) : [];
   const assistantMessageHasStopSignal = isAssistantRole
-    ? hasMessageStopSignal({ finish, parts: getKnownMessageParts(runtime, messageId) })
+    ? hasMessageStopSignal({ finish, parts: assistantMessageParts })
+    : false;
+  const assistantMessageHasSuccessfulStopSignal = isAssistantRole
+    ? hasSuccessfulMessageStopSignal({ finish, parts: assistantMessageParts })
     : false;
   const assistantMessageSettled = isAssistantRole
     ? isAssistantMessageSettled({
@@ -96,6 +101,7 @@ export const handleMessageUpdatedEvent = (event: Event, runtime: EventStreamRunt
     timestamp: messageTimestamp,
     info,
     hasStopSignal: assistantMessageHasStopSignal,
+    hasSuccessfulStopSignal: assistantMessageHasSuccessfulStopSignal,
   });
   return true;
 };

@@ -151,6 +151,7 @@ export type MockSession = {
   promptAsyncCalls: ClientMethodInput<"session", "promptAsync">[];
   commandCalls: ClientMethodInput<"session", "command">[];
   abortCalls: ClientMethodInput<"session", "abort">[];
+  statusCalls: ClientMethodInput<"session", "status">[];
   getCalls: ClientMethodInput<"session", "get">[];
   updateCalls: ClientMethodInput<"session", "update">[];
   forkCalls: ClientMethodInput<"session", "fork">[];
@@ -179,10 +180,12 @@ export type MockMcp = {
 };
 
 export type MockPermission = {
+  listCalls: ClientMethodInput<"permission", "list">[];
   replyCalls: ClientMethodInput<"permission", "reply">[];
 };
 
 export type MockQuestion = {
+  listCalls: ClientMethodInput<"question", "list">[];
   replyCalls: ClientMethodInput<"question", "reply">[];
 };
 
@@ -249,6 +252,9 @@ export type MakeMockClientInput = {
   sessionId?: string;
   sessionIds?: string[];
   forkSessionId?: string;
+  sessionStatus?: "busy" | "idle" | "retry";
+  pendingApproval?: boolean;
+  pendingQuestion?: boolean;
   sessionUpdateResult?: SessionUpdateMockResult;
   promptAsyncResult?: PromptAsyncMockResult;
   commandResult?: CommandMockResult;
@@ -266,6 +272,9 @@ export const makeMockClient = ({
   sessionId = "session-opencode-1",
   sessionIds,
   forkSessionId = "session-opencode-fork",
+  sessionStatus = "idle",
+  pendingApproval = false,
+  pendingQuestion = false,
   sessionUpdateResult = { data: { id: sessionId }, error: undefined },
   promptAsyncResult = { mode: "success" },
   commandResult = { mode: "success" },
@@ -287,6 +296,7 @@ export const makeMockClient = ({
     promptAsyncCalls: [],
     commandCalls: [],
     abortCalls: [],
+    statusCalls: [],
     getCalls: [],
     updateCalls: [],
     forkCalls: [],
@@ -299,6 +309,7 @@ export const makeMockClient = ({
     todoResult,
   };
   const permission: MockPermission = {
+    listCalls: [],
     replyCalls: [],
   };
   const tool: MockTool = {
@@ -310,6 +321,7 @@ export const makeMockClient = ({
     connectCalls: [],
   };
   const question: MockQuestion = {
+    listCalls: [],
     replyCalls: [],
   };
   const stream: MockEventStream = {
@@ -361,6 +373,10 @@ export const makeMockClient = ({
       abort: async (input: ClientMethodInput<"session", "abort">) => {
         session.abortCalls.push(input);
         return { data: true, error: undefined };
+      },
+      status: async (input: ClientMethodInput<"session", "status">) => {
+        session.statusCalls.push(input);
+        return { data: { [sessionId]: { type: sessionStatus } }, error: undefined };
       },
       get: async (input: ClientMethodInput<"session", "get">) => {
         session.getCalls.push(input);
@@ -433,6 +449,24 @@ export const makeMockClient = ({
     },
     permission: {
       ...baseClient.permission,
+      list: async (input: ClientMethodInput<"permission", "list">) => {
+        permission.listCalls.push(input);
+        return {
+          data: pendingApproval
+            ? [
+                {
+                  id: "permission-1",
+                  sessionID: sessionId,
+                  permission: "read",
+                  patterns: ["README.md"],
+                  metadata: {},
+                  always: [],
+                },
+              ]
+            : [],
+          error: undefined,
+        };
+      },
       reply: async (input: ClientMethodInput<"permission", "reply">) => {
         permission.replyCalls.push(input);
         return { data: true, error: undefined };
@@ -440,6 +474,27 @@ export const makeMockClient = ({
     },
     question: {
       ...baseClient.question,
+      list: async (input: ClientMethodInput<"question", "list">) => {
+        question.listCalls.push(input);
+        return {
+          data: pendingQuestion
+            ? [
+                {
+                  id: "question-1",
+                  sessionID: sessionId,
+                  questions: [
+                    {
+                      header: "Confirm",
+                      question: "Continue?",
+                      options: [{ label: "Yes", description: "Continue" }],
+                    },
+                  ],
+                },
+              ]
+            : [],
+          error: undefined,
+        };
+      },
       reply: async (input: ClientMethodInput<"question", "reply">) => {
         question.replyCalls.push(input);
         return { data: true, error: undefined };

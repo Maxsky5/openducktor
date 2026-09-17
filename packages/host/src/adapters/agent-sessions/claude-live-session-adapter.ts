@@ -8,13 +8,12 @@ import {
   type AgentSessionControlSummary,
   acceptedAgentUserMessageSchema,
   agentSessionContextUsageSchema,
-  type RuntimeInstanceSummary,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
-import type { AgentSessionSummary } from "@openducktor/core";
+import { type AgentSessionSummary, interruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
-import type { z } from "zod";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
 import { requireRuntimeWorkingDirectory } from "../../application/runtimes/runtime-working-directory";
@@ -38,6 +37,7 @@ import type {
 import { createClaudeLiveSessionEventCoordinator } from "./claude-live-session-event-coordinator";
 import {
   requireClaudePolicy,
+  toClaudeContinueInput,
   toClaudeForkInput,
   toClaudeLoadContextInput,
   toClaudeReplyApprovalInput,
@@ -48,6 +48,11 @@ import {
   toClaudeStartInput,
 } from "./claude-live-session-service-inputs";
 import { createClaudeLiveSessionState } from "./claude-live-session-state";
+import {
+  parseClaudeLiveSessionOutput,
+  requireClaudeHostServiceRuntime,
+  toClaudeLiveSessionRef,
+} from "./claude-live-session-runtime-guards";
 
 export type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 export { createClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
@@ -58,74 +63,18 @@ export type {
   PreparedClaudeLiveSessionAdapter,
 } from "./claude-live-session-adapter-contract";
 
-type ClaudeRuntimeInstance = RuntimeInstanceSummary & {
-  readonly kind: "claude";
-  readonly runtimeRoute: { readonly type: "host_service"; readonly identity: string };
-};
-
-type ClaudeRuntimeValidationDetails =
-  | { readonly runtimeId: string; readonly runtimeKind: RuntimeKind }
-  | { readonly runtimeId: string };
-
-type OperationValidationDetails = { readonly operation: string };
-
-const requireRuntime = (
-  runtime: RuntimeInstanceSummary,
-): Effect.Effect<ClaudeRuntimeInstance, HostValidationError<ClaudeRuntimeValidationDetails>> => {
-  if (runtime.kind !== "claude" || runtime.runtimeRoute.type !== "host_service") {
-    return Effect.fail(
-      new HostValidationError<ClaudeRuntimeValidationDetails>({
-        field: "runtime",
-        message: `Claude live-session adapter requires a Claude host-service runtime, received '${runtime.kind}/${runtime.runtimeRoute.type}'.`,
-        details: { runtimeId: runtime.runtimeId, runtimeKind: runtime.kind },
-      }),
-    );
-  }
-  if (runtime.runtimeRoute.identity !== runtime.runtimeId) {
-    return Effect.fail(
-      new HostValidationError<ClaudeRuntimeValidationDetails>({
-        field: "runtime.runtimeRoute.identity",
-        message: `Claude runtime route identity '${runtime.runtimeRoute.identity}' does not match runtime '${runtime.runtimeId}'.`,
-        details: { runtimeId: runtime.runtimeId },
-      }),
-    );
-  }
-  return Effect.succeed({
-    ...runtime,
-    kind: "claude",
-    runtimeRoute: {
-      type: "host_service",
-      identity: runtime.runtimeRoute.identity,
-    },
-  });
-};
-
-const parseOutput = <Schema extends z.ZodType, Input>(
-  schema: Schema,
-  value: Input,
-  operation: string,
-): Effect.Effect<z.output<Schema>, HostValidationError<OperationValidationDetails>> =>
-  Effect.try({
-    try: () => schema.parse(value),
-    catch: (cause) =>
-      new HostValidationError<OperationValidationDetails>({
-        message: cause instanceof Error ? cause.message : String(cause),
-        cause,
-        details: { operation },
-      }),
-  });
-
 export const createClaudeLiveSessionAdapterPreparer =
   ({
     eventHub,
     liveSessionLifecycle,
+    resumeInterruptedTurnEnabled = true,
     service,
     sessionStore,
     workingDirectoryDependencies,
   }: CreateClaudeLiveSessionAdapterPreparerInput): ClaudeRuntimeSessionAdapterPreparer =>
   (runtimeInput) =>
     Effect.gen(function* () {
-      const runtime = yield* requireRuntime(runtimeInput);
+      const runtime = yield* requireClaudeHostServiceRuntime(runtimeInput);
       const state = createClaudeLiveSessionState({ runtime });
       const binding = liveSessionLifecycle.createRuntimeRegistration({
         runtimeId: runtime.runtimeId,
@@ -295,7 +244,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                 .pipe(Effect.map((value) => ({ contextRevision, value }))),
             ),
             Effect.flatMap(({ contextRevision, value }) =>
-              parseOutput(
+              parseClaudeLiveSessionOutput(
                 agentSessionContextUsageSchema.nullable(),
                 value,
                 "claude-live-session.normalize-context",
@@ -377,6 +326,34 @@ export const createClaudeLiveSessionAdapterPreparer =
               ),
             ),
           ),
+        continueInterruptedTurn: (input) =>
+          requireSessionWorkingDirectory(input, "continue-interrupted-turn").pipe(
+            Effect.flatMap(() => {
+              if (!resumeInterruptedTurnEnabled) {
+                return Effect.fail(
+                  toAgentSessionResumeError(
+                    interruptedTurnResumeError({
+                      reason: "unsupported",
+                      message:
+                        "Interrupted-turn resume is disabled for this Claude runtime configuration.",
+                    }),
+                    toClaudeLiveSessionRef(input),
+                    "claude-live-session.continue-interrupted-turn",
+                  ),
+                );
+              }
+              return runSummary("claude-live-session.continue-interrupted-turn", () =>
+                service.continueInterruptedTurn(toClaudeContinueInput(input), runtime.runtimeId),
+              );
+            }),
+            Effect.mapError((cause) =>
+              toAgentSessionResumeError(
+                cause,
+                toClaudeLiveSessionRef(input),
+                "claude-live-session.continue-interrupted-turn",
+              ),
+            ),
+          ),
         forkSession: (input) =>
           requireSessionWorkingDirectory(input, "fork-session").pipe(
             Effect.flatMap(() =>
@@ -399,7 +376,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                       ),
                     ),
                     Effect.flatMap((event) =>
-                      parseOutput(
+                      parseClaudeLiveSessionOutput(
                         acceptedAgentUserMessageSchema,
                         event,
                         "claude-live-session.normalize-user-message",

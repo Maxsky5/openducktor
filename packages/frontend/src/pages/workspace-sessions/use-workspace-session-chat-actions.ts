@@ -3,10 +3,13 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
+import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import { resolveAgentStudioSendDraftParts } from "@/pages/agents/session-actions/agent-studio-send-draft";
 import { useAgentSessionsContext } from "@/state/app-state-contexts";
-import { useAgentOperations } from "@/state/app-state-provider";
+import { useAgentOperations, useAgentSession } from "@/state/app-state-provider";
 import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import { host } from "@/state/operations/host";
 import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
@@ -99,5 +102,34 @@ export function useWorkspaceSessionChatActions(
     }
   };
 
-  return { isSending, isStarting, isSavingModel, error, updateDraftModel, sendDraft };
+  const recordIdentity = workspaceSessionIdentity(record);
+  const session = useAgentSession(recordIdentity);
+  const recordSessionKey = recordIdentity === null ? null : agentSessionIdentityKey(recordIdentity);
+  const {
+    resume: resumeInterruptedTurn,
+    isSessionResuming,
+    resumeErrorForSession,
+    persistentResumeErrorForSession,
+  } = useInterruptedTurnResume(operations.continueInterruptedTurn, {
+    sessionKey: recordSessionKey,
+    isLatestTurnSettled: hasSettledLatestTurn(session?.messages.items ?? []),
+  });
+  const isResumingSession = recordSessionKey !== null && isSessionResuming(recordSessionKey);
+  const resumeSessionError =
+    recordSessionKey === null ? null : resumeErrorForSession(recordSessionKey);
+  const persistentResumeError =
+    recordSessionKey === null ? null : persistentResumeErrorForSession(recordSessionKey);
+
+  return {
+    isSending,
+    isStarting,
+    isSavingModel,
+    error,
+    updateDraftModel,
+    sendDraft,
+    isResumingSession,
+    resumeSessionError,
+    persistentResumeError,
+    resumeInterruptedTurn,
+  };
 }

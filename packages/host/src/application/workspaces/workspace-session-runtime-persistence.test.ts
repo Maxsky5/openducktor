@@ -273,6 +273,7 @@ describe("Workspace Session persistence through the shared command module", () =
     const scope = { kind: "repository" } as const;
     await Effect.runPromise(
       h.live.resumeSession({
+        resumeMode: "reattach",
         ...h.ref,
         sessionScope: scope,
         systemPrompt: "New catalog instructions.",
@@ -391,7 +392,11 @@ describe("Workspace Session persistence through the shared command module", () =
     };
     expect((await h.get()).selectedModel).toEqual(expectedModel);
     await Effect.runPromise(
-      h.live.resumeSession({ ...h.ref, sessionScope: { kind: "repository" } }),
+      h.live.resumeSession({
+        resumeMode: "reattach",
+        ...h.ref,
+        sessionScope: { kind: "repository" },
+      }),
     );
     await Effect.runPromise(
       h.live.sendUserMessage({
@@ -613,7 +618,11 @@ describe("Workspace Session persistence through the shared command module", () =
             })
             .pipe(Effect.asVoid)
         : h.live
-            .resumeSession({ ...h.ref, sessionScope: { kind: "repository" } })
+            .resumeSession({
+              resumeMode: "reattach",
+              ...h.ref,
+              sessionScope: { kind: "repository" },
+            })
             .pipe(Effect.asVoid);
     const archive = () =>
       workspace
@@ -694,7 +703,11 @@ describe("Workspace Session persistence through the shared command module", () =
 
   test("rejects target mismatch, missing worktrees, and archived sessions before calling the runtime", async () => {
     const h = await setup();
-    const resume = { ...h.ref, sessionScope: { kind: "repository" } as const };
+    const resume = {
+      ...h.ref,
+      sessionScope: { kind: "repository" } as const,
+      resumeMode: "reattach" as const,
+    };
     await expect(
       Effect.runPromise(h.live.resumeSession({ ...resume, workingDirectory: "/wrong" })),
     ).rejects.toThrow("does not match");
@@ -715,7 +728,11 @@ describe("Workspace Session persistence through the shared command module", () =
       const validate = (ref: AgentSessionLiveRef) => {
         switch (operation) {
           case "resume":
-            return h.persistence.prepareResume({ ...ref, sessionScope: { kind: "repository" } });
+            return h.persistence.prepareResume({
+              resumeMode: "reattach",
+              ...ref,
+              sessionScope: { kind: "repository" },
+            });
           case "send":
             return h.persistence.prepareSend({
               ...ref,

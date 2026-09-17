@@ -14,7 +14,10 @@ import {
   resolveForwardedClaudeSubagentMessage,
 } from "./claude-agent-sdk-forwarded-subagent-events";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
-import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
+import {
+  isClaudeMetaStreamMessage,
+  isClaudeSyntheticAssistantMessage,
+} from "./claude-agent-sdk-local-commands";
 import {
   emitClaudePermissionDeniedToolPart,
   handleClaudeResultMessage,
@@ -68,6 +71,9 @@ export const handleClaudeSdkMessage = ({
   timestamp,
 }: SdkMessageHandlerInput): void => {
   const messageValue = message;
+  if (message.type === "user" && isClaudeMetaStreamMessage(messageValue)) {
+    return;
+  }
   if (message.type === "system" && message.subtype === "init") {
     return;
   }

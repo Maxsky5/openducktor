@@ -109,7 +109,7 @@ describe("handleClaudeSdkMessage failed results", () => {
 
     expect(session.activity).toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
-    expect(events.map((event) => event.type)).toEqual(["session_idle"]);
+    expect(events.map((event) => event.type)).toEqual(["assistant_message", "session_idle"]);
 
     handleClaudeSdkMessage({
       ...commonInput,
@@ -125,6 +125,6 @@ describe("handleClaudeSdkMessage failed results", () => {
 
     expect(session.activity).toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
-    expect(events.map((event) => event.type)).toEqual(["session_idle"]);
+    expect(events.map((event) => event.type)).toEqual(["assistant_message", "session_idle"]);
   });
 });

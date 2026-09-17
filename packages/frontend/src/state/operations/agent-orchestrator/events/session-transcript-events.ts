@@ -3,7 +3,7 @@ import {
   recordImageGenerationTurnEnd,
   recordImageGenerationTurnStart,
 } from "../support/image-generation-settlement";
-import type { AgentSessionTranscriptEvent } from "@openducktor/contracts";
+import type { AgentSessionLiveRef, AgentSessionTranscriptEvent } from "@openducktor/contracts";
 import { toast } from "sonner";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { SessionTurnState } from "../support/session-turn-state";
@@ -161,6 +161,12 @@ const dispatchTranscriptEvent = (
 
 export type AgentSessionTranscriptEventConsumer = {
   handle: (event: AgentSessionTranscriptEvent) => void;
+  /**
+   * Applies the session's queued events without waiting for the batch window. A session
+   * snapshot that reports the session as settled must not overtake the transcript events
+   * the host published before it.
+   */
+  flushSession: (ref: AgentSessionLiveRef) => void;
   close: () => void;
 };
 
@@ -236,6 +242,9 @@ export const createAgentSessionTranscriptEventConsumer = (
         return;
       }
       scheduleFlush();
+    },
+    flushSession: (ref) => {
+      forceFlushSession(agentSessionIdentityKey(toAgentSessionIdentity(ref)));
     },
     close: () => {
       cancelScheduledFlush();

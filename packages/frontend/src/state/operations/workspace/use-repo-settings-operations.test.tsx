@@ -1220,6 +1220,9 @@ describe("use-repo-settings-operations", () => {
       await run.save;
 
       expect(run.invalidateQueries).toHaveBeenCalledWith({ queryKey: checksQueryKeys.all });
+      expect(run.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: runtimeQueryKeys.definitions(),
+      });
       expect(run.invalidateQueries).not.toHaveBeenCalledWith({ queryKey: runtimeQueryKeys.all });
       expect(run.invalidateQueries).not.toHaveBeenCalledWith({
         queryKey: [...workspaceQueryKeys.all, "repo-config"],

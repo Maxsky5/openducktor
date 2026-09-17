@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import {
+  claudeLiveHistoryContext,
   finalizeClaudeHistory,
   isClaudeSubagentTranscriptComplete,
   loadClaudeHistory,
   reconciledClaudeSubagentStatus,
 } from "./claude-agent-sdk-history-loader";
+import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
 
 const latestProjectedMessage: AgentSessionHistoryMessage = {
   messageId: "assistant-2",
@@ -121,6 +124,59 @@ describe("loadClaudeHistory", () => {
       ),
     ).rejects.toMatchObject({
       code: "request_failed",
+    });
+  });
+});
+
+describe("claudeLiveHistoryContext", () => {
+  const queuedMessage: SDKUserMessage = {
+    type: "user",
+    uuid: "00000000-0000-4000-8000-000000000002",
+    session_id: "session-1",
+    timestamp: "2026-06-25T20:00:01.000Z",
+    parent_tool_use_id: null,
+    message: {
+      role: "user",
+      content: [{ type: "text", text: "queued follow-up" }],
+    },
+  };
+  const acceptedUserMessage = {
+    messageId: "00000000-0000-4000-8000-000000000002",
+    parts: [],
+    text: "queued follow-up",
+    timestamp: "2026-06-25T20:00:01.000Z",
+  };
+  const acceptedUserMessages = [acceptedUserMessage];
+
+  test("marks a started session as fresh and reports the queued state of accepted turns", () => {
+    expect(
+      claudeLiveHistoryContext(
+        createClaudeSession({ acceptedUserMessages, queuedSdkMessages: [queuedMessage] }),
+      ),
+    ).toEqual({
+      source: "fresh",
+      userMessages: [{ ...acceptedUserMessage, state: "queued" }],
+    });
+  });
+
+  test("marks a resumed session as persisted and reads accepted turns as read", () => {
+    expect(
+      claudeLiveHistoryContext(
+        createClaudeSession({
+          acceptedUserMessages,
+          input: {
+            repoPath: "/repo",
+            runtimeKind: "claude",
+            workingDirectory: "/repo",
+            externalSessionId: "session-1",
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          },
+        }),
+      ),
+    ).toEqual({
+      source: "persisted",
+      userMessages: [{ ...acceptedUserMessage, state: "read" }],
     });
   });
 });

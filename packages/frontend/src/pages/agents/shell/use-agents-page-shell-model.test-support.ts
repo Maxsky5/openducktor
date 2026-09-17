@@ -104,6 +104,7 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
       contextUsage: null,
       canStopSession: false,
       onStopSession: () => {},
+      isResumingSession: false,
       composerFormRef: { current: null },
       composerEditorRef: { current: null },
       onComposerEditorInput: () => {},

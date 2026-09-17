@@ -122,6 +122,7 @@ const agentOperations: AgentOperationsContextValue = {
   },
   sendAgentMessage: async () => {},
   stopAgentSession: async () => {},
+  continueInterruptedTurn: async () => undefined,
   updateAgentSessionModel: () => {},
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},

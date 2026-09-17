@@ -88,21 +88,25 @@ const createTerminalCleanupService = (calls: unknown[]): TaskTerminalCleanupPort
     ),
 });
 
-const runtimeDefinitionsWithScopes = (supportedScopes: RuntimeSupportedScope[]) =>
-  ({
-    listRuntimeDefinitions: () => [
-      {
-        ...RUNTIME_DESCRIPTORS_BY_KIND.opencode,
-        capabilities: {
-          ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities,
-          workflow: {
-            ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities.workflow,
-            supportedScopes,
-          },
-        },
+const runtimeDefinitionsWithScopes = (supportedScopes: RuntimeSupportedScope[]) => {
+  const descriptor = {
+    ...RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+    capabilities: {
+      ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities,
+      workflow: {
+        ...RUNTIME_DESCRIPTORS_BY_KIND.opencode.capabilities.workflow,
+        supportedScopes,
       },
-    ],
-  }) satisfies { listRuntimeDefinitions(): RuntimeDescriptor[] };
+    },
+  };
+  return {
+    listRuntimeDefinitions: () => [descriptor],
+    listEffectiveRuntimeDefinitions: () => Effect.succeed([descriptor]),
+  } satisfies {
+    listRuntimeDefinitions(): RuntimeDescriptor[];
+    listEffectiveRuntimeDefinitions(): Effect.Effect<RuntimeDescriptor[]>;
+  };
+};
 
 describe("task worktree cleanup", () => {
   test.each([
