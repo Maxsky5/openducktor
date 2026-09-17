@@ -115,6 +115,7 @@ export function useAgentsPageRouteSessionModel({
   const taskExecutionFilePreview = useTaskExecutionFilePreviewController();
   const { selection: selectionState, selectAgentStudioSelection: applyAgentStudioSelection } =
     useAgentStudioSelectionState({
+      activeWorkspaceId,
       routeSessionIdentity,
       isWorkspaceRestorePending,
       taskIdParam,

@@ -95,6 +95,7 @@ const useWorkspaceRestoreWithSelection = (
     setSearchParams: () => {},
   });
   const selection = useAgentStudioSelectionState({
+    activeWorkspaceId: args.activeWorkspaceId,
     isWorkspaceRestorePending: navigation.isWorkspaceRestorePending,
     taskIdParam: navigation.taskIdParam,
     sessionExternalIdParam: navigation.sessionExternalIdParam,

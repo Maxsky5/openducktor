@@ -12,6 +12,7 @@ import {
 } from "./agent-studio-selection-state";
 
 type UseAgentStudioSelectionStateArgs = {
+  activeWorkspaceId: string | null;
   isWorkspaceRestorePending: boolean;
   taskIdParam: string;
   sessionExternalIdParam: string | null;
@@ -27,6 +28,7 @@ type UseAgentStudioSelectionStateArgs = {
 };
 
 type SelectionStateSnapshot = {
+  workspaceId: string | null;
   routeQueryKey: string;
   selection: AgentStudioSelectionState;
 };
@@ -37,6 +39,7 @@ export type AgentStudioSelectionStateModel = {
 };
 
 export function useAgentStudioSelectionState({
+  activeWorkspaceId,
   isWorkspaceRestorePending,
   taskIdParam,
   sessionExternalIdParam,
@@ -72,34 +75,47 @@ export function useAgentStudioSelectionState({
       : queryKey;
   }, [routeSelection]);
   const [snapshot, setSnapshot] = useState<SelectionStateSnapshot>(() => ({
+    workspaceId: activeWorkspaceId,
     routeQueryKey: routeSelectionQueryKey,
     selection: routeSelection,
   }));
+  // Drop the previous workspace's selection during render so effects never pair
+  // this workspace with a session directory that belongs to another one.
+  let currentSnapshot = snapshot;
+  if (snapshot.workspaceId !== activeWorkspaceId) {
+    currentSnapshot = {
+      workspaceId: activeWorkspaceId,
+      routeQueryKey: routeSelectionQueryKey,
+      selection: routeSelection,
+    };
+    setSnapshot(currentSnapshot);
+  }
   const latestTransitionStateRef = useRef({
     routeSelection,
     routeSelectionQueryKey,
-    snapshot,
+    snapshot: currentSnapshot,
   });
 
-  const selection = snapshot.selection;
+  const selection = currentSnapshot.selection;
 
   useLayoutEffect(() => {
     latestTransitionStateRef.current = {
       routeSelection,
       routeSelectionQueryKey,
-      snapshot,
+      snapshot: currentSnapshot,
     };
-  }, [routeSelection, routeSelectionQueryKey, snapshot]);
+  }, [currentSnapshot, routeSelection, routeSelectionQueryKey]);
 
   useLayoutEffect(() => {
-    if (snapshot.routeQueryKey === routeSelectionQueryKey) {
+    if (currentSnapshot.routeQueryKey === routeSelectionQueryKey) {
       return;
     }
-    const snapshotSelectionQueryKey = agentStudioSelectionQueryKey(snapshot.selection);
+    const snapshotSelectionQueryKey = agentStudioSelectionQueryKey(currentSnapshot.selection);
     if (snapshotSelectionQueryKey === routeSelectionQueryKey) {
       setSnapshot({
+        workspaceId: currentSnapshot.workspaceId,
         routeQueryKey: routeSelectionQueryKey,
-        selection: snapshot.selection,
+        selection: currentSnapshot.selection,
       });
       return;
     }
@@ -108,6 +124,7 @@ export function useAgentStudioSelectionState({
       () => {
         const latest = latestTransitionStateRef.current;
         setSnapshot({
+          workspaceId: latest.snapshot.workspaceId,
           routeQueryKey: latest.routeSelectionQueryKey,
           selection: latest.routeSelection,
         });
@@ -122,20 +139,21 @@ export function useAgentStudioSelectionState({
       { force: isWorkspaceRestorePending },
     );
   }, [
+    currentSnapshot,
     isWorkspaceRestorePending,
     requestContextTransition,
     routeSelectionQueryKey,
     scheduleQueryUpdate,
-    snapshot,
   ]);
 
   const selectAgentStudioSelection = useCallback<SelectAgentStudioSelection>(
     (nextSelection) => {
       requestContextTransition(() => {
-        setSnapshot({
+        setSnapshot((current) => ({
+          workspaceId: current.workspaceId,
           routeQueryKey: routeSelectionQueryKey,
           selection: nextSelection,
-        });
+        }));
         scheduleQueryUpdate(buildAgentStudioSelectionQueryUpdateFromState(nextSelection));
       });
     },
