@@ -48,6 +48,7 @@ function SelectionProbe({
   ...selectionProps
 }: SelectionProbeProps): ReactElement | null {
   const { selection } = useAgentStudioSelectionState(selectionProps);
+  // Observe every commit, including the one that switches workspace.
   useLayoutEffect(() => {
     observedWorkingDirectories.push(selection.sessionIdentity?.workingDirectory ?? null);
   });
@@ -257,6 +258,27 @@ describe("useAgentStudioSelectionState", () => {
     await harness.unmount();
   });
 
+  test("switches workspaces without exposing the previous workspace session directory to effects", () => {
+    const observedWorkingDirectories: Array<string | null> = [];
+    const firstWorkspaceProps = baseProps({
+      sessionExternalIdParam: session.externalSessionId,
+      routeSessionIdentity: session,
+    });
+    const secondWorkspaceProps = baseProps({
+      activeWorkspaceId: "workspace-2",
+      sessionExternalIdParam: session.externalSessionId,
+    });
+
+    const view = render(
+      createElement(SelectionProbe, { ...firstWorkspaceProps, observedWorkingDirectories }),
+    );
+    view.rerender(
+      createElement(SelectionProbe, { ...secondWorkspaceProps, observedWorkingDirectories }),
+    );
+
+    expect(observedWorkingDirectories).toEqual([session.workingDirectory, null]);
+  });
+
   test("keeps local task selection while stale route params are catching up", async () => {
     const harness = createHookHarness(baseProps());
 
@@ -354,28 +376,4 @@ test("selects two notification targets with the same native ID and keeps identit
   await harness.update(baseProps({ sessionExternalIdParam: second.externalSessionId }));
   expect(harness.getLatest().selection.sessionIdentity).toEqual(second);
   await harness.unmount();
-});
-
-test("switches workspaces without exposing the previous workspace session directory to effects", () => {
-  const observedWorkingDirectories: Array<string | null> = [];
-  const initialProps = baseProps({
-    sessionExternalIdParam: session.externalSessionId,
-    routeSessionIdentity: session,
-  });
-  const view = render(
-    createElement(SelectionProbe, { ...initialProps, observedWorkingDirectories }),
-  );
-  observedWorkingDirectories.length = 0;
-
-  view.rerender(
-    createElement(SelectionProbe, {
-      ...baseProps({
-        activeWorkspaceId: "workspace-2",
-        sessionExternalIdParam: session.externalSessionId,
-      }),
-      observedWorkingDirectories,
-    }),
-  );
-
-  expect(observedWorkingDirectories).toEqual([null]);
 });
