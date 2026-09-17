@@ -1,4 +1,5 @@
 import type { IncompleteWorkspaceRemoval, WorkspaceRecord } from "@openducktor/contracts";
+import { EyeClosed, Loader2, Trash2, type LucideIcon } from "lucide-react";
 import { type ReactElement, type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -49,9 +50,10 @@ const useLifecycleSubmit = (run: () => Promise<void>, onSuccess: () => void): Li
 
 type LifecycleDialogProps = {
   title: string;
-  workspace: WorkspaceRecord;
+  description: ReactNode;
   actionLabel: string;
   pendingActionLabel: string;
+  actionIcon: LucideIcon;
   destructive?: boolean;
   submitting: boolean;
   error: string | null;
@@ -62,9 +64,10 @@ type LifecycleDialogProps = {
 
 function LifecycleDialog({
   title,
-  workspace,
+  description,
   actionLabel,
   pendingActionLabel,
+  actionIcon: ActionIcon,
   destructive = false,
   submitting,
   error,
@@ -80,6 +83,7 @@ function LifecycleDialog({
       }}
     >
       <DialogContent
+        className="max-w-lg"
         {...(submitting ? { closeButton: null } : {})}
         onEscapeKeyDown={(event) => {
           if (submitting) event.preventDefault();
@@ -90,20 +94,17 @@ function LifecycleDialog({
       >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
-            {workspace.workspaceName}
-            <span className="block truncate font-mono text-xs">{workspace.repoPath}</span>
-          </DialogDescription>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <DialogBody className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground">
+        <DialogBody className="flex flex-col gap-3 py-4 text-sm text-muted-foreground">
           {children}
+          {error ? (
+            <p className="text-destructive-muted" role="alert">
+              {error}
+            </p>
+          ) : null}
         </DialogBody>
-        {error ? (
-          <p className="mt-3 text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <DialogFooter>
+        <DialogFooter className="mt-0 flex flex-row justify-between gap-2 border-t border-border pt-5">
           <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>
             Cancel
           </Button>
@@ -111,8 +112,14 @@ function LifecycleDialog({
             type="button"
             variant={destructive ? "destructive" : "default"}
             disabled={submitting}
+            aria-busy={submitting}
             onClick={onConfirm}
           >
+            {submitting ? (
+              <Loader2 className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <ActionIcon data-icon="inline-start" />
+            )}
             {submitting ? pendingActionLabel : actionLabel}
           </Button>
         </DialogFooter>
@@ -143,19 +150,20 @@ export function WorkspaceCloseDialog({
   return (
     <LifecycleDialog
       title="Close workspace"
-      workspace={workspace}
+      description={`Hide ${workspace.workspaceName} from the workspace rail?`}
       actionLabel="Close workspace"
       pendingActionLabel="Closing..."
+      actionIcon={EyeClosed}
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
       onConfirm={() => void submit.confirm()}
     >
+      <p className="truncate font-mono text-xs">{workspace.repoPath}</p>
       <p>
-        The workspace disappears from the workspace rail. Nothing is deleted: its settings, tasks,
-        sessions, attachments, repository files, branches, and task worktrees remain on disk.
+        Nothing is deleted. Workspace data, repository files, branches, and task worktrees stay on
+        disk. You can reopen this workspace later.
       </p>
-      <p>Reopen it later from Open a Repository.</p>
     </LifecycleDialog>
   );
 }
@@ -179,39 +187,39 @@ export function WorkspaceRemoveDialog({
   return (
     <LifecycleDialog
       title="Remove workspace"
-      workspace={workspace}
+      description={`Permanently remove ${workspace.workspaceName} and its task data? This cannot be undone.`}
       actionLabel="Remove workspace"
       pendingActionLabel="Removing..."
+      actionIcon={Trash2}
       destructive
       submitting={submit.submitting}
       error={submit.error}
       onCancel={() => onOpenChange(false)}
       onConfirm={() => void submit.confirm()}
     >
-      <p>
-        This permanently deletes the workspace from your settings and deletes its task store: all
-        tasks and subtasks in every status, workflow documents and document history, saved task
-        sessions, and OpenDucktor-managed task attachments.
-      </p>
-      <p>OpenDucktor cannot undo this loss. The repository directory and its Git history remain.</p>
-      <div className="flex flex-col gap-1 rounded-lg border border-border bg-card p-3">
-        <div className="flex items-start gap-2">
-          <Checkbox
-            id="remove-task-worktrees"
-            checked={removeTaskWorktrees}
-            disabled={submit.submitting}
-            onCheckedChange={(checked) => setRemoveTaskWorktrees(checked === true)}
-          />
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="remove-task-worktrees" className="cursor-pointer">
-              Remove task worktrees
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              {removeTaskWorktrees
-                ? "All files in the selected task worktrees, including uncommitted and untracked files, will be permanently lost. Local branches and committed history remain."
-                : "Leave unchecked to keep the task worktrees and their files on disk."}
-            </p>
-          </div>
+      <p className="truncate font-mono text-xs">{workspace.repoPath}</p>
+      <div className="space-y-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-destructive-surface-foreground">
+        <p className="font-medium">
+          OpenDucktor will delete the workspace settings, all tasks, workflow documents, saved
+          sessions, and managed attachments.
+        </p>
+        <p>The repository directory, Git branches, and committed history stay on disk.</p>
+      </div>
+      <div className="flex items-start gap-2">
+        <Checkbox
+          id="remove-task-worktrees"
+          checked={removeTaskWorktrees}
+          disabled={submit.submitting}
+          onCheckedChange={(checked) => setRemoveTaskWorktrees(checked === true)}
+        />
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="remove-task-worktrees" className="cursor-pointer">
+            Remove task worktrees
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Also delete task worktrees, including uncommitted and untracked files. Local branches
+            and committed history stay on disk.
+          </p>
         </div>
       </div>
     </LifecycleDialog>
@@ -246,9 +254,10 @@ export function WorkspaceRemovalRecoveryDialog({
   return (
     <LifecycleDialog
       title="Workspace removal did not finish"
-      workspace={removal.workspace}
+      description={`Finish removing ${removal.workspace.workspaceName} from OpenDucktor.`}
       actionLabel="Retry removal"
       pendingActionLabel="Removing..."
+      actionIcon={Trash2}
       destructive
       submitting={submit.submitting}
       error={submit.error}
