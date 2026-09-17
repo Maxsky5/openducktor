@@ -92,8 +92,11 @@ const isArchivedBranch = (
     if (archivedSessionKeys.has(current)) {
       return true;
     }
+    // The archived keys come from the chat records, so an ancestor is checked
+    // even when the live stream no longer reports it. Archiving a chat stops
+    // its session, which is when a lingering subagent has no reported parent.
     const parentKey = sessions.get(current)?.parentKey ?? null;
-    if (parentKey === null || visited.has(parentKey) || !sessions.has(parentKey)) {
+    if (parentKey === null || visited.has(parentKey)) {
       return false;
     }
     visited.add(parentKey);
