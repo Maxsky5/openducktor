@@ -35,11 +35,12 @@ export function useRuntimeModelCatalogs({
   const catalogQueries = useQueries({
     queries: uniqueRuntimeKinds.map((runtimeKind) => {
       const runtimeRef = repoPath ? { repoPath, runtimeKind } : null;
+      const isEnabled = repoPath !== null && enabledRuntimeKindSet.has(runtimeKind);
       return {
         ...(runtimeRef
           ? repoRuntimeCatalogQueryOptions(runtimeRef, loadCatalog)
           : skippedRepoRuntimeCatalogQueryOptions()),
-        enabled: runtimeRef !== null && enabledRuntimeKindSet.has(runtimeKind),
+        enabled: isEnabled,
       };
     }),
   });
