@@ -278,7 +278,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     },
   );
 
-  test("creates from_name from a dirty checkout, removes its worktree and branch, and restores from the current default branch", async () => {
+  test("creates from_name from a dirty checkout and archives it with worktree and branch removal", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     await writeFile(path.join(repoPath, "tracked.txt"), "uncommitted\n");
     await writeFile(path.join(repoPath, "staged.txt"), "staged\n");
@@ -309,16 +309,6 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       path.join(root, "worktrees", "workspace-sessions", "different-directory-name"),
     );
     expect(h.starts).toEqual([]);
-    gitCommand(
-      "-C",
-      directory,
-      ...commitIdentity,
-      "commit",
-      "--allow-empty",
-      "-m",
-      "Branch-only commit",
-    );
-    const oldHead = gitCommand("-C", directory, "rev-parse", "HEAD");
     await writeFile(path.join(directory, "tracked.txt"), "discard this edit\n");
     await writeFile(path.join(directory, "untracked.txt"), "discard this file\n");
     const archived = await h.router.invoke("workspace_session_archive", {
@@ -337,14 +327,50 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(
       await h.router.invoke("workspace_session_list_archived", { workspaceId: "fairnest" }),
     ).toEqual([archived]);
+  });
 
+  test("restores an archived removed-worktree session from the current default branch", async () => {
+    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
+    const h = setup();
+    const branchName = "feature/archive-review";
+    const directory = path.join(root, "worktrees", "workspace-sessions", "restored-chat");
+    const archived = await Effect.runPromise(
+      createSqliteWorkspaceSessionStore(database.contextProvider).create({
+        workspaceId: "fairnest",
+        repoPath,
+        session: {
+          id: crypto.randomUUID(),
+          runtimeKind: "opencode",
+          externalSessionId: null,
+          executionTarget: {
+            kind: "local_worktree",
+            workingDirectory: directory,
+            branchName,
+            worktreeState: "removed",
+          },
+          roleSnapshot: null,
+          selectedModel: null,
+          generatedTitle: null,
+          manualTitle: null,
+          createdAt: 1,
+          updatedAt: 2,
+          archivedAt: 2,
+        },
+      }),
+    );
+    const ref = { workspaceId: "fairnest", sessionId: archived.id };
     await writeFile(path.join(repoPath, "tracked.txt"), "new default branch content\n");
     gitCommand(...commitIdentity, "commit", "-a", "-m", "Advance default branch");
     const defaultHead = gitCommand("rev-parse", "main");
-    expect(defaultHead).not.toBe(oldHead);
+    expect(defaultHead).not.toBe(fixtureHead);
     gitCommand("checkout", "-b", "other-checkout", "main~1");
     const restored = await h.router.invoke("workspace_session_restore", ref);
-    expect(restored).toEqual(session);
+    expect(restored.executionTarget).toMatchObject({
+      kind: "local_worktree",
+      branchName,
+      worktreeState: "present",
+    });
+    expect(restored.archivedAt).toBeNull();
     expect(
       gitCommand("-C", directory, "rev-parse", "HEAD", "--symbolic-full-name", "HEAD").split("\n"),
     ).toEqual([defaultHead, `refs/heads/${branchName}`]);
