@@ -525,6 +525,93 @@ describe("OpenCode live session controls", () => {
     }
   });
 
+  test("holds a send out of a session while the interrupted-turn continuation runs", async () => {
+    let releaseContinuation: () => void = () => undefined;
+    const continuationBarrier = new Promise<void>((resolve) => {
+      releaseContinuation = resolve;
+    });
+    let resolveContinuationStarted: () => void = () => undefined;
+    const continuationStarted = new Promise<void>((resolve) => {
+      resolveContinuationStarted = resolve;
+    });
+    let resolveSendStarted: () => void = () => undefined;
+    const sendStarted = new Promise<void>((resolve) => {
+      resolveSendStarted = resolve;
+    });
+    const harness = createRuntimeHarness({
+      continueInterruptedTurnBarrier: continuationBarrier,
+      onContinueInterruptedTurn: resolveContinuationStarted,
+      onSendUserMessage: resolveSendStarted,
+    });
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime),
+    );
+    const adapter = prepared.adapter;
+    const sessionScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
+    await Effect.runPromise(
+      adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    );
+    await Effect.runPromise(
+      adapter.resumeSession({
+        resumeMode: "reattach",
+        ...ref,
+        externalSessionId: "session-2",
+        sessionScope,
+      }),
+    );
+    const send = (externalSessionId: string) =>
+      Effect.runPromise(
+        adapter.sendUserMessage({
+          ...ref,
+          externalSessionId,
+          sessionScope,
+          parts: [{ kind: "text", text: "Hello" }],
+        }),
+      );
+
+    const continuation = Effect.runPromise(
+      adapter.continueInterruptedTurn({ ...ref, sessionScope }),
+    );
+
+    try {
+      await continuationStarted;
+
+      const queued = send("session-1");
+      expect(
+        await Promise.race([
+          sendStarted.then(() => "started" as const),
+          new Promise<"queued">((resolve) => setTimeout(() => resolve("queued"), 100)),
+        ]),
+      ).toBe("queued");
+
+      const other = send("session-2");
+      expect(
+        await Promise.race([
+          sendStarted.then(() => "started" as const),
+          new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 500)),
+        ]),
+      ).toBe("started");
+
+      releaseContinuation();
+      await continuation;
+      await queued;
+      await other;
+
+      expect(
+        harness.controlCalls
+          .filter((call) => call.operation === "continue" || call.operation === "send")
+          .map((call) => `${call.operation}:${call.input.externalSessionId}`),
+      ).toEqual(["continue:session-1", "send:session-2", "send:session-1"]);
+    } finally {
+      releaseContinuation();
+      await continuation.catch(() => undefined);
+      await Effect.runPromise(adapter.releaseRuntime());
+    }
+  });
+
   test("accepts a send result that arrives after live state is released", async () => {
     let resolveSendStarted: () => void = () => undefined;
     let releaseSend: () => void = () => undefined;

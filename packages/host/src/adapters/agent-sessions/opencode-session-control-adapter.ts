@@ -134,8 +134,9 @@ export const createOpenCodeSessionControlAdapter = ({
       );
     },
     continueInterruptedTurn: (input) => {
+      const sessionRef = toSessionRef(input);
       const request: Parameters<typeof connection.continueInterruptedTurn>[0] = {
-        ...toSessionRef(input),
+        ...sessionRef,
         runtimeKind: "opencode",
         runtimePolicy: { kind: "opencode" },
         sessionScope: input.sessionScope,
@@ -146,13 +147,16 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.systemPrompt) {
         request.systemPrompt = input.systemPrompt;
       }
-      return runControlSummary("opencode-live-session.continue-interrupted-turn", () =>
-        connection.continueInterruptedTurn(request),
+      return serializeSessionSend(
+        refKey(sessionRef),
+        runControlSummary("opencode-live-session.continue-interrupted-turn", () =>
+          connection.continueInterruptedTurn(request),
+        ),
       ).pipe(
         Effect.mapError((cause) =>
           toAgentSessionResumeError(
             cause,
-            toSessionRef(input),
+            sessionRef,
             "opencode-live-session.continue-interrupted-turn",
           ),
         ),
