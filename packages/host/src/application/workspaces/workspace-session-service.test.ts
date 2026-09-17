@@ -16,6 +16,11 @@ import {
 import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
 import { HostOperationError } from "../../effect/host-errors";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
+import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
+import {
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../../interface/router/host-command-router";
 import { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
   createGitPortTestDouble,
@@ -404,14 +409,58 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.state.startPoint).toBe("HEAD");
   });
 
-  test("worktree creation does not read the source checkout status", async () => {
-    const h = setup();
-    h.dependencies.git.getStatus = () =>
-      Effect.dieMessage("Creation must not read checkout status");
-    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
-    expect(session.executionTarget.kind).toBe("local_worktree");
-    expect(h.calls).toEqual(["worktree", "copy", "hook", "save"]);
-  });
+  test.each(["from_name", "from_branch"] as const)(
+    "%s creation skips checkout status and retains its saved target through archive and restore",
+    async (mode) => {
+      const h = setup();
+      if (mode === "from_branch") h.branches.add("refs/heads/odt/my-feature");
+      h.dependencies.git.getStatus = () =>
+        Effect.dieMessage("Creation must not read checkout status");
+      const events: unknown[] = [];
+      const router = toPromiseHostCommandRouter(
+        createEffectHostCommandRouter({
+          handlers: createWorkspaceSessionCommandHandlers(h.service, (_workspaceId, session) =>
+            Effect.sync(() => {
+              events.push(session);
+            }),
+          ),
+        }),
+      );
+      const { session } = await router.invoke("workspace_session_create", {
+        ...worktreeInput(),
+        worktree: { mode, name: "my-feature", branchName: "odt/my-feature" },
+      });
+      expect(session.executionTarget.kind).toBe("local_worktree");
+      expect(h.calls).toEqual(["worktree", "copy", "hook", "save"]);
+      expect(h.starts).toEqual([]);
+      const ref = { workspaceId: "fairnest", sessionId: session.id };
+      const started = await router.invoke("workspace_session_start", ref);
+      expect(h.starts[0]?.workingDirectory).toBe(session.executionTarget.workingDirectory);
+      const callsBeforeArchive = [...h.calls];
+      const archived = await router.invoke("workspace_session_archive", {
+        ...ref,
+        confirmStop: false,
+      });
+      expect(archived.archivedAt).not.toBeNull();
+      expect(archived.executionTarget).toEqual(session.executionTarget);
+      expect(h.registered.has(session.executionTarget.workingDirectory)).toBe(true);
+      expect(h.branches.has("refs/heads/odt/my-feature")).toBe(true);
+      expect(await Effect.runPromise(h.service.listActive("fairnest"))).toEqual([]);
+      expect(await router.invoke("workspace_session_restore", ref)).toEqual(started.session);
+      expect(h.calls).toEqual(callsBeforeArchive);
+      expect(h.starts).toHaveLength(1);
+      expect(events).toEqual([session, started.session, archived, started.session]);
+      h.registered.clear();
+      await expect(
+        router.invoke("workspace_session_archive", {
+          ...ref,
+          confirmStop: false,
+        }),
+      ).rejects.toThrow("not a registered worktree");
+      expect(await Effect.runPromise(h.service.get(ref))).toEqual(started.session);
+      expect(events).toHaveLength(4);
+    },
+  );
 
   test("checks out an existing branch directly without creating another branch", async () => {
     const h = setup();
