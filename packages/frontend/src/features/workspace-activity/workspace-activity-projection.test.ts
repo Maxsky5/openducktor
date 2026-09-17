@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
+  emptyAgentSessionCollection,
+  getAgentSession,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
+import { applyAgentSessionLiveDelta } from "@/state/operations/agent-orchestrator/session-read-model/agent-session-live-projection";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import {
   applyWorkspaceActivityEnvelope,
   emptyWorkspaceActivityProjection,
   type WorkspaceActivityProjection,
@@ -56,6 +63,142 @@ const sessionErrorEvent = (externalSessionId: string): AgentSessionLiveEnvelope 
     sessionRef: { repoPath, runtimeKind, workingDirectory, externalSessionId },
     message: "runtime crashed",
   },
+});
+
+describe("shared snapshot activity policy", () => {
+  const cases = [
+    { name: "stale idle", overrides: {}, terminalPreserved: true },
+    {
+      name: "omitted episode",
+      overrides: { executionEpisodeId: undefined },
+      terminalPreserved: true,
+    },
+    {
+      name: "new episode",
+      overrides: { executionEpisodeId: "episode-2" },
+      terminalPreserved: false,
+    },
+    {
+      name: "pending approval",
+      overrides: {
+        pendingApprovals: [{ requestId: "a", requestType: "runtime_tool", title: "Allow tool" }],
+      },
+      terminalPreserved: false,
+    },
+    {
+      name: "pending question",
+      overrides: { pendingQuestions: [{ requestId: "q", questions: [] }] },
+      terminalPreserved: false,
+    },
+  ] satisfies {
+    name: string;
+    overrides: Partial<AgentSessionLiveSnapshot>;
+    terminalPreserved: boolean;
+  }[];
+
+  for (const status of ["error", "stopped"] as const) {
+    test.each(cases)(`applies $name to ${status} in both projections`, (scenario) => {
+      const current = createAgentSessionFixture({
+        externalSessionId: "a",
+        runtimeKind,
+        workingDirectory,
+        sessionAssociation: { kind: "repository" },
+        status,
+        executionEpisodeId: "episode-1",
+        runtimeStatusMessage: "Previous runtime message",
+      });
+      const incoming = snapshot("a", {
+        repositoryScope: { kind: "repository" },
+        executionEpisodeId: "episode-1",
+        ...scenario.overrides,
+      });
+      const envelope = { type: "session_upsert", session: incoming } as const;
+      const studio = getAgentSession(
+        applyAgentSessionLiveDelta({
+          current: replaceAgentSession(emptyAgentSessionCollection(), current),
+          envelope,
+        }),
+        current,
+      );
+      const railCurrent: WorkspaceActivityProjection = {
+        ...emptyWorkspaceActivityProjection(),
+        sessions: new Map([
+          [
+            key("a"),
+            {
+              key: key("a"),
+              parentKey: null,
+              status,
+              executionEpisodeId: current.executionEpisodeId,
+              runtimeStatusMessage: current.runtimeStatusMessage,
+              stopRequestedAt: null,
+              pendingApprovals: [],
+              pendingQuestions: [],
+            },
+          ],
+        ]),
+      };
+      const expected = {
+        status: scenario.terminalPreserved ? status : "idle",
+        executionEpisodeId: incoming.executionEpisodeId ?? "episode-1",
+        runtimeStatusMessage: scenario.terminalPreserved ? "Previous runtime message" : null,
+        pendingUserMessageStartedAt: undefined,
+        pendingApprovals: incoming.pendingApprovals,
+        pendingQuestions: incoming.pendingQuestions,
+      };
+
+      expect(studio).toMatchObject(expected);
+      expect(apply(railCurrent, envelope).sessions.get(key("a"))).toMatchObject(expected);
+      expect(apply(railCurrent, sessionSnapshot([incoming])).sessions.get(key("a"))).toMatchObject(
+        expected,
+      );
+    });
+  }
+
+  test.each(["session_finished", "session_error"] as const)(
+    "keeps local stop intent distinct from rail observation for %s",
+    (type) => {
+      const incoming = snapshot("a", {
+        activity: "running",
+        repositoryScope: { kind: "repository" },
+      });
+      const current = createAgentSessionFixture({
+        externalSessionId: "a",
+        runtimeKind,
+        workingDirectory,
+        sessionAssociation: { kind: "repository" },
+        status: "running",
+        stopRequestedAt: "2026-09-15T08:01:00.000Z",
+      });
+      const envelope = {
+        type: "transcript_event",
+        event: {
+          type,
+          externalSessionId: "a",
+          sessionRef: incoming.ref,
+          timestamp: "2026-09-15T08:01:01.000Z",
+          message: "The operation was aborted",
+        },
+      } as const;
+      const studio = getAgentSession(
+        applyAgentSessionLiveDelta({
+          current: replaceAgentSession(emptyAgentSessionCollection(), current),
+          envelope,
+        }),
+        current,
+      );
+      const rail = apply(
+        emptyWorkspaceActivityProjection(),
+        sessionSnapshot([incoming]),
+        envelope,
+        { type: "session_upsert", session: { ...incoming, activity: "idle" } },
+      ).sessions.get(key("a"));
+
+      expect(studio?.status).toBe("stopped");
+      expect(rail?.status).toBe(type === "session_error" ? "error" : "idle");
+      expect(rail?.stopRequestedAt).toBeNull();
+    },
+  );
 });
 
 describe("applyWorkspaceActivityEnvelope", () => {

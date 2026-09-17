@@ -3,10 +3,9 @@ import type {
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
 } from "@openducktor/contracts";
-import { agentSessionStatusFromActivity } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { projectSessionTranscriptActivity } from "@/state/operations/agent-orchestrator/session-read-model/agent-session-live-activity";
-import { projectObservedSessionActivity } from "@/state/operations/agent-orchestrator/session-read-model/agent-session-live-projection";
+import { projectSessionSnapshotActivity } from "@/state/operations/agent-orchestrator/session-read-model/agent-session-live-projection";
 import type { WorkspaceActivitySession } from "./workspace-activity-state";
 
 export type WorkspaceActivityProjection = {
@@ -43,25 +42,15 @@ const toActivitySession = (
   current: WorkspaceActivitySession | undefined,
 ): WorkspaceActivitySession => {
   const key = sessionKey(snapshot.ref);
-  const observedStatus = agentSessionStatusFromActivity(snapshot.activity);
-  const isNewEpisode =
-    snapshot.executionEpisodeId !== undefined &&
-    snapshot.executionEpisodeId !== current?.executionEpisodeId;
-  const hasPendingInput =
-    snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0;
-  const activity = projectObservedSessionActivity(
-    current ?? { status: "idle", pendingUserMessageStartedAt: undefined },
-    observedStatus,
-    !isNewEpisode && !hasPendingInput,
+  const activity = projectSessionSnapshotActivity(
+    current ?? { status: "idle", runtimeStatusMessage: null },
+    snapshot,
   );
   return {
     key,
     parentKey: parentSessionKey(snapshot),
-    executionEpisodeId: snapshot.executionEpisodeId ?? current?.executionEpisodeId,
     ...activity,
-    runtimeStatusMessage:
-      activity.status === "idle" ? null : (current?.runtimeStatusMessage ?? null),
-    stopRequestedAt: current?.stopRequestedAt ?? null,
+    stopRequestedAt: null,
     pendingApprovals: snapshot.pendingApprovals,
     pendingQuestions: snapshot.pendingQuestions,
   };

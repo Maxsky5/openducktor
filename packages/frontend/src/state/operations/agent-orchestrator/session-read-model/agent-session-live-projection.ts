@@ -86,6 +86,35 @@ export const projectObservedSessionActivity = (
   return { status: "idle", pendingUserMessageStartedAt: undefined };
 };
 
+type SessionSnapshotActivity = Pick<
+  AgentSessionState,
+  "status" | "pendingUserMessageStartedAt" | "executionEpisodeId" | "runtimeStatusMessage"
+>;
+
+export const projectSessionSnapshotActivity = (
+  current: SessionSnapshotActivity,
+  snapshot: Pick<
+    AgentSessionLiveSnapshot,
+    "activity" | "executionEpisodeId" | "pendingApprovals" | "pendingQuestions"
+  >,
+): SessionSnapshotActivity => {
+  const isNewEpisode =
+    snapshot.executionEpisodeId !== undefined &&
+    snapshot.executionEpisodeId !== current.executionEpisodeId;
+  const hasPendingInput =
+    snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0;
+  const activity = projectObservedSessionActivity(
+    current,
+    agentSessionStatusFromActivity(snapshot.activity),
+    !isNewEpisode && !hasPendingInput,
+  );
+  return {
+    executionEpisodeId: snapshot.executionEpisodeId ?? current.executionEpisodeId,
+    ...activity,
+    runtimeStatusMessage: activity.status === "idle" ? null : current.runtimeStatusMessage,
+  };
+};
+
 const settleAbsentSessionActivity = (
   current: Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt">,
 ): Pick<AgentSessionState, "status" | "pendingUserMessageStartedAt"> => {
@@ -266,17 +295,7 @@ const applyDirectSnapshot = (
     preserveLastMeasurement || sameContextUsage(currentContextUsage, snapshot.contextUsage)
       ? currentContextUsage
       : toContextUsage(snapshot.contextUsage);
-  const snapshotStatus = agentSessionStatusFromActivity(snapshot.activity);
-  const isNewEpisode =
-    snapshot.executionEpisodeId !== undefined &&
-    snapshot.executionEpisodeId !== current.executionEpisodeId;
-  const hasPendingInput =
-    snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0;
-  const activity = projectObservedSessionActivity(
-    current,
-    snapshotStatus,
-    !isNewEpisode && !hasPendingInput,
-  );
+  const activity = projectSessionSnapshotActivity(current, snapshot);
   const directApprovals = snapshot.pendingApprovals.map((request) => toApprovalRequest(request));
   const directQuestions = snapshot.pendingQuestions.map((request) => toQuestionRequest(request));
   const childApprovals = current.pendingApprovals.filter((request) => request.source !== undefined);
@@ -285,11 +304,9 @@ const applyDirectSnapshot = (
   return {
     ...current,
     sessionAssociation,
-    executionEpisodeId: snapshot.executionEpisodeId ?? current.executionEpisodeId,
     title: snapshot.title,
     selectedModel,
     ...activity,
-    runtimeStatusMessage: activity.status === "idle" ? null : current.runtimeStatusMessage,
     livePresence: "present",
     liveParentExternalSessionId: snapshot.parentExternalSessionId,
     pendingApprovals: [...directApprovals, ...childApprovals],

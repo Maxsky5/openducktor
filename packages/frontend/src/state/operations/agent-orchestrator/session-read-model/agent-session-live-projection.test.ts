@@ -17,6 +17,7 @@ import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
+  projectSessionSnapshotActivity,
 } from "./agent-session-live-projection";
 
 const repoPath = "/repo";
@@ -109,6 +110,49 @@ const registerWorkflowSession = (
     sessionAssociation: workflowAssociation(),
   });
 };
+
+describe("projectSessionSnapshotActivity", () => {
+  test.each([
+    { activity: "running", status: "running" },
+    { activity: "waiting_for_permission", status: "idle" },
+    { activity: "waiting_for_question", status: "idle" },
+    { activity: "idle", status: "idle" },
+  ] as const)("maps $activity and resets the message only when idle", ({ activity, status }) => {
+    expect(
+      projectSessionSnapshotActivity(
+        { status: "running", executionEpisodeId: "episode-1", runtimeStatusMessage: "Working" },
+        snapshot("a", { activity }),
+      ),
+    ).toEqual({
+      status,
+      executionEpisodeId: "episode-1",
+      runtimeStatusMessage: status === "idle" ? null : "Working",
+      pendingUserMessageStartedAt: undefined,
+    });
+  });
+
+  test.each(["starting", "running"] as const)(
+    "preserves %s with a pending local send over an idle snapshot",
+    (status) => {
+      expect(
+        projectSessionSnapshotActivity(
+          {
+            status,
+            pendingUserMessageStartedAt: 123,
+            runtimeStatusMessage: "Working",
+            executionEpisodeId: "episode-1",
+          },
+          snapshot("a", { executionEpisodeId: "episode-1" }),
+        ),
+      ).toEqual({
+        status,
+        pendingUserMessageStartedAt: 123,
+        runtimeStatusMessage: "Working",
+        executionEpisodeId: "episode-1",
+      });
+    },
+  );
+});
 
 describe("agent session live projection", () => {
   test.each(["snapshot", "delta"] as const)(
