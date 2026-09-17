@@ -95,6 +95,7 @@ export function useAgentStudioSelectionState({
     routeSelectionQueryKey,
     snapshot: currentSnapshot,
   });
+  const lastWorkspaceIdRef = useRef(activeWorkspaceId);
 
   const selection = currentSnapshot.selection;
 
@@ -107,17 +108,21 @@ export function useAgentStudioSelectionState({
   }, [currentSnapshot, routeSelection, routeSelectionQueryKey]);
 
   useLayoutEffect(() => {
-    if (currentSnapshot.routeQueryKey === routeSelectionQueryKey) {
+    const workspaceChanged = lastWorkspaceIdRef.current !== activeWorkspaceId;
+    lastWorkspaceIdRef.current = activeWorkspaceId;
+    if (!workspaceChanged && currentSnapshot.routeQueryKey === routeSelectionQueryKey) {
       return;
     }
-    const snapshotSelectionQueryKey = agentStudioSelectionQueryKey(currentSnapshot.selection);
-    if (snapshotSelectionQueryKey === routeSelectionQueryKey) {
-      setSnapshot({
-        workspaceId: currentSnapshot.workspaceId,
-        routeQueryKey: routeSelectionQueryKey,
-        selection: currentSnapshot.selection,
-      });
-      return;
+    if (!workspaceChanged) {
+      const snapshotSelectionQueryKey = agentStudioSelectionQueryKey(currentSnapshot.selection);
+      if (snapshotSelectionQueryKey === routeSelectionQueryKey) {
+        setSnapshot({
+          workspaceId: currentSnapshot.workspaceId,
+          routeQueryKey: routeSelectionQueryKey,
+          selection: currentSnapshot.selection,
+        });
+        return;
+      }
     }
     const requestedRouteQueryKey = routeSelectionQueryKey;
     requestContextTransition(
@@ -136,9 +141,12 @@ export function useAgentStudioSelectionState({
           buildAgentStudioSelectionQueryUpdateFromState(latest.snapshot.selection),
         );
       },
-      { force: isWorkspaceRestorePending },
+      // A workspace change forces the transition, because the previous workspace's
+      // file preview must not survive the boundary.
+      { force: workspaceChanged || isWorkspaceRestorePending },
     );
   }, [
+    activeWorkspaceId,
     currentSnapshot,
     isWorkspaceRestorePending,
     requestContextTransition,
@@ -148,7 +156,12 @@ export function useAgentStudioSelectionState({
 
   const selectAgentStudioSelection = useCallback<SelectAgentStudioSelection>(
     (nextSelection) => {
+      const selectedWorkspaceId = activeWorkspaceId;
       requestContextTransition(() => {
+        // Drop a deferred selection when the workspace changed before the apply.
+        if (latestTransitionStateRef.current.snapshot.workspaceId !== selectedWorkspaceId) {
+          return;
+        }
         setSnapshot((current) => ({
           workspaceId: current.workspaceId,
           routeQueryKey: routeSelectionQueryKey,
@@ -157,7 +170,7 @@ export function useAgentStudioSelectionState({
         scheduleQueryUpdate(buildAgentStudioSelectionQueryUpdateFromState(nextSelection));
       });
     },
-    [requestContextTransition, routeSelectionQueryKey, scheduleQueryUpdate],
+    [activeWorkspaceId, requestContextTransition, routeSelectionQueryKey, scheduleQueryUpdate],
   );
 
   return {

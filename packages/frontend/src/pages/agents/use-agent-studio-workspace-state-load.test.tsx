@@ -16,6 +16,7 @@ import {
 } from "./agent-studio-test-utils";
 import { useAgentStudioQuerySync } from "./query-sync/use-agent-studio-query-sync";
 import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigation";
+import { toAgentStudioSessionSelection } from "./shell/agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./shell/use-agent-studio-selection-state";
 import { buildAgentStudioStateLoad } from "./agent-studio-workspace-state-load-model";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
@@ -442,6 +443,59 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     expect(harness.getLatest().load.agentStudioStateLoadKey).not.toBe(repoALoadKey);
     expect(harness.getLatest().tabs.tabTaskIds).toEqual(["task-2", "task-1"]);
     expect(harness.getLatest().tabs.activeTaskTabId).toBe("task-2");
+    await harness.unmount();
+  });
+
+  test("drops the selected session while the next workspace snapshot loads", async () => {
+    const repoAState: WorkspaceAgentStudioState = {
+      openTaskIds: ["task-1"],
+      activeTask: { taskId: "task-1", role: "build" },
+    };
+    const repoBRead = createDeferred<RepoConfig>();
+    const workspaceGetRepoConfig = mock(async (workspaceId: string) => {
+      if (workspaceId === "repo-a") {
+        return createRepoConfig(repoAState);
+      }
+      return repoBRead.promise;
+    });
+    const selectedSession = {
+      externalSessionId: "session-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo-a/worktrees/session-1",
+      taskId: "task-1",
+      role: "build" as const,
+    };
+    const queryClient = createQueryClient();
+    const repoAArgs: LoadHookArgs & { onQueryUpdate: (update: AgentStudioQueryUpdate) => void } = {
+      activeWorkspaceId: "repo-a",
+      tasks,
+      isLoadingTasks: false,
+      tasksAreCurrent: true,
+      sessions: [],
+      sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
+      hostClient: { workspaceGetRepoConfig },
+      onQueryUpdate: () => {},
+    };
+    const harness = createSharedHookHarness(useWorkspaceRestoreWithSelection, repoAArgs, {
+      queryClient,
+    });
+
+    await harness.mount();
+    await harness.waitFor((result) => result.tabs.loadedStateWorkspaceId === "repo-a");
+    await harness.run((result) => {
+      result.selection.selectAgentStudioSelection(toAgentStudioSessionSelection(selectedSession));
+    });
+    expect(harness.getLatest().selection.selection.sessionIdentity).not.toBeNull();
+
+    await harness.update({
+      ...repoAArgs,
+      activeWorkspaceId: "repo-b",
+      sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-b"),
+    });
+
+    expect(harness.getLatest().navigation.isWorkspaceRestorePending).toBe(true);
+    expect(harness.getLatest().selection.selection.sessionIdentity).toBeNull();
+
     await harness.unmount();
   });
 
