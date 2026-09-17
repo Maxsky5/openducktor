@@ -11,6 +11,7 @@ import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { host } from "@/state/operations/shared/host";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
@@ -245,6 +246,48 @@ describe("useSessionRuntimeData", () => {
     }
   });
 
+  test("refreshes the selected-session catalog when runtime readiness returns", async () => {
+    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const readyProps: Parameters<typeof useSessionRuntimeData>[0] = {
+      repoPath: "/repo",
+      selectedSession: sessionTarget(),
+      runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
+      repoReadinessState: "ready",
+      loadRuntimeCatalog,
+      readSessionTodos: mock(async () => []),
+    };
+    const harness = createHookHarness(useSessionRuntimeDataWithQueryClient, readyProps, {
+      wrapper,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((latest) => latest.runtimeData.modelCatalog !== null, 2000);
+
+      await harness.update({
+        ...readyProps,
+        repoReadinessState: "checking",
+      });
+      await harness.run(({ queryClient }) =>
+        queryClient.invalidateQueries({
+          queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
+          exact: true,
+        }),
+      );
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(1);
+
+      await harness.update({
+        ...readyProps,
+        repoReadinessState: "ready",
+      });
+      await harness.waitFor(() => loadRuntimeCatalog.mock.calls.length === 2, 2000);
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().runtimeData.catalogError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reads todos from selected-session identity without waiting for hydrated history", async () => {
     const loadRuntimeCatalog = mock(async () => emptyCatalog);
     const readSessionTodos = mock(async () => [todoFixture]);
@@ -440,6 +483,61 @@ describe("useSessionRuntimeData", () => {
           modelCatalog: emptyCatalog,
           isLoadingModelCatalog: false,
           catalogError: "Catalog refresh failed",
+        }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the repo catalog readable while the model picker skips its own catalogs", async () => {
+    const loadRuntimeCatalog = mock(async () => emptyCatalog);
+    const useSessionChatRuntimeDataAndPicker = (
+      args: Parameters<typeof useSessionRuntimeData>[0],
+    ) => ({
+      ...useSessionRuntimeDataWithQueryClient(args),
+      pickerResources: useRuntimeModelCatalogs({
+        repoPath: args.repoPath,
+        runtimeKinds: ["opencode"] as const,
+        enabledRuntimeKinds: [] as const,
+        loadCatalog: args.loadRuntimeCatalog,
+      }).resources,
+    });
+    const harness = createHookHarness(
+      useSessionChatRuntimeDataAndPicker,
+      {
+        repoPath: "/repo",
+        selectedSession: sessionTarget(),
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
+        repoReadinessState: "ready",
+        loadRuntimeCatalog,
+        readSessionTodos: mock(async () => []),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((latest) => latest.runtimeData.modelCatalog !== null, 2000);
+
+      await harness.run(({ queryClient }) =>
+        queryClient.invalidateQueries({
+          queryKey: runtimeCatalogQueryKeys.repo("/repo", "opencode"),
+          exact: true,
+        }),
+      );
+
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().runtimeData).toEqual(
+        expect.objectContaining({
+          modelCatalog: emptyCatalog,
+          catalogError: null,
+        }),
+      );
+      expect(harness.getLatest().pickerResources[0]).toEqual(
+        expect.objectContaining({
+          catalog: emptyCatalog,
+          error: null,
         }),
       );
     } finally {

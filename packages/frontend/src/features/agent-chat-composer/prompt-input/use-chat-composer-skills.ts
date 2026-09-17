@@ -1,22 +1,12 @@
 import type { AgentSkillCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import {
-  RUNTIME_CATALOG_STALE_TIME_MS,
   repoRuntimeSkillsQueryOptions,
-  runtimeCatalogQueryKeys,
+  skippedRepoRuntimeSkillsQueryOptions,
 } from "@/state/queries/runtime-catalog";
-import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
 const EMPTY_SKILL_CATALOG: AgentSkillCatalog = { skills: [] };
-
-const skippedSkillsQueryOptions = (runtimeRef: RuntimeWorkingDirectoryRef | null) =>
-  skippedQueryOptions<AgentSkillCatalog>({
-    queryKey: runtimeRef
-      ? runtimeCatalogQueryKeys.repoSkills(runtimeRef)
-      : runtimeCatalogQueryKeys.all,
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
 
 type UseChatComposerSkillsArgs = {
   promptInputRuntime: ChatComposerPromptInputRuntime;
@@ -31,11 +21,12 @@ export const useChatComposerSkills = ({
 }: UseChatComposerSkillsArgs) => {
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
-  const skillsQuery = useQuery(
-    supportsSkillReferences && runtimeRef
+  const skillsQuery = useQuery({
+    ...(runtimeRef
       ? repoRuntimeSkillsQueryOptions(runtimeRef, loadSkillsForRepo)
-      : skippedSkillsQueryOptions(runtimeRef),
-  );
+      : skippedRepoRuntimeSkillsQueryOptions()),
+    enabled: runtimeRef !== null && supportsSkillReferences,
+  });
 
   let catalog = EMPTY_SKILL_CATALOG;
   let error: string | null = null;

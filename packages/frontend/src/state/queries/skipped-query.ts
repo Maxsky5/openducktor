@@ -1,5 +1,7 @@
 import { type QueryKey, queryOptions, skipToken } from "@tanstack/react-query";
 
+export const SKIPPED_QUERY_KEY_SEGMENT = "skipped";
+
 type SkippedQueryOptionsArgs<TQueryKey extends QueryKey> = {
   queryKey: TQueryKey;
   staleTime: number;

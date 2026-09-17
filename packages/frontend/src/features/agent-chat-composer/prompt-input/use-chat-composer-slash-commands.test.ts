@@ -1,10 +1,43 @@
-import { describe, expect, test } from "bun:test";
-import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
-import type { AgentSlashCommand } from "@openducktor/core";
+import { describe, expect, mock, test } from "bun:test";
+import {
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+  type ReusablePrompt,
+} from "@openducktor/contracts";
+import type { AgentSlashCommand, AgentSlashCommandCatalog } from "@openducktor/core";
+import { createElement, type PropsWithChildren } from "react";
+import { QueryProvider } from "@/lib/query-provider";
+import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import {
   filterSlashCommandsForComposerScope,
   mergeSlashCommands,
+  useChatComposerSlashCommands,
 } from "./use-chat-composer-slash-commands";
+
+enableReactActEnvironment();
+
+const wrapper = ({ children }: PropsWithChildren) =>
+  createElement(QueryProvider, { useIsolatedClient: true }, children);
+
+const EMPTY_CATALOG: AgentSlashCommandCatalog = { commands: [] };
+
+const sessionRuntime: ChatComposerPromptInputRuntime = {
+  state: "available",
+  scope: "session",
+  runtimeRef: {
+    repoPath: "/repo",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo/worktree",
+  },
+};
+
+const reusablePromptFixture: ReusablePrompt = {
+  id: "prompt-1",
+  name: "review",
+  description: "Review files",
+  content: "Review this: $ARGUMENTS",
+};
 
 describe("use-chat-composer-slash-commands", () => {
   test("gives reusable prompt slash commands precedence case-insensitively", () => {
@@ -107,5 +140,70 @@ describe("use-chat-composer-slash-commands", () => {
         "claude",
       ).map((command) => command.id),
     ).toEqual(["system:compact", "review"]);
+  });
+});
+
+describe("useChatComposerSlashCommands", () => {
+  test("keeps reusable prompt commands without querying an unsupported runtime", async () => {
+    const loadSlashCommandsForRepo = mock(async () => EMPTY_CATALOG);
+    const harness = createHookHarness(
+      useChatComposerSlashCommands,
+      {
+        promptInputRuntime: sessionRuntime,
+        runtimeSupportsSlashCommands: false,
+        reusablePrompts: [reusablePromptFixture],
+        loadSlashCommandsForRepo,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadSlashCommandsForRepo).not.toHaveBeenCalled();
+      expect(harness.getLatest()).toEqual(
+        expect.objectContaining({
+          supportsSlashCommands: true,
+          slashCommandsError: null,
+          isSlashCommandsLoading: false,
+        }),
+      );
+      expect(harness.getLatest().slashCommands.map((command) => command.trigger)).toEqual([
+        "review",
+      ]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reads repo slash commands from a supported runtime", async () => {
+    const runtimeCommand: AgentSlashCommand = {
+      id: "runtime-review",
+      trigger: "runtime-review",
+      title: "Runtime review",
+      hints: [],
+    };
+    const loadSlashCommandsForRepo = mock(async () => ({ commands: [runtimeCommand] }));
+    const harness = createHookHarness(
+      useChatComposerSlashCommands,
+      {
+        promptInputRuntime: sessionRuntime,
+        runtimeSupportsSlashCommands: true,
+        reusablePrompts: [],
+        loadSlashCommandsForRepo,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.slashCommands.length === 1);
+
+      expect(loadSlashCommandsForRepo).toHaveBeenCalledWith(sessionRuntime.runtimeRef);
+      expect(harness.getLatest().slashCommands).toEqual([runtimeCommand]);
+      expect(harness.getLatest().slashCommandsError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
   });
 });

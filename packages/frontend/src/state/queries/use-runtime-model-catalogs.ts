@@ -4,11 +4,9 @@ import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { errorMessage } from "@/lib/errors";
 import {
-  RUNTIME_CATALOG_STALE_TIME_MS,
   repoRuntimeCatalogQueryOptions,
-  runtimeCatalogQueryKeys,
+  skippedRepoRuntimeCatalogQueryOptions,
 } from "./runtime-catalog";
-import { skippedQueryOptions } from "./skipped-query";
 
 export type RuntimeModelCatalogQueryResource = {
   runtimeKind: RuntimeKind;
@@ -26,14 +24,6 @@ type UseRuntimeModelCatalogsArgs = {
   loadCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
 };
 
-const skippedRuntimeCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
-  skippedQueryOptions<AgentModelCatalog>({
-    queryKey: runtimeRef
-      ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
-      : runtimeCatalogQueryKeys.all,
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
-
 export function useRuntimeModelCatalogs({
   repoPath,
   runtimeKinds,
@@ -45,9 +35,13 @@ export function useRuntimeModelCatalogs({
   const catalogQueries = useQueries({
     queries: uniqueRuntimeKinds.map((runtimeKind) => {
       const runtimeRef = repoPath ? { repoPath, runtimeKind } : null;
-      return runtimeRef && enabledRuntimeKindSet.has(runtimeKind)
-        ? repoRuntimeCatalogQueryOptions(runtimeRef, loadCatalog)
-        : skippedRuntimeCatalogQueryOptions(runtimeRef);
+      const isEnabled = repoPath !== null && enabledRuntimeKindSet.has(runtimeKind);
+      return {
+        ...(runtimeRef
+          ? repoRuntimeCatalogQueryOptions(runtimeRef, loadCatalog)
+          : skippedRepoRuntimeCatalogQueryOptions()),
+        enabled: isEnabled,
+      };
     }),
   });
 

@@ -13,16 +13,13 @@ import { useMemo } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import {
-  agentSessionTodosQueryKeys,
-  SESSION_TODOS_STALE_TIME_MS,
   sessionTodosQueryOptions,
+  skippedSessionTodosQueryOptions,
 } from "@/state/queries/agent-session-todos";
 import {
-  RUNTIME_CATALOG_STALE_TIME_MS,
   repoRuntimeCatalogQueryOptions,
-  runtimeCatalogQueryKeys,
+  skippedRepoRuntimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
-import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import {
   EMPTY_SELECTED_SESSION_RUNTIME_DATA,
@@ -44,20 +41,6 @@ type UseSessionRuntimeDataArgs = {
   loadRuntimeCatalog: (runtimeRef: RepoRuntimeRef) => Promise<AgentModelCatalog>;
   readSessionTodos: (session: PolicyBoundSessionRef) => Promise<AgentSessionTodoItem[]>;
 };
-
-const skippedSessionTodosQueryOptions = (session: PolicyBoundSessionRef | null) =>
-  skippedQueryOptions<AgentSessionTodoItem[]>({
-    queryKey: session ? agentSessionTodosQueryKeys.todos(session) : agentSessionTodosQueryKeys.all,
-    staleTime: SESSION_TODOS_STALE_TIME_MS,
-  });
-
-const skippedRuntimeCatalogQueryOptions = (runtimeRef: RepoRuntimeRef | null) =>
-  skippedQueryOptions<AgentModelCatalog>({
-    queryKey: runtimeRef
-      ? runtimeCatalogQueryKeys.repo(runtimeRef.repoPath, runtimeRef.runtimeKind)
-      : runtimeCatalogQueryKeys.all,
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
 
 export const useSessionRuntimeData = ({
   repoPath,
@@ -164,17 +147,19 @@ export const useSessionRuntimeData = ({
   const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
 
   const catalogQuery = useQuery({
-    ...(catalogRef && isRuntimeReady
+    ...(catalogRef
       ? repoRuntimeCatalogQueryOptions(catalogRef, loadRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions(catalogRef)),
+      : skippedRepoRuntimeCatalogQueryOptions()),
+    enabled: catalogRef !== null && isRuntimeReady,
     notifyOnChangeProps: ["data", "error", "isFetching"],
   });
 
-  const todosQuery = useQuery(
-    todosRef && isRuntimeReady
+  const todosQuery = useQuery({
+    ...(todosRef
       ? sessionTodosQueryOptions(todosRef, readSessionTodos)
-      : skippedSessionTodosQueryOptions(todosRef),
-  );
+      : skippedSessionTodosQueryOptions()),
+    enabled: todosRef !== null && isRuntimeReady,
+  });
 
   return useMemo(() => {
     if (runtimeDataRefs.kind === "none") {

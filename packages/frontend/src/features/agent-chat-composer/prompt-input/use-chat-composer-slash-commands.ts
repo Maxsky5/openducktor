@@ -13,11 +13,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
 import {
-  RUNTIME_CATALOG_STALE_TIME_MS,
   repoRuntimeSlashCommandsQueryOptions,
-  runtimeCatalogQueryKeys,
+  skippedRepoRuntimeSlashCommandsQueryOptions,
 } from "@/state/queries/runtime-catalog";
-import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
 export const mergeSlashCommands = (
@@ -59,14 +57,6 @@ export const filterSlashCommandsForComposerScope = (
     ? commands
     : commands.filter((command) => !isManualSessionCompactionSlashCommand(command));
 
-const skippedSlashCommandsQueryOptions = (runtimeRef: RuntimeWorkingDirectoryRef | null) =>
-  skippedQueryOptions<AgentSlashCommandCatalog>({
-    queryKey: runtimeRef
-      ? runtimeCatalogQueryKeys.repoSlashCommands(runtimeRef)
-      : runtimeCatalogQueryKeys.all,
-    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-  });
-
 export const useChatComposerSlashCommands = ({
   promptInputRuntime,
   runtimeSupportsSlashCommands,
@@ -82,11 +72,12 @@ export const useChatComposerSlashCommands = ({
 }) => {
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
-  const slashCommandsQuery = useQuery(
-    runtimeSupportsSlashCommands && runtimeRef
+  const slashCommandsQuery = useQuery({
+    ...(runtimeRef
       ? repoRuntimeSlashCommandsQueryOptions(runtimeRef, loadSlashCommandsForRepo)
-      : skippedSlashCommandsQueryOptions(runtimeRef),
-  );
+      : skippedRepoRuntimeSlashCommandsQueryOptions()),
+    enabled: runtimeRef !== null && runtimeSupportsSlashCommands,
+  });
   const runtimeSlashCommandCatalog =
     promptInputRuntime.state === "available" ? (slashCommandsQuery.data ?? null) : null;
   const reusablePromptSlashCommands = useMemo(
