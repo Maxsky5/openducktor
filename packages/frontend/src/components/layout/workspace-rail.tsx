@@ -26,6 +26,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type RefCallback,
   useEffect,
+  useId,
   useMemo,
   useReducer,
   useRef,
@@ -46,11 +47,14 @@ import {
   tileLabelSizeClass,
 } from "@/lib/workspace-tile-appearance";
 import { useWorkspaceState } from "@/state/app-state-provider";
+import { useWorkspaceActivity } from "@/state/workspace-activity/workspace-activity-context";
 import {
   WorkspaceCloseDialog,
   WorkspaceRemovalRecoveryDialog,
   WorkspaceRemoveDialog,
 } from "../features/repository/workspace-lifecycle-dialogs";
+import { WorkspaceRailActivityBadges } from "./workspace-rail-activity-badges";
+import { workspaceActivityBadges } from "./workspace-rail-activity-badges-model";
 
 const DRAG_DISTANCE_PX = 6;
 
@@ -122,6 +126,8 @@ function WorkspaceRailButtonShell({
   const shouldSuppressSelection = dragState.shouldSuppressSelection === true;
   const { isSwitchingWorkspace } = interactionState;
   const isInteractionDisabled = isSwitchingWorkspace && !isDragOverlay;
+  const activityBadges = workspaceActivityBadges(useWorkspaceActivity(workspace.workspaceId));
+  const activityBadgesId = `${useId()}-workspace-activity`;
 
   const isActiveWorkspace = workspace.isActive;
   // The row surface joins the sidebar. The drag preview floats free of the rail, so it has none.
@@ -147,7 +153,8 @@ function WorkspaceRailButtonShell({
         size="icon"
         variant="ghost"
         className={cn(
-          "size-10 rounded-lg border-none p-0 shadow-sm transition-none",
+          // The activity badge strip is positioned against the tile.
+          "relative size-10 rounded-lg border-none p-0 shadow-sm transition-none",
           // A picked color replaces the theme classes, so a tile keeps its own color in both
           // states and in the drag preview.
           !tileColor && noColorTileClasses(isActiveWorkspace),
@@ -155,6 +162,7 @@ function WorkspaceRailButtonShell({
         )}
         style={tileColor ? tileColorFaceStyle(tileColor) : undefined}
         aria-label={workspace.workspaceName}
+        aria-describedby={activityBadges.length > 0 ? activityBadgesId : undefined}
         title={workspace.workspaceName}
         aria-disabled={isInteractionDisabled ? true : undefined}
         onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -179,6 +187,7 @@ function WorkspaceRailButtonShell({
         }}
       >
         <WorkspaceRailAvatar workspace={workspace} />
+        <WorkspaceRailActivityBadges badges={activityBadges} describedById={activityBadgesId} />
       </Button>
     </div>
   );

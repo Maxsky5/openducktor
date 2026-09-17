@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { WorkspaceActivityState } from "@/features/workspace-activity/workspace-activity-state";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
+import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
+import { createWorkspaceActivityObserverStub } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceRail } from "./workspace-rail";
 
@@ -27,20 +31,23 @@ const workspaceRecord = (
 });
 
 let workspaceState: WorkspaceStateContextValue;
+let workspaceActivity: Record<string, WorkspaceActivityState>;
+
+const withProviders = (children: ReactElement): ReactElement => (
+  <WorkspaceStateContext.Provider value={workspaceState}>
+    <WorkspaceActivityContext.Provider
+      value={createWorkspaceActivityObserverStub(workspaceActivity)}
+    >
+      {children}
+    </WorkspaceActivityContext.Provider>
+  </WorkspaceStateContext.Provider>
+);
 
 const renderRail = (onOpenRepositoryModal = () => {}): ReturnType<typeof render> =>
-  render(
-    <WorkspaceStateContext.Provider value={workspaceState}>
-      <WorkspaceRail onOpenRepositoryModal={onOpenRepositoryModal} />
-    </WorkspaceStateContext.Provider>,
-  );
+  render(withProviders(<WorkspaceRail onOpenRepositoryModal={onOpenRepositoryModal} />));
 
 const renderRailMarkup = (): string =>
-  renderToStaticMarkup(
-    <WorkspaceStateContext.Provider value={workspaceState}>
-      <WorkspaceRail onOpenRepositoryModal={() => {}} />
-    </WorkspaceStateContext.Provider>,
-  );
+  renderToStaticMarkup(withProviders(<WorkspaceRail onOpenRepositoryModal={() => {}} />));
 
 describe("WorkspaceRail", () => {
   beforeEach(() => {
@@ -78,6 +85,7 @@ describe("WorkspaceRail", () => {
       reopenWorkspace: async () => {},
       resolveWorkspacePath: async () => ({ kind: "new" }),
     };
+    workspaceActivity = {};
     selectWorkspaceMock.mockClear();
     reorderWorkspacesMock.mockClear();
   });
@@ -270,5 +278,84 @@ describe("WorkspaceRail", () => {
 
     expect(screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("disabled")).toBe(null);
     expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("disabled")).toBe(null);
+  });
+
+  test("shows no activity badge while the workspace activity is unknown", () => {
+    workspaceState.workspaces = [workspaceRecord("alpha", { workspaceName: "Alpha Repo" })];
+
+    renderRail();
+
+    expect(screen.queryByTestId("workspace-rail-activity-badges")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Alpha Repo" }).getAttribute("aria-describedby"),
+    ).toBeNull();
+  });
+
+  test("shows no activity badge when no session of the workspace is active", () => {
+    workspaceState.workspaces = [workspaceRecord("alpha", { workspaceName: "Alpha Repo" })];
+    workspaceActivity.alpha = { kind: "ready", inputRequired: false, error: false, active: false };
+
+    renderRail();
+
+    expect(screen.queryByTestId("workspace-rail-activity-badges")).toBeNull();
+  });
+
+  test("shows the input required and active badges side by side, in order", () => {
+    workspaceState.workspaces = [workspaceRecord("alpha", { workspaceName: "Alpha Repo" })];
+    workspaceActivity.alpha = { kind: "ready", inputRequired: true, error: false, active: true };
+
+    renderRail();
+
+    const badges = screen.getByTestId("workspace-rail-activity-badges");
+    expect(badges.textContent).toBe("Sessions waiting for inputSessions running");
+    expect(within(badges).getByTitle("Sessions waiting for input")).toBeDefined();
+    expect(within(badges).getByTitle("Sessions running")).toBeDefined();
+
+    const button = screen.getByRole("button", { name: "Alpha Repo" });
+    expect(button.getAttribute("aria-describedby")).toBe(badges.id);
+    expect(button.getAttribute("title")).toBe("Alpha Repo");
+    expect(button.contains(badges)).toBe(true);
+  });
+
+  test("reports unavailable activity with the reason the source gave", () => {
+    workspaceState.workspaces = [workspaceRecord("alpha", { workspaceName: "Alpha Repo" })];
+    workspaceActivity.alpha = { kind: "unavailable", reason: "stream closed" };
+
+    renderRail();
+
+    const badges = screen.getByTestId("workspace-rail-activity-badges");
+    expect(badges.textContent).toBe("Session activity unavailable: stream closed");
+  });
+
+  test("selects the workspace when a click lands on a badge", () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", { workspaceName: "Alpha Repo", isActive: true }),
+      workspaceRecord("beta", { workspaceName: "Beta Repo" }),
+    ];
+    workspaceActivity.beta = { kind: "ready", inputRequired: false, error: false, active: true };
+
+    renderRail();
+
+    fireEvent.click(
+      within(screen.getByTestId("workspace-rail-activity-badges")).getByTitle("Sessions running"),
+    );
+
+    expect(selectWorkspaceMock).toHaveBeenCalledWith("beta");
+  });
+
+  test("gives each tile its own badges, including the drag overlay copy", () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", { workspaceName: "Alpha Repo" }),
+      workspaceRecord("beta", { workspaceName: "Beta Repo" }),
+    ];
+    workspaceActivity.alpha = { kind: "ready", inputRequired: true, error: false, active: false };
+    workspaceActivity.beta = { kind: "ready", inputRequired: false, error: true, active: false };
+
+    renderRail();
+
+    const [alphaBadges, betaBadges] = screen.getAllByTestId("workspace-rail-activity-badges");
+    expect(alphaBadges?.textContent).toBe("Sessions waiting for input");
+    expect(betaBadges?.textContent).toBe("Sessions failed");
+    expect(alphaBadges?.id).not.toBe(betaBadges?.id);
   });
 });

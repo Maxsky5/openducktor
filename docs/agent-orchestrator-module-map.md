@@ -138,7 +138,8 @@ Owns transcript event routing, per-session batching, todo event forwarding, acti
 
 Rules:
 
-- Live activity, pending input, context, and removal arrive as live-state messages. Only `agent-session-live-projection.ts` applies them. It also applies activity carried by a transcript event before transcript buffering. Transcript assembly cannot change activity.
+- Live activity, pending input, context, and removal arrive as live-state messages. Only `agent-session-live-projection.ts` applies them to the Agent Studio session store. It also applies activity carried by a transcript event before transcript buffering. Transcript assembly cannot change activity.
+- `projectObservedSessionActivity` in `session-read-model/agent-session-live-projection.ts` states the observed status rule. `projectSessionSnapshotActivity` in the same file states the snapshot policy: episode carryforward, pending-input override, terminal preservation, and message reset. `projectSessionTranscriptActivity` in `session-read-model/agent-session-live-activity.ts` states the transcript rule. The workspace rail activity projection in `features/workspace-activity/` reuses these rules. Agent Studio also records local stop intent, which the rail does not receive, so their transcript results can differ when those inputs differ. Change each rule in its one function, not in a copy.
 - `SessionTranscriptEventContext.session` is the only event target. Other capability groups do not copy session identity.
 - Transcript text exists only in `session.messages`.
 - `SessionTurnMetadata` owns turn anchors. `SessionTurnTiming` owns timing.

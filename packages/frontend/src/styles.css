@@ -632,11 +632,9 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   will-change: transform, opacity;
 }
 
-.agent-studio-task-status-running-dot {
+.running-status-dot {
   position: relative;
   display: inline-flex;
-  width: 0.875rem;
-  height: 0.875rem;
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
@@ -644,15 +642,15 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   overflow: visible;
 }
 
-.agent-studio-task-status-running-dot::before,
-.agent-studio-task-status-running-dot::after {
+.running-status-dot::before,
+.running-status-dot::after {
   position: absolute;
   border-radius: 9999px;
   content: "";
   pointer-events: none;
 }
 
-.agent-studio-task-status-running-dot::before {
+.running-status-dot::before {
   inset: -0.1875rem;
   background: radial-gradient(
     circle,
@@ -666,15 +664,10 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
   animation: odt-task-tab-status-glow 1350ms ease-in-out infinite;
 }
 
-.agent-studio-task-status-running-dot::after {
+.running-status-dot::after {
   inset: -0.125rem;
   border: 1px solid color-mix(in oklch, var(--status-running) 48%, transparent);
   animation: odt-task-tab-status-ring 1350ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
-}
-
-.agent-studio-task-status-running-dot svg {
-  position: relative;
-  z-index: 1;
 }
 
 .kanban-active-session-card {
@@ -737,8 +730,8 @@ html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) 
 @media (prefers-reduced-motion: reduce) {
   .agent-chat-row-motion,
   .onboarding-stage-enter,
-  .agent-studio-task-status-running-dot::before,
-  .agent-studio-task-status-running-dot::after,
+  .running-status-dot::before,
+  .running-status-dot::after,
   .odt-border-ray-segment {
     animation: none;
   }

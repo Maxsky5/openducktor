@@ -3,8 +3,25 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
 import { isStopAbortSessionErrorMessage } from "../support/tool-messages";
 
+/**
+ * The session fields the transcript lifecycle rule reads and writes.
+ *
+ * The Agent Studio read model and the workspace rail activity projection keep
+ * different session shapes, so the rule is stated over the shared fields only.
+ */
+export type AgentSessionTranscriptActivityFacts = Pick<
+  AgentSessionState,
+  "status" | "runtimeStatusMessage" | "pendingUserMessageStartedAt" | "stopRequestedAt"
+> & {
+  pendingApprovals: readonly unknown[];
+  pendingQuestions: readonly unknown[];
+};
+
 /** Apply ordered lifecycle facts before transcript assembly can buffer the event. */
-const projectActivity = (current: AgentSessionState, event: AgentEvent): AgentSessionState => {
+const projectActivity = (
+  current: AgentSessionTranscriptActivityFacts,
+  event: AgentEvent,
+): AgentSessionTranscriptActivityFacts => {
   if (
     event.type === "session_started" ||
     (event.type === "session_status" && event.status.type !== "idle")
@@ -24,7 +41,7 @@ const projectActivity = (current: AgentSessionState, event: AgentEvent): AgentSe
       Boolean(current.stopRequestedAt) &&
       (event.type === "session_finished" ||
         isStopAbortSessionErrorMessage(normalizeSessionErrorMessage(event.message)));
-    let status: AgentSessionState["status"] = "idle";
+    let status: AgentSessionTranscriptActivityFacts["status"] = "idle";
     if (event.type === "session_error" || current.status === "error") status = "error";
     if (stopped) status = "stopped";
     return {
@@ -84,10 +101,10 @@ const projectActivity = (current: AgentSessionState, event: AgentEvent): AgentSe
   return current;
 };
 
-export const projectSessionTranscriptActivity = (
-  current: AgentSessionState,
+export const projectSessionTranscriptActivity = <T extends AgentSessionTranscriptActivityFacts>(
+  current: T,
   event: AgentEvent,
-): AgentSessionState => {
+): T => {
   const next = projectActivity(current, event);
   if (
     next.status === current.status &&
@@ -97,5 +114,5 @@ export const projectSessionTranscriptActivity = (
     next.pendingQuestions === current.pendingQuestions
   )
     return current;
-  return next;
+  return { ...current, ...next };
 };

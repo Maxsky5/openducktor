@@ -16,6 +16,11 @@ import {
   type TaskCard,
   type TaskStoreCheck,
 } from "@openducktor/contracts";
+import type { WorkspaceActivityObserver } from "@/features/workspace-activity/workspace-activity-observer";
+import {
+  UNKNOWN_WORKSPACE_ACTIVITY,
+  type WorkspaceActivityState,
+} from "@/features/workspace-activity/workspace-activity-state";
 import { deriveRepoRuntimeHealthState } from "@/lib/repo-runtime-health";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
@@ -474,3 +479,19 @@ export const createRepoRuntimeHealthFixture = (
 
   return structuredClone(merged);
 };
+
+/**
+ * A workspace activity observer that reports fixed states.
+ *
+ * The state objects are stable per workspace, which `useSyncExternalStore`
+ * requires.
+ */
+export const createWorkspaceActivityObserverStub = (
+  states: Readonly<Record<string, WorkspaceActivityState>> = {},
+): WorkspaceActivityObserver => ({
+  syncWorkspaces: () => {},
+  setSessionRecordsError: () => {},
+  subscribe: () => () => {},
+  getWorkspaceActivity: (workspaceId) => states[workspaceId] ?? UNKNOWN_WORKSPACE_ACTIVITY,
+  dispose: () => {},
+});

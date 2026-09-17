@@ -6,6 +6,7 @@ import { Circle, CircleAlert, LoaderCircle, Plus, SquareTerminal, X } from "luci
 import { type ReactElement, useMemo, useRef, useState } from "react";
 import { TaskSelector } from "@/components/features/tasks";
 import { Button } from "@/components/ui/button";
+import { RunningStatusDot } from "@/components/ui/running-status-dot";
 import {
   Dialog,
   DialogBody,
@@ -87,11 +88,7 @@ const statusLabelByTab = (status: AgentStudioTaskTabStatus): string => {
 
 const statusIconByTab = (status: AgentStudioTaskTabStatus): ReactElement => {
   if (status === "working") {
-    return (
-      <span className="agent-studio-task-status-running-dot">
-        <Circle className="size-3 fill-status-running text-status-running" />
-      </span>
-    );
+    return <RunningStatusDot />;
   }
   if (status === "waiting_input") {
     return <CircleAlert className="size-3.5 text-warning-accent" />;
