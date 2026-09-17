@@ -126,6 +126,22 @@ describe("WorkspaceRail", () => {
     expect(openRepositoryModal).toHaveBeenCalledTimes(1);
   });
 
+  test("uses the eye-off icon for the close workspace action", async () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", {
+        workspaceName: "Alpha Repo",
+        isActive: true,
+      }),
+    ];
+
+    renderRail();
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Alpha Repo" }));
+
+    const closeItem = await screen.findByRole("menuitem", { name: "Close workspace" });
+    expect(closeItem.querySelector(".lucide-eye-off")).not.toBeNull();
+  });
+
   test("shows the abbreviation exactly as the user typed it", () => {
     workspaceState.workspaces = [
       workspaceRecord("alpha", { workspaceName: "Alpha Repo", abbreviation: "iOS" }),

@@ -33,16 +33,18 @@ const { WorkspaceCloseDialog, WorkspaceRemoveDialog } =
 afterEach(cleanup);
 afterAll(() => workspaceStateSpy.mockRestore());
 
-test("workspace close uses the standard layout and close-eye icon", () => {
+test("workspace close uses the standard layout and eye-off icon", () => {
   render(<WorkspaceCloseDialog workspace={workspace} onOpenChange={() => {}} />);
 
   const dialog = screen.getByRole("dialog", { name: "Close workspace" });
   expect(within(dialog).getByText("Hide OpenDucktor from the workspace rail?")).toBeTruthy();
+  expect(within(dialog).getByText("Repository")).toBeTruthy();
   expect(within(dialog).getByText("/repos/openducktor")).toBeTruthy();
+  expect(within(dialog).getByText("Only the workspace rail entry is hidden.")).toBeTruthy();
 
   const cancelButton = within(dialog).getByRole("button", { name: "Cancel" });
   const closeButton = within(dialog).getByRole("button", { name: "Close workspace" });
-  expect(closeButton.querySelector(".lucide-eye-closed")).not.toBeNull();
+  expect(closeButton.querySelector(".lucide-eye-off")).not.toBeNull();
   expect(closeButton.parentElement).toBe(cancelButton.parentElement);
   expect(closeButton.parentElement?.className).toContain("justify-between");
   expect(closeButton.parentElement?.className).toContain("border-t");
@@ -57,6 +59,12 @@ test("workspace removal uses the destructive layout and trash icon", () => {
       "Permanently remove OpenDucktor and its task data? This cannot be undone.",
     ),
   ).toBeTruthy();
+
+  expect(within(dialog).getByText("Repository")).toBeTruthy();
+  expect(within(dialog).getByText("/repos/openducktor")).toBeTruthy();
+  expect(
+    within(dialog).getByRole("checkbox", { name: "Remove task worktrees" }).className,
+  ).toContain("mt-0.5");
   expect(
     within(dialog).getByText(
       "OpenDucktor will delete the workspace settings, all tasks, workflow documents, saved sessions, and managed attachments.",
