@@ -1,4 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
+import { render } from "@testing-library/react";
+import { createElement, type ReactElement, useLayoutEffect } from "react";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -23,6 +25,7 @@ const session = {
 };
 
 const baseProps = (overrides: Partial<HookProps> = {}): HookProps => ({
+  activeWorkspaceId: "workspace-1",
   isWorkspaceRestorePending: false,
   taskIdParam: "task-1",
   sessionExternalIdParam: null,
@@ -35,6 +38,26 @@ const baseProps = (overrides: Partial<HookProps> = {}): HookProps => ({
 
 const createHookHarness = (initialProps: HookProps) =>
   createSharedHookHarness(useAgentStudioSelectionState, initialProps);
+
+type SelectionProbeProps = HookProps & {
+  observedWorkingDirectories: Array<string | null>;
+};
+
+function SelectionProbe({
+  observedWorkingDirectories,
+  ...selectionProps
+}: SelectionProbeProps): ReactElement | null {
+  const { selection } = useAgentStudioSelectionState(selectionProps);
+  // Observe every commit, including the one that switches workspace. Record only
+  // changes, because one workspace change can commit more than once.
+  useLayoutEffect(() => {
+    const workingDirectory = selection.sessionIdentity?.workingDirectory ?? null;
+    if (observedWorkingDirectories.at(-1) !== workingDirectory) {
+      observedWorkingDirectories.push(workingDirectory);
+    }
+  });
+  return null;
+}
 
 describe("useAgentStudioSelectionState", () => {
   test("does not publish a local task change before the preview guard applies it", async () => {
@@ -211,6 +234,119 @@ describe("useAgentStudioSelectionState", () => {
     });
 
     await harness.unmount();
+  });
+
+  test("drops the previous workspace selection when the workspace changes", async () => {
+    const scheduleQueryUpdate = mock(() => {});
+    const harness = createHookHarness(baseProps({ scheduleQueryUpdate }));
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.selectAgentStudioSelection(toAgentStudioSessionSelection(session));
+    });
+
+    expect(harness.getLatest().selection).toEqual(toAgentStudioSessionSelection(session));
+
+    await harness.update(baseProps({ activeWorkspaceId: "workspace-2", scheduleQueryUpdate }));
+
+    expect(harness.getLatest().selection).toEqual({
+      taskId: "task-1",
+      sessionExternalId: null,
+      sessionIdentity: null,
+      role: "spec",
+      hasExplicitRoleSelection: false,
+      keepSessionless: false,
+    });
+    expect(scheduleQueryUpdate).toHaveBeenCalledTimes(1);
+
+    await harness.unmount();
+  });
+
+  test("forces the context transition when the workspace changes", async () => {
+    const options: Array<{ force: boolean } | undefined> = [];
+    const requestContextTransition = mock(
+      (_apply: () => void, _cancel?: () => void, transitionOptions?: { force: boolean }) => {
+        options.push(transitionOptions);
+      },
+    );
+    const harness = createHookHarness(baseProps({ requestContextTransition }));
+
+    await harness.mount();
+    await harness.update(baseProps({ activeWorkspaceId: "workspace-2", requestContextTransition }));
+
+    expect(options).toEqual([{ force: true }]);
+
+    await harness.unmount();
+  });
+
+  test("drops a deferred selection when the workspace changes before it applies", async () => {
+    const scheduleQueryUpdate = mock(() => {});
+    const pendingApplies: Array<() => void> = [];
+    const requestContextTransition = mock((apply: () => void) => {
+      pendingApplies.push(apply);
+    });
+    const harness = createHookHarness(baseProps({ requestContextTransition, scheduleQueryUpdate }));
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.selectAgentStudioSelection(toAgentStudioSessionSelection(session));
+    });
+    expect(pendingApplies).toHaveLength(1);
+
+    await harness.update(
+      baseProps({
+        activeWorkspaceId: "workspace-2",
+        requestContextTransition,
+        scheduleQueryUpdate,
+      }),
+    );
+    await harness.run(() => {
+      pendingApplies[0]?.();
+    });
+
+    expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+    expect(harness.getLatest().selection.sessionIdentity).toBeNull();
+
+    await harness.unmount();
+  });
+
+  test("switches workspaces without exposing the previous workspace session directory to effects", () => {
+    const observedWorkingDirectories: Array<string | null> = [];
+    const nextSession = {
+      ...session,
+      externalSessionId: "session-2",
+      workingDirectory: "/repo/worktrees/session-2",
+    };
+    const firstWorkspaceProps = baseProps({
+      sessionExternalIdParam: session.externalSessionId,
+      routeSessionIdentity: session,
+    });
+    const secondWorkspaceProps = baseProps({
+      activeWorkspaceId: "workspace-2",
+      isWorkspaceRestorePending: true,
+      sessionExternalIdParam: session.externalSessionId,
+    });
+    const restoredWorkspaceProps = baseProps({
+      activeWorkspaceId: "workspace-2",
+      sessionExternalIdParam: nextSession.externalSessionId,
+      routeSessionIdentity: nextSession,
+    });
+
+    const view = render(
+      createElement(SelectionProbe, { ...firstWorkspaceProps, observedWorkingDirectories }),
+    );
+    view.rerender(
+      createElement(SelectionProbe, { ...secondWorkspaceProps, observedWorkingDirectories }),
+    );
+    view.rerender(
+      createElement(SelectionProbe, { ...restoredWorkspaceProps, observedWorkingDirectories }),
+    );
+
+    expect(observedWorkingDirectories).toEqual([
+      session.workingDirectory,
+      null,
+      nextSession.workingDirectory,
+    ]);
   });
 
   test("keeps local task selection while stale route params are catching up", async () => {
