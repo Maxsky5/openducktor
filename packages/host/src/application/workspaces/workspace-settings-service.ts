@@ -3,7 +3,6 @@ import {
   globalConfigSchema,
   repoConfigSchema,
   settingsSnapshotSaveInputSchema,
-  type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { configValidationMessage } from "../../config/config-validation-message";
