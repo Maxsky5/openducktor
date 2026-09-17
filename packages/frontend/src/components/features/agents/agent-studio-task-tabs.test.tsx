@@ -55,7 +55,7 @@ describe("AgentStudioTaskTabs", () => {
     expect(html).toContain(">Working</span>");
     expect(html).toContain(">Waiting input</span>");
     expect(html).toContain(">Idle</span>");
-    expect(html).toContain("agent-studio-task-status-running-dot");
+    expect(html.match(/class="running-status-dot size-3.5"/g)).toHaveLength(1);
     expect(html).toContain("fill-status-running");
     expect(html).toContain("fill-input");
     expect(html).toContain("text-warning-accent");
@@ -84,6 +84,21 @@ describe("AgentStudioTaskTabs", () => {
         createElement(AgentStudioTaskTabs, { model: buildModel() }),
       ),
     );
+
+    const workingStatus = screen.getByTitle("Working");
+    const dot = workingStatus.querySelector(".running-status-dot");
+    expect(dot?.classList.contains("size-3.5")).toBe(true);
+    const svg = dot?.querySelector("svg");
+    expect(svg?.classList.contains("size-3")).toBe(true);
+    expect(svg?.classList.contains("relative")).toBe(true);
+    expect(svg?.classList.contains("z-1")).toBe(true);
+    expect(svg?.getAttribute("viewBox")).toBe("0 0 24 24");
+    expect(svg?.getAttribute("stroke-width")).toBe("2");
+    const circle = svg?.querySelector("circle");
+    expect(circle?.getAttribute("cx")).toBe("12");
+    expect(circle?.getAttribute("cy")).toBe("12");
+    expect(circle?.getAttribute("r")).toBe("10");
+    expect(dot?.querySelector(".bg-status-running")).toBeNull();
 
     const newTabButton = screen.getByRole("button", { name: "Open new task tab" });
     const lastTabCloseButton = screen.getByRole("button", {

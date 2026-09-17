@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { RunningStatusDot } from "@/components/ui/running-status-dot";
 import type { WorkspaceActivityState } from "@/features/workspace-activity/workspace-activity-state";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +27,7 @@ export type WorkspaceActivityBadge = {
 const WORKSPACE_ACTIVITY_BADGE_COLORS = {
   inputRequired: "bg-warning-accent",
   error: "bg-destructive",
-  active: "workspace-rail-status-running-dot bg-status-running",
+  active: "inline-flex",
 } satisfies Record<WorkspaceActivityBadgeKey, string>;
 
 /** Left to right: input required, then error, then active. */
@@ -89,6 +90,7 @@ export function WorkspaceRailActivityBadges({
           )}
           title={badge.label}
         >
+          {badge.key === "active" ? <RunningStatusDot size="sm" /> : null}
           <span className="sr-only">{badge.label}</span>
         </span>
       ))}
