@@ -1,12 +1,24 @@
-import { describe, expect, test } from "bun:test";
-import type { ModelInfo } from "@anthropic-ai/claude-agent-sdk";
-import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
+import { describe, expect, mock, test } from "bun:test";
+import type {
+  AgentInfo,
+  ModelInfo,
+  Options,
+  SDKUserMessage,
+  SlashCommand,
+} from "@anthropic-ai/claude-agent-sdk";
 import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+} from "@openducktor/contracts";
+import {
+  type ClaudeCatalogQueryFactory,
+  loadClaudeRuntimeCatalog,
   toClaudeHistoryMessages,
   toClaudeModelDescriptor,
   toClaudeSkillCatalog,
   toClaudeSlashCommandCatalog,
 } from "./claude-agent-sdk-catalog";
+import { createClaudeQueryFixture } from "./claude-agent-sdk-session-io.test-support";
 import { claudeSessionMessageFixtures } from "./claude-agent-sdk-test-messages";
 
 describe("toClaudeModelDescriptor", () => {
@@ -316,6 +328,123 @@ describe("toClaudeSkillCatalog", () => {
         },
       ],
     });
+  });
+});
+
+describe("loadClaudeRuntimeCatalog", () => {
+  const catalogInput = {
+    repoPath: "/repo",
+    runtimeKind: "claude" as const,
+    workingDirectory: "/repo/worktree",
+  };
+
+  const modelFixture: ModelInfo = {
+    value: "claude-sonnet-4-6",
+    displayName: "Claude Sonnet 4.6",
+    description: "Claude Sonnet",
+  };
+
+  const commandFixtures: SlashCommand[] = [
+    { name: "compact", description: "Free up context", argumentHint: "" },
+    { name: "grill-me", description: "User-only skill", argumentHint: "" },
+  ];
+
+  const agentFixtures: AgentInfo[] = [{ name: "reviewer", description: "Reviews changes" }];
+
+  test("reads every surface from one catalog session and shares the command read", async () => {
+    let receivedOptions: Options | undefined;
+    const supportedCommands = mock(async () => commandFixtures);
+    const close = mock(() => {});
+    const sdkQuery = createClaudeQueryFixture({
+      close,
+      supportedAgents: mock(async () => agentFixtures),
+      supportedCommands,
+      supportedModels: mock(async () => [modelFixture]),
+    });
+    const createQuery: ClaudeCatalogQueryFactory = mock(
+      ({ options }: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => {
+        receivedOptions = options;
+        return sdkQuery;
+      },
+    );
+
+    const catalog = await loadClaudeRuntimeCatalog(
+      catalogInput,
+      undefined,
+      process.execPath,
+      createQuery,
+    );
+
+    expect(createQuery).toHaveBeenCalledTimes(1);
+    expect(supportedCommands).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(receivedOptions?.cwd).toBe("/repo/worktree");
+    expect(receivedOptions?.env?.MCP_CONNECTION_NONBLOCKING).toBe("0");
+    expect(receivedOptions?.env?.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("openducktor");
+    expect(catalog.runtime).toEqual(CLAUDE_RUNTIME_DESCRIPTOR);
+    expect(catalog.models).toMatchObject({
+      status: "available",
+      catalog: {
+        models: [{ id: "claude-sonnet-4-6", modelId: "claude-sonnet-4-6" }],
+        defaultModelsByProvider: { claude: "claude-sonnet-4-6" },
+      },
+    });
+    expect(catalog.slashCommands).toMatchObject({
+      status: "available",
+      catalog: {
+        commands: [
+          MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+          { id: "grill-me", trigger: "grill-me", source: "skill" },
+        ],
+      },
+    });
+    expect(catalog.skills).toMatchObject({
+      status: "available",
+      catalog: { skills: [{ id: "grill-me", name: "grill-me" }] },
+    });
+    expect(catalog.subagents).toMatchObject({
+      status: "available",
+      catalog: { subagents: [{ id: "reviewer", name: "reviewer" }] },
+    });
+  });
+
+  test("keeps the other surfaces when one surface read fails", async () => {
+    const failure = new Error("Claude agent list failed.");
+    const sdkQuery = createClaudeQueryFixture({
+      supportedAgents: mock(async () => {
+        throw failure;
+      }),
+      supportedCommands: mock(async () => commandFixtures),
+      supportedModels: mock(async () => [modelFixture]),
+    });
+
+    const catalog = await loadClaudeRuntimeCatalog(
+      catalogInput,
+      undefined,
+      process.execPath,
+      () => sdkQuery,
+    );
+
+    expect(catalog.subagents).toEqual({ status: "failed", cause: failure });
+    expect(catalog.models?.status).toBe("available");
+    expect(catalog.slashCommands?.status).toBe("available");
+    expect(catalog.skills?.status).toBe("available");
+  });
+
+  test("fails the whole read and closes the session when initialization fails", async () => {
+    const failure = new Error("Claude catalog initialization failed.");
+    const close = mock(() => {});
+    const sdkQuery = createClaudeQueryFixture({
+      close,
+      initializationResult: mock(async () => {
+        throw failure;
+      }),
+    });
+
+    await expect(
+      loadClaudeRuntimeCatalog(catalogInput, undefined, process.execPath, () => sdkQuery),
+    ).rejects.toBe(failure);
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });
 

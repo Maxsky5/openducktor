@@ -424,6 +424,12 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     try {
       await harness.mount();
       await harness.waitFor((state) => state.session !== null);
+      await harness.waitFor(() => loadRepoRuntimeCatalog.mock.calls.length === 1);
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+      });
       expect(harness.getLatest().session?.messages.items[0]?.content).toBe("/grill-me");
       expect(harness.getLatest().session?.messages.items[0]?.meta).toMatchObject({
         kind: "user",

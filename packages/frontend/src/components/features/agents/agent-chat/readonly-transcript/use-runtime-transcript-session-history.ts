@@ -5,6 +5,7 @@ import {
   describeAgentSessionScope,
   type PolicyBoundSessionRef,
   resolveAgentSessionAssociationTransition,
+  type RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
@@ -136,6 +137,17 @@ export function useRuntimeTranscriptSessionHistory({
       : skippedRuntimeSessionRefQueryOptions,
   );
   const runtimeSessionRef = runtimeSessionRefQuery.data ?? null;
+  const runtimeCatalogRef = useMemo<RuntimeWorkingDirectoryRef | null>(
+    () =>
+      runtimeSessionRef === null
+        ? null
+        : {
+            repoPath: runtimeSessionRef.repoPath,
+            runtimeKind: runtimeSessionRef.runtimeKind,
+            workingDirectory: runtimeSessionRef.workingDirectory,
+          },
+    [runtimeSessionRef],
+  );
   const runtimePolicyError = runtimeSessionRefQuery.error
     ? errorMessageFromUnknown(runtimeSessionRefQuery.error, "Failed to resolve runtime policy.")
     : null;
@@ -153,8 +165,8 @@ export function useRuntimeTranscriptSessionHistory({
     emptyReason === null &&
       repoReadinessState === "ready" &&
       targetRuntimeKind === "claude" &&
-      runtimeSessionRef !== null
-      ? runtimeCatalogQueryOptions(runtimeSessionRef, loadRepoRuntimeCatalog)
+      runtimeCatalogRef !== null
+      ? runtimeCatalogQueryOptions(runtimeCatalogRef, loadRepoRuntimeCatalog)
       : skippedTranscriptSkillsQueryOptions,
   );
   const skillSurface = resolveRuntimeCatalogSurface(skillsQuery.data?.skills, skillsQuery.error);

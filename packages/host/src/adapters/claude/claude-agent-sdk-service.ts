@@ -206,7 +206,12 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   loadRuntimeCatalog(input: ListAgentRuntimeCatalogInput) {
     return fromPromise("claudeRuntime.loadRuntimeCatalog", () =>
-      loadClaudeRuntimeCatalog(input, this.input.processEnv, this.input.claudeExecutablePath),
+      loadClaudeRuntimeCatalog(
+        input,
+        this.input.processEnv,
+        this.input.claudeExecutablePath,
+        query,
+      ),
     );
   }
 

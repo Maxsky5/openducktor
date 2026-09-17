@@ -1,6 +1,7 @@
 import {
   type AgentInfo,
   type ModelInfo,
+  type Options,
   type Query,
   query,
   type SDKUserMessage,
@@ -30,15 +31,26 @@ import { INIT_TIMEOUT_MS, withTimeout } from "./claude-agent-sdk-utils";
 export { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 export { loadClaudeHistory } from "./claude-agent-sdk-history-loader";
 
+type ClaudeCatalogQuery = ReturnType<ClaudeCatalogQueryFactory>;
+
 type ClaudeCatalogSession = {
   queue: AsyncInputQueue<SDKUserMessage>;
-  sdkQuery: Query;
+  sdkQuery: ClaudeCatalogQuery;
 };
+
+export type ClaudeCatalogQueryFactory = (input: {
+  prompt: AsyncIterable<SDKUserMessage>;
+  options: Options;
+}) => Pick<
+  Query,
+  "close" | "initializationResult" | "supportedAgents" | "supportedCommands" | "supportedModels"
+>;
 
 const openClaudeCatalogSession = async (
   cwd: string,
   processEnv: NodeJS.ProcessEnv | undefined,
   claudeExecutablePath: string,
+  createQuery: ClaudeCatalogQueryFactory,
 ): Promise<ClaudeCatalogSession> => {
   const queue = new AsyncInputQueue<SDKUserMessage>();
   const abortController = new AbortController();
@@ -46,7 +58,7 @@ const openClaudeCatalogSession = async (
     ...buildClaudeAgentSdkBaseOptions({ claudeExecutablePath, cwd, processEnv }),
     abortController,
   } satisfies NonNullable<Parameters<typeof query>[0]>["options"];
-  const sdkQuery = query({
+  const sdkQuery = createQuery({
     prompt: queue,
     options,
   });
@@ -90,6 +102,7 @@ export const loadClaudeRuntimeCatalog = async (
   input: ListAgentRuntimeCatalogInput,
   processEnv: NodeJS.ProcessEnv | undefined,
   claudeExecutablePath: string,
+  createQuery: ClaudeCatalogQueryFactory,
 ): Promise<AgentRuntimeCatalogRead> => {
   const session = await openClaudeCatalogSession(
     input.workingDirectory,
@@ -100,6 +113,7 @@ export const loadClaudeRuntimeCatalog = async (
       MCP_CONNECTION_NONBLOCKING: "0",
     },
     claudeExecutablePath,
+    createQuery,
   );
   let commands: Promise<SlashCommand[]> | undefined;
   const readCommands = (): Promise<SlashCommand[]> => {
