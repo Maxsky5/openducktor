@@ -73,8 +73,9 @@ describe("config-schemas", () => {
       }).success,
     ).toBe(false);
   });
-  test("uses version 3 runtime paths and retains an explicit version 2 migration schema", () => {
-    const current = globalConfigSchema.parse({ version: 3 });
+
+  test("uses version 4 runtime paths and retains the version 2 schema", () => {
+    const current = globalConfigSchema.parse({ version: 4 });
     const legacy = persistedGlobalConfigV2Schema.parse({
       version: 2,
       agentRuntimes: {
@@ -84,7 +85,7 @@ describe("config-schemas", () => {
       },
     });
 
-    expect(current.version).toBe(3);
+    expect(current.version).toBe(4);
     expect(current.agentRuntimes.opencode.executablePath).toBe("");
     expect(current.agentRuntimes.codex.executablePath).toBe("");
     expect(current.agentRuntimes.claude.executablePath).toBe("");
@@ -148,7 +149,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const globalConfig = globalConfigSchema.parse({
-      version: 3,
+      version: 4,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
@@ -407,7 +408,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const globalConfig = globalConfigSchema.parse({
-      version: 3,
+      version: 4,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
@@ -461,7 +462,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const globalConfig = globalConfigSchema.parse({
-      version: 3,
+      version: 4,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
@@ -766,7 +767,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const parsedGlobalConfig = globalConfigSchema.parse({
-      version: 3,
+      version: 4,
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
@@ -798,7 +799,7 @@ describe("config-schemas", () => {
       globalPromptOverrides: {},
     });
     const parsedGlobalConfig = globalConfigSchema.parse({
-      version: 3,
+      version: 4,
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
       chat: {
@@ -1112,7 +1113,7 @@ describe("config-schemas", () => {
   });
 
   test("defaults notifications for existing configs and settings snapshots", () => {
-    const config = globalConfigSchema.parse({ version: 3 });
+    const config = globalConfigSchema.parse({ version: 4 });
     const snapshot = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },

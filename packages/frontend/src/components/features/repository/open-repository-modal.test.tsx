@@ -29,6 +29,12 @@ const createWorkspaceStateValue = (
   branches: [],
   activeBranch: null,
   isSwitchingWorkspace: false,
+  closedWorkspaces: [],
+  incompleteRemovals: [],
+  closeWorkspace: async () => {},
+  removeWorkspace: async () => {},
+  reopenWorkspace: async () => {},
+  resolveWorkspacePath: async () => ({ kind: "new" }),
   isLoadingBranches: false,
   isSwitchingBranch: false,
   branchSyncDegraded: false,
@@ -95,17 +101,66 @@ describe("OpenRepositoryModal", () => {
     view.unmount();
   });
 
-  test("locks modal dismissal and recent workspaces while a repository add is pending", async () => {
+  test("reserves workspace IDs used by closed and incomplete-removal workspaces", async () => {
+    const closedWorkspace = {
+      workspaceId: "repo",
+      workspaceName: "Closed",
+      abbreviation: null,
+      tileColor: null,
+      repoPath: "/closed",
+      isActive: false,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: "/worktrees/repo",
+      effectiveWorktreeBasePath: "/worktrees/repo",
+    };
+    const removingWorkspace = {
+      ...closedWorkspace,
+      workspaceId: "repo-2",
+      workspaceName: "Removing",
+      repoPath: "/removing",
+    };
+    const { unmount } = render(
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider
+          value={createWorkspaceStateValue({
+            closedWorkspaces: [closedWorkspace],
+            incompleteRemovals: [
+              {
+                workspace: removingWorkspace,
+                record: {
+                  phase: "attachments",
+                  removeTaskWorktrees: false,
+                  pendingWorktreePath: null,
+                },
+              },
+            ],
+          })}
+        >
+          <SeedFilesystemDirectory />
+          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
+
+    expect((await screen.findByLabelText<HTMLInputElement>("Workspace ID")).value).toBe("repo-3");
+    unmount();
+  });
+
+  test("locks modal dismissal and closed workspaces while a repository add is pending", async () => {
     const addWorkspaceResult = createDeferred<void>();
     const addWorkspace = mock(async () => addWorkspaceResult.promise);
     const onOpenChange = mock((_open: boolean) => {});
-    const recentWorkspace = {
+    const closedWorkspace = {
       workspaceId: "existing",
       workspaceName: "Existing",
       abbreviation: null,
       tileColor: null,
       repoPath: "/other",
-      isActive: true,
+      isActive: false,
       hasConfig: true,
       configuredWorktreeBasePath: null,
       defaultWorktreeBasePath: "/worktrees",
@@ -115,8 +170,8 @@ describe("OpenRepositoryModal", () => {
       <QueryProvider useIsolatedClient>
         <WorkspaceStateContext.Provider
           value={createWorkspaceStateValue({
-            activeWorkspace: recentWorkspace,
-            workspaces: [recentWorkspace],
+            closedWorkspaces: [closedWorkspace],
+            incompleteRemovals: [],
             addWorkspace,
           })}
         >
@@ -132,15 +187,15 @@ describe("OpenRepositoryModal", () => {
 
     expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
     const closeButton = screen.getByRole("button", { name: "Close" });
-    const recentButton = screen.getByRole("button", { name: /Existing/ });
+    const closedWorkspaceButton = screen.getByRole("button", { name: /Existing/ });
     if (!(closeButton instanceof HTMLButtonElement)) {
       throw new TypeError("Expected the close action to be a button.");
     }
-    if (!(recentButton instanceof HTMLButtonElement)) {
-      throw new TypeError("Expected the recent repository action to be a button.");
+    if (!(closedWorkspaceButton instanceof HTMLButtonElement)) {
+      throw new TypeError("Expected the closed workspace action to be a button.");
     }
     expect(closeButton.disabled).toBe(true);
-    expect(recentButton.disabled).toBe(true);
+    expect(closedWorkspaceButton.disabled).toBe(true);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onOpenChange).not.toHaveBeenCalled();
 
@@ -149,7 +204,153 @@ describe("OpenRepositoryModal", () => {
     await screen.findByText("Repository open failed");
     expect(screen.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
     expect(closeButton.disabled).toBe(false);
-    expect(recentButton.disabled).toBe(false);
+    expect(closedWorkspaceButton.disabled).toBe(false);
+    unmount();
+  });
+
+  test("reopens a closed workspace and closes the modal", async () => {
+    const reopenWorkspace = mock(
+      async (_input: { workspaceId: string; expectedRepoPath: string }): Promise<void> => {},
+    );
+    const onOpenChange = mock((_open: boolean) => {});
+    const closedWorkspace = {
+      workspaceId: "existing",
+      workspaceName: "Existing",
+      abbreviation: null,
+      tileColor: null,
+      repoPath: "/other",
+      isActive: false,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: "/worktrees",
+      effectiveWorktreeBasePath: "/worktrees",
+    };
+    const { unmount } = render(
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider
+          value={createWorkspaceStateValue({
+            closedWorkspaces: [closedWorkspace],
+            incompleteRemovals: [],
+            reopenWorkspace,
+          })}
+        >
+          <SeedFilesystemDirectory />
+          <OpenRepositoryModal open canClose onOpenChange={onOpenChange} />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Existing/ }));
+
+    await waitFor(() => {
+      expect(reopenWorkspace).toHaveBeenCalledWith({
+        workspaceId: "existing",
+        expectedRepoPath: "/other",
+      });
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    unmount();
+  });
+
+  test("reopens a closed workspace when the folder picker resolves a closed path", async () => {
+    const reopenWorkspace = mock(
+      async (_input: { workspaceId: string; expectedRepoPath: string }): Promise<void> => {},
+    );
+    const onOpenChange = mock((_open: boolean) => {});
+    const closedWorkspace = {
+      workspaceId: "existing",
+      workspaceName: "Existing",
+      abbreviation: null,
+      tileColor: null,
+      repoPath: "/repo",
+      isActive: false,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: "/worktrees",
+      effectiveWorktreeBasePath: "/worktrees",
+    };
+    const { unmount } = render(
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider
+          value={createWorkspaceStateValue({
+            closedWorkspaces: [closedWorkspace],
+            incompleteRemovals: [],
+            resolveWorkspacePath: async () => ({ kind: "closed", workspace: closedWorkspace }),
+            reopenWorkspace,
+          })}
+        >
+          <SeedFilesystemDirectory />
+          <OpenRepositoryModal open canClose onOpenChange={onOpenChange} />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
+
+    await waitFor(() => {
+      expect(reopenWorkspace).toHaveBeenCalledWith({
+        workspaceId: "existing",
+        expectedRepoPath: "/repo",
+      });
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+    unmount();
+  });
+
+  test("keeps the folder picker open when the path has an incomplete removal", async () => {
+    const { unmount } = render(
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider
+          value={createWorkspaceStateValue({
+            resolveWorkspacePath: async () => ({
+              kind: "removing",
+              removal: {
+                workspace: {
+                  workspaceId: "existing",
+                  workspaceName: "Existing",
+                  abbreviation: null,
+                  tileColor: null,
+                  repoPath: "/repo",
+                  isActive: false,
+                  hasConfig: true,
+                  configuredWorktreeBasePath: null,
+                  defaultWorktreeBasePath: "/worktrees",
+                  effectiveWorktreeBasePath: "/worktrees",
+                },
+                record: {
+                  phase: "attachments",
+                  removeTaskWorktrees: true,
+                  pendingWorktreePath: null,
+                },
+              },
+            }),
+          })}
+        >
+          <SeedFilesystemDirectory />
+          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /choose repository folder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));
+
+    expect(await screen.findByText(/Workspace removal is incomplete/)).toBeTruthy();
+    unmount();
+  });
+
+  test("shows the empty closed workspace message when none are closed", async () => {
+    const { unmount } = render(
+      <QueryProvider useIsolatedClient>
+        <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
+          <SeedFilesystemDirectory />
+          <OpenRepositoryModal open canClose onOpenChange={() => {}} />
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+    );
+
+    expect(await screen.findByText("No closed workspaces")).toBeTruthy();
     unmount();
   });
 

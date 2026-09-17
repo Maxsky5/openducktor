@@ -23,6 +23,30 @@ const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient =>
     workspaceList: async () => [],
     workspaceAdd: async (input) => workspace(input.repoPath),
     workspaceSelect: async (repoPath: string) => workspace(repoPath, true),
+    workspaceCatalogGet: async () => ({
+      openWorkspaces: [],
+      closedWorkspaces: [],
+      incompleteRemovals: [],
+    }),
+    workspaceClose: async () => ({
+      openWorkspaces: [],
+      closedWorkspaces: [],
+      incompleteRemovals: [],
+    }),
+    workspaceReopen: async () => ({
+      openWorkspaces: [],
+      closedWorkspaces: [],
+      incompleteRemovals: [],
+    }),
+    workspaceRemove: async () => ({
+      catalog: {
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      },
+      removedWorktrees: [],
+    }),
+    workspaceResolvePath: async () => ({ kind: "new" }),
     workspaceReorder: async (workspaceOrder: string[]) =>
       workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
     workspaceGetSettingsSnapshot: async () => {

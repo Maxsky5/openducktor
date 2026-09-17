@@ -9,13 +9,14 @@ import type {
 } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
-import { type HostError, HostOperationError } from "../../effect/host-errors";
+import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterMutation,
   AgentSessionRuntimeAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
 import { createAgentSessionLiveStateService } from "./agent-session-live-state-service";
+import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 
 const sessionRef = (
   externalSessionId: string,
@@ -107,12 +108,13 @@ const mutateRegisteredAdapter = <A>(
     return yield* registration.runMutation(mutation);
   });
 
-const createHarness = () => {
+const createHarness = (withProcessStartAdmission?: WithProcessStartAdmission) => {
   const events: AgentSessionLiveEnvelope[] = [];
   const faultLogs: string[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const service = createAgentSessionLiveStateService({
     adapterRegistry,
+    withProcessStartAdmission,
     faultLog: (message) => Effect.sync(() => faultLogs.push(message)),
     publish: (event) => events.push(event),
   });
@@ -130,6 +132,29 @@ const expectHostFailure = async <Success>(
 };
 
 describe("createAgentSessionLiveStateService", () => {
+  test("rejects a session start for a blocked workspace before resolving an adapter", async () => {
+    const withProcessStartAdmission: WithProcessStartAdmission = (repoPath) =>
+      Effect.fail(
+        new HostValidationError({
+          message: `Workspace is closed: ${repoPath}. Reopen it before using it.`,
+          field: "workspaceId",
+        }),
+      );
+    const { service } = createHarness(withProcessStartAdmission);
+
+    const failure = await expectHostFailure(
+      service.startSession({
+        repoPath: "/closed-repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/closed-repo",
+        sessionScope: { kind: "repository" },
+        systemPrompt: "Work.",
+      }),
+    );
+
+    expect(failure.message).toBe("Workspace is closed: /closed-repo. Reopen it before using it.");
+  });
+
   test("resets the published collection after a failed detach read and a replacement registration", async () => {
     const { service, events } = createHarness();
     const old = {

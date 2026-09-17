@@ -92,7 +92,7 @@ import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
-import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
+import { installApplicationMenu } from "./main-menu";
 import { registerElectronTerminalIpc } from "./terminals/electron-terminal-ipc";
 import { createNodePtyPort } from "./terminals/node-pty-adapter";
 
@@ -483,7 +483,6 @@ const createMainWindowEffect = (
     window.webContents.on("will-navigate", (event) => {
       event.preventDefault();
     });
-    registerWindowContextMenu(window, { isDevelopment });
     window.on("close", (event) => {
       if (shutdownController.isHostShutdownComplete()) {
         return;

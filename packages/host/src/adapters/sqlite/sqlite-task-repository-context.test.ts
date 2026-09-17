@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { sql } from "drizzle-orm";
-import { Deferred, Effect, Fiber, TestClock, TestContext } from "effect";
+import { Deferred, Effect, Fiber, FiberId, TestClock, TestContext } from "effect";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createSqliteTaskRepositoryContextManager } from "./sqlite-task-repository-context";
 import { openSqliteTaskStoreConnection } from "./sqlite-task-store-connection";
@@ -296,6 +296,52 @@ test("serializes complete operations that use the same database path", async () 
   }
 });
 
+test("waits for admitted workspace operations before closing their slot", async () => {
+  const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-close-race-"));
+  tempDirectories.add(configDir);
+  const operationAdmitted = Deferred.unsafeMake<void>(FiberId.none);
+  const releaseAdmission = Deferred.unsafeMake<void>(FiberId.none);
+  const events: string[] = [];
+  const manager = createSqliteTaskRepositoryContextManager({
+    assertWorkspaceAdmitted: () =>
+      Effect.gen(function* () {
+        events.push("admitted");
+        yield* Deferred.succeed(operationAdmitted, undefined);
+        yield* Deferred.await(releaseAdmission);
+      }),
+    processEnv: {},
+    resolveDatabasePath: ({ workspaceId }) =>
+      Effect.succeed(path.join(configDir, workspaceId, "database.sqlite")),
+    resolveWorkspaceIdForRepoPath: () => Effect.succeed("alpha"),
+  });
+
+  const result = await Effect.runPromise(
+    Effect.gen(function* () {
+      const operation = yield* Effect.fork(
+        manager.withDatabase("/repos/alpha", "test.active-operation", () =>
+          Effect.sync(() => events.push("operation")),
+        ),
+      );
+      yield* Deferred.await(operationAdmitted);
+      const close = yield* Effect.fork(
+        manager
+          .closeWorkspace("alpha")
+          .pipe(Effect.tap(() => Effect.sync(() => events.push("closed")))),
+      );
+      yield* Effect.yieldNow();
+      const beforeRelease = [...events];
+      yield* Deferred.succeed(releaseAdmission, undefined);
+      yield* Fiber.join(operation);
+      yield* Fiber.join(close);
+      return { beforeRelease, afterRelease: [...events] };
+    }),
+  );
+
+  expect(result.beforeRelease).toEqual(["admitted"]);
+  expect(result.afterRelease).toEqual(["admitted", "operation", "closed"]);
+  await Effect.runPromise(manager.dispose());
+});
+
 test("stops admission and drains an active operation before disposal completes", async () => {
   const { manager } = await createHarness();
 
@@ -377,6 +423,20 @@ test("reports close failures from every retained database during disposal", asyn
       "Failed to close alpha.",
       "Failed to close beta.",
     ]);
+  }
+});
+
+test("retains a workspace slot when shutdown fails", async () => {
+  const manager = await createCloseFailureHarness();
+  await Effect.runPromise(manager.withDatabase("/repos/alpha", "test.open", () => Effect.void));
+
+  const first = await Effect.runPromise(Effect.either(manager.closeWorkspace("alpha")));
+  const retry = await Effect.runPromise(Effect.either(manager.closeWorkspace("alpha")));
+
+  expect(first._tag).toBe("Left");
+  expect(retry._tag).toBe("Left");
+  if (retry._tag === "Left") {
+    expect(retry.left.message).toBe("Failed to close alpha.");
   }
 });
 

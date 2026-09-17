@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { taskQueryKeys } from "../../queries/tasks";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
 import {
@@ -52,6 +54,7 @@ const normalizeSelectionArgs = ({
 
 const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
   let latest: ReturnType<typeof useWorkspaceSelectionOperations> | null = null;
+  let queryClient: QueryClient | null = null;
   const currentArgs = initialArgs;
 
   const Harness = ({ args }: { args: SelectionHarnessArgs }) => {
@@ -59,6 +62,7 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
       ...normalizeSelectionArgs(args),
       hostClient: workspaceHost,
     });
+    queryClient = useQueryClient();
     return null;
   };
 
@@ -91,6 +95,12 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
 
       return latest;
     },
+    getQueryClient: (): QueryClient => {
+      if (!queryClient) {
+        throw new Error("Hook not mounted");
+      }
+      return queryClient;
+    },
     waitFor: async (
       predicate: (value: ReturnType<typeof useWorkspaceSelectionOperations>) => boolean,
     ) => {
@@ -103,6 +113,98 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
 };
 
 describe("use-workspace-selection-operations", () => {
+  test("waits for the workspace catalog before reporting loaded state", async () => {
+    const catalogDeferred =
+      createDeferred<Awaited<ReturnType<typeof workspaceHost.workspaceCatalogGet>>>();
+    workspaceHost.workspaceCatalogGet = mock(async () => catalogDeferred.promise);
+    const harness = createSelectionHarness({
+      activeRepo: null,
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().isLoadingWorkspaces).toBe(true);
+      expect(harness.getLatest().hasLoadedWorkspaceList).toBe(false);
+
+      catalogDeferred.resolve({
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      });
+      await harness.waitFor((state) => state.hasLoadedWorkspaceList);
+
+      expect(harness.getLatest().isLoadingWorkspaces).toBe(false);
+    } finally {
+      catalogDeferred.resolve({
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      });
+      await harness.unmount();
+    }
+  });
+
+  test("reports workspace catalog load errors", async () => {
+    workspaceHost.workspaceCatalogGet = mock(async () => {
+      throw new Error("Catalog load failed");
+    });
+    const harness = createSelectionHarness({
+      activeRepo: null,
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.workspaceLoadError !== null);
+
+      expect(harness.getLatest().workspaceLoadError?.message).toBe("Catalog load failed");
+      expect(harness.getLatest().hasLoadedWorkspaceList).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("refreshWorkspaces retries a failed workspace catalog load", async () => {
+    let catalogCalls = 0;
+    workspaceHost.workspaceCatalogGet = mock(async () => {
+      catalogCalls += 1;
+      if (catalogCalls === 1) {
+        throw new Error("Catalog load failed");
+      }
+      return {
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      };
+    });
+    const harness = createSelectionHarness({
+      activeRepo: null,
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.workspaceLoadError !== null);
+      await harness.run((value) => value.refreshWorkspaces());
+      await harness.waitFor((state) => state.hasLoadedWorkspaceList);
+
+      expect(catalogCalls).toBe(2);
+      expect(harness.getLatest().workspaceLoadError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("trims repo paths before adding a workspace", async () => {
     const workspaceAdd = mock(async (): Promise<ReturnType<typeof workspace>> =>
       workspace("/repo-new"),
@@ -475,6 +577,204 @@ describe("use-workspace-selection-operations", () => {
       ]);
     } finally {
       reorderDeferred.resolve([workspace("/repo-b"), workspace("/repo-a", true)]);
+      await harness.unmount();
+    }
+  });
+
+  test("drops repository-path and workspace-id caches after committed removal", async () => {
+    workspaceHost.workspaceRemove = mock(async () => ({
+      catalog: {
+        openWorkspaces: [],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      },
+      removedWorktrees: [],
+    }));
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+        tasks: [{ id: "task-1" }],
+      });
+      queryClient.setQueryData(["workspace", "repo-config", "repo"], { workspaceId: "repo" });
+
+      await harness.run((value) =>
+        value.removeWorkspace({
+          workspaceId: "repo",
+          expectedRepoPath: "/repo",
+          removeTaskWorktrees: false,
+        }),
+      );
+
+      expect(queryClient.getQueryData(taskQueryKeys.repoData("/repo"))).toBeUndefined();
+      expect(queryClient.getQueryData(["workspace", "repo-config", "repo"])).toBeUndefined();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("refreshes workspace caches after a failed removal", async () => {
+    let listCalls = 0;
+    let catalogCalls = 0;
+    workspaceHost.workspaceList = mock(async () => {
+      listCalls += 1;
+      return [workspace("/repo", true)];
+    });
+    workspaceHost.workspaceCatalogGet = mock(async () => {
+      catalogCalls += 1;
+      return {
+        openWorkspaces: [workspace("/repo", true)],
+        closedWorkspaces: [],
+        incompleteRemovals: [],
+      };
+    });
+    workspaceHost.workspaceRemove = mock(async () => {
+      throw new Error("Removal stopped after a durable change");
+    });
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.hasLoadedWorkspaceList);
+
+      await expect(
+        harness.run((value) =>
+          value.removeWorkspace({
+            workspaceId: "repo",
+            expectedRepoPath: "/repo",
+            removeTaskWorktrees: false,
+          }),
+        ),
+      ).rejects.toThrow("Removal stopped after a durable change");
+
+      expect(listCalls).toBe(2);
+      expect(catalogCalls).toBe(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("preserves a removal failure when its cache refresh also fails", async () => {
+    workspaceHost.workspaceRemove = mock(async () => {
+      throw new Error("Removal stopped at task store cleanup");
+    });
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      spyOn(queryClient, "invalidateQueries").mockImplementation(async () => {
+        throw new Error("Workspace refresh failed");
+      });
+
+      await expect(
+        harness.run((value) =>
+          value.removeWorkspace({
+            workspaceId: "repo",
+            expectedRepoPath: "/repo",
+            removeTaskWorktrees: false,
+          }),
+        ),
+      ).rejects.toThrow("Removal stopped at task store cleanup");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("rejects a second lifecycle action while the first action is pending", async () => {
+    const closeStarted = createDeferred<void>();
+    const closeResult =
+      createDeferred<Awaited<ReturnType<typeof workspaceHost.workspaceCatalogGet>>>();
+    workspaceHost.workspaceClose = mock(async () => {
+      closeStarted.resolve();
+      return closeResult.promise;
+    });
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      const first = harness.run((value) =>
+        value.closeWorkspace({ workspaceId: "repo", expectedRepoPath: "/repo" }),
+      );
+      await closeStarted.promise;
+
+      await expect(
+        harness.run((value) =>
+          value.reopenWorkspace({ workspaceId: "repo", expectedRepoPath: "/repo" }),
+        ),
+      ).rejects.toThrow("A workspace action is already in progress");
+
+      closeResult.resolve({
+        openWorkspaces: [],
+        closedWorkspaces: [workspace("/repo")],
+        incompleteRemovals: [],
+      });
+      await first;
+      expect(workspaceHost.workspaceClose).toHaveBeenCalledTimes(1);
+    } finally {
+      closeResult.resolve({
+        openWorkspaces: [],
+        closedWorkspaces: [workspace("/repo")],
+        incompleteRemovals: [],
+      });
+      await harness.unmount();
+    }
+  });
+
+  test("keeps a committed lifecycle action successful when cache refresh fails", async () => {
+    workspaceHost.workspaceClose = mock(async () => ({
+      openWorkspaces: [],
+      closedWorkspaces: [workspace("/repo")],
+      incompleteRemovals: [],
+    }));
+    const harness = createSelectionHarness({
+      activeRepo: "/repo",
+      setActiveRepo: () => {},
+      clearTaskData: () => {},
+      clearActiveTaskStoreCheck: () => {},
+      clearBranchData: () => {},
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      spyOn(queryClient, "invalidateQueries").mockImplementation(async () => {
+        throw new Error("Workspace refresh failed");
+      });
+
+      await expect(
+        harness.run((value) =>
+          value.closeWorkspace({ workspaceId: "repo", expectedRepoPath: "/repo" }),
+        ),
+      ).resolves.toBeUndefined();
+      expect(harness.getLatest().closedWorkspaces).toEqual([workspace("/repo")]);
+    } finally {
       await harness.unmount();
     }
   });

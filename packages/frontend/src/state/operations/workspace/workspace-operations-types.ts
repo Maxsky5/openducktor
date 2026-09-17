@@ -1,4 +1,12 @@
-import type { GitBranch, GitCurrentBranch, WorkspaceRecord } from "@openducktor/contracts";
+import type {
+  GitBranch,
+  GitCurrentBranch,
+  IncompleteWorkspaceRemoval,
+  WorkspaceLifecycleTargetInput,
+  WorkspacePathResolution,
+  WorkspaceRecord,
+  WorkspaceRemovalInput,
+} from "@openducktor/contracts";
 import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import type { host } from "../shared/host";
 
@@ -14,7 +22,15 @@ export type WorkspaceBranchProbeHostClient = Pick<
 
 export type WorkspaceSelectionOperationsHostClient = Pick<
   typeof host,
-  "workspaceAdd" | "workspaceList" | "workspaceReorder" | "workspaceSelect"
+  | "workspaceAdd"
+  | "workspaceCatalogGet"
+  | "workspaceClose"
+  | "workspaceList"
+  | "workspaceRemove"
+  | "workspaceReopen"
+  | "workspaceReorder"
+  | "workspaceResolvePath"
+  | "workspaceSelect"
 >;
 
 export type WorkspaceOperationsHostClient = WorkspaceBranchOperationsHostClient &
@@ -22,6 +38,8 @@ export type WorkspaceOperationsHostClient = WorkspaceBranchOperationsHostClient 
 
 export type UseWorkspaceOperationsResult = {
   workspaces: WorkspaceRecord[];
+  closedWorkspaces: WorkspaceRecord[];
+  incompleteRemovals: IncompleteWorkspaceRemoval[];
   hasLoadedWorkspaceList: boolean;
   isLoadingWorkspaces: boolean;
   workspaceLoadError: Error | null;
@@ -34,6 +52,10 @@ export type UseWorkspaceOperationsResult = {
   refreshWorkspaces: () => Promise<void>;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
+  closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
+  removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
+  reopenWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
+  resolveWorkspacePath: (repoPath: string) => Promise<WorkspacePathResolution>;
   reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;

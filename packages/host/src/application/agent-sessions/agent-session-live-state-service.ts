@@ -50,6 +50,7 @@ import { createLiveStateCoordinator, type LiveStateCoordinator } from "./live-st
 import { createAgentSessionLiveRuntimeLifecycle } from "./agent-session-live-runtime-lifecycle";
 import { parseAdapterOutput } from "./agent-session-live-validation";
 import { createAgentSessionExecutionEpisodes } from "./agent-session-execution-episodes";
+import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 
 export type {
   AgentSessionLiveEnvelopePublisher,
@@ -109,6 +110,7 @@ export type AgentSessionLiveStateService = {
 export type CreateAgentSessionLiveStateServiceInput = {
   readonly persistence?: AgentSessionPersistencePort;
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
+  readonly withProcessStartAdmission?: WithProcessStartAdmission | undefined;
   readonly faultLog: AgentSessionLiveFaultLogger;
   readonly publish: AgentSessionLiveEnvelopePublisher;
   readonly coordinator?: LiveStateCoordinator;
@@ -116,11 +118,20 @@ export type CreateAgentSessionLiveStateServiceInput = {
 
 export const createAgentSessionLiveStateService = ({
   adapterRegistry,
+  withProcessStartAdmission,
   faultLog,
   publish,
   coordinator = createLiveStateCoordinator(),
   persistence,
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
+  const withStartAdmission =
+    <Input extends { repoPath: string }, Success>(
+      operation: (input: Input) => Effect.Effect<Success, HostError>,
+    ) =>
+    (input: Input): Effect.Effect<Success, HostError> =>
+      withProcessStartAdmission
+        ? withProcessStartAdmission(input.repoPath, operation(input))
+        : operation(input);
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
   const refreshGate = createLiveStateCoordinator();
   const executionEpisodes = createAgentSessionExecutionEpisodes();
@@ -273,18 +284,26 @@ export const createAgentSessionLiveStateService = ({
           ),
         ),
       ),
-    replyApproval: (input) =>
+    replyApproval: withStartAdmission((input) =>
       adapterRegistry
         .resolveForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.replyApproval(input))),
-    replyQuestion: (input) =>
+    ),
+    replyQuestion: withStartAdmission((input) =>
       adapterRegistry
         .resolveForScope(input)
         .pipe(Effect.flatMap((adapter) => adapter.replyQuestion(input))),
-    startSession: (input) => runControl(input, (adapter) => adapter.startSession(input)),
-    resumeSession: (input) => runControl(input, (adapter) => adapter.resumeSession(input)),
-    forkSession: (input) => runControl(input, (adapter) => adapter.forkSession(input)),
-    sendUserMessage: (input) =>
+    ),
+    startSession: withStartAdmission((input) =>
+      runControl(input, (adapter) => adapter.startSession(input)),
+    ),
+    resumeSession: withStartAdmission((input) =>
+      runControl(input, (adapter) => adapter.resumeSession(input)),
+    ),
+    forkSession: withStartAdmission((input) =>
+      runControl(input, (adapter) => adapter.forkSession(input)),
+    ),
+    sendUserMessage: withStartAdmission((input) =>
       Effect.gen(function* () {
         const adapter = yield* adapterRegistry.resolveControlForScope(input);
         const acceptedMessage = yield* adapter.sendUserMessage(input);
@@ -308,6 +327,7 @@ export const createAgentSessionLiveStateService = ({
         );
         return acceptedMessage;
       }),
+    ),
     updateSessionModel: (input) =>
       runControl(input, (adapter) => adapter.updateSessionModel(input)),
     stopSession: (input) => runControl(input, (adapter) => adapter.stopSession(input)),

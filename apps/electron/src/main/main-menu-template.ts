@@ -74,12 +74,6 @@ export const createViewMenu = (isDevelopment: boolean): MenuItemConstructorOptio
   ],
 });
 
-export const createContextMenuTemplate = (isDevelopment: boolean): MenuItemConstructorOptions[] => [
-  { role: "reload" },
-  { role: "forceReload" },
-  ...(isDevelopment ? ([{ type: "separator" }, { role: "toggleDevTools" }] as const) : []),
-];
-
 export const createApplicationMenuTemplate = ({
   isDevelopment,
   appName = "OpenDucktor",

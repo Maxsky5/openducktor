@@ -1,9 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  createApplicationMenuTemplate,
-  createContextMenuTemplate,
-  createViewMenu,
-} from "./main-menu-template";
+import { createApplicationMenuTemplate, createViewMenu } from "./main-menu-template";
 import type { MenuItemConstructorOptions } from "electron";
 
 type MenuSubmenu = MenuItemConstructorOptions["submenu"] | undefined;
@@ -31,14 +27,6 @@ describe("main menu template", () => {
     const roles = rolesFromSubmenu(viewMenu.submenu);
 
     expect(roles).not.toContain("toggleDevTools");
-  });
-
-  test("adds reload and devtools roles to the dev context menu", () => {
-    const roles = createContextMenuTemplate(true).map((item) =>
-      "role" in item ? item.role : null,
-    );
-
-    expect(roles).toEqual(expect.arrayContaining(["reload", "forceReload", "toggleDevTools"]));
   });
 
   test("puts reload roles in the main application menu", () => {

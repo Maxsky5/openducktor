@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
@@ -71,6 +71,12 @@ describe("WorkspaceRail", () => {
         throw new Error("saveAgentModelFavorites is not used in this test");
       },
       isSwitchingWorkspace: false,
+      closedWorkspaces: [],
+      incompleteRemovals: [],
+      closeWorkspace: async () => {},
+      removeWorkspace: async () => {},
+      reopenWorkspace: async () => {},
+      resolveWorkspacePath: async () => ({ kind: "new" }),
     };
     selectWorkspaceMock.mockClear();
     reorderWorkspacesMock.mockClear();
@@ -120,6 +126,25 @@ describe("WorkspaceRail", () => {
     expect(openRepositoryModal).toHaveBeenCalledTimes(1);
   });
 
+  test("uses the eye-off icon for the close workspace action", async () => {
+    workspaceState.workspaces = [
+      workspaceRecord("alpha", {
+        workspaceName: "Alpha Repo",
+        isActive: true,
+      }),
+    ];
+
+    renderRail();
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Alpha Repo" }));
+
+    const closeItem = await screen.findByRole("menuitem", { name: "Close workspace" });
+    const removeItem = screen.getByRole("menuitem", { name: "Remove workspace" });
+    expect(closeItem.querySelector(".lucide-eye-off")).not.toBeNull();
+    expect(closeItem.className).toContain("cursor-pointer");
+    expect(removeItem.className).toContain("cursor-pointer");
+  });
+
   test("shows the abbreviation exactly as the user typed it", () => {
     workspaceState.workspaces = [
       workspaceRecord("alpha", { workspaceName: "Alpha Repo", abbreviation: "iOS" }),
@@ -150,6 +175,82 @@ describe("WorkspaceRail", () => {
     );
     expect(screen.getByRole("button", { name: "Beta Repo" }).getAttribute("style")).toContain(
       "background-color: #f43f5e",
+    );
+  });
+
+  test("retries an incomplete removal from the rail recovery entry", async () => {
+    const removeWorkspace = mock(
+      async (_input: {
+        workspaceId: string;
+        expectedRepoPath: string;
+        removeTaskWorktrees: boolean;
+      }): Promise<void> => {},
+    );
+    workspaceState.incompleteRemovals = [
+      {
+        workspace: workspaceRecord("stuck", {
+          workspaceName: "Stuck Repo",
+          repoPath: "/stuck",
+        }),
+        record: {
+          phase: "attachments",
+          removeTaskWorktrees: true,
+          pendingWorktreePath: null,
+        },
+      },
+    ];
+    workspaceState.removeWorkspace = removeWorkspace;
+
+    renderRail();
+
+    fireEvent.click(screen.getByRole("button", { name: "Finish removing Stuck Repo" }));
+    expect(await screen.findByText("Workspace removal did not finish")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry removal" }));
+
+    await waitFor(() =>
+      expect(removeWorkspace).toHaveBeenCalledWith({
+        workspaceId: "stuck",
+        expectedRepoPath: "/stuck",
+        removeTaskWorktrees: true,
+      }),
+    );
+  });
+
+  test("can retry an incomplete inventory removal without deleting task worktrees", async () => {
+    const removeWorkspace = mock(
+      async (_input: {
+        workspaceId: string;
+        expectedRepoPath: string;
+        removeTaskWorktrees: boolean;
+      }): Promise<void> => {},
+    );
+    workspaceState.incompleteRemovals = [
+      {
+        workspace: workspaceRecord("stuck", {
+          workspaceName: "Stuck Repo",
+          repoPath: "/stuck",
+        }),
+        record: {
+          phase: "worktrees",
+          removeTaskWorktrees: true,
+          pendingWorktreePath: null,
+        },
+      },
+    ];
+    workspaceState.removeWorkspace = removeWorkspace;
+
+    renderRail();
+
+    fireEvent.click(screen.getByRole("button", { name: "Finish removing Stuck Repo" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Remove task worktrees" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry removal" }));
+
+    await waitFor(() =>
+      expect(removeWorkspace).toHaveBeenCalledWith({
+        workspaceId: "stuck",
+        expectedRepoPath: "/stuck",
+        removeTaskWorktrees: false,
+      }),
     );
   });
 

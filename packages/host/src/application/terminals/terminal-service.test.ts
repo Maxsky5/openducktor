@@ -12,7 +12,9 @@ import {
   type TerminalPtyPort,
 } from "../../ports/terminal-pty-port";
 import { TERMINAL_LIMITS } from "./terminal-limits";
+import { HostValidationError } from "../../effect/host-errors";
 import { createTerminalService } from "./terminal-service";
+import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 
 let directoryAvailable = true;
@@ -124,31 +126,110 @@ const makeService = async (
   pty = makePty(),
   idFactory: () => string = () => "terminal-1",
   filesystemPort: FilesystemPort = filesystem,
+  withProcessStartAdmission?: WithProcessStartAdmission,
 ) => {
   const titleSettlement = makeTitleSettlementScheduler();
   const shellPath = await resolveFakeShellPath();
+  const serviceInput: Parameters<typeof createTerminalService>[0] = {
+    filesystem: filesystemPort,
+    ptyPort: pty.port,
+    resolveLaunchEnvironment: createTerminalLaunchEnvironment({
+      processEnv: { PATH: "/usr/bin" },
+      platform: "darwin",
+      readUserShell: () => shellPath,
+    }),
+    idFactory,
+    hostInstanceIdFactory: () => "host-1",
+    now: () => new Date("2026-07-12T00:00:00.000Z"),
+    scheduleTitleSettlement: titleSettlement.schedule,
+  };
+  if (withProcessStartAdmission) {
+    serviceInput.withProcessStartAdmission = withProcessStartAdmission;
+  }
   return {
     pty,
     settleTitles: titleSettlement.flush,
-    service: await Effect.runPromise(
-      createTerminalService({
-        filesystem: filesystemPort,
-        ptyPort: pty.port,
-        resolveLaunchEnvironment: createTerminalLaunchEnvironment({
-          processEnv: { PATH: "/usr/bin" },
-          platform: "darwin",
-          readUserShell: () => shellPath,
-        }),
-        idFactory,
-        hostInstanceIdFactory: () => "host-1",
-        now: () => new Date("2026-07-12T00:00:00.000Z"),
-        scheduleTitleSettlement: titleSettlement.schedule,
-      }),
-    ),
+    service: await Effect.runPromise(createTerminalService(serviceInput)),
   };
 };
 
 describe("TerminalService", () => {
+  test("rejects task terminal creation and input for a blocked workspace", async () => {
+    let blocked = true;
+    const withProcessStartAdmission: WithProcessStartAdmission = (_repoPath, effect) =>
+      blocked
+        ? Effect.fail(
+            new HostValidationError({
+              message: "Workspace is closed: ws. Reopen it before using it.",
+              field: "workspaceId",
+            }),
+          )
+        : effect;
+    const { service, pty } = await makeService(
+      makePty(),
+      undefined,
+      undefined,
+      withProcessStartAdmission,
+    );
+
+    await expect(
+      Effect.runPromise(
+        service.create({
+          workingDir: "/repo",
+          context: { repoPath: "/repo", taskId: "task-1" },
+        }),
+      ),
+    ).rejects.toThrow("Workspace is closed");
+    expect(pty.operations).not.toContain("write:/repo");
+
+    blocked = false;
+    const created = await Effect.runPromise(
+      service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
+    );
+    blocked = true;
+    await expect(
+      Effect.runPromise(service.write(created.ref.terminalId, new TextEncoder().encode("ls"))),
+    ).rejects.toThrow("Workspace is closed");
+    expect(pty.operations).not.toContain("write:ls");
+  });
+
+  test("reports an idle live terminal as unknown activity", async () => {
+    const idle = await makeService(makePty(true, false));
+    await Effect.runPromise(
+      idle.service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(idle.service.inspectWorkspaceActivity("/repo")),
+    ).resolves.toEqual({
+      activeTerminalIds: [],
+      unknownTerminalIds: ["terminal-1"],
+    });
+  });
+
+  test("reports a terminal with a child process as active activity", async () => {
+    const busy = await makeService(makePty(true, true));
+    await Effect.runPromise(
+      busy.service.create({
+        workingDir: "/repo",
+        context: { repoPath: "/repo", taskId: "task-1" },
+      }),
+    );
+
+    await expect(
+      Effect.runPromise(busy.service.inspectWorkspaceActivity("/repo")),
+    ).resolves.toEqual({
+      activeTerminalIds: ["terminal-1"],
+      unknownTerminalIds: [],
+    });
+  });
+
   test("retains PTY failure details for live attachments and attachments after exit", async () => {
     const { service, pty } = await makeService();
     await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
@@ -309,7 +390,11 @@ describe("TerminalService", () => {
         lastConsumedSequence: 0,
         sink: (event) => {
           if (event.type === "output") {
-            events.push({ type: event.type, start: event.sequenceStart, end: event.sequenceEnd });
+            events.push({
+              type: event.type,
+              start: event.sequenceStart,
+              end: event.sequenceEnd,
+            });
             return;
           }
           events.push({ type: event.type });
@@ -600,21 +685,34 @@ describe("TerminalService", () => {
     );
 
     await Effect.runPromise(
-      Effect.scoped(service.acquireTaskCleanup({ repoPath: "/repo-a", taskIds: ["shared-task"] })),
+      Effect.scoped(
+        service.acquireTaskCleanup({
+          repoPath: "/repo-a",
+          taskIds: ["shared-task"],
+        }),
+      ),
     );
 
     expect(events.at(-1)).toBe("terminal_forgotten");
     expect(
       (
         await Effect.runPromise(
-          service.list({ kind: "task", repoPath: "/repo-a", taskId: "shared-task" }),
+          service.list({
+            kind: "task",
+            repoPath: "/repo-a",
+            taskId: "shared-task",
+          }),
         )
       ).terminals,
     ).toEqual([]);
     expect(
       (
         await Effect.runPromise(
-          service.list({ kind: "task", repoPath: "/repo-b", taskId: "shared-task" }),
+          service.list({
+            kind: "task",
+            repoPath: "/repo-b",
+            taskId: "shared-task",
+          }),
         )
       ).terminals.map((terminal) => terminal.terminalId),
     ).toEqual(["terminal-2"]);
@@ -638,7 +736,10 @@ describe("TerminalService", () => {
       }),
     );
 
-    expect(created.summary.context).toEqual({ repoPath: "/repo", taskId: "task-1" });
+    expect(created.summary.context).toEqual({
+      repoPath: "/repo",
+      taskId: "task-1",
+    });
     expect(
       (
         await Effect.runPromise(service.list({ kind: "task", repoPath: "/repo", taskId: "task-1" }))
@@ -646,7 +747,12 @@ describe("TerminalService", () => {
     ).toEqual(["terminal-1"]);
 
     await Effect.runPromise(
-      Effect.scoped(service.acquireTaskCleanup({ repoPath: "/repo-link", taskIds: ["task-1"] })),
+      Effect.scoped(
+        service.acquireTaskCleanup({
+          repoPath: "/repo-link",
+          taskIds: ["task-1"],
+        }),
+      ),
     );
 
     expect(
@@ -868,7 +974,10 @@ describe("TerminalService", () => {
     const cleanup = Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          yield* service.acquireTaskCleanup({ repoPath: "/repo", taskIds: ["task-1"] });
+          yield* service.acquireTaskCleanup({
+            repoPath: "/repo",
+            taskIds: ["task-1"],
+          });
           reportCleanupAcquired();
           yield* Effect.promise(() => cleanupReleased);
         }),

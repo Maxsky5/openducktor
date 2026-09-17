@@ -1,6 +1,11 @@
 import { Deferred, Effect } from "effect";
+import path from "node:path";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
-import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import {
@@ -37,6 +42,9 @@ export type SqliteTaskRepositoryContextProvider = <A>(
 ) => Effect.Effect<A, TaskStoreError>;
 
 export type SqliteTaskRepositoryContextManager = {
+  readonly closeWorkspace: (
+    workspaceId: string,
+  ) => Effect.Effect<void, HostOperationError<{ failures: HostOperationErrorAggregate[] }>>;
   readonly dispose: () => Effect.Effect<
     void,
     HostOperationError<{ failures: HostOperationErrorAggregate[] }>
@@ -46,6 +54,11 @@ export type SqliteTaskRepositoryContextManager = {
 
 type CreateSqliteTaskRepositoryContextManagerInput = {
   configDir?: string;
+  assertWorkspaceAdmitted?: (input: {
+    operation: string;
+    repoPath: string;
+    workspaceId: string;
+  }) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
   onBackgroundFailure?: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   openConnection?: OpenSqliteTaskStoreConnection;
   processEnv: NodeJS.ProcessEnv;
@@ -80,14 +93,20 @@ const invalidAdmissionReleaseError = () =>
     message: "The SQLite task store released an operation without an active admission lease.",
   });
 
-const createAdmissionGate = (): AdmissionGate => {
+const workspaceClosingError = (workspaceId: string) =>
+  new HostOperationError({
+    operation: "sqliteTaskRepository.acquireConnection",
+    message: `The task store is closing for workspace ${workspaceId}. Retry after the workspace operation finishes.`,
+  });
+
+const createAdmissionGate = (stoppedError = hostIsStoppingError): AdmissionGate => {
   let accepting = true;
   let activeLeases = 0;
   let shutdownWaiter: Deferred.Deferred<void> | null = null;
 
   const acquireLease = Effect.suspend(() => {
     if (!accepting) {
-      return Effect.fail(hostIsStoppingError());
+      return Effect.fail(stoppedError());
     }
     activeLeases += 1;
     return Effect.void;
@@ -126,6 +145,7 @@ const createAdmissionGate = (): AdmissionGate => {
 
 export const createSqliteTaskRepositoryContextManager = ({
   configDir,
+  assertWorkspaceAdmitted,
   onBackgroundFailure = (failure) => Effect.logError(failure.message),
   openConnection = openSqliteTaskStoreConnection,
   processEnv,
@@ -134,6 +154,15 @@ export const createSqliteTaskRepositoryContextManager = ({
 }: CreateSqliteTaskRepositoryContextManagerInput): SqliteTaskRepositoryContextManager => {
   const admission = createAdmissionGate();
   const slots = new Map<string, SqliteTaskStoreConnectionSlot>();
+  const workspaceAdmissions = new Map<string, AdmissionGate>();
+
+  const getWorkspaceAdmission = (workspaceId: string): AdmissionGate => {
+    const current = workspaceAdmissions.get(workspaceId);
+    if (current) return current;
+    const next = createAdmissionGate(() => workspaceClosingError(workspaceId));
+    workspaceAdmissions.set(workspaceId, next);
+    return next;
+  };
 
   const resolveStorage = (repoPath: string) =>
     Effect.gen(function* () {
@@ -158,16 +187,53 @@ export const createSqliteTaskRepositoryContextManager = ({
     admission.withLease(() =>
       Effect.gen(function* () {
         const storage = yield* resolveStorage(repoPath);
-        const slot = getSlot(storage.databasePath);
-        return yield* slot
-          .run((session) => use({ ...storage, session }))
-          .pipe(
-            Effect.mapError((cause) =>
-              mapSqliteTaskStoreAdapterError(operation, storage.databasePath, cause),
-            ),
-          );
+        return yield* getWorkspaceAdmission(storage.workspaceId).withLease(() =>
+          Effect.gen(function* () {
+            if (assertWorkspaceAdmitted) {
+              yield* assertWorkspaceAdmitted({
+                operation,
+                repoPath: storage.repoPath,
+                workspaceId: storage.workspaceId,
+              });
+            }
+            const slot = getSlot(storage.databasePath);
+            return yield* slot
+              .run((session) => use({ ...storage, session }))
+              .pipe(
+                Effect.mapError((cause) =>
+                  mapSqliteTaskStoreAdapterError(operation, storage.databasePath, cause),
+                ),
+              );
+          }),
+        );
       }),
     );
+
+  const closeWorkspace = (workspaceId: string) =>
+    Effect.gen(function* () {
+      yield* getWorkspaceAdmission(workspaceId).stop();
+      const matches = Array.from(slots.entries()).filter(
+        ([databasePath]) => path.basename(path.dirname(databasePath)) === workspaceId,
+      );
+      const failures: HostOperationErrorAggregate[] = [];
+      for (const [databasePath, slot] of matches) {
+        const result = yield* Effect.either(slot.shutdown());
+        if (result._tag === "Left") {
+          failures.push(result.left);
+          continue;
+        }
+        slots.delete(databasePath);
+      }
+      if (failures.length > 0) {
+        return yield* new HostOperationError({
+          operation: "sqliteTaskRepository.closeWorkspace",
+          message: failures.map((failure) => failure.message).join("\n"),
+          cause: failures[0],
+          details: { failures, workspaceId },
+        });
+      }
+      workspaceAdmissions.delete(workspaceId);
+    });
 
   const dispose = () =>
     Effect.gen(function* () {
@@ -188,5 +254,5 @@ export const createSqliteTaskRepositoryContextManager = ({
       }
     });
 
-  return { dispose, withDatabase };
+  return { closeWorkspace, dispose, withDatabase };
 };

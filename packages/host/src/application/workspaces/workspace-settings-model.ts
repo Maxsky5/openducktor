@@ -14,17 +14,20 @@ import {
   type SettingsSnapshotSaveInput,
   settingsSnapshotSchema,
   type ThemePreference,
+  type WorkspaceCatalog,
+  type WorkspacePathResolution,
   type WorkspaceRecord,
+  type WorkspaceRemovalPhase,
+  type WorkspaceRemovalRecord,
   type WorkspaceRepoConfigInput,
   type WorkspaceRepoHooksInput,
   type WorkspaceRepoSettingsInput,
-  workspaceRecordSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
 import { parseConfig } from "../../config/parse-config";
+import { workspaceRecordForId } from "./workspace-catalog-model";
 import {
-  HostInvariantError,
   type HostInvariantErrorAggregate,
   HostValidationError,
   type HostValidationErrorAggregate,
@@ -53,8 +56,34 @@ export type WorkspaceSettingsService = {
   ): Effect.Effect<CustomAgentRole, WorkspaceSettingsError>;
   deleteCustomAgentRole(id: string): Effect.Effect<void, WorkspaceSettingsError>;
   listWorkspaces(): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
+  getWorkspaceCatalog(): Effect.Effect<WorkspaceCatalog, WorkspaceSettingsError>;
   addWorkspace(input: WorkspaceAddInput): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
   selectWorkspace(workspaceId: string): Effect.Effect<WorkspaceRecord, WorkspaceSettingsError>;
+  closeWorkspace(
+    workspaceId: string,
+    expectedRepoPath: string,
+  ): Effect.Effect<WorkspaceCatalog, WorkspaceSettingsError>;
+  reopenWorkspace(
+    workspaceId: string,
+    expectedRepoPath: string,
+  ): Effect.Effect<WorkspaceCatalog, WorkspaceSettingsError>;
+  resolveWorkspacePath(
+    repoPath: string,
+  ): Effect.Effect<WorkspacePathResolution, WorkspaceSettingsError>;
+  removeWorkspaceRegistration(
+    workspaceId: string,
+    expectedRepoPath: string,
+  ): Effect.Effect<WorkspaceCatalog, WorkspaceSettingsError>;
+  beginWorkspaceRemoval(input: {
+    workspaceId: string;
+    expectedRepoPath: string;
+    removeTaskWorktrees: boolean;
+  }): Effect.Effect<WorkspaceRemovalRecord, WorkspaceSettingsError>;
+  recordWorkspaceRemovalProgress(input: {
+    workspaceId: string;
+    phase: WorkspaceRemovalPhase;
+    pendingWorktreePath: string | null;
+  }): Effect.Effect<void, WorkspaceSettingsError>;
   reorderWorkspaces(
     workspaceOrder: string[],
   ): Effect.Effect<WorkspaceRecord[], WorkspaceSettingsError>;
@@ -143,68 +172,6 @@ export const touchRecentWorkspace = (config: LoadedGlobalConfig, workspaceId: st
     ...config.recentWorkspaces.filter((entry) => entry !== workspaceId),
   ].slice(0, 20);
 };
-const sortedWorkspaceIds = (config: LoadedGlobalConfig): string[] => {
-  const orderedIds: string[] = [];
-  const seenIds = new Set<string>();
-  for (const workspaceId of config.workspaceOrder) {
-    if (config.workspaces[workspaceId] && !seenIds.has(workspaceId)) {
-      seenIds.add(workspaceId);
-      orderedIds.push(workspaceId);
-    }
-  }
-  const remaining = Object.entries(config.workspaces).sort(
-    ([leftId, leftRepo], [rightId, rightRepo]) => {
-      const nameComparison = leftRepo.workspaceName.localeCompare(rightRepo.workspaceName);
-      return nameComparison === 0 ? leftId.localeCompare(rightId) : nameComparison;
-    },
-  );
-  for (const [workspaceId] of remaining) {
-    if (!seenIds.has(workspaceId)) {
-      seenIds.add(workspaceId);
-      orderedIds.push(workspaceId);
-    }
-  }
-  return orderedIds;
-};
-const workspaceRecordFromRepo = (
-  settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
-  workspaceId: string,
-  repo: RepoConfig,
-): WorkspaceRecord => {
-  const defaultWorktreeBasePath = settingsConfig.defaultWorktreeBasePath(workspaceId);
-  const effectiveWorktreeBasePath =
-    repo.worktreeBasePath !== undefined
-      ? settingsConfig.resolveConfiguredPath(repo.worktreeBasePath)
-      : defaultWorktreeBasePath;
-  return workspaceRecordSchema.parse({
-    workspaceId: repo.workspaceId,
-    workspaceName: repo.workspaceName,
-    abbreviation: repo.abbreviation ?? null,
-    tileColor: repo.tileColor ?? null,
-    repoPath: repo.repoPath,
-    iconDataUrl: null,
-    isActive: config.activeWorkspace === workspaceId,
-    hasConfig: true,
-    configuredWorktreeBasePath: repo.worktreeBasePath ?? null,
-    defaultWorktreeBasePath,
-    effectiveWorktreeBasePath,
-  });
-};
-export const workspaceRecordsInEffectiveOrder = (
-  settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
-): WorkspaceRecord[] =>
-  sortedWorkspaceIds(config).map((workspaceId) => {
-    const repo = config.workspaces[workspaceId];
-    if (!repo) {
-      throw new HostInvariantError({
-        invariant: "workspace_order_matches_config",
-        message: "Workspace disappeared from config.",
-      });
-    }
-    return workspaceRecordFromRepo(settingsConfig, config, workspaceId, repo);
-  });
 export const toSettingsSnapshot = (config: LoadedGlobalConfig): SettingsSnapshot =>
   settingsSnapshotSchema.parse({
     customAgentRoles: config.customAgentRoles,
@@ -220,10 +187,14 @@ export const toSettingsSnapshot = (config: LoadedGlobalConfig): SettingsSnapshot
     notifications: config.notifications,
     agentRuntimes: config.agentRuntimes,
     agentModelFavorites: config.agentModelFavorites,
-    workspaces: config.workspaces,
+    workspaces: Object.fromEntries(
+      Object.entries(config.workspaces).filter(
+        ([, repoConfig]) => !repoConfig.closed && repoConfig.removal === undefined,
+      ),
+    ),
     globalPromptOverrides: config.globalPromptOverrides,
   });
-const validateGitRepoPath = (settingsConfig: SettingsConfigPort, repoPath: string) =>
+export const validateGitRepoPath = (settingsConfig: SettingsConfigPort, repoPath: string) =>
   Effect.gen(function* () {
     if (!(yield* settingsConfig.pathExists(repoPath))) {
       return yield* Effect.fail(
@@ -295,20 +266,6 @@ export const ensureRepoPathAvailable = (
     });
   }
 };
-const workspaceRecord = (
-  settingsConfig: SettingsConfigPort,
-  config: LoadedGlobalConfig,
-  workspaceId: string,
-): WorkspaceRecord => {
-  const repo = config.workspaces[workspaceId];
-  if (!repo) {
-    throw new HostInvariantError({
-      invariant: "workspace_record_exists",
-      message: "Workspace disappeared from config.",
-    });
-  }
-  return workspaceRecordFromRepo(settingsConfig, config, workspaceId, repo);
-};
 export const saveAndReturnWorkspaceRecord = (
   settingsConfig: SettingsConfigPort,
   config: LoadedGlobalConfig,
@@ -318,7 +275,7 @@ export const saveAndReturnWorkspaceRecord = (
     const parsed = yield* parseConfig(globalConfigSchema, config);
     yield* settingsConfig.writeConfig(parsed);
     return yield* Effect.try({
-      try: () => workspaceRecord(settingsConfig, config, workspaceId),
+      try: () => workspaceRecordForId(settingsConfig, config, workspaceId),
       catch: (cause) =>
         new HostValidationError({
           message: cause instanceof Error ? cause.message : String(cause),
@@ -417,6 +374,8 @@ export const normalizeSnapshotWorkspaces = (
         ...repoConfig,
         workspaceId,
         agentStudioState: existingRepoConfig.agentStudioState,
+        closed: existingRepoConfig.closed,
+        removal: existingRepoConfig.removal,
       });
       const conflictingWorkspaceId = Object.entries(nextWorkspaces).find(
         ([, workspace]) => workspace.repoPath === normalizedRepoConfig.repoPath,

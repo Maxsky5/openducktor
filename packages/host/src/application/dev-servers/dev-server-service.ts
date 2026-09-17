@@ -1,5 +1,4 @@
 import {
-  type DevServerEvent,
   type DevServerScriptState,
   devServerGroupStateSchema,
   type RepoConfig,
@@ -29,20 +28,21 @@ import type {
   DisposableDevServerService,
   FailedDevServerScriptStart,
 } from "./dev-server-service-types";
+import { createDevServerEventPublisher } from "./dev-server-event-publisher";
 import {
   buildGroupState,
-  createDevServerEventEnvelope,
   DEV_SERVER_CLICOLOR_FORCE,
   DEV_SERVER_COLORTERM,
   DEV_SERVER_FORCE_COLOR,
   DEV_SERVER_TERM,
   type DevServerGroupRuntime,
+  inspectDevServerWorkspaceActivity,
+  nowIso,
   scriptHasLiveProcess,
   startTerminalRun,
   syncGroupState,
   syncRuntimeTerminalBufferByteCounts,
 } from "./dev-server-state";
-import { createDevServerTerminalWriter } from "./dev-server-terminal-writer";
 
 export type {
   CreateDevServerServiceInput,
@@ -53,9 +53,8 @@ export type {
   DisposableDevServerService,
   StoppedDevServerScript,
 } from "./dev-server-service-types";
-
-const nowIso = (): string => new Date().toISOString();
 export const createDevServerService = ({
+  withProcessStartAdmission,
   eventBus,
   processPort,
   taskWorktreeService,
@@ -63,11 +62,7 @@ export const createDevServerService = ({
 }: CreateDevServerServiceInput): DisposableDevServerService => {
   const hostInstanceId = globalThis.crypto.randomUUID();
   const groups = new Map<string, Map<string, DevServerGroupRuntime>>();
-  const publish = (event: DevServerEvent): void =>
-    eventBus?.publish(createDevServerEventEnvelope(event));
-  const terminalWriter = createDevServerTerminalWriter(publish);
-  const emitSnapshot = (runtime: DevServerGroupRuntime): void =>
-    publish({ type: "snapshot", state: runtime.state });
+  const { publish, publishSnapshot, terminalWriter } = createDevServerEventPublisher(eventBus);
   const getWorktreePath = (repoPath: string, taskId: string) =>
     Effect.gen(function* () {
       const worktree = taskWorktreeService
@@ -350,6 +345,9 @@ export const createDevServerService = ({
         return devServerGroupStateSchema.parse(runtime.state);
       });
     },
+    inspectWorkspaceActivity(input) {
+      return Effect.sync(() => inspectDevServerWorkspaceActivity(groups, input.repoPath));
+    },
     restart(input) {
       return Effect.gen(function* () {
         const { repoPath, taskId } = input;
@@ -361,84 +359,87 @@ export const createDevServerService = ({
       return Effect.gen(function* () {
         const { repoPath, taskId } = input;
         const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-        if (repoConfig.devServers.length === 0) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "devServers",
-              message: `No builder dev server scripts are configured for ${repoConfig.repoPath}. Add them in repository settings first.`,
-              details: { repoPath: repoConfig.repoPath },
-            }),
-          );
-        }
-        const worktreePath = yield* getWorktreePath(repoPath, taskId);
-        if (!worktreePath) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Builder continuation cannot start until a task worktree exists for task ${taskId}. Start Builder first.`,
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-        const runtime = yield* getRuntime(taskId, repoConfig, worktreePath);
-        if (runtime.state.scripts.some(scriptHasLiveProcess)) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Dev servers are already running for task ${taskId}. Stop or restart them instead.`,
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-        emitSnapshot(runtime);
-        let failedScript: FailedDevServerScriptStart | null = null;
-        for (const script of repoConfig.devServers) {
-          const startResult = yield* Effect.either(startScript(runtime, worktreePath, script));
-          if (startResult._tag === "Left") {
-            failedScript = {
-              command: script.command,
-              message: errorMessage(startResult.left),
-              name: script.name,
-              scriptId: script.id,
-            };
-            break;
+        const start = Effect.gen(function* () {
+          if (repoConfig.devServers.length === 0) {
+            return yield* Effect.fail(
+              new HostValidationError({
+                field: "devServers",
+                message: `No builder dev server scripts are configured for ${repoConfig.repoPath}. Add them in repository settings first.`,
+                details: { repoPath: repoConfig.repoPath },
+              }),
+            );
           }
-        }
-        if (failedScript) {
-          const { cleanupErrors, stoppedScripts } = yield* stopStartedScriptsAfterStartFailure(
-            runtime,
-            updateScriptState,
-          );
-          emitSnapshot(runtime);
+          const worktreePath = yield* getWorktreePath(repoPath, taskId);
+          if (!worktreePath) {
+            return yield* Effect.fail(
+              new HostValidationError({
+                field: "taskId",
+                message: `Builder continuation cannot start until a task worktree exists for task ${taskId}. Start Builder first.`,
+                details: { repoPath, taskId },
+              }),
+            );
+          }
+          const runtime = yield* getRuntime(taskId, repoConfig, worktreePath);
+          if (runtime.state.scripts.some(scriptHasLiveProcess)) {
+            return yield* Effect.fail(
+              new HostValidationError({
+                field: "taskId",
+                message: `Dev servers are already running for task ${taskId}. Stop or restart them instead.`,
+                details: { repoPath, taskId },
+              }),
+            );
+          }
+          publishSnapshot(runtime);
+          let failedScript: FailedDevServerScriptStart | null = null;
+          for (const script of repoConfig.devServers) {
+            const startResult = yield* Effect.either(startScript(runtime, worktreePath, script));
+            if (startResult._tag === "Left") {
+              failedScript = {
+                command: script.command,
+                message: errorMessage(startResult.left),
+                name: script.name,
+                scriptId: script.id,
+              };
+              break;
+            }
+          }
+          if (failedScript) {
+            const { cleanupErrors, stoppedScripts } = yield* stopStartedScriptsAfterStartFailure(
+              runtime,
+              updateScriptState,
+            );
+            publishSnapshot(runtime);
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: "dev_server.start",
+                message: [
+                  "Failed to start all configured dev server scripts.",
+                  `Failed starting dev server ${failedScript.scriptId}: ${failedScript.message}`,
+                  ...cleanupErrors,
+                ].join("\n"),
+                details: {
+                  cleanupErrors,
+                  failedScripts: [failedScript],
+                  repoPath,
+                  stoppedScripts,
+                  taskId,
+                },
+              }),
+            );
+          }
+          publishSnapshot(runtime);
+          if (runtime.state.scripts.some(scriptHasLiveProcess)) {
+            return devServerGroupStateSchema.parse(runtime.state);
+          }
           return yield* Effect.fail(
             new HostOperationError({
               operation: "dev_server.start",
-              message: [
-                "Failed to start all configured dev server scripts.",
-                `Failed starting dev server ${failedScript.scriptId}: ${failedScript.message}`,
-                ...cleanupErrors,
-              ].join("\n"),
-              details: {
-                cleanupErrors,
-                failedScripts: [failedScript],
-                repoPath,
-                stoppedScripts,
-                taskId,
-              },
+              message: "Dev server start completed without any live script processes.",
+              details: { repoPath, taskId },
             }),
           );
-        }
-        emitSnapshot(runtime);
-        if (runtime.state.scripts.some(scriptHasLiveProcess)) {
-          return devServerGroupStateSchema.parse(runtime.state);
-        }
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "dev_server.start",
-            message: "Dev server start completed without any live script processes.",
-            details: { repoPath, taskId },
-          }),
-        );
+        });
+        return yield* withProcessStartAdmission?.(repoConfig.repoPath, start) ?? start;
       });
     },
     stop(input) {
@@ -446,7 +447,7 @@ export const createDevServerService = ({
         const { repoPath, taskId } = input;
         const { runtime } = yield* resolveRuntime(repoPath, taskId);
         const errors = yield* stopRuntime(runtime);
-        emitSnapshot(runtime);
+        publishSnapshot(runtime);
         if (errors.length > 0) {
           return yield* Effect.fail(
             new HostOperationError({
@@ -473,7 +474,7 @@ export const createDevServerService = ({
             Effect.gen(function* () {
               const runningScripts = listRunningScripts(runtime);
               const stopErrors = yield* stopRuntime(runtime);
-              emitSnapshot(runtime);
+              publishSnapshot(runtime);
               return { runningScripts, stopErrors };
             }),
           { concurrency: "unbounded" },

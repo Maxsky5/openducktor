@@ -26,8 +26,10 @@ import { TerminalServiceError } from "./terminal-service-error";
 import {
   createTerminalSessionEngine,
   type TerminalSessionAttachInput,
+  type TerminalWorkspaceActivity,
 } from "./terminal-session-engine";
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
+import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 
 const DEFAULT_GRID: TerminalGrid = { columns: 80, rows: 24 };
 
@@ -39,6 +41,9 @@ export type TerminalService = {
   readonly hostInstanceId: string;
   create(input: TerminalCreateRequest): Effect.Effect<TerminalCreateResponse, TerminalServiceError>;
   list(filter: TerminalListFilter): Effect.Effect<TerminalListResponse, TerminalServiceError>;
+  inspectWorkspaceActivity(
+    repoPath: string,
+  ): Effect.Effect<TerminalWorkspaceActivity, TerminalServiceError>;
   preparePathInput(
     input: TerminalPreparePathInputRequest,
   ): Effect.Effect<TerminalPreparePathInputResponse, TerminalServiceError>;
@@ -62,6 +67,7 @@ export type TerminalService = {
 };
 
 type CreateTerminalServiceInput = {
+  withProcessStartAdmission?: WithProcessStartAdmission;
   filesystem: FilesystemPort;
   ptyPort: TerminalPtyPort;
   resolveLaunchEnvironment: TerminalLaunchEnvironmentPort;
@@ -72,6 +78,7 @@ type CreateTerminalServiceInput = {
 };
 
 export const createTerminalService = ({
+  withProcessStartAdmission,
   filesystem,
   ptyPort,
   resolveLaunchEnvironment,
@@ -137,20 +144,38 @@ export const createTerminalService = ({
             (reservation) =>
               Effect.gen(function* () {
                 const context = yield* canonicalizeContext(input.context, "create");
-                yield* reservation.bind(context);
-                const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
-                const terminalId = idFactory();
-                const summary: TerminalSummary = {
-                  terminalId,
-                  label: plan.cwd,
-                  context,
-                  initialWorkingDir: plan.cwd,
-                  createdAt: now().toISOString(),
-                  lifecycle: "starting",
-                  exit: null,
-                };
-                const started = yield* engine.start(summary, plan);
-                return { ref: { terminalId }, summary: started };
+                const start = Effect.gen(function* () {
+                  yield* reservation.bind(context);
+                  const plan = yield* launch({ ...input, context }, DEFAULT_GRID);
+                  const terminalId = idFactory();
+                  const summary: TerminalSummary = {
+                    terminalId,
+                    label: plan.cwd,
+                    context,
+                    initialWorkingDir: plan.cwd,
+                    createdAt: now().toISOString(),
+                    lifecycle: "starting",
+                    exit: null,
+                  };
+                  const started = yield* engine.start(summary, plan);
+                  return { ref: { terminalId }, summary: started };
+                });
+                if (!("taskId" in context) || !withProcessStartAdmission) {
+                  return yield* start;
+                }
+                return yield* withProcessStartAdmission(context.repoPath, start).pipe(
+                  Effect.mapError((cause) =>
+                    cause instanceof TerminalServiceError
+                      ? cause
+                      : new TerminalServiceError({
+                          code: "invalid_input",
+                          operation: "create",
+                          message: cause.message,
+                          cause,
+                          workingDir: context.repoPath,
+                        }),
+                  ),
+                );
               }),
             (reservation) => Effect.sync(() => reservation.release()),
           );
@@ -167,6 +192,11 @@ export const createTerminalService = ({
               : filter;
           return { hostInstanceId, terminals: engine.list(canonicalFilter) };
         }),
+      inspectWorkspaceActivity: (repoPath) =>
+        Effect.gen(function* () {
+          const canonicalRepoPath = yield* canonicalizeRepositoryPath(repoPath, "list");
+          return yield* engine.inspectWorkspaceActivity(canonicalRepoPath);
+        }),
       preparePathInput: (rawInput) =>
         Effect.gen(function* () {
           const input = terminalPreparePathInputRequestSchema.parse(rawInput);
@@ -174,7 +204,28 @@ export const createTerminalService = ({
           return { text };
         }),
       attach: engine.attach,
-      write: engine.write,
+      write: (terminalId, data) =>
+        Effect.gen(function* () {
+          const context = engine.getContext(terminalId);
+          const write = engine.write(terminalId, data);
+          if (!context || !("taskId" in context) || !withProcessStartAdmission) {
+            return yield* write;
+          }
+          yield* withProcessStartAdmission(context.repoPath, write).pipe(
+            Effect.mapError((cause) =>
+              cause instanceof TerminalServiceError
+                ? cause
+                : new TerminalServiceError({
+                    code: "invalid_input",
+                    operation: "write",
+                    message: cause.message,
+                    cause,
+                    terminalId,
+                    workingDir: context.repoPath,
+                  }),
+            ),
+          );
+        }),
       resize: engine.resize,
       acknowledge: engine.acknowledge,
       detach: engine.detach,

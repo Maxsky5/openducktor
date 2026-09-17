@@ -19,6 +19,7 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
+import type { WithProcessStartAdmission } from "../workspaces/workspace-admission-service";
 
 export type DevServerServiceError =
   | DevServerProcessStartExitError
@@ -34,8 +35,15 @@ export type DevServerTaskInput = {
   taskId: string;
 };
 
+export type DevServerWorkspaceActivity = {
+  activeTaskIds: string[];
+};
+
 export type DevServerService = {
   getState(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
+  inspectWorkspaceActivity(input: {
+    repoPath: string;
+  }): Effect.Effect<DevServerWorkspaceActivity, DevServerServiceError>;
   restart(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
   start(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
   stop(input: DevServerTaskInput): Effect.Effect<DevServerGroupState, DevServerServiceError>;
@@ -66,6 +74,7 @@ export type DevServerStopAllResult = {
 };
 
 export type CreateDevServerServiceInput = {
+  withProcessStartAdmission?: WithProcessStartAdmission;
   eventBus?: HostEventBusPort;
   processPort?: DevServerProcessPort;
   taskWorktreeService?: TaskWorktreeService;

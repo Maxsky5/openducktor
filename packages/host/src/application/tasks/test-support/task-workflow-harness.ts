@@ -263,7 +263,7 @@ const createBuildSettingsConfig = (
     readConfig() {
       return Effect.succeed(
         globalConfigSchema.parse({
-          version: 3,
+          version: 4,
           workspaces: {
             repo: {
               workspaceId: "repo",
@@ -441,6 +441,9 @@ const createBuildStartGitPort = ({
         return true;
       });
     },
+    listWorktrees() {
+      return Effect.dieMessage("unexpected list worktrees");
+    },
     referenceExists(workingDir, reference) {
       return Effect.sync(() => {
         calls.push({ type: "referenceExists", workingDir, reference });
@@ -598,6 +601,9 @@ const createDirectMergeGitPort = ({
     isRegisteredWorktree() {
       return Effect.succeed(true);
     },
+    listWorktrees() {
+      return Effect.dieMessage("unexpected list worktrees");
+    },
     referenceExists() {
       return Effect.succeed(true);
     },
@@ -710,6 +716,9 @@ const createDirectMergeDevServerService = (calls: unknown[]): DevServerService =
   ({
     getState() {
       return Effect.dieMessage("unexpected dev server get state");
+    },
+    inspectWorkspaceActivity() {
+      return Effect.dieMessage("unexpected dev server activity inspection");
     },
     restart() {
       return Effect.dieMessage("unexpected dev server restart");

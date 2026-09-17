@@ -17,8 +17,12 @@ import type {
   TaskCreateInput,
   TaskStatus,
   TaskStoreCheck,
+  IncompleteWorkspaceRemoval,
   TaskUpdatePatch,
+  WorkspacePathResolution,
   WorkspaceRecord,
+  WorkspaceLifecycleTargetInput,
+  WorkspaceRemovalInput,
 } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
@@ -84,11 +88,17 @@ export type WorkspaceStateContextValue = {
   isSwitchingBranch: boolean;
   branchSyncDegraded: boolean;
   workspaces: WorkspaceRecord[];
+  closedWorkspaces: WorkspaceRecord[];
+  incompleteRemovals: IncompleteWorkspaceRemoval[];
   activeWorkspace: WorkspaceRecord | null;
   branches: GitBranch[];
   activeBranch: GitCurrentBranch | null;
   addWorkspace: (input: WorkspaceSelectionOperationsInput) => Promise<void>;
   selectWorkspace: (workspaceId: string) => Promise<void>;
+  closeWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
+  removeWorkspace: (input: WorkspaceRemovalInput) => Promise<void>;
+  reopenWorkspace: (input: WorkspaceLifecycleTargetInput) => Promise<void>;
+  resolveWorkspacePath: (repoPath: string) => Promise<WorkspacePathResolution>;
   reorderWorkspaces: (workspaceIds: string[]) => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   switchBranch: (branchName: string) => Promise<void>;
