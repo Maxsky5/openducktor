@@ -51,25 +51,30 @@ const INLINE_COMMENT_SIDES = ["old", "new"] as const satisfies readonly InlineCo
 const nonEmptyStringSchema = z
   .string()
   .refine((value) => value.trim().length > 0, { message: "String must contain non-whitespace." });
+const lineNumberSchema = z.number().int().positive();
 const diffScopeSchema = z.enum(DIFF_SCOPES);
 const sideSchema = z.enum(INLINE_COMMENT_SIDES);
 const contextLineSchema = z.object({
-  lineNumber: z.number().int(),
+  lineNumber: lineNumberSchema,
   text: z.string(),
   isSelected: z.boolean(),
 });
-const persistedCommentSchema = z.object({
-  id: nonEmptyStringSchema,
-  filePath: nonEmptyStringSchema,
-  diffScope: diffScopeSchema,
-  side: sideSchema,
-  startLine: z.number().int(),
-  endLine: z.number().int(),
-  text: nonEmptyStringSchema,
-  codeContext: z.array(contextLineSchema),
-  language: z.string().nullable(),
-  createdAt: z.number().int().nonnegative(),
-});
+const persistedCommentSchema = z
+  .object({
+    id: nonEmptyStringSchema,
+    filePath: nonEmptyStringSchema,
+    diffScope: diffScopeSchema,
+    side: sideSchema,
+    startLine: lineNumberSchema,
+    endLine: lineNumberSchema,
+    text: nonEmptyStringSchema,
+    codeContext: z.array(contextLineSchema),
+    language: z.string().nullable(),
+    createdAt: z.number().int().nonnegative(),
+  })
+  .refine((comment) => comment.startLine <= comment.endLine, {
+    message: "Stored git diff comment line range must be ordered.",
+  });
 const persistedInlineCommentDraftsPayloadSchema = z.object({
   version: z.literal(1),
   workspaceId: nonEmptyStringSchema,

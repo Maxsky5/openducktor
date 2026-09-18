@@ -139,6 +139,44 @@ describe("inline comment draft storage", () => {
     expect(storage.getItem(OWNER)).toBeNull();
   });
 
+  test("rejects inverted and non-positive line ranges", () => {
+    const storage = createMemoryStorage();
+    const updatedAt = new Date().toISOString();
+    const payloadFor = (comment: PersistedInlineCommentDraft): string =>
+      JSON.stringify({
+        version: 1,
+        workspaceId: "workspace:one",
+        taskId: "task/one",
+        updatedAt,
+        comments: [comment],
+      });
+
+    storage.setItem(OWNER, payloadFor(buildComment({ startLine: 5, endLine: 2 })));
+    expect(readInlineCommentDraftsFromStorage({ storage, ownerKey: OWNER })).toMatchObject({
+      status: "invalid",
+    });
+    expect(storage.getItem(OWNER)).toBeNull();
+
+    storage.setItem(OWNER, payloadFor(buildComment({ startLine: 0, endLine: 2 })));
+    expect(readInlineCommentDraftsFromStorage({ storage, ownerKey: OWNER })).toMatchObject({
+      status: "invalid",
+    });
+    expect(storage.getItem(OWNER)).toBeNull();
+
+    storage.setItem(
+      OWNER,
+      payloadFor(
+        buildComment({
+          codeContext: [{ lineNumber: -1, text: "stale", isSelected: true }],
+        }),
+      ),
+    );
+    expect(readInlineCommentDraftsFromStorage({ storage, ownerKey: OWNER })).toMatchObject({
+      status: "invalid",
+    });
+    expect(storage.getItem(OWNER)).toBeNull();
+  });
+
   test("expires entries after the draft TTL and rejects future update dates", () => {
     const storage = createMemoryStorage();
     const updatedAt = new Date("2026-09-01T10:00:00.000Z");
