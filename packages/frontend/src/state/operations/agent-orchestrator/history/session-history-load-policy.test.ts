@@ -36,6 +36,22 @@ describe("agent-orchestrator/history/session-history-load-policy", () => {
         }),
       ),
     ).toBe(true);
+
+    expect(
+      shouldRequestSelectedSessionBaselineHistory(
+        createAgentSessionFixture({
+          historyLoadState: "loaded",
+          messages: [
+            {
+              id: "retained-message",
+              role: "assistant",
+              content: "Retained transcript",
+              timestamp: "2026-06-12T08:00:00.000Z",
+            },
+          ],
+        }),
+      ),
+    ).toBe(false);
   });
 
   test("merges selected-session baseline history into a transcript that gained live messages", () => {

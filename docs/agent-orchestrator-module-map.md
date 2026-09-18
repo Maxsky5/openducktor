@@ -10,7 +10,7 @@ Pass primitive identity through these modules. Use `workspaceRepoPath` for repos
 
 Files: `packages/frontend/src/state/agent-sessions-store.ts` and `hooks/use-orchestrator-session-state.ts`.
 
-Owns the current `AgentSessionState` collection, derived summaries, activity snapshot, and React notifications.
+Owns the per-repository `AgentSessionState` collections, derived summaries, activity snapshot, and React notifications. By default, the store keeps at most two repository collections in memory. The oldest collection leaves when a third repository becomes active.
 
 Rules:
 
@@ -19,6 +19,9 @@ Rules:
 - A repository refresh commits through this store once. Do not add a second session collection.
 - Read one selected session through the store reader. Do not request a full collection only to prepare or load one session.
 - Pass summaries to render code as snapshots. Do not build a mutable mirror.
+- All reads and writes target the active repository. A session outside the active collection resolves to no session.
+- A repository switch keeps retained transcripts. The store serves the retained transcript immediately and the read model revalidates in the background.
+- A history load that is in flight when its repository becomes inactive reopens for the next activation.
 
 ## Activity state
 

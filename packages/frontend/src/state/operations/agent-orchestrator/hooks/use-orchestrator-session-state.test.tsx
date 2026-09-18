@@ -3,7 +3,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-session-collection";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
@@ -107,7 +107,7 @@ const createHookHarness = (initialArgs: HookArgs) => {
 };
 
 describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
-  test("clears sessions on repo change", async () => {
+  test("scopes session reads to the active repository on repo change", async () => {
     const harness = createHookHarness({
       workspaceRepoPath: "/tmp/repo-a",
       tasks: [taskFixture],
@@ -125,6 +125,88 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       });
 
       expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("clears the session start gate on workspace change", async () => {
+    const harness = createHookHarness({
+      workspaceRepoPath: "/tmp/repo-a",
+      tasks: [taskFixture],
+    });
+    const firstStartDeferred = Promise.withResolvers<AgentSessionIdentity>();
+    const firstIdentity: AgentSessionIdentity = {
+      externalSessionId: "external-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo-a",
+    };
+    const secondIdentity: AgentSessionIdentity = {
+      externalSessionId: "external-2",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo-b",
+    };
+    try {
+      await harness.mount();
+
+      const firstStart = harness
+        .getLatest()
+        .sessionStartGateRef.current.run("session-key", () => firstStartDeferred.promise);
+
+      await harness.update({
+        workspaceRepoPath: "/tmp/repo-b",
+        tasks: [taskFixture],
+      });
+
+      await expect(
+        harness
+          .getLatest()
+          .sessionStartGateRef.current.run("session-key", async () => secondIdentity),
+      ).resolves.toBe(secondIdentity);
+
+      firstStartDeferred.resolve(firstIdentity);
+      await expect(firstStart).resolves.toBe(firstIdentity);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("restores a retained session when the workspace returns", async () => {
+    const session = {
+      ...createSessionFixture(),
+      historyLoadState: "loaded" as const,
+      messages: createSessionMessagesState("external-1", [
+        {
+          id: "message-1",
+          role: "assistant" as const,
+          content: "Retained transcript",
+          timestamp: "2026-03-01T09:00:00.000Z",
+        },
+      ]),
+    };
+    const harness = createHookHarness({
+      workspaceRepoPath: "/tmp/repo-a",
+      tasks: [taskFixture],
+    });
+    try {
+      await harness.mount();
+      await harness.run((hook) => {
+        hook.sessionStore.setSessionCollection(() => createAgentSessionCollection([session]));
+      });
+
+      await harness.update({
+        workspaceRepoPath: "/tmp/repo-b",
+        tasks: [taskFixture],
+      });
+
+      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toBeNull();
+
+      await harness.update({
+        workspaceRepoPath: "/tmp/repo-a",
+        tasks: [taskFixture],
+      });
+
+      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toBe(session);
     } finally {
       await harness.unmount();
     }
