@@ -48,6 +48,7 @@ const DIFF_BODY_CONTAINER_STYLE = {
 type FileDiffEntryProps = {
   diff: FileDiff;
   diffScope: DiffScope;
+  ownerKey: string | null;
   fileComments: InlineCommentDraft[];
   viewState: {
     isConflicted: boolean;
@@ -258,6 +259,7 @@ function FileDiffEntryHeader({
 function FileDiffEntry({
   diff,
   diffScope,
+  ownerKey,
   fileComments,
   viewState,
   onToggle,
@@ -326,11 +328,11 @@ function FileDiffEntry({
   const handleSaveNewComment = useCallback(
     (text: string) => {
       const normalizedText = text.trim();
-      if (!pendingSelection || normalizedText.length === 0) {
+      if (ownerKey === null || !pendingSelection || normalizedText.length === 0) {
         return;
       }
 
-      addDraft({
+      addDraft(ownerKey, {
         filePath: diff.file,
         diffScope,
         startLine: pendingSelection.startLine,
@@ -342,7 +344,7 @@ function FileDiffEntry({
       });
       clearPendingSelection();
     },
-    [addDraft, clearPendingSelection, diff.file, diffScope, pendingSelection],
+    [addDraft, clearPendingSelection, diff.file, diffScope, ownerKey, pendingSelection],
   );
 
   const handleStartEditing = useCallback((comment: InlineCommentDraft) => {
@@ -356,14 +358,24 @@ function FileDiffEntry({
   const handleSaveEditing = useCallback(
     (commentId: string, text: string) => {
       const normalizedText = text.trim();
-      if (normalizedText.length === 0) {
+      if (ownerKey === null || normalizedText.length === 0) {
         return;
       }
 
-      updateDraft(commentId, normalizedText);
+      updateDraft(ownerKey, commentId, normalizedText);
       dispatchAnnotation({ type: "editingCanceled" });
     },
-    [updateDraft],
+    [ownerKey, updateDraft],
+  );
+  const handleRemoveComment = useCallback(
+    (commentId: string) => {
+      if (ownerKey === null) {
+        return;
+      }
+
+      removeDraft(ownerKey, commentId);
+    },
+    [ownerKey, removeDraft],
   );
   const lineAnnotations = useMemo<DiffLineAnnotation<GitDiffCommentAnnotationMetadata>[]>(() => {
     const commentAnnotations = fileComments.map((comment) => ({
@@ -422,7 +434,7 @@ function FileDiffEntry({
             onStartEditing={handleStartEditing}
             onCancelEditing={handleCancelEditing}
             onSaveEditing={handleSaveEditing}
-            onRemove={removeDraft}
+            onRemove={handleRemoveComment}
           />
         </DiffAnnotationShell>
       );
@@ -432,11 +444,11 @@ function FileDiffEntry({
       commentsById,
       activeEditingCommentId,
       handleCancelEditing,
+      handleRemoveComment,
       handleSaveEditing,
       handleSaveNewComment,
       handleStartEditing,
       pendingSelection,
-      removeDraft,
     ],
   );
 
@@ -469,8 +481,8 @@ function FileDiffEntry({
                 patch={diff.diff}
                 filePath={diff.file}
                 diffStyle={diffStyle}
-                enableLineSelection={!hasOpenAnnotationForm}
-                enableGutterUtility={!hasOpenAnnotationForm}
+                enableLineSelection={ownerKey !== null && !hasOpenAnnotationForm}
+                enableGutterUtility={ownerKey !== null && !hasOpenAnnotationForm}
                 selectedLines={selectedLines}
                 onLineSelectionEnd={handleLineSelectionEnd}
                 lineAnnotations={lineAnnotations}
@@ -502,6 +514,7 @@ export const FileDiffEntryWithMemo = memo(
   (previous, next) =>
     previous.viewState.isExpanded === next.viewState.isExpanded &&
     previous.diffScope === next.diffScope &&
+    previous.ownerKey === next.ownerKey &&
     previous.viewState.isConflicted === next.viewState.isConflicted &&
     previous.viewState.reserveConflictSlot === next.viewState.reserveConflictSlot &&
     previous.diffStyle === next.diffStyle &&

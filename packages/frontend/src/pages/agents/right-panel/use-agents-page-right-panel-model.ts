@@ -12,7 +12,7 @@ import type {
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
-import type { GitConflict, GitDiffRefresh } from "@/features/agent-studio-git";
+import type { DiffScope, GitConflict, GitDiffRefresh } from "@/features/agent-studio-git";
 import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
@@ -23,6 +23,10 @@ import {
   type PullRequestReviewContextQueryInput,
   prefetchPullRequestReviewContextFromQuery,
 } from "@/state/queries/pull-request-review";
+import {
+  toInlineCommentDraftOwnerKey,
+  useInlineCommentDraftStore,
+} from "@/state/use-inline-comment-draft-store";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
@@ -73,6 +77,7 @@ type BuildAgentsPageDiffModelArgs<GitActions extends object> = {
   buildToolsSnapshot: BuildAgentsPageDiffModelSnapshot;
   gitActions: GitActions;
   selectedTask: BuildToolsSelectedView["selectedTask"];
+  commentOwner?: { workspaceId: string; taskId: string } | null;
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
@@ -97,6 +102,8 @@ type FileExplorerRoot = {
   unavailableReason: string | null;
 };
 
+const COMMENT_VALIDATION_SCOPES: readonly DiffScope[] = ["uncommitted", "target"];
+
 function collectUnmergedFilePaths(
   fileStatuses: BuildAgentsPageDiffModelSnapshot["diffData"]["fileStatuses"],
 ): string[] {
@@ -114,6 +121,7 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
   buildToolsSnapshot,
   gitActions,
   selectedTask,
+  commentOwner = null,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -184,6 +192,7 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
   return {
     ...diffData,
     contextMode: gitPanelContextMode,
+    commentOwner,
     branch: resolvedGitPanelBranch,
     openInTargetPath: openInTarget.path,
     openInDisabledReason: openInTarget.disabledReason,
@@ -354,12 +363,53 @@ export function useAgentsPageRightPanelModel({
   useEffect(publishGitConflictQuickActionContext, [publishGitConflictQuickActionContext]);
 
   useEffect(() => clearGitConflictQuickActionContext, [clearGitConflictQuickActionContext]);
+  const commentOwner = useMemo(
+    () =>
+      activeWorkspace
+        ? { workspaceId: activeWorkspace.workspaceId, taskId: selectedView.taskId }
+        : null,
+    [activeWorkspace, selectedView.taskId],
+  );
+  const commentOwnerKey = useMemo(
+    () => (commentOwner ? toInlineCommentDraftOwnerKey(commentOwner) : null),
+    [commentOwner],
+  );
+  const isCommentStoreHydrated = useInlineCommentDraftStore((store) => store.isHydrated);
+  const dropDraftsForMissingFiles = useInlineCommentDraftStore(
+    (store) => store.dropDraftsForMissingFiles,
+  );
+
+  useEffect(() => {
+    if (commentOwnerKey === null || !isCommentStoreHydrated) {
+      return;
+    }
+
+    for (const diffScope of COMMENT_VALIDATION_SCOPES) {
+      if (!diffData.loadedScopesByScope[diffScope]) {
+        continue;
+      }
+      const scopeState = diffData.scopeStatesByScope[diffScope];
+      if (scopeState.error !== null) {
+        continue;
+      }
+      const presentFilePaths = new Set(scopeState.fileDiffs.map((fileDiff) => fileDiff.file));
+      dropDraftsForMissingFiles(commentOwnerKey, diffScope, presentFilePaths);
+    }
+  }, [
+    commentOwnerKey,
+    diffData.loadedScopesByScope,
+    diffData.scopeStatesByScope,
+    dropDraftsForMissingFiles,
+    isCommentStoreHydrated,
+  ]);
+
   const diffModel = useMemo(() => {
     const input: BuildAgentsPageDiffModelArgs<typeof gitActions> = {
       branches,
       buildToolsSnapshot,
       gitActions,
       selectedTask: selectedView.selectedTask,
+      commentOwner,
       detectingPullRequestTaskId,
       onDetectPullRequest,
       gitProviderContext,
@@ -372,6 +422,7 @@ export function useAgentsPageRightPanelModel({
   }, [
     buildToolsSnapshot,
     branches,
+    commentOwner,
     gitActions,
     onDetectPullRequest,
     gitProviderContext,

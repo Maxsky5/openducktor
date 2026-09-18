@@ -11,6 +11,7 @@ import type {
 
 export type AgentStudioGitPanelModel = DiffDataState & {
   contextMode?: "repository" | "worktree";
+  commentOwner?: { workspaceId: string; taskId: string } | null;
   pullRequest?: PullRequest | null;
   openInTargetPath?: string | null;
   openInDisabledReason?: string | null;

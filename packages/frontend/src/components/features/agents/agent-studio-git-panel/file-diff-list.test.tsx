@@ -2,7 +2,34 @@ import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act, type ReactElement, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
+import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
+import {
+  resetInlineCommentDraftStoreForTests,
+  setInlineCommentDraftScheduleTaskForTests,
+  setInlineCommentDraftStorageForTests,
+  useInlineCommentDraftStore,
+} from "@/state/use-inline-comment-draft-store";
+
+const OWNER_KEY = toInlineCommentDraftStorageKey({ workspaceId: "workspace-1", taskId: "task-1" });
+
+type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
+
+const createMemoryStorage = (): TestStorage => {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => {
+      store.set(key, value);
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+  };
+};
 
 const pierreDiffViewerModule = await import("@/components/features/agents/pierre-diff-viewer");
 type RestorableSpy = { mockRestore(): void };
@@ -116,11 +143,15 @@ const viewerMock = mock(
 );
 
 const resetInlineComments = (): void => {
-  useInlineCommentDraftStore.setState({ drafts: [], draftStateKey: null });
+  resetInlineCommentDraftStoreForTests();
 };
 
 beforeEach(async () => {
   reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
+
+  resetInlineCommentDraftStoreForTests();
+  setInlineCommentDraftStorageForTests(createMemoryStorage());
+  setInlineCommentDraftScheduleTaskForTests(() => () => {});
 
   pierreViewerSpies = [
     spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
@@ -180,6 +211,7 @@ function FileDiffListHarness(): ReactElement {
           },
         ]}
         diffScope="uncommitted"
+        ownerKey={OWNER_KEY}
         conflictedFiles={new Set()}
         diffStyle="unified"
         setDiffStyle={() => {}}
@@ -224,6 +256,7 @@ function ScopeSwitchFileDiffListHarness(): ReactElement {
           },
         ]}
         diffScope={diffScope}
+        ownerKey={OWNER_KEY}
         conflictedFiles={new Set()}
         diffStyle="unified"
         setDiffStyle={() => {}}
@@ -303,13 +336,13 @@ describe("FileDiffList", () => {
 
     const sentSnapshot = useInlineCommentDraftStore
       .getState()
-      .getPendingDrafts()
+      .getPendingDrafts(OWNER_KEY)
       .map((draft) => ({ id: draft.id, revision: draft.revision }));
 
     act(() => {
       const submissionId = useInlineCommentDraftStore
         .getState()
-        .beginSubmittingDrafts(sentSnapshot);
+        .beginSubmittingDrafts(OWNER_KEY, sentSnapshot);
       if (!submissionId) {
         throw new Error("Expected submission id");
       }
@@ -332,11 +365,11 @@ describe("FileDiffList", () => {
 
     const sentSnapshot = useInlineCommentDraftStore
       .getState()
-      .getPendingDrafts()
+      .getPendingDrafts(OWNER_KEY)
       .map((draft) => ({ id: draft.id, revision: draft.revision }));
 
     act(() => {
-      useInlineCommentDraftStore.getState().beginSubmittingDrafts(sentSnapshot);
+      useInlineCommentDraftStore.getState().beginSubmittingDrafts(OWNER_KEY, sentSnapshot);
     });
 
     expect(screen.getByRole("button", { name: "Edit" }).getAttribute("disabled")).not.toBeNull();

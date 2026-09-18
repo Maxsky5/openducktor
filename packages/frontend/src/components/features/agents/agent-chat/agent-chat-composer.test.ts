@@ -322,6 +322,41 @@ describe("AgentChatComposer", () => {
     expect(html).not.toContain('aria-label="Send message" disabled');
   });
 
+  test("warns when pending comments are not saved for later", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          pendingSendItems: {
+            count: 2,
+            accessibleLabel: "2 pending review comments",
+            warning: "These comments are not saved for this session.",
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("agent-chat-pending-items-warning");
+    expect(html).toContain("These comments are not saved for this session.");
+  });
+
+  test("hides the warning when there are no pending comments", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          pendingSendItems: {
+            count: 0,
+            accessibleLabel: "0 pending review comments",
+            warning: "These comments are not saved for this session.",
+          },
+        },
+      }),
+    );
+
+    expect(html).not.toContain("agent-chat-pending-items-warning");
+  });
+
   test("styles composer shell with agent accent border and padded container", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {

@@ -7,28 +7,27 @@ import {
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import {
   type InlineCommentDraftStore,
+  type InlineCommentPersistenceWarning,
+  toInlineCommentDraftOwnerKey,
   useInlineCommentDraftStore,
 } from "@/state/use-inline-comment-draft-store";
-import {
-  type AgentStudioChatDraftScope,
-  didAgentStudioChatDraftScopeSwitchSessionOnly,
-} from "./agent-studio-chat-draft";
 
 export type AgentStudioReviewCommentStore = Pick<
   InlineCommentDraftStore,
-  | "drafts"
   | "getPendingDrafts"
   | "formatBatchMessage"
   | "beginSubmittingDrafts"
   | "restoreSubmittingDrafts"
   | "completeSubmittingDrafts"
-  | "setDraftStateKey"
-  | "resetForContext"
+  | "hydrate"
+  | "flush"
 >;
 
 type AgentStudioReviewCommentComposerAdapter = {
-  syncDraftScope: (draftScope: AgentStudioChatDraftScope, draftStateKey: string) => void;
+  hydrate: () => void;
+  flush: () => Promise<void>;
   submitDraft: (
+    ownerKey: string | null,
     draft: AgentChatComposerDraft,
     onSend: AgentChatComposerModel["onSend"],
   ) => Promise<AgentChatSendResult>;
@@ -36,79 +35,75 @@ type AgentStudioReviewCommentComposerAdapter = {
 
 export const createAgentStudioReviewCommentComposerAdapter = (
   getStore: () => AgentStudioReviewCommentStore,
-): AgentStudioReviewCommentComposerAdapter => {
-  let previousDraftScope: AgentStudioChatDraftScope | null = null;
+): AgentStudioReviewCommentComposerAdapter => ({
+  hydrate: () => {
+    getStore().hydrate();
+  },
+  flush: () => getStore().flush(),
+  submitDraft: async (ownerKey, draft, onSend) => {
+    if (ownerKey === null) {
+      return onSend(draft);
+    }
 
-  return {
-    syncDraftScope: (draftScope, draftStateKey) => {
-      if (previousDraftScope === draftScope) {
-        return;
-      }
+    const store = getStore();
+    const pendingDrafts = store.getPendingDrafts(ownerKey);
+    const pendingDraftSnapshots = pendingDrafts.map((pendingDraft) => ({
+      id: pendingDraft.id,
+      revision: pendingDraft.revision,
+    }));
+    const commentAppendix = store.formatBatchMessage(pendingDrafts);
+    const nextDraft =
+      commentAppendix.length > 0 ? appendTextToDraft(draft, commentAppendix) : draft;
+    const submissionId = store.beginSubmittingDrafts(ownerKey, pendingDraftSnapshots);
 
-      const store = getStore();
-      if (
-        previousDraftScope !== null &&
-        didAgentStudioChatDraftScopeSwitchSessionOnly(previousDraftScope, draftScope) &&
-        store.drafts.some((draft) => draft.status === "submitting")
-      ) {
-        store.setDraftStateKey(draftStateKey);
-      } else {
-        store.resetForContext(draftStateKey);
-      }
-
-      previousDraftScope = draftScope;
-    },
-    submitDraft: async (draft, onSend) => {
-      const store = getStore();
-      const pendingDrafts = store.getPendingDrafts();
-      const pendingDraftSnapshots = pendingDrafts.map((pendingDraft) => ({
-        id: pendingDraft.id,
-        revision: pendingDraft.revision,
-      }));
-      const commentAppendix = store.formatBatchMessage(pendingDrafts);
-      const nextDraft =
-        commentAppendix.length > 0 ? appendTextToDraft(draft, commentAppendix) : draft;
-      const submissionId = store.beginSubmittingDrafts(pendingDraftSnapshots);
-
-      try {
-        const result = await onSend(nextDraft);
-        if (!submissionId) {
-          return result;
-        }
-
-        if (result === true) {
-          getStore().completeSubmittingDrafts(submissionId);
-        } else {
-          getStore().restoreSubmittingDrafts(submissionId);
-        }
+    try {
+      const result = await onSend(nextDraft);
+      if (!submissionId) {
         return result;
-      } catch (error) {
-        if (submissionId) {
-          getStore().restoreSubmittingDrafts(submissionId);
-        }
-        throw error;
       }
-    },
-  };
-};
+
+      if (result === true) {
+        getStore().completeSubmittingDrafts(submissionId);
+      } else {
+        getStore().restoreSubmittingDrafts(submissionId);
+      }
+      return result;
+    } catch (error) {
+      if (submissionId) {
+        getStore().restoreSubmittingDrafts(submissionId);
+      }
+      throw error;
+    }
+  },
+});
 
 type UseAgentStudioReviewCommentComposerAdapterArgs = {
-  draftScope: AgentStudioChatDraftScope;
-  draftStateKey: string;
+  workspaceId: string | null;
+  taskId: string;
   onSend: AgentChatComposerModel["onSend"];
 };
 
 type UseAgentStudioReviewCommentComposerAdapterResult = {
   pendingInlineCommentCount: number;
+  persistenceWarning: InlineCommentPersistenceWarning | null;
   onSend: AgentChatComposerModel["onSend"];
 };
 
 export function useAgentStudioReviewCommentComposerAdapter({
-  draftScope,
-  draftStateKey,
+  workspaceId,
+  taskId,
   onSend,
 }: UseAgentStudioReviewCommentComposerAdapterArgs): UseAgentStudioReviewCommentComposerAdapterResult {
-  const pendingInlineCommentCount = useInlineCommentDraftStore((store) => store.getDraftCount());
+  const ownerKey = useMemo(
+    () => toInlineCommentDraftOwnerKey({ workspaceId, taskId }),
+    [taskId, workspaceId],
+  );
+  const pendingInlineCommentCount = useInlineCommentDraftStore((store) =>
+    ownerKey === null ? 0 : store.getDraftCount(ownerKey),
+  );
+  const persistenceWarning = useInlineCommentDraftStore((store) =>
+    ownerKey === null ? null : store.getPersistenceWarning(ownerKey),
+  );
   const adapter = useMemo(
     () =>
       createAgentStudioReviewCommentComposerAdapter(() => useInlineCommentDraftStore.getState()),
@@ -116,20 +111,45 @@ export function useAgentStudioReviewCommentComposerAdapter({
   );
 
   useEffect(() => {
-    adapter.syncDraftScope(draftScope, draftStateKey);
-  }, [adapter, draftScope, draftStateKey]);
+    adapter.hydrate();
+  }, [adapter]);
+
+  useEffect(() => {
+    if (globalThis.window === undefined || globalThis.document === undefined) {
+      return;
+    }
+
+    const flushComments = (): void => {
+      void adapter.flush();
+    };
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === "hidden") {
+        flushComments();
+      }
+    };
+
+    window.addEventListener("pagehide", flushComments);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pagehide", flushComments);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      flushComments();
+    };
+  }, [adapter]);
 
   const submitDraft = useCallback(
     (draft: AgentChatComposerDraft): Promise<AgentChatSendResult> =>
-      adapter.submitDraft(draft, onSend),
-    [adapter, onSend],
+      adapter.submitDraft(ownerKey, draft, onSend),
+    [adapter, onSend, ownerKey],
   );
 
   return useMemo(
     () => ({
       pendingInlineCommentCount,
+      persistenceWarning,
       onSend: submitDraft,
     }),
-    [pendingInlineCommentCount, submitDraft],
+    [pendingInlineCommentCount, persistenceWarning, submitDraft],
   );
 }
