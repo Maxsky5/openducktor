@@ -60,7 +60,7 @@ export const createOdtMcpBridgeService = (
   input: CreateOdtMcpToolContextInput,
 ): OdtMcpBridgeService => {
   const context = createOdtMcpToolContext(input);
-  const service: OdtMcpBridgeService = {
+  return {
     ready() {
       return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
     },
@@ -85,7 +85,6 @@ export const createOdtMcpBridgeService = (
       });
     },
   };
-  return service;
 };
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;

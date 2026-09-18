@@ -51,14 +51,8 @@ export const executeOdtMcpMutationTool = (
   toolName: OdtMcpMutationToolName,
   input: JSONType,
 ): Effect.Effect<OdtMcpMutationToolResult, OdtMcpBridgeError> => {
-  const {
-    repoPathForWorkspace,
-    resolveTask,
-    taskForWorkspace,
-    tasksForWorkspace,
-    taskService,
-    workspaceSettingsService,
-  } = context;
+  const { repoPathForWorkspace, resolveTask, taskForWorkspace, tasksForWorkspace, taskService } =
+    context;
 
   return Effect.gen(function* () {
     switch (toolName) {
@@ -194,10 +188,10 @@ export const executeOdtMcpMutationTool = (
       }
       case "odt_set_pull_request": {
         const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-        const repoConfig = yield* workspaceSettingsService.getRepoConfig(parsed.workspaceId ?? "");
+        const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
         const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
         const pullRequest = yield* taskService.linkPullRequest({
-          repoPath: repoConfig.repoPath,
+          repoPath,
           taskId: task.id,
           providerId: parsed.providerId,
           number: parsed.number,
