@@ -75,6 +75,28 @@ describe("renderMarkdownElement", () => {
     expect(screen.getByTestId("policy-anchor").getAttribute("href")).toBe("#");
   });
 
+  test("does not reuse a cached element when the link policy changes", () => {
+    const handledPolicy = createPolicy();
+    const unhandledPolicy: MarkdownLinkPolicy = {
+      ...createPolicy(),
+      handlesDestination: () => false,
+    };
+    const components: Components = {};
+    const markdown = "[go](odt:task)";
+
+    const handled = renderMarkdownElement({ markdown, components, linkPolicy: handledPolicy });
+    const unhandled = renderMarkdownElement({ markdown, components, linkPolicy: unhandledPolicy });
+
+    expect(unhandled).not.toBe(handled);
+
+    const handledView = render(handled);
+    expect(handledView.container.querySelector("a")?.getAttribute("href")).toBe("#");
+    handledView.unmount();
+
+    const unhandledView = render(unhandled);
+    expect(unhandledView.container.querySelector("a")?.getAttribute("href")).not.toBe("#");
+  });
+
   test("evicts the oldest entry after the cache limit", () => {
     const components: Components = {};
     const first = renderMarkdownElement({ markdown: "**entry-0**", components });
