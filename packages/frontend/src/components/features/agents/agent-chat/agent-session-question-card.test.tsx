@@ -49,6 +49,15 @@ const createCardHarness = (props: CardProps) => {
     rendered = render(createElement(AgentSessionQuestionCard, props));
   };
 
+  const rerender = async (nextProps: CardProps): Promise<void> => {
+    if (!rendered) {
+      throw new Error("Renderer not mounted");
+    }
+    await act(async () => {
+      rendered?.rerender(createElement(AgentSessionQuestionCard, nextProps));
+    });
+  };
+
   const unmount = async (): Promise<void> => {
     rendered?.unmount();
   };
@@ -82,7 +91,7 @@ const createCardHarness = (props: CardProps) => {
     return rendered.container.textContent ?? "";
   };
 
-  return { mount, unmount, clickButtonByText, clickTabByText, getButtonDisabled, asText };
+  return { mount, rerender, unmount, clickButtonByText, clickTabByText, getButtonDisabled, asText };
 };
 
 describe("AgentSessionQuestionCard", () => {
@@ -154,6 +163,66 @@ describe("AgentSessionQuestionCard", () => {
 
     await harness.unmount();
   });
+  test("keeps question progress and free text when the request is re-projected", async () => {
+    const request = buildRequest({
+      questions: [
+        {
+          header: "First",
+          question: "Pick the first answer",
+          options: [{ label: "Frontend", description: "UI work" }],
+          multiple: false,
+        },
+        {
+          header: "Second",
+          question: "Pick the second answer",
+          options: [{ label: "Backend", description: "API work" }],
+          multiple: false,
+        },
+      ],
+    });
+    const reProject = (): AgentQuestionRequest => ({
+      requestId: request.requestId,
+      questions: request.questions.map((question) => {
+        const projectedQuestion: AgentQuestionRequest["questions"][number] = {
+          header: question.header,
+          question: question.question,
+          options: question.options.map((option) => ({ ...option })),
+        };
+        if (question.multiple !== undefined) {
+          projectedQuestion.multiple = question.multiple;
+        }
+        if (question.custom !== undefined) {
+          projectedQuestion.custom = question.custom;
+        }
+        return projectedQuestion;
+      }),
+    });
+    const onSubmit = mock(async () => {});
+    const harness = createCardHarness({ request, onSubmit });
+    await harness.mount();
+
+    await harness.clickButtonByText("Frontend");
+    expectActiveTabPanel(screen.getByRole("tab", { name: /Second/i }));
+
+    await harness.rerender({ request: reProject(), onSubmit });
+    expectActiveTabPanel(screen.getByRole("tab", { name: /Second/i }));
+
+    await harness.clickButtonByText("Other answer");
+    await harness.rerender({ request: reProject(), onSubmit });
+
+    const textarea = screen.getByPlaceholderText("Write your answer...");
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "Custom backend answer" } });
+    });
+    await harness.rerender({ request: reProject(), onSubmit });
+
+    expect(harness.getButtonDisabled("Confirm Answers")).toBe(false);
+    await harness.clickButtonByText("Confirm Answers");
+    expect(onSubmit).toHaveBeenCalledWith("request-1", [["Frontend"], ["Custom backend answer"]]);
+
+    await harness.unmount();
+  });
+
   test("enables submit after completion and sends normalized answers", async () => {
     const onSubmit = mock(async () => {});
     const harness = createCardHarness({

@@ -206,6 +206,60 @@ describe("useQuestionDraft", () => {
     await harness.unmount();
   });
 
+  test("keeps active tab, answers, and free text when the request is re-projected", async () => {
+    const request = buildRequest({
+      questions: [baseQuestion({ header: "Question 1" }), baseQuestion({ header: "Question 2" })],
+    });
+    const harness = createHookHarness(request);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.selectOption(0, "Frontend");
+      state.toggleFreeText(1);
+      state.updateFreeText(1, "Custom answer");
+    });
+    expect(harness.getLatest().activeTabId).toBe("1");
+
+    const reProjected: AgentQuestionRequest = {
+      requestId: request.requestId,
+      questions: request.questions.map((question) => ({
+        ...question,
+        options: question.options.map((option) => ({ ...option })),
+      })),
+    };
+    await harness.update({ request: reProjected });
+
+    const latest = harness.getLatest();
+    expect(latest.activeTabId).toBe("1");
+    expect(latest.answeredCount).toBe(2);
+    expect(latest.isComplete).toBe(true);
+    expect(latest.buildAnswers()).toEqual([["Frontend"], ["Custom answer"]]);
+
+    await harness.unmount();
+  });
+
+  test("resets when a new request arrives with identical questions", async () => {
+    const request = buildRequest({
+      questions: [baseQuestion({ header: "Question 1" }), baseQuestion({ header: "Question 2" })],
+    });
+    const harness = createHookHarness(request);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.selectOption(0, "Frontend");
+    });
+    expect(harness.getLatest().activeTabId).toBe("1");
+
+    await harness.update({
+      request: { requestId: "request-2", questions: request.questions },
+    });
+
+    expect(harness.getLatest().activeTabId).toBe("0");
+    expect(harness.getLatest().answeredCount).toBe(0);
+
+    await harness.unmount();
+  });
+
   test("clears submit error when switching tabs", async () => {
     const request = buildRequest({
       questions: [baseQuestion({ header: "Question 1" }), baseQuestion({ header: "Question 2" })],

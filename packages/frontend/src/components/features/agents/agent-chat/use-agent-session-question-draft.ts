@@ -55,10 +55,10 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
     draft: createAgentQuestionDraft(request),
   }));
   const [submitError, setSubmitErrorState] = useState<string | null>(null);
-  const [draftRequest, setDraftRequest] = useState(request);
+  const [draftRequestId, setDraftRequestId] = useState(request.requestId);
 
-  if (draftRequest !== request) {
-    setDraftRequest(request);
+  if (draftRequestId !== request.requestId) {
+    setDraftRequestId(request.requestId);
     setUiState({
       activeTabId: "0",
       draft: createAgentQuestionDraft(request),
