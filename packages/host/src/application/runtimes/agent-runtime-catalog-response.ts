@@ -10,28 +10,6 @@ import {
 import type { AgentRuntimeCatalogRead, AgentRuntimeCatalogSurfaceRead } from "@openducktor/core";
 import { errorMessage } from "../../effect/host-errors";
 
-const toSurface = <Catalog>(
-  label: string,
-  surface: string,
-  read: AgentRuntimeCatalogSurfaceRead<Catalog>,
-  parse: (catalog: Catalog) => { success: boolean; error?: unknown },
-): AgentRuntimeCatalogSurface<Catalog> => {
-  if (read.status === "failed") {
-    return {
-      status: "failed",
-      message: `${label} could not load ${surface}. ${errorMessage(read.cause)} Retry this surface.`,
-    };
-  }
-  const parsed = parse(read.catalog);
-  if (!parsed.success) {
-    return {
-      status: "failed",
-      message: `${label} returned invalid ${surface} data. ${errorMessage(parsed.error)} Update the runtime and retry this surface.`,
-    };
-  }
-  return { status: "available", catalog: read.catalog };
-};
-
 export const toAgentRuntimeCatalogResponse = (
   read: AgentRuntimeCatalogRead,
   runtime: RuntimeInstanceSummary,
@@ -65,4 +43,26 @@ export const toAgentRuntimeCatalogResponse = (
     );
   }
   return response;
+};
+
+const toSurface = <Catalog>(
+  label: string,
+  surface: string,
+  read: AgentRuntimeCatalogSurfaceRead<Catalog>,
+  parse: (catalog: Catalog) => { success: boolean; error?: unknown },
+): AgentRuntimeCatalogSurface<Catalog> => {
+  if (read.status === "failed") {
+    return {
+      status: "failed",
+      message: `${label} could not load ${surface}. ${errorMessage(read.cause)} Retry this surface.`,
+    };
+  }
+  const parsed = parse(read.catalog);
+  if (!parsed.success) {
+    return {
+      status: "failed",
+      message: `${label} returned invalid ${surface} data. ${errorMessage(parsed.error)} Update the runtime and retry this surface.`,
+    };
+  }
+  return { status: "available", catalog: read.catalog };
 };

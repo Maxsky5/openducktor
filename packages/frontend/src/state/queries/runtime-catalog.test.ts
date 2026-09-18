@@ -67,14 +67,14 @@ describe("runtime catalog queries", () => {
 
   test("scopes invalidation to one runtime directory or to every directory of a runtime", () => {
     expect(
-      runtimeCatalogQueryKeys.catalogScope({
+      runtimeCatalogQueryKeys.runtimeCatalogScope({
         repoPath: "/repo",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
       }),
     ).toEqual(["runtime-catalog", "catalog", "/repo", "opencode", "/repo/worktree"]);
     expect(
-      runtimeCatalogQueryKeys.catalogScope({
+      runtimeCatalogQueryKeys.runtimeCatalogScope({
         repoPath: "/repo",
         runtimeKind: "opencode",
       }),
@@ -161,7 +161,7 @@ describe("runtime catalog queries", () => {
     const skippedOptions = skippedRuntimeCatalogQueryOptions();
     const liveKeys = [
       runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture),
-      runtimeCatalogQueryKeys.catalogScope({ repoPath: "/repo", runtimeKind: "opencode" }),
+      runtimeCatalogQueryKeys.runtimeCatalogScope({ repoPath: "/repo", runtimeKind: "opencode" }),
       runtimeCatalogQueryKeys.repoFileSearch(workingDirectoryRefFixture, "index"),
     ];
 

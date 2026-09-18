@@ -2458,7 +2458,7 @@ describe("prepared composer catalog refresh", () => {
         await harness.run(async ({ queryClient }) => {
           queryClient.setQueriesData(
             {
-              queryKey: runtimeCatalogQueryKeys.catalogScope({
+              queryKey: runtimeCatalogQueryKeys.runtimeCatalogScope({
                 repoPath: "/repo",
                 runtimeKind: "opencode",
               }),

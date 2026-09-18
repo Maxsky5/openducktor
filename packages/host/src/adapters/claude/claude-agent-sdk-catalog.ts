@@ -19,10 +19,10 @@ import {
   type AgentModelCatalog,
   type AgentModelDescriptor,
   type AgentRuntimeCatalogRead,
-  type AgentRuntimeCatalogSurfaceRead,
   type AgentSkillCatalog,
   type AgentSubagentCatalog,
   type ListAgentRuntimeCatalogInput,
+  readAgentRuntimeCatalogSurface,
 } from "@openducktor/core";
 import { buildClaudeAgentSdkBaseOptions } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
@@ -81,16 +81,6 @@ const closeClaudeCatalogSession = ({ queue, sdkQuery }: ClaudeCatalogSession): v
   sdkQuery.close();
 };
 
-const readCatalogSurface = async <Catalog>(
-  read: () => Promise<Catalog>,
-): Promise<AgentRuntimeCatalogSurfaceRead<Catalog>> => {
-  try {
-    return { status: "available", catalog: await read() };
-  } catch (cause) {
-    return { status: "failed", cause };
-  }
-};
-
 export const toClaudeModelCatalog = (models: ModelInfo[]): AgentModelCatalog => ({
   runtime: CLAUDE_RUNTIME_DESCRIPTOR,
   models: models.map((model) => toClaudeModelDescriptor(model)),
@@ -107,10 +97,14 @@ const readClaudeCatalogSurfaces = async (
     return commands;
   };
   const [models, slashCommands, skills, subagents] = await Promise.all([
-    readCatalogSurface(async () => toClaudeModelCatalog(await sdkQuery.supportedModels())),
-    readCatalogSurface(async () => toClaudeSlashCommandCatalog(await readCommands())),
-    readCatalogSurface(async () => toClaudeSkillCatalog(await readCommands())),
-    readCatalogSurface(async () => toClaudeSubagentCatalog(await sdkQuery.supportedAgents())),
+    readAgentRuntimeCatalogSurface(async () =>
+      toClaudeModelCatalog(await sdkQuery.supportedModels()),
+    ),
+    readAgentRuntimeCatalogSurface(async () => toClaudeSlashCommandCatalog(await readCommands())),
+    readAgentRuntimeCatalogSurface(async () => toClaudeSkillCatalog(await readCommands())),
+    readAgentRuntimeCatalogSurface(async () =>
+      toClaudeSubagentCatalog(await sdkQuery.supportedAgents()),
+    ),
   ]);
   return { runtime: CLAUDE_RUNTIME_DESCRIPTOR, models, slashCommands, skills, subagents };
 };

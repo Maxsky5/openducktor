@@ -5,8 +5,10 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { hasNestedNodeErrorCode } from "../../effect/host-errors";
-import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
-import type { NativeAgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
+import type {
+  AgentRuntimeQueryPort,
+  NativeAgentRuntimeQueryPort,
+} from "../../ports/agent-runtime-query-port";
 import type {
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterRegistryPort,

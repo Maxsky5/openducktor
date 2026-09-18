@@ -3,13 +3,13 @@ import {
   slashCommandCatalogSchema,
   subagentCatalogSchema,
 } from "@openducktor/contracts";
-import type {
-  AgentFileSearchResult,
-  AgentModelCatalog,
-  AgentRuntimeCatalogRead,
-  AgentRuntimeCatalogSurfaceRead,
-  AgentSlashCommandCatalog,
-  AgentSubagentCatalog,
+import {
+  type AgentFileSearchResult,
+  type AgentModelCatalog,
+  type AgentRuntimeCatalogRead,
+  type AgentSlashCommandCatalog,
+  type AgentSubagentCatalog,
+  readAgentRuntimeCatalogSurface,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
@@ -186,16 +186,6 @@ type OpencodeRuntimeCatalogInput = OpencodeRuntimeClientInput & {
   repoPath: string;
 };
 
-const readCatalogSurface = async <Catalog>(
-  read: () => Promise<Catalog>,
-): Promise<AgentRuntimeCatalogSurfaceRead<Catalog>> => {
-  try {
-    return { status: "available", catalog: await read() };
-  } catch (cause) {
-    return { status: "failed", cause };
-  }
-};
-
 export const loadRuntimeCatalog = async (
   createClient: ClientFactoryFor<"app" | "config" | "command">,
   input: OpencodeRuntimeCatalogInput,
@@ -246,9 +236,9 @@ export const loadRuntimeCatalog = async (
   };
 
   const [models, slashCommands, subagents] = await Promise.all([
-    readCatalogSurface(readModels),
-    readCatalogSurface(readSlashCommands),
-    readCatalogSurface(readSubagents),
+    readAgentRuntimeCatalogSurface(readModels),
+    readAgentRuntimeCatalogSurface(readSlashCommands),
+    readAgentRuntimeCatalogSurface(readSubagents),
   ]);
 
   return { models, slashCommands, subagents };

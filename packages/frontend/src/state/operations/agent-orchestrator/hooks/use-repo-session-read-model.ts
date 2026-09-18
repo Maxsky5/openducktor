@@ -827,7 +827,7 @@ export const useRepoSessionReadModel = ({
         runOrchestratorSideEffect(
           "agent-session-live-invalidate-catalog",
           queryClient.invalidateQueries({
-            queryKey: runtimeCatalogQueryKeys.catalogScope(catalogScope),
+            queryKey: runtimeCatalogQueryKeys.runtimeCatalogScope(catalogScope),
           }),
           {
             tags: {
@@ -850,7 +850,7 @@ export const useRepoSessionReadModel = ({
         runOrchestratorSideEffect(
           "agent-session-live-invalidate-catalog",
           queryClient.invalidateQueries({
-            queryKey: runtimeCatalogQueryKeys.catalogScope(envelope.scope),
+            queryKey: runtimeCatalogQueryKeys.runtimeCatalogScope(envelope.scope),
           }),
           {
             tags: {

@@ -26,7 +26,7 @@ export const runtimeCatalogQueryKeys = {
     ] as const,
   repoCatalogScope: (repoPath: string) =>
     [...runtimeCatalogQueryKeys.all, "catalog", normalizeWorkingDirectory(repoPath)] as const,
-  catalogScope: ({
+  runtimeCatalogScope: ({
     repoPath,
     runtimeKind,
     workingDirectory,

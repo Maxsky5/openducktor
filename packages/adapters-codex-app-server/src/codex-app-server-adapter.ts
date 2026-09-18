@@ -28,7 +28,6 @@ import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
   AgentRuntimeCatalogRead,
-  AgentRuntimeCatalogSurfaceRead,
   AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionRuntimeSnapshot,
@@ -61,6 +60,7 @@ import {
   agentSessionRefsEqual,
   classifyAgentSessionActivity,
   classifySystemSlashCommandInvocation,
+  readAgentRuntimeCatalogSurface,
   withAgentSessionRef,
 } from "@openducktor/core";
 import { requireCodexPendingRequestKey } from "./codex-app-server-approvals";
@@ -202,16 +202,6 @@ const toLivePendingQuestion = (
   requestId: request.requestId,
   questions: toCodexToolQuestions(request.questions),
 });
-
-const readCatalogSurface = async <Catalog>(
-  read: () => Promise<Catalog>,
-): Promise<AgentRuntimeCatalogSurfaceRead<Catalog>> => {
-  try {
-    return { status: "available", catalog: await read() };
-  } catch (cause) {
-    return { status: "failed", cause };
-  }
-};
 
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -770,9 +760,9 @@ export class CodexAppServerAdapter
     };
 
     return {
-      models: await readCatalogSurface(readModels),
-      slashCommands: await readCatalogSurface(readSlashCommands),
-      skills: await readCatalogSurface(readSkills),
+      models: await readAgentRuntimeCatalogSurface(readModels),
+      slashCommands: await readAgentRuntimeCatalogSurface(readSlashCommands),
+      skills: await readAgentRuntimeCatalogSurface(readSkills),
     };
   }
 

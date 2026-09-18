@@ -49,7 +49,7 @@ export const createAgentRuntimeServices = (hostClient: HostClient = host): Agent
   };
 };
 
-const toAgentRuntimeCatalogSurfaceRead = <Catalog>(
+const toSurfaceRead = <Catalog>(
   surface: AgentRuntimeCatalogSurface<Catalog> | undefined,
 ): AgentRuntimeCatalogSurfaceRead<Catalog> | undefined => {
   if (surface === undefined) {
@@ -61,24 +61,24 @@ const toAgentRuntimeCatalogSurfaceRead = <Catalog>(
   return { status: "failed", cause: surface.message };
 };
 
-const toAgentRuntimeCatalogRead = (catalog: AgentRuntimeCatalog): AgentRuntimeCatalogRead => {
+const toCatalogRead = (catalog: AgentRuntimeCatalog): AgentRuntimeCatalogRead => {
   const read: AgentRuntimeCatalogRead = {};
   if (catalog.runtime !== undefined) {
     read.runtime = catalog.runtime;
   }
-  const models = toAgentRuntimeCatalogSurfaceRead(catalog.models);
+  const models = toSurfaceRead(catalog.models);
   if (models !== undefined) {
     read.models = models;
   }
-  const slashCommands = toAgentRuntimeCatalogSurfaceRead(catalog.slashCommands);
+  const slashCommands = toSurfaceRead(catalog.slashCommands);
   if (slashCommands !== undefined) {
     read.slashCommands = slashCommands;
   }
-  const skills = toAgentRuntimeCatalogSurfaceRead(catalog.skills);
+  const skills = toSurfaceRead(catalog.skills);
   if (skills !== undefined) {
     read.skills = skills;
   }
-  const subagents = toAgentRuntimeCatalogSurfaceRead(catalog.subagents);
+  const subagents = toSurfaceRead(catalog.subagents);
   if (subagents !== undefined) {
     read.subagents = subagents;
   }
@@ -116,7 +116,7 @@ const createAgentEngine = (hostClient: HostClient): AgentEnginePort => {
     forkSession: (input) => hostClient.agentSessionControlFork(input),
     listRuntimeDefinitions: () => Object.values(RUNTIME_DESCRIPTORS_BY_KIND),
     loadRuntimeCatalog: async (input) =>
-      toAgentRuntimeCatalogRead(await hostClient.agentRuntimeLoadCatalog(input)),
+      toCatalogRead(await hostClient.agentRuntimeLoadCatalog(input)),
     searchFiles: (input) => hostClient.agentRuntimeSearchFiles(input),
     loadSessionHistory: async (input) => {
       const history = await hostClient.agentRuntimeLoadSessionHistory(input);
