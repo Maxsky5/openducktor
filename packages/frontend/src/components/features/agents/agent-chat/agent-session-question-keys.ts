@@ -1,3 +1,4 @@
+import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 
 type AgentQuestion = AgentQuestionRequest["questions"][number];
@@ -40,10 +41,7 @@ export const buildQuestionContentEntries = (
   });
 };
 
-export const buildQuestionDraftKey = (request: AgentQuestionRequest): string => {
-  const origin = request.source ? `subagent:${request.source.childExternalSessionId}` : "direct";
-  const contentKeys = buildQuestionContentEntries(request.questions).map(
-    ({ contentKey }) => contentKey,
-  );
-  return `${origin}::${contentKeys.join("::")}`;
-};
+export const buildQuestionCardKey = (
+  externalSessionId: string,
+  request: AgentQuestionRequest,
+): string => `${externalSessionId}:${pendingInputIdentity(request)}`;

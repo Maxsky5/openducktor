@@ -9,7 +9,6 @@ import {
   normalizeAgentQuestionDraft,
   toggleAgentQuestionOption,
 } from "./agent-session-question-draft";
-import { buildQuestionDraftKey } from "./agent-session-question-keys";
 
 export const QUESTION_SUMMARY_TAB_ID = "__summary__";
 
@@ -60,14 +59,6 @@ const createInitialUiState = (request: AgentQuestionRequest): QuestionDraftUiSta
 export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestionDraftState => {
   const [uiState, setUiState] = useState<QuestionDraftUiState>(() => createInitialUiState(request));
   const [submitError, setSubmitErrorState] = useState<string | null>(null);
-  const [draftKey, setDraftKey] = useState(() => buildQuestionDraftKey(request));
-  const requestDraftKey = buildQuestionDraftKey(request);
-
-  if (draftKey !== requestDraftKey) {
-    setDraftKey(requestDraftKey);
-    setUiState(createInitialUiState(request));
-    setSubmitErrorState(null);
-  }
 
   const normalizedDraft = useMemo(
     () => normalizeAgentQuestionDraft(request, uiState.draft),

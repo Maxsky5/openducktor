@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
-import { buildQuestionContentEntries, buildQuestionDraftKey } from "./agent-session-question-keys";
+import { buildQuestionCardKey, buildQuestionContentEntries } from "./agent-session-question-keys";
 
 const buildRequest = (overrides: Partial<AgentQuestionRequest> = {}): AgentQuestionRequest => ({
   requestId: "request-1",
@@ -18,39 +18,36 @@ const buildRequest = (overrides: Partial<AgentQuestionRequest> = {}): AgentQuest
   ...overrides,
 });
 
-describe("buildQuestionDraftKey", () => {
-  test("ignores the request id", () => {
+const baseQuestion = (
+  overrides: Partial<AgentQuestionRequest["questions"][number]> = {},
+): AgentQuestionRequest["questions"][number] => ({
+  header: "Scope",
+  question: "Which area should we prioritize?",
+  options: [{ label: "Frontend", description: "UI and interaction work" }],
+  multiple: false,
+  ...overrides,
+});
+
+describe("buildQuestionCardKey", () => {
+  test("keeps the key when the same request is re-projected", () => {
     const request = buildRequest();
-    expect(buildQuestionDraftKey({ ...request, requestId: "request-2" })).toBe(
-      buildQuestionDraftKey(request),
+    expect(buildQuestionCardKey("session-1", structuredClone(request))).toBe(
+      buildQuestionCardKey("session-1", request),
     );
   });
 
-  test("changes when the question content changes", () => {
+  test("changes the key when the request id changes", () => {
     const request = buildRequest();
-    const changed = buildRequest({
-      questions: [
-        {
-          header: "Scope",
-          question: "Which area should we prioritize first?",
-          options: request.questions[0]?.options ?? [],
-          multiple: false,
-        },
-      ],
-    });
-    expect(buildQuestionDraftKey(changed)).not.toBe(buildQuestionDraftKey(request));
+    expect(buildQuestionCardKey("session-1", { ...request, requestId: "request-2" })).not.toBe(
+      buildQuestionCardKey("session-1", request),
+    );
   });
 
-  test("separates subagent questions from direct questions", () => {
+  test("separates requests from different sessions", () => {
     const request = buildRequest();
-    const subagent = buildRequest({
-      source: {
-        kind: "subagent",
-        parentExternalSessionId: "parent-session",
-        childExternalSessionId: "child-session",
-      },
-    });
-    expect(buildQuestionDraftKey(subagent)).not.toBe(buildQuestionDraftKey(request));
+    expect(buildQuestionCardKey("session-2", request)).not.toBe(
+      buildQuestionCardKey("session-1", request),
+    );
   });
 });
 
@@ -60,5 +57,12 @@ describe("buildQuestionContentEntries", () => {
     expect(buildQuestionContentEntries(structuredClone(request.questions))).toEqual(
       buildQuestionContentEntries(request.questions),
     );
+  });
+
+  test("gives identical questions in one request distinct content keys", () => {
+    const request = buildRequest({ questions: [baseQuestion(), baseQuestion()] });
+    const [first, second] = buildQuestionContentEntries(request.questions);
+
+    expect(first?.contentKey).not.toBe(second?.contentKey);
   });
 });

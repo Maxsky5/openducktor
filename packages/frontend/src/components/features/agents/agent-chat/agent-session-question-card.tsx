@@ -64,6 +64,11 @@ export function AgentSessionQuestionCard({
     cn("h-7 gap-1 border px-2 transition-none", active ? "border-transparent" : "border-input");
   const getTabId = (tabId: string): string => `${tabGroupId}-tab-${tabId}`;
   const getPanelId = (tabId: string): string => `${tabGroupId}-panel-${tabId}`;
+  const goToQuestionTab = (index: number): void => {
+    const tabId = String(index);
+    setActiveTabId(tabId);
+    document.getElementById(getTabId(tabId))?.focus();
+  };
   const getTabPanelProps = (tabId: string): HTMLAttributes<HTMLDivElement> | undefined => {
     if (!hasMultipleQuestions) {
       return undefined;
@@ -191,9 +196,7 @@ export function AgentSessionQuestionCard({
           isSubmitting={isSubmitting}
           isComplete={isComplete}
           onReset={resetDraft}
-          onNext={
-            nextQuestionIndex === null ? undefined : () => setActiveTabId(String(nextQuestionIndex))
-          }
+          onNext={nextQuestionIndex === null ? undefined : () => goToQuestionTab(nextQuestionIndex)}
           onSubmit={() => {
             clearSubmitError();
             const answers = buildAnswers();

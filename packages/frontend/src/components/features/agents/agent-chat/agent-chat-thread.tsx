@@ -17,7 +17,7 @@ import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
-import { buildQuestionDraftKey } from "./agent-session-question-keys";
+import { buildQuestionCardKey } from "./agent-session-question-keys";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
@@ -253,7 +253,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
 
       {pendingQuestions.map((request) => (
         <AgentSessionQuestionCard
-          key={`${externalSessionId}:${buildQuestionDraftKey(request)}`}
+          key={buildQuestionCardKey(externalSessionId, request)}
           request={request}
           disabled={!canSubmitQuestionAnswers}
           isSubmitting={Boolean(isSubmittingQuestionByRequestId[request.requestId])}

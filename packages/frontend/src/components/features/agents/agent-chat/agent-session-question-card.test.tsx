@@ -240,7 +240,7 @@ describe("AgentSessionQuestionCard", () => {
     await harness.unmount();
   });
 
-  test("reuses question tab nodes when the request id changes with the same questions", async () => {
+  test("reuses question tab and option nodes when the request is re-projected", async () => {
     const request = buildRequest({
       questions: [
         {
@@ -266,7 +266,7 @@ describe("AgentSessionQuestionCard", () => {
     const optionBefore = screen.getByRole("button", { name: /Backend/ });
 
     await harness.rerender({
-      request: { ...structuredClone(request), requestId: "request-2" },
+      request: structuredClone(request),
       onSubmit,
     });
 
@@ -310,6 +310,35 @@ describe("AgentSessionQuestionCard", () => {
     await harness.clickButtonByText("Reset");
     expect(harness.getButtonDisabled("Confirm Answers")).toBe(true);
     expect(harness.asText()).toContain("Answer all questions to confirm.");
+
+    await harness.unmount();
+  });
+
+  test("moves focus to the next question tab when Next is pressed", async () => {
+    const harness = createCardHarness({
+      request: buildRequest({
+        questions: [
+          {
+            header: "First",
+            question: "Pick the first answer",
+            options: [{ label: "One", description: "First option" }],
+            multiple: false,
+          },
+          {
+            header: "Second",
+            question: "Pick the second answer",
+            options: [{ label: "Two", description: "Second option" }],
+            multiple: false,
+          },
+        ],
+      }),
+      onSubmit: async () => {},
+    });
+    await harness.mount();
+
+    await harness.clickButtonByText("Next");
+
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: /Second/i }));
 
     await harness.unmount();
   });
