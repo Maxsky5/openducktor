@@ -7,6 +7,7 @@ import {
 import {
   type AddInlineCommentDraftInput,
   resetInlineCommentDraftStoreForTests,
+  setInlineCommentDraftPersistenceErrorReporter,
   setInlineCommentDraftScheduleTaskForTests,
   setInlineCommentDraftStorageForTests,
   useInlineCommentDraftStore,
@@ -102,6 +103,7 @@ const writeStoredPayload = (
 };
 
 const originalDateNow = Date.now;
+let persistenceErrors: Error[] = [];
 
 const requireDraftRevision = (ownerKey: string, index: number): number => {
   const revision = useInlineCommentDraftStore.getState().draftsByOwner[ownerKey]?.[index]?.revision;
@@ -116,6 +118,10 @@ describe("use-inline-comment-draft-store", () => {
     resetInlineCommentDraftStoreForTests();
     setInlineCommentDraftStorageForTests(createMemoryStorage());
     setInlineCommentDraftScheduleTaskForTests(() => () => {});
+    persistenceErrors = [];
+    setInlineCommentDraftPersistenceErrorReporter((error) => {
+      persistenceErrors.push(error);
+    });
   });
 
   afterEach(() => {
@@ -564,6 +570,9 @@ describe("use-inline-comment-draft-store", () => {
       "storage_unavailable",
     );
     expect(useInlineCommentDraftStore.getState().getDraftCount(OWNER)).toBe(1);
+    expect(persistenceErrors.map((error) => error.message)).toEqual([
+      `Failed to persist git diff comment storage key "${OWNER}".`,
+    ]);
   });
 
   test("reports storage unavailability when hydration cannot read storage", () => {
@@ -575,5 +584,6 @@ describe("use-inline-comment-draft-store", () => {
     expect(useInlineCommentDraftStore.getState().getPersistenceWarning(OWNER)).toBe(
       "storage_unavailable",
     );
+    expect(persistenceErrors).toHaveLength(1);
   });
 });

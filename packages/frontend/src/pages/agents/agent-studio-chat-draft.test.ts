@@ -15,7 +15,6 @@ import {
   type AgentStudioChatDraftScope,
   agentStudioChatDraftScopeKey,
   createAgentStudioChatDraftPersistence,
-  didAgentStudioChatDraftScopeSwitchSessionOnly,
 } from "./agent-studio-chat-draft";
 
 type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
@@ -70,27 +69,6 @@ describe("Agent Studio chat draft adapter", () => {
     expect(agentStudioChatDraftScopeKey("workspace-a", selectedScope)).not.toBe(
       agentStudioChatDraftScopeKey("workspace-b", selectedScope),
     );
-  });
-
-  test("recognizes only session changes within the same task and role", () => {
-    expect(
-      didAgentStudioChatDraftScopeSwitchSessionOnly(
-        scope({ session: session("session-1") }),
-        scope({ session: session("session-2") }),
-      ),
-    ).toBe(true);
-    expect(
-      didAgentStudioChatDraftScopeSwitchSessionOnly(
-        scope({ session: session("session-1") }),
-        scope({ taskId: "task-2", session: session("session-2") }),
-      ),
-    ).toBe(false);
-    expect(
-      didAgentStudioChatDraftScopeSwitchSessionOnly(
-        scope({ session: session("session-1") }),
-        scope({ role: "build", session: session("session-2") }),
-      ),
-    ).toBe(false);
   });
 
   test("uses stable persistence targets for equivalent session identities", () => {

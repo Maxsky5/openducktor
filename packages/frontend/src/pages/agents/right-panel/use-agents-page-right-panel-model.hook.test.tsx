@@ -7,11 +7,20 @@ import {
   createDialogPreviewHarness,
   dialogTextFile,
 } from "@/components/features/agents/agent-chat/agent-session-dialog-preview-test-harness";
-import type { GitConflict, PullRequest } from "@openducktor/contracts";
+import type { FileDiff, GitConflict, PullRequest } from "@openducktor/contracts";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createQueryClient } from "@/lib/query-client";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { readInlineCommentDraftsFromStorage } from "@/state/inline-comment-draft-storage";
+import {
+  type AddInlineCommentDraftInput,
+  resetInlineCommentDraftStoreForTests,
+  setInlineCommentDraftScheduleTaskForTests,
+  setInlineCommentDraftStorageForTests,
+  toInlineCommentDraftOwnerKey,
+  useInlineCommentDraftStore,
+} from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -79,6 +88,83 @@ const createEmptyScopeState =
     statusHash: null,
     diffHash: null,
   });
+
+type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
+
+const createMemoryStorage = (): TestStorage => {
+  const values = new Map<string, string>();
+  return {
+    get length() {
+      return values.size;
+    },
+    key: (index) => Array.from(values.keys())[index] ?? null,
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
+    removeItem: (key) => {
+      values.delete(key);
+    },
+  };
+};
+
+const createFileDiff = (file: string): FileDiff => ({
+  file,
+  type: "modified",
+  additions: 1,
+  deletions: 0,
+  diff: "",
+});
+
+const createCommentInput = (
+  overrides: Partial<AddInlineCommentDraftInput> = {},
+): AddInlineCommentDraftInput => ({
+  filePath: "src/file.ts",
+  diffScope: "uncommitted",
+  startLine: 4,
+  endLine: 4,
+  side: "new",
+  text: "Please change this.",
+  codeContext: [{ lineNumber: 4, text: "const value = 1;", isSelected: true }],
+  language: "ts",
+  ...overrides,
+});
+
+const requireOwnerKey = (value: string | null): string => {
+  if (value === null) {
+    throw new Error("Expected an inline comment owner key.");
+  }
+  return value;
+};
+
+const COMMENT_OWNER_KEY = requireOwnerKey(
+  toInlineCommentDraftOwnerKey({ workspaceId: "workspace-repo", taskId: "task-1" }),
+);
+
+const seedStoredComments = async (inputs: AddInlineCommentDraftInput[]): Promise<void> => {
+  const store = useInlineCommentDraftStore.getState();
+  for (const input of inputs) {
+    store.addDraft(COMMENT_OWNER_KEY, input);
+  }
+  await store.flush();
+};
+
+const pendingCommentPaths = (): string[] =>
+  useInlineCommentDraftStore
+    .getState()
+    .getPendingDrafts(COMMENT_OWNER_KEY)
+    .map((draft) => draft.filePath);
+
+const setScopeState = (
+  snapshot: BuildToolsSnapshot,
+  scope: "uncommitted" | "target",
+  state: BuildToolsSnapshot["diffData"]["scopeStatesByScope"]["target"],
+): void => {
+  snapshot.diffData.scopeStatesByScope = {
+    ...snapshot.diffData.scopeStatesByScope,
+    [scope]: state,
+  };
+};
 
 const createSnapshot = (): BuildToolsSnapshot => ({
   isEnabled: true,
@@ -286,6 +372,7 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
 };
 
 beforeEach(async () => {
+  resetInlineCommentDraftStoreForTests();
   prefetchPullRequestReviewContextMock.mockClear();
   refreshWorktreeMock.mockClear();
   buildToolsSnapshotState.current = createSnapshot();
@@ -509,6 +596,96 @@ describe("useAgentsPageRightPanelModel", () => {
       queryInput: null,
       unavailableReason: readError,
     });
+
+    await harness.unmount();
+  });
+
+  test("drops restored comments for files missing from a loaded scope and persists the drop", async () => {
+    const storage = createMemoryStorage();
+    setInlineCommentDraftScheduleTaskForTests(() => () => {});
+    setInlineCommentDraftStorageForTests(storage);
+    await seedStoredComments([
+      createCommentInput({ filePath: "src/present.ts" }),
+      createCommentInput({ filePath: "src/missing.ts" }),
+    ]);
+
+    resetInlineCommentDraftStoreForTests();
+    setInlineCommentDraftScheduleTaskForTests(() => () => {});
+    setInlineCommentDraftStorageForTests(storage);
+    useInlineCommentDraftStore.getState().hydrate();
+    expect(pendingCommentPaths()).toEqual(["src/missing.ts", "src/present.ts"]);
+
+    const snapshot = createSnapshot();
+    setScopeState(snapshot, "uncommitted", {
+      ...createEmptyScopeState(),
+      fileDiffs: [createFileDiff("src/present.ts")],
+    });
+    buildToolsSnapshotState.current = snapshot;
+
+    const harness = createHookHarness(useAgentsPageRightPanelModel, createHookArgs());
+    await harness.mount();
+
+    expect(pendingCommentPaths()).toEqual(["src/present.ts"]);
+    const stored = readInlineCommentDraftsFromStorage({ storage, ownerKey: COMMENT_OWNER_KEY });
+    if (stored.status !== "restored") {
+      throw new Error("Expected restored comments after missing-file validation.");
+    }
+    expect(stored.comments.map((comment) => comment.filePath)).toEqual(["src/present.ts"]);
+
+    await harness.unmount();
+  });
+
+  test("skips unloaded and failed scopes and validates each owner scope once", async () => {
+    const storage = createMemoryStorage();
+    setInlineCommentDraftScheduleTaskForTests(() => () => {});
+    setInlineCommentDraftStorageForTests(storage);
+    await seedStoredComments([
+      createCommentInput({ filePath: "src/missing-uncommitted.ts" }),
+      createCommentInput({ filePath: "src/missing-target.ts", diffScope: "target" }),
+    ]);
+
+    resetInlineCommentDraftStoreForTests();
+    setInlineCommentDraftScheduleTaskForTests(() => () => {});
+    setInlineCommentDraftStorageForTests(storage);
+    useInlineCommentDraftStore.getState().hydrate();
+
+    const snapshot = createSnapshot();
+    snapshot.diffData.loadedScopesByScope = { target: false, uncommitted: false };
+    buildToolsSnapshotState.current = snapshot;
+
+    const harness = createHookHarness(useAgentsPageRightPanelModel, createHookArgs());
+    await harness.mount();
+    expect(pendingCommentPaths()).toEqual(["src/missing-target.ts", "src/missing-uncommitted.ts"]);
+
+    snapshot.diffData.loadedScopesByScope = { target: false, uncommitted: true };
+    setScopeState(snapshot, "uncommitted", createEmptyScopeState());
+    await harness.update(createHookArgs());
+    expect(pendingCommentPaths()).toEqual(["src/missing-target.ts"]);
+
+    snapshot.diffData.loadedScopesByScope = { target: true, uncommitted: true };
+    setScopeState(snapshot, "target", {
+      ...createEmptyScopeState(),
+      error: "Failed to load the target diff.",
+    });
+    await harness.update(createHookArgs());
+    expect(pendingCommentPaths()).toEqual(["src/missing-target.ts"]);
+
+    setScopeState(snapshot, "target", createEmptyScopeState());
+    await harness.update(createHookArgs());
+    expect(pendingCommentPaths()).toEqual([]);
+
+    useInlineCommentDraftStore
+      .getState()
+      .addDraft(
+        COMMENT_OWNER_KEY,
+        createCommentInput({ filePath: "src/late.ts", diffScope: "target" }),
+      );
+    setScopeState(snapshot, "target", {
+      ...createEmptyScopeState(),
+      fileDiffs: [createFileDiff("src/other.ts")],
+    });
+    await harness.update(createHookArgs());
+    expect(pendingCommentPaths()).toEqual(["src/late.ts"]);
 
     await harness.unmount();
   });

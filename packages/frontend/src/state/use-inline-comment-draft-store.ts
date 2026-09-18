@@ -86,6 +86,8 @@ type InlineCommentDraftStorage = Pick<
   "length" | "key" | "getItem" | "setItem" | "removeItem"
 >;
 
+type PersistenceErrorReporter = (error: Error) => void;
+
 type OwnerPersistenceEntry = {
   version: number;
   persistedVersion: number;
@@ -106,6 +108,9 @@ let storageOverride: InlineCommentDraftStorage | null = null;
 let nowProvider = (): Date => new Date();
 let scheduleFlushTask: ScheduleTask = scheduleTask;
 let didRunHydration = false;
+let persistenceErrorReporter: PersistenceErrorReporter = (error) => {
+  console.error(error);
+};
 
 let nextId = 0;
 let nextRevision = 0;
@@ -195,7 +200,7 @@ const getInlineCommentStorage = (): InlineCommentDraftStorage => {
 };
 
 const reportPersistenceError = (cause: unknown): void => {
-  console.error(cause instanceof Error ? cause : new Error(String(cause)));
+  persistenceErrorReporter(cause instanceof Error ? cause : new Error(String(cause)));
 };
 
 const toPersistedDraft = (draft: InlineCommentDraft): PersistedInlineCommentDraft => ({
@@ -670,6 +675,12 @@ export const setInlineCommentDraftStorageForTests = (
   storageOverride = storage;
 };
 
+export const setInlineCommentDraftPersistenceErrorReporter = (
+  reporter: PersistenceErrorReporter,
+): void => {
+  persistenceErrorReporter = reporter;
+};
+
 export const setInlineCommentDraftNowProviderForTests = (provider: (() => Date) | null): void => {
   nowProvider = provider ?? (() => new Date());
 };
@@ -688,6 +699,9 @@ export const resetInlineCommentDraftStoreForTests = (): void => {
   nowProvider = () => new Date();
   scheduleFlushTask = scheduleTask;
   didRunHydration = false;
+  persistenceErrorReporter = (error) => {
+    console.error(error);
+  };
   useInlineCommentDraftStore.setState({
     draftsByOwner: {},
     persistenceWarningsByOwner: {},
