@@ -14,6 +14,7 @@ export const withViteTestServer = async (
       root: directory,
       configFile: false,
       ...options,
+      server: { fs: { strict: false }, ...options.server },
       cacheDir: path.join(directory, ".vite"),
     });
     try {
