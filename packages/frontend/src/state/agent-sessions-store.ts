@@ -33,7 +33,6 @@ type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) =>
   collection: AgentSessionCollection;
   result: Result;
 };
-
 export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
@@ -103,12 +102,10 @@ export const createAgentSessionsStore = (
     }));
   };
 
-  // A repository switch drops the late result of a running load. Return an
-  // unfinished load to not requested, so the next visit requests the baseline
-  // history again.
-  const reopenInterruptedHistoryLoads = (
-    collection: AgentSessionCollection,
-  ): AgentSessionCollection => {
+  // A repository switch drops the late result of an unfinished history load.
+  // Return it to not requested, so the next visit requests the baseline history
+  // again.
+  const resetLoadingHistoryLoads = (collection: AgentSessionCollection): AgentSessionCollection => {
     let next = collection;
     for (const session of listAgentSessions(collection)) {
       if (session.historyLoadState === "loading") {
@@ -122,7 +119,7 @@ export const createAgentSessionsStore = (
     if (workspaceRepoPath === null) {
       return;
     }
-    retainedCollections.set(workspaceRepoPath, reopenInterruptedHistoryLoads(sessionCollection));
+    retainedCollections.set(workspaceRepoPath, resetLoadingHistoryLoads(sessionCollection));
   };
 
   const activateCollection = (repoPath: string | null): AgentSessionCollection => {
