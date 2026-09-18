@@ -15,59 +15,36 @@ import {
   type SetPlanResult,
   type SetPullRequestResult,
   type SetSpecResult,
-  type TaskCard,
   type TaskDocumentsRead,
   type TaskSummary,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType } from "zod";
+import { parseResponse, parseToolInput } from "./odt-mcp-bridge-model";
+import { executeOdtMcpMutationTool } from "./odt-mcp-bridge-mutation-tools";
+import { executeOdtMcpReadTool } from "./odt-mcp-bridge-read-tools";
 import {
-  HostOperationError,
-  type HostOperationErrorAggregate,
-  HostValidationError,
-  type HostValidationErrorAggregate,
-} from "../../effect/host-errors";
-import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
-import type { TaskService, TaskServiceError } from "../tasks/task-service";
-import type {
-  WorkspaceSettingsError,
-  WorkspaceSettingsService,
-} from "../workspaces/workspace-settings-service";
-import {
-  activeStatuses,
-  buildTaskUpdatePatch,
-  createdSubtaskIds,
-  directSubtaskIds,
-  latestDocument,
-  latestQaReport,
-  mapPublicTask,
-  mapTaskSummary,
-  normalizeKey,
-  parseResponse,
-  parseToolInput,
-  persistedDocument,
-  resolveTaskReference,
-} from "./odt-mcp-bridge-model";
+  createOdtMcpToolContext,
+  type CreateOdtMcpToolContextInput,
+  type OdtMcpBridgeError,
+  type OdtMcpReadToolName,
+} from "./odt-mcp-bridge-tool-context";
+
+export type { OdtMcpBridgeError } from "./odt-mcp-bridge-tool-context";
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
 
-const compareTaskSearchResults = (
-  left: Pick<TaskCard, "id" | "updatedAt">,
-  right: Pick<TaskCard, "id" | "updatedAt">,
-): number => {
-  const updatedAtOrder = right.updatedAt.localeCompare(left.updatedAt);
-  if (updatedAtOrder !== 0) {
-    return updatedAtOrder;
-  }
-  return left.id.localeCompare(right.id);
-};
+const READ_TOOL_NAMES: ReadonlySet<WorkspaceScopedOdtToolName> = new Set([
+  "odt_read_task",
+  "odt_read_task_assets",
+  "odt_read_task_documents",
+  "odt_search_tasks",
+]);
 
-export type OdtMcpBridgeError =
-  | HostOperationErrorAggregate
-  | HostValidationErrorAggregate
-  | TaskServiceError
-  | WorkspaceSettingsError;
+const isOdtMcpReadToolName = (
+  toolName: WorkspaceScopedOdtToolName,
+): toolName is OdtMcpReadToolName => READ_TOOL_NAMES.has(toolName);
 
 export type WorkspaceScopedOdtToolResult =
   | BuildBlockedResult
@@ -92,55 +69,11 @@ export type OdtMcpBridgeService = {
     input: JSONType,
   ): Effect.Effect<WorkspaceScopedOdtToolResult, OdtMcpBridgeError>;
 };
-export type CreateOdtMcpBridgeServiceInput = {
-  taskAssetReadService: Pick<TaskAssetReadService, "readBatch">;
-  taskService: Pick<
-    TaskService,
-    | "buildBlocked"
-    | "buildCompleted"
-    | "buildResumed"
-    | "createTask"
-    | "getTaskMetadata"
-    | "linkPullRequest"
-    | "listTasks"
-    | "qaApproved"
-    | "qaRejected"
-    | "setPlan"
-    | "setSpec"
-    | "updateTask"
-  >;
-  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig" | "listWorkspaces">;
-};
-export const createOdtMcpBridgeService = ({
-  taskAssetReadService,
-  taskService,
-  workspaceSettingsService,
-}: CreateOdtMcpBridgeServiceInput): OdtMcpBridgeService => {
-  const repoPathForWorkspace = (workspaceId: string) =>
-    Effect.gen(function* () {
-      const repoConfig = yield* workspaceSettingsService.getRepoConfig(workspaceId);
-      return repoConfig.repoPath;
-    });
-  const tasksForWorkspace = (workspaceId: string) =>
-    Effect.gen(function* () {
-      const repoPath = yield* repoPathForWorkspace(workspaceId);
-      return yield* taskService.listTasks({ repoPath });
-    });
-  const taskForWorkspace = (workspaceId: string, taskId: string) =>
-    Effect.gen(function* () {
-      const tasks = yield* tasksForWorkspace(workspaceId);
-      return yield* Effect.try({
-        try: () => resolveTaskReference(tasks, taskId),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-            details: {
-              operation: "odt_mcp_bridge.resolve_task_reference",
-            },
-          }),
-      });
-    });
+export type CreateOdtMcpBridgeServiceInput = CreateOdtMcpToolContextInput;
+export const createOdtMcpBridgeService = (
+  input: CreateOdtMcpBridgeServiceInput,
+): OdtMcpBridgeService => {
+  const context = createOdtMcpToolContext(input);
   const service: OdtMcpBridgeService = {
     ready() {
       return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
@@ -153,328 +86,16 @@ export const createOdtMcpBridgeService = ({
           input ?? {},
         );
         return yield* parseResponse("odt_get_workspaces", RESPONSE_SCHEMAS.odt_get_workspaces, {
-          workspaces: yield* workspaceSettingsService.listWorkspaces(),
+          workspaces: yield* context.workspaceSettingsService.listWorkspaces(),
         });
       });
     },
     invoke(toolName, input) {
       return Effect.gen(function* () {
-        switch (toolName) {
-          case "odt_create_task": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-            const created = yield* taskService.createTask({
-              repoPath,
-              task: {
-                title: parsed.title,
-                issueType: parsed.issueType,
-                priority: parsed.priority,
-                description: parsed.description,
-                labels: parsed.labels,
-                aiReviewEnabled: parsed.aiReviewEnabled ?? true,
-              },
-            });
-            return yield* parseResponse(
-              toolName,
-              RESPONSE_SCHEMAS.odt_create_task,
-              mapTaskSummary(created),
-            );
-          }
-          case "odt_search_tasks": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const tasks = (yield* tasksForWorkspace(parsed.workspaceId ?? "")).filter((task) => {
-              if (!activeStatuses.has(task.status)) {
-                return false;
-              }
-              if (parsed.priority !== undefined && task.priority !== parsed.priority) {
-                return false;
-              }
-              if (parsed.issueType !== undefined && task.issueType !== parsed.issueType) {
-                return false;
-              }
-              if (parsed.status !== undefined && task.status !== parsed.status) {
-                return false;
-              }
-              if (
-                parsed.title !== undefined &&
-                !normalizeKey(task.title).includes(normalizeKey(parsed.title))
-              ) {
-                return false;
-              }
-              if (parsed.tags !== undefined) {
-                const labels = new Set(task.labels.map(normalizeKey));
-                return parsed.tags.every((tag) => labels.has(normalizeKey(tag)));
-              }
-              return true;
-            });
-            tasks.sort(compareTaskSearchResults);
-            const results = tasks.slice(0, parsed.limit).map(mapTaskSummary);
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_search_tasks, {
-              results,
-              limit: parsed.limit,
-              totalCount: tasks.length,
-              hasMore: tasks.length > results.length,
-            });
-          }
-          case "odt_read_task_assets": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const batch = yield* taskAssetReadService
-              .readBatch({
-                workspaceId: parsed.workspaceId ?? "",
-                taskId: task.id,
-                scope: "description",
-                assetIds: parsed.assetIds,
-              })
-              .pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new HostOperationError({
-                      operation: "odt_mcp_bridge.read_task_assets",
-                      message: cause.message,
-                      cause,
-                      details: {
-                        taskId: task.id,
-                        assetIds: parsed.assetIds,
-                        failedPhase: cause.failedPhase,
-                      },
-                    }),
-                ),
-              );
-            if (batch.kind === "missing") {
-              return yield* new HostValidationError({
-                field: "assetIds",
-                message: "One or more requested task description assets were not found.",
-                details: {
-                  field: "assetIds",
-                  taskId: task.id,
-                  missingAssetIds: batch.assetIds,
-                },
-              });
-            }
-            if (batch.kind === "too_large") {
-              return yield* new HostValidationError({
-                field: "assetIds",
-                message: "Requested task description assets exceed the per-call byte limit.",
-                details: {
-                  field: "assetIds",
-                  taskId: task.id,
-                  requestedBytes: batch.requestedBytes,
-                  maxBytes: batch.maxBytes,
-                },
-              });
-            }
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_read_task_assets, {
-              assets: batch.assets.map(({ assetId, asset }) => ({
-                assetId,
-                mediaType: asset.mediaType,
-                byteSize: asset.bytes.byteLength,
-                dataBase64: Buffer.from(asset.bytes).toString("base64"),
-              })),
-            });
-          }
-          case "odt_read_task": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            return yield* parseResponse(
-              toolName,
-              RESPONSE_SCHEMAS.odt_read_task,
-              mapTaskSummary(yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId)),
-            );
-          }
-          case "odt_read_task_documents": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const metadata = yield* taskService.getTaskMetadata({ repoPath, taskId: task.id });
-            const documents: TaskDocumentsRead["documents"] = {};
-            if (parsed.includeSpec) {
-              documents.spec = latestDocument(metadata.spec);
-            }
-            if (parsed.includePlan) {
-              documents.implementationPlan = latestDocument(metadata.plan);
-            }
-            if (parsed.includeQaReport) {
-              documents.latestQaReport = latestQaReport(metadata.qaReport);
-            }
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_read_task_documents, {
-              documents,
-            });
-          }
-          case "odt_update_task": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            if (task.issueType === "epic") {
-              return yield* new HostValidationError({
-                field: "taskId",
-                message: "Epic tasks cannot be updated by the public MCP update tool.",
-                details: { taskId: task.id },
-              });
-            }
-            const patch = buildTaskUpdatePatch(task, parsed);
-            if (Object.keys(patch).length === 0) {
-              return yield* parseResponse(
-                toolName,
-                RESPONSE_SCHEMAS.odt_update_task,
-                mapTaskSummary(task),
-              );
-            }
-            const updated = yield* taskService.updateTask({
-              repoPath,
-              taskId: task.id,
-              patch,
-            });
-            return yield* parseResponse(
-              toolName,
-              RESPONSE_SCHEMAS.odt_update_task,
-              mapTaskSummary(updated),
-            );
-          }
-          case "odt_set_spec": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const document = yield* taskService.setSpec({
-              repoPath,
-              taskId: task.id,
-              markdown: parsed.markdown,
-            });
-            const updated = yield* taskForWorkspace(parsed.workspaceId ?? "", task.id);
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_set_spec, {
-              task: mapPublicTask(updated),
-              document: persistedDocument(document, toolName),
-            });
-          }
-          case "odt_set_plan": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-            const beforeTasks = yield* tasksForWorkspace(parsed.workspaceId ?? "");
-            const task = yield* Effect.try({
-              try: () => resolveTaskReference(beforeTasks, parsed.taskId),
-              catch: (cause) =>
-                new HostValidationError({
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause,
-                  details: {
-                    operation: "odt_mcp_bridge.resolve_task_reference",
-                  },
-                }),
-            });
-            const previousSubtaskIds = directSubtaskIds(beforeTasks, task.id);
-            const plan = yield* taskService.setPlan({
-              repoPath,
-              taskId: task.id,
-              markdown: parsed.markdown,
-              subtasks: [],
-              hasExplicitSubtasks: false,
-            });
-            const document = plan.document;
-            const afterTasks = yield* tasksForWorkspace(parsed.workspaceId ?? "");
-            const updated = yield* Effect.try({
-              try: () => resolveTaskReference(afterTasks, task.id),
-              catch: (cause) =>
-                new HostValidationError({
-                  message: cause instanceof Error ? cause.message : String(cause),
-                  cause,
-                  details: {
-                    operation: "odt_mcp_bridge.resolve_task_reference",
-                  },
-                }),
-            });
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_set_plan, {
-              task: mapPublicTask(updated),
-              document: persistedDocument(document, toolName),
-              createdSubtaskIds: createdSubtaskIds(previousSubtaskIds, afterTasks, task.id),
-            });
-          }
-          case "odt_build_blocked": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const updated = yield* taskService.buildBlocked({
-              repoPath,
-              taskId: task.id,
-              reason: parsed.reason,
-            });
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_build_blocked, {
-              task: mapPublicTask(updated),
-              reason: parsed.reason.trim(),
-            });
-          }
-          case "odt_build_resumed": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const updated = yield* taskService.buildResumed({ repoPath, taskId: task.id });
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_build_resumed, {
-              task: mapPublicTask(updated),
-            });
-          }
-          case "odt_build_completed": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const completionInput: Parameters<TaskService["buildCompleted"]>[0] = {
-              repoPath,
-              taskId: task.id,
-            };
-            if (parsed.summary !== undefined) {
-              completionInput.summary = parsed.summary;
-            }
-            const updated = yield* taskService.buildCompleted(completionInput);
-            const response: BuildCompletedResult = {
-              task: mapPublicTask(updated),
-            };
-            if (parsed.summary !== undefined) {
-              response.summary = parsed.summary;
-            }
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_build_completed, response);
-          }
-          case "odt_set_pull_request": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const repoConfig = yield* workspaceSettingsService.getRepoConfig(
-              parsed.workspaceId ?? "",
-            );
-            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const pullRequest = yield* taskService.linkPullRequest({
-              repoPath: repoConfig.repoPath,
-              taskId: task.id,
-              providerId: parsed.providerId,
-              number: parsed.number,
-            });
-            const updated = yield* taskForWorkspace(parsed.workspaceId ?? "", task.id);
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_set_pull_request, {
-              task: mapPublicTask(updated),
-              pullRequest,
-            });
-          }
-          case "odt_qa_approved": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const updated = yield* taskService.qaApproved({
-              repoPath,
-              taskId: task.id,
-              markdown: parsed.reportMarkdown,
-            });
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_qa_approved, {
-              task: mapPublicTask(updated),
-            });
-          }
-          case "odt_qa_rejected": {
-            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
-            const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-            const updated = yield* taskService.qaRejected({
-              repoPath,
-              taskId: task.id,
-              markdown: parsed.reportMarkdown,
-            });
-            return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_qa_rejected, {
-              task: mapPublicTask(updated),
-            });
-          }
+        if (isOdtMcpReadToolName(toolName)) {
+          return yield* executeOdtMcpReadTool(context, toolName, input);
         }
+        return yield* executeOdtMcpMutationTool(context, toolName, input);
       });
     },
   };
