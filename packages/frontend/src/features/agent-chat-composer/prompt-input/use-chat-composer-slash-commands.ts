@@ -10,15 +10,11 @@ import type {
   AgentSlashCommandCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
-import {
-  resolveRuntimeCatalogSurface,
-  runtimeCatalogQueryOptions,
-  skippedRuntimeCatalogQueryOptions,
-} from "@/state/queries/runtime-catalog";
+import { resolveRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
+import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
 
 export const mergeSlashCommands = (
   runtimeSlashCommands: AgentSlashCommand[],
@@ -70,13 +66,10 @@ export const useChatComposerSlashCommands = ({
   reusablePrompts: ReusablePrompt[];
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 }) => {
-  const runtimeRef =
-    promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
-  const slashCommandsQuery = useQuery({
-    ...(runtimeRef
-      ? runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions()),
-    enabled: runtimeRef !== null && runtimeSupportsSlashCommands,
+  const slashCommandsQuery = useChatComposerRuntimeCatalogQuery({
+    promptInputRuntime,
+    supports: runtimeSupportsSlashCommands,
+    loadRuntimeCatalog,
   });
   const surface = resolveRuntimeCatalogSurface(
     slashCommandsQuery.data?.slashCommands,

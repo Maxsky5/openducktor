@@ -3,13 +3,9 @@ import type {
   AgentSubagentCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
-import {
-  resolveRuntimeCatalogSurface,
-  runtimeCatalogQueryOptions,
-  skippedRuntimeCatalogQueryOptions,
-} from "@/state/queries/runtime-catalog";
+import { resolveRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
+import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
 
 const EMPTY_SUBAGENT_CATALOG: AgentSubagentCatalog = { subagents: [] };
 
@@ -24,13 +20,10 @@ export const useChatComposerSubagents = ({
   supportsSubagentReferences,
   loadRuntimeCatalog,
 }: UseChatComposerSubagentsArgs) => {
-  const runtimeRef =
-    promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
-  const catalogQuery = useQuery({
-    ...(runtimeRef
-      ? runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions()),
-    enabled: runtimeRef !== null && supportsSubagentReferences,
+  const catalogQuery = useChatComposerRuntimeCatalogQuery({
+    promptInputRuntime,
+    supports: supportsSubagentReferences,
+    loadRuntimeCatalog,
   });
   const surface = resolveRuntimeCatalogSurface(catalogQuery.data?.subagents, catalogQuery.error);
 
@@ -47,7 +40,7 @@ export const useChatComposerSubagents = ({
 
   return {
     subagentCatalog: catalog,
-    subagents: supportsSubagentReferences ? catalog.subagents : [],
+    subagents: catalog.subagents,
     subagentsError: error,
     isSubagentsLoading: isLoading,
   } satisfies {

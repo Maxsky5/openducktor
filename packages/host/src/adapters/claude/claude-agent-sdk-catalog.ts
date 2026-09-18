@@ -46,6 +46,30 @@ export type ClaudeCatalogQueryFactory = (input: {
   "close" | "initializationResult" | "supportedAgents" | "supportedCommands" | "supportedModels"
 >;
 
+export const loadClaudeRuntimeCatalog = async (
+  input: ListAgentRuntimeCatalogInput,
+  processEnv: NodeJS.ProcessEnv | undefined,
+  claudeExecutablePath: string,
+  createQuery: ClaudeCatalogQueryFactory,
+): Promise<AgentRuntimeCatalogRead> => {
+  const session = await openClaudeCatalogSession(
+    input.workingDirectory,
+    {
+      ...processEnv,
+      // The SDK otherwise completes initialization while inherited MCP servers are
+      // still pending, which leaves their prompts out of supportedCommands().
+      MCP_CONNECTION_NONBLOCKING: "0",
+    },
+    claudeExecutablePath,
+    createQuery,
+  );
+  try {
+    return await readClaudeCatalogSurfaces(session.sdkQuery);
+  } finally {
+    closeClaudeCatalogSession(session);
+  }
+};
+
 const openClaudeCatalogSession = async (
   cwd: string,
   processEnv: NodeJS.ProcessEnv | undefined,
@@ -81,13 +105,6 @@ const closeClaudeCatalogSession = ({ queue, sdkQuery }: ClaudeCatalogSession): v
   sdkQuery.close();
 };
 
-export const toClaudeModelCatalog = (models: ModelInfo[]): AgentModelCatalog => ({
-  runtime: CLAUDE_RUNTIME_DESCRIPTOR,
-  models: models.map((model) => toClaudeModelDescriptor(model)),
-  defaultModelsByProvider: models[0] ? { claude: models[0].value } : {},
-  profiles: [],
-});
-
 const readClaudeCatalogSurfaces = async (
   sdkQuery: ClaudeCatalogQuery,
 ): Promise<AgentRuntimeCatalogRead> => {
@@ -109,29 +126,12 @@ const readClaudeCatalogSurfaces = async (
   return { runtime: CLAUDE_RUNTIME_DESCRIPTOR, models, slashCommands, skills, subagents };
 };
 
-export const loadClaudeRuntimeCatalog = async (
-  input: ListAgentRuntimeCatalogInput,
-  processEnv: NodeJS.ProcessEnv | undefined,
-  claudeExecutablePath: string,
-  createQuery: ClaudeCatalogQueryFactory,
-): Promise<AgentRuntimeCatalogRead> => {
-  const session = await openClaudeCatalogSession(
-    input.workingDirectory,
-    {
-      ...processEnv,
-      // The SDK otherwise completes initialization while inherited MCP servers are
-      // still pending, which leaves their prompts out of supportedCommands().
-      MCP_CONNECTION_NONBLOCKING: "0",
-    },
-    claudeExecutablePath,
-    createQuery,
-  );
-  try {
-    return await readClaudeCatalogSurfaces(session.sdkQuery);
-  } finally {
-    closeClaudeCatalogSession(session);
-  }
-};
+export const toClaudeModelCatalog = (models: ModelInfo[]): AgentModelCatalog => ({
+  runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+  models: models.map((model) => toClaudeModelDescriptor(model)),
+  defaultModelsByProvider: models[0] ? { claude: models[0].value } : {},
+  profiles: [],
+});
 
 export const toClaudeModelDescriptor = (model: ModelInfo): AgentModelDescriptor => ({
   id: model.value,

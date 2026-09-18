@@ -9,12 +9,6 @@ export type AgentRuntimeCatalogSurface<Catalog> =
   | { status: "available"; catalog: Catalog }
   | { status: "failed"; message: string };
 
-const catalogSurfaceSchema = <CatalogSchema extends z.ZodType>(catalogSchema: CatalogSchema) =>
-  z.discriminatedUnion("status", [
-    z.object({ status: z.literal("available"), catalog: catalogSchema }).strict(),
-    z.object({ status: z.literal("failed"), message: z.string().trim().min(1) }).strict(),
-  ]);
-
 export const agentRuntimeCatalogSchema = z
   .object({
     runtime: runtimeDescriptorSchema.optional(),
@@ -25,3 +19,10 @@ export const agentRuntimeCatalogSchema = z
   })
   .strict();
 export type AgentRuntimeCatalog = z.infer<typeof agentRuntimeCatalogSchema>;
+
+function catalogSurfaceSchema<CatalogSchema extends z.ZodType>(catalogSchema: CatalogSchema) {
+  return z.discriminatedUnion("status", [
+    z.object({ status: z.literal("available"), catalog: catalogSchema }).strict(),
+    z.object({ status: z.literal("failed"), message: z.string().trim().min(1) }).strict(),
+  ]);
+}

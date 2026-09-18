@@ -3,13 +3,9 @@ import type {
   AgentSkillCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
-import {
-  resolveRuntimeCatalogSurface,
-  runtimeCatalogQueryOptions,
-  skippedRuntimeCatalogQueryOptions,
-} from "@/state/queries/runtime-catalog";
+import { resolveRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
+import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
 
 const EMPTY_SKILL_CATALOG: AgentSkillCatalog = { skills: [] };
 
@@ -24,13 +20,10 @@ export const useChatComposerSkills = ({
   supportsSkillReferences,
   loadRuntimeCatalog,
 }: UseChatComposerSkillsArgs) => {
-  const runtimeRef =
-    promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
-  const catalogQuery = useQuery({
-    ...(runtimeRef
-      ? runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions()),
-    enabled: runtimeRef !== null && supportsSkillReferences,
+  const catalogQuery = useChatComposerRuntimeCatalogQuery({
+    promptInputRuntime,
+    supports: supportsSkillReferences,
+    loadRuntimeCatalog,
   });
   const surface = resolveRuntimeCatalogSurface(catalogQuery.data?.skills, catalogQuery.error);
 
@@ -47,7 +40,7 @@ export const useChatComposerSkills = ({
 
   return {
     skillCatalog: catalog,
-    skills: supportsSkillReferences ? catalog.skills : [],
+    skills: catalog.skills,
     skillsError: error,
     isSkillsLoading: isLoading,
   } satisfies {

@@ -41,147 +41,6 @@ type ClientFactoryFor<Namespace extends keyof ReturnType<ClientFactory>> = (
   input: Parameters<ClientFactory>[0],
 ) => Pick<ReturnType<ClientFactory>, Namespace>;
 
-const resolveAgentColor = (
-  agentName: string,
-  explicitColor: string | undefined,
-  isNative: boolean | undefined,
-): string | undefined => {
-  if (explicitColor?.trim()) {
-    return explicitColor;
-  }
-
-  if (isNative !== true) {
-    return undefined;
-  }
-
-  const normalizedName = agentName.trim().toLowerCase();
-  return OPENCODE_DEFAULT_AGENT_COLORS.get(normalizedName);
-};
-
-const readAgentList = async (
-  client: Pick<ReturnType<ClientFactory>, "app">,
-  workingDirectory: string,
-): Promise<ParsedOpencodeAgent[]> => {
-  const payload = unwrapData(
-    await client.app.agents({ directory: workingDirectory }),
-    "list agents",
-  );
-  return opencodeAgentListPayloadSchema.parse(payload);
-};
-
-const normalizeFileSearchPath = (rawPath: string, workingDirectory: string): string => {
-  const trimmedPath = rawPath.trim();
-  if (trimmedPath.length === 0) {
-    throw new Error("Invalid file search payload: expected non-empty file paths.");
-  }
-
-  return toProjectRelativePath(trimmedPath, workingDirectory);
-};
-
-const toFileSearchResult = (rawPath: string, workingDirectory: string): AgentFileSearchResult => {
-  const path = normalizeFileSearchPath(rawPath, workingDirectory);
-  const name = basename(path);
-  return {
-    id: path,
-    path,
-    name: name.length > 0 ? name : path,
-    kind: detectAgentFileReferenceKind({
-      filePath: path,
-      isDirectory: /[\\/]\s*$/.test(rawPath),
-    }),
-  };
-};
-
-const toFileSearchResults = (
-  payload: string[],
-  workingDirectory: string,
-): AgentFileSearchResult[] => {
-  return payload.map((entry) => toFileSearchResult(entry, workingDirectory));
-};
-
-const toOpencodeProfiles = (
-  agentsData: ParsedOpencodeAgent[],
-): NonNullable<AgentModelCatalog["profiles"]> =>
-  agentsData
-    .map((agent) => {
-      const resolvedColor = resolveAgentColor(agent.name, agent.color, agent.native);
-      const profile: NonNullable<AgentModelCatalog["profiles"]>[number] & { label: string } = {
-        id: agent.name,
-        label: agent.name,
-        mode: agent.mode,
-      };
-      if (agent.description) {
-        profile.description = agent.description;
-      }
-      if (agent.hidden !== undefined) {
-        profile.hidden = agent.hidden;
-      }
-      if (agent.native !== undefined) {
-        profile.native = agent.native;
-      }
-      if (resolvedColor !== undefined) {
-        profile.color = resolvedColor;
-      }
-      return profile;
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
-
-const toOpencodeSubagentCatalog = (agentsData: ParsedOpencodeAgent[]): AgentSubagentCatalog => {
-  const subagents = agentsData
-    .map((agent) => {
-      const trimmedName = agent.name.trim();
-      if (agent.hidden === true || agent.mode === "primary") {
-        return null;
-      }
-
-      const trimmedDescription = agent.description?.trim();
-      const subagent: NonNullable<AgentSubagentCatalog["subagents"]>[number] & {
-        label: string;
-      } = {
-        id: trimmedName,
-        name: trimmedName,
-        label: trimmedName,
-      };
-      if (trimmedDescription) {
-        subagent.description = trimmedDescription;
-      }
-      return subagent;
-    })
-    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-    .sort((left, right) => left.label.localeCompare(right.label));
-
-  return subagentCatalogSchema.parse({ subagents });
-};
-
-const toOpencodeSlashCommandCatalog = (
-  commands: ParsedOpencodeSlashCommand[],
-): AgentSlashCommandCatalog => {
-  const catalogCommands = commands
-    .map((command) => {
-      const entry: AgentSlashCommandCatalog["commands"][number] = {
-        id: command.name,
-        trigger: command.name,
-        title: command.name,
-        hints: command.hints,
-      };
-      if (command.description) {
-        entry.description = command.description;
-      }
-      if (command.source) {
-        entry.source = command.source;
-      }
-      return entry;
-    })
-    .sort((left, right) => left.trigger.localeCompare(right.trigger));
-
-  return slashCommandCatalogSchema.parse({
-    commands: [
-      MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
-      ...catalogCommands.filter((command) => command.trigger.toLowerCase() !== "compact"),
-    ],
-  });
-};
-
 type OpencodeRuntimeCatalogInput = OpencodeRuntimeClientInput & {
   repoPath: string;
 };
@@ -269,4 +128,145 @@ export const searchFiles = async (
   } catch (error) {
     throw toOpenCodeRequestError("search files", error);
   }
+};
+
+const toOpencodeProfiles = (
+  agentsData: ParsedOpencodeAgent[],
+): NonNullable<AgentModelCatalog["profiles"]> =>
+  agentsData
+    .map((agent) => {
+      const resolvedColor = resolveAgentColor(agent.name, agent.color, agent.native);
+      const profile: NonNullable<AgentModelCatalog["profiles"]>[number] & { label: string } = {
+        id: agent.name,
+        label: agent.name,
+        mode: agent.mode,
+      };
+      if (agent.description) {
+        profile.description = agent.description;
+      }
+      if (agent.hidden !== undefined) {
+        profile.hidden = agent.hidden;
+      }
+      if (agent.native !== undefined) {
+        profile.native = agent.native;
+      }
+      if (resolvedColor !== undefined) {
+        profile.color = resolvedColor;
+      }
+      return profile;
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+const toOpencodeSubagentCatalog = (agentsData: ParsedOpencodeAgent[]): AgentSubagentCatalog => {
+  const subagents = agentsData
+    .map((agent) => {
+      const trimmedName = agent.name.trim();
+      if (agent.hidden === true || agent.mode === "primary") {
+        return null;
+      }
+
+      const trimmedDescription = agent.description?.trim();
+      const subagent: NonNullable<AgentSubagentCatalog["subagents"]>[number] & {
+        label: string;
+      } = {
+        id: trimmedName,
+        name: trimmedName,
+        label: trimmedName,
+      };
+      if (trimmedDescription) {
+        subagent.description = trimmedDescription;
+      }
+      return subagent;
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .sort((left, right) => left.label.localeCompare(right.label));
+
+  return subagentCatalogSchema.parse({ subagents });
+};
+
+const toOpencodeSlashCommandCatalog = (
+  commands: ParsedOpencodeSlashCommand[],
+): AgentSlashCommandCatalog => {
+  const catalogCommands = commands
+    .map((command) => {
+      const entry: AgentSlashCommandCatalog["commands"][number] = {
+        id: command.name,
+        trigger: command.name,
+        title: command.name,
+        hints: command.hints,
+      };
+      if (command.description) {
+        entry.description = command.description;
+      }
+      if (command.source) {
+        entry.source = command.source;
+      }
+      return entry;
+    })
+    .sort((left, right) => left.trigger.localeCompare(right.trigger));
+
+  return slashCommandCatalogSchema.parse({
+    commands: [
+      MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+      ...catalogCommands.filter((command) => command.trigger.toLowerCase() !== "compact"),
+    ],
+  });
+};
+
+const resolveAgentColor = (
+  agentName: string,
+  explicitColor: string | undefined,
+  isNative: boolean | undefined,
+): string | undefined => {
+  if (explicitColor?.trim()) {
+    return explicitColor;
+  }
+
+  if (isNative !== true) {
+    return undefined;
+  }
+
+  const normalizedName = agentName.trim().toLowerCase();
+  return OPENCODE_DEFAULT_AGENT_COLORS.get(normalizedName);
+};
+
+const readAgentList = async (
+  client: Pick<ReturnType<ClientFactory>, "app">,
+  workingDirectory: string,
+): Promise<ParsedOpencodeAgent[]> => {
+  const payload = unwrapData(
+    await client.app.agents({ directory: workingDirectory }),
+    "list agents",
+  );
+  return opencodeAgentListPayloadSchema.parse(payload);
+};
+
+const normalizeFileSearchPath = (rawPath: string, workingDirectory: string): string => {
+  const trimmedPath = rawPath.trim();
+  if (trimmedPath.length === 0) {
+    throw new Error("Invalid file search payload: expected non-empty file paths.");
+  }
+
+  return toProjectRelativePath(trimmedPath, workingDirectory);
+};
+
+const toFileSearchResult = (rawPath: string, workingDirectory: string): AgentFileSearchResult => {
+  const path = normalizeFileSearchPath(rawPath, workingDirectory);
+  const name = basename(path);
+  return {
+    id: path,
+    path,
+    name: name.length > 0 ? name : path,
+    kind: detectAgentFileReferenceKind({
+      filePath: path,
+      isDirectory: /[\\/]\s*$/.test(rawPath),
+    }),
+  };
+};
+
+const toFileSearchResults = (
+  payload: string[],
+  workingDirectory: string,
+): AgentFileSearchResult[] => {
+  return payload.map((entry) => toFileSearchResult(entry, workingDirectory));
 };
