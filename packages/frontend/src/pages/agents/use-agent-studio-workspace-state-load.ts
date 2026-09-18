@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { logSwitchPerf } from "@/lib/switch-perf-debug";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { host } from "@/state/operations/host";
 import { repoConfigQueryOptions } from "@/state/queries/workspace";
@@ -45,6 +46,17 @@ export function useAgentStudioWorkspaceStateLoad({
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
   });
+  const loggedRepoConfigWorkspaceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeWorkspaceId || !repoConfigQuery.data) {
+      return;
+    }
+    if (loggedRepoConfigWorkspaceRef.current === activeWorkspaceId) {
+      return;
+    }
+    loggedRepoConfigWorkspaceRef.current = activeWorkspaceId;
+    logSwitchPerf(`agent studio repo config ready ${activeWorkspaceId}`);
+  }, [activeWorkspaceId, repoConfigQuery.data]);
   const loadModel = useMemo(
     () =>
       buildAgentStudioStateLoad({
@@ -71,6 +83,17 @@ export function useAgentStudioWorkspaceStateLoad({
     ],
   );
   const refetchAgentStudioState = repoConfigQuery.refetch;
+  const loggedStudioStateWorkspaceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeWorkspaceId || loadModel.isLoading || loadModel.agentStudioState === null) {
+      return;
+    }
+    if (loggedStudioStateWorkspaceRef.current === activeWorkspaceId) {
+      return;
+    }
+    loggedStudioStateWorkspaceRef.current = activeWorkspaceId;
+    logSwitchPerf(`agent studio state ready ${activeWorkspaceId}`);
+  }, [activeWorkspaceId, loadModel.agentStudioState, loadModel.isLoading]);
   const retry = useCallback((): void => {
     void refetchAgentStudioState();
   }, [refetchAgentStudioState]);

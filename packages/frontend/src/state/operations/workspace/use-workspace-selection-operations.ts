@@ -10,6 +10,7 @@ import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
+import { logSwitchPerf } from "@/lib/switch-perf-debug";
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
   dropWorkspaceQueries,
@@ -367,18 +368,27 @@ export function useWorkspaceSelectionOperations({
       const switchVersion = ++workspaceSwitchVersionRef.current;
       workspaceReorderVersionRef.current += 1;
 
+      logSwitchPerf(`select clicked ${workspaceId}`);
+      const switchStartedAt = performance.now();
       setIsSwitchingWorkspace(true);
 
       try {
+        const selectStartedAt = performance.now();
         const selectedWorkspace = await hostClient.workspaceSelect(workspaceId);
+        logSwitchPerf(`workspaceSelect resolved ${workspaceId}`, selectStartedAt);
+        const cacheRefreshStartedAt = performance.now();
         await refreshWorkspaceCachesAfterMutation();
+        logSwitchPerf(`workspace caches refreshed ${workspaceId}`, cacheRefreshStartedAt);
 
         if (workspaceSwitchVersionRef.current === switchVersion) {
           clearStateForWorkspaceTransition(selectedWorkspace);
           setActiveWorkspace(selectedWorkspace);
+          logSwitchPerf(`active workspace set ${workspaceId}`, switchStartedAt);
 
           try {
+            const trailingRefreshStartedAt = performance.now();
             await refreshWorkspaces();
+            logSwitchPerf(`trailing workspace refresh ${workspaceId}`, trailingRefreshStartedAt);
           } catch (error) {
             if (workspaceSwitchVersionRef.current === switchVersion) {
               markWorkspaceActiveLocally(selectedWorkspace.workspaceId);
