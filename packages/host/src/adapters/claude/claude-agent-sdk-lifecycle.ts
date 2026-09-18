@@ -39,8 +39,13 @@ const pendingUserTurnCount = (session: ClaudeLifecycleSession): number =>
 const activeSdkUserTurnCount = (session: ClaudeLifecycleSession): number =>
   session.activeSdkUserTurnCount ?? 0;
 
-const emitSessionIdle = ({ emit, session, timestamp }: ClaudeLifecycleInput): void => {
-  if (session.activity === "idle") {
+const emitSessionIdle = ({
+  emit,
+  session,
+  settle = false,
+  timestamp,
+}: ClaudeLifecycleInput & { settle?: boolean }): void => {
+  if (!settle && session.activity === "idle") {
     return;
   }
   session.activity = "idle";
@@ -138,7 +143,9 @@ const applyResultLifecycleEvent = (
     return;
   }
   input.session.sdkState = "idle";
-  emitSessionIdle(input);
+  // A finalized SDK-initiated turn can end while the renderer is running from
+  // transcript activity, so the settle signal must not depend on host activity.
+  emitSessionIdle({ ...input, settle: true });
 };
 
 export const applyClaudeLifecycleEvent = (

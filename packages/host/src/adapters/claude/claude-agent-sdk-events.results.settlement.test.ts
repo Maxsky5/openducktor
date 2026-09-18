@@ -9,6 +9,11 @@ import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 const readSdkState = (session: ReturnType<typeof createSession>) => session.sdkState;
 
+const markSessionRunning = (session: ReturnType<typeof createSession>): void => {
+  session.activity = "running";
+  session.sdkState = "running";
+};
+
 describe("handleClaudeSdkMessage result settlement", () => {
   test("marks the parent idle when its completed result arrives", () => {
     const events: AgentEvent[] = [];
@@ -339,5 +344,151 @@ describe("handleClaudeSdkMessage result settlement", () => {
     expect(session.activity).toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
     expect(events.map((event) => event.type)).toEqual(["session_idle"]);
+  });
+
+  test("settles a task-notification turn that runs while the host is idle", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("idle");
+    const commonInput = {
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model: string) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude" as const,
+      }),
+      emit: (event: AgentEvent) => events.push(event),
+    };
+
+    handleClaudeSdkMessage({
+      ...commonInput,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: "5a91c77d-22be-4340-8676-aa50b78359cc",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: { role: "user", content: "Task completed" },
+        origin: { kind: "task-notification" },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...commonInput,
+      timestamp: "2026-06-25T20:00:02.000Z",
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: "31e408ec-4757-4238-87ab-e998e29e9c12",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: {
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "All background reviews are complete." }],
+        },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...commonInput,
+      timestamp: "2026-06-25T20:00:03.000Z",
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: "e8e45018-5f3b-46ee-82da-0c358b384386",
+        session_id: "session-1",
+        is_error: false,
+        result: "All background reviews are complete.",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        origin: { kind: "task-notification" },
+      }),
+    });
+
+    expect(session.activity).toBe("idle");
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_message",
+        message: "All background reviews are complete.",
+      }),
+    );
+    expect(events.at(-1)).toEqual(
+      expect.objectContaining({
+        type: "session_idle",
+        externalSessionId: "session-1",
+      }),
+    );
+  });
+
+  test("settles after a user turn races a task-notification turn", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("idle");
+    const commonInput = {
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model: string) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude" as const,
+      }),
+      emit: (event: AgentEvent) => events.push(event),
+    };
+
+    handleClaudeSdkMessage({
+      ...commonInput,
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: "5a91c77d-22be-4340-8676-aa50b78359cc",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: { role: "user", content: "Task completed" },
+        origin: { kind: "task-notification" },
+      }),
+    });
+    session.pendingUserTurnCount = 1;
+    session.activeSdkUserTurnCount = 1;
+    markSessionRunning(session);
+
+    handleClaudeSdkMessage({
+      ...commonInput,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: "e8e45018-5f3b-46ee-82da-0c358b384386",
+        session_id: "session-1",
+        is_error: false,
+        result: "Background review complete.",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        origin: { kind: "task-notification" },
+      }),
+    });
+    handleClaudeSdkMessage({
+      ...commonInput,
+      timestamp: "2026-06-25T20:00:02.000Z",
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: "f2a5e421-0b25-4de2-9d77-9d3a2f5d3c42",
+        session_id: "session-1",
+        is_error: false,
+        result: "Racing user turn complete.",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    });
+
+    expect(session.pendingUserTurnCount).toBe(0);
+    expect(session.activeSdkUserTurnCount).toBe(0);
+    expect(session.activity).toBe("idle");
+    expect(events.at(-1)).toEqual(
+      expect.objectContaining({
+        type: "session_idle",
+        externalSessionId: "session-1",
+      }),
+    );
   });
 });
