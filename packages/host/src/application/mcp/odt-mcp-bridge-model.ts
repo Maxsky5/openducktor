@@ -24,9 +24,6 @@ export const normalizeKey = (value: string): string => value.trim().toLowerCase(
 export const normalizeLabels = (labels: readonly string[]): string[] =>
   Array.from(new Set(labels.map((label) => label.trim()).filter(Boolean))).sort();
 
-const labelsEqual = (left: readonly string[], right: readonly string[]): boolean =>
-  left.length === right.length && left.every((value, index) => value === right[index]);
-
 export const buildTaskUpdatePatch = (
   current: TaskCard,
   input: UpdateTaskInput,
@@ -55,6 +52,9 @@ export const buildTaskUpdatePatch = (
   }
   return patch;
 };
+
+const labelsEqual = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
 
 const sanitizeSlug = (value: string): string =>
   value

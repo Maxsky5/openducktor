@@ -143,7 +143,8 @@ const registerOdtTool = <
       return toToolError(cause);
     }
   };
-  // SAFETY: the MCP SDK parses tool input with the registered inputSchema before it calls this handler.
+  // SAFETY: the MCP SDK parses tool input with the registered inputSchema before it calls this
+  // handler, and its callback type cannot carry a generic schema, so the handler asserts the type.
   const handleInput: ToolCallback<z.ZodTypeAny> = async (input) =>
     execute(input as ToolInput<InputSchema>);
   if (definition.nativeResult) {

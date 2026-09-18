@@ -780,6 +780,7 @@ describe("createOdtMcpBridgeService", () => {
       },
     ]);
   });
+
   test("updates only the present task fields through the host update path", async () => {
     const updateCalls: unknown[] = [];
     const current = taskCard({

@@ -27,8 +27,8 @@ export type OdtMcpReadToolName =
 
 export type OdtMcpMutationToolName = Exclude<WorkspaceScopedOdtToolName, OdtMcpReadToolName>;
 
-export type OdtMcpTaskAssetReadService = Pick<TaskAssetReadService, "readBatch">;
-export type OdtMcpTaskService = Pick<
+type OdtMcpTaskAssetReadService = Pick<TaskAssetReadService, "readBatch">;
+type OdtMcpTaskService = Pick<
   TaskService,
   | "buildBlocked"
   | "buildCompleted"
@@ -43,7 +43,7 @@ export type OdtMcpTaskService = Pick<
   | "setSpec"
   | "updateTask"
 >;
-export type OdtMcpWorkspaceSettingsService = Pick<
+type OdtMcpWorkspaceSettingsService = Pick<
   WorkspaceSettingsService,
   "getRepoConfig" | "listWorkspaces"
 >;

@@ -34,7 +34,7 @@ import type {
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
 
-export type OdtMcpMutationToolResult =
+type OdtMcpMutationToolResult =
   | BuildBlockedResult
   | BuildCompletedResult
   | BuildResumedResult

@@ -33,19 +33,6 @@ import {
 
 export type { OdtMcpBridgeError } from "./odt-mcp-bridge-tool-context";
 
-const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
-
-const READ_TOOL_NAMES: ReadonlySet<WorkspaceScopedOdtToolName> = new Set([
-  "odt_read_task",
-  "odt_read_task_assets",
-  "odt_read_task_documents",
-  "odt_search_tasks",
-]);
-
-const isOdtMcpReadToolName = (
-  toolName: WorkspaceScopedOdtToolName,
-): toolName is OdtMcpReadToolName => READ_TOOL_NAMES.has(toolName);
-
 export type WorkspaceScopedOdtToolResult =
   | BuildBlockedResult
   | BuildCompletedResult
@@ -69,9 +56,8 @@ export type OdtMcpBridgeService = {
     input: JSONType,
   ): Effect.Effect<WorkspaceScopedOdtToolResult, OdtMcpBridgeError>;
 };
-export type CreateOdtMcpBridgeServiceInput = CreateOdtMcpToolContextInput;
 export const createOdtMcpBridgeService = (
-  input: CreateOdtMcpBridgeServiceInput,
+  input: CreateOdtMcpToolContextInput,
 ): OdtMcpBridgeService => {
   const context = createOdtMcpToolContext(input);
   const service: OdtMcpBridgeService = {
@@ -101,3 +87,16 @@ export const createOdtMcpBridgeService = (
   };
   return service;
 };
+
+const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
+
+const READ_TOOL_NAMES: ReadonlySet<WorkspaceScopedOdtToolName> = new Set([
+  "odt_read_task",
+  "odt_read_task_assets",
+  "odt_read_task_documents",
+  "odt_search_tasks",
+]);
+
+const isOdtMcpReadToolName = (
+  toolName: WorkspaceScopedOdtToolName,
+): toolName is OdtMcpReadToolName => READ_TOOL_NAMES.has(toolName);

@@ -184,11 +184,11 @@ Clearing uses typed values:
 - An empty `labels` array clears all labels.
 - `aiReviewEnabled: false` turns QA review off.
 
-`title` must not be empty. `priority` is an integer from 0 through 4. Labels trim each entry, drop empty entries, deduplicate, and sort before the store saves them. `issueType` is `task`, `feature`, or `bug`. The tool rejects epic targets and epic conversions. A task can change between `task`, `feature`, and `bug` and keeps its status.
+`title` must not be empty. `priority` is an integer from 0 through 4. Labels trim each entry, drop empty entries and repeats, and sort before the store saves them. `issueType` is `task`, `feature`, or `bug`. The tool rejects epic targets and epic conversions. A task can change between `task`, `feature`, and `bug` and keeps its status.
 
 A call with no fields other than `taskId` and optional `workspaceId` succeeds and changes nothing. `updatedAt` changes only when a field value changes. Repeating stored values changes nothing.
 
-A description that references an image the task does not own fails and writes nothing. Images the new description no longer references are quarantined.
+A description that references an image the task does not own fails and writes nothing. The store quarantines images the new description no longer references.
 
 Unknown fields fail. `workspaceId` is optional only when the process has a default workspace. The result is `{ task }` with the shared summary shape.
 

@@ -27,18 +27,7 @@ import type {
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
 
-const compareTaskSearchResults = (
-  left: Pick<TaskCard, "id" | "updatedAt">,
-  right: Pick<TaskCard, "id" | "updatedAt">,
-): number => {
-  const updatedAtOrder = right.updatedAt.localeCompare(left.updatedAt);
-  if (updatedAtOrder !== 0) {
-    return updatedAtOrder;
-  }
-  return left.id.localeCompare(right.id);
-};
-
-export type OdtMcpReadToolResult =
+type OdtMcpReadToolResult =
   | ReadTaskAssetsResult
   | SearchTasksResult
   | TaskDocumentsRead
@@ -181,4 +170,15 @@ export const executeOdtMcpReadTool = (
       }
     }
   });
+};
+
+const compareTaskSearchResults = (
+  left: Pick<TaskCard, "id" | "updatedAt">,
+  right: Pick<TaskCard, "id" | "updatedAt">,
+): number => {
+  const updatedAtOrder = right.updatedAt.localeCompare(left.updatedAt);
+  if (updatedAtOrder !== 0) {
+    return updatedAtOrder;
+  }
+  return left.id.localeCompare(right.id);
 };

@@ -201,12 +201,10 @@ const publicEpicRejectionReason = "Epic creation is not supported by the public 
 const publicEpicUpdateRejectionReason =
   "Epic updates are not supported by the public MCP update tool.";
 
-const publicIssueTypeSchema = z.enum(["task", "feature", "bug"], {
-  error: `issueType must be task, feature, or bug. ${publicEpicRejectionReason}`,
-});
-const publicUpdateIssueTypeSchema = z.enum(["task", "feature", "bug"], {
-  error: `issueType must be task, feature, or bug. ${publicEpicUpdateRejectionReason}`,
-});
+const publicIssueTypeSchema = (rejectionReason: string) =>
+  z.enum(["task", "feature", "bug"], {
+    error: `issueType must be task, feature, or bug. ${rejectionReason}`,
+  });
 const activeTaskStatusSchema = z.enum([
   "open",
   "spec_ready",
@@ -294,7 +292,7 @@ export const CreateTaskInputSchema = z
   .object({
     workspaceId: workspaceScopedToolWorkspaceIdSchema,
     title: z.string().trim().min(1).describe("Task title."),
-    issueType: publicIssueTypeSchema.describe(
+    issueType: publicIssueTypeSchema(publicEpicRejectionReason).describe(
       `Issue type. Allowed values: task, feature, bug. ${publicEpicRejectionReason}`,
     ),
     priority: taskPrioritySchema.describe(
@@ -358,7 +356,7 @@ export const UpdateTaskInputSchema = z
       .array(labelStringSchema)
       .optional()
       .describe("New task labels. An empty array clears all labels."),
-    issueType: publicUpdateIssueTypeSchema
+    issueType: publicIssueTypeSchema(publicEpicUpdateRejectionReason)
       .optional()
       .describe(
         `New issue type. Allowed values: task, feature, bug. ${publicEpicUpdateRejectionReason}`,
