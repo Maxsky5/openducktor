@@ -26,13 +26,32 @@ export const markdownLinkUrlTransform = (
   };
 };
 
+type LinkComponentsCacheEntry = {
+  defaults: Components;
+  overrides: Components | undefined;
+  policy: MarkdownLinkPolicy | undefined;
+  components: Components;
+};
+
+const MAX_LINK_COMPONENTS_CACHE_ENTRIES = 16;
+const linkComponentsCache: LinkComponentsCacheEntry[] = [];
+
 export const markdownLinkComponents = (
   defaults: Components,
   overrides: Components | undefined,
   policy: MarkdownLinkPolicy | undefined,
 ): Components => {
   if (!overrides && !policy) return defaults;
+  const cached = linkComponentsCache.find(
+    (entry) =>
+      entry.defaults === defaults && entry.overrides === overrides && entry.policy === policy,
+  );
+  if (cached) return cached.components;
   const components = { ...defaults, ...overrides };
   if (policy) components.a = policy.anchor;
+  linkComponentsCache.push({ defaults, overrides, policy, components });
+  if (linkComponentsCache.length > MAX_LINK_COMPONENTS_CACHE_ENTRIES) {
+    linkComponentsCache.shift();
+  }
   return components;
 };

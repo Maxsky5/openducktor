@@ -1,8 +1,4 @@
-import {
-  markdownLinkComponents,
-  markdownLinkUrlTransform,
-  type MarkdownLinkPolicy,
-} from "./markdown-link-policy";
+import { markdownLinkComponents, type MarkdownLinkPolicy } from "./markdown-link-policy";
 import { TASK_ASSET_URI_PREFIX, type TaskAssetRenderContext } from "@openducktor/contracts";
 import {
   type ComponentProps,
@@ -13,10 +9,10 @@ import {
   Suspense,
   useMemo,
 } from "react";
-import Markdown, { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
+import { renderMarkdownElement } from "./markdown-render-element";
 import { MARKDOWN_COMPONENTS, type MarkdownRendererVariant } from "./markdown-renderer-components";
 import { prepareMarkdownRenderContent } from "./markdown-render-content";
 
@@ -48,9 +44,6 @@ type MarkdownRendererProps = {
   stripTaskDescriptionFrontMatter?: boolean;
   lightweight?: boolean;
 };
-
-const REMARK_PLUGINS = [remarkGfm];
-const MARKDOWN_URL_TRANSFORM: UrlTransform = (url) => defaultUrlTransform(url);
 
 const MARKDOWN_CLASSES = {
   compact: cn(
@@ -87,16 +80,7 @@ const MarkdownSync = memo(function MarkdownSync({
   components: Components;
   linkPolicy?: MarkdownLinkPolicy | undefined;
 }): ReactElement {
-  return (
-    <Markdown
-      remarkPlugins={REMARK_PLUGINS}
-      skipHtml
-      urlTransform={markdownLinkUrlTransform(MARKDOWN_URL_TRANSFORM, linkPolicy)}
-      components={components}
-    >
-      {markdown}
-    </Markdown>
-  );
+  return renderMarkdownElement({ markdown, components, linkPolicy });
 });
 
 type MarkdownRendererCandidate = "mermaid" | "math";
