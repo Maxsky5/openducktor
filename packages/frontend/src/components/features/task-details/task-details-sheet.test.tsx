@@ -1,6 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
+import { render, screen } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { QueryProvider } from "@/lib/query-provider";
 import {
   createTaskCardFixture,
@@ -94,6 +96,25 @@ const createTaskStopImpactHookMock = () =>
     isLoading: false,
     error: null,
   }));
+
+const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
+  onPlan: () => {},
+  onQaStart: () => {},
+  onQaOpen: () => {},
+  onBuild: () => {},
+  onOpenSession: () => {},
+  onDelegate: () => {},
+  onEdit: () => {},
+  onHumanApprove: () => {},
+  onHumanRequestChanges: () => {},
+  onResetImplementation: () => {},
+  onResetTask: async () => {},
+  onCloseTask: async () => {},
+  onDelete: async () => {},
+  taskSessionsByTaskId: new Map(),
+  historicalSessionsByTaskId: new Map(),
+  activeTaskSessionContextByTaskId: new Map(),
+});
 
 describe("TaskDetailsSheet", () => {
   test("passes activeWorkspace into task details view model", async () => {
@@ -522,5 +543,49 @@ describe("TaskDetailsSheet", () => {
     );
 
     expect(html).not.toContain('<span class="sr-only">Close</span>');
+  });
+
+  test("renders workflow actions from the task workflow context when props omit handlers", async () => {
+    const { TaskDetailsSheet } = await import("./task-details-sheet");
+    const { TaskWorkflowActionsContext } =
+      await import("@/features/task-workflow/task-workflow-actions-context");
+
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      title: "Task 1",
+      status: "ready_for_dev",
+      availableActions: ["build_start"],
+      documentSummary: {
+        spec: { has: false, updatedAt: undefined },
+        plan: { has: false, updatedAt: undefined },
+        qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
+      },
+    });
+
+    const { unmount } = render(
+      createElement(
+        IsolatedProviders,
+        null,
+        createElement(
+          TaskWorkflowActionsContext.Provider,
+          { value: createTaskWorkflowActionsValue() },
+          createElement(TaskDetailsSheet, {
+            activeWorkspace: {
+              workspaceId: "workspace-a",
+              workspaceName: "Workspace A",
+              repoPath: "/repo-a",
+            },
+            task,
+            allTasks: [task],
+            open: true,
+            onOpenChange: () => {},
+          }),
+        ),
+      ),
+    );
+
+    expect(screen.getByText("Start Builder")).toBeDefined();
+
+    unmount();
   });
 });

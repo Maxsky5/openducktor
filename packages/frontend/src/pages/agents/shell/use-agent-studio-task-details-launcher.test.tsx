@@ -67,10 +67,9 @@ describe("useAgentStudioTaskDetailsLauncher", () => {
       const props = harness.getLatest().taskDetailsSheetProps;
       expect(props.activeWorkspace).toBe(activeWorkspace);
       expect(props.allTasks).toEqual([task]);
-      expect(props.workflowActionsEnabled).toBe(false);
       expect(props.onOpenSession).toBeUndefined();
-      expect(props.taskSessionsByTaskId.size).toBe(0);
-      expect(props.activeTaskSessionContextByTaskId.size).toBe(0);
+      expect(props.taskSessionsByTaskId).toBeUndefined();
+      expect(props.activeTaskSessionContextByTaskId).toBeUndefined();
       expect(props.detectingPullRequestTaskId).toBe("task-1");
       expect(props.unlinkingPullRequestTaskId).toBe("task-2");
 
@@ -130,7 +129,6 @@ describe("useAgentStudioTaskDetailsLauncher", () => {
       expect(harness.getLatest().taskEditor?.task).toBe(otherTask);
       expect(harness.getLatest().taskEditor?.open).toBe(true);
       expect(harness.getLatest().taskEditor?.tasks).toBe(args.tasks);
-      expect(harness.getLatest().taskDetailsSheetProps.workflowActionsEnabled).toBe(false);
 
       const updatedTask = { ...otherTask, title: "Updated task" };
       await harness.update({ ...args, tasks: [task, updatedTask], selectedTaskId: null });

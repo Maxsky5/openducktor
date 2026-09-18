@@ -22,9 +22,9 @@ type TaskDetailsSheetControllerProps = Omit<
   "task" | "open" | "onOpenChange"
 > & {
   allTasks: TaskCard[];
-  taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
-  historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
-  activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
+  taskSessionsByTaskId?: Map<string, KanbanTaskSession[]>;
+  historicalSessionsByTaskId?: Map<string, AgentSessionRecord[]>;
+  activeTaskSessionContextByTaskId?: ActiveTaskSessionContextByTaskId;
   onOpenSession?: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   ref?: Ref<TaskDetailsSheetControllerHandle>;
 };
@@ -89,12 +89,16 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
   );
 
   const activeTaskId = task ? taskId : null;
-  const selectedTaskSessions = activeTaskId ? (taskSessionsByTaskId.get(activeTaskId) ?? []) : [];
-  const selectedHistoricalSessions = activeTaskId
-    ? (historicalSessionsByTaskId.get(activeTaskId) ?? [])
-    : [];
+  const selectedTaskSessions =
+    activeTaskId && taskSessionsByTaskId
+      ? (taskSessionsByTaskId.get(activeTaskId) ?? [])
+      : undefined;
+  const selectedHistoricalSessions =
+    activeTaskId && historicalSessionsByTaskId
+      ? (historicalSessionsByTaskId.get(activeTaskId) ?? [])
+      : undefined;
   const selectedActiveSessionContext = activeTaskId
-    ? activeTaskSessionContextByTaskId.get(activeTaskId)
+    ? activeTaskSessionContextByTaskId?.get(activeTaskId)
     : undefined;
 
   return (
@@ -102,9 +106,9 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
       {...sheetProps}
       task={task}
       allTasks={sheetTasks}
-      taskSessions={selectedTaskSessions}
-      historicalSessions={selectedHistoricalSessions}
-      hasActiveSession={Boolean(selectedActiveSessionContext)}
+      {...(selectedTaskSessions ? { taskSessions: selectedTaskSessions } : {})}
+      {...(selectedHistoricalSessions ? { historicalSessions: selectedHistoricalSessions } : {})}
+      {...(taskSessionsByTaskId ? { hasActiveSession: Boolean(selectedActiveSessionContext) } : {})}
       {...(selectedActiveSessionContext?.role
         ? { activeSessionRole: selectedActiveSessionContext.role }
         : {})}

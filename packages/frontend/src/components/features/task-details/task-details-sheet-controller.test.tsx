@@ -60,7 +60,6 @@ describe("TaskDetailsSheetController", () => {
           taskSessionsByTaskId: new Map(),
           historicalSessionsByTaskId: new Map(),
           activeTaskSessionContextByTaskId: new Map(),
-          workflowActionsEnabled: false,
         }),
         { wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children) },
       );
@@ -134,7 +133,6 @@ describe("TaskDetailsSheetController", () => {
         taskSessionsByTaskId: new Map(),
         historicalSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
-        workflowActionsEnabled: false,
       });
     const rendered = renderUi(controller(activeWorkspace.repoPath), {
       wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
@@ -194,7 +192,6 @@ describe("TaskDetailsSheetController", () => {
         taskSessionsByTaskId: new Map(),
         historicalSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
-        workflowActionsEnabled: false,
       });
     };
 
@@ -207,7 +204,6 @@ describe("TaskDetailsSheetController", () => {
         activeWorkspace,
         allTasks: [task],
         open: false,
-        workflowActionsEnabled: false,
       }),
     );
 
@@ -222,7 +218,6 @@ describe("TaskDetailsSheetController", () => {
         activeWorkspace,
         allTasks: [task],
         open: true,
-        workflowActionsEnabled: false,
       }),
     );
 
@@ -247,7 +242,6 @@ describe("TaskDetailsSheetController", () => {
         taskSessionsByTaskId: new Map(),
         historicalSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
-        workflowActionsEnabled: false,
         onDetectPullRequest,
         onUnlinkPullRequest,
         detectingPullRequestTaskId: "task-1",
@@ -289,7 +283,6 @@ describe("TaskDetailsSheetController", () => {
         taskSessionsByTaskId: new Map(),
         historicalSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
-        workflowActionsEnabled: false,
       });
 
     const rendered = render(renderController([task]));

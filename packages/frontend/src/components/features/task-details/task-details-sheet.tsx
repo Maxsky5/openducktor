@@ -23,6 +23,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { useTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 
 const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
@@ -41,53 +42,52 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
   "close_task",
 ];
 
-const detailActionsForHandlers = (handlers: {
-  onResetTask?: TaskDetailsSheetProps["onResetTask"];
-  onCloseTask?: TaskDetailsSheetProps["onCloseTask"];
-}): readonly TaskWorkflowAction[] =>
-  DETAIL_ACTIONS.filter((action) => {
-    if (action === "reset_task") {
-      return Boolean(handlers.onResetTask);
-    }
-    if (action === "close_task") {
-      return Boolean(handlers.onCloseTask);
-    }
-    return true;
-  });
 const EMPTY_TASK_SESSIONS: NonNullable<TaskDetailsSheetProps["taskSessions"]> = [];
 const EMPTY_HISTORICAL_SESSIONS: NonNullable<TaskDetailsSheetProps["historicalSessions"]> = [];
 
-export function TaskDetailsSheet({
-  activeWorkspace = null,
-  task,
-  allTasks,
-  taskSessions = EMPTY_TASK_SESSIONS,
-  historicalSessions = EMPTY_HISTORICAL_SESSIONS,
-  hasActiveSession = false,
-  activeSessionRole,
-  open,
-  onOpenChange,
-  workflowActionsEnabled = true,
-  onPlan,
-  onQaStart,
-  onQaOpen,
-  onBuild,
-  onOpenSession,
-  onDelegate,
-  onEdit,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
-  onResetTask,
-  onCloseTask,
-  onDetectPullRequest,
-  gitProviderContext,
-  gitProviderReadError = null,
-  onUnlinkPullRequest,
-  detectingPullRequestTaskId = null,
-  unlinkingPullRequestTaskId = null,
-  onDelete,
-}: TaskDetailsSheetProps): ReactElement {
+export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
+  const workflowActions = useTaskWorkflowActions();
+  const {
+    activeWorkspace = null,
+    task,
+    allTasks,
+    open,
+    onOpenChange,
+    onEdit = workflowActions?.onEdit,
+    onDetectPullRequest,
+    gitProviderContext,
+    gitProviderReadError = null,
+    onUnlinkPullRequest,
+    detectingPullRequestTaskId = null,
+    unlinkingPullRequestTaskId = null,
+  } = props;
+  const contextTaskSessions =
+    task && workflowActions ? workflowActions.taskSessionsByTaskId.get(task.id) : undefined;
+  const contextHistoricalSessions =
+    task && workflowActions ? workflowActions.historicalSessionsByTaskId.get(task.id) : undefined;
+  const activeSessionContext =
+    task && workflowActions
+      ? workflowActions.activeTaskSessionContextByTaskId.get(task.id)
+      : undefined;
+  const taskSessions = props.taskSessions ?? contextTaskSessions ?? EMPTY_TASK_SESSIONS;
+  const historicalSessions =
+    props.historicalSessions ?? contextHistoricalSessions ?? EMPTY_HISTORICAL_SESSIONS;
+  const hasActiveSession = props.hasActiveSession ?? Boolean(activeSessionContext);
+  const activeSessionRole = props.activeSessionRole ?? activeSessionContext?.role;
+  const onPlan = props.onPlan ?? workflowActions?.onPlan;
+  const onQaStart = props.onQaStart ?? workflowActions?.onQaStart;
+  const onQaOpen = props.onQaOpen ?? workflowActions?.onQaOpen;
+  const onBuild = props.onBuild ?? workflowActions?.onBuild;
+  const onOpenSession = props.onOpenSession ?? workflowActions?.onOpenSession;
+  const onDelegate = props.onDelegate ?? workflowActions?.onDelegate;
+  const onHumanApprove = props.onHumanApprove ?? workflowActions?.onHumanApprove;
+  const onHumanRequestChanges =
+    props.onHumanRequestChanges ?? workflowActions?.onHumanRequestChanges;
+  const onResetImplementation =
+    props.onResetImplementation ?? workflowActions?.onResetImplementation;
+  const onResetTask = props.onResetTask ?? workflowActions?.onResetTask;
+  const onCloseTask = props.onCloseTask ?? workflowActions?.onCloseTask;
+  const onDelete = props.onDelete ?? workflowActions?.onDelete;
   const viewModelInput = getTaskDetailsViewModelInput({
     activeWorkspace,
     task,
@@ -132,12 +132,10 @@ export function TaskDetailsSheet({
   }
 
   const canDetectPullRequestForTask = canDetectTaskPullRequest(task);
-  const detailActions = detailActionsForHandlers({ onResetTask, onCloseTask });
   const footerProps = getTaskDetailsFooterProps({
     task,
     onOpenChange,
-    workflowActionsEnabled,
-    detailActions,
+    detailActions: DETAIL_ACTIONS,
     hasActiveSession,
     activeSessionRole,
     historicalSessionRoles,
@@ -269,7 +267,6 @@ function getTaskDetailsViewModelInput(args: {
 function getTaskDetailsFooterProps({
   task,
   onOpenChange,
-  workflowActionsEnabled,
   detailActions,
   hasActiveSession,
   activeSessionRole,
@@ -281,7 +278,6 @@ function getTaskDetailsFooterProps({
 }: {
   task: NonNullable<TaskDetailsSheetProps["task"]>;
   onOpenChange: TaskDetailsSheetProps["onOpenChange"];
-  workflowActionsEnabled: boolean;
   detailActions: readonly TaskWorkflowAction[];
   hasActiveSession: boolean;
   activeSessionRole: AgentRole | undefined;
@@ -291,17 +287,18 @@ function getTaskDetailsFooterProps({
   runWorkflowAction: TaskDetailsViewModel["runWorkflowAction"];
   openDeleteDialog: TaskDetailsViewModel["openDeleteDialog"];
 }): TaskDetailsSheetFooterProps {
-  const footerProps: TaskDetailsSheetFooterProps = { task, onOpenChange };
-  if (workflowActionsEnabled) {
-    footerProps.includeActions = detailActions;
-    footerProps.hasActiveSession = hasActiveSession;
-    footerProps.onWorkflowAction = runWorkflowAction;
-    if (activeSessionRole) {
-      footerProps.activeSessionRole = activeSessionRole;
-    }
-    if (historicalSessionRoles.length > 0) {
-      footerProps.historicalSessionRoles = historicalSessionRoles;
-    }
+  const footerProps: TaskDetailsSheetFooterProps = {
+    task,
+    onOpenChange,
+    includeActions: detailActions,
+    hasActiveSession,
+    onWorkflowAction: runWorkflowAction,
+  };
+  if (activeSessionRole) {
+    footerProps.activeSessionRole = activeSessionRole;
+  }
+  if (historicalSessionRoles.length > 0) {
+    footerProps.historicalSessionRoles = historicalSessionRoles;
   }
   if (onEdit) {
     footerProps.onEdit = onEdit;

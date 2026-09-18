@@ -84,4 +84,6 @@ A task can have more than one action. The UI can choose one primary action and p
 
 Current card and detail views use all action IDs except `view_details`, which the card click and details panel already provide.
 
+The task detail sheet shows the same available actions on every surface, such as Kanban, Agent Studio, and the agent chat viewer. A surface can override an action handler, but it cannot remove an action.
+
 When you add an action ID, update backend derivation, the transition matrix, the status and action docs, and UI mapping in one change.

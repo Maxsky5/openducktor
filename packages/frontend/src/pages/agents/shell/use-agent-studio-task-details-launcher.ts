@@ -1,9 +1,5 @@
-import type { AgentSessionRecord, RepositoryGitProviderContext } from "@openducktor/contracts";
+import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { type ComponentProps, type RefObject, useCallback, useMemo, useRef, useState } from "react";
-import type {
-  ActiveTaskSessionContextByTaskId,
-  KanbanTaskSession,
-} from "@/components/features/kanban/kanban-task-activity";
 import type { TaskCreateModal } from "@/components/features/task-create/task-create-modal";
 import type {
   TaskDetailsSheetController,
@@ -34,10 +30,6 @@ export type AgentStudioTaskDetailsLauncherModel = {
   taskDetailsSheetRef: RefObject<TaskDetailsSheetControllerHandle | null>;
   taskDetailsSheetProps: AgentStudioTaskDetailsSheetProps;
 };
-
-const EMPTY_TASK_SESSIONS_BY_TASK_ID = new Map<string, KanbanTaskSession[]>();
-const EMPTY_HISTORICAL_SESSIONS_BY_TASK_ID = new Map<string, AgentSessionRecord[]>();
-const EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID: ActiveTaskSessionContextByTaskId = new Map();
 
 export function useAgentStudioTaskDetailsLauncher({
   activeWorkspace,
@@ -103,10 +95,6 @@ export function useAgentStudioTaskDetailsLauncher({
     () => ({
       activeWorkspace,
       allTasks: tasks,
-      taskSessionsByTaskId: EMPTY_TASK_SESSIONS_BY_TASK_ID,
-      historicalSessionsByTaskId: EMPTY_HISTORICAL_SESSIONS_BY_TASK_ID,
-      activeTaskSessionContextByTaskId: EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID,
-      workflowActionsEnabled: false,
       onEdit,
       onDetectPullRequest,
       gitProviderContext,
