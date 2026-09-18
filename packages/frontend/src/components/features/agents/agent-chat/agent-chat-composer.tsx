@@ -1,4 +1,12 @@
-import { Bot, BrainCog, LoaderCircle, Paperclip, SendHorizontal, Square } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  BrainCog,
+  LoaderCircle,
+  Paperclip,
+  SendHorizontal,
+  Square,
+} from "lucide-react";
 import {
   memo,
   type ReactElement,
@@ -367,6 +375,9 @@ function AgentChatComposerFormView({
     composerEditorRef,
     onComposerEditorInput,
   } = model;
+  const pendingItemsWarning = pendingSendItems?.warning ?? null;
+  const showPendingItemsWarning =
+    pendingItemsWarning !== null && (pendingSendItems?.count ?? 0) > 0;
 
   return (
     <form ref={composerFormRef} className="px-4 pb-4" action={submitAction}>
@@ -415,6 +426,16 @@ function AgentChatComposerFormView({
               : undefined
           }
         >
+          {showPendingItemsWarning ? (
+            <div
+              className="flex items-start gap-1.5 border-b border-border/50 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-300"
+              data-testid="agent-chat-pending-items-warning"
+              role="status"
+            >
+              <AlertTriangle className="mt-px size-3.5 shrink-0" />
+              <span>{pendingItemsWarning}</span>
+            </div>
+          ) : null}
           <AgentChatComposerEditor
             draft={draft}
             onDraftChange={onDraftChange}

@@ -7,19 +7,21 @@ import type {
   InlineCommentDraft,
   InlineCommentDraftSnapshot,
 } from "@/state/use-inline-comment-draft-store";
-import type { AgentStudioChatDraftScope } from "./agent-studio-chat-draft";
+import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
 import {
   type AgentStudioReviewCommentStore,
   createAgentStudioReviewCommentComposerAdapter,
 } from "./use-agent-studio-review-comment-composer-adapter";
+
+const OWNER = toInlineCommentDraftStorageKey({ workspaceId: "workspace-1", taskId: "task-1" });
 
 type FakeReviewCommentStore = {
   getStore: () => AgentStudioReviewCommentStore;
   addDraft: (draft: InlineCommentDraft) => void;
   updateDraft: (id: string, text: string, revision: number) => void;
   setOnFormat: (onFormat: (() => void) | null) => void;
-  resetKeys: string[];
-  setKeys: string[];
+  hydrated: () => number;
+  flushed: () => number;
 };
 
 const buildComment = (
@@ -46,19 +48,23 @@ const buildComment = (
 
 const createFakeReviewCommentStore = (
   initialDrafts: InlineCommentDraft[],
-  initialDraftStateKey = "task-1:build:new",
 ): FakeReviewCommentStore => {
   const drafts = initialDrafts.map((draft) => ({ ...draft }));
-  const resetKeys: string[] = [];
-  const setKeys: string[] = [];
-  let draftStateKey = initialDraftStateKey;
   let nextSubmissionId = 0;
   let onFormat: (() => void) | null = null;
+  let hydrateCount = 0;
+  let flushCount = 0;
 
-  const getPendingDrafts = (): InlineCommentDraft[] =>
-    drafts.filter((draft) => draft.status === "pending");
+  const getPendingDrafts = (ownerKey: string): InlineCommentDraft[] => {
+    expect(ownerKey).toBe(OWNER);
+    return drafts.filter((draft) => draft.status === "pending");
+  };
 
-  const beginSubmittingDrafts = (snapshots: InlineCommentDraftSnapshot[]): string | null => {
+  const beginSubmittingDrafts = (
+    ownerKey: string,
+    snapshots: InlineCommentDraftSnapshot[],
+  ): string | null => {
+    expect(ownerKey).toBe(OWNER);
     const submissionId = `submission-${++nextSubmissionId}`;
     let didTransition = false;
     for (const draft of drafts) {
@@ -77,9 +83,6 @@ const createFakeReviewCommentStore = (
   };
 
   const store: AgentStudioReviewCommentStore = {
-    get drafts() {
-      return drafts;
-    },
     getPendingDrafts,
     formatBatchMessage: (pendingDrafts) => {
       const message = [
@@ -106,17 +109,11 @@ const createFakeReviewCommentStore = (
         }
       }
     },
-    setDraftStateKey: (nextDraftStateKey) => {
-      setKeys.push(nextDraftStateKey);
-      draftStateKey = nextDraftStateKey;
+    hydrate: () => {
+      hydrateCount += 1;
     },
-    resetForContext: (nextDraftStateKey) => {
-      resetKeys.push(nextDraftStateKey);
-      if (draftStateKey === nextDraftStateKey) {
-        return;
-      }
-      drafts.splice(0, drafts.length);
-      draftStateKey = nextDraftStateKey;
+    flush: () => {
+      flushCount += 1;
     },
   };
 
@@ -136,27 +133,10 @@ const createFakeReviewCommentStore = (
     setOnFormat: (nextOnFormat) => {
       onFormat = nextOnFormat;
     },
-    resetKeys,
-    setKeys,
+    hydrated: () => hydrateCount,
+    flushed: () => flushCount,
   };
 };
-
-const buildScope = (
-  taskId: string,
-  role: AgentStudioChatDraftScope["role"],
-  externalSessionId: string | null,
-): AgentStudioChatDraftScope => ({
-  taskId,
-  role,
-  session:
-    externalSessionId === null
-      ? null
-      : {
-          externalSessionId,
-          runtimeKind: "opencode",
-          workingDirectory: "/repo",
-        },
-});
 
 describe("Agent Studio review comment composer adapter", () => {
   test("formats pending comments and sends them when the typed draft is empty", async () => {
@@ -166,15 +146,14 @@ describe("Agent Studio review comment composer adapter", () => {
     const adapter = createAgentStudioReviewCommentComposerAdapter(fakeStore.getStore);
     let sentText = "";
 
-    const didSend = await adapter.submitDraft(createEmptyComposerDraft(), async (draft) => {
+    const didSend = await adapter.submitDraft(OWNER, createEmptyComposerDraft(), async (draft) => {
       sentText = draftToSerializedText(draft);
-      expect(fakeStore.getStore().drafts[0]?.status).toBe("submitting");
+      expect(fakeStore.getStore().getPendingDrafts(OWNER)).toEqual([]);
       return true;
     });
 
     expect(didSend).toBe(true);
     expect(sentText).toBe("## Git Diff Comments\n\nInstruction: Keep this branch explicit.");
-    expect(fakeStore.getStore().drafts).toEqual([]);
   });
 
   test("restores the exact pending comments when send returns false", async () => {
@@ -183,17 +162,19 @@ describe("Agent Studio review comment composer adapter", () => {
     ]);
     const adapter = createAgentStudioReviewCommentComposerAdapter(fakeStore.getStore);
 
-    const didSend = await adapter.submitDraft(createEmptyComposerDraft(), async () => false);
+    const didSend = await adapter.submitDraft(OWNER, createEmptyComposerDraft(), async () => false);
 
     expect(didSend).toBe(false);
-    expect(fakeStore.getStore().drafts).toMatchObject([
-      {
-        id: "first-comment",
-        revision: 1,
-        status: "pending",
-        submissionId: null,
-      },
-    ]);
+    expect(
+      fakeStore
+        .getStore()
+        .getPendingDrafts(OWNER)
+        .map(({ id, revision, status }) => ({
+          id,
+          revision,
+          status,
+        })),
+    ).toEqual([{ id: "first-comment", revision: 1, status: "pending" }]);
   });
 
   test("restores pending comments and propagates a thrown send failure", async () => {
@@ -203,18 +184,20 @@ describe("Agent Studio review comment composer adapter", () => {
     const adapter = createAgentStudioReviewCommentComposerAdapter(fakeStore.getStore);
 
     await expect(
-      adapter.submitDraft(createEmptyComposerDraft(), async () => {
+      adapter.submitDraft(OWNER, createEmptyComposerDraft(), async () => {
         throw new Error("Runtime send failed");
       }),
     ).rejects.toThrow("Runtime send failed");
-    expect(fakeStore.getStore().drafts).toMatchObject([
-      {
-        id: "first-comment",
-        revision: 1,
-        status: "pending",
-        submissionId: null,
-      },
-    ]);
+    expect(
+      fakeStore
+        .getStore()
+        .getPendingDrafts(OWNER)
+        .map(({ id, revision, status }) => ({
+          id,
+          revision,
+          status,
+        })),
+    ).toEqual([{ id: "first-comment", revision: 1, status: "pending" }]);
   });
 
   test("does not complete an edited revision or a comment added during an older send", async () => {
@@ -225,7 +208,8 @@ describe("Agent Studio review comment composer adapter", () => {
     fakeStore.setOnFormat(() => {
       const editedDraft = fakeStore
         .getStore()
-        .drafts.find((draft) => draft.id === "edited-comment");
+        .getPendingDrafts(OWNER)
+        .find((draft) => draft.id === "edited-comment");
       if (!editedDraft) {
         throw new Error("Missing edited comment fixture.");
       }
@@ -234,51 +218,52 @@ describe("Agent Studio review comment composer adapter", () => {
     });
     const adapter = createAgentStudioReviewCommentComposerAdapter(fakeStore.getStore);
 
-    await adapter.submitDraft(createEmptyComposerDraft(), async () => {
+    await adapter.submitDraft(OWNER, createEmptyComposerDraft(), async () => {
       fakeStore.addDraft(buildComment("new-comment", 4, "Added during send."));
       fakeStore.updateDraft("new-comment", "Edited during send.", 5);
       return true;
     });
 
     expect(
-      fakeStore.getStore().drafts.map(({ id, revision, status }) => ({
-        id,
-        revision,
-        status,
-      })),
+      fakeStore
+        .getStore()
+        .getPendingDrafts(OWNER)
+        .map(({ id, revision, status }) => ({
+          id,
+          revision,
+          status,
+        })),
     ).toEqual([
       { id: "edited-comment", revision: 3, status: "pending" },
       { id: "new-comment", revision: 5, status: "pending" },
     ]);
   });
 
-  test("preserves an in-flight transaction only for a session-only scope switch", () => {
+  test("sends the caller draft unchanged when no comment owner exists", async () => {
     const fakeStore = createFakeReviewCommentStore([
-      buildComment("submitting-comment", 1, "Already sending.", "submitting"),
+      buildComment("first-comment", 1, "Must not be sent."),
     ]);
     const adapter = createAgentStudioReviewCommentComposerAdapter(fakeStore.getStore);
-    const initialScope = buildScope("task-1", "build", null);
-    const sessionScope = buildScope("task-1", "build", "session-1");
+    let sentText = "";
 
-    adapter.syncDraftScope(initialScope, "task-1:build:new");
-    adapter.syncDraftScope(sessionScope, "task-1:build:session-1");
+    const didSend = await adapter.submitDraft(null, createEmptyComposerDraft(), async (draft) => {
+      sentText = draftToSerializedText(draft);
+      return true;
+    });
 
-    expect(fakeStore.setKeys).toEqual(["task-1:build:session-1"]);
-    expect(fakeStore.getStore().drafts).toHaveLength(1);
+    expect(didSend).toBe(true);
+    expect(sentText).toBe("");
+    expect(fakeStore.getStore().getPendingDrafts(OWNER)).toHaveLength(1);
+  });
 
-    const roleScope = buildScope("task-1", "qa", "session-1");
-    adapter.syncDraftScope(roleScope, "task-1:qa:session-1");
-    expect(fakeStore.resetKeys).toContain("task-1:qa:session-1");
-    expect(fakeStore.getStore().drafts).toEqual([]);
+  test("delegates hydration and flush to the store", () => {
+    const fakeStore = createFakeReviewCommentStore([]);
+    const adapter = createAgentStudioReviewCommentComposerAdapter(fakeStore.getStore);
 
-    fakeStore.addDraft(buildComment("pending-comment", 2, "Not sending."));
-    const nextSessionScope = buildScope("task-1", "qa", "session-2");
-    adapter.syncDraftScope(nextSessionScope, "task-1:qa:session-2");
-    expect(fakeStore.getStore().drafts).toEqual([]);
+    adapter.hydrate();
+    adapter.flush();
 
-    fakeStore.addDraft(buildComment("next-task-comment", 3, "Different task."));
-    const taskScope = buildScope("task-2", "qa", "session-2");
-    adapter.syncDraftScope(taskScope, "task-2:qa:session-2");
-    expect(fakeStore.getStore().drafts).toEqual([]);
+    expect(fakeStore.hydrated()).toBe(1);
+    expect(fakeStore.flushed()).toBe(1);
   });
 });

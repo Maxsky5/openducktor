@@ -20,6 +20,7 @@ import {
   GitConflictDialog,
   GitConflictStrip,
 } from "@/features/git-conflict-resolution";
+import { toInlineCommentDraftOwnerKey } from "@/state/use-inline-comment-draft-store";
 import { CommitComposer } from "./commit-composer";
 import { INLINE_CODE_CLASS_NAME, PRELOAD_DIFF_LIMIT } from "./constants";
 import { EmptyDiffState } from "./empty-diff-state";
@@ -230,12 +231,18 @@ function AgentStudioGitDiff({
   model: AgentStudioGitPanelModel;
   view: GitPanelView;
 }): ReactElement {
+  const commentOwnerKey = useMemo(
+    () => (model.commentOwner ? toInlineCommentDraftOwnerKey(model.commentOwner) : null),
+    [model.commentOwner],
+  );
+
   return (
     <ScrollArea className="min-h-0 flex-1">
       {view.hasFiles ? (
         <FileDiffList
           fileDiffs={view.displayedFileDiffs}
           diffScope={view.diffScope}
+          ownerKey={commentOwnerKey}
           conflictedFiles={view.conflictedFiles}
           diffStyle={view.diffStyle}
           setDiffStyle={view.setDiffStyle}

@@ -2,7 +2,38 @@ import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act, type ReactElement, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
+import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
+import {
+  resetInlineCommentDraftStoreForTests,
+  setInlineCommentDraftScheduleTaskForTests,
+  setInlineCommentDraftStorageForTests,
+  useInlineCommentDraftStore,
+} from "@/state/use-inline-comment-draft-store";
+
+const OWNER_KEY = toInlineCommentDraftStorageKey({ workspaceId: "workspace-1", taskId: "task-1" });
+const OTHER_OWNER_KEY = toInlineCommentDraftStorageKey({
+  workspaceId: "workspace-1",
+  taskId: "task-2",
+});
+
+type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
+
+const createMemoryStorage = (): TestStorage => {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => {
+      store.set(key, value);
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+  };
+};
 
 const pierreDiffViewerModule = await import("@/components/features/agents/pierre-diff-viewer");
 type RestorableSpy = { mockRestore(): void };
@@ -116,11 +147,15 @@ const viewerMock = mock(
 );
 
 const resetInlineComments = (): void => {
-  useInlineCommentDraftStore.setState({ drafts: [], draftStateKey: null });
+  resetInlineCommentDraftStoreForTests();
 };
 
 beforeEach(async () => {
   reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
+
+  resetInlineCommentDraftStoreForTests();
+  setInlineCommentDraftStorageForTests(createMemoryStorage());
+  setInlineCommentDraftScheduleTaskForTests(() => () => {});
 
   pierreViewerSpies = [
     spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
@@ -180,6 +215,7 @@ function FileDiffListHarness(): ReactElement {
           },
         ]}
         diffScope="uncommitted"
+        ownerKey={OWNER_KEY}
         conflictedFiles={new Set()}
         diffStyle="unified"
         setDiffStyle={() => {}}
@@ -224,6 +260,52 @@ function ScopeSwitchFileDiffListHarness(): ReactElement {
           },
         ]}
         diffScope={diffScope}
+        ownerKey={OWNER_KEY}
+        conflictedFiles={new Set()}
+        diffStyle="unified"
+        setDiffStyle={() => {}}
+        expandedFiles={expandedFiles}
+        onToggleFile={(filePath) => {
+          setExpandedFiles((previous) => {
+            const next = new Set(previous);
+            if (next.has(filePath)) {
+              next.delete(filePath);
+            } else {
+              next.add(filePath);
+            }
+            return next;
+          });
+        }}
+        preloadLimit={1}
+        canResetFiles={false}
+        isResetDisabled={false}
+        resetDisabledReason={null}
+      />
+    </TooltipProvider>
+  );
+}
+
+function OwnerSwitchFileDiffListHarness(): ReactElement {
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set(["src/example.ts"]));
+  const [ownerKey, setOwnerKey] = useState(OWNER_KEY);
+
+  return (
+    <TooltipProvider>
+      <button type="button" onClick={() => setOwnerKey(OTHER_OWNER_KEY)}>
+        Switch owner
+      </button>
+      <FileDiffList
+        fileDiffs={[
+          {
+            file: "src/example.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 1,
+            diff: "@@ -1 +1 @@\n-old\n+new\n",
+          },
+        ]}
+        diffScope="uncommitted"
+        ownerKey={ownerKey}
         conflictedFiles={new Set()}
         diffStyle="unified"
         setDiffStyle={() => {}}
@@ -303,13 +385,13 @@ describe("FileDiffList", () => {
 
     const sentSnapshot = useInlineCommentDraftStore
       .getState()
-      .getPendingDrafts()
+      .getPendingDrafts(OWNER_KEY)
       .map((draft) => ({ id: draft.id, revision: draft.revision }));
 
     act(() => {
       const submissionId = useInlineCommentDraftStore
         .getState()
-        .beginSubmittingDrafts(sentSnapshot);
+        .beginSubmittingDrafts(OWNER_KEY, sentSnapshot);
       if (!submissionId) {
         throw new Error("Expected submission id");
       }
@@ -332,11 +414,11 @@ describe("FileDiffList", () => {
 
     const sentSnapshot = useInlineCommentDraftStore
       .getState()
-      .getPendingDrafts()
+      .getPendingDrafts(OWNER_KEY)
       .map((draft) => ({ id: draft.id, revision: draft.revision }));
 
     act(() => {
-      useInlineCommentDraftStore.getState().beginSubmittingDrafts(sentSnapshot);
+      useInlineCommentDraftStore.getState().beginSubmittingDrafts(OWNER_KEY, sentSnapshot);
     });
 
     expect(screen.getByRole("button", { name: "Edit" }).getAttribute("disabled")).not.toBeNull();
@@ -351,6 +433,16 @@ describe("FileDiffList", () => {
     expect(screen.getByTestId("agent-studio-git-new-comment-form")).toBeDefined();
 
     fireEvent.click(screen.getByRole("button", { name: "Switch scope" }));
+    expect(screen.queryByTestId("agent-studio-git-new-comment-form")).toBeNull();
+  });
+
+  test("clears an unsaved selection form when the comment owner changes for the same file row", () => {
+    render(<OwnerSwitchFileDiffListHarness />);
+
+    fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+    expect(screen.getByTestId("agent-studio-git-new-comment-form")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch owner" }));
     expect(screen.queryByTestId("agent-studio-git-new-comment-form")).toBeNull();
   });
 

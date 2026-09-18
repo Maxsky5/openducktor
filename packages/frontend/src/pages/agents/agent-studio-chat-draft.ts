@@ -30,14 +30,6 @@ export const agentStudioChatDraftScopeKey = (
   { taskId, role, session }: AgentStudioChatDraftScope,
 ): string => [workspaceId ?? "", taskId, role, sessionScopeKey(session)].join(":");
 
-export const didAgentStudioChatDraftScopeSwitchSessionOnly = (
-  previous: AgentStudioChatDraftScope,
-  next: AgentStudioChatDraftScope,
-): boolean =>
-  previous.taskId === next.taskId &&
-  previous.role === next.role &&
-  sessionScopeKey(previous.session) !== sessionScopeKey(next.session);
-
 const toPersistenceIdentity = (
   workspaceId: string | null,
   session: AgentSessionIdentity | null,

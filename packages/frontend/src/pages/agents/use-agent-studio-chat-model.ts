@@ -21,6 +21,7 @@ import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/con
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
 import { useActiveWorkspace, useAgentSessionReadModelState } from "@/state/app-state-provider";
+import type { InlineCommentPersistenceWarning } from "@/state/use-inline-comment-draft-store";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
   type AgentStudioChatDraftScope,
@@ -100,6 +101,11 @@ type UseAgentStudioChatModelArgs = {
   runtimeDefinitions: RuntimeDescriptor[];
   composer: AgentStudioChatComposerContext;
 };
+
+const REVIEW_COMMENT_PERSISTENCE_WARNINGS = {
+  oversized: "These comments are too large to save for later.",
+  storage_unavailable: "These comments are not saved for this session.",
+} satisfies Record<InlineCommentPersistenceWarning, string>;
 
 const toChatContextUsage = (
   selectedSessionContextUsage: AgentStudioContextUsage,
@@ -331,10 +337,11 @@ export function useAgentStudioChatModel({
   );
   const onResumeSession = sessionActions.onResumeSession;
   const reviewCommentComposer = useAgentStudioReviewCommentComposerAdapter({
-    draftScope: composer.draftScope,
-    draftStateKey,
+    workspaceId: composer.workspaceId,
+    taskId: selectedSession.taskId,
     onSend: sessionActions.onSend,
   });
+  const reviewCommentPersistenceWarning = reviewCommentComposer.persistenceWarning;
   const interruptedTurnResume = useMemo<AgentChatInterruptedTurnResumeModel | undefined>(
     () =>
       sessionActions.canResumeSession
@@ -358,11 +365,15 @@ export function useAgentStudioChatModel({
     }
 
     const commentLabel = count === 1 ? "comment" : "comments";
-    return {
+    const items: AgentChatPendingSendItems = {
       count,
       accessibleLabel: `${count} pending review ${commentLabel}`,
     };
-  }, [reviewCommentComposer.pendingInlineCommentCount]);
+    if (reviewCommentPersistenceWarning !== null) {
+      items.warning = REVIEW_COMMENT_PERSISTENCE_WARNINGS[reviewCommentPersistenceWarning];
+    }
+    return items;
+  }, [reviewCommentComposer.pendingInlineCommentCount, reviewCommentPersistenceWarning]);
 
   const composerConfig = useMemo<AgentChatComposerConfig>(() => {
     const config: AgentChatComposerConfig = {

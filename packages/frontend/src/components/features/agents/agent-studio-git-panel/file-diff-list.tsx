@@ -36,6 +36,7 @@ const groupInlineCommentsByFile = (
 type FileDiffListProps = {
   fileDiffs: FileDiff[];
   diffScope: DiffScope;
+  ownerKey: string | null;
   conflictedFiles: ReadonlySet<string>;
   diffStyle: PierreDiffStyle;
   setDiffStyle: (style: PierreDiffStyle) => void;
@@ -88,6 +89,7 @@ function DiffStyleToggleButton({
 export const FileDiffList = memo(function FileDiffList({
   fileDiffs,
   diffScope,
+  ownerKey,
   conflictedFiles,
   diffStyle,
   setDiffStyle,
@@ -109,7 +111,11 @@ export const FileDiffList = memo(function FileDiffList({
     }
     return { totalAdditions: additions, totalDeletions: deletions };
   }, [fileDiffs]);
-  const inlineCommentDrafts = useInlineCommentDraftStore((store) => store.drafts);
+  const inlineCommentDrafts = useInlineCommentDraftStore((store) =>
+    ownerKey === null
+      ? EMPTY_INLINE_COMMENTS
+      : (store.draftsByOwner[ownerKey] ?? EMPTY_INLINE_COMMENTS),
+  );
   const inlineCommentsByFile = useMemo(
     () => groupInlineCommentsByFile(inlineCommentDrafts, diffScope),
     [diffScope, inlineCommentDrafts],
@@ -156,6 +162,7 @@ export const FileDiffList = memo(function FileDiffList({
           key={diff.file}
           diff={diff}
           diffScope={diffScope}
+          ownerKey={ownerKey}
           fileComments={inlineCommentsByFile.get(diff.file) ?? EMPTY_INLINE_COMMENTS}
           viewState={{
             isConflicted: conflictedFiles.has(diff.file),
