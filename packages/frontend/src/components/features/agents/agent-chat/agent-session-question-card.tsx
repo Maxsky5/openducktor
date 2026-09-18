@@ -60,6 +60,8 @@ export function AgentSessionQuestionCard({
       ? activeQuestionIndex + 1
       : null;
   const questionRenderEntries = buildQuestionRenderEntries(request.questions);
+  const questionTabClassName = (active: boolean): string =>
+    cn("h-7 gap-1 border px-2 transition-none", active ? "border-transparent" : "border-input");
   const getTabId = (tabId: string): string => `${tabGroupId}-tab-${tabId}`;
   const getPanelId = (tabId: string): string => `${tabGroupId}-panel-${tabId}`;
   const getTabPanelProps = (tabId: string): HTMLAttributes<HTMLDivElement> | undefined => {
@@ -117,7 +119,7 @@ export function AgentSessionQuestionCard({
                   grow="hug"
                   size="xs"
                   inactiveClassName="bg-card text-foreground hover:bg-accent"
-                  className="h-7 gap-1 border border-input px-2 transition-none"
+                  className={questionTabClassName(isTabActive)}
                   onClick={() => setActiveTabId(tabId)}
                 >
                   {answered ? (
@@ -149,7 +151,7 @@ export function AgentSessionQuestionCard({
               grow="hug"
               size="xs"
               inactiveClassName="bg-card text-foreground hover:bg-muted"
-              className="h-7 gap-1 border border-input px-2 transition-none"
+              className={questionTabClassName(isSummaryTab)}
               onClick={() => setActiveTabId(QUESTION_SUMMARY_TAB_ID)}
             >
               <ListChecks className="size-3.5" />

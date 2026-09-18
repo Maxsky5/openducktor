@@ -314,6 +314,39 @@ describe("AgentSessionQuestionCard", () => {
     await harness.unmount();
   });
 
+  test("reset returns to the first question tab", async () => {
+    const harness = createCardHarness({
+      request: buildRequest({
+        questions: [
+          {
+            header: "First",
+            question: "Pick the first answer",
+            options: [{ label: "One", description: "First option" }],
+            multiple: false,
+          },
+          {
+            header: "Second",
+            question: "Pick the second answer",
+            options: [{ label: "Two", description: "Second option" }],
+            multiple: false,
+          },
+        ],
+      }),
+      onSubmit: async () => {},
+    });
+    await harness.mount();
+
+    await harness.clickTabByText("Summary");
+    expect(harness.asText()).toContain("No answer yet");
+
+    await harness.clickButtonByText("Reset");
+
+    expectActiveTabPanel(screen.getByRole("tab", { name: /First/i }));
+    expect(harness.asText()).toContain("Pick the first answer");
+
+    await harness.unmount();
+  });
+
   test("shows submit errors and clears them after user edits", async () => {
     const harness = createCardHarness({
       request: buildRequest(),

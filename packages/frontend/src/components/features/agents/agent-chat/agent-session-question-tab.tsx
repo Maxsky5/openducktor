@@ -102,7 +102,10 @@ export const QuestionTab = ({
             grow="hug"
             size="xs"
             inactiveClassName="bg-card text-foreground hover:bg-accent"
-            className="gap-1 border border-input px-2 transition-none"
+            className={cn(
+              "gap-1 border px-2 transition-none",
+              entry?.useFreeText ? "border-transparent" : "border-input",
+            )}
             disabled={disabled}
             onClick={onToggleFreeText}
           >

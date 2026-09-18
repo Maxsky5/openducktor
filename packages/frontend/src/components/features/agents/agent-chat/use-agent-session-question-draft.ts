@@ -217,10 +217,10 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
 
   const resetDraft = useCallback(() => {
     clearSubmitError();
-    setUiState((current) => ({
-      ...current,
+    setUiState({
+      activeTabId: "0",
       draft: createAgentQuestionDraft(request),
-    }));
+    });
   }, [request, clearSubmitError]);
 
   const buildAnswers = useCallback(
