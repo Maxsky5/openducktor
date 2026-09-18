@@ -3,7 +3,7 @@ import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dn
 import { CSS } from "@dnd-kit/utilities";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Check, History, MessageCirclePlus, Plus } from "lucide-react";
+import { Archive, Check, History, LoaderCircle, MessageCirclePlus, Plus } from "lucide-react";
 import { type ComponentProps, type ReactElement, useEffect, useState } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,7 @@ type WorkspaceSessionTabProps = {
   selected: boolean;
   pending: boolean;
   confirming: boolean;
+  archiving: boolean;
   onArchive?: (record: WorkspaceSession) => void;
   onSelect?: (id: string) => void;
   shouldSuppressSelection?: (id: string) => boolean;
@@ -84,6 +85,7 @@ function WorkspaceSessionTabView({
   selected,
   pending,
   confirming,
+  archiving,
   onArchive,
   onSelect,
   shouldSuppressSelection,
@@ -103,6 +105,7 @@ function WorkspaceSessionTabView({
   const title = workspaceSessionTitle(record);
   let archiveLabel = `Archive ${title}`;
   if (confirming) archiveLabel = `Confirm stop and archive ${title}`;
+  if (archiving) archiveLabel = `Archiving ${title}`;
   return (
     <div
       {...shellProps}
@@ -142,26 +145,33 @@ function WorkspaceSessionTabView({
         )}
         data-active={selected}
         aria-label={archiveLabel}
+        aria-busy={archiving}
         title={archiveLabel}
         disabled={pending}
         onMouseDown={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={() => onArchive?.(record)}
       >
-        <Archive
-          aria-hidden="true"
-          className={cn(
-            "absolute transition-[opacity,transform] duration-150 motion-reduce:transition-none",
-            confirming ? "scale-75 -rotate-45 opacity-0" : "scale-100 rotate-0 opacity-100",
-          )}
-        />
-        <Check
-          aria-hidden="true"
-          className={cn(
-            "absolute transition-[opacity,transform] duration-150 motion-reduce:transition-none",
-            confirming ? "scale-100 rotate-0 opacity-100" : "scale-75 rotate-45 opacity-0",
-          )}
-        />
+        {archiving ? (
+          <LoaderCircle aria-hidden="true" className="animate-spin" />
+        ) : (
+          <>
+            <Archive
+              aria-hidden="true"
+              className={cn(
+                "absolute transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+                confirming ? "scale-75 -rotate-45 opacity-0" : "scale-100 rotate-0 opacity-100",
+              )}
+            />
+            <Check
+              aria-hidden="true"
+              className={cn(
+                "absolute transition-[opacity,transform] duration-150 motion-reduce:transition-none",
+                confirming ? "scale-100 rotate-0 opacity-100" : "scale-75 rotate-45 opacity-0",
+              )}
+            />
+          </>
+        )}
       </Button>
     </div>
   );
@@ -174,11 +184,13 @@ function WorkspaceSessionTabDragPreview({
   selectedId,
   pending,
   confirming,
+  archiving,
 }: {
   record: WorkspaceSession | undefined;
   selectedId: string | null;
   pending: boolean;
   confirming: boolean;
+  archiving: boolean;
 }): ReactElement | null {
   if (!record) return null;
   return (
@@ -190,6 +202,7 @@ function WorkspaceSessionTabDragPreview({
             selected={record.id === selectedId}
             pending={pending}
             confirming={confirming}
+            archiving={archiving}
           />
         </StudioTabsList>
       </Tabs>
@@ -200,6 +213,7 @@ function WorkspaceSessionTabDragPreview({
 function WorkspaceSessionTabs({
   sessions,
   selectedId,
+  archivingId,
   pending,
   onReorder,
   onSelect,
@@ -207,6 +221,7 @@ function WorkspaceSessionTabs({
 }: {
   sessions: WorkspaceSession[];
   selectedId: string | null;
+  archivingId: string | null;
   pending: boolean;
   onReorder: (draggedId: string, targetId: string, position: "before" | "after") => void;
   onSelect: (id: string) => void;
@@ -219,6 +234,7 @@ function WorkspaceSessionTabs({
     return () => window.clearTimeout(timeout);
   }, [confirmingId]);
   const handleArchive = (record: WorkspaceSession) => {
+    if (archivingId !== null) return;
     if (record.executionTarget.kind === "local_worktree") {
       setConfirmingId(null);
       onArchive(record);
@@ -253,6 +269,7 @@ function WorkspaceSessionTabs({
               selected={record.id === selectedId}
               pending={pending}
               confirming={confirmingId === record.id}
+              archiving={archivingId === record.id}
               onSelect={onSelect}
               onArchive={handleArchive}
               shouldSuppressSelection={drag.shouldSuppressSelection}
@@ -266,6 +283,7 @@ function WorkspaceSessionTabs({
           selectedId={selectedId}
           pending={pending}
           confirming={confirmingId === activeDragRecord?.id}
+          archiving={archivingId === activeDragRecord?.id}
         />
       </DragOverlay>
     </DndContext>
@@ -290,6 +308,7 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
   );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<WorkspaceSession | null>(null);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const mounted = useMountedRef();
   const selected = useWorkspaceSessionSelection({
@@ -302,21 +321,43 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
     if (records.data && sessionId !== selectedId) updateNavigation({ sessionId: selectedId });
   }, [records.data, selectedId, sessionId, updateNavigation]);
   const archive = useMutation({
-    mutationFn: (input: { sessionId: string; confirmStop: boolean; removeWorktree: boolean }) =>
-      host.workspaceSessionArchive({ workspaceId: workspace.workspaceId, ...input }),
+    mutationFn: ({
+      sessionId,
+      ...input
+    }: {
+      sessionId: string;
+      confirmStop: boolean;
+      removeWorktree: boolean;
+    }) => host.workspaceSessionArchive({ ...input, workspaceId: workspace.workspaceId, sessionId }),
     onSuccess: (record) => {
       updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, record);
       if (!mounted.current) return;
       setArchiveTarget(null);
+      setArchivingId(null);
       if (selectedId === record.id)
         updateNavigation({
           sessionId: orderedSessions.find((entry) => entry.id !== record.id)?.id ?? null,
         });
     },
+    onError: () => {
+      setArchivingId(null);
+    },
     onSettled: () => {
       void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
     },
   });
+  const beginArchive = (sessionId: string, removeWorktree: boolean) => {
+    archive.reset();
+    setArchivingId(sessionId);
+    archive.mutate({ sessionId, confirmStop: true, removeWorktree });
+  };
+  const handleTabArchive = (target: WorkspaceSession) => {
+    if (target.executionTarget.kind === "local_worktree") {
+      setArchiveTarget(target);
+      return;
+    }
+    beginArchive(target.id, false);
+  };
   const setCreating = (open: boolean) => {
     setCreateOpen(open);
     if (!open && creating) updateNavigation({ creating: false });
@@ -371,17 +412,11 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
         <WorkspaceSessionTabs
           sessions={orderedSessions}
           selectedId={selectedId}
+          archivingId={archivingId}
           pending={archive.isPending}
           onReorder={reorder}
           onSelect={(sessionId) => updateNavigation({ sessionId }, false)}
-          onArchive={(target) => {
-            archive.reset();
-            if (target.executionTarget.kind === "local_worktree") {
-              setArchiveTarget(target);
-              return;
-            }
-            archive.mutate({ sessionId: target.id, confirmStop: true, removeWorktree: false });
-          }}
+          onArchive={handleTabArchive}
         />
       </StudioTabStrip>
       <WorkspaceSessionReadModelNotice />
@@ -423,13 +458,7 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
           record={archiveTarget}
           isArchiving={archive.isPending}
           error={archive.error}
-          onArchive={(removeWorktree) =>
-            archive.mutate({
-              sessionId: archiveTarget.id,
-              confirmStop: true,
-              removeWorktree,
-            })
-          }
+          onArchive={(removeWorktree) => beginArchive(archiveTarget.id, removeWorktree)}
           onClose={() => {
             setArchiveTarget(null);
             archive.reset();
