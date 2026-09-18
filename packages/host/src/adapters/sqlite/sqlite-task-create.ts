@@ -1,6 +1,7 @@
 import type { TaskCreateInput } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { encodeJson, normalizeLabels } from "./sqlite-json-codecs";
+import { normalizeLabels } from "../../domain/task/task-labels";
+import { encodeJson } from "./sqlite-json-codecs";
 import {
   firstTaskIdHashLength,
   taskIdCandidates,

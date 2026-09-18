@@ -19,11 +19,14 @@ export type OdtMcpBridgeError =
   | TaskServiceError
   | WorkspaceSettingsError;
 
-export type OdtMcpReadToolName =
-  | "odt_read_task"
-  | "odt_read_task_assets"
-  | "odt_read_task_documents"
-  | "odt_search_tasks";
+export const ODT_MCP_READ_TOOL_NAMES = [
+  "odt_read_task",
+  "odt_read_task_assets",
+  "odt_read_task_documents",
+  "odt_search_tasks",
+] as const satisfies readonly WorkspaceScopedOdtToolName[];
+
+export type OdtMcpReadToolName = (typeof ODT_MCP_READ_TOOL_NAMES)[number];
 
 export type OdtMcpMutationToolName = Exclude<WorkspaceScopedOdtToolName, OdtMcpReadToolName>;
 

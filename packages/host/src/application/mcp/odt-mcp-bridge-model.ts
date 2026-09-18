@@ -13,6 +13,7 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType, z } from "zod";
+import { normalizeLabels } from "../../domain/task/task-labels";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 
 type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
@@ -20,9 +21,6 @@ type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
 const MAX_TASK_CANDIDATES = 5;
 
 export const normalizeKey = (value: string): string => value.trim().toLowerCase();
-
-export const normalizeLabels = (labels: readonly string[]): string[] =>
-  Array.from(new Set(labels.map((label) => label.trim()).filter(Boolean))).sort();
 
 export const buildTaskUpdatePatch = (
   current: TaskCard,

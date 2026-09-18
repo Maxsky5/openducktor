@@ -345,6 +345,7 @@ export const UpdateTaskInputSchema = z
       .describe("New task title. Omit to keep the current title."),
     description: z
       .string()
+      .trim()
       .optional()
       .describe("New task description. An empty string clears the description."),
     priority: taskPrioritySchema

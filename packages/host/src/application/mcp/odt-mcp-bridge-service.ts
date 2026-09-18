@@ -27,6 +27,7 @@ import { executeOdtMcpReadTool } from "./odt-mcp-bridge-read-tools";
 import {
   createOdtMcpToolContext,
   type CreateOdtMcpToolContextInput,
+  ODT_MCP_READ_TOOL_NAMES,
   type OdtMcpBridgeError,
   type OdtMcpReadToolName,
 } from "./odt-mcp-bridge-tool-context";
@@ -89,12 +90,7 @@ export const createOdtMcpBridgeService = (
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
 
-const READ_TOOL_NAMES: ReadonlySet<WorkspaceScopedOdtToolName> = new Set([
-  "odt_read_task",
-  "odt_read_task_assets",
-  "odt_read_task_documents",
-  "odt_search_tasks",
-]);
+const READ_TOOL_NAMES: ReadonlySet<WorkspaceScopedOdtToolName> = new Set(ODT_MCP_READ_TOOL_NAMES);
 
 const isOdtMcpReadToolName = (
   toolName: WorkspaceScopedOdtToolName,

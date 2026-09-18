@@ -155,6 +155,10 @@ describe("odt mcp public task schemas", () => {
 
   test("public update accepts a partial patch and clears fields with typed values", () => {
     expect(UpdateTaskInputSchema.parse({ taskId: " task-1 " })).toEqual({ taskId: "task-1" });
+    expect(UpdateTaskInputSchema.parse({ taskId: "task-1", description: "   " })).toEqual({
+      taskId: "task-1",
+      description: "",
+    });
     expect(
       UpdateTaskInputSchema.parse({
         workspaceId: "repo",
