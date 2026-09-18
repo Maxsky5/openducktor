@@ -9,7 +9,7 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Fiber, TestClock, TestContext } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { terminateProcessTree } from "../../infrastructure/process/process-tree";
 import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
@@ -870,6 +870,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       const childPidPath = join(root, "child.pid");
+      const startupTimeoutMs = 2_000;
       await mkdir(repo);
       const opencodeBinary = await createFakeOpenCode(root, { childPidPath });
       const starter = createOpenCodeWorkspaceRuntimeStarter({
@@ -881,28 +882,46 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
             hostUrl: "http://127.0.0.1:14327",
             hostToken: "token-1",
           }),
-        startupTimeoutMs: 2_000,
-        retryDelayMs: 5,
+        startupTimeoutMs,
+        retryDelayMs: 2_000,
         portAllocator: () => Effect.succeed(43123),
-        readinessProbe: () =>
-          Effect.promise(() =>
-            waitFor(() => existsSync(childPidPath), PROCESS_START_TIMEOUT_MS),
-          ).pipe(Effect.as(false)),
+        readinessProbe: () => Effect.succeed(false),
       });
 
-      await expect(
-        Effect.runPromise(
-          starter.startWorkspaceRuntime({
-            runtimeKind: "opencode",
-            repoPath: repo,
-            workingDirectory: repo,
-            descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
-          }),
-        ),
-      ).rejects.toThrow("Timed out waiting for OpenCode runtime on 127.0.0.1:43123.");
-      childPid = Number(await readFile(childPidPath, "utf8"));
-      const stoppedPid = childPid;
-      await waitFor(() => !processIsAlive(stoppedPid), PROCESS_CLEANUP_TIMEOUT_MS);
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const startup = yield* Effect.fork(
+            Effect.either(
+              starter.startWorkspaceRuntime({
+                runtimeKind: "opencode",
+                repoPath: repo,
+                workingDirectory: repo,
+                descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+              }),
+            ),
+          );
+          yield* Effect.gen(function* () {
+            yield* Effect.promise(() =>
+              waitFor(() => existsSync(childPidPath), PROCESS_START_TIMEOUT_MS),
+            );
+            childPid = Number(yield* Effect.promise(() => readFile(childPidPath, "utf8")));
+            const timedOutPid = childPid;
+            expect(processIsAlive(timedOutPid)).toBe(true);
+
+            yield* TestClock.adjust(`${startupTimeoutMs} millis`);
+            const result = yield* Fiber.join(startup);
+            expect(result._tag).toBe("Left");
+            if (result._tag === "Left") {
+              expect(result.left.message).toBe(
+                "Timed out waiting for OpenCode runtime on 127.0.0.1:43123.",
+              );
+            }
+            yield* Effect.promise(() =>
+              waitFor(() => !processIsAlive(timedOutPid), PROCESS_CLEANUP_TIMEOUT_MS),
+            );
+          }).pipe(Effect.ensuring(Fiber.interrupt(startup)));
+        }).pipe(Effect.provide(TestContext.TestContext)),
+      );
     } finally {
       if (childPid !== null && processIsAlive(childPid)) {
         process.kill(childPid, "SIGKILL");
