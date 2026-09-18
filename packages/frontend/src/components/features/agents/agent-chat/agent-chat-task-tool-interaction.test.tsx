@@ -116,10 +116,15 @@ test("the task card opens and closes the real detail sheet without leaving chat"
   );
   try {
     fireEvent.click(view.getByRole("button", { name: "Open task details" }));
-    await waitFor(() => expect(view.getByRole("button", { name: "Close" })).toBeDefined(), {
-      timeout: 1500,
-    });
-    expect(view.getAllByRole("heading", { name: task.title, level: 2 }).length).toBeGreaterThan(0);
+    await waitFor(
+      () => {
+        expect(view.getByRole("button", { name: "Close" })).toBeDefined();
+        expect(view.getAllByRole("heading", { name: task.title, level: 2 }).length).toBeGreaterThan(
+          0,
+        );
+      },
+      { timeout: 1500 },
+    );
     expect(window.location.href).toBe(url);
     fireEvent.click(view.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(view.queryByRole("button", { name: "Close" })).toBeNull(), {

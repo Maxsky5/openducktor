@@ -7,7 +7,7 @@
   "scripts": {
     "build": "bunx tsc -p tsconfig.json",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
-    "test": "bun test --preload ../../scripts/bun-test-preload.ts --pass-with-no-tests --timeout 1000",
+    "test": "bun test --preload ../../scripts/bun-test-preload.ts --pass-with-no-tests --timeout 1000 --parallel",
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "dependencies": {

@@ -12,7 +12,7 @@
     "build": "bunx tsc -p tsconfig.build.json",
     "db:generate": "drizzle-kit generate --config drizzle.task-store.config.ts",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
-    "test": "bun test --preload ../../scripts/bun-test-preload.ts --pass-with-no-tests --timeout 5000",
+    "test": "bun test --preload ../../scripts/bun-test-preload.ts --pass-with-no-tests --timeout 5000 --parallel",
     "lint": "oxlint -c ../../.oxlintrc.json src drizzle.task-store.config.ts"
   },
   "dependencies": {
