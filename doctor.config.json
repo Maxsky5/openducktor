@@ -1,4 +1,5 @@
 {
+  "$schema": "https://react.doctor/schema/config.json",
   "ignore": {
     "overrides": [
       {

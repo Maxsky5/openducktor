@@ -25,7 +25,9 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      issues: write
       pull-requests: write
+      statuses: write
 
     steps:
       - name: Checkout
@@ -34,10 +36,11 @@ jobs:
           fetch-depth: 0
 
       - name: Run React Doctor
-        uses: millionco/react-doctor@b31fd85b9ee469c6b588d4e446f44385466193a2 # main
+        uses: millionco/react-doctor@013f7373f91a3b9e68bd1dc7d4d354f4b041b117 # v2.2.9
         with:
           project: "@openducktor/frontend,@openducktor/electron"
           blocking: warning
+          version: "0.9.14"
 
   typescript-workspace-quality:
     name: TypeScript Workspace Quality (${{ matrix.label }})
