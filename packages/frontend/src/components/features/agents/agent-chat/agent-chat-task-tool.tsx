@@ -155,6 +155,48 @@ const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
     </>
   );
 };
+const resolveRenderedTask = (
+  tool: AgentChatTaskToolName,
+  meta: ToolMeta,
+): PublicTaskSummaryTask | null => {
+  if (getToolLifecyclePhase(meta) !== "completed") {
+    return null;
+  }
+  if (tool === "create_task") {
+    const result = readTaskToolResult(createTaskResultSchema, meta.output);
+    return result ? result.task : null;
+  }
+  if (tool === "update_task") {
+    const result = readTaskToolResult(taskSummarySchema, meta.output);
+    return result ? result.task : null;
+  }
+  return null;
+};
+
+const buildTaskToolSummary = (
+  tool: AgentChatTaskToolName,
+  meta: ToolMeta,
+  task: PublicTaskSummaryTask | null,
+): string => {
+  const phase = getToolLifecyclePhase(meta);
+  if (tool === "search_tasks") return taskSearchSummary(meta);
+  if (phase === "failed") return meta.error || "Tool failed";
+  if (phase === "cancelled") return "Tool cancelled";
+  if (task) return task.title;
+  if (phase === "completed") return "Invalid task result";
+  const title = CreateTaskInputSchema.shape.title.safeParse(meta.input?.title);
+  if (title.success) return title.data;
+  return tool === "update_task" ? "Updating task" : "Creating task";
+};
+
+const showsInvalidTaskAlert = (
+  tool: AgentChatTaskToolName,
+  meta: ToolMeta,
+  task: PublicTaskSummaryTask | null,
+): boolean =>
+  (tool === "create_task" || tool === "update_task") &&
+  getToolLifecyclePhase(meta) === "completed" &&
+  task === null;
 
 export const AgentChatTaskTool = ({
   meta,
@@ -171,23 +213,8 @@ export const AgentChatTaskTool = ({
   messageTimestamp: string;
   sessionWorkingDirectory?: string | null | undefined;
 }) => {
-  const phase = getToolLifecyclePhase(meta);
-  const completed = phase === "completed";
-  const created =
-    tool === "create_task" && completed
-      ? readTaskToolResult(createTaskResultSchema, meta.output)
-      : null;
-  const updated =
-    tool === "update_task" && completed ? readTaskToolResult(taskSummarySchema, meta.output) : null;
-  const title = CreateTaskInputSchema.shape.title.safeParse(meta.input?.title);
-  const runningSummary = tool === "update_task" ? "Updating task" : "Creating task";
-  let summary = completed ? "Invalid task result" : runningSummary;
-  if (tool === "search_tasks") summary = taskSearchSummary(meta);
-  else if (phase === "failed") summary = meta.error || "Tool failed";
-  else if (phase === "cancelled") summary = "Tool cancelled";
-  else if (created) summary = created.task.title;
-  else if (updated) summary = updated.task.title;
-  else if (title.success) summary = title.data;
+  const task = resolveRenderedTask(tool, meta);
+  const summary = buildTaskToolSummary(tool, meta, task);
 
   return (
     <section aria-label={tool} className="flex min-w-0 flex-col gap-2">
@@ -199,9 +226,8 @@ export const AgentChatTaskTool = ({
         sessionWorkingDirectory={sessionWorkingDirectory}
         displayName={tool}
       />
-      {created && <TaskResultCard task={created.task} />}
-      {updated && <TaskResultCard task={updated.task} />}
-      {(tool === "create_task" || tool === "update_task") && completed && !created && !updated && (
+      {task && <TaskResultCard task={task} />}
+      {showsInvalidTaskAlert(tool, meta, task) && (
         <p role="alert" className="text-sm text-destructive">
           OpenDucktor returned an invalid task result. Expand the tool output to inspect the
           response.
