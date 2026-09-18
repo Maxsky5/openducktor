@@ -870,6 +870,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     try {
       const repo = join(root, "repo");
       const childPidPath = join(root, "child.pid");
+      const startupTimeoutMs = 2_000;
       await mkdir(repo);
       const opencodeBinary = await createFakeOpenCode(root, { childPidPath });
       const starter = createOpenCodeWorkspaceRuntimeStarter({
@@ -881,7 +882,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
             hostUrl: "http://127.0.0.1:14327",
             hostToken: "token-1",
           }),
-        startupTimeoutMs: 2_000,
+        startupTimeoutMs,
         retryDelayMs: 2_000,
         portAllocator: () => Effect.succeed(43123),
         readinessProbe: () => Effect.succeed(false),
@@ -904,9 +905,10 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
               waitFor(() => existsSync(childPidPath), PROCESS_START_TIMEOUT_MS),
             );
             childPid = Number(yield* Effect.promise(() => readFile(childPidPath, "utf8")));
-            expect(processIsAlive(childPid)).toBe(true);
+            const timedOutPid = childPid;
+            expect(processIsAlive(timedOutPid)).toBe(true);
 
-            yield* TestClock.adjust("2 seconds");
+            yield* TestClock.adjust(`${startupTimeoutMs} millis`);
             const result = yield* Fiber.join(startup);
             expect(result._tag).toBe("Left");
             if (result._tag === "Left") {
@@ -914,7 +916,9 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
                 "Timed out waiting for OpenCode runtime on 127.0.0.1:43123.",
               );
             }
-            expect(processIsAlive(childPid)).toBe(false);
+            yield* Effect.promise(() =>
+              waitFor(() => !processIsAlive(timedOutPid), PROCESS_CLEANUP_TIMEOUT_MS),
+            );
           }).pipe(Effect.ensuring(Fiber.interrupt(startup)));
         }).pipe(Effect.provide(TestContext.TestContext)),
       );
