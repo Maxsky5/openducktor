@@ -12,6 +12,7 @@ export type ClaudeLifecycleSession = {
   externalSessionId: string;
   pendingApprovals?: Map<string, PendingApproval>;
   pendingQuestions?: Map<string, PendingQuestion>;
+  sdkInitiatedTurnActive?: boolean;
   sdkState?: "idle" | "requires_action" | "running";
   pendingUserTurnCount?: number;
 };
@@ -119,23 +120,38 @@ const applySdkStateLifecycleEvent = (
 
 const applySdkTurnStartedLifecycleEvent = (input: ClaudeLifecycleInput): void => {
   // A task-notification user message starts a turn before any host send. Count the
-  // turn so its result settles its own turn, and mark the session busy. A replayed
-  // sdk_state "running" frame does not start a turn.
+  // turn so its result settles its own turn, and mark the session busy. The flag
+  // keeps the result from consuming a queued local turn. A replayed sdk_state
+  // "running" frame does not start a turn.
   if (input.session.activity !== "idle") {
     return;
   }
   input.session.activeSdkUserTurnCount = activeSdkUserTurnCount(input.session) + 1;
+  input.session.sdkInitiatedTurnActive = true;
   emitSessionBusy(input);
 };
+
+// An SDK-initiated result completes its own turn and leaves queued local turns to
+// their own results.
+const completeResultUserTurns = (session: ClaudeLifecycleSession, sdkInitiatedTurn: boolean) => ({
+  remainingActiveSdkUserTurns: completeActiveSdkUserTurn(session),
+  remainingPendingUserTurns: sdkInitiatedTurn
+    ? pendingUserTurnCount(session)
+    : completePendingUserTurn(session),
+});
 
 const applyResultLifecycleEvent = (
   input: ClaudeLifecycleInput & {
     outcome: Extract<ClaudeLifecycleEvent, { kind: "result" }>["outcome"];
   },
 ): void => {
+  const sdkInitiatedTurn = input.session.sdkInitiatedTurnActive === true;
+  delete input.session.sdkInitiatedTurnActive;
   if (input.outcome === "awaiting_sdk_idle") {
-    const remainingActiveSdkUserTurns = completeActiveSdkUserTurn(input.session);
-    const remainingPendingUserTurns = completePendingUserTurn(input.session);
+    const { remainingActiveSdkUserTurns, remainingPendingUserTurns } = completeResultUserTurns(
+      input.session,
+      sdkInitiatedTurn,
+    );
     if (
       remainingActiveSdkUserTurns > 0 ||
       remainingPendingUserTurns > 0 ||
@@ -151,8 +167,10 @@ const applyResultLifecycleEvent = (
     input.session.activity = "running";
     return;
   }
-  const remainingActiveSdkUserTurns = completeActiveSdkUserTurn(input.session);
-  const remainingPendingUserTurns = completePendingUserTurn(input.session);
+  const { remainingActiveSdkUserTurns, remainingPendingUserTurns } = completeResultUserTurns(
+    input.session,
+    sdkInitiatedTurn,
+  );
   if (
     remainingActiveSdkUserTurns > 0 ||
     remainingPendingUserTurns > 0 ||

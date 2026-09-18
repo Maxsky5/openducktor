@@ -455,7 +455,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     expect(events.filter((event) => event.type === "session_status")).toEqual([]);
   });
 
-  test("settles after a user turn races a task-notification turn", () => {
+  test("settles after a queued user turn races a task-notification turn", () => {
     const events: AgentEvent[] = [];
     const session = createSession("idle");
     const commonInput = {
@@ -481,9 +481,8 @@ describe("handleClaudeSdkMessage result settlement", () => {
       }),
     });
     expect(session.activeSdkUserTurnCount).toBe(1);
-    // A local user send pushes while the wake-up turn runs.
-    session.activeSdkUserTurnCount = (session.activeSdkUserTurnCount ?? 0) + 1;
-    session.sdkState = "running";
+    // A local user send queues while the wake-up turn runs.
+    session.pendingUserTurnCount = (session.pendingUserTurnCount ?? 0) + 1;
 
     handleClaudeSdkMessage({
       ...commonInput,
@@ -501,9 +500,14 @@ describe("handleClaudeSdkMessage result settlement", () => {
         origin: { kind: "task-notification" },
       }),
     });
-    expect(session.activeSdkUserTurnCount).toBe(1);
+    expect(session.activeSdkUserTurnCount).toBe(0);
+    expect(session.pendingUserTurnCount).toBe(1);
     expect(session.activity).toBe("running");
     expect(events.filter((event) => event.type === "session_idle")).toEqual([]);
+
+    // The queued send flushes and pushes the local turn.
+    session.activeSdkUserTurnCount = 1;
+    session.sdkState = "running";
 
     handleClaudeSdkMessage({
       ...commonInput,
@@ -514,12 +518,14 @@ describe("handleClaudeSdkMessage result settlement", () => {
         uuid: "f2a5e421-0b25-4de2-9d77-9d3a2f5d3c42",
         session_id: "session-1",
         is_error: false,
-        result: "Racing user turn complete.",
+        result: "Queued user turn complete.",
         stop_reason: "end_turn",
         terminal_reason: "completed",
         usage: { input_tokens: 1, output_tokens: 1 },
       }),
     });
+
+    expect(session.pendingUserTurnCount).toBe(0);
 
     expect(session.activeSdkUserTurnCount).toBe(0);
     expect(session.activity).toBe("idle");
