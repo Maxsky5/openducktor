@@ -115,6 +115,16 @@ export const handleClaudeSdkMessage = ({
     } else if (originKind !== undefined) {
       session.assistantTurnOriginKind = originKind;
     }
+    if (originKind === "task-notification") {
+      // The SDK starts this turn, so mark the session busy here to keep the live
+      // snapshot running until the turn result settles.
+      applyClaudeLifecycleEvent({
+        emit,
+        session,
+        timestamp,
+        event: { kind: "sdk_turn_started" },
+      });
+    }
     emitClaudeSubagentUserMessage({ emit, message, session, timestamp });
     handleClaudeUserToolResultMessage({ emit, message, session, timestamp });
     return;

@@ -122,6 +122,7 @@ export type ClaudeSession = {
   parentExternalSessionId?: string;
   pendingApprovals: Map<string, PendingApproval>;
   pendingQuestions: Map<string, PendingQuestion>;
+  sdkInitiatedTurnActive?: boolean;
   sdkState?: "idle" | "requires_action" | "running";
   queuedSdkMessages: SDKUserMessage[];
   pendingUserTurnCount: number;

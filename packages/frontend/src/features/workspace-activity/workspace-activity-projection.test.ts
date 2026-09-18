@@ -280,6 +280,34 @@ describe("applyWorkspaceActivityEnvelope", () => {
     expect(badges(newEpisode)).toEqual({ inputRequired: false, error: false, active: false });
   });
 
+  test("clears a tile that transcript activity marked active when the session settles", () => {
+    const ref = { repoPath, runtimeKind, workingDirectory, externalSessionId: "a" };
+    const active = apply(emptyWorkspaceActivityProjection(), sessionSnapshot([snapshot("a")]), {
+      type: "transcript_event",
+      event: {
+        type: "assistant_delta",
+        channel: "text",
+        messageId: "message-1",
+        delta: "Background review complete.",
+        externalSessionId: "a",
+        sessionRef: ref,
+        timestamp: "2026-09-15T08:01:00.000Z",
+      },
+    });
+    expect(badges(active)).toEqual({ inputRequired: false, error: false, active: true });
+
+    const settled = apply(active, {
+      type: "transcript_event",
+      event: {
+        type: "session_idle",
+        externalSessionId: "a",
+        sessionRef: ref,
+        timestamp: "2026-09-15T08:01:01.000Z",
+      },
+    });
+    expect(badges(settled)).toEqual({ inputRequired: false, error: false, active: false });
+  });
+
   test("drops a removed session", () => {
     const projection = apply(
       emptyWorkspaceActivityProjection(),
