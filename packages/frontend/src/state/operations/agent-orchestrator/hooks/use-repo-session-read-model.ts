@@ -9,7 +9,6 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
-import { logSwitchPerf } from "@/lib/switch-perf-debug";
 import type { AgentSessionCollection } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
@@ -484,7 +483,6 @@ export const useRepoSessionReadModel = ({
       if (!initialLiveSnapshotReceivedRef.current) {
         return loadingAgentSessionReadModelLoadState(workspaceRepoPath);
       }
-      logSwitchPerf(`session read model ready ${workspaceRepoPath}`);
       return readyAgentSessionReadModelLoadState(workspaceRepoPath);
     };
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
@@ -596,7 +594,6 @@ export const useRepoSessionReadModel = ({
     }
 
     const repoPath = workspaceRepoPath;
-    logSwitchPerf(`read model observe effect start ${repoPath}`);
     clearSessionFaults();
     const isRepoStale = createRepoStaleGuard({
       repoPath,
@@ -726,7 +723,6 @@ export const useRepoSessionReadModel = ({
         return applyWorkspaceRecords(applyLoadedRecords(projected, current), current);
       });
       initialLiveSnapshotReceivedRef.current = true;
-      logSwitchPerf(`initial live snapshot received ${repoPath}`);
       if (isStaleRepoOperation()) {
         return;
       }
@@ -734,7 +730,6 @@ export const useRepoSessionReadModel = ({
       const recoveredLiveFailure = liveStreamFailureRef.current !== null;
       liveStreamFailureRef.current = null;
       if (readLoadedWorkflowRecords()) {
-        logSwitchPerf(`session read model ready ${repoPath}`);
         setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
         return;
       }
@@ -902,7 +897,6 @@ export const useRepoSessionReadModel = ({
     initialLiveSnapshotReceivedRef.current = false;
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
     setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
-    logSwitchPerf(`live observation subscribe ${repoPath}`);
     void observeLiveSessions({ repoPath }, (envelope) => {
       if (isStaleRepoOperation()) {
         return;

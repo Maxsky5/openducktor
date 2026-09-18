@@ -9,7 +9,6 @@ import {
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { normalizeTargetBranch } from "@/lib/target-branch";
-import { logSwitchPerf } from "@/lib/switch-perf-debug";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "@/types/state-slices";
 import { host } from "../operations/host";
 
@@ -149,22 +148,16 @@ export const writeWorkspaceCatalogToQuery = (
 };
 
 export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Promise<void> => {
-  const listStartedAt = performance.now();
   await queryClient.invalidateQueries({
     queryKey: workspaceQueryKeys.list(),
   });
-  logSwitchPerf("invalidate workspace list done", listStartedAt);
-  const catalogStartedAt = performance.now();
   await queryClient.invalidateQueries({
     queryKey: workspaceQueryKeys.catalog(),
   });
-  logSwitchPerf("invalidate workspace catalog done", catalogStartedAt);
-  const settingsStartedAt = performance.now();
   await queryClient.invalidateQueries({
     queryKey: workspaceQueryKeys.settingsSnapshot(),
     exact: true,
   });
-  logSwitchPerf("invalidate settings snapshot done", settingsStartedAt);
   queryClient.removeQueries({
     queryKey: workspaceQueryKeys.settingsSnapshot(),
     exact: true,
