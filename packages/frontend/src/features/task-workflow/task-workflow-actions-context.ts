@@ -28,7 +28,7 @@ export type TaskWorkflowActions = {
   unlinkingPullRequestTaskId: string | null;
   gitProviderContext: RepositoryGitProviderContext | undefined;
   gitProviderReadError: string | null;
-  registerTaskDetailsClose: (close: () => void) => () => void;
+  registerTaskDetailsClose: (taskId: string, close: () => void) => () => void;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   activeTaskSessionContextByTaskId: Map<string, ActiveTaskSessionContext>;
 };

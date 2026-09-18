@@ -1,4 +1,3 @@
-import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { type ComponentProps, type RefObject, useCallback, useMemo, useRef, useState } from "react";
 import type { TaskCreateModal } from "@/components/features/task-create/task-create-modal";
 import type {
@@ -11,12 +10,6 @@ type UseAgentStudioTaskDetailsLauncherArgs = {
   activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
   tasks: ReturnType<typeof useTasksState>["tasks"];
   selectedTaskId: string | null;
-  detectingPullRequestTaskId: ReturnType<typeof useTasksState>["detectingPullRequestTaskId"];
-  unlinkingPullRequestTaskId: ReturnType<typeof useTasksState>["unlinkingPullRequestTaskId"];
-  onDetectPullRequest: (taskId: string) => void;
-  onUnlinkPullRequest: (taskId: string) => void;
-  gitProviderContext?: RepositoryGitProviderContext | undefined;
-  gitProviderReadError?: string | null;
 };
 
 export type AgentStudioTaskDetailsSheetProps = Omit<
@@ -35,12 +28,6 @@ export function useAgentStudioTaskDetailsLauncher({
   activeWorkspace,
   tasks,
   selectedTaskId,
-  detectingPullRequestTaskId,
-  unlinkingPullRequestTaskId,
-  onDetectPullRequest,
-  onUnlinkPullRequest,
-  gitProviderContext,
-  gitProviderReadError = null,
 }: UseAgentStudioTaskDetailsLauncherArgs): AgentStudioTaskDetailsLauncherModel {
   const taskDetailsSheetRef = useRef<TaskDetailsSheetControllerHandle | null>(null);
   const [editTarget, setEditTarget] = useState<{ workspaceId: string; taskId: string } | null>(
@@ -96,24 +83,8 @@ export function useAgentStudioTaskDetailsLauncher({
       activeWorkspace,
       allTasks: tasks,
       onEdit,
-      onDetectPullRequest,
-      gitProviderContext,
-      gitProviderReadError,
-      onUnlinkPullRequest,
-      detectingPullRequestTaskId,
-      unlinkingPullRequestTaskId,
     }),
-    [
-      activeWorkspace,
-      detectingPullRequestTaskId,
-      gitProviderContext,
-      gitProviderReadError,
-      onDetectPullRequest,
-      onEdit,
-      onUnlinkPullRequest,
-      tasks,
-      unlinkingPullRequestTaskId,
-    ],
+    [activeWorkspace, onEdit, tasks],
   );
 
   return useMemo(

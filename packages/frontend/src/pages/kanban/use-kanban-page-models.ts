@@ -3,9 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import { TASK_SESSION_HISTORY_ERROR_TOAST_ID } from "@/features/task-workflow/use-task-details-historical-sessions";
 import { errorMessage } from "@/lib/errors";
 import { gitProviderReadError } from "@/lib/git-provider-health";
-import { useAgentSessionSummaries, useTasksState, useWorkspaceState } from "@/state";
+import { useTasksState, useWorkspaceState } from "@/state";
 import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
 import { useHorizontalScrollbarVisibility } from "@/state/queries/use-horizontal-scrollbar-visibility";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
@@ -55,7 +56,6 @@ export function useKanbanPageModels({
     activeWorkspaceId,
   });
   const providerReadError = gitProviderReadError(gitProvider.error);
-  const sessions = useAgentSessionSummaries();
   const {
     refreshTasks,
     linkMergedPullRequest,
@@ -160,6 +160,7 @@ export function useKanbanPageModels({
 
     reportedHistoricalSessionsErrorRef.current = description;
     toast.error("Failed to load task session history", {
+      id: TASK_SESSION_HISTORY_ERROR_TOAST_ID,
       description,
     });
   }, [historicalSessionsError]);
@@ -183,7 +184,8 @@ export function useKanbanPageModels({
     showHorizontalScrollbars: horizontalScrollbarState.showHorizontalScrollbars,
     tasks: kanbanTasks,
     historicalSessionsByTaskId,
-    sessions,
+    taskSessionsByTaskId: actions.taskSessionsByTaskId,
+    activeTaskSessionContextByTaskId: actions.activeTaskSessionContextByTaskId,
     onOpenDetails,
     onDelegate: actions.onDelegate,
     onOpenSession: actions.onOpenSession,

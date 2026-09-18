@@ -1,7 +1,11 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
 import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
+
+export const TASK_SESSION_HISTORY_ERROR_TOAST_ID = "task-session-history-error";
 
 type UseTaskDetailsHistoricalSessionsArgs = {
   repoPath: string | null;
@@ -22,6 +26,25 @@ export function useTaskDetailsHistoricalSessions({
     enabled: enabled && repoPath !== null && taskIds.length > 0,
     queryClient,
   });
+  const sessionListsError = sessionLists.error;
+  const reportedErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionListsError) {
+      reportedErrorRef.current = null;
+      return;
+    }
+
+    const description = errorMessage(sessionListsError);
+    if (reportedErrorRef.current === description) {
+      return;
+    }
+
+    reportedErrorRef.current = description;
+    toast.error("Failed to load task session history", {
+      id: TASK_SESSION_HISTORY_ERROR_TOAST_ID,
+      description,
+    });
+  }, [sessionListsError]);
 
   return useMemo(
     () => (taskId ? (sessionLists.data[taskId] ?? []) : []),

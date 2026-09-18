@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
+import { hostClient } from "@/lib/host-client";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { withMockedToast } from "@/test-utils/mock-toast";
 import { useTaskDetailsHistoricalSessions } from "./use-task-details-historical-sessions";
 
 const sessionFixture: AgentSessionRecord = {
@@ -59,6 +62,41 @@ describe("useTaskDetailsHistoricalSessions", () => {
       await harness.update({ repoPath: "/repo-a", taskId: "task-1", enabled: true });
       expect(harness.getLatest()).toEqual([sessionFixture]);
     } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("reports a session list read failure", async () => {
+    const originalList = hostClient.agentSessionsList;
+    const originalListForTasks = hostClient.agentSessionsListForTasks;
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const harness = createHarness(
+      { repoPath: "/repo-a", taskId: "task-1", enabled: true },
+      queryClient,
+    );
+
+    try {
+      hostClient.agentSessionsList = async () => {
+        throw new Error("agent session list unavailable");
+      };
+      hostClient.agentSessionsListForTasks = async () => {
+        throw new Error("agent session list unavailable");
+      };
+      await withMockedToast(async ({ toastErrorMock }) => {
+        await harness.mount();
+        await harness.run(() => {});
+        await waitFor(() => {
+          expect(toastErrorMock).toHaveBeenCalled();
+        });
+        expect(toastErrorMock).toHaveBeenCalledWith("Failed to load task session history", {
+          id: "task-session-history-error",
+          description: "agent session list unavailable",
+        });
+      });
+    } finally {
+      hostClient.agentSessionsList = originalList;
+      hostClient.agentSessionsListForTasks = originalListForTasks;
       await harness.unmount();
       queryClient.clear();
     }

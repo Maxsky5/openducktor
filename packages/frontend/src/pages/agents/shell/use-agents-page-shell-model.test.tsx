@@ -877,7 +877,7 @@ const createHookHarness = () =>
   });
 
 describe("useAgentsPageShellModel", () => {
-  test("passes provider read errors to each Pull Request action model", async () => {
+  test("passes provider read errors to the orchestration and right panel models", async () => {
     repoSettingsState = {
       ...repoSettingsState,
       gitProvider: {
@@ -893,10 +893,6 @@ describe("useAgentsPageShellModel", () => {
       const error = "Could not load the current Git provider: connection failed";
       expect(lastOrchestrationGitProviderReadError).toBe(error);
       expect(harness.getLatest().rightPanelBridge?.rightPanel.gitProviderReadError).toBe(error);
-      expect(
-        harness.getLatest().modalContent.taskDetailsLauncher.taskDetailsSheetProps
-          .gitProviderReadError,
-      ).toBe(error);
     } finally {
       await harness.unmount();
     }

@@ -217,47 +217,6 @@ describe("TaskDetailsSheetController", () => {
     });
   });
 
-  test("forwards pull request detection props to the task details sheet", async () => {
-    const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
-
-    const task = createTaskCardFixture({ id: "task-1", title: "Task 1", status: "human_review" });
-    const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
-    const onDetectPullRequest = mock((_taskId: string) => {});
-    const onUnlinkPullRequest = mock((_taskId: string) => {});
-
-    const rendered = render(
-      createElement(TaskDetailsSheetController, {
-        ref: controllerRef,
-        activeWorkspace,
-        allTasks: [task],
-        onDetectPullRequest,
-        onUnlinkPullRequest,
-        detectingPullRequestTaskId: "task-1",
-        unlinkingPullRequestTaskId: "task-1",
-      }),
-    );
-
-    await act(async () => {
-      controllerRef.current?.openTask(task.id);
-    });
-
-    expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        task,
-        activeWorkspace,
-        open: true,
-        onDetectPullRequest,
-        onUnlinkPullRequest,
-        detectingPullRequestTaskId: "task-1",
-        unlinkingPullRequestTaskId: "task-1",
-      }),
-    );
-
-    await act(async () => {
-      rendered.unmount();
-    });
-  });
-
   test("closes the sheet when the selected task disappears from the task list", async () => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
 

@@ -14,7 +14,7 @@ type ResetImplementationOptions = {
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
   resetTaskImplementation: (taskId: string) => Promise<void>;
-  closeTaskDetails: () => void;
+  closeTaskDetails: (taskId: string) => void;
 };
 
 const deriveRollbackLabel = (task: TaskCard): string => {
@@ -102,7 +102,7 @@ export function useTaskResetFlow({
         setTaskId(null);
         setCloseDetailsAfterReset(false);
         if (closeDetailsAfterReset) {
-          closeTaskDetails();
+          closeTaskDetails(task.id);
         }
       } catch (error: unknown) {
         setModalError(errorMessage(error));

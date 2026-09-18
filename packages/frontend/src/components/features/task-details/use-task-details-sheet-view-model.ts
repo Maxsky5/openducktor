@@ -21,6 +21,7 @@ import {
   useTaskDocuments,
 } from "@/components/features/task-details/use-task-documents";
 import { useTaskResetDialog } from "@/components/features/task-details/use-task-reset-dialog";
+import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
@@ -95,19 +96,19 @@ type UseTaskDetailsSheetViewModelOptions = {
   allTasks: TaskDetailsSheetProps["allTasks"];
   open: TaskDetailsSheetProps["open"];
   onOpenChange: TaskDetailsSheetProps["onOpenChange"];
-  onPlan: TaskDetailsSheetProps["onPlan"] | undefined;
-  onQaStart: TaskDetailsSheetProps["onQaStart"] | undefined;
-  onQaOpen: TaskDetailsSheetProps["onQaOpen"] | undefined;
-  onBuild: TaskDetailsSheetProps["onBuild"] | undefined;
-  onOpenSession: TaskDetailsSheetProps["onOpenSession"] | undefined;
+  onPlan: TaskWorkflowActions["onPlan"] | undefined;
+  onQaStart: TaskWorkflowActions["onQaStart"] | undefined;
+  onQaOpen: TaskWorkflowActions["onQaOpen"] | undefined;
+  onBuild: TaskWorkflowActions["onBuild"] | undefined;
+  onOpenSession: TaskWorkflowActions["onOpenSession"] | undefined;
   resolveSessionOptionsByRole?: ((role: AgentRole) => SessionTargetOptions | undefined) | undefined;
-  onDelegate: TaskDetailsSheetProps["onDelegate"] | undefined;
-  onHumanApprove: TaskDetailsSheetProps["onHumanApprove"] | undefined;
-  onHumanRequestChanges: TaskDetailsSheetProps["onHumanRequestChanges"] | undefined;
-  onResetImplementation: TaskDetailsSheetProps["onResetImplementation"] | undefined;
-  onResetTask: TaskDetailsSheetProps["onResetTask"] | undefined;
-  onCloseTask: TaskDetailsSheetProps["onCloseTask"] | undefined;
-  onDelete: TaskDetailsSheetProps["onDelete"] | undefined;
+  onDelegate: TaskWorkflowActions["onDelegate"] | undefined;
+  onHumanApprove: TaskWorkflowActions["onHumanApprove"] | undefined;
+  onHumanRequestChanges: TaskWorkflowActions["onHumanRequestChanges"] | undefined;
+  onResetImplementation: TaskWorkflowActions["onResetImplementation"] | undefined;
+  onResetTask: TaskWorkflowActions["onResetTask"] | undefined;
+  onCloseTask: TaskWorkflowActions["onCloseTask"] | undefined;
+  onDelete: TaskWorkflowActions["onDelete"] | undefined;
   taskDocumentsHook?: typeof useTaskDocuments;
   taskCleanupImpactHook?: typeof useTaskCleanupImpact;
   taskStopImpactHook?: typeof useTaskStopImpact;

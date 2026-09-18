@@ -1,40 +1,11 @@
-import type {
-  AgentSessionRecord,
-  RepositoryGitProviderContext,
-  TaskCard,
-} from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
-import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
-import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
+import type { TaskCard } from "@openducktor/contracts";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 export type TaskDetailsSheetProps = {
   activeWorkspace?: ActiveWorkspace | null;
   task: TaskCard | null;
   allTasks: TaskCard[];
-  taskSessions?: KanbanTaskSession[];
-  historicalSessions?: AgentSessionRecord[];
-  hasActiveSession?: boolean;
-  activeSessionRole?: AgentRole;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPlan?: (taskId: string, action: "set_spec" | "set_plan") => void;
-  onQaStart?: (taskId: string) => void;
-  onQaOpen?: (taskId: string) => void;
-  onBuild?: (taskId: string) => void;
-  onOpenSession?: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
-  onDelegate?: (taskId: string) => void;
   onEdit?: (taskId: string) => void;
-  onHumanApprove?: (taskId: string) => void;
-  onHumanRequestChanges?: (taskId: string) => void;
-  onResetImplementation?: (taskId: string, options?: { closeDetailsAfterReset?: boolean }) => void;
-  onResetTask?: (taskId: string) => Promise<void>;
-  onCloseTask?: (taskId: string) => Promise<void>;
-  onDetectPullRequest?: (taskId: string) => void;
-  gitProviderContext?: RepositoryGitProviderContext | undefined;
-  gitProviderReadError?: string | null;
-  onUnlinkPullRequest?: (taskId: string) => void;
-  detectingPullRequestTaskId?: string | null;
-  unlinkingPullRequestTaskId?: string | null;
-  onDelete?: (taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>;
 };

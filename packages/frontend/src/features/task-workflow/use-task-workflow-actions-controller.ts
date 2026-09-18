@@ -115,15 +115,31 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     runSessionStartWorkflow,
   });
 
-  const taskDetailsCloseRef = useRef<Array<() => void>>([]);
-  const registerTaskDetailsClose = useCallback((close: () => void): (() => void) => {
-    taskDetailsCloseRef.current.push(close);
-    return () => {
-      taskDetailsCloseRef.current = taskDetailsCloseRef.current.filter((entry) => entry !== close);
-    };
-  }, []);
-  const closeTaskDetails = useCallback((): void => {
-    for (const close of taskDetailsCloseRef.current.slice()) {
+  const taskDetailsCloseByTaskIdRef = useRef(new Map<string, Set<() => void>>());
+  const registerTaskDetailsClose = useCallback(
+    (taskId: string, close: () => void): (() => void) => {
+      const closers = taskDetailsCloseByTaskIdRef.current.get(taskId) ?? new Set<() => void>();
+      closers.add(close);
+      taskDetailsCloseByTaskIdRef.current.set(taskId, closers);
+      return () => {
+        const currentClosers = taskDetailsCloseByTaskIdRef.current.get(taskId);
+        if (!currentClosers) {
+          return;
+        }
+        currentClosers.delete(close);
+        if (currentClosers.size === 0) {
+          taskDetailsCloseByTaskIdRef.current.delete(taskId);
+        }
+      };
+    },
+    [],
+  );
+  const closeTaskDetails = useCallback((taskId: string): void => {
+    const closers = taskDetailsCloseByTaskIdRef.current.get(taskId);
+    if (!closers) {
+      return;
+    }
+    for (const close of Array.from(closers)) {
       close();
     }
   }, []);

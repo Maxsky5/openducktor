@@ -142,7 +142,8 @@ type UseKanbanBoardModelArgs = {
   showHorizontalScrollbars: boolean | null;
   tasks: TaskCard[];
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
-  sessions: AgentSessionSummary[];
+  taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
+  activeTaskSessionContextByTaskId: Map<string, ActiveTaskSessionContext>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
@@ -162,7 +163,8 @@ export function useKanbanBoardModel({
   showHorizontalScrollbars,
   tasks,
   historicalSessionsByTaskId,
-  sessions,
+  taskSessionsByTaskId,
+  activeTaskSessionContextByTaskId,
   onOpenDetails,
   onDelegate,
   onOpenSession,
@@ -175,13 +177,6 @@ export function useKanbanBoardModel({
   onResetImplementation,
 }: UseKanbanBoardModelArgs): KanbanPageContentModel {
   const columns = useMemo(() => mapToKanbanColumns(tasks), [tasks]);
-
-  const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(sessions), [sessions]);
-
-  const activeTaskSessionContextByTaskId = useMemo(
-    () => buildActiveTaskSessionContextByTaskId(sessions),
-    [sessions],
-  );
 
   const taskActivityStateByTaskId = useMemo(
     () => buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId),

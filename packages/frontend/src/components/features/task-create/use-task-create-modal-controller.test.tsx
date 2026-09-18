@@ -243,10 +243,6 @@ describe("Agent Studio task editor save ownership", () => {
           activeWorkspace: workspace,
           tasks: [task],
           selectedTaskId: task.id,
-          detectingPullRequestTaskId: null,
-          unlinkingPullRequestTaskId: null,
-          onDetectPullRequest: () => {},
-          onUnlinkPullRequest: () => {},
         });
         return launcher.taskEditor ? <EditorProbe editor={launcher.taskEditor} /> : null;
       };

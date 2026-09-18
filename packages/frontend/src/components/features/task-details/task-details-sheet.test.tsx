@@ -1,14 +1,17 @@
 import { describe, expect, mock, test } from "bun:test";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
+import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import type { TaskStopImpactState, useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
@@ -569,26 +572,31 @@ describe("TaskDetailsSheet", () => {
       },
     });
     const actions = createTaskWorkflowActionsValue();
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(agentSessionQueryKeys.list("/repo-a", "TASK-1"), []);
 
     const { unmount } = render(
       createElement(
-        IsolatedProviders,
-        null,
+        QueryClientProvider,
+        { client: queryClient },
         createElement(
-          TaskWorkflowActionsContext.Provider,
-          { value: actions },
-          createElement(TaskDetailsSheet, {
-            activeWorkspace: {
-              workspaceId: "workspace-a",
-              workspaceName: "Workspace A",
-              repoPath: "/repo-a",
-            },
-            task,
-            allTasks: [task],
-            historicalSessions: [],
-            open: true,
-            onOpenChange: () => {},
-          }),
+          WorkspaceStateContext.Provider,
+          { value: createWorkspaceStateValue() },
+          createElement(
+            TaskWorkflowActionsContext.Provider,
+            { value: actions },
+            createElement(TaskDetailsSheet, {
+              activeWorkspace: {
+                workspaceId: "workspace-a",
+                workspaceName: "Workspace A",
+                repoPath: "/repo-a",
+              },
+              task,
+              allTasks: [task],
+              open: true,
+              onOpenChange: () => {},
+            }),
+          ),
         ),
       ),
     );
