@@ -85,6 +85,36 @@ const createHistoryLoadHarness = (initialSession: AgentSessionState = createSess
   };
 };
 
+const retainedHistoryMessage: AgentSessionHistoryMessage = {
+  messageId: "retained-1",
+  role: "assistant",
+  timestamp: "2026-06-12T08:00:00.000Z",
+  text: "Retained transcript",
+  parts: [],
+};
+
+const missedHistoryMessage: AgentSessionHistoryMessage = {
+  messageId: "missed-1",
+  role: "assistant",
+  timestamp: "2026-06-12T08:00:02.000Z",
+  text: "Produced while inactive",
+  parts: [],
+};
+
+const createRetainedSessionHarness = () =>
+  createHistoryLoadHarness({
+    ...createSession(),
+    historyLoadState: "loaded",
+    messages: createSessionMessagesState("external-1", [
+      {
+        id: "retained-1",
+        role: "assistant",
+        timestamp: "2026-06-12T08:00:00.000Z",
+        content: "Retained transcript",
+      },
+    ]),
+  });
+
 describe("session history loader", () => {
   test("history reloads clear absent image media and can later restore it", async () => {
     const harness = createHistoryLoadHarness();
@@ -576,18 +606,7 @@ describe("session history loader", () => {
 
   test("revalidates a retained transcript without hiding it behind a loading state", async () => {
     const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
-    const harness = createHistoryLoadHarness({
-      ...createSession(),
-      historyLoadState: "loaded",
-      messages: createSessionMessagesState("external-1", [
-        {
-          id: "retained-1",
-          role: "assistant",
-          timestamp: "2026-06-12T08:00:00.000Z",
-          content: "Retained transcript",
-        },
-      ]),
-    });
+    const harness = createRetainedSessionHarness();
 
     const loadPromise = revalidateSessionHistoryIntoStore({
       repoPath: "/repo",
@@ -603,22 +622,7 @@ describe("session history loader", () => {
       "Retained transcript",
     ]);
 
-    historyPromise.resolve([
-      {
-        messageId: "retained-1",
-        role: "assistant",
-        timestamp: "2026-06-12T08:00:00.000Z",
-        text: "Retained transcript",
-        parts: [],
-      },
-      {
-        messageId: "missed-1",
-        role: "assistant",
-        timestamp: "2026-06-12T08:00:02.000Z",
-        text: "Produced while inactive",
-        parts: [],
-      },
-    ]);
+    historyPromise.resolve([retainedHistoryMessage, missedHistoryMessage]);
 
     await loadPromise;
 
@@ -632,18 +636,7 @@ describe("session history loader", () => {
 
   test("does not start a second retained revalidation while one is in flight", async () => {
     const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
-    const harness = createHistoryLoadHarness({
-      ...createSession(),
-      historyLoadState: "loaded",
-      messages: createSessionMessagesState("external-1", [
-        {
-          id: "retained-1",
-          role: "assistant",
-          timestamp: "2026-06-12T08:00:00.000Z",
-          content: "Retained transcript",
-        },
-      ]),
-    });
+    const harness = createRetainedSessionHarness();
     const started = Promise.withResolvers<void>();
     const loadSessionHistory = mock(async () => {
       started.resolve();
@@ -666,22 +659,7 @@ describe("session history loader", () => {
     expect(loadSessionHistory).toHaveBeenCalledTimes(1);
     expect(skippedLoad?.historyLoadState).toBe("loaded");
 
-    historyPromise.resolve([
-      {
-        messageId: "retained-1",
-        role: "assistant",
-        timestamp: "2026-06-12T08:00:00.000Z",
-        text: "Retained transcript",
-        parts: [],
-      },
-      {
-        messageId: "missed-1",
-        role: "assistant",
-        timestamp: "2026-06-12T08:00:02.000Z",
-        text: "Produced while inactive",
-        parts: [],
-      },
-    ]);
+    historyPromise.resolve([retainedHistoryMessage, missedHistoryMessage]);
     await firstLoad;
 
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
@@ -695,18 +673,7 @@ describe("session history loader", () => {
   });
 
   test("keeps the retained transcript and records the failure when a revalidation fails", async () => {
-    const harness = createHistoryLoadHarness({
-      ...createSession(),
-      historyLoadState: "loaded",
-      messages: createSessionMessagesState("external-1", [
-        {
-          id: "retained-1",
-          role: "assistant",
-          timestamp: "2026-06-12T08:00:00.000Z",
-          content: "Retained transcript",
-        },
-      ]),
-    });
+    const harness = createRetainedSessionHarness();
 
     await revalidateSessionHistoryIntoStore({
       repoPath: "/repo",
