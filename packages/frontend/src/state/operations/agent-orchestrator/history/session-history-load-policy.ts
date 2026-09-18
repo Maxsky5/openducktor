@@ -60,11 +60,15 @@ export const shouldRequestSelectedSessionBaselineHistory = (
 ): boolean => session.historyLoadState === "not_requested";
 
 export const requestedSessionHistoryLoadPolicy: SessionHistoryLoadPolicy = {
-  claimLoad: (session) =>
-    session.historyLoadState === "loading" ||
-    (hasLoadedSessionHistory(session) && session.historyLoadFailure == null)
-      ? null
-      : markSessionHistoryLoading(session),
+  claimLoad: (session) => {
+    if (session.historyLoadState === "loading") {
+      return null;
+    }
+    if (hasLoadedSessionHistory(session) && session.historyLoadFailure == null) {
+      return null;
+    }
+    return markSessionHistoryLoading(session);
+  },
   propagateFailure: false,
   abandonLoad: abandonBaselineLoad,
   failLoad: failBaselineLoad,

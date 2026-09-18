@@ -55,16 +55,13 @@ const claimSessionHistoryLoad = ({
   }
 
   let claimedLoad = false;
-  const claimedSession = updateSession(identity, (current) => {
+  updateSession(identity, (current) => {
     const claimed = policy.claimLoad(current);
     claimedLoad = claimed !== null;
     return claimed ?? current;
   });
-  if (!claimedLoad) {
-    return { session: currentSession, claimedLoad: false };
-  }
 
-  return { session: claimedSession ?? readSessionSnapshot(identity), claimedLoad: true };
+  return { session: readSessionSnapshot(identity), claimedLoad };
 };
 
 const resetLoadingSessionHistory = (

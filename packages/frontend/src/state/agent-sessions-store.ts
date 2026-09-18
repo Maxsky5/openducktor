@@ -120,6 +120,43 @@ export const createAgentSessionsStore = (
     return next;
   };
 
+  const retainActiveCollection = (): void => {
+    if (workspaceRepoPath === null) {
+      return;
+    }
+    retainedCollections.set(workspaceRepoPath, reopenInterruptedHistoryLoads(sessionCollection));
+  };
+
+  const activateCollection = (repoPath: string | null): AgentSessionCollection => {
+    if (repoPath === null) {
+      return emptyAgentSessionCollection();
+    }
+    const collection = retainedCollections.get(repoPath) ?? emptyAgentSessionCollection();
+    retainedCollections.delete(repoPath);
+    retainedCollections.set(repoPath, collection);
+    return collection;
+  };
+
+  const evictOldestCollections = (): void => {
+    while (retainedCollections.size > repositoryRetentionLimit) {
+      const oldestRepoPath = retainedCollections.keys().next().value;
+      if (oldestRepoPath === undefined) {
+        return;
+      }
+      retainedCollections.delete(oldestRepoPath);
+    }
+  };
+
+  const dropEvictedPendingInput = (): void => {
+    if (visiblePendingInputSnapshot === null) {
+      return;
+    }
+    if ([...retainedCollections.values()].includes(visiblePendingInputSnapshot.collection)) {
+      return;
+    }
+    visiblePendingInputSnapshot = null;
+  };
+
   return {
     subscribe: (listener) => {
       listeners.add(listener);
@@ -168,34 +205,11 @@ export const createAgentSessionsStore = (
       return nextSession;
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {
-      if (workspaceRepoPath !== null) {
-        retainedCollections.set(
-          workspaceRepoPath,
-          reopenInterruptedHistoryLoads(sessionCollection),
-        );
-      }
+      retainActiveCollection();
       workspaceRepoPath = nextWorkspaceRepoPath;
-      if (nextWorkspaceRepoPath === null) {
-        sessionCollection = emptyAgentSessionCollection();
-      } else {
-        sessionCollection =
-          retainedCollections.get(nextWorkspaceRepoPath) ?? emptyAgentSessionCollection();
-        retainedCollections.delete(nextWorkspaceRepoPath);
-        retainedCollections.set(nextWorkspaceRepoPath, sessionCollection);
-      }
-      while (retainedCollections.size > repositoryRetentionLimit) {
-        const oldestRepoPath = retainedCollections.keys().next().value;
-        if (oldestRepoPath === undefined) {
-          break;
-        }
-        retainedCollections.delete(oldestRepoPath);
-      }
-      if (
-        visiblePendingInputSnapshot !== null &&
-        ![...retainedCollections.values()].includes(visiblePendingInputSnapshot.collection)
-      ) {
-        visiblePendingInputSnapshot = null;
-      }
+      sessionCollection = activateCollection(nextWorkspaceRepoPath);
+      evictOldestCollections();
+      dropEvictedPendingInput();
       activitySnapshot = createAgentActivitySnapshot({
         collection: sessionCollection,
         previous:

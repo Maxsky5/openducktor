@@ -862,39 +862,30 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test("revalidates a retained transcript when the workspace returns", async () => {
-    const histories: AgentSessionHistoryMessage[][] = [
-      [
-        {
-          messageId: "history-1",
-          role: "assistant",
-          timestamp: "2026-02-22T08:00:01.000Z",
-          text: "Retained transcript",
-          parts: [],
-        },
-      ],
-      [
-        {
-          messageId: "history-1",
-          role: "assistant",
-          timestamp: "2026-02-22T08:00:01.000Z",
-          text: "Retained transcript",
-          parts: [],
-        },
-        {
-          messageId: "history-2",
-          role: "assistant",
-          timestamp: "2026-02-22T08:00:02.000Z",
-          text: "Produced while inactive",
-          parts: [],
-        },
-      ],
+    const baselineHistory: AgentSessionHistoryMessage[] = [
+      {
+        messageId: "history-1",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        text: "Retained transcript",
+        parts: [],
+      },
+    ];
+    const revalidatedHistory: AgentSessionHistoryMessage[] = [
+      ...baselineHistory,
+      {
+        messageId: "history-2",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:02.000Z",
+        text: "Produced while inactive",
+        parts: [],
+      },
     ];
     let historyCalls = 0;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
-      const history = histories[Math.min(historyCalls, histories.length - 1)] ?? [];
       historyCalls += 1;
-      return history;
+      return historyCalls === 1 ? baselineHistory : revalidatedHistory;
     };
 
     const liveStream = createLiveSessionStreamFixture([createAgentSessionLiveSnapshotFixture()]);

@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
 import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
@@ -193,13 +194,7 @@ export function useAgentOrchestratorOperations({
         .filter((session) => session.historyLoadState === "loaded");
 
       await Promise.all([
-        ...loadedSessions.map((session) =>
-          loadHistory({
-            externalSessionId: session.externalSessionId,
-            runtimeKind: session.runtimeKind,
-            workingDirectory: session.workingDirectory,
-          }),
-        ),
+        ...loadedSessions.map((session) => loadHistory(toAgentSessionIdentity(session))),
         queryClient.invalidateQueries({
           queryKey: agentSessionHistoryQueryKeys.all,
           refetchType: "active",
