@@ -1,4 +1,3 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { type ReactElement, useEffect, useRef } from "react";
 import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
@@ -25,7 +24,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import {
+  type TaskWorkflowActions,
+  useTaskWorkflowActions,
+} from "@/features/task-workflow/task-workflow-actions-context";
 import { useTaskDetailsHistoricalSessions } from "@/features/task-workflow/use-task-details-historical-sessions";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 
@@ -71,15 +73,6 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
   });
   const hasActiveSession = Boolean(activeSessionContext);
   const activeSessionRole = activeSessionContext?.role;
-  const onPlan = workflowActions?.onPlan;
-  const onQaStart = workflowActions?.onQaStart;
-  const onQaOpen = workflowActions?.onQaOpen;
-  const onBuild = workflowActions?.onBuild;
-  const onOpenSession = workflowActions?.onOpenSession;
-  const onDelegate = workflowActions?.onDelegate;
-  const onHumanApprove = workflowActions?.onHumanApprove;
-  const onHumanRequestChanges = workflowActions?.onHumanRequestChanges;
-  const onResetImplementation = workflowActions?.onResetImplementation;
   const onResetTask = workflowActions?.onResetTask;
   const onCloseTask = workflowActions?.onCloseTask;
   const onDelete = workflowActions?.onDelete;
@@ -100,28 +93,19 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
     }
     return registerTaskDetailsClose(taskId, () => onOpenChangeRef.current(false));
   }, [registerTaskDetailsClose, taskId]);
-  const viewModelInput = getTaskDetailsViewModelInput({
+  const viewModelOptions: Parameters<typeof useTaskDetailsSheetViewModel>[0] = {
     activeWorkspace,
     task,
     allTasks,
     open,
     onOpenChange,
-    onPlan,
-    onQaStart,
-    onQaOpen,
-    onBuild,
-    onOpenSession,
-    onDelegate,
-    onHumanApprove,
-    onHumanRequestChanges,
-    onResetImplementation,
-    onResetTask,
-    onCloseTask,
-    onDelete,
-    historicalSessions,
-    taskSessions: contextTaskSessions,
-  });
-  const viewModel = useTaskDetailsSheetViewModel(viewModelInput);
+    ...workflowActions,
+  };
+  if (task) {
+    viewModelOptions.resolveSessionOptionsByRole = (role: AgentRole) =>
+      resolveSessionTargetOptions(historicalSessions, contextTaskSessions, role);
+  }
+  const viewModel = useTaskDetailsSheetViewModel(viewModelOptions);
 
   const historicalSessionRoles = task ? resolveHistoricalSessionRoles(historicalSessions) : [];
 
@@ -228,56 +212,6 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
 }
 
 type TaskDetailsViewModel = ReturnType<typeof useTaskDetailsSheetViewModel>;
-type TaskDetailsViewModelInput = Parameters<typeof useTaskDetailsSheetViewModel>[0];
-type TaskDetailsActionHandler<Key extends keyof TaskDetailsViewModelInput> =
-  TaskDetailsViewModelInput[Key];
-
-function getTaskDetailsViewModelInput(args: {
-  activeWorkspace: Exclude<TaskDetailsSheetProps["activeWorkspace"], undefined>;
-  task: TaskDetailsSheetProps["task"];
-  allTasks: TaskDetailsSheetProps["allTasks"];
-  open: boolean;
-  onOpenChange: TaskDetailsSheetProps["onOpenChange"];
-  onPlan: TaskDetailsActionHandler<"onPlan">;
-  onQaStart: TaskDetailsActionHandler<"onQaStart">;
-  onQaOpen: TaskDetailsActionHandler<"onQaOpen">;
-  onBuild: TaskDetailsActionHandler<"onBuild">;
-  onOpenSession: TaskDetailsActionHandler<"onOpenSession">;
-  onDelegate: TaskDetailsActionHandler<"onDelegate">;
-  onHumanApprove: TaskDetailsActionHandler<"onHumanApprove">;
-  onHumanRequestChanges: TaskDetailsActionHandler<"onHumanRequestChanges">;
-  onResetImplementation: TaskDetailsActionHandler<"onResetImplementation">;
-  onResetTask: TaskDetailsActionHandler<"onResetTask">;
-  onCloseTask: TaskDetailsActionHandler<"onCloseTask">;
-  onDelete: TaskDetailsActionHandler<"onDelete">;
-  historicalSessions: AgentSessionRecord[];
-  taskSessions: KanbanTaskSession[];
-}): TaskDetailsViewModelInput {
-  const input: Parameters<typeof useTaskDetailsSheetViewModel>[0] = {
-    activeWorkspace: args.activeWorkspace,
-    task: args.task,
-    allTasks: args.allTasks,
-    open: args.open,
-    onOpenChange: args.onOpenChange,
-    onPlan: args.onPlan,
-    onQaStart: args.onQaStart,
-    onQaOpen: args.onQaOpen,
-    onBuild: args.onBuild,
-    onOpenSession: args.onOpenSession,
-    onDelegate: args.onDelegate,
-    onHumanApprove: args.onHumanApprove,
-    onHumanRequestChanges: args.onHumanRequestChanges,
-    onResetImplementation: args.onResetImplementation,
-    onResetTask: args.onResetTask,
-    onCloseTask: args.onCloseTask,
-    onDelete: args.onDelete,
-  };
-  if (args.task) {
-    input.resolveSessionOptionsByRole = (role: AgentRole) =>
-      resolveSessionTargetOptions(args.historicalSessions, args.taskSessions, role);
-  }
-  return input;
-}
 
 function getTaskDetailsFooterProps({
   task,
@@ -298,7 +232,7 @@ function getTaskDetailsFooterProps({
   activeSessionRole: AgentRole | undefined;
   historicalSessionRoles: AgentRole[];
   onEdit: TaskDetailsSheetProps["onEdit"];
-  onDelete: TaskDetailsActionHandler<"onDelete">;
+  onDelete: TaskWorkflowActions["onDelete"] | undefined;
   runWorkflowAction: TaskDetailsViewModel["runWorkflowAction"];
   openDeleteDialog: TaskDetailsViewModel["openDeleteDialog"];
 }): TaskDetailsSheetFooterProps {
