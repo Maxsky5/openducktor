@@ -1,0 +1,175 @@
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { sep } from "node:path";
+import type { DirItem, FileItem, MixedSearchResult } from "@ff-labs/fff-node";
+import {
+  type AgentFileSearchResult,
+  detectAgentFileReferenceKind,
+  type SearchAgentFilesInput,
+} from "@openducktor/core";
+import { normalizePathSeparators } from "@openducktor/path-support";
+
+export const FILE_SEARCH_LIMIT = 30;
+const FILE_FINDER_CACHE_LIMIT = 3;
+const FILE_FINDER_SCAN_TIMEOUT_MS = 5_000;
+const ASAR_SEGMENT = `${sep}app.asar${sep}`;
+
+export type ClaudeWorkspaceFileFinder = {
+  search(query: string): Promise<AgentFileSearchResult[]>;
+  destroy(): void;
+};
+
+export type ClaudeWorkspaceFileSearch = {
+  prewarm(workingDirectory: string): void;
+  release(workingDirectory: string): void;
+  search(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]>;
+};
+
+type ClaudeFileSearchSession = { input: { workingDirectory: string } };
+
+type ClaudeFileSearchSessionStore = {
+  subscribeClose(listener: (session: ClaudeFileSearchSession) => void): () => void;
+  values(): IterableIterator<ClaudeFileSearchSession>;
+};
+
+export const trackClaudeFileSearchSessions = ({
+  fileSearch,
+  sessionStore,
+}: {
+  fileSearch: ClaudeWorkspaceFileSearch;
+  sessionStore: ClaudeFileSearchSessionStore;
+}): void => {
+  sessionStore.subscribeClose((session) => {
+    const workingDirectory = session.input.workingDirectory;
+    const inUse = [...sessionStore.values()].some(
+      (other) => other.input.workingDirectory === workingDirectory,
+    );
+    if (!inUse) {
+      fileSearch.release(workingDirectory);
+    }
+  });
+};
+
+const toFileResult = (item: FileItem): AgentFileSearchResult => {
+  const path = normalizePathSeparators(item.relativePath);
+  return {
+    id: path,
+    path,
+    name: item.fileName,
+    kind: detectAgentFileReferenceKind({ filePath: path }),
+  };
+};
+
+const toDirectoryResult = (item: DirItem): AgentFileSearchResult => {
+  const path = normalizePathSeparators(item.relativePath);
+  return {
+    id: path,
+    path,
+    name: item.dirName.replace(/[\\/]+$/u, ""),
+    kind: "directory",
+  };
+};
+
+export const toClaudeFileSearchResults = (result: MixedSearchResult): AgentFileSearchResult[] =>
+  result.items
+    .map((entry) =>
+      entry.type === "directory" ? toDirectoryResult(entry.item) : toFileResult(entry.item),
+    )
+    .filter((entry) => entry.path.length > 0)
+    .slice(0, FILE_SEARCH_LIMIT);
+
+export const resolveUnpackedAsarModulePath = (modulePath: string): string => {
+  if (!modulePath.includes(ASAR_SEGMENT)) {
+    return modulePath;
+  }
+  const unpackedPath = modulePath.replace(ASAR_SEGMENT, `${sep}app.asar.unpacked${sep}`);
+  return existsSync(unpackedPath) ? unpackedPath : modulePath;
+};
+
+const loadFileFinderModule = (): typeof import("@ff-labs/fff-node") => {
+  // fff resolves its native library next to the package. Inside an Electron asar
+  // archive that path cannot be opened by ffi-rs, so load the unpacked copy.
+  const require = createRequire(import.meta.url);
+  const modulePath = resolveUnpackedAsarModulePath(require.resolve("@ff-labs/fff-node"));
+  // SAFETY: The resolved path is the CommonJS entry of @ff-labs/fff-node, so the
+  // loaded value has the package API type.
+  return require(modulePath) as typeof import("@ff-labs/fff-node");
+};
+
+export const createNativeClaudeFileFinder = (
+  workingDirectory: string,
+): ClaudeWorkspaceFileFinder => {
+  const { FileFinder } = loadFileFinderModule();
+  const created = FileFinder.create({ basePath: workingDirectory });
+  if (!created.ok) {
+    throw new Error(`Claude file search could not index '${workingDirectory}': ${created.error}`);
+  }
+  const finder = created.value;
+  const scanComplete = finder.waitForScan(FILE_FINDER_SCAN_TIMEOUT_MS).then(() => undefined);
+  return {
+    search: async (query) => {
+      await scanComplete;
+      const result = finder.mixedSearch(query, { pageSize: FILE_SEARCH_LIMIT });
+      if (!result.ok) {
+        throw new Error(`Claude file search failed in '${workingDirectory}': ${result.error}`);
+      }
+      return toClaudeFileSearchResults(result.value);
+    },
+    destroy: () => finder.destroy(),
+  };
+};
+
+export const createClaudeWorkspaceFileSearch = ({
+  createFinder = createNativeClaudeFileFinder,
+  cacheLimit = FILE_FINDER_CACHE_LIMIT,
+}: {
+  createFinder?: (workingDirectory: string) => ClaudeWorkspaceFileFinder;
+  cacheLimit?: number;
+} = {}): ClaudeWorkspaceFileSearch => {
+  const findersByDirectory = new Map<string, ClaudeWorkspaceFileFinder>();
+
+  const destroyEvictedFinders = (): void => {
+    while (findersByDirectory.size > cacheLimit) {
+      const oldest = findersByDirectory.entries().next().value;
+      if (!oldest) {
+        return;
+      }
+      const [workingDirectory, finder] = oldest;
+      findersByDirectory.delete(workingDirectory);
+      finder.destroy();
+    }
+  };
+
+  const ensureFinder = (workingDirectory: string): ClaudeWorkspaceFileFinder => {
+    const existing = findersByDirectory.get(workingDirectory);
+    if (existing) {
+      findersByDirectory.delete(workingDirectory);
+      findersByDirectory.set(workingDirectory, existing);
+      return existing;
+    }
+    const finder = createFinder(workingDirectory);
+    findersByDirectory.set(workingDirectory, finder);
+    destroyEvictedFinders();
+    return finder;
+  };
+
+  return {
+    prewarm: (workingDirectory) => {
+      try {
+        ensureFinder(workingDirectory);
+      } catch {
+        // A failed prewarm stays silent so the session opens. The '@' search
+        // reports the load failure when the composer requests results.
+      }
+    },
+    release: (workingDirectory) => {
+      const finder = findersByDirectory.get(workingDirectory);
+      if (!finder) {
+        return;
+      }
+      findersByDirectory.delete(workingDirectory);
+      finder.destroy();
+    },
+    search: async (input) => ensureFinder(input.workingDirectory).search(input.query),
+  };
+};

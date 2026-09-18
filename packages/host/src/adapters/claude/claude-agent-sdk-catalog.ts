@@ -1,5 +1,3 @@
-import { readdir } from "node:fs/promises";
-import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import {
   type AgentInfo,
   type ModelInfo,
@@ -16,9 +14,7 @@ import {
   subagentCatalogSchema,
 } from "@openducktor/contracts";
 import {
-  detectAgentFileReferenceKind,
   type AgentEvent,
-  type AgentFileSearchResult,
   type AgentModelCatalog,
   type AgentModelDescriptor,
   type AgentSkillCatalog,
@@ -28,17 +24,10 @@ import {
   type ListAgentSkillsInput,
   type ListAgentSlashCommandsInput,
   type ListAgentSubagentsInput,
-  type SearchAgentFilesInput,
 } from "@openducktor/core";
 import { buildClaudeAgentSdkBaseOptions } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
-import {
-  FILE_SEARCH_LIMIT,
-  FILE_SEARCH_MAX_VISITED,
-  IGNORED_DIRECTORIES,
-  INIT_TIMEOUT_MS,
-  withTimeout,
-} from "./claude-agent-sdk-utils";
+import { INIT_TIMEOUT_MS, withTimeout } from "./claude-agent-sdk-utils";
 
 export { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 export { loadClaudeHistory } from "./claude-agent-sdk-history-loader";
@@ -419,50 +408,4 @@ export const listClaudeSubagents = async (
     claudeExecutablePath,
   );
   return toClaudeSubagentCatalog(agents);
-};
-
-export const searchClaudeWorkspaceFiles = async (
-  input: SearchAgentFilesInput,
-): Promise<AgentFileSearchResult[]> => {
-  const root = resolve(input.workingDirectory);
-  const queryText = input.query.trim().toLowerCase();
-  const results: AgentFileSearchResult[] = [];
-  let visited = 0;
-  const visit = async (directory: string): Promise<void> => {
-    if (results.length >= FILE_SEARCH_LIMIT || visited >= FILE_SEARCH_MAX_VISITED) {
-      return;
-    }
-    const entries = await readdir(directory, { withFileTypes: true });
-    for (const entry of entries) {
-      if (results.length >= FILE_SEARCH_LIMIT || visited >= FILE_SEARCH_MAX_VISITED) {
-        return;
-      }
-      if (entry.isDirectory() && IGNORED_DIRECTORIES.has(entry.name)) {
-        continue;
-      }
-      const absolutePath = resolve(directory, entry.name);
-      const relativePath = relative(root, absolutePath).split(sep).join("/");
-      if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
-        continue;
-      }
-      visited += 1;
-      const haystack = `${entry.name}\n${relativePath}`.toLowerCase();
-      if (haystack.includes(queryText)) {
-        results.push({
-          id: relativePath,
-          path: relativePath,
-          name: basename(relativePath),
-          kind: detectAgentFileReferenceKind({
-            filePath: relativePath,
-            isDirectory: entry.isDirectory(),
-          }),
-        });
-      }
-      if (entry.isDirectory()) {
-        await visit(absolutePath);
-      }
-    }
-  };
-  await visit(root);
-  return results;
 };

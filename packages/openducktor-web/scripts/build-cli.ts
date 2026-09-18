@@ -16,6 +16,8 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
       "--target=bun",
       "--external",
       "vite",
+      "--external",
+      "@ff-labs/fff-node",
       "--outdir",
       dirname(outputPath),
       "--entry-naming",
