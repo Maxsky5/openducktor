@@ -1,14 +1,34 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, waitFor } from "@testing-library/react";
-import { createElement } from "react";
+import { createElement, type ReactElement, type ReactNode, useLayoutEffect, useState } from "react";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { buildCopyPreview } from "@/lib/copy-preview";
+import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { TaskDetailsMarkdownContent } from "./task-details-markdown-content";
 
 enableReactActEnvironment();
+
+const StaticThemeProvider = ({ children }: { children: ReactNode }): ReactElement | null => {
+  const queryClient = useQueryClient();
+  const [ready, setReady] = useState(false);
+
+  useLayoutEffect(() => {
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture({ theme: "light" }),
+    );
+    setReady(true);
+  }, [queryClient]);
+
+  return ready ? createElement(ThemeProvider, null, children) : null;
+};
 
 const writeClipboardMock = mock(async (_value: string) => {});
 let restoreClipboard: (() => void) | null = null;
@@ -209,12 +229,20 @@ describe("TaskDetailsMarkdownContent", () => {
       await withMockedToast(async () => {
         const markdown = "```mermaid\ngraph TD\n  A --> B\n```";
         const rendered = render(
-          createElement(TaskDetailsMarkdownContent, {
-            markdown,
-            empty: "No doc",
-            active: true,
-            copyableMarkdown: markdown,
-          }),
+          createElement(
+            QueryProvider,
+            { useIsolatedClient: true },
+            createElement(
+              StaticThemeProvider,
+              null,
+              createElement(TaskDetailsMarkdownContent, {
+                markdown,
+                empty: "No doc",
+                active: true,
+                copyableMarkdown: markdown,
+              }),
+            ),
+          ),
         );
 
         try {
