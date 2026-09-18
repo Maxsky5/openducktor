@@ -6,8 +6,9 @@ import {
 import { eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { z } from "zod";
+import { normalizeLabels } from "../../domain/task/task-labels";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
-import { encodeJson, normalizeLabels, validateWithSchema } from "./sqlite-json-codecs";
+import { encodeJson, validateWithSchema } from "./sqlite-json-codecs";
 import { getTaskCard } from "./sqlite-task-card-read-model";
 import { requireTaskRow } from "./sqlite-task-queries";
 import {

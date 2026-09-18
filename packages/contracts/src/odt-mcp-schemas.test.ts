@@ -13,6 +13,7 @@ import {
   readTaskAssetsResultSchema,
   SetPlanInputSchema,
   taskSummarySchema,
+  UpdateTaskInputSchema,
 } from "./odt-mcp-schemas";
 import {
   ODT_MCP_TOOL_NAMES,
@@ -93,6 +94,7 @@ describe("odt mcp public task schemas", () => {
         "odt_set_plan",
         "odt_set_pull_request",
         "odt_set_spec",
+        "odt_update_task",
       ].sort(),
     );
   });
@@ -110,6 +112,7 @@ describe("odt mcp public task schemas", () => {
       "odt_read_task",
       "odt_read_task_assets",
       "odt_read_task_documents",
+      "odt_update_task",
       "odt_set_spec",
       "odt_set_plan",
       "odt_build_blocked",
@@ -146,6 +149,76 @@ describe("odt mcp public task schemas", () => {
         path: ["issueType"],
         message:
           "issueType must be task, feature, or bug. Epic creation is not supported by the public MCP create tool.",
+      }),
+    );
+  });
+
+  test("public update accepts a partial patch and clears fields with typed values", () => {
+    expect(UpdateTaskInputSchema.parse({ taskId: " task-1 " })).toEqual({ taskId: "task-1" });
+    expect(UpdateTaskInputSchema.parse({ taskId: "task-1", description: "   " })).toEqual({
+      taskId: "task-1",
+      description: "",
+    });
+    expect(
+      UpdateTaskInputSchema.parse({
+        workspaceId: "repo",
+        taskId: "task-1",
+        title: "  New title  ",
+        description: "",
+        priority: 0,
+        labels: [" backend ", "ui"],
+        issueType: "bug",
+        aiReviewEnabled: false,
+      }),
+    ).toEqual({
+      workspaceId: "repo",
+      taskId: "task-1",
+      title: "New title",
+      description: "",
+      priority: 0,
+      labels: ["backend", "ui"],
+      issueType: "bug",
+      aiReviewEnabled: false,
+    });
+  });
+
+  test("public update rejects unknown fields, null values, empty titles, and empty labels entries", () => {
+    expect(UpdateTaskInputSchema.safeParse({ taskId: "task-1", status: "closed" }).success).toBe(
+      false,
+    );
+    expect(UpdateTaskInputSchema.safeParse({ taskId: "task-1", parentId: "task-2" }).success).toBe(
+      false,
+    );
+    expect(
+      UpdateTaskInputSchema.safeParse({ taskId: "task-1", targetBranch: { branch: "main" } })
+        .success,
+    ).toBe(false);
+    expect(UpdateTaskInputSchema.safeParse({ taskId: "task-1", title: null }).success).toBe(false);
+    expect(UpdateTaskInputSchema.safeParse({ taskId: "task-1", title: "   " }).success).toBe(false);
+    expect(UpdateTaskInputSchema.safeParse({ taskId: "task-1", labels: ["  "] }).success).toBe(
+      false,
+    );
+    expect(UpdateTaskInputSchema.safeParse({ taskId: "task-1", priority: 5 }).success).toBe(false);
+    expect(UpdateTaskInputSchema.safeParse({ taskId: "task-1", description: null }).success).toBe(
+      false,
+    );
+    expect(
+      UpdateTaskInputSchema.safeParse({ taskId: "task-1", aiReviewEnabled: null }).success,
+    ).toBe(false);
+  });
+
+  test("public update rejects epic issue type with an explanatory validation message", () => {
+    const result = UpdateTaskInputSchema.safeParse({ taskId: "task-1", issueType: "epic" });
+
+    expect(result.success).toBe(false);
+    if (result.success) {
+      return;
+    }
+    expect(result.error.issues).toContainEqual(
+      expect.objectContaining({
+        path: ["issueType"],
+        message:
+          "issueType must be task, feature, or bug. Epic updates are not supported by the public MCP update tool.",
       }),
     );
   });

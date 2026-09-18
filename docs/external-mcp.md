@@ -83,6 +83,7 @@ Public tools:
 - `odt_read_task`
 - `odt_read_task_assets`
 - `odt_read_task_documents`
+- `odt_update_task`
 
 Workflow tools on the same server:
 
@@ -95,7 +96,7 @@ Workflow tools on the same server:
 - `odt_qa_approved`
 - `odt_qa_rejected`
 
-Task-bound sessions with the Spec Agent, Planner Agent, Builder Agent, or QA Agent role do not get `odt_get_workspaces`. They can call `odt_create_task` and `odt_search_tasks` in their startup workspace and omit `workspaceId`.
+Task-bound sessions with the Spec Agent, Planner Agent, Builder Agent, or QA Agent role do not get `odt_get_workspaces`. They can call `odt_create_task`, `odt_search_tasks`, and `odt_update_task` in their startup workspace and omit `workspaceId`. `odt_update_task` is the only task-bound tool that may target a task other than the session task.
 
 ## List workspaces
 
@@ -120,7 +121,7 @@ Call `odt_get_workspaces` when the process has no default workspace or when the 
 
 ## Task summary
 
-`odt_create_task`, `odt_search_tasks`, and `odt_read_task` use this task summary:
+`odt_create_task`, `odt_search_tasks`, `odt_read_task`, and `odt_update_task` use this task summary:
 
 ```json
 {
@@ -163,6 +164,33 @@ The result is `{ task }`.
 ## Read a task
 
 `odt_read_task` requires `taskId`. It also requires `workspaceId` when the process has no default workspace. The result is `{ task }` with the shared summary shape.
+
+## Update a task
+
+`odt_update_task` changes task fields. It requires `taskId` and accepts only the fields to change:
+
+- `title`
+- `description`
+- `priority`
+- `labels`
+- `issueType`
+- `aiReviewEnabled`
+
+The input is a patch. An omitted field keeps its stored value. A null value fails. The tool never changes `status`, `parentId`, `targetBranch`, or documents.
+
+Clearing uses typed values:
+
+- An empty `description` clears the description.
+- An empty `labels` array clears all labels.
+- `aiReviewEnabled: false` turns QA review off.
+
+`title` must not be empty. The tool trims `title` and `description`. `priority` is an integer from 0 through 4. Each label must contain a non-whitespace character. The store drops repeats and sorts labels before it saves them. `issueType` is `task`, `feature`, or `bug`. The tool rejects epic targets and epic conversions. A task can change between `task`, `feature`, and `bug` and keeps its status.
+
+A call with no fields other than `taskId` and optional `workspaceId` succeeds and changes nothing. `updatedAt` changes only when a field value changes. Repeating stored values changes nothing.
+
+A description that references an image the task does not own fails and writes nothing. The store quarantines images the new description no longer references.
+
+Unknown fields fail. `workspaceId` is optional only when the process has a default workspace. The result is `{ task }` with the shared summary shape.
 
 ## Search tasks
 

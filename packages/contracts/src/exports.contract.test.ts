@@ -625,6 +625,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "toClaudeOdtToolAliases",
   "toOpencodeExposedOdtToolIds",
   "toOpencodeOdtToolAliases",
+  "UpdateTaskInputSchema",
   "pullRequestSchema",
   "validatePromptTemplatePlaceholders",
   "validateSpecMarkdown",

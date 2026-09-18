@@ -198,10 +198,13 @@ export const ReadTaskDocumentsInputSchema = z
 export type ReadTaskDocumentsInput = z.infer<typeof ReadTaskDocumentsInputSchema>;
 
 const publicEpicRejectionReason = "Epic creation is not supported by the public MCP create tool.";
+const publicEpicUpdateRejectionReason =
+  "Epic updates are not supported by the public MCP update tool.";
 
-const publicIssueTypeSchema = z.enum(["task", "feature", "bug"], {
-  error: `issueType must be task, feature, or bug. ${publicEpicRejectionReason}`,
-});
+const publicIssueTypeSchema = (rejectionReason: string) =>
+  z.enum(["task", "feature", "bug"], {
+    error: `issueType must be task, feature, or bug. ${rejectionReason}`,
+  });
 const activeTaskStatusSchema = z.enum([
   "open",
   "spec_ready",
@@ -289,7 +292,7 @@ export const CreateTaskInputSchema = z
   .object({
     workspaceId: workspaceScopedToolWorkspaceIdSchema,
     title: z.string().trim().min(1).describe("Task title."),
-    issueType: publicIssueTypeSchema.describe(
+    issueType: publicIssueTypeSchema(publicEpicRejectionReason).describe(
       `Issue type. Allowed values: task, feature, bug. ${publicEpicRejectionReason}`,
     ),
     priority: taskPrioritySchema.describe(
@@ -330,6 +333,43 @@ export const SearchTasksInputSchema = z
   .strict();
 export type SearchTasksInput = z.infer<typeof SearchTasksInputSchema>;
 
+export const UpdateTaskInputSchema = z
+  .object({
+    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    taskId: z.string().trim().min(1),
+    title: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("New task title. Omit to keep the current title."),
+    description: z
+      .string()
+      .trim()
+      .optional()
+      .describe("New task description. An empty string clears the description."),
+    priority: taskPrioritySchema
+      .optional()
+      .describe(
+        "New task priority. Valid values: 0 (P0 Critical), 1 (P1 High), 2 (P2 Normal), 3 (P3 Low), 4 (P4 Very low).",
+      ),
+    labels: z
+      .array(labelStringSchema)
+      .optional()
+      .describe("New task labels. An empty array clears all labels."),
+    issueType: publicIssueTypeSchema(publicEpicUpdateRejectionReason)
+      .optional()
+      .describe(
+        `New issue type. Allowed values: task, feature, bug. ${publicEpicUpdateRejectionReason}`,
+      ),
+    aiReviewEnabled: z
+      .boolean()
+      .optional()
+      .describe("Set false to turn OpenDucktor QA review off for this task."),
+  })
+  .strict();
+export type UpdateTaskInput = z.infer<typeof UpdateTaskInputSchema>;
+
 export const GetWorkspacesInputSchema = z.object({}).strict();
 export type GetWorkspacesInput = z.infer<typeof GetWorkspacesInputSchema>;
 
@@ -343,6 +383,7 @@ export const ODT_TOOL_SCHEMAS = {
   odt_read_task: ReadTaskInputSchema,
   odt_read_task_assets: ReadTaskAssetsInputSchema,
   odt_read_task_documents: ReadTaskDocumentsInputSchema,
+  odt_update_task: UpdateTaskInputSchema,
   odt_set_spec: SetSpecInputSchema,
   odt_set_plan: SetPlanInputSchema,
   odt_build_blocked: BuildBlockedInputSchema,
@@ -359,6 +400,7 @@ export const ODT_WORKFLOW_TOOL_SCHEMAS = {
   odt_read_task: ODT_TOOL_SCHEMAS.odt_read_task,
   odt_read_task_assets: ODT_TOOL_SCHEMAS.odt_read_task_assets,
   odt_read_task_documents: ODT_TOOL_SCHEMAS.odt_read_task_documents,
+  odt_update_task: ODT_TOOL_SCHEMAS.odt_update_task,
   odt_set_spec: ODT_TOOL_SCHEMAS.odt_set_spec,
   odt_set_plan: ODT_TOOL_SCHEMAS.odt_set_plan,
   odt_build_blocked: ODT_TOOL_SCHEMAS.odt_build_blocked,
@@ -394,6 +436,7 @@ export const ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS = {
   odt_read_task: ODT_TOOL_SCHEMAS.odt_read_task,
   odt_read_task_assets: ODT_TOOL_SCHEMAS.odt_read_task_assets,
   odt_read_task_documents: ODT_TOOL_SCHEMAS.odt_read_task_documents,
+  odt_update_task: ODT_TOOL_SCHEMAS.odt_update_task,
   odt_set_spec: ODT_TOOL_SCHEMAS.odt_set_spec,
   odt_set_plan: ODT_TOOL_SCHEMAS.odt_set_plan,
   odt_build_blocked: ODT_TOOL_SCHEMAS.odt_build_blocked,
@@ -562,6 +605,7 @@ export const ODT_HOST_BRIDGE_RESPONSE_SCHEMAS = {
   odt_read_task: taskSummarySchema,
   odt_read_task_assets: readTaskAssetsResultSchema,
   odt_read_task_documents: taskDocumentsReadSchema,
+  odt_update_task: taskSummarySchema,
   odt_set_spec: setSpecResultSchema,
   odt_set_plan: setPlanResultSchema,
   odt_build_blocked: buildBlockedResultSchema,

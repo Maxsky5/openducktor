@@ -37,4 +37,10 @@ describe("agent orchestrator role policy contract", () => {
       expect(tools).toContain("odt_create_task");
     }
   });
+
+  test("lets every workflow role update task fields", () => {
+    for (const tools of Object.values(AGENT_ROLE_TOOL_POLICY)) {
+      expect(tools).toContain("odt_update_task");
+    }
+  });
 });

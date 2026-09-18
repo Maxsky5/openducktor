@@ -56,7 +56,7 @@ const ALLOWED_TOOLS_ENV = "ODT_ALLOWED_TOOLS";
 // Deliberately allow workflow-scoped calls with workspaceId through schema validation so
 // rejectForbiddenWorkspaceIdInput can return the canonical structured ODT error envelope.
 const SHARED_SERVER_INSTRUCTIONS =
-  "Public task access uses odt_create_task, odt_search_tasks, odt_read_task, odt_read_task_assets, and odt_read_task_documents. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans. Use odt_read_task_assets to read referenced description images in one batch when their raw total is at most 20 MiB; split only larger sets. Use odt_read_task_documents only for needed document bodies. Internal workflow mutations use odt_* tools.";
+  "Public task access uses odt_create_task, odt_search_tasks, odt_read_task, odt_read_task_assets, odt_read_task_documents, and odt_update_task. Use odt_read_task first for the single task summary object, including task state, nested qaVerdict, and nested document presence booleans. Use odt_read_task_assets to read referenced description images in one batch when their raw total is at most 20 MiB; split only larger sets. Use odt_read_task_documents only for needed document bodies. Use odt_update_task to patch task fields only; it never changes status or documents. Internal workflow mutations use odt_* tools.";
 
 const createServerInstructions = (options: { forbidWorkspaceIdInput: boolean }): string => {
   const workspaceInstruction = options.forbidWorkspaceIdInput
@@ -143,28 +143,32 @@ const registerOdtTool = <
       return toToolError(cause);
     }
   };
+  // SAFETY: the MCP SDK parses tool input with the registered inputSchema before it calls this
+  // handler, and its callback type cannot carry a generic schema, so the handler asserts the type.
+  const handleInput: ToolCallback<z.ZodTypeAny> = async (input) =>
+    execute(input as ToolInput<InputSchema>);
   if (definition.nativeResult) {
-    server.registerTool(
+    server.registerTool<z.ZodTypeAny, z.ZodTypeAny>(
       name,
       {
         title: name,
         description: definition.description,
-        inputSchema: inputSchema.shape,
+        inputSchema,
       },
-      async (input: ToolInput<InputSchema>) => execute(input),
+      handleInput,
     );
     return;
   }
 
-  server.registerTool(
+  server.registerTool<z.ZodTypeAny, z.ZodTypeAny>(
     name,
     {
       title: name,
       description: definition.description,
-      inputSchema: inputSchema.shape,
+      inputSchema,
       outputSchema: ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[name],
     },
-    async (input: ToolInput<InputSchema>) => execute(input),
+    handleInput,
   );
 };
 
@@ -248,6 +252,11 @@ const ODT_TOOL_DEFINITIONS = [
     description:
       "Read only the requested OpenDucktor task document bodies. Provide taskId plus one or more true include flags for spec, implementation plan, or latest QA report.",
     execute: (store, input) => store.readTaskDocuments(input),
+  }),
+  defineOdtTool("odt_update_task", ODT_TOOL_SCHEMAS.odt_update_task, {
+    description:
+      "Update the title, description, priority, labels, issue type, or QA review flag of one non-epic task. Send only the fields to change; omitted fields stay unchanged. An empty description or labels array clears that field. This tool never changes task status or workflow documents.",
+    execute: (store, input) => store.updateTask(input),
   }),
   defineOdtTool("odt_set_spec", ODT_TOOL_SCHEMAS.odt_set_spec, {
     description:

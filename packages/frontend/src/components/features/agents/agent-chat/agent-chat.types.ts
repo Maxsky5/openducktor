@@ -92,12 +92,14 @@ export type AgentChatTranscriptPresentation = AgentChatTranscriptPresentationBas
       }
   );
 
+export type AgentChatTaskToolName = "create_task" | "search_tasks" | "update_task";
+
 export type AgentChatToolCallPresentation =
   | {
       kind: "regular" | "workflow";
       displayName: string;
     }
-  | { kind: "task"; displayName: string; taskTool: "create_task" | "search_tasks" };
+  | { kind: "task"; displayName: string; taskTool: AgentChatTaskToolName };
 
 export type AgentChatRuntimePresentation = {
   runtimeKind: RuntimeKind | null;

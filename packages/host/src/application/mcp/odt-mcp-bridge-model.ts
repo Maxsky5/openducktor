@@ -8,9 +8,12 @@ import {
   type TaskMetadataPayload,
   type TaskRequestedDocuments,
   type TaskSummary,
+  type TaskUpdatePatch,
+  type UpdateTaskInput,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType, z } from "zod";
+import { normalizeLabels } from "../../domain/task/task-labels";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 
 type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
@@ -18,6 +21,38 @@ type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
 const MAX_TASK_CANDIDATES = 5;
 
 export const normalizeKey = (value: string): string => value.trim().toLowerCase();
+
+export const buildTaskUpdatePatch = (
+  current: TaskCard,
+  input: UpdateTaskInput,
+): TaskUpdatePatch => {
+  const patch: TaskUpdatePatch = {};
+  if (input.title !== undefined && input.title !== current.title) {
+    patch.title = input.title;
+  }
+  if (input.description !== undefined && input.description !== (current.description ?? "")) {
+    patch.description = input.description;
+  }
+  if (input.priority !== undefined && input.priority !== current.priority) {
+    patch.priority = input.priority;
+  }
+  if (
+    input.labels !== undefined &&
+    !labelsEqual(normalizeLabels(input.labels), normalizeLabels(current.labels))
+  ) {
+    patch.labels = input.labels;
+  }
+  if (input.issueType !== undefined && input.issueType !== current.issueType) {
+    patch.issueType = input.issueType;
+  }
+  if (input.aiReviewEnabled !== undefined && input.aiReviewEnabled !== current.aiReviewEnabled) {
+    patch.aiReviewEnabled = input.aiReviewEnabled;
+  }
+  return patch;
+};
+
+const labelsEqual = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
 
 const sanitizeSlug = (value: string): string =>
   value

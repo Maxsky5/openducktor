@@ -66,6 +66,10 @@ export class OdtTaskStore {
     return this.executeWorkspaceScoped("odt_read_task_documents", input);
   }
 
+  async updateTask(input: ToolInput<"odt_update_task">) {
+    return this.executeWorkspaceScoped("odt_update_task", input);
+  }
+
   async createTask(input: ToolInput<"odt_create_task">) {
     return this.executeWorkspaceScoped("odt_create_task", input);
   }

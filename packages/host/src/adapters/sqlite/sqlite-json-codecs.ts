@@ -1,6 +1,7 @@
 import { type AgentSessionRecord, agentSessionRecordSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z, type JSONType } from "zod";
+import { normalizeLabels } from "../../domain/task/task-labels";
 import { errorMessage } from "../../effect/host-errors";
 import {
   SqliteTaskStoreDataError,
@@ -19,9 +20,6 @@ type SafeParser<Input, Output> = {
 const labelsSchema = z.array(z.string());
 const jsonValueSchema = z.json();
 const agentSessionListSchema = agentSessionRecordSchema.array();
-
-export const normalizeLabels = (labels: string[]): string[] =>
-  Array.from(new Set(labels.map((label) => label.trim()).filter(Boolean))).sort();
 
 export const encodeJson = (value: JSONType): string => JSON.stringify(value);
 

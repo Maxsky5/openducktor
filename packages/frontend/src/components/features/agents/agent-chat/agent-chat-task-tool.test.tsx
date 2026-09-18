@@ -289,3 +289,42 @@ test.each(["not JSON", JSON.stringify({ task: { id: "fake", title: "Incomplete" 
     expect(html).toContain("Output");
   },
 );
+
+test("renders update_task through the real message card as a Kanban-style task", () => {
+  const html = renderTool("openducktor_odt_update_task", {
+    input: { taskId: "task-1" },
+    output: JSON.stringify({ task: { ...task(), title: "Renamed task", priority: 1 } }),
+  });
+  expect(html).toContain('aria-label="update_task"');
+  expect(html).toContain('data-task-id="task-1"');
+  expect(html).toContain("Renamed task");
+  expect(html).toContain("P1");
+  expect(html).not.toContain("odt_update_task");
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const section = document.querySelector("section");
+  const regularTool = section?.firstElementChild;
+  expect(regularTool?.querySelector("details > summary")?.textContent).toContain("update_task");
+  expect(regularTool?.nextElementSibling?.getAttribute("data-task-id")).toBe("task-1");
+  expect(section?.querySelector("details[open]")).toBeNull();
+});
+
+test("does not claim a task update before completion or after failure", () => {
+  const input = { taskId: "task-1", title: "Draft title" };
+  for (const status of ["pending", "running", "error"] as const) {
+    const fields: Partial<ToolMeta> = { status, input };
+    if (status === "error") fields.error = "Task not found";
+    const html = renderTool("odt_update_task", fields);
+    expect(html).not.toContain("data-task-id");
+    if (status === "error") expect(html).toContain("Task not found");
+    else expect(html).toContain("Draft title");
+  }
+});
+
+test.each(["not JSON", JSON.stringify({ task: { id: "fake", title: "Incomplete" } })])(
+  "reports invalid successful update output without fabricating a task card",
+  (output) => {
+    const html = renderTool("odt_update_task", { output });
+    expect(html).toContain("invalid task result");
+    expect(html).not.toContain("data-task-id");
+  },
+);

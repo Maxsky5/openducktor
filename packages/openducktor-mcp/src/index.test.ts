@@ -117,6 +117,7 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
           "odt_read_task",
           "odt_read_task_assets",
           "odt_read_task_documents",
+          "odt_update_task",
           "odt_set_spec",
           "odt_set_plan",
           "odt_build_blocked",
@@ -177,6 +178,12 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
     }
 
     if (url === "/invoke/odt_create_task") {
+      requests.push({ url, body: await readJsonBody(request) });
+      writeJson(response, taskSummaryPayload);
+      return;
+    }
+
+    if (url === "/invoke/odt_update_task") {
       requests.push({ url, body: await readJsonBody(request) });
       writeJson(response, taskSummaryPayload);
       return;
@@ -550,6 +557,98 @@ describe("MCP server tool results", () => {
           priority: 2,
         },
       });
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("odt_update_task sends only the present patch fields to the host bridge", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_update_task",
+        arguments: {
+          taskId: "task-1",
+          priority: 0,
+          labels: [],
+        },
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual(taskSummaryPayload);
+      expect(bridge.requests).toContainEqual({
+        url: "/invoke/odt_update_task",
+        body: {
+          workspaceId: "repo",
+          taskId: "task-1",
+          priority: 0,
+          labels: [],
+        },
+      });
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("odt_update_task rejects epic conversions before reaching the host", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_update_task",
+        arguments: {
+          taskId: "task-1",
+          issueType: "epic",
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const textBlock = result.content.find((block) => block.type === "text");
+      if (!textBlock || textBlock.type !== "text") {
+        throw new Error("Expected an MCP text error result.");
+      }
+      expect(textBlock.text).toContain(
+        "Epic updates are not supported by the public MCP update tool.",
+      );
+      expect(bridge.requests).not.toContainEqual(
+        expect.objectContaining({ url: "/invoke/odt_update_task" }),
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("odt_update_task rejects unknown fields before reaching the host", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_update_task",
+        arguments: {
+          taskId: "task-1",
+          status: "closed",
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const textBlock = result.content.find((block) => block.type === "text");
+      if (!textBlock || textBlock.type !== "text") {
+        throw new Error("Expected an MCP text error result.");
+      }
+      expect(textBlock.text).toContain("status");
+      expect(bridge.requests).not.toContainEqual(
+        expect.objectContaining({ url: "/invoke/odt_update_task" }),
+      );
     } finally {
       await client.close();
     }

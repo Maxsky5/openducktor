@@ -95,8 +95,9 @@ The OpenDucktor host owns SQLite task-store readiness, workflow transitions, and
 - `odt_read_task`
 - `odt_read_task_assets`
 - `odt_read_task_documents`
+- `odt_update_task`
 
-The `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
+The remaining `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
 
 ## `odt_get_workspaces`
 
@@ -159,6 +160,25 @@ Optional filters:
 - `title`
 - `tags`
 - `limit`
+
+When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` becomes required at call time.
+
+## `odt_update_task`
+
+Updates an existing non-epic task.
+
+Input fields:
+
+- `workspaceId?` optional per-call workspace override
+- `taskId`
+- `title?`
+- `description?`
+- `priority?`
+- `labels?`
+- `issueType?`
+- `aiReviewEnabled?`
+
+Omitted fields keep their stored values. The tool trims `title` and `description`. An empty `description` clears the description. An empty `labels` array clears all labels. `issueType=epic` is rejected. The tool rejects epic targets. `updatedAt` changes only when a value changes.
 
 When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` becomes required at call time.
 
