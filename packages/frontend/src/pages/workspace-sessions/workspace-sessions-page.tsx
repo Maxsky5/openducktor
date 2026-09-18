@@ -145,7 +145,8 @@ function WorkspaceSessionTabView({
         size="icon"
         className={cn(
           "relative mr-1 size-6 shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100 focus-visible:opacity-100 data-[active=true]:opacity-100",
-          (confirming || archiving) && "text-foreground opacity-100",
+          confirming && "text-foreground opacity-100",
+          archiving && "text-foreground disabled:opacity-100",
         )}
         data-active={selected}
         aria-label={archiveLabel}

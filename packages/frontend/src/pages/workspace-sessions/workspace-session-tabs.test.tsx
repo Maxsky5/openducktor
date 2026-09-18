@@ -1054,7 +1054,7 @@ test("an archive in flight shows a loader on its tab, disables all archive contr
     expect(archiving.getAttribute("aria-busy")).toBe("true");
     expect(archiving.querySelector("svg")?.classList.contains("animate-spin")).toBe(true);
     expect(archiving.classList.contains("text-foreground")).toBe(true);
-    expect(archiving.classList.contains("opacity-100")).toBe(true);
+    expect(archiving.classList.contains("disabled:opacity-100")).toBe(true);
     expect(view.getByRole("tab", { name: /Second/ })).toBeTruthy();
     expect(view.getByRole("button", { name: "Archive First" }).hasAttribute("disabled")).toBe(true);
     fireEvent.click(view.getByRole("button", { name: "Archive First" }));
