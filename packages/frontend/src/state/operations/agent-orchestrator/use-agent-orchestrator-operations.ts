@@ -26,6 +26,7 @@ import {
   createReloadAgentSessionHistory,
   createRevalidateAgentSessionHistory,
 } from "./history/session-history-loader";
+import { createSessionHistoryReadGeneration } from "./history/session-history-read-generation";
 import { createWorkflowSessionHistoryPromptPolicy } from "./history/workflow-session-history-policy";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
@@ -149,6 +150,7 @@ export function useAgentOrchestratorOperations({
       workspaceRepoPath,
     ],
   );
+  const historyReadGeneration = useMemo(() => createSessionHistoryReadGeneration(), []);
   const sessionHistoryLoaders = useMemo(() => {
     const loaderArgs = {
       workspaceRepoPath,
@@ -164,6 +166,7 @@ export function useAgentOrchestratorOperations({
         loadRepoPromptOverrides: queryBackedPromptOverrides,
       }),
       loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
+      historyReadGeneration,
     };
 
     return {
@@ -175,6 +178,7 @@ export function useAgentOrchestratorOperations({
   }, [
     agentEngine,
     currentWorkspaceRepoPathRef,
+    historyReadGeneration,
     queryBackedPromptOverrides,
     queryClient,
     repoEpochRef,

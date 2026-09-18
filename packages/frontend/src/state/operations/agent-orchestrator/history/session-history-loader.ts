@@ -16,6 +16,7 @@ import {
   selectedSessionBaselineHistoryLoadPolicy,
   transcriptGapRecoveryHistoryLoadPolicy,
 } from "./session-history-load-policy";
+import type { SessionHistoryReadGeneration } from "./session-history-read-generation";
 import type { LoadSessionHistorySystemPromptContext } from "./workflow-session-history-policy";
 
 export type SessionHistoryLoaderAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
@@ -29,6 +30,7 @@ type CreateLoadAgentSessionHistoryArgs = {
   updateSession: UpdateSession;
   loadSystemPromptContext: LoadSessionHistorySystemPromptContext;
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
+  historyReadGeneration: SessionHistoryReadGeneration;
 };
 
 type SessionHistoryLoadClaim = {
@@ -108,6 +110,7 @@ type LoadSessionHistoryIntoStoreArgs = {
   loadSettingsSnapshot?: LoadSettingsSnapshotForRuntimePolicy;
   loadSystemPromptContext?: LoadSessionHistorySystemPromptContext;
   isStaleRepoOperation: () => boolean;
+  historyReadGeneration: SessionHistoryReadGeneration;
 };
 
 const loadSessionHistoryIntoStoreWithPolicy = async ({
@@ -120,6 +123,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
   loadSettingsSnapshot,
   loadSystemPromptContext,
   isStaleRepoOperation,
+  historyReadGeneration,
 }: LoadSessionHistoryIntoStoreArgs & {
   policy: SessionHistoryLoadPolicy;
 }): Promise<AgentSessionState | null> => {
@@ -147,10 +151,15 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
   }
 
   const loadingSession = loadClaim.session;
+  const readToken = historyReadGeneration.begin(identity);
+  const isSupersededRead = (): boolean => !historyReadGeneration.isLatest(identity, readToken);
   const finishStaleHistoryLoad = (): null => {
-    resetLoadingSessionHistory(identity, updateSession, policy);
+    if (!isSupersededRead()) {
+      resetLoadingSessionHistory(identity, updateSession, policy);
+    }
     return null;
   };
+  const finishSupersededHistoryRead = (): AgentSessionState | null => readSessionSnapshot(identity);
 
   try {
     if (isStaleRepoOperation()) {
@@ -160,6 +169,9 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     const systemPromptContext = await loadSystemPromptContext?.(loadingSession);
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
+    }
+    if (isSupersededRead()) {
+      return finishSupersededHistoryRead();
     }
 
     const sessionForHistory = readSessionSnapshot(identity);
@@ -183,6 +195,9 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
     }
+    if (isSupersededRead()) {
+      return finishSupersededHistoryRead();
+    }
 
     const historyInput: Parameters<typeof adapter.loadSessionHistory>[0] = {
       ...sessionRef,
@@ -196,6 +211,9 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
     }
+    if (isSupersededRead()) {
+      return finishSupersededHistoryRead();
+    }
 
     return updateSession(identity, (current) =>
       policy.applyLoadedHistory(current, history, messagesAtReadStart),
@@ -203,6 +221,9 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
   } catch (error) {
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
+    }
+    if (isSupersededRead()) {
+      return finishSupersededHistoryRead();
     }
     const failedSession = failSessionHistoryLoad(
       identity,
@@ -214,6 +235,8 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
       throw error;
     }
     return failedSession?.historyLoadState === "loaded" ? failedSession : null;
+  } finally {
+    historyReadGeneration.finish(identity, readToken);
   }
 };
 
@@ -258,6 +281,7 @@ const createLoadSessionHistoryWithPolicy = ({
   updateSession,
   loadSystemPromptContext,
   loadSettingsSnapshot,
+  historyReadGeneration,
   policy,
   skipInFlightLoads = false,
 }: CreateLoadAgentSessionHistoryArgs & {
@@ -289,6 +313,7 @@ const createLoadSessionHistoryWithPolicy = ({
       policy,
       loadSystemPromptContext,
       isStaleRepoOperation,
+      historyReadGeneration,
     };
     if (loadSettingsSnapshot) {
       input.loadSettingsSnapshot = loadSettingsSnapshot;
