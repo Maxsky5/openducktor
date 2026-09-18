@@ -86,6 +86,12 @@ const archiveButtonLabel = (title: string, confirming: boolean, archiving: boole
   return `Archive ${title}`;
 };
 
+const iconSwapClassName = (visible: boolean): string =>
+  cn(
+    "col-start-1 row-start-1 transition-[opacity,filter,transform] duration-[250ms] ease-in-out will-change-[opacity,filter,transform] motion-reduce:transition-none",
+    visible ? "scale-100 opacity-100 blur-[0px]" : "scale-25 opacity-0 blur-[2px]",
+  );
+
 function WorkspaceSessionTabView({
   record,
   selected,
@@ -157,26 +163,14 @@ function WorkspaceSessionTabView({
         onPointerDown={(event) => event.stopPropagation()}
         onClick={() => onArchive?.(record)}
       >
-        {archiving ? (
-          <LoaderCircle aria-hidden="true" className="animate-spin" />
-        ) : (
-          <>
-            <Archive
-              aria-hidden="true"
-              className={cn(
-                "absolute transition-[opacity,transform] duration-150 motion-reduce:transition-none",
-                confirming ? "scale-75 -rotate-45 opacity-0" : "scale-100 rotate-0 opacity-100",
-              )}
-            />
-            <Check
-              aria-hidden="true"
-              className={cn(
-                "absolute transition-[opacity,transform] duration-150 motion-reduce:transition-none",
-                confirming ? "scale-100 rotate-0 opacity-100" : "scale-75 rotate-45 opacity-0",
-              )}
-            />
-          </>
-        )}
+        <span className="grid">
+          <Archive aria-hidden="true" className={iconSwapClassName(!confirming && !archiving)} />
+          <Check aria-hidden="true" className={iconSwapClassName(confirming && !archiving)} />
+          <LoaderCircle
+            aria-hidden="true"
+            className={cn(iconSwapClassName(archiving), "animate-spin")}
+          />
+        </span>
       </Button>
     </div>
   );
