@@ -111,7 +111,7 @@ const createFakeReviewCommentStore = (
     hydrate: () => {
       hydrateCount += 1;
     },
-    flush: async () => {
+    flush: () => {
       flushCount += 1;
     },
   };
@@ -255,12 +255,12 @@ describe("Agent Studio review comment composer adapter", () => {
     expect(fakeStore.getStore().getPendingDrafts(OWNER)).toHaveLength(1);
   });
 
-  test("delegates hydration and flush to the store", async () => {
+  test("delegates hydration and flush to the store", () => {
     const fakeStore = createFakeReviewCommentStore([]);
     const adapter = createAgentStudioReviewCommentComposerAdapter(fakeStore.getStore);
 
     adapter.hydrate();
-    await adapter.flush();
+    adapter.flush();
 
     expect(fakeStore.hydrated()).toBe(1);
     expect(fakeStore.flushed()).toBe(1);

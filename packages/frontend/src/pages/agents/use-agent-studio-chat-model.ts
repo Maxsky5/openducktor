@@ -341,10 +341,11 @@ export function useAgentStudioChatModel({
     taskId: selectedSession.taskId,
     onSend: sessionActions.onSend,
   });
+  const reviewCommentPersistenceWarning = reviewCommentComposer.persistenceWarning;
   const reviewCommentWarning =
-    reviewCommentComposer.persistenceWarning === null
+    reviewCommentPersistenceWarning === null
       ? null
-      : REVIEW_COMMENT_PERSISTENCE_WARNINGS[reviewCommentComposer.persistenceWarning];
+      : REVIEW_COMMENT_PERSISTENCE_WARNINGS[reviewCommentPersistenceWarning];
   const interruptedTurnResume = useMemo<AgentChatInterruptedTurnResumeModel | undefined>(
     () =>
       sessionActions.canResumeSession

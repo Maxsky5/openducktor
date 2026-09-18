@@ -78,7 +78,7 @@ export type InlineCommentDraftStore = {
   formatBatchMessage: (drafts: InlineCommentDraft[]) => string;
   formatPendingBatchMessage: (ownerKey: string) => string;
   hydrate: () => void;
-  flush: () => Promise<void>;
+  flush: () => void;
 };
 
 type InlineCommentDraftStorage = Pick<
@@ -93,9 +93,6 @@ type OwnerPersistenceEntry = {
   persistedVersion: number;
   cancelMaxFlush: (() => void) | null;
   cancelTrailingFlush: (() => void) | null;
-  isFlushing: boolean;
-  flushRequestedAfterCurrent: boolean;
-  flushPromise: Promise<void> | null;
 };
 
 const MAX_WAIT_MS = 2_000;
@@ -241,9 +238,6 @@ const getOrCreateOwnerEntry = (ownerKey: string): OwnerPersistenceEntry => {
     persistedVersion: 0,
     cancelMaxFlush: null,
     cancelTrailingFlush: null,
-    isFlushing: false,
-    flushRequestedAfterCurrent: false,
-    flushPromise: null,
   };
   ownerEntries.set(ownerKey, entry);
   return entry;
@@ -289,76 +283,34 @@ const persistOwner = (ownerKey: string): InlineCommentPersistenceWarning | null 
   return result.status === "oversized" ? "oversized" : null;
 };
 
-const flushOwner = (ownerKey: string): Promise<void> => {
+const flushOwner = (ownerKey: string): void => {
   const entry = readOwnerEntry(ownerKey);
   if (!entry) {
-    return Promise.resolve();
-  }
-
-  if (entry.isFlushing) {
-    entry.flushRequestedAfterCurrent = true;
-    return entry.flushPromise ?? Promise.resolve();
+    return;
   }
 
   clearOwnerTimers(entry);
-  entry.isFlushing = true;
   const version = entry.version;
-  let warning: InlineCommentPersistenceWarning | null = null;
-  let didFail = false;
-  const flushPromise = Promise.resolve()
-    .then(() => persistOwner(ownerKey))
-    .then((result) => {
-      warning = result;
-    })
-    .catch((error) => {
-      didFail = true;
-      warning = "storage_unavailable";
-      reportPersistenceError(error);
-    })
-    .finally(() => {
-      if (readOwnerEntry(ownerKey) !== entry) {
-        return;
-      }
-
-      entry.isFlushing = false;
-      entry.flushPromise = null;
-      const hasNewChanges = entry.version !== version;
-      entry.flushRequestedAfterCurrent = false;
-      if (!didFail) {
-        entry.persistedVersion = version;
-      }
-      setPersistenceWarning(ownerKey, warning);
-      if (didFail) {
-        if (hasNewChanges) {
-          scheduleOwnerFlush(ownerKey);
-        }
-        return;
-      }
-      if (entry.version !== entry.persistedVersion) {
-        scheduleOwnerFlush(ownerKey);
-      }
-    });
-
-  entry.flushPromise = flushPromise;
-  return flushPromise;
+  try {
+    setPersistenceWarning(ownerKey, persistOwner(ownerKey));
+    entry.persistedVersion = version;
+  } catch (error) {
+    setPersistenceWarning(ownerKey, "storage_unavailable");
+    reportPersistenceError(error);
+  }
 };
 
 const scheduleOwnerFlush = (ownerKey: string): void => {
   const entry = getOrCreateOwnerEntry(ownerKey);
-  if (entry.isFlushing) {
-    entry.flushRequestedAfterCurrent = true;
-    return;
-  }
-
   if (entry.cancelMaxFlush === null) {
     entry.cancelMaxFlush = scheduleFlushTask(() => {
-      void flushOwner(ownerKey);
+      flushOwner(ownerKey);
     }, MAX_WAIT_MS);
   }
 
   entry.cancelTrailingFlush?.();
   entry.cancelTrailingFlush = scheduleFlushTask(() => {
-    void flushOwner(ownerKey);
+    flushOwner(ownerKey);
   }, TRAILING_WAIT_MS);
 };
 
@@ -368,10 +320,10 @@ const markOwnerChanged = (ownerKey: string): void => {
   scheduleOwnerFlush(ownerKey);
 };
 
-const markOwnerChangedImmediately = (ownerKey: string): void => {
+const markOwnerChangedNow = (ownerKey: string): void => {
   const entry = getOrCreateOwnerEntry(ownerKey);
   entry.version += 1;
-  void flushOwner(ownerKey);
+  flushOwner(ownerKey);
 };
 
 export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, get) => ({
@@ -540,7 +492,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
 
     set({ draftsByOwner });
     for (const ownerKey of changedOwnerKeys) {
-      markOwnerChangedImmediately(ownerKey);
+      markOwnerChangedNow(ownerKey);
     }
   },
 
@@ -566,7 +518,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     set((state) => ({
       draftsByOwner: { ...state.draftsByOwner, [ownerKey]: nextDrafts },
     }));
-    markOwnerChangedImmediately(ownerKey);
+    markOwnerChangedNow(ownerKey);
   },
 
   getDraftCount: (ownerKey) => get().getPendingDrafts(ownerKey).length,
@@ -655,17 +607,13 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     }));
   },
 
-  flush: async () => {
-    const ownerKeys = Object.keys(get().draftsByOwner);
-    const flushes: Promise<void>[] = [];
-    for (const ownerKey of ownerKeys) {
+  flush: () => {
+    for (const ownerKey of Object.keys(get().draftsByOwner)) {
       const entry = readOwnerEntry(ownerKey);
-      if (!entry || entry.version === entry.persistedVersion) {
-        continue;
+      if (entry && entry.version !== entry.persistedVersion) {
+        flushOwner(ownerKey);
       }
-      flushes.push(flushOwner(ownerKey));
     }
-    await Promise.all(flushes);
   },
 }));
 

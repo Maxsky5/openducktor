@@ -25,7 +25,7 @@ export type AgentStudioReviewCommentStore = Pick<
 
 type AgentStudioReviewCommentComposerAdapter = {
   hydrate: () => void;
-  flush: () => Promise<void>;
+  flush: () => void;
   submitDraft: (
     ownerKey: string | null,
     draft: AgentChatComposerDraft,
@@ -36,9 +36,7 @@ type AgentStudioReviewCommentComposerAdapter = {
 export const createAgentStudioReviewCommentComposerAdapter = (
   getStore: () => AgentStudioReviewCommentStore,
 ): AgentStudioReviewCommentComposerAdapter => ({
-  hydrate: () => {
-    getStore().hydrate();
-  },
+  hydrate: () => getStore().hydrate(),
   flush: () => getStore().flush(),
   submitDraft: async (ownerKey, draft, onSend) => {
     if (ownerKey === null) {
@@ -120,7 +118,7 @@ export function useAgentStudioReviewCommentComposerAdapter({
     }
 
     const flushComments = (): void => {
-      void adapter.flush();
+      adapter.flush();
     };
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === "hidden") {

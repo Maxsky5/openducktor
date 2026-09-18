@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import { act } from "react";
 import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
 import {
@@ -86,7 +86,7 @@ describe("useAgentStudioReviewCommentComposerAdapter", () => {
     rendered.unmount();
   });
 
-  test("flushes pending comments on pagehide so a comment written before quitting survives", async () => {
+  test("flushes pending comments on pagehide so a comment written before quitting survives", () => {
     const rendered = renderHook(() =>
       useAgentStudioReviewCommentComposerAdapter({
         workspaceId: "workspace-1",
@@ -113,9 +113,7 @@ describe("useAgentStudioReviewCommentComposerAdapter", () => {
       window.dispatchEvent(new Event("pagehide"));
     });
 
-    await waitFor(() => {
-      expect(storage.getItem(OWNER_KEY)).not.toBeNull();
-    });
+    expect(storage.getItem(OWNER_KEY)).not.toBeNull();
     expect(rendered.result.current.pendingInlineCommentCount).toBe(1);
     rendered.unmount();
   });

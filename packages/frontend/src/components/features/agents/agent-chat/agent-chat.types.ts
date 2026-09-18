@@ -148,7 +148,7 @@ export type AgentChatThreadModel = {
 export type AgentChatPendingSendItems = {
   count: number;
   accessibleLabel: string;
-  warning?: string | null;
+  warning?: string;
 };
 
 export type AgentChatModelPicker = {

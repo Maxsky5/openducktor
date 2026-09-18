@@ -141,12 +141,23 @@ const COMMENT_OWNER_KEY = requireOwnerKey(
   toInlineCommentDraftOwnerKey({ workspaceId: "workspace-repo", taskId: "task-1" }),
 );
 
-const seedStoredComments = async (inputs: AddInlineCommentDraftInput[]): Promise<void> => {
+const setCommentStorage = (storage: TestStorage): void => {
+  setInlineCommentDraftScheduleTaskForTests(() => () => {});
+  setInlineCommentDraftStorageForTests(storage);
+};
+
+const reloadCommentStore = (storage: TestStorage): void => {
+  resetInlineCommentDraftStoreForTests();
+  setCommentStorage(storage);
+  useInlineCommentDraftStore.getState().hydrate();
+};
+
+const seedStoredComments = (inputs: AddInlineCommentDraftInput[]): void => {
   const store = useInlineCommentDraftStore.getState();
   for (const input of inputs) {
     store.addDraft(COMMENT_OWNER_KEY, input);
   }
-  await store.flush();
+  store.flush();
 };
 
 const pendingCommentPaths = (): string[] =>
@@ -602,17 +613,12 @@ describe("useAgentsPageRightPanelModel", () => {
 
   test("drops restored comments for files missing from a loaded scope and persists the drop", async () => {
     const storage = createMemoryStorage();
-    setInlineCommentDraftScheduleTaskForTests(() => () => {});
-    setInlineCommentDraftStorageForTests(storage);
-    await seedStoredComments([
+    setCommentStorage(storage);
+    seedStoredComments([
       createCommentInput({ filePath: "src/present.ts" }),
       createCommentInput({ filePath: "src/missing.ts" }),
     ]);
-
-    resetInlineCommentDraftStoreForTests();
-    setInlineCommentDraftScheduleTaskForTests(() => () => {});
-    setInlineCommentDraftStorageForTests(storage);
-    useInlineCommentDraftStore.getState().hydrate();
+    reloadCommentStore(storage);
     expect(pendingCommentPaths()).toEqual(["src/missing.ts", "src/present.ts"]);
 
     const snapshot = createSnapshot();
@@ -637,17 +643,12 @@ describe("useAgentsPageRightPanelModel", () => {
 
   test("skips unloaded and failed scopes and validates each owner scope once", async () => {
     const storage = createMemoryStorage();
-    setInlineCommentDraftScheduleTaskForTests(() => () => {});
-    setInlineCommentDraftStorageForTests(storage);
-    await seedStoredComments([
+    setCommentStorage(storage);
+    seedStoredComments([
       createCommentInput({ filePath: "src/missing-uncommitted.ts" }),
       createCommentInput({ filePath: "src/missing-target.ts", diffScope: "target" }),
     ]);
-
-    resetInlineCommentDraftStoreForTests();
-    setInlineCommentDraftScheduleTaskForTests(() => () => {});
-    setInlineCommentDraftStorageForTests(storage);
-    useInlineCommentDraftStore.getState().hydrate();
+    reloadCommentStore(storage);
 
     const snapshot = createSnapshot();
     snapshot.diffData.loadedScopesByScope = { target: false, uncommitted: false };

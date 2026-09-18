@@ -436,7 +436,7 @@ describe("use-inline-comment-draft-store", () => {
     );
   });
 
-  test("schedules a coalesced background write and persists on flush", async () => {
+  test("schedules a coalesced background write and persists on flush", () => {
     const storage = createMemoryStorage();
     const scheduledTasks: Array<() => void> = [];
     setInlineCommentDraftStorageForTests(storage);
@@ -450,7 +450,7 @@ describe("use-inline-comment-draft-store", () => {
     expect(scheduledTasks.length).toBeGreaterThan(0);
     expect(storage.getItem(OWNER)).toBeNull();
 
-    await useInlineCommentDraftStore.getState().flush();
+    useInlineCommentDraftStore.getState().flush();
 
     const readResult = readInlineCommentDraftsFromStorage({ storage, ownerKey: OWNER });
     expect(readResult.status).toBe("restored");
@@ -506,7 +506,7 @@ describe("use-inline-comment-draft-store", () => {
     ).toEqual(["Local note"]);
   });
 
-  test("drops comments for files missing from a loaded scope once and writes immediately", async () => {
+  test("drops comments for files missing from a loaded scope once and writes immediately", () => {
     const storage = createMemoryStorage();
     setInlineCommentDraftStorageForTests(storage);
     useInlineCommentDraftStore
@@ -523,7 +523,6 @@ describe("use-inline-comment-draft-store", () => {
         "uncommitted",
         new Set(["packages/frontend/src/present.ts"]),
       );
-    await useInlineCommentDraftStore.getState().flush();
 
     expect(
       useInlineCommentDraftStore.getState().draftsByOwner[OWNER]?.map((draft) => draft.filePath),
@@ -546,25 +545,25 @@ describe("use-inline-comment-draft-store", () => {
     ).toEqual(["packages/frontend/src/present.ts"]);
   });
 
-  test("keeps comments in memory and warns when a write is oversized", async () => {
+  test("keeps comments in memory and warns when a write is oversized", () => {
     const storage = createMemoryStorage();
     setInlineCommentDraftStorageForTests(storage);
     useInlineCommentDraftStore
       .getState()
       .addDraft(OWNER, buildInput({ text: "x".repeat(131_072) }));
 
-    await useInlineCommentDraftStore.getState().flush();
+    useInlineCommentDraftStore.getState().flush();
 
     expect(useInlineCommentDraftStore.getState().getPersistenceWarning(OWNER)).toBe("oversized");
     expect(useInlineCommentDraftStore.getState().getDraftCount(OWNER)).toBe(1);
     expect(storage.getItem(OWNER)).toBeNull();
   });
 
-  test("keeps comments in memory and reports storage unavailability", async () => {
+  test("keeps comments in memory and reports storage unavailability", () => {
     setInlineCommentDraftStorageForTests(createThrowingStorage());
     useInlineCommentDraftStore.getState().addDraft(OWNER, buildInput());
 
-    await useInlineCommentDraftStore.getState().flush();
+    useInlineCommentDraftStore.getState().flush();
 
     expect(useInlineCommentDraftStore.getState().getPersistenceWarning(OWNER)).toBe(
       "storage_unavailable",
