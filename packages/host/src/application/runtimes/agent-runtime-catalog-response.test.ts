@@ -56,11 +56,11 @@ describe("toAgentRuntimeCatalogResponse", () => {
     });
   });
 
-  test("names the runtime and the surface for invalid catalog data", () => {
+  test("names the invalid field for invalid catalog data", () => {
     const response = toAgentRuntimeCatalogResponse(
       {
         // SAFETY: Invalid catalog data tests the host-side validation path.
-        models: { status: "available", catalog: { models: [{ id: "broken" }] } } as never,
+        models: { status: "available", catalog: { models: "broken" } } as never,
       },
       runtime,
     );
@@ -68,9 +68,10 @@ describe("toAgentRuntimeCatalogResponse", () => {
     expect(response.models?.status).toBe("failed");
     const message = response.models?.status === "failed" ? response.models.message : "";
     expect(message).toContain(
-      `${CLAUDE_RUNTIME_DESCRIPTOR.label} returned invalid model catalog data.`,
+      `${CLAUDE_RUNTIME_DESCRIPTOR.label} returned invalid model catalog data. models:`,
     );
     expect(message).toContain("Update the runtime and retry this surface.");
+    expect(message).not.toContain('"code"');
   });
 
   test("keeps the other surfaces when one surface fails", () => {

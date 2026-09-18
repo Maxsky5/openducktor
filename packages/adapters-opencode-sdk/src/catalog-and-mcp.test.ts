@@ -123,6 +123,12 @@ describe("catalog-and-mcp combined runtime catalog", () => {
     });
   });
 
+  test("stamps the OpenCode runtime descriptor on the combined read", async () => {
+    const catalog = await loadCatalog(catalogClient({}));
+
+    expect(catalog.runtime?.kind).toBe("opencode");
+  });
+
   test("reserves compact case-insensitively after a successful runtime read", async () => {
     const catalog = await loadCatalog(
       catalogClient({

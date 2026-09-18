@@ -1,5 +1,6 @@
 import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+  OPENCODE_RUNTIME_DESCRIPTOR,
   slashCommandCatalogSchema,
   subagentCatalogSchema,
 } from "@openducktor/contracts";
@@ -100,7 +101,7 @@ export const loadRuntimeCatalog = async (
     readAgentRuntimeCatalogSurface(readSubagents),
   ]);
 
-  return { models, slashCommands, subagents };
+  return { runtime: OPENCODE_RUNTIME_DESCRIPTOR, models, slashCommands, subagents };
 };
 
 export const searchFiles = async (

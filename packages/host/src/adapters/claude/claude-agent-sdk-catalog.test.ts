@@ -380,6 +380,7 @@ describe("loadClaudeRuntimeCatalog", () => {
     expect(close).toHaveBeenCalledTimes(1);
     expect(receivedOptions?.cwd).toBe("/repo/worktree");
     expect(receivedOptions?.env?.MCP_CONNECTION_NONBLOCKING).toBe("0");
+    expect(receivedOptions?.env?.MCP_CONNECT_TIMEOUT_MS).toBe("5000");
     expect(receivedOptions?.env?.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("openducktor");
     expect(catalog.runtime).toEqual(CLAUDE_RUNTIME_DESCRIPTOR);
     expect(catalog.models).toMatchObject({

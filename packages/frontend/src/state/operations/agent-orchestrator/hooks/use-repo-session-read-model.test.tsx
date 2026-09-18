@@ -2231,7 +2231,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("invalidates the combined catalog from the authoritative ordered stream payload", async () => {
+  test("invalidates the combined catalog from the slash command update event", async () => {
     const state = createState((emit) => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
@@ -2264,15 +2264,6 @@ describe("useRepoSessionReadModel", () => {
         } satisfies AgentSessionLiveEnvelope);
       });
 
-      expect(
-        state.queryClient.getQueryData([
-          "runtime-catalog",
-          "slash-commands",
-          "/repo",
-          "claude",
-          "/repo/worktree",
-        ]),
-      ).toBeUndefined();
       expect(invalidateQueries).toHaveBeenCalledWith({
         queryKey: ["runtime-catalog", "catalog", "/repo", "claude", "/repo/worktree"],
       });

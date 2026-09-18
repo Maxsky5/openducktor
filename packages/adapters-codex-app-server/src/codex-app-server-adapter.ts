@@ -760,6 +760,7 @@ export class CodexAppServerAdapter
     };
 
     return {
+      runtime: CODEX_RUNTIME_DESCRIPTOR,
       models: await readAgentRuntimeCatalogSurface(readModels),
       slashCommands: await readAgentRuntimeCatalogSurface(readSlashCommands),
       skills: await readAgentRuntimeCatalogSurface(readSkills),

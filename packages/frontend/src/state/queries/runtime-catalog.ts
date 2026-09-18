@@ -16,6 +16,7 @@ export const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
 export const runtimeCatalogQueryKeys = {
   all: ["runtime-catalog"] as const,
   skipped: ["runtime-catalog", SKIPPED_QUERY_KEY_SEGMENT] as const,
+  // Exact key for one runtime working directory read.
   catalog: ({ repoPath, runtimeKind, workingDirectory }: RuntimeWorkingDirectoryRef) =>
     [
       ...runtimeCatalogQueryKeys.all,
@@ -26,6 +27,7 @@ export const runtimeCatalogQueryKeys = {
     ] as const,
   repoCatalogScope: (repoPath: string) =>
     [...runtimeCatalogQueryKeys.all, "catalog", normalizeWorkingDirectory(repoPath)] as const,
+  // Prefix key for invalidation. Omit workingDirectory to cover all directories.
   runtimeCatalogScope: ({
     repoPath,
     runtimeKind,

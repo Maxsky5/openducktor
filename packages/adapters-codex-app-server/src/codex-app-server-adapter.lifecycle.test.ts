@@ -16,6 +16,7 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import { codexSandboxPolicy } from "./codex-session-policy";
 import { CodexAppServerAdapter } from "./index";
+import type { CodexJsonRpcRequest } from "./types";
 
 const expectedThreadPolicy = {
   approvalPolicy: "on-request",
@@ -38,6 +39,15 @@ const codexPolicy = (
   kind: "codex" as const,
   policy: resolveCodexEffectivePolicy(config, role),
 });
+
+class FailingSkillsTransport extends RecordingTransport {
+  async request(request: CodexJsonRpcRequest) {
+    if (request.method === "skills/list") {
+      throw new Error("skill index unavailable");
+    }
+    return super.request(request);
+  }
+}
 
 describe("CodexAppServerAdapter lifecycle", () => {
   test("prepares one host-owned event subscription per runtime", async () => {
@@ -77,6 +87,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       workingDirectory: "/repo",
     });
 
+    expect(catalog.runtime?.kind).toBe("codex");
     expect(
       catalog.models?.status === "available" ? catalog.models.catalog.runtime?.kind : undefined,
     ).toBe("codex");
@@ -168,6 +179,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       workingDirectory: "/repo",
     });
 
+    expect(catalog.runtime?.kind).toBe("codex");
     expect(
       catalog.models?.status === "available" ? catalog.models.catalog.runtime?.kind : undefined,
     ).toBe("codex");
@@ -177,6 +189,28 @@ describe("CodexAppServerAdapter lifecycle", () => {
       "model/list",
       "skills/list",
     ]);
+  });
+
+  test("keeps the model surface when the skills surface fails", async () => {
+    const transport = new FailingSkillsTransport("runtime-live", false);
+    const adapter = new CodexAppServerAdapter({
+      repoRuntimeResolver: {
+        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
+      },
+      transportFactory: () => transport,
+    });
+
+    const catalog = await adapter.loadRuntimeCatalog({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+    });
+
+    expect(catalog.models).toMatchObject({ status: "available" });
+    expect(catalog.skills?.status).toBe("failed");
+    expect(
+      catalog.skills?.status === "failed" ? String(catalog.skills.cause) : undefined,
+    ).toContain("skill index unavailable");
   });
 
   test("resumes and forks sessions through the live runtime id", async () => {

@@ -3,9 +3,8 @@ import type {
   AgentSubagentCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { resolveRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
-import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
+import { useChatComposerCatalogSurface } from "./use-chat-composer-catalog-surface";
 
 const EMPTY_SUBAGENT_CATALOG: AgentSubagentCatalog = { subagents: [] };
 
@@ -20,23 +19,13 @@ export const useChatComposerSubagents = ({
   supportsSubagentReferences,
   loadRuntimeCatalog,
 }: UseChatComposerSubagentsArgs) => {
-  const catalogQuery = useChatComposerRuntimeCatalogQuery({
+  const { catalog, error, isLoading } = useChatComposerCatalogSurface({
     promptInputRuntime,
     supports: supportsSubagentReferences,
     loadRuntimeCatalog,
+    selectSurface: (runtimeCatalog) => runtimeCatalog?.subagents,
+    emptyCatalog: EMPTY_SUBAGENT_CATALOG,
   });
-  const surface = resolveRuntimeCatalogSurface(catalogQuery.data?.subagents, catalogQuery.error);
-
-  let catalog = EMPTY_SUBAGENT_CATALOG;
-  let error: string | null = null;
-  let isLoading = false;
-  if (supportsSubagentReferences && promptInputRuntime.state === "unavailable") {
-    error = promptInputRuntime.error;
-  } else if (supportsSubagentReferences && promptInputRuntime.state === "available") {
-    catalog = surface.catalog ?? EMPTY_SUBAGENT_CATALOG;
-    error = surface.error;
-    isLoading = catalogQuery.isLoading;
-  }
 
   return {
     subagentCatalog: catalog,

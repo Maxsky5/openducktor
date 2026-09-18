@@ -3,9 +3,8 @@ import type {
   AgentSkillCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { resolveRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
-import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
+import { useChatComposerCatalogSurface } from "./use-chat-composer-catalog-surface";
 
 const EMPTY_SKILL_CATALOG: AgentSkillCatalog = { skills: [] };
 
@@ -20,23 +19,13 @@ export const useChatComposerSkills = ({
   supportsSkillReferences,
   loadRuntimeCatalog,
 }: UseChatComposerSkillsArgs) => {
-  const catalogQuery = useChatComposerRuntimeCatalogQuery({
+  const { catalog, error, isLoading } = useChatComposerCatalogSurface({
     promptInputRuntime,
     supports: supportsSkillReferences,
     loadRuntimeCatalog,
+    selectSurface: (runtimeCatalog) => runtimeCatalog?.skills,
+    emptyCatalog: EMPTY_SKILL_CATALOG,
   });
-  const surface = resolveRuntimeCatalogSurface(catalogQuery.data?.skills, catalogQuery.error);
-
-  let catalog = EMPTY_SKILL_CATALOG;
-  let error: string | null = null;
-  let isLoading = false;
-  if (supportsSkillReferences && promptInputRuntime.state === "unavailable") {
-    error = promptInputRuntime.error;
-  } else if (supportsSkillReferences && promptInputRuntime.state === "available") {
-    catalog = surface.catalog ?? EMPTY_SKILL_CATALOG;
-    error = surface.error;
-    isLoading = catalogQuery.isLoading;
-  }
 
   return {
     skillCatalog: catalog,

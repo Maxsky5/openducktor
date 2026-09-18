@@ -58,7 +58,10 @@ export const loadClaudeRuntimeCatalog = async (
       ...processEnv,
       // The SDK otherwise completes initialization while inherited MCP servers are
       // still pending, which leaves their prompts out of supportedCommands().
+      // MCP_CONNECT_TIMEOUT_MS bounds the blocking wait, so the model, skill, and
+      // subagent surfaces do not wait on a slow MCP server.
       MCP_CONNECTION_NONBLOCKING: "0",
+      MCP_CONNECT_TIMEOUT_MS: "5000",
     },
     claudeExecutablePath,
     createQuery,
