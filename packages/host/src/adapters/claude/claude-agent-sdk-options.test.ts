@@ -336,7 +336,7 @@ describe("buildClaudeAgentSdkOptions", () => {
       throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
     }
     expect(openducktorServer.env?.ODT_ALLOWED_TOOLS).toBe(
-      "odt_read_task,odt_read_task_assets,odt_read_task_documents,odt_search_tasks,odt_create_task,odt_set_spec",
+      "odt_read_task,odt_read_task_assets,odt_read_task_documents,odt_search_tasks,odt_create_task,odt_update_task,odt_set_spec",
     );
     session.abortController.abort();
   });

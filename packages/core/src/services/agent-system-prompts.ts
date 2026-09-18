@@ -173,7 +173,7 @@ const AGENT_PROMPT_DEFINITIONS = {
   "system.shared.tool_protocol": {
     id: "system.shared.tool_protocol",
     purpose: "system",
-    builtinVersion: 8,
+    builtinVersion: 9,
     template: joinPromptBlocks(
       "OpenDucktor workflow tools are native MCP tools.\nCall them directly as tool invocations; do not emit XML wrappers or pseudo-tool payloads.",
       lineSection("Allowed tools for this role", ["{{role.allowedTools}}"]),
@@ -181,6 +181,7 @@ const AGENT_PROMPT_DEFINITIONS = {
         "Use this exact taskId literal in every task-bound odt_* call: {{task.id}}.",
         "Never derive taskId from title/slug or rewrite it.",
         "If a tool call fails with task-id mismatch, retry with {{task.id}}.",
+        "odt_update_task is the only exception: it may update any task in the resolved workspace, including a task other than {{task.id}}.",
       ]),
       bulletSection("Tool and communication protocol", [
         "Always include taskId in every task-bound odt_* tool call.",

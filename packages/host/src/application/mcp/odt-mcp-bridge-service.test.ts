@@ -780,4 +780,150 @@ describe("createOdtMcpBridgeService", () => {
       },
     ]);
   });
+  test("updates only the present task fields through the host update path", async () => {
+    const updateCalls: unknown[] = [];
+    const current = taskCard({
+      title: "Add bridge",
+      description: "Wire the bridge",
+      priority: 2,
+      issueType: "feature",
+      aiReviewEnabled: true,
+      labels: ["mcp"],
+    });
+    const taskService = createTaskService({
+      listTasks: () => Effect.succeed([current]),
+      updateTask(input: Parameters<OdtTaskService["updateTask"]>[0]) {
+        updateCalls.push(input);
+        return Effect.succeed({
+          ...current,
+          title: input.patch.title ?? current.title,
+          aiReviewEnabled: input.patch.aiReviewEnabled ?? current.aiReviewEnabled,
+          updatedAt: "2026-05-10T11:00:00.000Z",
+        });
+      },
+    });
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService,
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    const result = await Effect.runPromise(
+      service.invoke("odt_update_task", {
+        workspaceId: "repo",
+        taskId: "task-1",
+        title: "  Updated title  ",
+        aiReviewEnabled: false,
+      }),
+    );
+
+    expect(updateCalls).toEqual([
+      {
+        repoPath: "/repo",
+        taskId: "task-1",
+        patch: { title: "Updated title", aiReviewEnabled: false },
+      },
+    ]);
+    expect(result).toMatchObject({
+      task: { id: "task-1", title: "Updated title", aiReviewEnabled: false },
+    });
+  });
+
+  test("skips the host update when a patch repeats the stored task values", async () => {
+    let updateCalls = 0;
+    const current = taskCard({
+      title: "Add bridge",
+      description: "",
+      priority: 2,
+      issueType: "feature",
+      aiReviewEnabled: true,
+      labels: ["backend", "ui"],
+    });
+    const taskService = createTaskService({
+      listTasks: () => Effect.succeed([current]),
+      updateTask() {
+        updateCalls += 1;
+        return Effect.succeed(current);
+      },
+    });
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService,
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    const result = await Effect.runPromise(
+      service.invoke("odt_update_task", {
+        workspaceId: "repo",
+        taskId: "task-1",
+        title: "Add bridge",
+        description: "",
+        labels: [" backend ", "backend", "ui"],
+      }),
+    );
+
+    expect(updateCalls).toBe(0);
+    expect(result).toMatchObject({
+      task: { id: "task-1", title: "Add bridge", labels: ["backend", "ui"] },
+    });
+  });
+
+  test("returns the unchanged task when no editable field is present", async () => {
+    let updateCalls = 0;
+    const current = taskCard();
+    const taskService = createTaskService({
+      listTasks: () => Effect.succeed([current]),
+      updateTask() {
+        updateCalls += 1;
+        return Effect.succeed(current);
+      },
+    });
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService,
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    const result = await Effect.runPromise(
+      service.invoke("odt_update_task", {
+        workspaceId: "repo",
+        taskId: "task-1",
+      }),
+    );
+
+    expect(updateCalls).toBe(0);
+    expect(result).toMatchObject({
+      task: { id: "task-1", title: current.title, updatedAt: current.updatedAt },
+    });
+  });
+
+  test("rejects epic task updates before calling the host update path", async () => {
+    let updateCalls = 0;
+    const epic = taskCard({ issueType: "epic" });
+    const taskService = createTaskService({
+      listTasks: () => Effect.succeed([epic]),
+      updateTask() {
+        updateCalls += 1;
+        return Effect.succeed(epic);
+      },
+    });
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService,
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.invoke("odt_update_task", {
+          workspaceId: "repo",
+          taskId: "task-1",
+          title: "Epic rename",
+        }),
+      ),
+    );
+
+    expect(error).toMatchObject({
+      _tag: "HostValidationError",
+      field: "taskId",
+      message: "Epic tasks cannot be updated by the public MCP update tool.",
+    });
+    expect(updateCalls).toBe(0);
+  });
 });

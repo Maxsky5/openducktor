@@ -47,6 +47,8 @@ describe("buildAgentSystemPrompt", () => {
       "Use this exact taskId literal in every task-bound odt_* call: task-42.",
       'odt_search_tasks({"priority"?: number, "issueType"?: "task"|"feature"|"bug"|"epic", "status"?: "open"|"spec_ready"|"ready_for_dev"|"in_progress"|"blocked"|"ai_review"|"human_review", "title"?: string, "tags"?: string[], "limit"?: number})',
       'odt_create_task({"title": string, "issueType": "task"|"feature"|"bug", "priority": number, "description"?: string, "labels"?: string[], "aiReviewEnabled"?: boolean})',
+      'odt_update_task({"taskId": string, "title"?: string, "description"?: string, "priority"?: number, "labels"?: string[], "issueType"?: "task"|"feature"|"bug", "aiReviewEnabled"?: boolean})',
+      "odt_update_task is the only exception: it may update any task in the resolved workspace, including a task other than task-42.",
       "odt_search_tasks and odt_create_task act on the startup workspace, take no taskId, and do not change the session task.",
       "Omit workspaceId from workflow tool calls; workflow sessions use the startup workspace.",
       "Start each session by calling odt_read_task with taskId task-42 to load the canonical task summary object, including task fields, qaVerdict, and document presence booleans.",
@@ -304,7 +306,7 @@ describe("buildAgentSystemPrompt", () => {
 
   test.each([
     ["system.shared.workflow_guards", 6, 7, "build"],
-    ["system.shared.tool_protocol", 7, 8, "build"],
+    ["system.shared.tool_protocol", 8, 9, "build"],
     ["system.shared.task_context", 3, 4, "build"],
     ["system.role.spec.base", 5, 6, "spec"],
     ["system.role.planner.base", 6, 7, "planner"],

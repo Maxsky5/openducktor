@@ -6,6 +6,7 @@ export const ODT_WORKFLOW_AGENT_TOOL_NAMES = [
   "odt_read_task",
   "odt_read_task_assets",
   "odt_read_task_documents",
+  "odt_update_task",
   "odt_set_spec",
   "odt_set_plan",
   "odt_build_blocked",

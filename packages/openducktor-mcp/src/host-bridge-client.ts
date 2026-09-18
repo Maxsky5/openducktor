@@ -135,6 +135,8 @@ function parseToolResponse(command: OdtToolName, payload: McpToolPayload) {
         payload,
         command,
       );
+    case "odt_update_task":
+      return parseHostResponse(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_update_task, payload, command);
     case "odt_set_spec":
       return parseHostResponse(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_set_spec, payload, command);
     case "odt_set_plan":

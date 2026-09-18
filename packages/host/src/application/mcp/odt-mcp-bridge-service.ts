@@ -36,6 +36,7 @@ import type {
 } from "../workspaces/workspace-settings-service";
 import {
   activeStatuses,
+  buildTaskUpdatePatch,
   createdSubtaskIds,
   directSubtaskIds,
   latestDocument,
@@ -106,6 +107,7 @@ export type CreateOdtMcpBridgeServiceInput = {
     | "qaRejected"
     | "setPlan"
     | "setSpec"
+    | "updateTask"
   >;
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig" | "listWorkspaces">;
 };
@@ -297,6 +299,36 @@ export const createOdtMcpBridgeService = ({
             return yield* parseResponse(toolName, RESPONSE_SCHEMAS.odt_read_task_documents, {
               documents,
             });
+          }
+          case "odt_update_task": {
+            const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
+            const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
+            const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
+            if (task.issueType === "epic") {
+              return yield* new HostValidationError({
+                field: "taskId",
+                message: "Epic tasks cannot be updated by the public MCP update tool.",
+                details: { taskId: task.id },
+              });
+            }
+            const patch = buildTaskUpdatePatch(task, parsed);
+            if (Object.keys(patch).length === 0) {
+              return yield* parseResponse(
+                toolName,
+                RESPONSE_SCHEMAS.odt_update_task,
+                mapTaskSummary(task),
+              );
+            }
+            const updated = yield* taskService.updateTask({
+              repoPath,
+              taskId: task.id,
+              patch,
+            });
+            return yield* parseResponse(
+              toolName,
+              RESPONSE_SCHEMAS.odt_update_task,
+              mapTaskSummary(updated),
+            );
           }
           case "odt_set_spec": {
             const parsed = yield* parseToolInput(toolName, ODT_TOOL_SCHEMAS[toolName], input);
