@@ -53,6 +53,12 @@ export function AgentSessionQuestionCard({
   }
 
   const sourceLabel = request.source?.kind === "subagent" ? "Subagent request" : null;
+  const nextQuestionIndex =
+    hasMultipleQuestions &&
+    activeQuestionIndex >= 0 &&
+    activeQuestionIndex + 1 < request.questions.length
+      ? activeQuestionIndex + 1
+      : null;
   const questionRenderEntries = buildQuestionRenderEntries(request.requestId, request.questions);
   const getTabId = (tabId: string): string => `${tabGroupId}-tab-${tabId}`;
   const getPanelId = (tabId: string): string => `${tabGroupId}-panel-${tabId}`;
@@ -184,6 +190,9 @@ export function AgentSessionQuestionCard({
           isSubmitting={isSubmitting}
           isComplete={isComplete}
           onReset={resetDraft}
+          onNext={
+            nextQuestionIndex === null ? undefined : () => setActiveTabId(String(nextQuestionIndex))
+          }
           onSubmit={() => {
             clearSubmitError();
             const answers = buildAnswers();

@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from "react";
-import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
   type AgentQuestionDraftEntry,
@@ -10,6 +9,7 @@ import {
   normalizeAgentQuestionDraft,
   toggleAgentQuestionOption,
 } from "./agent-session-question-draft";
+import { buildQuestionDraftKey } from "./agent-session-question-keys";
 
 export const QUESTION_SUMMARY_TAB_ID = "__summary__";
 
@@ -56,10 +56,10 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
     draft: createAgentQuestionDraft(request),
   }));
   const [submitError, setSubmitErrorState] = useState<string | null>(null);
-  const [draftRequestId, setDraftRequestId] = useState(() => pendingInputIdentity(request));
+  const [draftKey, setDraftKey] = useState(() => buildQuestionDraftKey(request));
 
-  if (draftRequestId !== pendingInputIdentity(request)) {
-    setDraftRequestId(pendingInputIdentity(request));
+  if (draftKey !== buildQuestionDraftKey(request)) {
+    setDraftKey(buildQuestionDraftKey(request));
     setUiState({
       activeTabId: "0",
       draft: createAgentQuestionDraft(request),

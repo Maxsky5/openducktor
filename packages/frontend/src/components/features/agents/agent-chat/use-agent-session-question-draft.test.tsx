@@ -232,7 +232,7 @@ describe("useQuestionDraft", () => {
     await harness.unmount();
   });
 
-  test("resets when a new request arrives with identical questions", async () => {
+  test("keeps the draft when the same questions arrive with a new request id", async () => {
     const request = buildRequest({
       questions: [baseQuestion({ header: "Question 1" }), baseQuestion({ header: "Question 2" })],
     });
@@ -243,13 +243,14 @@ describe("useQuestionDraft", () => {
       state.selectOption(0, "Frontend");
     });
     expect(harness.getLatest().activeTabId).toBe("1");
+    expect(harness.getLatest().answeredCount).toBe(1);
 
     await harness.update({
       request: { requestId: "request-2", questions: request.questions },
     });
 
-    expect(harness.getLatest().activeTabId).toBe("0");
-    expect(harness.getLatest().answeredCount).toBe(0);
+    expect(harness.getLatest().activeTabId).toBe("1");
+    expect(harness.getLatest().answeredCount).toBe(1);
 
     await harness.unmount();
   });

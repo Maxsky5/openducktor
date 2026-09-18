@@ -1,4 +1,4 @@
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { ChevronRight, LoaderCircle, Sparkles } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -8,6 +8,7 @@ type QuestionSubmitFooterProps = {
   isComplete: boolean;
   onReset: () => void;
   onSubmit: () => void;
+  onNext?: (() => void) | undefined;
 };
 
 export const QuestionSubmitFooter = ({
@@ -16,6 +17,7 @@ export const QuestionSubmitFooter = ({
   isComplete,
   onReset,
   onSubmit,
+  onNext,
 }: QuestionSubmitFooterProps): ReactElement => {
   return (
     <footer className="flex items-center justify-between gap-2 border-t border-input pt-1.5">
@@ -33,25 +35,38 @@ export const QuestionSubmitFooter = ({
         >
           Reset
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="h-7"
-          disabled={disabled || isSubmitting || !isComplete}
-          onClick={onSubmit}
-        >
-          {isSubmitting ? (
-            <>
-              <LoaderCircle className="size-3.5 animate-spin" />
-              Submitting…
-            </>
-          ) : (
-            <>
-              <Sparkles className="size-3.5" />
-              Confirm Answers
-            </>
-          )}
-        </Button>
+        {onNext ? (
+          <Button
+            type="button"
+            size="sm"
+            className="h-7"
+            disabled={disabled || isSubmitting}
+            onClick={onNext}
+          >
+            <ChevronRight className="size-3.5" />
+            Next
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            className="h-7"
+            disabled={disabled || isSubmitting || !isComplete}
+            onClick={onSubmit}
+          >
+            {isSubmitting ? (
+              <>
+                <LoaderCircle className="size-3.5 animate-spin" />
+                Submitting…
+              </>
+            ) : (
+              <>
+                <Sparkles className="size-3.5" />
+                Confirm Answers
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </footer>
   );

@@ -207,6 +207,39 @@ describe("AgentSessionQuestionCard", () => {
     await harness.unmount();
   });
 
+  test("advances to the next question with Next after entering a custom answer", async () => {
+    const request = buildRequest({
+      questions: [
+        {
+          header: "First",
+          question: "Pick the first answer",
+          options: [{ label: "Frontend", description: "UI work" }],
+          multiple: false,
+        },
+        {
+          header: "Second",
+          question: "Pick the second answer",
+          options: [{ label: "Backend", description: "API work" }],
+          multiple: false,
+        },
+      ],
+    });
+    const harness = createCardHarness({ request, onSubmit: async () => {} });
+    await harness.mount();
+
+    await harness.clickButtonByText("Other answer");
+    const textarea = screen.getByPlaceholderText("Write your answer...");
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "Custom first answer" } });
+    });
+
+    expect(harness.getButtonDisabled("Next")).toBe(false);
+    await harness.clickButtonByText("Next");
+    expectActiveTabPanel(screen.getByRole("tab", { name: /Second/i }));
+
+    await harness.unmount();
+  });
+
   test("enables submit after completion and sends normalized answers", async () => {
     const onSubmit = mock(async () => {});
     const harness = createCardHarness({
