@@ -3,6 +3,7 @@ import type {
   AgentFileSearchResult,
   AgentRuntimeCatalog,
   AgentRuntimeCatalogSurface,
+  AgentSlashCommandCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { type QueryKey, type QueryClient, queryOptions } from "@tanstack/react-query";
@@ -77,6 +78,26 @@ export const loadRuntimeCatalogFromQuery = (
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>,
 ): Promise<AgentRuntimeCatalog> =>
   queryClient.fetchQuery(runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog));
+
+// The runtime pushes an authoritative slash command catalog for one working
+// directory. Write it into the cached combined catalog so the composer does not
+// re-read every surface. Ignore the event when nothing is cached; the next read
+// already returns the pushed commands.
+export const writeSlashCommandCatalogUpdate = (
+  queryClient: QueryClient,
+  runtimeRef: RuntimeWorkingDirectoryRef,
+  catalog: AgentSlashCommandCatalog,
+): void => {
+  const queryKey = runtimeCatalogQueryKeys.catalog(runtimeRef);
+  const current = queryClient.getQueryData<AgentRuntimeCatalog>(queryKey);
+  if (current === undefined) {
+    return;
+  }
+  queryClient.setQueryData<AgentRuntimeCatalog>(queryKey, {
+    ...current,
+    slashCommands: { status: "available", catalog },
+  });
+};
 
 export type ResolvedRuntimeCatalogSurface<Catalog> = {
   catalog: Catalog | null;

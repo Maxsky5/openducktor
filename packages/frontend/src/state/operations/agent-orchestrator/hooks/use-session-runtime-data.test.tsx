@@ -694,6 +694,37 @@ describe("useSessionRuntimeData", () => {
     }
   });
 
+  test("keeps the cached catalog when the selected session changes in the same directory", async () => {
+    const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
+    const readSessionTodos = mock(async () => [todoFixture]);
+    const props: Parameters<typeof useSessionRuntimeData>[0] = {
+      repoPath: "/repo",
+      selectedSession: sessionTarget(),
+      runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+      repoReadinessState: "ready",
+      loadRuntimeCatalog,
+      readSessionTodos,
+    };
+    const harness = createHookHarness(useSessionRuntimeData, props, { wrapper });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((latest) => latest.modelCatalog !== null && latest.todos.length === 1);
+
+      await harness.update({
+        ...props,
+        selectedSession: sessionTarget(sessionState({ externalSessionId: "external-2" })),
+      });
+
+      await harness.waitFor(() => readSessionTodos.mock.calls.length === 2);
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(1);
+      expect(readSessionTodos).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().modelCatalog).toEqual(emptyCatalog);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reports missing workspace repo path without querying runtime data", async () => {
     const loadRuntimeCatalog = mock(async () => availableRuntimeCatalog(emptyCatalog));
     const readSessionTodos = mock(async () => [todoFixture]);

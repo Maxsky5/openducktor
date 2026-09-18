@@ -2,6 +2,7 @@ import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as approvalPolicy from "../session-read-model/pending-approval-policy";
 import * as workspaceRecords from "../session-read-model/workspace-session-records";
 import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type { AgentRuntimeCatalog } from "@openducktor/core";
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRefreshInput,
@@ -2231,12 +2232,16 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("invalidates the combined catalog from the slash command update event", async () => {
+  test("writes the slash command update into the cached combined catalog", async () => {
     const state = createState((emit) => {
       emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
     });
     const invalidateQueries = mock(async () => undefined);
     state.queryClient.invalidateQueries = invalidateQueries;
+    const queryKey = ["runtime-catalog", "catalog", "/repo", "claude", "/repo/worktree"] as const;
+    state.queryClient.setQueryData<AgentRuntimeCatalog>(queryKey, {
+      models: { status: "failed", message: "models unavailable" },
+    });
     const catalog = {
       commands: [
         {
@@ -2264,9 +2269,11 @@ describe("useRepoSessionReadModel", () => {
         } satisfies AgentSessionLiveEnvelope);
       });
 
-      expect(invalidateQueries).toHaveBeenCalledWith({
-        queryKey: ["runtime-catalog", "catalog", "/repo", "claude", "/repo/worktree"],
+      expect(state.queryClient.getQueryData<AgentRuntimeCatalog>(queryKey)).toEqual({
+        models: { status: "failed", message: "models unavailable" },
+        slashCommands: { status: "available", catalog },
       });
+      expect(invalidateQueries).not.toHaveBeenCalled();
     } finally {
       await state.harness.unmount();
     }

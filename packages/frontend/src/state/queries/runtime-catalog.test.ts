@@ -17,6 +17,7 @@ import {
   runtimeCatalogQueryKeys,
   runtimeCatalogQueryOptions,
   skippedRuntimeCatalogQueryOptions,
+  writeSlashCommandCatalogUpdate,
 } from "./runtime-catalog";
 
 const workingDirectoryRefFixture: RuntimeWorkingDirectoryRef = {
@@ -155,6 +156,59 @@ describe("runtime catalog queries", () => {
 
     expect(results).toEqual([fileSearchFixture]);
     expect(searchFiles).toHaveBeenCalledWith(workingDirectoryRefFixture, "index");
+  });
+
+  test("writes a pushed slash command catalog into the cached combined catalog", () => {
+    const queryClient = new QueryClient();
+    const queryKey = runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture);
+    const pushedCatalog: AgentSlashCommandCatalog = {
+      commands: [
+        {
+          id: "review",
+          trigger: "review",
+          title: "review",
+          source: "command",
+          hints: [],
+        },
+      ],
+    };
+    queryClient.setQueryData<AgentRuntimeCatalog>(queryKey, runtimeCatalogFixture);
+
+    writeSlashCommandCatalogUpdate(queryClient, workingDirectoryRefFixture, pushedCatalog);
+
+    expect(queryClient.getQueryData<AgentRuntimeCatalog>(queryKey)).toEqual({
+      ...runtimeCatalogFixture,
+      slashCommands: { status: "available", catalog: pushedCatalog },
+    });
+  });
+
+  test("keeps a pushed slash command catalog fresh so a switch does not re-read", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture);
+    queryClient.setQueryData<AgentRuntimeCatalog>(queryKey, runtimeCatalogFixture);
+    await queryClient.invalidateQueries({ queryKey });
+    expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
+
+    writeSlashCommandCatalogUpdate(
+      queryClient,
+      workingDirectoryRefFixture,
+      slashCommandCatalogFixture,
+    );
+
+    expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
+  });
+
+  test("ignores a pushed slash command catalog when nothing is cached", () => {
+    const queryClient = new QueryClient();
+    const queryKey = runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture);
+
+    writeSlashCommandCatalogUpdate(
+      queryClient,
+      workingDirectoryRefFixture,
+      slashCommandCatalogFixture,
+    );
+
+    expect(queryClient.getQueryData(queryKey)).toBeUndefined();
   });
 
   test("keeps the skipped catalog read on a dedicated skipToken key", () => {

@@ -18,8 +18,11 @@ import {
   retryAgentSessionListQueries,
 } from "@/state/queries/agent-sessions";
 import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
-import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
-import { invalidateRuntimeQueries } from "@/state/queries/runtime-query-invalidation";
+import {
+  runtimeCatalogQueryKeys,
+  writeSlashCommandCatalogUpdate,
+} from "@/state/queries/runtime-catalog";
+import { invalidateRuntimeSessionQueries } from "@/state/queries/runtime-query-invalidation";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
@@ -841,17 +844,17 @@ export const useRepoSessionReadModel = ({
       if (envelope.type === "runtime_changed") {
         runOrchestratorSideEffect(
           "agent-session-live-runtime-changed",
-          invalidateRuntimeQueries(queryClient, envelope.scope, envelope.state),
+          invalidateRuntimeSessionQueries(queryClient, envelope.scope, envelope.state),
           { tags: envelope.scope },
         );
         return;
       }
       if (envelope.type === "slash_command_catalog_updated") {
         runOrchestratorSideEffect(
-          "agent-session-live-invalidate-catalog",
-          queryClient.invalidateQueries({
-            queryKey: runtimeCatalogQueryKeys.runtimeCatalogScope(envelope.scope),
-          }),
+          "agent-session-live-write-slash-command-catalog",
+          Promise.resolve(
+            writeSlashCommandCatalogUpdate(queryClient, envelope.scope, envelope.catalog),
+          ),
           {
             tags: {
               repoPath: envelope.scope.repoPath,
