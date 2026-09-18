@@ -810,7 +810,7 @@ test("archive targets its tab, restore preserves selection, and the final archiv
   }
 });
 
-test("a slow worktree archive keeps its loader on the tab after the dialog closes and removes the tab on success", async () => {
+test("a slow worktree archive keeps its loader on the tab while the dialog is pending and removes the tab on success", async () => {
   const worktree: WorkspaceSession = {
     ...sessionRecord("Second"),
     executionTarget: {
@@ -995,6 +995,8 @@ test("an archive in flight shows a loader on its tab, disables all archive contr
     expect(archiving.hasAttribute("disabled")).toBe(true);
     expect(archiving.getAttribute("aria-busy")).toBe("true");
     expect(archiving.querySelector("svg")?.classList.contains("animate-spin")).toBe(true);
+    expect(archiving.classList.contains("text-foreground")).toBe(true);
+    expect(archiving.classList.contains("opacity-100")).toBe(true);
     expect(view.getByRole("tab", { name: /Second/ })).toBeTruthy();
     expect(view.getByRole("button", { name: "Archive First" }).hasAttribute("disabled")).toBe(true);
     fireEvent.click(view.getByRole("button", { name: "Archive First" }));

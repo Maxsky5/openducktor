@@ -142,6 +142,7 @@ function WorkspaceSessionTabView({
         className={cn(
           "relative mr-1 size-6 shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100 focus-visible:opacity-100 data-[active=true]:opacity-100",
           confirming && "text-foreground opacity-100",
+          archiving && "text-foreground opacity-100",
         )}
         data-active={selected}
         aria-label={archiveLabel}
@@ -234,7 +235,6 @@ function WorkspaceSessionTabs({
     return () => window.clearTimeout(timeout);
   }, [confirmingId]);
   const handleArchive = (record: WorkspaceSession) => {
-    if (archivingId !== null) return;
     if (record.executionTarget.kind === "local_worktree") {
       setConfirmingId(null);
       onArchive(record);
@@ -321,14 +321,8 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
     if (records.data && sessionId !== selectedId) updateNavigation({ sessionId: selectedId });
   }, [records.data, selectedId, sessionId, updateNavigation]);
   const archive = useMutation({
-    mutationFn: ({
-      sessionId,
-      ...input
-    }: {
-      sessionId: string;
-      confirmStop: boolean;
-      removeWorktree: boolean;
-    }) => host.workspaceSessionArchive({ ...input, workspaceId: workspace.workspaceId, sessionId }),
+    mutationFn: (input: { sessionId: string; confirmStop: boolean; removeWorktree: boolean }) =>
+      host.workspaceSessionArchive({ workspaceId: workspace.workspaceId, ...input }),
     onSuccess: (record) => {
       updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, record);
       if (!mounted.current) return;
