@@ -3,8 +3,7 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
-import { hostClient } from "@/lib/host-client";
-import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { type AgentSessionReadPort, agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { useTaskDetailsHistoricalSessions } from "./use-task-details-historical-sessions";
@@ -19,6 +18,15 @@ const sessionFixture: AgentSessionRecord = {
 };
 
 type HarnessProps = Parameters<typeof useTaskDetailsHistoricalSessions>[0];
+
+const createFailingReadPort = (): AgentSessionReadPort => ({
+  agentSessionsList: async () => {
+    throw new Error("agent session list unavailable");
+  },
+  agentSessionsListForTasks: async () => {
+    throw new Error("agent session list unavailable");
+  },
+});
 
 const createHarness = (initialProps: HarnessProps, queryClient: QueryClient) =>
   createHookHarness(useTaskDetailsHistoricalSessions, initialProps, {
@@ -68,21 +76,18 @@ describe("useTaskDetailsHistoricalSessions", () => {
   });
 
   test("reports a session list read failure", async () => {
-    const originalList = hostClient.agentSessionsList;
-    const originalListForTasks = hostClient.agentSessionsListForTasks;
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const harness = createHarness(
-      { repoPath: "/repo-a", taskId: "task-1", enabled: true },
+      {
+        repoPath: "/repo-a",
+        taskId: "task-1",
+        enabled: true,
+        readPort: createFailingReadPort(),
+      },
       queryClient,
     );
 
     try {
-      hostClient.agentSessionsList = async () => {
-        throw new Error("agent session list unavailable");
-      };
-      hostClient.agentSessionsListForTasks = async () => {
-        throw new Error("agent session list unavailable");
-      };
       await withMockedToast(async ({ toastErrorMock }) => {
         await harness.mount();
         await harness.run(() => {});
@@ -90,13 +95,42 @@ describe("useTaskDetailsHistoricalSessions", () => {
           expect(toastErrorMock).toHaveBeenCalled();
         });
         expect(toastErrorMock).toHaveBeenCalledWith("Failed to load task session history", {
-          id: "task-session-history-error",
+          id: "task-session-history-error:/repo-a:task-1",
           description: "agent session list unavailable",
         });
       });
     } finally {
-      hostClient.agentSessionsList = originalList;
-      hostClient.agentSessionsListForTasks = originalListForTasks;
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("reports failures for different tasks separately", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const readPort = createFailingReadPort();
+    const harness = createHarness(
+      { repoPath: "/repo-a", taskId: "task-1", enabled: true, readPort },
+      queryClient,
+    );
+
+    try {
+      await withMockedToast(async ({ toastErrorMock }) => {
+        await harness.mount();
+        await harness.run(() => {});
+        await waitFor(() => {
+          expect(toastErrorMock).toHaveBeenCalledTimes(1);
+        });
+
+        await harness.update({ repoPath: "/repo-a", taskId: "task-2", enabled: true, readPort });
+        await waitFor(() => {
+          expect(toastErrorMock).toHaveBeenCalledTimes(2);
+        });
+        expect(toastErrorMock).toHaveBeenNthCalledWith(2, "Failed to load task session history", {
+          id: "task-session-history-error:/repo-a:task-2",
+          description: "agent session list unavailable",
+        });
+      });
+    } finally {
       await harness.unmount();
       queryClient.clear();
     }
