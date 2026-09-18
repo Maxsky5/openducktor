@@ -10,7 +10,7 @@ describe("resolveAgentChatRuntimePresentation", () => {
         runtimeDefinitions: [],
         runtimeKind,
       });
-      for (const name of ["create_task", "search_tasks"] as const) {
+      for (const name of ["create_task", "search_tasks", "update_task"] as const) {
         const raw = runtimeKind === "claude" ? `mcp__openducktor__odt_${name}` : `odt_${name}`;
         expect(presentation.presentToolCall(raw, raw)).toEqual({
           kind: "task",
@@ -20,24 +20,27 @@ describe("resolveAgentChatRuntimePresentation", () => {
       }
     },
   );
-  test.each(["create_task", "search_tasks"])("presents %s as a dedicated task tool", (name) => {
-    const presentation = resolveAgentChatRuntimePresentation({
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      runtimeKind: "opencode",
-    });
-    for (const toolName of [
-      `odt_${name}`,
-      `openducktor_odt_${name}`,
-      `functions.openducktor_odt_${name}`,
-    ]) {
-      expect(presentation.presentToolCall(toolName)).toEqual({
-        kind: "task",
-        displayName: name,
-        taskTool: name,
+  test.each(["create_task", "search_tasks", "update_task"])(
+    "presents %s as a dedicated task tool",
+    (name) => {
+      const presentation = resolveAgentChatRuntimePresentation({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        runtimeKind: "opencode",
       });
-    }
-    expect(presentation.presentToolCall(`other_server.odt_${name}`).kind).toBe("regular");
-  });
+      for (const toolName of [
+        `odt_${name}`,
+        `openducktor_odt_${name}`,
+        `functions.openducktor_odt_${name}`,
+      ]) {
+        expect(presentation.presentToolCall(toolName)).toEqual({
+          kind: "task",
+          displayName: name,
+          taskTool: name,
+        });
+      }
+      expect(presentation.presentToolCall(`other_server.odt_${name}`).kind).toBe("regular");
+    },
+  );
   test("projects tool presentation and approval outcomes above the chat render tree", () => {
     const presentation = resolveAgentChatRuntimePresentation({
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],

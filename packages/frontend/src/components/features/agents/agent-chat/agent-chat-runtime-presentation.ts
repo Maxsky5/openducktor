@@ -1,4 +1,5 @@
 import {
+  type OdtToolName,
   type RuntimeDescriptor,
   type RuntimeKind,
   toOpencodeExposedOdtToolIds,
@@ -9,7 +10,20 @@ import {
   toOdtWorkflowToolDisplayName,
 } from "@openducktor/core";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import type { AgentChatRuntimePresentation } from "./agent-chat.types";
+import type { AgentChatTaskToolName, AgentChatRuntimePresentation } from "./agent-chat.types";
+
+const resolveTaskTool = (odtTool: OdtToolName | null): AgentChatTaskToolName | null => {
+  switch (odtTool) {
+    case "odt_create_task":
+      return "create_task";
+    case "odt_search_tasks":
+      return "search_tasks";
+    case "odt_update_task":
+      return "update_task";
+    default:
+      return null;
+  }
+};
 
 export const resolveAgentChatRuntimePresentation = ({
   runtimeDefinitions,
@@ -31,8 +45,8 @@ export const resolveAgentChatRuntimePresentation = ({
         if (runtimeKind === "claude") return [`mcp__openducktor__${canonical}`];
         return [];
       });
-      if (odtTool === "odt_create_task" || odtTool === "odt_search_tasks") {
-        const taskTool = odtTool === "odt_create_task" ? "create_task" : "search_tasks";
+      const taskTool = resolveTaskTool(odtTool);
+      if (taskTool) {
         return { kind: "task", displayName: taskTool, taskTool };
       }
       return {

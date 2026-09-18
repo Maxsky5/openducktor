@@ -3,6 +3,7 @@ import {
   SearchTasksInputSchema,
   createTaskResultSchema,
   searchTasksResultSchema,
+  taskSummarySchema,
   type PublicTaskSummaryTask,
 } from "@openducktor/contracts";
 import { ImageIcon } from "lucide-react";
@@ -22,10 +23,9 @@ import { statusBadgeClassName, statusLabel } from "@/lib/task-status-presentatio
 import { cn } from "@/lib/utils";
 import { buildTaskDescriptionPreviewMarkdown } from "./agent-chat-task-description-preview";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
+import type { AgentChatTaskToolName } from "./agent-chat.types";
 import { RegularToolMessage } from "./agent-chat-regular-tool-message";
 import { getToolLifecyclePhase } from "./tool-lifecycle";
-
-type TaskTool = "create_task" | "search_tasks";
 
 const TASK_DESCRIPTION_PREVIEW_CLASS_NAME = cn(
   "line-clamp-5 break-words text-muted-foreground",
@@ -165,7 +165,7 @@ export const AgentChatTaskTool = ({
   sessionWorkingDirectory,
 }: {
   meta: ToolMeta;
-  tool: TaskTool;
+  tool: AgentChatTaskToolName;
   timeLabel: string;
   messageContent: string;
   messageTimestamp: string;
@@ -177,12 +177,16 @@ export const AgentChatTaskTool = ({
     tool === "create_task" && completed
       ? readTaskToolResult(createTaskResultSchema, meta.output)
       : null;
+  const updated =
+    tool === "update_task" && completed ? readTaskToolResult(taskSummarySchema, meta.output) : null;
   const title = CreateTaskInputSchema.shape.title.safeParse(meta.input?.title);
-  let summary = completed ? "Invalid task result" : "Creating task";
+  const runningSummary = tool === "update_task" ? "Updating task" : "Creating task";
+  let summary = completed ? "Invalid task result" : runningSummary;
   if (tool === "search_tasks") summary = taskSearchSummary(meta);
   else if (phase === "failed") summary = meta.error || "Tool failed";
   else if (phase === "cancelled") summary = "Tool cancelled";
   else if (created) summary = created.task.title;
+  else if (updated) summary = updated.task.title;
   else if (title.success) summary = title.data;
 
   return (
@@ -196,7 +200,8 @@ export const AgentChatTaskTool = ({
         displayName={tool}
       />
       {created && <TaskResultCard task={created.task} />}
-      {tool === "create_task" && completed && !created && (
+      {updated && <TaskResultCard task={updated.task} />}
+      {(tool === "create_task" || tool === "update_task") && completed && !created && !updated && (
         <p role="alert" className="text-sm text-destructive">
           OpenDucktor returned an invalid task result. Expand the tool output to inspect the
           response.
