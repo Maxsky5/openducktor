@@ -393,8 +393,8 @@ describe("createAgentSessionsStore repository retention", () => {
     expect(store.listSessionSnapshots()).toEqual([sessionA]);
   });
 
-  test("evicts the oldest repository collection beyond the retention limit", () => {
-    const store = createAgentSessionsStore("/repo-a", 2);
+  test("retains every visited repository collection", () => {
+    const store = createAgentSessionsStore("/repo-a");
     const sessionA = createLoadedSession("session-a", "/repo-a/worktree", "Transcript A");
     const sessionB = createLoadedSession("session-b", "/repo-b/worktree", "Transcript B");
     const sessionC = createLoadedSession("session-c", "/repo-c/worktree", "Transcript C");
@@ -404,27 +404,18 @@ describe("createAgentSessionsStore repository retention", () => {
     store.resetWorkspace("/repo-c");
     replaceStoreSessions(store, [sessionC]);
 
-    store.resetWorkspace("/repo-a");
+    store.resetWorkspace("/repo-b");
+    expect(store.getSessionSnapshot(sessionB)).toBe(sessionB);
 
-    expect(store.getSessionSnapshot(sessionA)).toBeNull();
-    expect(store.listSessionSnapshots()).toEqual([]);
-    expect(store.getActivitySnapshot()).toEqual({
-      workspaceRepoPath: "/repo-a",
-      sessions: [],
-      repositorySessions: [],
-    });
+    store.resetWorkspace("/repo-a");
+    expect(store.getSessionSnapshot(sessionA)).toBe(sessionA);
 
     store.resetWorkspace("/repo-c");
     expect(store.getSessionSnapshot(sessionC)).toBe(sessionC);
-
-    // /repo-b was evicted earlier, so this visit starts an empty collection
-    // and evicts /repo-a as the oldest entry.
-    store.resetWorkspace("/repo-b");
-    expect(store.getSessionSnapshot(sessionB)).toBeNull();
   });
 
   test("reopens an interrupted history load when its repository becomes inactive", () => {
-    const store = createAgentSessionsStore("/repo-a", 2);
+    const store = createAgentSessionsStore("/repo-a");
     const session = {
       ...createLoadedSession("session-a", "/repo-a/worktree", "Partial transcript"),
       historyLoadState: "loading" as const,
@@ -440,7 +431,7 @@ describe("createAgentSessionsStore repository retention", () => {
   });
 
   test("rejects a late update for a session outside the active repository", () => {
-    const store = createAgentSessionsStore("/repo-a", 2);
+    const store = createAgentSessionsStore("/repo-a");
     const sessionA = createLoadedSession("session-a", "/repo-a/worktree", "Transcript A");
     replaceStoreSessions(store, [sessionA]);
 
@@ -451,16 +442,9 @@ describe("createAgentSessionsStore repository retention", () => {
     ).toBeNull();
     expect(store.getSessionSnapshot(sessionA)).toBeNull();
 
-    store.resetWorkspace("/repo-c");
+    store.resetWorkspace("/repo-a");
 
-    expect(
-      store.updateSession(sessionA, (current) => ({ ...current, status: "running" })),
-    ).toBeNull();
-    expect(store.getSessionSnapshot(sessionA)).toBeNull();
-    expect(store.getActivitySnapshot()).toMatchObject({
-      workspaceRepoPath: "/repo-c",
-      sessions: [],
-    });
+    expect(store.getSessionSnapshot(sessionA)?.status).toBe("idle");
   });
 });
 

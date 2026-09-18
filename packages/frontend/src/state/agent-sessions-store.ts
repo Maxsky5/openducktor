@@ -34,7 +34,6 @@ type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) =>
   result: Result;
 };
 
-const REPOSITORY_RETENTION_LIMIT = 2;
 export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
@@ -56,7 +55,6 @@ export type AgentSessionsStore = {
 
 export const createAgentSessionsStore = (
   initialWorkspaceRepoPath: string | null = null,
-  repositoryRetentionLimit: number = REPOSITORY_RETENTION_LIMIT,
 ): AgentSessionsStore => {
   let workspaceRepoPath = initialWorkspaceRepoPath;
   const retainedCollections = new Map<string, AgentSessionCollection>();
@@ -131,30 +129,7 @@ export const createAgentSessionsStore = (
     if (repoPath === null) {
       return emptyAgentSessionCollection();
     }
-    const collection = retainedCollections.get(repoPath) ?? emptyAgentSessionCollection();
-    retainedCollections.delete(repoPath);
-    retainedCollections.set(repoPath, collection);
-    return collection;
-  };
-
-  const evictOldestCollections = (): void => {
-    while (retainedCollections.size > repositoryRetentionLimit) {
-      const oldestRepoPath = retainedCollections.keys().next().value;
-      if (oldestRepoPath === undefined) {
-        return;
-      }
-      retainedCollections.delete(oldestRepoPath);
-    }
-  };
-
-  const dropEvictedPendingInput = (): void => {
-    if (visiblePendingInputSnapshot === null) {
-      return;
-    }
-    if ([...retainedCollections.values()].includes(visiblePendingInputSnapshot.collection)) {
-      return;
-    }
-    visiblePendingInputSnapshot = null;
+    return retainedCollections.get(repoPath) ?? emptyAgentSessionCollection();
   };
 
   return {
@@ -208,8 +183,6 @@ export const createAgentSessionsStore = (
       retainActiveCollection();
       workspaceRepoPath = nextWorkspaceRepoPath;
       sessionCollection = activateCollection(nextWorkspaceRepoPath);
-      evictOldestCollections();
-      dropEvictedPendingInput();
       activitySnapshot = createAgentActivitySnapshot({
         collection: sessionCollection,
         previous:

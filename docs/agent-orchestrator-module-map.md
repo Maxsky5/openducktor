@@ -10,7 +10,7 @@ Pass primitive identity through these modules. Use `workspaceRepoPath` for repos
 
 Files: `packages/frontend/src/state/agent-sessions-store.ts` and `hooks/use-orchestrator-session-state.ts`.
 
-Owns the per-repository `AgentSessionState` collections, derived summaries, activity snapshot, and React notifications. By default, the store keeps at most two repository collections in memory. The oldest collection leaves when a third repository becomes active.
+Owns the per-repository `AgentSessionState` collections, derived summaries, activity snapshot, and React notifications. The store keeps every visited repository collection in memory.
 
 Rules:
 
