@@ -871,6 +871,70 @@ test("a slow worktree archive keeps its loader on the tab while the dialog is pe
   }
 });
 
+test("a failed direct archive does not show its error in the next worktree dialog", async () => {
+  const worktree = worktreeRecord("Second");
+  const requests: WorkspaceSessionArchiveInput[] = [];
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceSessionListActive: async () => [sessionRecord("First"), worktree],
+        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+        workspaceSessionArchivePreview: async () => ({
+          branchName: "feature/second",
+          worktreeExists: true,
+          hasUncommittedChanges: false,
+        }),
+        workspaceSessionArchive: async (input) => {
+          requests.push(input);
+          if (input.sessionId === "First") throw new Error("Stop failed: runtime disconnected");
+          return { ...worktree, archivedAt: 2000 };
+        },
+      },
+    }),
+  );
+  const view = renderTabs();
+  try {
+    fireEvent.click(await view.findByRole("button", { name: "Archive First" }, { timeout: 800 }));
+    fireEvent.click(view.getByRole("button", { name: "Confirm stop and archive First" }));
+    await view.findByText("Stop failed: runtime disconnected", {}, { timeout: 800 });
+    fireEvent.click(view.getByRole("button", { name: "Archive Second" }));
+    expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
+    expect(view.queryByRole("alert")).toBeNull();
+    expect(requests).toEqual([
+      {
+        workspaceId: view.workspaceId,
+        sessionId: "First",
+        confirmStop: true,
+        removeWorktree: false,
+      },
+    ]);
+    const submit = view.getByRole("button", { name: "Archive chat" });
+    await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false), { timeout: 800 });
+    fireEvent.click(submit);
+    await waitFor(() => expect(view.queryByRole("dialog") === null).toBe(true), { timeout: 800 });
+    await waitFor(() => expect(view.queryByRole("tab", { name: /Second/ }) === null).toBe(true), {
+      timeout: 800,
+    });
+    expect(requests).toEqual([
+      {
+        workspaceId: view.workspaceId,
+        sessionId: "First",
+        confirmStop: true,
+        removeWorktree: false,
+      },
+      {
+        workspaceId: view.workspaceId,
+        sessionId: "Second",
+        confirmStop: true,
+        removeWorktree: true,
+      },
+    ]);
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
 test("archive confirmation expires after five seconds and only one tab is armed", async () => {
   let calls = 0;
   configureShellBridge(

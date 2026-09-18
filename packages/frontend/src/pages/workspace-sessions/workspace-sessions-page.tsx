@@ -344,6 +344,7 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
     archive.mutate({ sessionId, confirmStop: true, removeWorktree });
   };
   const handleTabArchive = (target: WorkspaceSession) => {
+    archive.reset();
     if (target.executionTarget.kind === "local_worktree") {
       setArchiveTarget(target);
       return;
