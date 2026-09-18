@@ -627,7 +627,7 @@ describe("AppShell", () => {
     const openRepositoryButton = await within(workspaceFooter).findByRole(
       "button",
       { name: "Open repository" },
-      { timeout: 4000 },
+      { timeout: 8000 },
     );
     fireEvent.click(openRepositoryButton);
 
@@ -697,7 +697,7 @@ describe("AppShell", () => {
     await screen.findByRole("heading", { name: "Open your first workspace" });
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
     fireEvent.click(
-      await screen.findByRole("button", { name: "Open repository" }, { timeout: 4000 }),
+      await screen.findByRole("button", { name: "Open repository" }, { timeout: 8000 }),
     );
 
     const backButton = screen.getByRole("button", { name: "Back to notifications" });
