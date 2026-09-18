@@ -41,8 +41,8 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 
 - `packages/frontend` and `packages/host` run with `bun test --parallel --no-isolate`.
 - Other workspaces run serially.
-- The preload gives each worker its own temp directory and config directory.
-- The preload removes the document theme class after each test file.
+- The preload gives each frontend and host worker its own temp directory and config directory.
+- The preload removes the document theme class after each frontend test file.
 - The frontend and host test timeout is 15000 ms.
 
 ## Async and flaky tests
