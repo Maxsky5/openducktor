@@ -144,8 +144,16 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     }
   }, []);
 
+  const resetFlowWorkspaceIdentity = useMemo(
+    () =>
+      activeWorkspaceId && workspaceRepoPath
+        ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath }
+        : null,
+    [activeWorkspaceId, workspaceRepoPath],
+  );
   const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
     tasks,
+    workspaceIdentity: resetFlowWorkspaceIdentity,
     resetTaskImplementation,
     closeTaskDetails,
   });

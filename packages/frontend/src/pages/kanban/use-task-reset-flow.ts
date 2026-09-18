@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useTaskCleanupImpact } from "@/components/features/task-details/use-task-cleanup-impact";
 import { errorMessage } from "@/lib/errors";
@@ -11,8 +11,14 @@ type ResetImplementationOptions = {
   closeDetailsAfterReset?: boolean;
 };
 
+type ResetFlowWorkspaceIdentity = {
+  workspaceId: string;
+  repoPath: string;
+};
+
 type UseTaskResetFlowArgs = {
   tasks: TaskCard[];
+  workspaceIdentity: ResetFlowWorkspaceIdentity | null;
   resetTaskImplementation: (taskId: string) => Promise<void>;
   closeTaskDetails: (taskId: string) => void;
 };
@@ -29,6 +35,7 @@ const deriveRollbackLabel = (task: TaskCard): string => {
 
 export function useTaskResetFlow({
   tasks,
+  workspaceIdentity,
   resetTaskImplementation,
   closeTaskDetails,
 }: UseTaskResetFlowArgs) {
@@ -36,6 +43,21 @@ export function useTaskResetFlow({
   const [closeDetailsAfterReset, setCloseDetailsAfterReset] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  const workspaceIdentityRef = useRef(workspaceIdentity);
+
+  useEffect(() => {
+    const previousIdentity = workspaceIdentityRef.current;
+    if (
+      previousIdentity?.workspaceId === workspaceIdentity?.workspaceId &&
+      previousIdentity?.repoPath === workspaceIdentity?.repoPath
+    ) {
+      return;
+    }
+    workspaceIdentityRef.current = workspaceIdentity;
+    setTaskId(null);
+    setCloseDetailsAfterReset(false);
+    setModalError(null);
+  }, [workspaceIdentity]);
 
   const task = useMemo(
     () => (taskId ? (tasks.find((entry) => entry.id === taskId) ?? null) : null),
