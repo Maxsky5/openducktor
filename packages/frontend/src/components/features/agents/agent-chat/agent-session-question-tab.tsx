@@ -56,7 +56,7 @@ export const QuestionTab = ({
                 type="button"
                 disabled={disabled}
                 className={cn(
-                  "w-full cursor-pointer rounded-md border px-2 py-1 text-left transition-colors",
+                  "w-full cursor-pointer rounded-md border px-2 py-1 text-left",
                   isSelected
                     ? "border-muted-foreground bg-secondary text-foreground"
                     : "border-border bg-card text-foreground hover:border-input hover:bg-accent",
@@ -102,7 +102,7 @@ export const QuestionTab = ({
             grow="hug"
             size="xs"
             inactiveClassName="bg-card text-foreground hover:bg-accent"
-            className="gap-1 border border-input px-2"
+            className="gap-1 border border-input px-2 transition-none"
             disabled={disabled}
             onClick={onToggleFreeText}
           >

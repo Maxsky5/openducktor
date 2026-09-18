@@ -117,7 +117,7 @@ export function AgentSessionQuestionCard({
                   grow="hug"
                   size="xs"
                   inactiveClassName="bg-card text-foreground hover:bg-accent"
-                  className="h-7 gap-1 border border-input px-2"
+                  className="h-7 gap-1 border border-input px-2 transition-none"
                   onClick={() => setActiveTabId(tabId)}
                 >
                   {answered ? (
@@ -149,7 +149,7 @@ export function AgentSessionQuestionCard({
               grow="hug"
               size="xs"
               inactiveClassName="bg-card text-foreground hover:bg-muted"
-              className="h-7 gap-1 border border-input px-2"
+              className="h-7 gap-1 border border-input px-2 transition-none"
               onClick={() => setActiveTabId(QUESTION_SUMMARY_TAB_ID)}
             >
               <ListChecks className="size-3.5" />
