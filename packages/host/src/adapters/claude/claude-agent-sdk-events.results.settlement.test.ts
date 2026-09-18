@@ -9,11 +9,6 @@ import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 const readSdkState = (session: ReturnType<typeof createSession>) => session.sdkState;
 
-const markSessionRunning = (session: ReturnType<typeof createSession>): void => {
-  session.activity = "running";
-  session.sdkState = "running";
-};
-
 describe("handleClaudeSdkMessage result settlement", () => {
   test("marks the parent idle when its completed result arrives", () => {
     const events: AgentEvent[] = [];
@@ -372,6 +367,16 @@ describe("handleClaudeSdkMessage result settlement", () => {
         origin: { kind: "task-notification" },
       }),
     });
+
+    expect(session.activity).toBe("running");
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "session_status",
+        externalSessionId: "session-1",
+        status: { type: "busy", message: null },
+      }),
+    ]);
+
     handleClaudeSdkMessage({
       ...commonInput,
       timestamp: "2026-06-25T20:00:02.000Z",
@@ -420,6 +425,33 @@ describe("handleClaudeSdkMessage result settlement", () => {
     );
   });
 
+  test("keeps a wake-up turn that starts during a live turn busy without a repeated status", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("running");
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: "5a91c77d-22be-4340-8676-aa50b78359cc",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: { role: "user", content: "Task completed" },
+        origin: { kind: "task-notification" },
+      }),
+    });
+
+    expect(session.activity).toBe("running");
+    expect(events.filter((event) => event.type === "session_status")).toEqual([]);
+  });
+
   test("settles after a user turn races a task-notification turn", () => {
     const events: AgentEvent[] = [];
     const session = createSession("idle");
@@ -447,7 +479,6 @@ describe("handleClaudeSdkMessage result settlement", () => {
     });
     session.pendingUserTurnCount = 1;
     session.activeSdkUserTurnCount = 1;
-    markSessionRunning(session);
 
     handleClaudeSdkMessage({
       ...commonInput,

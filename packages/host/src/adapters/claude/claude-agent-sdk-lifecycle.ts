@@ -24,6 +24,7 @@ type ClaudeLifecycleInput = {
 
 type ClaudeLifecycleEvent =
   | { kind: "sdk_state"; state: "idle" | "requires_action" | "running" }
+  | { kind: "sdk_turn_started" }
   | {
       kind: "result";
       outcome: ClaudeResultLifecycleOutcome;
@@ -117,6 +118,13 @@ const applySdkStateLifecycleEvent = (
   input.session.activity = "running";
 };
 
+const applySdkTurnStartedLifecycleEvent = (input: ClaudeLifecycleInput): void => {
+  if (input.session.activity !== "idle") {
+    return;
+  }
+  emitSessionBusy(input);
+};
+
 const applyResultLifecycleEvent = (
   input: ClaudeLifecycleInput & {
     outcome: Extract<ClaudeLifecycleEvent, { kind: "result" }>["outcome"];
@@ -153,6 +161,10 @@ export const applyClaudeLifecycleEvent = (
 ): void => {
   if (input.event.kind === "sdk_state") {
     applySdkStateLifecycleEvent({ ...input, state: input.event.state });
+    return;
+  }
+  if (input.event.kind === "sdk_turn_started") {
+    applySdkTurnStartedLifecycleEvent(input);
     return;
   }
   applyResultLifecycleEvent({ ...input, outcome: input.event.outcome });
