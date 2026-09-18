@@ -118,11 +118,13 @@ const applySdkStateLifecycleEvent = (
 };
 
 const applySdkTurnStartedLifecycleEvent = (input: ClaudeLifecycleInput): void => {
-  // A task-notification user message starts a turn before any host send, so the
-  // session must go busy. A replayed sdk_state "running" frame does not start a turn.
+  // A task-notification user message starts a turn before any host send. Count the
+  // turn so its result settles its own turn, and mark the session busy. A replayed
+  // sdk_state "running" frame does not start a turn.
   if (input.session.activity !== "idle") {
     return;
   }
+  input.session.activeSdkUserTurnCount = activeSdkUserTurnCount(input.session) + 1;
   emitSessionBusy(input);
 };
 
@@ -132,9 +134,13 @@ const applyResultLifecycleEvent = (
   },
 ): void => {
   if (input.outcome === "awaiting_sdk_idle") {
-    completeActiveSdkUserTurn(input.session);
+    const remainingActiveSdkUserTurns = completeActiveSdkUserTurn(input.session);
     const remainingPendingUserTurns = completePendingUserTurn(input.session);
-    if (remainingPendingUserTurns > 0) {
+    if (
+      remainingActiveSdkUserTurns > 0 ||
+      remainingPendingUserTurns > 0 ||
+      hasPendingInput(input.session)
+    ) {
       input.session.activity = "running";
       return;
     }
@@ -145,9 +151,13 @@ const applyResultLifecycleEvent = (
     input.session.activity = "running";
     return;
   }
-  completeActiveSdkUserTurn(input.session);
+  const remainingActiveSdkUserTurns = completeActiveSdkUserTurn(input.session);
   const remainingPendingUserTurns = completePendingUserTurn(input.session);
-  if (remainingPendingUserTurns > 0) {
+  if (
+    remainingActiveSdkUserTurns > 0 ||
+    remainingPendingUserTurns > 0 ||
+    hasPendingInput(input.session)
+  ) {
     input.session.activity = "running";
     return;
   }

@@ -369,6 +369,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     });
 
     expect(session.activity).toBe("running");
+    expect(session.activeSdkUserTurnCount).toBe(1);
     expect(events).toEqual([
       expect.objectContaining({
         type: "session_status",
@@ -411,6 +412,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     });
 
     expect(session.activity).toBe("idle");
+    expect(session.activeSdkUserTurnCount).toBe(0);
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "assistant_message",
@@ -449,6 +451,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     });
 
     expect(session.activity).toBe("running");
+    expect(session.activeSdkUserTurnCount).toBe(0);
     expect(events.filter((event) => event.type === "session_status")).toEqual([]);
   });
 
@@ -477,8 +480,10 @@ describe("handleClaudeSdkMessage result settlement", () => {
         origin: { kind: "task-notification" },
       }),
     });
-    session.pendingUserTurnCount = 1;
-    session.activeSdkUserTurnCount = 1;
+    expect(session.activeSdkUserTurnCount).toBe(1);
+    // A local user send pushes while the wake-up turn runs.
+    session.activeSdkUserTurnCount = (session.activeSdkUserTurnCount ?? 0) + 1;
+    session.sdkState = "running";
 
     handleClaudeSdkMessage({
       ...commonInput,
@@ -496,6 +501,10 @@ describe("handleClaudeSdkMessage result settlement", () => {
         origin: { kind: "task-notification" },
       }),
     });
+    expect(session.activeSdkUserTurnCount).toBe(1);
+    expect(session.activity).toBe("running");
+    expect(events.filter((event) => event.type === "session_idle")).toEqual([]);
+
     handleClaudeSdkMessage({
       ...commonInput,
       timestamp: "2026-06-25T20:00:02.000Z",
@@ -512,18 +521,12 @@ describe("handleClaudeSdkMessage result settlement", () => {
       }),
     });
 
-    expect(session.pendingUserTurnCount).toBe(0);
     expect(session.activeSdkUserTurnCount).toBe(0);
     expect(session.activity).toBe("idle");
-    expect(events.at(-1)).toEqual(
-      expect.objectContaining({
-        type: "session_idle",
-        externalSessionId: "session-1",
-      }),
-    );
+    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
   });
 
-  test("settles a finalized wake-up turn when the host went idle before the result", () => {
+  test("keeps a running wake-up turn when an idle frame arrives before the result", () => {
     const events: AgentEvent[] = [];
     const session = createSession("idle");
     const commonInput = {
@@ -550,6 +553,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
       }),
     });
     expect(session.activity).toBe("running");
+    expect(session.activeSdkUserTurnCount).toBe(1);
 
     handleClaudeSdkMessage({
       ...commonInput,
@@ -562,7 +566,8 @@ describe("handleClaudeSdkMessage result settlement", () => {
         session_id: "session-1",
       }),
     });
-    expect(session.activity).toBe("idle");
+    expect(session.activity).toBe("running");
+    expect(events.filter((event) => event.type === "session_idle")).toEqual([]);
 
     handleClaudeSdkMessage({
       ...commonInput,
@@ -582,11 +587,74 @@ describe("handleClaudeSdkMessage result settlement", () => {
     });
 
     expect(session.activity).toBe("idle");
-    expect(events.at(-1)).toEqual(
-      expect.objectContaining({
-        type: "session_idle",
-        externalSessionId: "session-1",
+    expect(session.activeSdkUserTurnCount).toBe(0);
+    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
+  });
+
+  test("publishes the settle signal when a finalized result arrives while the host is idle", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("idle");
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
       }),
-    );
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    });
+
+    expect(session.activity).toBe("idle");
+    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
+  });
+
+  test("keeps the session running when a finalized result leaves pending input", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("running");
+    session.pendingApprovals.set("approval-1", {
+      event: {
+        type: "approval_required",
+        externalSessionId: "session-1",
+        timestamp: "2026-06-25T20:00:00.000Z",
+        requestId: "approval-1",
+        requestType: "runtime_tool",
+        title: "Approve tool",
+        tool: { name: "TestTool", input: {} },
+        mutation: "unknown",
+      },
+      resolve: () => {},
+    });
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude",
+      }),
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+    });
+
+    expect(session.activity).toBe("running");
+    expect(events.filter((event) => event.type === "session_idle")).toEqual([]);
   });
 });
