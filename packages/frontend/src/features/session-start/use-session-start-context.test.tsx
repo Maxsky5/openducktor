@@ -40,13 +40,9 @@ describe("useSessionStartContext", () => {
   test("cancels on unmount", async () => {
     const harness = createHarness("workspace-a");
 
-    try {
-      await harness.mount();
-      const operation = harness.getLatest();
-      await harness.unmount();
-      expect(operation()).toBe(false);
-    } finally {
-      await harness.unmount();
-    }
+    await harness.mount();
+    const operation = harness.getLatest();
+    await harness.unmount();
+    expect(operation()).toBe(false);
   });
 });
