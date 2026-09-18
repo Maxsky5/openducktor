@@ -1,54 +1,13 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
 import type { ModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import {
-  searchClaudeWorkspaceFiles,
   toClaudeHistoryMessages,
   toClaudeModelDescriptor,
   toClaudeSkillCatalog,
   toClaudeSlashCommandCatalog,
 } from "./claude-agent-sdk-catalog";
 import { claudeSessionMessageFixtures } from "./claude-agent-sdk-test-messages";
-
-const tempWorkspaces: string[] = [];
-
-const createTempWorkspace = async (): Promise<string> => {
-  const workspace = await mkdtemp(join(tmpdir(), "openducktor-claude-files-"));
-  tempWorkspaces.push(workspace);
-  return workspace;
-};
-
-afterEach(async () => {
-  await Promise.all(
-    tempWorkspaces.splice(0).map((path) => rm(path, { force: true, recursive: true })),
-  );
-});
-
-describe("searchClaudeWorkspaceFiles", () => {
-  test("returns initial file candidates for empty autocomplete queries", async () => {
-    const workspace = await createTempWorkspace();
-    await writeFile(join(workspace, "README.md"), "# Project\n");
-
-    await expect(
-      searchClaudeWorkspaceFiles({
-        repoPath: workspace,
-        runtimeKind: "claude",
-        workingDirectory: workspace,
-        query: "",
-      }),
-    ).resolves.toEqual([
-      {
-        id: "README.md",
-        path: "README.md",
-        name: "README.md",
-        kind: "default",
-      },
-    ]);
-  });
-});
 
 describe("toClaudeModelDescriptor", () => {
   test("maps Claude SDK effort levels to OpenDucktor variants", () => {

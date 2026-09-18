@@ -12,7 +12,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "bun run scripts/build.ts",
-    "build:main": "bun build --target=node --external electron --external node-pty --splitting --outdir dist --entry-naming '[name].[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts src/main/generated-image-worker.ts",
+    "build:main": "bun build --target=node --external electron --external node-pty --external @ff-labs/fff-node --splitting --outdir dist --entry-naming '[name].[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts src/main/generated-image-worker.ts",
     "build:preload": "bun build --target=node --format=cjs --external electron --outfile dist/preload.cjs src/preload/preload.ts",
     "build:renderer": "vite build --outDir dist/renderer --emptyOutDir",
     "builder": "electron-builder",
@@ -28,6 +28,7 @@
     "lint": "oxlint -c ../../.oxlintrc.json src scripts vite.config.ts"
   },
   "dependencies": {
+    "@ff-labs/fff-node": "0.10.6",
     "electron-updater": "^6.8.9",
     "node-pty": "1.2.0-beta.15",
     "semver": "7.8.5",
