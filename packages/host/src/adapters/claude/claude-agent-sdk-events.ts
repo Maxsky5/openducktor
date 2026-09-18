@@ -116,8 +116,8 @@ export const handleClaudeSdkMessage = ({
       session.assistantTurnOriginKind = originKind;
     }
     if (originKind === "task-notification") {
-      // The wake-up turn runs in the SDK, so the host must mark it busy here to
-      // keep the live snapshot running until the turn result settles.
+      // The SDK starts this turn, so mark the session busy here to keep the live
+      // snapshot running until the turn result settles.
       applyClaudeLifecycleEvent({
         emit,
         session,

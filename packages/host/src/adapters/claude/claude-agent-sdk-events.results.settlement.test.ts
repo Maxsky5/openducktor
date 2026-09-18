@@ -425,7 +425,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
     );
   });
 
-  test("keeps a wake-up turn that starts during a live turn busy without a repeated status", () => {
+  test("does not repeat the busy status when a wake-up turn starts during a live turn", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
 
