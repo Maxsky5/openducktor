@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTaskCleanupImpact } from "@/components/features/task-details/use-task-cleanup-impact";
 import { errorMessage } from "@/lib/errors";
@@ -14,6 +14,11 @@ type ResetImplementationOptions = {
 type ResetFlowWorkspaceIdentity = {
   workspaceId: string;
   repoPath: string;
+};
+
+type ResetFlowRequest = ResetFlowWorkspaceIdentity & {
+  taskId: string;
+  closeDetailsAfterReset: boolean;
 };
 
 type UseTaskResetFlowArgs = {
@@ -39,37 +44,29 @@ export function useTaskResetFlow({
   resetTaskImplementation,
   closeTaskDetails,
 }: UseTaskResetFlowArgs) {
-  const [taskId, setTaskId] = useState<string | null>(null);
-  const [closeDetailsAfterReset, setCloseDetailsAfterReset] = useState(false);
+  const [request, setRequest] = useState<ResetFlowRequest | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
-  const workspaceIdentityRef = useRef(workspaceIdentity);
 
-  useEffect(() => {
-    const previousIdentity = workspaceIdentityRef.current;
-    if (
-      previousIdentity?.workspaceId === workspaceIdentity?.workspaceId &&
-      previousIdentity?.repoPath === workspaceIdentity?.repoPath
-    ) {
-      return;
-    }
-    workspaceIdentityRef.current = workspaceIdentity;
-    setTaskId(null);
-    setCloseDetailsAfterReset(false);
-    setModalError(null);
-  }, [workspaceIdentity]);
-
+  const isWorkspaceCurrent =
+    request !== null &&
+    request.workspaceId === workspaceIdentity?.workspaceId &&
+    request.repoPath === workspaceIdentity?.repoPath;
   const task = useMemo(
-    () => (taskId ? (tasks.find((entry) => entry.id === taskId) ?? null) : null),
-    [taskId, tasks],
+    () =>
+      isWorkspaceCurrent && request
+        ? (tasks.find((entry) => entry.id === request.taskId) ?? null)
+        : null,
+    [isWorkspaceCurrent, request, tasks],
   );
   const open = task !== null;
+  const openTaskId = task?.id ?? null;
   const {
     stoppableSessionCount: activeSessionCount,
     isLoading: isLoadingStopImpact,
     error: stopImpactError,
   } = useTaskStopImpact({
-    taskIds: taskId ? [taskId] : [],
+    taskIds: openTaskId ? [openTaskId] : [],
     operation: "reset_implementation",
     enabled: open,
   });
@@ -81,21 +78,20 @@ export function useTaskResetFlow({
     terminalCount,
     impactError,
     isLoadingImpact,
-  } = useTaskCleanupImpact(taskId ? [taskId] : [], open);
+  } = useTaskCleanupImpact(openTaskId ? [openTaskId] : [], open);
 
   const closeModal = useCallback((): void => {
     if (isSubmitting) {
       return;
     }
-    setTaskId(null);
-    setCloseDetailsAfterReset(false);
+    setRequest(null);
     setModalError(null);
   }, [isSubmitting]);
 
   const openResetImplementation = useCallback(
     (nextTaskId: string, options?: ResetImplementationOptions): boolean => {
       const nextTask = tasks.find((entry) => entry.id === nextTaskId);
-      if (!nextTask) {
+      if (!nextTask || !workspaceIdentity) {
         toast.error("Unable to reset implementation", {
           description: `Task ${nextTaskId} was not found. Refresh tasks and try again.`,
         });
@@ -103,15 +99,19 @@ export function useTaskResetFlow({
       }
 
       setModalError(null);
-      setTaskId(nextTaskId);
-      setCloseDetailsAfterReset(options?.closeDetailsAfterReset ?? false);
+      setRequest({
+        taskId: nextTaskId,
+        workspaceId: workspaceIdentity.workspaceId,
+        repoPath: workspaceIdentity.repoPath,
+        closeDetailsAfterReset: options?.closeDetailsAfterReset ?? false,
+      });
       return true;
     },
-    [tasks],
+    [tasks, workspaceIdentity],
   );
 
   const confirmReset = useCallback((): void => {
-    if (!task || isSubmitting) {
+    if (!task || !request || !isWorkspaceCurrent || isSubmitting) {
       return;
     }
 
@@ -121,9 +121,8 @@ export function useTaskResetFlow({
     void (async () => {
       try {
         await resetTaskImplementation(task.id);
-        setTaskId(null);
-        setCloseDetailsAfterReset(false);
-        if (closeDetailsAfterReset) {
+        setRequest(null);
+        if (request.closeDetailsAfterReset) {
           closeTaskDetails(task.id);
         }
       } catch (error: unknown) {
@@ -132,7 +131,7 @@ export function useTaskResetFlow({
         setIsSubmitting(false);
       }
     })();
-  }, [closeTaskDetails, closeDetailsAfterReset, isSubmitting, resetTaskImplementation, task]);
+  }, [closeTaskDetails, isSubmitting, isWorkspaceCurrent, request, resetTaskImplementation, task]);
 
   if (!task) {
     return {

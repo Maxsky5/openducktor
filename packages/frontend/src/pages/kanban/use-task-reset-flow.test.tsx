@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { waitFor } from "@testing-library/react";
 import * as cleanupImpactModule from "@/components/features/task-details/use-task-cleanup-impact";
 import {
   createTaskCardFixture,
@@ -89,8 +90,9 @@ describe("useTaskResetFlow", () => {
     }
   });
 
-  test("closes the modal when the workspace changes", async () => {
-    const args = createArgs();
+  test("binds the modal to its opening workspace", async () => {
+    const resetTaskImplementation = mock(async () => {});
+    const args = createArgs({ resetTaskImplementation });
     const harness = createHookHarness(args);
 
     try {
@@ -103,6 +105,15 @@ describe("useTaskResetFlow", () => {
       expect(harness.getLatest().resetImplementationModal).toBeNull();
 
       await harness.update(args);
+      const modal = harness.getLatest().resetImplementationModal;
+      expect(modal?.taskId).toBe("task-1");
+
+      await harness.run(() => {
+        modal?.onConfirm();
+      });
+      await waitFor(() => {
+        expect(resetTaskImplementation).toHaveBeenCalledWith("task-1");
+      });
       expect(harness.getLatest().resetImplementationModal).toBeNull();
     } finally {
       await harness.unmount();
