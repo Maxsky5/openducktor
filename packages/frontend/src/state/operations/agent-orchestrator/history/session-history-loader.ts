@@ -262,10 +262,10 @@ const createLoadSessionHistoryWithPolicy = ({
   loadSystemPromptContext,
   loadSettingsSnapshot,
   policy,
-  dedupeConcurrentLoads = false,
+  skipInFlightLoads = false,
 }: CreateLoadAgentSessionHistoryArgs & {
   policy: SessionHistoryLoadPolicy;
-  dedupeConcurrentLoads?: boolean;
+  skipInFlightLoads?: boolean;
 }): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) => {
   const inFlightSessionKeys = new Set<string>();
   return async (sessionIdentity: AgentSessionIdentity): Promise<AgentSessionState | null> => {
@@ -296,7 +296,7 @@ const createLoadSessionHistoryWithPolicy = ({
     if (loadSettingsSnapshot) {
       input.loadSettingsSnapshot = loadSettingsSnapshot;
     }
-    if (!dedupeConcurrentLoads) {
+    if (!skipInFlightLoads) {
       return loadSessionHistoryIntoStoreWithPolicy(input);
     }
 
@@ -343,5 +343,5 @@ export const createRevalidateAgentSessionHistory = (
   createLoadSessionHistoryWithPolicy({
     ...args,
     policy: retainedSessionRevalidationHistoryLoadPolicy,
-    dedupeConcurrentLoads: true,
+    skipInFlightLoads: true,
   });

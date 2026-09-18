@@ -184,9 +184,9 @@ export function useAgentOrchestratorOperations({
     workspaceId,
     workspaceRepoPath,
   ]);
-  const reloadLoadedSessionHistory = useCallback(
+  const reloadHistoryForLoadedSessions = useCallback(
     async (
-      reload: (sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>,
+      loadHistory: (sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>,
     ): Promise<void> => {
       const loadedSessions = sessionStore
         .listSessionSnapshots()
@@ -194,7 +194,7 @@ export function useAgentOrchestratorOperations({
 
       await Promise.all([
         ...loadedSessions.map((session) =>
-          reload({
+          loadHistory({
             externalSessionId: session.externalSessionId,
             runtimeKind: session.runtimeKind,
             workingDirectory: session.workingDirectory,
@@ -210,13 +210,13 @@ export function useAgentOrchestratorOperations({
   );
   const recoverTranscriptGap = useCallback(
     (): Promise<void> =>
-      reloadLoadedSessionHistory(sessionHistoryLoaders.reloadAgentSessionHistory),
-    [reloadLoadedSessionHistory, sessionHistoryLoaders],
+      reloadHistoryForLoadedSessions(sessionHistoryLoaders.reloadAgentSessionHistory),
+    [reloadHistoryForLoadedSessions, sessionHistoryLoaders],
   );
   const revalidateRetainedSessionHistory = useCallback(
     (): Promise<void> =>
-      reloadLoadedSessionHistory(sessionHistoryLoaders.revalidateAgentSessionHistory),
-    [reloadLoadedSessionHistory, sessionHistoryLoaders],
+      reloadHistoryForLoadedSessions(sessionHistoryLoaders.revalidateAgentSessionHistory),
+    [reloadHistoryForLoadedSessions, sessionHistoryLoaders],
   );
   const currentSessionReadModel = useRepoSessionReadModel({
     workspaceRepoPath,

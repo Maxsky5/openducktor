@@ -417,8 +417,8 @@ describe("createAgentSessionsStore repository retention", () => {
     store.resetWorkspace("/repo-c");
     expect(store.getSessionSnapshot(sessionC)).toBe(sessionC);
 
-    // The visit to the evicted repo made it the newest entry, so the middle
-    // repository now leaves the retention window.
+    // /repo-b was evicted earlier, so this visit starts an empty collection
+    // and evicts /repo-a as the oldest entry.
     store.resetWorkspace("/repo-b");
     expect(store.getSessionSnapshot(sessionB)).toBeNull();
   });

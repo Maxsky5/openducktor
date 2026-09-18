@@ -728,7 +728,7 @@ describe("session history loader", () => {
     ]);
   });
 
-  test("does not revalidate a retained session before its history loaded", async () => {
+  test("does not revalidate a retained session before its baseline history loads", async () => {
     const loadSessionHistory = mock(async () => []);
     const harness = createHistoryLoadHarness();
 

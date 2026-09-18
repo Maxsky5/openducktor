@@ -21,7 +21,7 @@ Rules:
 - Pass summaries to render code as snapshots. Do not build a mutable mirror.
 - All reads and writes target the active repository. A session outside the active collection resolves to no session.
 - A repository switch keeps retained transcripts. The store serves the retained transcript immediately and the read model revalidates in the background.
-- A history load that is in flight when its repository becomes inactive reopens for the next activation.
+- An unfinished history load returns to not requested when its repository becomes inactive, so the next visit loads the baseline history again.
 
 ## Activity state
 

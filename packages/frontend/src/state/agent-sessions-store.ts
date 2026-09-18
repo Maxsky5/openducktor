@@ -34,7 +34,7 @@ type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) =>
   result: Result;
 };
 
-export const AGENT_SESSION_REPOSITORY_RETENTION_LIMIT = 2;
+const REPOSITORY_RETENTION_LIMIT = 2;
 export type AgentSessionsStore = {
   subscribe: (listener: Listener) => () => void;
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
@@ -56,13 +56,13 @@ export type AgentSessionsStore = {
 
 export const createAgentSessionsStore = (
   initialWorkspaceRepoPath: string | null = null,
-  retainedRepositoryLimit: number = AGENT_SESSION_REPOSITORY_RETENTION_LIMIT,
+  repositoryRetentionLimit: number = REPOSITORY_RETENTION_LIMIT,
 ): AgentSessionsStore => {
   let workspaceRepoPath = initialWorkspaceRepoPath;
-  const retainedRepoCollections = new Map<string, AgentSessionCollection>();
+  const retainedCollections = new Map<string, AgentSessionCollection>();
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   if (workspaceRepoPath !== null) {
-    retainedRepoCollections.set(workspaceRepoPath, sessionCollection);
+    retainedCollections.set(workspaceRepoPath, sessionCollection);
   }
   let activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
   type VisiblePendingInputSnapshot = {
@@ -105,9 +105,9 @@ export const createAgentSessionsStore = (
     }));
   };
 
-  // A history load cannot outlive its repository's active window: its late
-  // result is dropped for the incoming repository. Reopen the load gate so the
-  // next activation can request the baseline history again.
+  // A repository switch drops the late result of a running load. Return an
+  // unfinished load to not requested, so the next visit requests the baseline
+  // history again.
   const reopenInterruptedHistoryLoads = (
     collection: AgentSessionCollection,
   ): AgentSessionCollection => {
@@ -169,7 +169,7 @@ export const createAgentSessionsStore = (
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {
       if (workspaceRepoPath !== null) {
-        retainedRepoCollections.set(
+        retainedCollections.set(
           workspaceRepoPath,
           reopenInterruptedHistoryLoads(sessionCollection),
         );
@@ -179,20 +179,20 @@ export const createAgentSessionsStore = (
         sessionCollection = emptyAgentSessionCollection();
       } else {
         sessionCollection =
-          retainedRepoCollections.get(nextWorkspaceRepoPath) ?? emptyAgentSessionCollection();
-        retainedRepoCollections.delete(nextWorkspaceRepoPath);
-        retainedRepoCollections.set(nextWorkspaceRepoPath, sessionCollection);
+          retainedCollections.get(nextWorkspaceRepoPath) ?? emptyAgentSessionCollection();
+        retainedCollections.delete(nextWorkspaceRepoPath);
+        retainedCollections.set(nextWorkspaceRepoPath, sessionCollection);
       }
-      while (retainedRepoCollections.size > retainedRepositoryLimit) {
-        const oldestRepoPath = retainedRepoCollections.keys().next().value;
+      while (retainedCollections.size > repositoryRetentionLimit) {
+        const oldestRepoPath = retainedCollections.keys().next().value;
         if (oldestRepoPath === undefined) {
           break;
         }
-        retainedRepoCollections.delete(oldestRepoPath);
+        retainedCollections.delete(oldestRepoPath);
       }
       if (
         visiblePendingInputSnapshot !== null &&
-        ![...retainedRepoCollections.values()].includes(visiblePendingInputSnapshot.collection)
+        ![...retainedCollections.values()].includes(visiblePendingInputSnapshot.collection)
       ) {
         visiblePendingInputSnapshot = null;
       }
