@@ -10,6 +10,7 @@ import {
   NotificationAttentionFocus,
   NotificationNavigationRegistrar,
 } from "@/features/notifications/notification-navigation";
+import { TaskWorkflowActionsProvider } from "@/features/task-workflow/task-workflow-actions-provider";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 
 function NotificationFailurePromptHost(): ReactElement {
@@ -34,12 +35,14 @@ export function ApplicationOverlays({ children }: PropsWithChildren): ReactEleme
   return (
     <SettingsModalProvider>
       <NotificationFailurePromptHost />
-      <AgentSessionTranscriptDialogHost>
-        <NotificationNavigationRegistrar />
-        <NotificationAttentionFocus />
-        {children}
-        <AppUpdatePrompt />
-      </AgentSessionTranscriptDialogHost>
+      <TaskWorkflowActionsProvider>
+        <AgentSessionTranscriptDialogHost>
+          <NotificationNavigationRegistrar />
+          <NotificationAttentionFocus />
+          {children}
+          <AppUpdatePrompt />
+        </AgentSessionTranscriptDialogHost>
+      </TaskWorkflowActionsProvider>
     </SettingsModalProvider>
   );
 }

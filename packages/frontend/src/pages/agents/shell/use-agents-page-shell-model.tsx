@@ -72,12 +72,10 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     syncPullRequests,
     linkMergedPullRequest,
     cancelLinkMergedPullRequest,
-    unlinkPullRequest,
     humanRequestChangesTask,
     detectingPullRequestTaskId,
     linkingMergedPullRequestTaskId,
     pendingMergedPullRequest,
-    unlinkingPullRequestTaskId,
     setTaskTargetBranch,
   } = useTasksState();
   const {
@@ -118,16 +116,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     activeWorkspace,
     tasks,
     selectedTaskId: selection.view.selectedTask?.id ?? null,
-    detectingPullRequestTaskId,
     linkingMergedPullRequestTaskId,
     pendingMergedPullRequest,
-    unlinkingPullRequestTaskId,
     syncPullRequests,
     linkMergedPullRequest,
     cancelLinkMergedPullRequest,
-    unlinkPullRequest,
-    gitProviderContext: gitProvider.context,
-    gitProviderReadError: providerReadError,
   });
 
   const {

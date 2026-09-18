@@ -25,7 +25,6 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace,
   tasks: [task],
   selectedTaskId: "task-1",
-  detectingPullRequestTaskId: null,
   linkingMergedPullRequestTaskId: null,
   pendingMergedPullRequest: {
     taskId: "task-1",
@@ -41,11 +40,9 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
       closedAt: "2026-03-20T11:21:32Z",
     },
   },
-  unlinkingPullRequestTaskId: null,
   syncPullRequests: mock(async () => undefined),
   linkMergedPullRequest: mock(async () => undefined),
   cancelLinkMergedPullRequest: mock(() => undefined),
-  unlinkPullRequest: mock(async () => undefined),
   ...overrides,
 });
 
@@ -53,14 +50,12 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioShellTaskActions, initialProps);
 
 describe("useAgentStudioShellTaskActions", () => {
-  test("wires pull-request actions into task-details and merged PR models", async () => {
+  test("wires pull-request actions into the shell and merged PR models", async () => {
     const syncPullRequests = mock(async (_taskId: string) => undefined);
-    const unlinkPullRequest = mock(async (_taskId: string) => undefined);
     const linkMergedPullRequest = mock(async () => undefined);
     const cancelLinkMergedPullRequest = mock(() => undefined);
     const args = createArgs({
       syncPullRequests,
-      unlinkPullRequest,
       linkMergedPullRequest,
       cancelLinkMergedPullRequest,
     });
@@ -71,15 +66,12 @@ describe("useAgentStudioShellTaskActions", () => {
 
       const state = harness.getLatest();
       state.onDetectPullRequest("task-1");
-      state.taskDetailsLauncher.taskDetailsSheetProps.onDetectPullRequest?.("task-2");
-      state.taskDetailsLauncher.taskDetailsSheetProps.onUnlinkPullRequest?.("task-3");
       state.mergedPullRequestModal?.onConfirm();
       state.mergedPullRequestModal?.onCancel();
 
       expect(state.taskDetailsLauncher.taskDetailsSheetProps.allTasks).toBe(args.tasks);
+      expect(state.taskDetailsLauncher.taskDetailsSheetProps.onEdit).toBeDefined();
       expect(syncPullRequests).toHaveBeenCalledWith("task-1");
-      expect(syncPullRequests).toHaveBeenCalledWith("task-2");
-      expect(unlinkPullRequest).toHaveBeenCalledWith("task-3");
       expect(linkMergedPullRequest).toHaveBeenCalled();
       expect(cancelLinkMergedPullRequest).toHaveBeenCalled();
     } finally {

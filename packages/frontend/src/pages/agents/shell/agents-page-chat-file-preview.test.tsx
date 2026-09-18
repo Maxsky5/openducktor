@@ -68,9 +68,6 @@ function MainChatPreview() {
         taskDetailsSheetRef: { current: null },
         taskDetailsSheetProps: {
           allTasks: [],
-          taskSessionsByTaskId: new Map(),
-          historicalSessionsByTaskId: new Map(),
-          activeTaskSessionContextByTaskId: new Map(),
         },
       },
     },

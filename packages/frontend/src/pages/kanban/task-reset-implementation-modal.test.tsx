@@ -1,11 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
-import type { KanbanPageModels } from "./kanban-page-model-types";
+import type { TaskResetImplementationModalModel } from "./kanban-page-model-types";
 import { TaskResetImplementationModal } from "./task-reset-implementation-modal";
 
-const makeModel = (
-  legacyWorktreeCount: number,
-): NonNullable<KanbanPageModels["resetImplementationModal"]> => ({
+const makeModel = (legacyWorktreeCount: number): TaskResetImplementationModalModel => ({
   open: true,
   taskId: "task-1",
   taskTitle: "Task One",

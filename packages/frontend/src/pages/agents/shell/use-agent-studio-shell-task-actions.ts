@@ -1,4 +1,3 @@
-import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { useCallback, useMemo } from "react";
 import type { useTasksState, useWorkspaceState } from "@/state/app-state-provider";
 import {
@@ -14,18 +13,13 @@ type UseAgentStudioShellTaskActionsArgs = {
   activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
   tasks: ReturnType<typeof useTasksState>["tasks"];
   selectedTaskId: string | null;
-  detectingPullRequestTaskId: ReturnType<typeof useTasksState>["detectingPullRequestTaskId"];
   linkingMergedPullRequestTaskId: ReturnType<
     typeof useTasksState
   >["linkingMergedPullRequestTaskId"];
   pendingMergedPullRequest: ReturnType<typeof useTasksState>["pendingMergedPullRequest"];
-  unlinkingPullRequestTaskId: ReturnType<typeof useTasksState>["unlinkingPullRequestTaskId"];
   syncPullRequests: ReturnType<typeof useTasksState>["syncPullRequests"];
   linkMergedPullRequest: ReturnType<typeof useTasksState>["linkMergedPullRequest"];
   cancelLinkMergedPullRequest: ReturnType<typeof useTasksState>["cancelLinkMergedPullRequest"];
-  unlinkPullRequest: ReturnType<typeof useTasksState>["unlinkPullRequest"];
-  gitProviderContext?: RepositoryGitProviderContext | undefined;
-  gitProviderReadError?: string | null;
 };
 
 export type AgentStudioShellTaskActionsModel = {
@@ -38,29 +32,17 @@ export function useAgentStudioShellTaskActions({
   activeWorkspace,
   tasks,
   selectedTaskId,
-  detectingPullRequestTaskId,
   linkingMergedPullRequestTaskId,
   pendingMergedPullRequest,
-  unlinkingPullRequestTaskId,
   syncPullRequests,
   linkMergedPullRequest,
   cancelLinkMergedPullRequest,
-  unlinkPullRequest,
-  gitProviderContext,
-  gitProviderReadError = null,
 }: UseAgentStudioShellTaskActionsArgs): AgentStudioShellTaskActionsModel {
   const onDetectPullRequest = useCallback(
     (taskId: string): void => {
       void syncPullRequests(taskId);
     },
     [syncPullRequests],
-  );
-
-  const onUnlinkPullRequest = useCallback(
-    (taskId: string): void => {
-      void unlinkPullRequest(taskId);
-    },
-    [unlinkPullRequest],
   );
 
   const onLinkMergedPullRequest = useCallback((): Promise<void> => {
@@ -75,12 +57,6 @@ export function useAgentStudioShellTaskActions({
     activeWorkspace,
     tasks,
     selectedTaskId,
-    detectingPullRequestTaskId,
-    unlinkingPullRequestTaskId,
-    onDetectPullRequest,
-    onUnlinkPullRequest,
-    gitProviderContext,
-    gitProviderReadError,
   });
 
   const mergedPullRequestModal = useAgentStudioPullRequestModalModel({

@@ -1,12 +1,17 @@
 import { describe, expect, mock, test } from "bun:test";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
+import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import type { TaskStopImpactState, useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
@@ -94,6 +99,32 @@ const createTaskStopImpactHookMock = () =>
     isLoading: false,
     error: null,
   }));
+
+const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
+  onCreateTask: mock(() => {}),
+  onPlan: mock(() => {}),
+  onQaStart: mock(() => {}),
+  onQaOpen: mock(() => {}),
+  onBuild: mock(() => {}),
+  onOpenSession: mock(() => {}),
+  onDelegate: mock(() => {}),
+  onEdit: mock(() => {}),
+  onHumanApprove: mock(() => {}),
+  onHumanRequestChanges: mock(() => {}),
+  onResetImplementation: mock(() => {}),
+  onResetTask: mock(async () => {}),
+  onCloseTask: mock(async () => {}),
+  onDelete: mock(async () => {}),
+  onDetectPullRequest: mock(() => {}),
+  onUnlinkPullRequest: mock(() => {}),
+  detectingPullRequestTaskId: null,
+  unlinkingPullRequestTaskId: null,
+  gitProviderContext: undefined,
+  gitProviderReadError: null,
+  registerTaskDetailsClose: mock(() => () => {}),
+  taskSessionsByTaskId: new Map(),
+  activeTaskSessionContextByTaskId: new Map(),
+});
 
 describe("TaskDetailsSheet", () => {
   test("passes activeWorkspace into task details view model", async () => {
@@ -522,5 +553,58 @@ describe("TaskDetailsSheet", () => {
     );
 
     expect(html).not.toContain('<span class="sr-only">Close</span>');
+  });
+
+  test("dispatches a workflow action through the task workflow context", async () => {
+    const { TaskDetailsSheet } = await import("./task-details-sheet");
+    const { TaskWorkflowActionsContext } =
+      await import("@/features/task-workflow/task-workflow-actions-context");
+
+    const task = createTaskCardFixture({
+      id: "TASK-1",
+      title: "Task 1",
+      status: "ready_for_dev",
+      availableActions: ["build_start"],
+      documentSummary: {
+        spec: { has: false, updatedAt: undefined },
+        plan: { has: false, updatedAt: undefined },
+        qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
+      },
+    });
+    const actions = createTaskWorkflowActionsValue();
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(agentSessionQueryKeys.list("/repo-a", "TASK-1"), []);
+
+    const { unmount } = render(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(
+          WorkspaceStateContext.Provider,
+          { value: createWorkspaceStateValue() },
+          createElement(
+            TaskWorkflowActionsContext.Provider,
+            { value: actions },
+            createElement(TaskDetailsSheet, {
+              activeWorkspace: {
+                workspaceId: "workspace-a",
+                workspaceName: "Workspace A",
+                repoPath: "/repo-a",
+              },
+              task,
+              allTasks: [task],
+              open: true,
+              onOpenChange: () => {},
+            }),
+          ),
+        ),
+      ),
+    );
+
+    fireEvent.click(screen.getByText("Start Builder"));
+
+    expect(actions.onDelegate).toHaveBeenCalledWith("TASK-1");
+
+    unmount();
   });
 });

@@ -44,7 +44,6 @@ export default function TaskDetailsSheetViewer({
       allTasks={allTasks}
       open
       onOpenChange={onOpenChange}
-      workflowActionsEnabled={false}
     />
   );
 }

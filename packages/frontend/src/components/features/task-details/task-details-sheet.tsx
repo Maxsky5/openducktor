@@ -1,5 +1,10 @@
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import type { ReactElement } from "react";
+import { type ComponentProps, type ReactElement, useEffect, useRef } from "react";
+import type {
+  ActiveTaskSessionContext,
+  KanbanTaskSession,
+} from "@/components/features/kanban/kanban-task-activity";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import {
   resolveHistoricalSessionRoles,
@@ -23,6 +28,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  type TaskWorkflowActions,
+  useTaskWorkflowActions,
+} from "@/features/task-workflow/task-workflow-actions-context";
+import { useTaskDetailsHistoricalSessions } from "@/features/task-workflow/use-task-details-historical-sessions";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 
 const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
@@ -41,108 +51,63 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
   "close_task",
 ];
 
-const detailActionsForHandlers = (handlers: {
-  onResetTask?: TaskDetailsSheetProps["onResetTask"];
-  onCloseTask?: TaskDetailsSheetProps["onCloseTask"];
-}): readonly TaskWorkflowAction[] =>
-  DETAIL_ACTIONS.filter((action) => {
-    if (action === "reset_task") {
-      return Boolean(handlers.onResetTask);
-    }
-    if (action === "close_task") {
-      return Boolean(handlers.onCloseTask);
-    }
-    return true;
-  });
-const EMPTY_TASK_SESSIONS: NonNullable<TaskDetailsSheetProps["taskSessions"]> = [];
-const EMPTY_HISTORICAL_SESSIONS: NonNullable<TaskDetailsSheetProps["historicalSessions"]> = [];
+const EMPTY_TASK_SESSIONS: KanbanTaskSession[] = [];
 
-export function TaskDetailsSheet({
-  activeWorkspace = null,
-  task,
-  allTasks,
-  taskSessions = EMPTY_TASK_SESSIONS,
-  historicalSessions = EMPTY_HISTORICAL_SESSIONS,
-  hasActiveSession = false,
-  activeSessionRole,
-  open,
-  onOpenChange,
-  workflowActionsEnabled = true,
-  onPlan,
-  onQaStart,
-  onQaOpen,
-  onBuild,
-  onOpenSession,
-  onDelegate,
-  onEdit,
-  onHumanApprove,
-  onHumanRequestChanges,
-  onResetImplementation,
-  onResetTask,
-  onCloseTask,
-  onDetectPullRequest,
-  gitProviderContext,
-  gitProviderReadError = null,
-  onUnlinkPullRequest,
-  detectingPullRequestTaskId = null,
-  unlinkingPullRequestTaskId = null,
-  onDelete,
-}: TaskDetailsSheetProps): ReactElement {
-  const viewModelInput = getTaskDetailsViewModelInput({
-    activeWorkspace,
+export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
+  const workflowActions = useTaskWorkflowActions();
+  const {
+    activeWorkspace = null,
     task,
     allTasks,
     open,
     onOpenChange,
-    onPlan,
-    onQaStart,
-    onQaOpen,
-    onBuild,
-    onOpenSession,
-    onDelegate,
-    onHumanApprove,
-    onHumanRequestChanges,
-    onResetImplementation,
-    onResetTask,
-    onCloseTask,
-    onDelete,
-    historicalSessions,
-    taskSessions,
+    onEdit = workflowActions?.onEdit,
+  } = props;
+  const taskId = task?.id ?? null;
+  const contextTaskSessions = getContextTaskSessions(workflowActions, taskId);
+  const activeSessionContext = getActiveTaskSessionContext(workflowActions, taskId);
+  const historicalSessions = useTaskDetailsHistoricalSessions({
+    repoPath: activeWorkspace?.repoPath ?? null,
+    taskId,
+    enabled: workflowActions !== null,
   });
-  const viewModel = useTaskDetailsSheetViewModel(viewModelInput);
-
-  const historicalSessionRoles = task ? resolveHistoricalSessionRoles(historicalSessions) : [];
+  useTaskDetailsCloseRegistration(workflowActions?.registerTaskDetailsClose, taskId, onOpenChange);
+  const viewModel = useTaskDetailsSheetViewModel(
+    createTaskDetailsViewModelOptions({
+      activeWorkspace,
+      task,
+      allTasks,
+      open,
+      onOpenChange,
+      workflowActions,
+      historicalSessions,
+      taskSessions: contextTaskSessions,
+    }),
+  );
+  const hasActiveSession = Boolean(activeSessionContext);
+  const activeSessionRole = activeSessionContext?.role;
 
   if (!task) {
-    return (
-      <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
-        <SheetContent
-          side="right"
-          closeButton={null}
-          visualOverlay
-          className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]"
-        >
-          <SheetHeader>
-            <SheetTitle>Task Details</SheetTitle>
-            <SheetDescription>Select a task to inspect details.</SheetDescription>
-          </SheetHeader>
-        </SheetContent>
-      </Sheet>
-    );
+    return <TaskDetailsSheetEmptyState open={open} onOpenChange={onOpenChange} />;
   }
 
-  const canDetectPullRequestForTask = canDetectTaskPullRequest(task);
-  const detailActions = detailActionsForHandlers({ onResetTask, onCloseTask });
+  const pullRequestHeaderProps = getPullRequestHeaderProps({
+    task,
+    onDetectPullRequest: workflowActions?.onDetectPullRequest,
+    onUnlinkPullRequest: workflowActions?.onUnlinkPullRequest,
+    detectingPullRequestTaskId: workflowActions?.detectingPullRequestTaskId ?? null,
+    unlinkingPullRequestTaskId: workflowActions?.unlinkingPullRequestTaskId ?? null,
+  });
+  const historicalSessionRoles = resolveTaskHistoricalSessionRoles(task, historicalSessions);
   const footerProps = getTaskDetailsFooterProps({
     task,
     onOpenChange,
-    workflowActionsEnabled,
-    detailActions,
+    detailActions: DETAIL_ACTIONS,
     hasActiveSession,
     activeSessionRole,
     historicalSessionRoles,
     onEdit,
-    onDelete,
+    onDelete: workflowActions?.onDelete,
     runWorkflowAction: viewModel.runWorkflowAction,
     openDeleteDialog: viewModel.openDeleteDialog,
   });
@@ -164,20 +129,9 @@ export function TaskDetailsSheet({
             task={task}
             subtasksCount={viewModel.subtasks.length}
             taskLabels={viewModel.taskLabels}
-            gitProviderContext={gitProviderContext}
-            gitProviderReadError={gitProviderReadError}
-            {...(onDetectPullRequest && canDetectPullRequestForTask
-              ? {
-                  onDetectPullRequest: () => onDetectPullRequest(task.id),
-                }
-              : {})}
-            {...(onUnlinkPullRequest
-              ? {
-                  onUnlinkPullRequest: () => onUnlinkPullRequest(task.id),
-                }
-              : {})}
-            {...(detectingPullRequestTaskId === task.id ? { isDetectingPullRequest: true } : {})}
-            {...(unlinkingPullRequestTaskId === task.id ? { isUnlinkingPullRequest: true } : {})}
+            gitProviderContext={workflowActions?.gitProviderContext}
+            gitProviderReadError={workflowActions?.gitProviderReadError ?? null}
+            {...pullRequestHeaderProps}
           />
         </SheetHeader>
 
@@ -209,9 +163,9 @@ export function TaskDetailsSheet({
 
       <TaskDetailsDialogs
         viewModel={viewModel}
-        showDelete={onDelete !== undefined}
-        showReset={onResetTask !== undefined}
-        showClose={onCloseTask !== undefined}
+        showDelete={workflowActions?.onDelete !== undefined}
+        showReset={workflowActions?.onResetTask !== undefined}
+        showClose={workflowActions?.onCloseTask !== undefined}
       />
     </Sheet>
   );
@@ -219,57 +173,148 @@ export function TaskDetailsSheet({
 
 type TaskDetailsViewModel = ReturnType<typeof useTaskDetailsSheetViewModel>;
 
-function getTaskDetailsViewModelInput(args: {
-  activeWorkspace: Exclude<TaskDetailsSheetProps["activeWorkspace"], undefined>;
+type TaskDetailsPullRequestHeaderProps = Pick<
+  ComponentProps<typeof TaskDetailsSheetHeader>,
+  | "onDetectPullRequest"
+  | "onUnlinkPullRequest"
+  | "isDetectingPullRequest"
+  | "isUnlinkingPullRequest"
+>;
+
+function getContextTaskSessions(
+  workflowActions: TaskWorkflowActions | null,
+  taskId: string | null,
+): KanbanTaskSession[] {
+  if (!workflowActions || !taskId) {
+    return EMPTY_TASK_SESSIONS;
+  }
+  return workflowActions.taskSessionsByTaskId.get(taskId) ?? EMPTY_TASK_SESSIONS;
+}
+
+function getActiveTaskSessionContext(
+  workflowActions: TaskWorkflowActions | null,
+  taskId: string | null,
+): ActiveTaskSessionContext | undefined {
+  if (!workflowActions || !taskId) {
+    return undefined;
+  }
+  return workflowActions.activeTaskSessionContextByTaskId.get(taskId);
+}
+
+function createTaskDetailsViewModelOptions({
+  activeWorkspace,
+  task,
+  allTasks,
+  open,
+  onOpenChange,
+  workflowActions,
+  historicalSessions,
+  taskSessions,
+}: {
+  activeWorkspace: TaskDetailsSheetProps["activeWorkspace"];
   task: TaskDetailsSheetProps["task"];
   allTasks: TaskDetailsSheetProps["allTasks"];
   open: boolean;
   onOpenChange: TaskDetailsSheetProps["onOpenChange"];
-  onPlan: TaskDetailsSheetProps["onPlan"];
-  onQaStart: TaskDetailsSheetProps["onQaStart"];
-  onQaOpen: TaskDetailsSheetProps["onQaOpen"];
-  onBuild: TaskDetailsSheetProps["onBuild"];
-  onOpenSession: TaskDetailsSheetProps["onOpenSession"];
-  onDelegate: TaskDetailsSheetProps["onDelegate"];
-  onHumanApprove: TaskDetailsSheetProps["onHumanApprove"];
-  onHumanRequestChanges: TaskDetailsSheetProps["onHumanRequestChanges"];
-  onResetImplementation: TaskDetailsSheetProps["onResetImplementation"];
-  onResetTask: TaskDetailsSheetProps["onResetTask"];
-  onCloseTask: TaskDetailsSheetProps["onCloseTask"];
-  onDelete: TaskDetailsSheetProps["onDelete"];
-  historicalSessions: NonNullable<TaskDetailsSheetProps["historicalSessions"]>;
-  taskSessions: NonNullable<TaskDetailsSheetProps["taskSessions"]>;
+  workflowActions: TaskWorkflowActions | null;
+  historicalSessions: AgentSessionRecord[];
+  taskSessions: KanbanTaskSession[];
 }): Parameters<typeof useTaskDetailsSheetViewModel>[0] {
-  const input: Parameters<typeof useTaskDetailsSheetViewModel>[0] = {
-    activeWorkspace: args.activeWorkspace,
-    task: args.task,
-    allTasks: args.allTasks,
-    open: args.open,
-    onOpenChange: args.onOpenChange,
-    onPlan: args.onPlan,
-    onQaStart: args.onQaStart,
-    onQaOpen: args.onQaOpen,
-    onBuild: args.onBuild,
-    onOpenSession: args.onOpenSession,
-    onDelegate: args.onDelegate,
-    onHumanApprove: args.onHumanApprove,
-    onHumanRequestChanges: args.onHumanRequestChanges,
-    onResetImplementation: args.onResetImplementation,
-    onResetTask: args.onResetTask,
-    onCloseTask: args.onCloseTask,
-    onDelete: args.onDelete,
+  const options: Parameters<typeof useTaskDetailsSheetViewModel>[0] = {
+    activeWorkspace: activeWorkspace ?? null,
+    task,
+    allTasks,
+    open,
+    onOpenChange,
+    ...workflowActions,
   };
-  if (args.task) {
-    input.resolveSessionOptionsByRole = (role: AgentRole) =>
-      resolveSessionTargetOptions(args.historicalSessions, args.taskSessions, role);
+  if (task) {
+    options.resolveSessionOptionsByRole = (role: AgentRole) =>
+      resolveSessionTargetOptions(historicalSessions, taskSessions, role);
   }
-  return input;
+  return options;
+}
+
+function useTaskDetailsCloseRegistration(
+  registerTaskDetailsClose: TaskWorkflowActions["registerTaskDetailsClose"] | undefined,
+  taskId: string | null,
+  onOpenChange: TaskDetailsSheetProps["onOpenChange"],
+): void {
+  const onOpenChangeRef = useRef(onOpenChange);
+  useEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
+  useEffect(() => {
+    if (!registerTaskDetailsClose || !taskId) {
+      return;
+    }
+    return registerTaskDetailsClose(taskId, () => onOpenChangeRef.current(false));
+  }, [registerTaskDetailsClose, taskId]);
+}
+
+function getPullRequestHeaderProps({
+  task,
+  onDetectPullRequest,
+  onUnlinkPullRequest,
+  detectingPullRequestTaskId,
+  unlinkingPullRequestTaskId,
+}: {
+  task: NonNullable<TaskDetailsSheetProps["task"]>;
+  onDetectPullRequest: TaskWorkflowActions["onDetectPullRequest"] | undefined;
+  onUnlinkPullRequest: TaskWorkflowActions["onUnlinkPullRequest"] | undefined;
+  detectingPullRequestTaskId: string | null;
+  unlinkingPullRequestTaskId: string | null;
+}): TaskDetailsPullRequestHeaderProps {
+  const props: TaskDetailsPullRequestHeaderProps = {};
+  if (onDetectPullRequest && canDetectTaskPullRequest(task)) {
+    props.onDetectPullRequest = () => onDetectPullRequest(task.id);
+  }
+  if (onUnlinkPullRequest) {
+    props.onUnlinkPullRequest = () => onUnlinkPullRequest(task.id);
+  }
+  if (detectingPullRequestTaskId === task.id) {
+    props.isDetectingPullRequest = true;
+  }
+  if (unlinkingPullRequestTaskId === task.id) {
+    props.isUnlinkingPullRequest = true;
+  }
+  return props;
+}
+
+function resolveTaskHistoricalSessionRoles(
+  task: TaskDetailsSheetProps["task"],
+  historicalSessions: AgentSessionRecord[],
+): AgentRole[] {
+  return task ? resolveHistoricalSessionRoles(historicalSessions) : [];
+}
+
+function TaskDetailsSheetEmptyState({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: TaskDetailsSheetProps["onOpenChange"];
+}): ReactElement {
+  return (
+    <Sheet modal={false} open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        closeButton={null}
+        visualOverlay
+        className="h-full max-h-screen gap-0 p-0 sm:max-w-[680px]"
+      >
+        <SheetHeader>
+          <SheetTitle>Task Details</SheetTitle>
+          <SheetDescription>Select a task to inspect details.</SheetDescription>
+        </SheetHeader>
+      </SheetContent>
+    </Sheet>
+  );
 }
 
 function getTaskDetailsFooterProps({
   task,
   onOpenChange,
-  workflowActionsEnabled,
   detailActions,
   hasActiveSession,
   activeSessionRole,
@@ -281,27 +326,27 @@ function getTaskDetailsFooterProps({
 }: {
   task: NonNullable<TaskDetailsSheetProps["task"]>;
   onOpenChange: TaskDetailsSheetProps["onOpenChange"];
-  workflowActionsEnabled: boolean;
   detailActions: readonly TaskWorkflowAction[];
   hasActiveSession: boolean;
   activeSessionRole: AgentRole | undefined;
   historicalSessionRoles: AgentRole[];
   onEdit: TaskDetailsSheetProps["onEdit"];
-  onDelete: TaskDetailsSheetProps["onDelete"];
+  onDelete: TaskWorkflowActions["onDelete"] | undefined;
   runWorkflowAction: TaskDetailsViewModel["runWorkflowAction"];
   openDeleteDialog: TaskDetailsViewModel["openDeleteDialog"];
 }): TaskDetailsSheetFooterProps {
-  const footerProps: TaskDetailsSheetFooterProps = { task, onOpenChange };
-  if (workflowActionsEnabled) {
-    footerProps.includeActions = detailActions;
-    footerProps.hasActiveSession = hasActiveSession;
-    footerProps.onWorkflowAction = runWorkflowAction;
-    if (activeSessionRole) {
-      footerProps.activeSessionRole = activeSessionRole;
-    }
-    if (historicalSessionRoles.length > 0) {
-      footerProps.historicalSessionRoles = historicalSessionRoles;
-    }
+  const footerProps: TaskDetailsSheetFooterProps = {
+    task,
+    onOpenChange,
+    includeActions: detailActions,
+    hasActiveSession,
+    onWorkflowAction: runWorkflowAction,
+  };
+  if (activeSessionRole) {
+    footerProps.activeSessionRole = activeSessionRole;
+  }
+  if (historicalSessionRoles.length > 0) {
+    footerProps.historicalSessionRoles = historicalSessionRoles;
   }
   if (onEdit) {
     footerProps.onEdit = onEdit;

@@ -57,10 +57,6 @@ describe("TaskDetailsSheetController", () => {
           ref,
           activeWorkspace,
           allTasks: visibleOnBoard ? [task] : [],
-          taskSessionsByTaskId: new Map(),
-          historicalSessionsByTaskId: new Map(),
-          activeTaskSessionContextByTaskId: new Map(),
-          workflowActionsEnabled: false,
         }),
         { wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children) },
       );
@@ -131,10 +127,6 @@ describe("TaskDetailsSheetController", () => {
         ref,
         activeWorkspace: { ...activeWorkspace, repoPath },
         allTasks: [],
-        taskSessionsByTaskId: new Map(),
-        historicalSessionsByTaskId: new Map(),
-        activeTaskSessionContextByTaskId: new Map(),
-        workflowActionsEnabled: false,
       });
     const rendered = renderUi(controller(activeWorkspace.repoPath), {
       wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
@@ -191,10 +183,6 @@ describe("TaskDetailsSheetController", () => {
         ref: controllerRef,
         activeWorkspace,
         allTasks: [task],
-        taskSessionsByTaskId: new Map(),
-        historicalSessionsByTaskId: new Map(),
-        activeTaskSessionContextByTaskId: new Map(),
-        workflowActionsEnabled: false,
       });
     };
 
@@ -207,7 +195,6 @@ describe("TaskDetailsSheetController", () => {
         activeWorkspace,
         allTasks: [task],
         open: false,
-        workflowActionsEnabled: false,
       }),
     );
 
@@ -222,52 +209,6 @@ describe("TaskDetailsSheetController", () => {
         activeWorkspace,
         allTasks: [task],
         open: true,
-        workflowActionsEnabled: false,
-      }),
-    );
-
-    await act(async () => {
-      rendered.unmount();
-    });
-  });
-
-  test("forwards pull request detection props to the task details sheet", async () => {
-    const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
-
-    const task = createTaskCardFixture({ id: "task-1", title: "Task 1", status: "human_review" });
-    const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
-    const onDetectPullRequest = mock((_taskId: string) => {});
-    const onUnlinkPullRequest = mock((_taskId: string) => {});
-
-    const rendered = render(
-      createElement(TaskDetailsSheetController, {
-        ref: controllerRef,
-        activeWorkspace,
-        allTasks: [task],
-        taskSessionsByTaskId: new Map(),
-        historicalSessionsByTaskId: new Map(),
-        activeTaskSessionContextByTaskId: new Map(),
-        workflowActionsEnabled: false,
-        onDetectPullRequest,
-        onUnlinkPullRequest,
-        detectingPullRequestTaskId: "task-1",
-        unlinkingPullRequestTaskId: "task-1",
-      }),
-    );
-
-    await act(async () => {
-      controllerRef.current?.openTask(task.id);
-    });
-
-    expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        task,
-        activeWorkspace,
-        open: true,
-        onDetectPullRequest,
-        onUnlinkPullRequest,
-        detectingPullRequestTaskId: "task-1",
-        unlinkingPullRequestTaskId: "task-1",
       }),
     );
 
@@ -286,10 +227,6 @@ describe("TaskDetailsSheetController", () => {
       createElement(TaskDetailsSheetController, {
         ref: controllerRef,
         allTasks,
-        taskSessionsByTaskId: new Map(),
-        historicalSessionsByTaskId: new Map(),
-        activeTaskSessionContextByTaskId: new Map(),
-        workflowActionsEnabled: false,
       });
 
     const rendered = render(renderController([task]));

@@ -29,10 +29,6 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace,
   tasks: [task],
   selectedTaskId: "task-1",
-  detectingPullRequestTaskId: null,
-  unlinkingPullRequestTaskId: null,
-  onDetectPullRequest: mock((_taskId: string) => {}),
-  onUnlinkPullRequest: mock((_taskId: string) => {}),
   ...overrides,
 });
 
@@ -50,16 +46,7 @@ const attachControllerHandle = (model: AgentStudioTaskDetailsLauncherModel) => {
 
 describe("useAgentStudioTaskDetailsLauncher", () => {
   test("builds task-details controller props for the selected workspace", async () => {
-    const onDetectPullRequest = mock((_taskId: string) => {});
-    const onUnlinkPullRequest = mock((_taskId: string) => {});
-    const harness = createHookHarness(
-      createArgs({
-        detectingPullRequestTaskId: "task-1",
-        unlinkingPullRequestTaskId: "task-2",
-        onDetectPullRequest,
-        onUnlinkPullRequest,
-      }),
-    );
+    const harness = createHookHarness(createArgs());
 
     try {
       await harness.mount();
@@ -67,18 +54,7 @@ describe("useAgentStudioTaskDetailsLauncher", () => {
       const props = harness.getLatest().taskDetailsSheetProps;
       expect(props.activeWorkspace).toBe(activeWorkspace);
       expect(props.allTasks).toEqual([task]);
-      expect(props.workflowActionsEnabled).toBe(false);
-      expect(props.onOpenSession).toBeUndefined();
-      expect(props.taskSessionsByTaskId.size).toBe(0);
-      expect(props.activeTaskSessionContextByTaskId.size).toBe(0);
-      expect(props.detectingPullRequestTaskId).toBe("task-1");
-      expect(props.unlinkingPullRequestTaskId).toBe("task-2");
-
-      props.onDetectPullRequest?.("task-1");
-      props.onUnlinkPullRequest?.("task-2");
-
-      expect(onDetectPullRequest).toHaveBeenCalledWith("task-1");
-      expect(onUnlinkPullRequest).toHaveBeenCalledWith("task-2");
+      expect(props.onEdit).toBeDefined();
     } finally {
       await harness.unmount();
     }
@@ -130,7 +106,6 @@ describe("useAgentStudioTaskDetailsLauncher", () => {
       expect(harness.getLatest().taskEditor?.task).toBe(otherTask);
       expect(harness.getLatest().taskEditor?.open).toBe(true);
       expect(harness.getLatest().taskEditor?.tasks).toBe(args.tasks);
-      expect(harness.getLatest().taskDetailsSheetProps.workflowActionsEnabled).toBe(false);
 
       const updatedTask = { ...otherTask, title: "Updated task" };
       await harness.update({ ...args, tasks: [task, updatedTask], selectedTaskId: null });
