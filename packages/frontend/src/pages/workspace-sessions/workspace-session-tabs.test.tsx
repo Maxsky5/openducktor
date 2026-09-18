@@ -856,7 +856,7 @@ test("a slow worktree archive keeps its loader on the tab while the dialog is pe
     expect(view.getByRole("button", { name: "Archiving…" }).hasAttribute("disabled")).toBe(true);
     const archiving = view.getByRole("button", { name: "Archiving Second", hidden: true });
     expect(archiving.hasAttribute("disabled")).toBe(true);
-    expect(archiving.querySelector("svg.animate-spin")).not.toBeNull();
+    expect(archiving.querySelector('svg[class*="motion-safe:animate-spin"]')).not.toBeNull();
     await act(async () => {
       complete({ ...worktree, archivedAt: 2000 });
     });
@@ -1053,7 +1053,7 @@ test("an archive in flight shows a loader on its tab, disables all archive contr
     expect(archiving.hasAttribute("disabled")).toBe(true);
     expect(archiving.getAttribute("aria-busy")).toBe("true");
     expect(archiving.querySelectorAll("svg")).toHaveLength(3);
-    expect(archiving.querySelector("svg.animate-spin")).not.toBeNull();
+    expect(archiving.querySelector('svg[class*="motion-safe:animate-spin"]')).not.toBeNull();
     expect(archiving.classList.contains("text-foreground")).toBe(true);
     expect(archiving.classList.contains("disabled:opacity-100")).toBe(true);
     expect(view.getByRole("tab", { name: /Second/ })).toBeTruthy();

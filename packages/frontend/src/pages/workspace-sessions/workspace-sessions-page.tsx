@@ -3,7 +3,7 @@ import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dn
 import { CSS } from "@dnd-kit/utilities";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Check, History, LoaderCircle, MessageCirclePlus, Plus } from "lucide-react";
+import { Archive, Check, History, LoaderCircle, Plus } from "lucide-react";
 import { type ComponentProps, type ReactElement, useEffect, useState } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ import {
   WorkspaceSessionReadModelNotice,
 } from "./workspace-session-content";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
+import { WorkspaceSessionEmptyState } from "./workspace-session-empty-state";
 import { WorkspaceSessionHistoryDialog } from "./workspace-session-history-dialog";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 import { useMountedRef } from "./use-mounted-ref";
@@ -168,7 +169,7 @@ function WorkspaceSessionTabView({
           <Check aria-hidden="true" className={iconSwapClassName(confirming && !archiving)} />
           <LoaderCircle
             aria-hidden="true"
-            className={cn(iconSwapClassName(archiving), "animate-spin")}
+            className={cn(iconSwapClassName(archiving), "motion-safe:animate-spin")}
           />
         </span>
       </Button>
@@ -285,6 +286,15 @@ function WorkspaceSessionTabs({
         />
       </DragOverlay>
     </DndContext>
+  );
+}
+
+function WorkspaceSessionArchiveError({ error }: { error: Error | null }): ReactElement | null {
+  if (!error) return null;
+  return (
+    <p role="alert" className="p-3 text-sm text-destructive">
+      {errorMessage(error)}
+    </p>
   );
 }
 
@@ -408,29 +418,14 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
         />
       </StudioTabStrip>
       <WorkspaceSessionReadModelNotice />
-      {archive.error && !archiveTarget && (
-        <p role="alert" className="p-3 text-sm text-destructive">
-          {errorMessage(archive.error)}
-        </p>
-      )}
+      {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
       {selected ? (
         <WorkspaceSessionContent key={selected.id} workspace={workspace} record={selected} />
       ) : (
-        <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-card p-6 text-center">
-          <MessageCirclePlus className="size-8 text-muted-foreground" aria-hidden="true" />
-          <h1 className="text-lg font-semibold">Workspace chat</h1>
-          <p className="text-muted-foreground">
-            {records.data.length ? "Select a session above." : "No active sessions."}
-          </p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Work with an agent outside a task. Choose a repository or worktree and start a
-            conversation.
-          </p>
-          <Button onClick={() => setCreating(true)}>
-            <MessageCirclePlus />
-            New chat
-          </Button>
-        </section>
+        <WorkspaceSessionEmptyState
+          hasSessions={records.data.length > 0}
+          onCreate={() => setCreating(true)}
+        />
       )}
       {historyOpen && (
         <WorkspaceSessionHistoryDialog
