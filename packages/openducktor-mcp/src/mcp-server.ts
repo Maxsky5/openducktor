@@ -143,6 +143,9 @@ const registerOdtTool = <
       return toToolError(cause);
     }
   };
+  // SAFETY: the MCP SDK parses tool input with the registered inputSchema before it calls this handler.
+  const handleInput: ToolCallback<z.ZodTypeAny> = async (input) =>
+    execute(input as ToolInput<InputSchema>);
   if (definition.nativeResult) {
     server.registerTool<z.ZodTypeAny, z.ZodTypeAny>(
       name,
@@ -151,7 +154,7 @@ const registerOdtTool = <
         description: definition.description,
         inputSchema,
       },
-      async (input) => execute(inputSchema.parse(input)),
+      handleInput,
     );
     return;
   }
@@ -164,7 +167,7 @@ const registerOdtTool = <
       inputSchema,
       outputSchema: ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[name],
     },
-    async (input) => execute(inputSchema.parse(input)),
+    handleInput,
   );
 };
 
