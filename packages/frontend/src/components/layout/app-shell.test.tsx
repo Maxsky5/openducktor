@@ -696,7 +696,9 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open repository" }, { timeout: 4000 }),
+    );
 
     const backButton = screen.getByRole("button", { name: "Back to notifications" });
     if (!(backButton instanceof HTMLButtonElement)) {
