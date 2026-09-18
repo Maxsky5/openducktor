@@ -47,18 +47,20 @@ const sessionRecord = (id: string): WorkspaceSession => ({
   archivedAt: null,
 });
 
+const worktreeRecord = (id: string): WorkspaceSession => ({
+  ...sessionRecord(id),
+  executionTarget: {
+    kind: "local_worktree",
+    workingDirectory: `/worktrees/${id.toLowerCase()}`,
+    branchName: `feature/${id.toLowerCase()}`,
+    worktreeState: "present",
+  },
+});
+
 test.each([true, false])(
   "worktree archive opens a modal on the first click and sends removal=%s only after confirmation",
   async (removeWorktree) => {
-    const worktree: WorkspaceSession = {
-      ...sessionRecord("Second"),
-      executionTarget: {
-        kind: "local_worktree",
-        workingDirectory: "/worktrees/second",
-        branchName: "feature/second",
-        worktreeState: "present",
-      },
-    };
+    const worktree = worktreeRecord("Second");
     const requests: unknown[] = [];
     configureShellBridge(
       createShellBridgeFixture({
@@ -810,6 +812,129 @@ test("archive targets its tab, restore preserves selection, and the final archiv
   }
 });
 
+test("a slow worktree archive keeps its loader on the tab while the dialog is pending and removes the tab on success", async () => {
+  const worktree = worktreeRecord("Second");
+  const requests: WorkspaceSessionArchiveInput[] = [];
+  let complete!: (record: WorkspaceSession) => void;
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceSessionListActive: async () => [sessionRecord("First"), worktree],
+        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+        workspaceSessionArchivePreview: async () => ({
+          branchName: "feature/second",
+          worktreeExists: true,
+          hasUncommittedChanges: false,
+        }),
+        workspaceSessionArchive: (input) => {
+          requests.push(input);
+          return new Promise((resolve) => {
+            complete = resolve;
+          });
+        },
+      },
+    }),
+  );
+  const view = renderTabs();
+  try {
+    fireEvent.click(await view.findByRole("button", { name: "Archive Second" }, { timeout: 800 }));
+    expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
+    expect(view.getByRole("button", { name: "Archive Second", hidden: true })).toBeTruthy();
+    const submit = view.getByRole("button", { name: "Archive chat" });
+    await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false), { timeout: 800 });
+    fireEvent.click(submit);
+    await waitFor(() => expect(requests.length === 1).toBe(true), { timeout: 800 });
+    expect(requests).toEqual([
+      {
+        workspaceId: view.workspaceId,
+        sessionId: "Second",
+        confirmStop: true,
+        removeWorktree: true,
+      },
+    ]);
+    expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
+    expect(view.getByRole("button", { name: "Archiving…" }).hasAttribute("disabled")).toBe(true);
+    const archiving = view.getByRole("button", { name: "Archiving Second", hidden: true });
+    expect(archiving.hasAttribute("disabled")).toBe(true);
+    expect(archiving.querySelector('svg[class*="motion-safe:animate-spin"]')).not.toBeNull();
+    await act(async () => {
+      complete({ ...worktree, archivedAt: 2000 });
+    });
+    await waitFor(() => expect(view.queryByRole("dialog") === null).toBe(true), { timeout: 800 });
+    await waitFor(() => expect(view.queryByRole("tab", { name: /Second/ }) === null).toBe(true), {
+      timeout: 800,
+    });
+    expect(view.queryByRole("button", { name: "Archiving Second" })).toBeNull();
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("a failed direct archive does not show its error in the next worktree dialog", async () => {
+  const worktree = worktreeRecord("Second");
+  const requests: WorkspaceSessionArchiveInput[] = [];
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        workspaceSessionListActive: async () => [sessionRecord("First"), worktree],
+        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+        workspaceSessionArchivePreview: async () => ({
+          branchName: "feature/second",
+          worktreeExists: true,
+          hasUncommittedChanges: false,
+        }),
+        workspaceSessionArchive: async (input) => {
+          requests.push(input);
+          if (input.sessionId === "First") throw new Error("Stop failed: runtime disconnected");
+          return { ...worktree, archivedAt: 2000 };
+        },
+      },
+    }),
+  );
+  const view = renderTabs();
+  try {
+    fireEvent.click(await view.findByRole("button", { name: "Archive First" }, { timeout: 800 }));
+    fireEvent.click(view.getByRole("button", { name: "Confirm stop and archive First" }));
+    await view.findByText("Stop failed: runtime disconnected", {}, { timeout: 800 });
+    fireEvent.click(view.getByRole("button", { name: "Archive Second" }));
+    expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
+    expect(view.queryByRole("alert")).toBeNull();
+    expect(requests).toEqual([
+      {
+        workspaceId: view.workspaceId,
+        sessionId: "First",
+        confirmStop: true,
+        removeWorktree: false,
+      },
+    ]);
+    const submit = view.getByRole("button", { name: "Archive chat" });
+    await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false), { timeout: 800 });
+    fireEvent.click(submit);
+    await waitFor(() => expect(view.queryByRole("dialog") === null).toBe(true), { timeout: 800 });
+    await waitFor(() => expect(view.queryByRole("tab", { name: /Second/ }) === null).toBe(true), {
+      timeout: 800,
+    });
+    expect(requests).toEqual([
+      {
+        workspaceId: view.workspaceId,
+        sessionId: "First",
+        confirmStop: true,
+        removeWorktree: false,
+      },
+      {
+        workspaceId: view.workspaceId,
+        sessionId: "Second",
+        confirmStop: true,
+        removeWorktree: true,
+      },
+    ]);
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
 test("archive confirmation expires after five seconds and only one tab is armed", async () => {
   let calls = 0;
   configureShellBridge(
@@ -877,6 +1002,10 @@ test("running archive confirms inline and retains the tab and selection when Sto
     expect(requests).toHaveLength(0);
     fireEvent.click(view.getByRole("button", { name: "Confirm stop and archive Second" }));
     await view.findByText("Stop failed: runtime disconnected", {}, { timeout: 800 });
+    expect(view.queryByRole("button", { name: "Archiving Second" })).toBeNull();
+    expect(view.getByRole("button", { name: "Archive Second" }).hasAttribute("disabled")).toBe(
+      false,
+    );
     expect(requests).toEqual([
       {
         workspaceId: view.workspaceId,
@@ -894,7 +1023,7 @@ test("running archive confirms inline and retains the tab and selection when Sto
   }
 });
 
-test("an archive in flight disables all tab archive controls", async () => {
+test("an archive in flight shows a loader on its tab, disables all archive controls, and removes the tab when it settles", async () => {
   let complete!: (record: WorkspaceSession) => void;
   let calls = 0;
   configureShellBridge(
@@ -916,13 +1045,19 @@ test("an archive in flight disables all tab archive controls", async () => {
     fireEvent.click(await view.findByRole("button", { name: "Archive Second" }, { timeout: 800 }));
     expect(calls).toBe(0);
     fireEvent.click(view.getByRole("button", { name: "Confirm stop and archive Second" }));
-    await waitFor(
-      () =>
-        expect(view.getByRole("button", { name: "Archive First" }).hasAttribute("disabled")).toBe(
-          true,
-        ),
+    const archiving = await view.findByRole(
+      "button",
+      { name: "Archiving Second" },
       { timeout: 800 },
     );
+    expect(archiving.hasAttribute("disabled")).toBe(true);
+    expect(archiving.getAttribute("aria-busy")).toBe("true");
+    expect(archiving.querySelectorAll("svg")).toHaveLength(3);
+    expect(archiving.querySelector('svg[class*="motion-safe:animate-spin"]')).not.toBeNull();
+    expect(archiving.classList.contains("text-foreground")).toBe(true);
+    expect(archiving.classList.contains("disabled:opacity-100")).toBe(true);
+    expect(view.getByRole("tab", { name: /Second/ })).toBeTruthy();
+    expect(view.getByRole("button", { name: "Archive First" }).hasAttribute("disabled")).toBe(true);
     fireEvent.click(view.getByRole("button", { name: "Archive First" }));
     expect(calls).toBe(1);
     await act(async () => {
@@ -931,6 +1066,7 @@ test("an archive in flight disables all tab archive controls", async () => {
     await waitFor(() => expect(view.queryByRole("tab", { name: /Second/ }) === null).toBe(true), {
       timeout: 800,
     });
+    expect(view.queryByRole("button", { name: "Archiving Second" })).toBeNull();
     expect(view.getByRole("button", { name: "Archive First" }).hasAttribute("disabled")).toBe(
       false,
     );

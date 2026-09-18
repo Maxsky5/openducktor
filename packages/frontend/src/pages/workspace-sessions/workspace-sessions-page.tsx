@@ -3,7 +3,7 @@ import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dn
 import { CSS } from "@dnd-kit/utilities";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Check, History, MessageCirclePlus, Plus } from "lucide-react";
+import { Archive, Check, History, LoaderCircle, Plus } from "lucide-react";
 import { type ComponentProps, type ReactElement, useEffect, useState } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ import {
   WorkspaceSessionReadModelNotice,
 } from "./workspace-session-content";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
+import { WorkspaceSessionEmptyState } from "./workspace-session-empty-state";
 import { WorkspaceSessionHistoryDialog } from "./workspace-session-history-dialog";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 import { useMountedRef } from "./use-mounted-ref";
@@ -56,6 +57,7 @@ type WorkspaceSessionTabProps = {
   selected: boolean;
   pending: boolean;
   confirming: boolean;
+  archiving: boolean;
   onArchive?: (record: WorkspaceSession) => void;
   onSelect?: (id: string) => void;
   shouldSuppressSelection?: (id: string) => boolean;
@@ -79,11 +81,24 @@ function WorkspaceSessionTab(props: WorkspaceSessionTabProps): ReactElement {
   );
 }
 
+const archiveButtonLabel = (title: string, confirming: boolean, archiving: boolean): string => {
+  if (archiving) return `Archiving ${title}`;
+  if (confirming) return `Confirm stop and archive ${title}`;
+  return `Archive ${title}`;
+};
+
+const iconSwapClassName = (visible: boolean): string =>
+  cn(
+    "col-start-1 row-start-1 transition-[opacity,filter,transform] duration-[250ms] ease-in-out will-change-[opacity,filter,transform] motion-reduce:transition-none",
+    visible ? "scale-100 opacity-100 blur-[0px]" : "scale-25 opacity-0 blur-[2px]",
+  );
+
 function WorkspaceSessionTabView({
   record,
   selected,
   pending,
   confirming,
+  archiving,
   onArchive,
   onSelect,
   shouldSuppressSelection,
@@ -101,8 +116,7 @@ function WorkspaceSessionTabView({
   const statusLabel = statusAvailable ? (activity ?? "idle") : "Status unavailable";
   const running = isAgentSessionActivityActive(activity);
   const title = workspaceSessionTitle(record);
-  let archiveLabel = `Archive ${title}`;
-  if (confirming) archiveLabel = `Confirm stop and archive ${title}`;
+  const archiveLabel = archiveButtonLabel(title, confirming, archiving);
   return (
     <div
       {...shellProps}
@@ -139,29 +153,25 @@ function WorkspaceSessionTabView({
         className={cn(
           "relative mr-1 size-6 shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100 focus-visible:opacity-100 data-[active=true]:opacity-100",
           confirming && "text-foreground opacity-100",
+          archiving && "text-foreground disabled:opacity-100",
         )}
         data-active={selected}
         aria-label={archiveLabel}
+        aria-busy={archiving}
         title={archiveLabel}
         disabled={pending}
         onMouseDown={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={() => onArchive?.(record)}
       >
-        <Archive
-          aria-hidden="true"
-          className={cn(
-            "absolute transition-[opacity,transform] duration-150 motion-reduce:transition-none",
-            confirming ? "scale-75 -rotate-45 opacity-0" : "scale-100 rotate-0 opacity-100",
-          )}
-        />
-        <Check
-          aria-hidden="true"
-          className={cn(
-            "absolute transition-[opacity,transform] duration-150 motion-reduce:transition-none",
-            confirming ? "scale-100 rotate-0 opacity-100" : "scale-75 rotate-45 opacity-0",
-          )}
-        />
+        <span className="grid">
+          <Archive aria-hidden="true" className={iconSwapClassName(!confirming && !archiving)} />
+          <Check aria-hidden="true" className={iconSwapClassName(confirming && !archiving)} />
+          <LoaderCircle
+            aria-hidden="true"
+            className={cn(iconSwapClassName(archiving), "motion-safe:animate-spin")}
+          />
+        </span>
       </Button>
     </div>
   );
@@ -174,11 +184,13 @@ function WorkspaceSessionTabDragPreview({
   selectedId,
   pending,
   confirming,
+  archiving,
 }: {
   record: WorkspaceSession | undefined;
   selectedId: string | null;
   pending: boolean;
   confirming: boolean;
+  archiving: boolean;
 }): ReactElement | null {
   if (!record) return null;
   return (
@@ -190,6 +202,7 @@ function WorkspaceSessionTabDragPreview({
             selected={record.id === selectedId}
             pending={pending}
             confirming={confirming}
+            archiving={archiving}
           />
         </StudioTabsList>
       </Tabs>
@@ -200,6 +213,7 @@ function WorkspaceSessionTabDragPreview({
 function WorkspaceSessionTabs({
   sessions,
   selectedId,
+  archivingId,
   pending,
   onReorder,
   onSelect,
@@ -207,6 +221,7 @@ function WorkspaceSessionTabs({
 }: {
   sessions: WorkspaceSession[];
   selectedId: string | null;
+  archivingId: string | null;
   pending: boolean;
   onReorder: (draggedId: string, targetId: string, position: "before" | "after") => void;
   onSelect: (id: string) => void;
@@ -253,6 +268,7 @@ function WorkspaceSessionTabs({
               selected={record.id === selectedId}
               pending={pending}
               confirming={confirmingId === record.id}
+              archiving={archivingId === record.id}
               onSelect={onSelect}
               onArchive={handleArchive}
               shouldSuppressSelection={drag.shouldSuppressSelection}
@@ -266,9 +282,19 @@ function WorkspaceSessionTabs({
           selectedId={selectedId}
           pending={pending}
           confirming={confirmingId === activeDragRecord?.id}
+          archiving={archivingId === activeDragRecord?.id}
         />
       </DragOverlay>
     </DndContext>
+  );
+}
+
+function WorkspaceSessionArchiveError({ error }: { error: Error | null }): ReactElement | null {
+  if (!error) return null;
+  return (
+    <p role="alert" className="p-3 text-sm text-destructive">
+      {errorMessage(error)}
+    </p>
   );
 }
 
@@ -317,6 +343,19 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
       void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
     },
   });
+  const archivingId = archive.isPending ? (archive.variables?.sessionId ?? null) : null;
+  const beginArchive = (sessionId: string, removeWorktree: boolean) => {
+    archive.reset();
+    archive.mutate({ sessionId, confirmStop: true, removeWorktree });
+  };
+  const handleTabArchive = (target: WorkspaceSession) => {
+    archive.reset();
+    if (target.executionTarget.kind === "local_worktree") {
+      setArchiveTarget(target);
+      return;
+    }
+    beginArchive(target.id, false);
+  };
   const setCreating = (open: boolean) => {
     setCreateOpen(open);
     if (!open && creating) updateNavigation({ creating: false });
@@ -371,43 +410,22 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
         <WorkspaceSessionTabs
           sessions={orderedSessions}
           selectedId={selectedId}
+          archivingId={archivingId}
           pending={archive.isPending}
           onReorder={reorder}
           onSelect={(sessionId) => updateNavigation({ sessionId }, false)}
-          onArchive={(target) => {
-            archive.reset();
-            if (target.executionTarget.kind === "local_worktree") {
-              setArchiveTarget(target);
-              return;
-            }
-            archive.mutate({ sessionId: target.id, confirmStop: true, removeWorktree: false });
-          }}
+          onArchive={handleTabArchive}
         />
       </StudioTabStrip>
       <WorkspaceSessionReadModelNotice />
-      {archive.error && !archiveTarget && (
-        <p role="alert" className="p-3 text-sm text-destructive">
-          {errorMessage(archive.error)}
-        </p>
-      )}
+      {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
       {selected ? (
         <WorkspaceSessionContent key={selected.id} workspace={workspace} record={selected} />
       ) : (
-        <section className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-card p-6 text-center">
-          <MessageCirclePlus className="size-8 text-muted-foreground" aria-hidden="true" />
-          <h1 className="text-lg font-semibold">Workspace chat</h1>
-          <p className="text-muted-foreground">
-            {records.data.length ? "Select a session above." : "No active sessions."}
-          </p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Work with an agent outside a task. Choose a repository or worktree and start a
-            conversation.
-          </p>
-          <Button onClick={() => setCreating(true)}>
-            <MessageCirclePlus />
-            New chat
-          </Button>
-        </section>
+        <WorkspaceSessionEmptyState
+          hasSessions={records.data.length > 0}
+          onCreate={() => setCreating(true)}
+        />
       )}
       {historyOpen && (
         <WorkspaceSessionHistoryDialog
@@ -423,13 +441,7 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
           record={archiveTarget}
           isArchiving={archive.isPending}
           error={archive.error}
-          onArchive={(removeWorktree) =>
-            archive.mutate({
-              sessionId: archiveTarget.id,
-              confirmStop: true,
-              removeWorktree,
-            })
-          }
+          onArchive={(removeWorktree) => beginArchive(archiveTarget.id, removeWorktree)}
           onClose={() => {
             setArchiveTarget(null);
             archive.reset();
