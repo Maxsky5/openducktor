@@ -55,6 +55,22 @@ describe("agent-orchestrator/history/session-history-load-policy", () => {
     ).toBe(false);
   });
 
+  test("requests selected-session baseline history again after a baseline failure", () => {
+    expect(
+      shouldRequestSelectedSessionBaselineHistory(
+        createAgentSessionFixture({
+          historyLoadState: "failed",
+          historyLoadFailure: {
+            code: "request_failed",
+            summary: "History failed",
+            detail: "History failed detail",
+          },
+          messages: [],
+        }),
+      ),
+    ).toBe(true);
+  });
+
   test("merges selected-session baseline history into a transcript that gained live messages", () => {
     const session = createAgentSessionFixture({
       externalSessionId: "session-live",

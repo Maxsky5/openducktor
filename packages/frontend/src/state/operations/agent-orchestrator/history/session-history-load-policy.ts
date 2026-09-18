@@ -57,7 +57,7 @@ const markLoadedHistoryFailed = (
 
 export const shouldRequestSelectedSessionBaselineHistory = (
   session: SessionHistoryLoadPolicySession,
-): boolean => session.historyLoadState === "not_requested";
+): boolean => session.historyLoadState === "not_requested" || session.historyLoadState === "failed";
 
 export const requestedSessionHistoryLoadPolicy: SessionHistoryLoadPolicy = {
   claimLoad: (session) => {
