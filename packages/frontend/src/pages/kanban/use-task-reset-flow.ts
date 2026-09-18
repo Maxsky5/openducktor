@@ -4,9 +4,9 @@ import { toast } from "sonner";
 import { useTaskCleanupImpact } from "@/components/features/task-details/use-task-cleanup-impact";
 import { errorMessage } from "@/lib/errors";
 import { useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
-import type { KanbanPageModels } from "./kanban-page-model-types";
+import type { TaskResetImplementationModalModel } from "./kanban-page-model-types";
 
-type ResetImplementationModalModel = KanbanPageModels["resetImplementationModal"];
+type ResetImplementationModalModel = TaskResetImplementationModalModel;
 type ResetImplementationOptions = {
   closeDetailsAfterReset?: boolean;
 };
@@ -117,7 +117,7 @@ export function useTaskResetFlow({
       resetImplementationModal: null,
       openResetImplementation,
     } satisfies {
-      resetImplementationModal: ResetImplementationModalModel;
+      resetImplementationModal: ResetImplementationModalModel | null;
       openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => boolean;
     };
   }
@@ -149,7 +149,7 @@ export function useTaskResetFlow({
     },
     openResetImplementation,
   } satisfies {
-    resetImplementationModal: ResetImplementationModalModel;
+    resetImplementationModal: ResetImplementationModalModel | null;
     openResetImplementation: (taskId: string, options?: ResetImplementationOptions) => boolean;
   };
 }

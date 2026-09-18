@@ -11,9 +11,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TaskStopImpactNotice } from "@/components/features/task-details/task-stop-impact-notice";
-import type { KanbanPageModels } from "./kanban-page-model-types";
+import type { TaskResetImplementationModalModel } from "./kanban-page-model-types";
 
-type ResetImplementationModalModel = KanbanPageModels["resetImplementationModal"];
+type ResetImplementationModalModel = TaskResetImplementationModalModel;
 
 const formatManagedCleanupMessage = (): string =>
   "The canonical task worktree and branch are retained. Tracked content is reset to the latest locally available base, ordinary untracked files are removed, and ignored files are preserved.";
@@ -29,7 +29,7 @@ const formatLegacyCleanupMessage = (legacyWorktreeCount: number): string => {
 export function TaskResetImplementationModal({
   model,
 }: {
-  model: ResetImplementationModalModel;
+  model: ResetImplementationModalModel | null;
 }): ReactElement | null {
   if (!model) {
     return null;

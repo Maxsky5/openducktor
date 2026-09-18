@@ -1,5 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
-import { type ReactElement, useEffect } from "react";
+import { type ReactElement, useEffect, useRef } from "react";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import {
   resolveHistoricalSessionRoles,
@@ -24,6 +24,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import { useTaskDetailsHistoricalSessions } from "@/features/task-workflow/use-task-details-historical-sessions";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 
 const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
@@ -43,7 +44,6 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
 ];
 
 const EMPTY_TASK_SESSIONS: NonNullable<TaskDetailsSheetProps["taskSessions"]> = [];
-const EMPTY_HISTORICAL_SESSIONS: NonNullable<TaskDetailsSheetProps["historicalSessions"]> = [];
 
 export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
   const workflowActions = useTaskWorkflowActions();
@@ -57,15 +57,17 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
   } = props;
   const contextTaskSessions =
     task && workflowActions ? workflowActions.taskSessionsByTaskId.get(task.id) : undefined;
-  const contextHistoricalSessions =
-    task && workflowActions ? workflowActions.historicalSessionsByTaskId.get(task.id) : undefined;
   const activeSessionContext =
     task && workflowActions
       ? workflowActions.activeTaskSessionContextByTaskId.get(task.id)
       : undefined;
+  const contextHistoricalSessions = useTaskDetailsHistoricalSessions({
+    repoPath: activeWorkspace?.repoPath ?? null,
+    taskId: task?.id ?? null,
+    enabled: workflowActions !== null && props.historicalSessions === undefined,
+  });
   const taskSessions = props.taskSessions ?? contextTaskSessions ?? EMPTY_TASK_SESSIONS;
-  const historicalSessions =
-    props.historicalSessions ?? contextHistoricalSessions ?? EMPTY_HISTORICAL_SESSIONS;
+  const historicalSessions = props.historicalSessions ?? contextHistoricalSessions;
   const hasActiveSession = props.hasActiveSession ?? Boolean(activeSessionContext);
   const activeSessionRole = props.activeSessionRole ?? activeSessionContext?.role;
   const onPlan = props.onPlan ?? workflowActions?.onPlan;
@@ -91,12 +93,17 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
   const gitProviderContext = props.gitProviderContext ?? workflowActions?.gitProviderContext;
   const gitProviderReadError =
     props.gitProviderReadError ?? workflowActions?.gitProviderReadError ?? null;
+  const onOpenChangeRef = useRef(onOpenChange);
   useEffect(() => {
-    if (!workflowActions) {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
+  const registerTaskDetailsClose = workflowActions?.registerTaskDetailsClose;
+  useEffect(() => {
+    if (!registerTaskDetailsClose) {
       return;
     }
-    return workflowActions.registerTaskDetailsClose(() => onOpenChange(false));
-  }, [onOpenChange, workflowActions]);
+    return registerTaskDetailsClose(() => onOpenChangeRef.current(false));
+  }, [registerTaskDetailsClose]);
   const viewModelInput = getTaskDetailsViewModelInput({
     activeWorkspace,
     task,

@@ -66,6 +66,7 @@ import {
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
+import type { TaskWorkflowActionsController } from "@/features/task-workflow/use-task-workflow-actions-controller";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanColumn } from "@/components/features/kanban/kanban-column";
@@ -180,11 +181,13 @@ type LatestKanbanPageModels = {
   columnProps: KanbanColumnTestProps | null;
   isLoadingTasks: boolean | null;
   showHorizontalScrollbars: boolean | null;
+  composerModel: TaskWorkflowActionsController["composer"] | null;
+  taskWorkflowActions: TaskWorkflowActionsController["actions"] | null;
   humanReviewFeedbackModalModel: HumanReviewFeedbackModalModel | null;
-  taskApprovalModalModel: KanbanPageModels["taskApprovalModal"];
-  taskGitConflictDialogModel: KanbanPageModels["taskGitConflictDialog"];
-  sessionStartModalModel: KanbanPageModels["sessionStartModal"];
-  resetImplementationModalModel: KanbanPageModels["resetImplementationModal"];
+  taskApprovalModalModel: TaskWorkflowActionsController["taskApprovalModal"];
+  taskGitConflictDialogModel: TaskWorkflowActionsController["taskGitConflictDialog"];
+  sessionStartModalModel: TaskWorkflowActionsController["sessionStartModal"];
+  resetImplementationModalModel: TaskWorkflowActionsController["resetImplementationModal"];
   mergedPullRequestModalProps: KanbanPageModels["mergedPullRequestModal"];
   location: string;
 };
@@ -202,11 +205,13 @@ type KanbanPageHarness = RenderResult & {
   getKanbanColumnProps: () => KanbanColumnTestProps;
   getIsLoadingTasks: () => boolean | null;
   getShowHorizontalScrollbars: () => boolean | null;
+  getComposerModel: () => TaskWorkflowActionsController["composer"] | null;
+  getTaskWorkflowActions: () => TaskWorkflowActionsController["actions"] | null;
   getHumanReviewFeedbackModalModel: () => HumanReviewFeedbackModalModel | null;
-  getTaskApprovalModalModel: () => KanbanPageModels["taskApprovalModal"];
-  getTaskGitConflictDialogModel: () => KanbanPageModels["taskGitConflictDialog"];
-  getSessionStartModalModel: () => KanbanPageModels["sessionStartModal"];
-  getResetImplementationModalModel: () => KanbanPageModels["resetImplementationModal"];
+  getTaskApprovalModalModel: () => TaskWorkflowActionsController["taskApprovalModal"];
+  getTaskGitConflictDialogModel: () => TaskWorkflowActionsController["taskGitConflictDialog"];
+  getSessionStartModalModel: () => TaskWorkflowActionsController["sessionStartModal"];
+  getResetImplementationModalModel: () => TaskWorkflowActionsController["resetImplementationModal"];
   getMergedPullRequestModalProps: () => KanbanPageModels["mergedPullRequestModal"];
   getLocation: () => string;
 };
@@ -504,12 +509,20 @@ const publishKanbanPageModels = (
     : null;
   latest.isLoadingTasks = models.content.isLoadingTasks;
   latest.showHorizontalScrollbars = models.content.showHorizontalScrollbars;
-  latest.humanReviewFeedbackModalModel = models.humanReviewFeedbackModal;
-  latest.taskApprovalModalModel = models.taskApprovalModal;
-  latest.taskGitConflictDialogModel = models.taskGitConflictDialog;
-  latest.sessionStartModalModel = models.sessionStartModal;
-  latest.resetImplementationModalModel = models.resetImplementationModal;
   latest.mergedPullRequestModalProps = models.mergedPullRequestModal;
+};
+
+const publishTaskWorkflowController = (
+  latest: LatestKanbanPageModels,
+  controller: TaskWorkflowActionsController,
+): void => {
+  latest.composerModel = controller.composer;
+  latest.taskWorkflowActions = controller.actions;
+  latest.humanReviewFeedbackModalModel = controller.humanReviewFeedbackModal;
+  latest.taskApprovalModalModel = controller.taskApprovalModal;
+  latest.taskGitConflictDialogModel = controller.taskGitConflictDialog;
+  latest.sessionStartModalModel = controller.sessionStartModal;
+  latest.resetImplementationModalModel = controller.resetImplementationModal;
 };
 
 const getKanbanColumnProps = (latest: LatestKanbanPageModels): KanbanColumnTestProps => {
@@ -540,6 +553,8 @@ const renderPage = async (
     columnProps: null,
     isLoadingTasks: null,
     showHorizontalScrollbars: null,
+    composerModel: null,
+    taskWorkflowActions: null,
     humanReviewFeedbackModalModel: null,
     taskApprovalModalModel: null,
     taskGitConflictDialogModel: null,
@@ -549,6 +564,8 @@ const renderPage = async (
     location: "/",
   };
   const { useKanbanPageModels } = await import("./use-kanban-page-models");
+  const { useTaskWorkflowActionsController } =
+    await import("@/features/task-workflow/use-task-workflow-actions-controller");
   const sessionStore = createAgentSessionsStore("/repo");
   sessionStore.setSessionCollection(() => createAgentSessionCollection(renderState.sessions));
   const queryClient = createQueryClient();
@@ -581,11 +598,13 @@ const renderPage = async (
     return null;
   };
   const KanbanModelsProbe = (): null => {
+    const controller = useTaskWorkflowActionsController();
+    publishTaskWorkflowController(latest, controller);
     publishKanbanPageModels(
       latest,
       useKanbanPageModels({
         onOpenDetails: () => {},
-        onCloseDetails: () => {},
+        actions: controller.actions,
       }),
     );
     return null;
@@ -677,6 +696,8 @@ const renderPage = async (
     getKanbanColumnProps: () => getKanbanColumnProps(latest),
     getIsLoadingTasks: () => latest.isLoadingTasks,
     getShowHorizontalScrollbars: () => latest.showHorizontalScrollbars,
+    getComposerModel: () => latest.composerModel,
+    getTaskWorkflowActions: () => latest.taskWorkflowActions,
     getHumanReviewFeedbackModalModel: () => latest.humanReviewFeedbackModalModel,
     getTaskApprovalModalModel: () => latest.taskApprovalModalModel,
     getTaskGitConflictDialogModel: () => latest.taskGitConflictDialogModel,
@@ -943,6 +964,37 @@ describe("KanbanPage session start modal flow", () => {
       expect(onCreateTask).toHaveBeenCalledTimes(1);
     } finally {
       renderer.unmount();
+    }
+  });
+
+  kanbanTest("drives the task composer from the shared workflow actions", async () => {
+    const renderer = await renderPage();
+    try {
+      const actions = renderer.getTaskWorkflowActions();
+      if (!actions) {
+        throw new Error("Expected published task workflow actions.");
+      }
+      expect(renderer.getComposerModel()?.open).toBe(false);
+
+      await act(async () => {
+        actions.onCreateTask();
+      });
+      expect(renderer.getComposerModel()?.open).toBe(true);
+      expect(renderer.getComposerModel()?.task).toBeNull();
+
+      await act(async () => {
+        actions.onEdit(currentTaskFixture.id);
+      });
+      expect(renderer.getComposerModel()?.open).toBe(true);
+      expect(renderer.getComposerModel()?.task?.id).toBe(currentTaskFixture.id);
+
+      await act(async () => {
+        renderer.getComposerModel()?.onOpenChange(false);
+      });
+      expect(renderer.getComposerModel()?.open).toBe(false);
+      expect(renderer.getComposerModel()?.task).toBeNull();
+    } finally {
+      await unmountPageIfRendered(renderer);
     }
   });
 

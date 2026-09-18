@@ -8,9 +8,9 @@ import { openExternalUrl } from "@/lib/open-external-url";
 import { loadTaskApprovalContextFromQuery } from "@/state/queries/task-approval";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type {
-  KanbanPageModels,
   TaskApprovalModalModel,
   TaskApprovalOpenOptions,
+  TaskGitConflictDialogModel,
 } from "./kanban-page-model-types";
 import {
   completeDirectMergeApproval,
@@ -48,7 +48,7 @@ type UseTaskApprovalFlowArgs = {
 
 type UseTaskApprovalFlowResult = {
   taskApprovalModal: TaskApprovalModalModel | null;
-  taskGitConflictDialog: KanbanPageModels["taskGitConflictDialog"];
+  taskGitConflictDialog: TaskGitConflictDialogModel | null;
   openTaskApproval: (taskId: string, options?: TaskApprovalOpenOptions) => void;
 };
 

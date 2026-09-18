@@ -57,9 +57,6 @@ describe("TaskDetailsSheetController", () => {
           ref,
           activeWorkspace,
           allTasks: visibleOnBoard ? [task] : [],
-          taskSessionsByTaskId: new Map(),
-          historicalSessionsByTaskId: new Map(),
-          activeTaskSessionContextByTaskId: new Map(),
         }),
         { wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children) },
       );
@@ -130,9 +127,6 @@ describe("TaskDetailsSheetController", () => {
         ref,
         activeWorkspace: { ...activeWorkspace, repoPath },
         allTasks: [],
-        taskSessionsByTaskId: new Map(),
-        historicalSessionsByTaskId: new Map(),
-        activeTaskSessionContextByTaskId: new Map(),
       });
     const rendered = renderUi(controller(activeWorkspace.repoPath), {
       wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
@@ -189,9 +183,6 @@ describe("TaskDetailsSheetController", () => {
         ref: controllerRef,
         activeWorkspace,
         allTasks: [task],
-        taskSessionsByTaskId: new Map(),
-        historicalSessionsByTaskId: new Map(),
-        activeTaskSessionContextByTaskId: new Map(),
       });
     };
 
@@ -239,9 +230,6 @@ describe("TaskDetailsSheetController", () => {
         ref: controllerRef,
         activeWorkspace,
         allTasks: [task],
-        taskSessionsByTaskId: new Map(),
-        historicalSessionsByTaskId: new Map(),
-        activeTaskSessionContextByTaskId: new Map(),
         onDetectPullRequest,
         onUnlinkPullRequest,
         detectingPullRequestTaskId: "task-1",
@@ -280,9 +268,6 @@ describe("TaskDetailsSheetController", () => {
       createElement(TaskDetailsSheetController, {
         ref: controllerRef,
         allTasks,
-        taskSessionsByTaskId: new Map(),
-        historicalSessionsByTaskId: new Map(),
-        activeTaskSessionContextByTaskId: new Map(),
       });
 
     const rendered = render(renderController([task]));

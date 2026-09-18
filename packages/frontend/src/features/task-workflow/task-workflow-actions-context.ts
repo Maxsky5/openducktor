@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, RepositoryGitProviderContext } from "@openducktor/contracts";
+import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { createContext, useContext } from "react";
 import type {
@@ -8,6 +8,7 @@ import type {
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 
 export type TaskWorkflowActions = {
+  onCreateTask: () => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;
@@ -29,7 +30,6 @@ export type TaskWorkflowActions = {
   gitProviderReadError: string | null;
   registerTaskDetailsClose: (close: () => void) => () => void;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
-  historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   activeTaskSessionContextByTaskId: Map<string, ActiveTaskSessionContext>;
 };
 
@@ -37,3 +37,11 @@ export const TaskWorkflowActionsContext = createContext<TaskWorkflowActions | nu
 
 export const useTaskWorkflowActions = (): TaskWorkflowActions | null =>
   useContext(TaskWorkflowActionsContext);
+
+export const useRequiredTaskWorkflowActions = (): TaskWorkflowActions => {
+  const actions = useTaskWorkflowActions();
+  if (actions === null) {
+    throw new Error("Task workflow actions require TaskWorkflowActionsProvider");
+  }
+  return actions;
+};

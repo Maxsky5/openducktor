@@ -3,7 +3,10 @@ import { toast } from "sonner";
 import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
 import { getGitConflictCopy } from "@/features/git-conflict-resolution";
 import { errorMessage } from "@/lib/errors";
-import type { KanbanPageModels, TaskApprovalOpenOptions } from "./kanban-page-model-types";
+import type {
+  TaskApprovalOpenOptions,
+  TaskGitConflictDialogModel,
+} from "./kanban-page-model-types";
 import {
   abortTaskApprovalGitConflict,
   askBuilderToResolveTaskApprovalGitConflict,
@@ -159,7 +162,7 @@ export function useTaskApprovalGitConflictFlow({
     taskGitConflictDialog,
     openGitConflictDialog,
   } satisfies {
-    taskGitConflictDialog: KanbanPageModels["taskGitConflictDialog"];
+    taskGitConflictDialog: TaskGitConflictDialogModel | null;
     openGitConflictDialog: (taskId: string, conflict: GitConflict) => void;
   };
 }

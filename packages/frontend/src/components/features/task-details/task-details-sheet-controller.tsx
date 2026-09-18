@@ -1,14 +1,7 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
-import { type ReactElement, type Ref, useEffect, useImperativeHandle, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { type ReactElement, type Ref, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "sonner";
 import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";
-import type {
-  ActiveTaskSessionContextByTaskId,
-  KanbanTaskSession,
-} from "@/components/features/kanban/kanban-task-activity";
-import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { TaskDetailsSheet } from "./task-details-sheet";
 import type { TaskDetailsSheetProps } from "./task-details-sheet-types";
 
@@ -21,11 +14,6 @@ type TaskDetailsSheetControllerProps = Omit<
   TaskDetailsSheetProps,
   "task" | "open" | "onOpenChange"
 > & {
-  allTasks: TaskCard[];
-  taskSessionsByTaskId?: Map<string, KanbanTaskSession[]>;
-  historicalSessionsByTaskId?: Map<string, AgentSessionRecord[]>;
-  activeTaskSessionContextByTaskId?: ActiveTaskSessionContextByTaskId;
-  onOpenSession?: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   ref?: Ref<TaskDetailsSheetControllerHandle>;
 };
 
@@ -34,14 +22,7 @@ export function TaskDetailsSheetController(props: TaskDetailsSheetControllerProp
 }
 
 function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerProps): ReactElement {
-  const {
-    allTasks,
-    taskSessionsByTaskId,
-    historicalSessionsByTaskId,
-    activeTaskSessionContextByTaskId,
-    ref,
-    ...sheetProps
-  } = props;
+  const { allTasks, ref, ...sheetProps } = props;
   const repoPath = sheetProps.activeWorkspace?.repoPath ?? null;
   const [taskId, setTaskId] = useState<string | null>(null);
   const boardTask = allTasks.find((entry) => entry.id === taskId);
@@ -88,30 +69,11 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
     [],
   );
 
-  const activeTaskId = task ? taskId : null;
-  const selectedTaskSessions =
-    activeTaskId && taskSessionsByTaskId
-      ? (taskSessionsByTaskId.get(activeTaskId) ?? [])
-      : undefined;
-  const selectedHistoricalSessions =
-    activeTaskId && historicalSessionsByTaskId
-      ? (historicalSessionsByTaskId.get(activeTaskId) ?? [])
-      : undefined;
-  const selectedActiveSessionContext = activeTaskId
-    ? activeTaskSessionContextByTaskId?.get(activeTaskId)
-    : undefined;
-
   return (
     <TaskDetailsSheet
       {...sheetProps}
       task={task}
       allTasks={sheetTasks}
-      {...(selectedTaskSessions ? { taskSessions: selectedTaskSessions } : {})}
-      {...(selectedHistoricalSessions ? { historicalSessions: selectedHistoricalSessions } : {})}
-      {...(taskSessionsByTaskId ? { hasActiveSession: Boolean(selectedActiveSessionContext) } : {})}
-      {...(selectedActiveSessionContext?.role
-        ? { activeSessionRole: selectedActiveSessionContext.role }
-        : {})}
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {

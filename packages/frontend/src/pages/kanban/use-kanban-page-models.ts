@@ -1,35 +1,21 @@
 import { DEFAULT_KANBAN_SETTINGS, type TaskCard } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import type { GitConflict } from "@/features/agent-studio-git";
-import { useGitConflictResolution } from "@/features/git-conflict-resolution";
-import { useSessionStartWorkflowRunner } from "@/features/session-start";
+import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { errorMessage } from "@/lib/errors";
 import { gitProviderReadError } from "@/lib/git-provider-health";
-import {
-  useAgentOperations,
-  useAgentSessionSummaries,
-  useTasksState,
-  useWorkspaceState,
-} from "@/state";
-import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
+import { useAgentSessionSummaries, useTasksState, useWorkspaceState } from "@/state";
 import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
 import { useHorizontalScrollbarVisibility } from "@/state/queries/use-horizontal-scrollbar-visibility";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { buildAgentStudioHref } from "../agents/query-sync/agent-studio-navigation";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 import { useKanbanBoardModel } from "./use-kanban-board-model";
-import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
-import { useKanbanTaskDialogs } from "./use-kanban-task-dialogs";
-import { useTaskApprovalFlow } from "./use-task-approval-flow";
-import { useTaskResetFlow } from "./use-task-reset-flow";
 
 type UseKanbanPageModelsArgs = {
   onOpenDetails: (taskId: string) => void;
-  onCloseDetails: () => void;
+  actions: TaskWorkflowActions;
 };
 
 const EMPTY_KANBAN_TASKS: TaskCard[] = [];
@@ -59,38 +45,24 @@ export const isKanbanForegroundLoading = (args: {
 
 export function useKanbanPageModels({
   onOpenDetails,
-  onCloseDetails,
+  actions,
 }: UseKanbanPageModelsArgs): KanbanPageModels {
-  const { activeWorkspace, branches, isSwitchingWorkspace, saveAgentModelFavorites } =
-    useWorkspaceState();
-  const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
+  const { activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { gitProvider, repoSettings } = useAgentStudioRepoSettings({
+  const { gitProvider } = useAgentStudioRepoSettings({
     activeRepoPath: workspaceRepoPath,
     activeWorkspaceId,
   });
   const providerReadError = gitProviderReadError(gitProvider.error);
-  const { startAgentSession, sendAgentMessage } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
   const {
     refreshTasks,
-    syncPullRequests,
     linkMergedPullRequest,
     cancelLinkMergedPullRequest,
-    unlinkPullRequest,
     isForegroundLoadingTasks,
-    detectingPullRequestTaskId,
     linkingMergedPullRequestTaskId,
     pendingMergedPullRequest,
-    unlinkingPullRequestTaskId,
-    deleteTask,
-    closeTask,
-    resetTaskImplementation,
-    resetTask,
-    humanApproveTask,
-    humanRequestChangesTask,
-    setTaskTargetBranch,
     tasks,
   } = useTasksState();
   const reportedSettingsErrorRef = useRef<string | null>(null);
@@ -100,8 +72,6 @@ export function useKanbanPageModels({
   const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
   const horizontalScrollbarVisibility =
     settingsSnapshotQuery.data?.appearance.horizontalScrollbarVisibility;
-  const openAgentStudioTabOnBackgroundSessionStart =
-    settingsSnapshotQuery.data?.general.openAgentStudioTabOnBackgroundSessionStart ?? null;
   const emptyColumnDisplay =
     settingsSnapshotQuery.data?.kanban.emptyColumnDisplay ??
     DEFAULT_KANBAN_SETTINGS.emptyColumnDisplay;
@@ -201,130 +171,10 @@ export function useKanbanPageModels({
     doneVisibleDays,
     isKanbanPending: false,
   });
-  const navigate = useNavigate();
-  const runSessionStartWorkflow = useSessionStartWorkflowRunner({
-    workspaceId: activeWorkspaceId,
-    startAgentSession,
-    sendAgentMessage,
-  });
-
-  const sessionStartFlow = useKanbanSessionStartFlow({
-    activeWorkspaceId,
-    branches,
-    favoriteState,
-    repoSettings,
-    openAgentStudioTabOnBackgroundSessionStart,
-    tasks: kanbanTasks,
-    sessions,
-    navigate,
-    workspaceRepoPath,
-    humanRequestChangesTask,
-    setTaskTargetBranch,
-    runSessionStartWorkflow,
-  });
-  const {
-    humanReviewFeedbackModal,
-    sessionStartModal,
-    startSessionIntent,
-    onPullRequestGenerate,
-    onDelegate,
-    onOpenSession,
-    onPlan,
-    onQaStart,
-    onQaOpen,
-    onBuild,
-    onHumanRequestChanges,
-  } = sessionStartFlow;
 
   const onRefreshTasks = useCallback((): void => {
     void refreshTasks();
   }, [refreshTasks]);
-  const onDetectPullRequest = useCallback(
-    (taskId: string): void => {
-      void syncPullRequests(taskId);
-    },
-    [syncPullRequests],
-  );
-  const onUnlinkPullRequest = useCallback(
-    (taskId: string): void => {
-      void unlinkPullRequest(taskId);
-    },
-    [unlinkPullRequest],
-  );
-  const onResetTask = useCallback(
-    async (taskId: string): Promise<void> => {
-      await resetTask(taskId);
-    },
-    [resetTask],
-  );
-  const { handleResolveGitConflict } = useGitConflictResolution({
-    workspaceId: activeWorkspaceId,
-    startConflictResolutionSession: async (request) =>
-      startSessionIntent({
-        taskId: request.taskId,
-        role: request.role,
-        launchActionId: "build_rebase_conflict_resolution",
-        initialStartMode: request.initialStartMode,
-        targetWorkingDirectory: request.targetWorkingDirectory,
-        initialSourceSession: request.initialSourceSession,
-        existingSessionOptions: request.existingSessionOptions,
-        postStartAction: "send_message",
-        message: request.message,
-      }),
-  });
-  const handleResolveKanbanGitConflict = useCallback(
-    (conflict: GitConflict, taskId: string) => {
-      const task = kanbanTasks.find((entry) => entry.id === taskId) ?? null;
-      const builderSessions = sessions.filter(
-        (entry) => entry.role === "build" && entry.taskId === taskId,
-      );
-      return handleResolveGitConflict(conflict, {
-        taskId,
-        task,
-        builderSessions,
-        currentViewSession: null,
-        onOpenSession: (session) => {
-          navigate(
-            buildAgentStudioHref({
-              taskId,
-              sessionExternalId: session.externalSessionId,
-              role: "build",
-            }),
-          );
-        },
-      });
-    },
-    [handleResolveGitConflict, kanbanTasks, navigate, sessions],
-  );
-  const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
-    tasks: kanbanTasks,
-    resetTaskImplementation,
-    closeTaskDetails: onCloseDetails,
-  });
-
-  const { taskApprovalModal, taskGitConflictDialog, openTaskApproval } = useTaskApprovalFlow({
-    activeWorkspace,
-    gitProviderContext: gitProvider.context,
-    gitProviderContextError: gitProvider.error,
-    loadGitProviderContext: gitProvider.load,
-    tasks: kanbanTasks,
-    requestPullRequestGeneration: onPullRequestGenerate,
-    refreshTasks,
-    humanApproveTask,
-    openResetImplementation,
-    onResolveGitConflict: handleResolveKanbanGitConflict,
-  });
-
-  const onHumanApprove = useCallback(
-    (taskId: string): void => {
-      openTaskApproval(taskId);
-    },
-    [openTaskApproval],
-  );
-
-  const taskDialogs = useKanbanTaskDialogs({
-    tasks: kanbanTasks,
-  });
 
   const content = useKanbanBoardModel({
     isLoadingTasks: isLoadingKanbanTasks,
@@ -335,51 +185,28 @@ export function useKanbanPageModels({
     historicalSessionsByTaskId,
     sessions,
     onOpenDetails,
-    onDelegate,
-    onOpenSession,
-    onPlan,
-    onQaStart,
-    onQaOpen,
-    onBuild,
-    onHumanApprove,
-    onHumanRequestChanges,
-    onResetImplementation: openResetImplementation,
+    onDelegate: actions.onDelegate,
+    onOpenSession: actions.onOpenSession,
+    onPlan: actions.onPlan,
+    onQaStart: actions.onQaStart,
+    onQaOpen: actions.onQaOpen,
+    onBuild: actions.onBuild,
+    onHumanApprove: actions.onHumanApprove,
+    onHumanRequestChanges: actions.onHumanRequestChanges,
+    onResetImplementation: actions.onResetImplementation,
   });
 
   return {
     header: {
       isLoadingTasks: isLoadingKanbanTasks,
       isSwitchingWorkspace,
-      onCreateTask: taskDialogs.onCreateTask,
+      onCreateTask: actions.onCreateTask,
       onRefreshTasks,
     },
     content,
-    taskComposer: taskDialogs.taskComposer,
     taskDetailsController: {
       activeWorkspace,
       allTasks: kanbanTasks,
-      taskSessionsByTaskId: content.taskSessionsByTaskId,
-      historicalSessionsByTaskId: content.historicalSessionsByTaskId,
-      activeTaskSessionContextByTaskId: content.activeTaskSessionContextByTaskId,
-      onOpenSession,
-      onPlan,
-      onQaStart,
-      onQaOpen,
-      onBuild,
-      onDelegate,
-      onEdit: taskDialogs.onEditTask,
-      onHumanApprove,
-      onHumanRequestChanges,
-      onResetImplementation: openResetImplementation,
-      onResetTask,
-      onCloseTask: closeTask,
-      onDetectPullRequest,
-      gitProviderContext: gitProvider.context,
-      gitProviderReadError: providerReadError,
-      onUnlinkPullRequest,
-      detectingPullRequestTaskId,
-      unlinkingPullRequestTaskId,
-      onDelete: (taskId, options) => deleteTask(taskId, options.deleteSubtasks),
     },
     mergedPullRequestModal: pendingMergedPullRequest
       ? {
@@ -391,10 +218,5 @@ export function useKanbanPageModels({
           },
         }
       : null,
-    humanReviewFeedbackModal,
-    taskApprovalModal,
-    resetImplementationModal,
-    taskGitConflictDialog,
-    sessionStartModal,
   };
 }

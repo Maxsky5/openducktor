@@ -68,8 +68,6 @@ describe("useAgentStudioTaskDetailsLauncher", () => {
       expect(props.activeWorkspace).toBe(activeWorkspace);
       expect(props.allTasks).toEqual([task]);
       expect(props.onOpenSession).toBeUndefined();
-      expect(props.taskSessionsByTaskId).toBeUndefined();
-      expect(props.activeTaskSessionContextByTaskId).toBeUndefined();
       expect(props.detectingPullRequestTaskId).toBe("task-1");
       expect(props.unlinkingPullRequestTaskId).toBe("task-2");
 

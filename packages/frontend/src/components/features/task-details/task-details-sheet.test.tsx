@@ -98,6 +98,7 @@ const createTaskStopImpactHookMock = () =>
   }));
 
 const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
+  onCreateTask: mock(() => {}),
   onPlan: mock(() => {}),
   onQaStart: mock(() => {}),
   onQaOpen: mock(() => {}),
@@ -119,7 +120,6 @@ const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
   gitProviderReadError: null,
   registerTaskDetailsClose: mock(() => () => {}),
   taskSessionsByTaskId: new Map(),
-  historicalSessionsByTaskId: new Map(),
   activeTaskSessionContextByTaskId: new Map(),
 });
 
@@ -585,6 +585,7 @@ describe("TaskDetailsSheet", () => {
             },
             task,
             allTasks: [task],
+            historicalSessions: [],
             open: true,
             onOpenChange: () => {},
           }),
