@@ -224,21 +224,29 @@ test("Open shows a sheet during lazy loading and closing it keeps it closed", as
     documents: { hasSpec: false, hasPlan: false, hasQaReport: false },
   };
   const h = render(
-    <AgentChatTaskTool
-      tool="create_task"
-      timeLabel="now"
-      messageContent=""
-      messageTimestamp="2026-09-09T10:00:00Z"
-      meta={{
-        kind: "tool",
-        partId: "p1",
-        callId: "c1",
-        tool: "odt_create_task",
-        toolType: "generic",
-        status: "completed",
-        output: JSON.stringify({ task }),
-      }}
-    />,
+    <QueryProvider useIsolatedClient>
+      <ActiveWorkspaceContext value={{ activeWorkspace, setActiveWorkspace: () => {} }}>
+        <WorkspaceStateContext value={createWorkspaceState()}>
+          <TaskSnapshotContext value={{ tasks: [], isLoadingTasks: true }}>
+            <AgentChatTaskTool
+              tool="create_task"
+              timeLabel="now"
+              messageContent=""
+              messageTimestamp="2026-09-09T10:00:00Z"
+              meta={{
+                kind: "tool",
+                partId: "p1",
+                callId: "c1",
+                tool: "odt_create_task",
+                toolType: "generic",
+                status: "completed",
+                output: JSON.stringify({ task }),
+              }}
+            />
+          </TaskSnapshotContext>
+        </WorkspaceStateContext>
+      </ActiveWorkspaceContext>
+    </QueryProvider>,
   );
   try {
     fireEvent.click(h.getByRole("button", { name: "Open task details" }));
