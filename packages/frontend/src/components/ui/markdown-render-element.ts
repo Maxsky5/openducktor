@@ -10,7 +10,7 @@ const MAX_CACHED_MARKDOWN_LENGTH = 50_000;
 
 const elementCacheByComponents = new WeakMap<Components, Map<string, ReactElement>>();
 
-const readElementCache = (components: Components): Map<string, ReactElement> => {
+const getElementCache = (components: Components): Map<string, ReactElement> => {
   const existing = elementCacheByComponents.get(components);
   if (existing) return existing;
   const created = new Map<string, ReactElement>();
@@ -27,7 +27,7 @@ export const renderMarkdownElement = ({
   components: Components;
   linkPolicy?: MarkdownLinkPolicy | undefined;
 }): ReactElement => {
-  const cache = readElementCache(components);
+  const cache = getElementCache(components);
   const cached = cache.get(markdown);
   if (cached) {
     cache.delete(markdown);

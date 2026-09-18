@@ -71,18 +71,6 @@ const MARKDOWN_CLASSES = {
   ),
 } satisfies Record<MarkdownRendererVariant, string>;
 
-const MarkdownSync = memo(function MarkdownSync({
-  markdown,
-  components,
-  linkPolicy,
-}: {
-  markdown: string;
-  components: Components;
-  linkPolicy?: MarkdownLinkPolicy | undefined;
-}): ReactElement {
-  return renderMarkdownElement({ markdown, components, linkPolicy });
-});
-
 type MarkdownRendererCandidate = "mermaid" | "math";
 
 type MarkdownTaskAssetProps = Pick<
@@ -172,9 +160,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       </Suspense>
     );
   } else {
-    renderedContent = (
-      <MarkdownSync markdown={content} components={components} linkPolicy={linkPolicy} />
-    );
+    renderedContent = renderMarkdownElement({ markdown: content, components, linkPolicy });
   }
 
   if (candidate !== null) {
