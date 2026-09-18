@@ -423,13 +423,18 @@ const renderAppShellForTest = (
       error: "Path is empty.",
     });
   }
-  queryClient.setQueryData(filesystemQueryKeys.directory(), {
-    currentPath: "/repo",
-    currentPathIsGitRepo: true,
-    parentPath: "/",
-    homePath: "/repo",
-    entries: [],
-  });
+  // Keep the seeded listing fresh for the whole test. A stale refetch would call the unconfigured host bridge.
+  queryClient.setQueryData(
+    filesystemQueryKeys.directory(),
+    {
+      currentPath: "/repo",
+      currentPathIsGitRepo: true,
+      parentPath: "/",
+      homePath: "/repo",
+      entries: [],
+    },
+    { updatedAt: Date.now() + 60_000 },
+  );
   options.prepareQueryClient?.(queryClient);
 
   return render(
