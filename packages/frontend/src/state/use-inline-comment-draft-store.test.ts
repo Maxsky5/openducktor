@@ -468,7 +468,7 @@ describe("use-inline-comment-draft-store", () => {
 
   test("hydrates stored comments as pending and keeps in-memory owners", () => {
     const storage = createMemoryStorage();
-    const updatedAt = new Date("2026-09-18T10:00:00.000Z");
+    const updatedAt = new Date();
     writeStoredPayload(storage, OWNER, [buildStoredComment()], updatedAt.toISOString());
     writeStoredPayload(storage, OTHER_OWNER, [buildStoredComment({ id: "other-comment" })]);
     setInlineCommentDraftStorageForTests(storage);

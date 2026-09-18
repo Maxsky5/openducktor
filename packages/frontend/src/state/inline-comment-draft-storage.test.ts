@@ -80,7 +80,9 @@ describe("inline comment draft storage", () => {
       taskId: "task/one",
     });
     expect(storage.getItem(OWNER)).not.toBeNull();
-    expect(readInlineCommentDraftsFromStorage({ storage, ownerKey: OWNER })).toEqual({
+    expect(
+      readInlineCommentDraftsFromStorage({ storage, ownerKey: OWNER, now: new Date(updatedAt) }),
+    ).toEqual({
       status: "restored",
       comments,
       updatedAt,
