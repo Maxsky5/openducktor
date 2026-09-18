@@ -63,13 +63,13 @@ describe("Bun test preload", () => {
     ]);
 
     expect(exitCode, stderr).toBe(0);
-    const match = stdout.match(/test config: (.+)/);
-    expect(match).not.toBeNull();
-    const configDir = match?.[1];
-    if (!configDir) {
-      throw new Error("Expected the fixture to print its test config directory.");
+    const configDir = stdout.match(/test config: (.+)/)?.[1];
+    const workerTmpDir = stdout.match(/worker tmp: (.+)/)?.[1];
+    if (!configDir || !workerTmpDir) {
+      throw new Error("Expected the fixture to print its test directories.");
     }
     await expect(access(configDir)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(workerTmpDir)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   test("loads the frontend DOM setup for a focused test run from the repository root", async () => {

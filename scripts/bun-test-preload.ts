@@ -1,13 +1,34 @@
 import { createRequire } from "node:module";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-test-"));
+const systemTmpDir = tmpdir();
+const workerTmpDir = path.join(systemTmpDir, `openducktor-worker-tmp-${process.pid}`);
+const configDir = path.join(workerTmpDir, `openducktor-test-${process.pid}`);
+mkdirSync(workerTmpDir, { recursive: true });
+mkdirSync(configDir, { recursive: true });
 process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
-const { afterAll } = await import("bun:test");
-afterAll(async () => {
-  await rm(configDir, { force: true, recursive: true });
+process.env.TMPDIR = workerTmpDir;
+process.env.TMP = workerTmpDir;
+process.env.TEMP = workerTmpDir;
+
+const removeQuietly = (directory: string): void => {
+  try {
+    rmSync(directory, { force: true, recursive: true });
+  } catch {
+    return;
+  }
+};
+
+const { afterAll, afterEach, beforeAll } = await import("bun:test");
+beforeAll((): void => {
+  mkdirSync(workerTmpDir, { recursive: true });
+  mkdirSync(configDir, { recursive: true });
+});
+afterAll((): void => {
+  removeQuietly(configDir);
+  removeQuietly(workerTmpDir);
 });
 
 const repoRoot = path.resolve(import.meta.dir, "..");
@@ -31,7 +52,6 @@ if (testRoot === repoRoot || testRoot === frontendRoot) {
     writable: true,
   });
 
-  const { afterEach } = await import("bun:test");
   const { cleanup } = await import(frontendRequire.resolve("@testing-library/react"));
 
   afterEach((): void => {
