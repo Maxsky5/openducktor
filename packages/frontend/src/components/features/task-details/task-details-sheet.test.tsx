@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
@@ -98,19 +98,26 @@ const createTaskStopImpactHookMock = () =>
   }));
 
 const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
-  onPlan: () => {},
-  onQaStart: () => {},
-  onQaOpen: () => {},
-  onBuild: () => {},
-  onOpenSession: () => {},
-  onDelegate: () => {},
-  onEdit: () => {},
-  onHumanApprove: () => {},
-  onHumanRequestChanges: () => {},
-  onResetImplementation: () => {},
-  onResetTask: async () => {},
-  onCloseTask: async () => {},
-  onDelete: async () => {},
+  onPlan: mock(() => {}),
+  onQaStart: mock(() => {}),
+  onQaOpen: mock(() => {}),
+  onBuild: mock(() => {}),
+  onOpenSession: mock(() => {}),
+  onDelegate: mock(() => {}),
+  onEdit: mock(() => {}),
+  onHumanApprove: mock(() => {}),
+  onHumanRequestChanges: mock(() => {}),
+  onResetImplementation: mock(() => {}),
+  onResetTask: mock(async () => {}),
+  onCloseTask: mock(async () => {}),
+  onDelete: mock(async () => {}),
+  onDetectPullRequest: mock(() => {}),
+  onUnlinkPullRequest: mock(() => {}),
+  detectingPullRequestTaskId: null,
+  unlinkingPullRequestTaskId: null,
+  gitProviderContext: undefined,
+  gitProviderReadError: null,
+  registerTaskDetailsClose: mock(() => () => {}),
   taskSessionsByTaskId: new Map(),
   historicalSessionsByTaskId: new Map(),
   activeTaskSessionContextByTaskId: new Map(),
@@ -545,7 +552,7 @@ describe("TaskDetailsSheet", () => {
     expect(html).not.toContain('<span class="sr-only">Close</span>');
   });
 
-  test("renders workflow actions from the task workflow context when props omit handlers", async () => {
+  test("dispatches a workflow action through the task workflow context", async () => {
     const { TaskDetailsSheet } = await import("./task-details-sheet");
     const { TaskWorkflowActionsContext } =
       await import("@/features/task-workflow/task-workflow-actions-context");
@@ -561,6 +568,7 @@ describe("TaskDetailsSheet", () => {
         qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
       },
     });
+    const actions = createTaskWorkflowActionsValue();
 
     const { unmount } = render(
       createElement(
@@ -568,7 +576,7 @@ describe("TaskDetailsSheet", () => {
         null,
         createElement(
           TaskWorkflowActionsContext.Provider,
-          { value: createTaskWorkflowActionsValue() },
+          { value: actions },
           createElement(TaskDetailsSheet, {
             activeWorkspace: {
               workspaceId: "workspace-a",
@@ -584,7 +592,9 @@ describe("TaskDetailsSheet", () => {
       ),
     );
 
-    expect(screen.getByText("Start Builder")).toBeDefined();
+    fireEvent.click(screen.getByText("Start Builder"));
+
+    expect(actions.onDelegate).toHaveBeenCalledWith("TASK-1");
 
     unmount();
   });

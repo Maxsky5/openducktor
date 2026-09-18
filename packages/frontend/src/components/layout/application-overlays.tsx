@@ -35,12 +35,14 @@ export function ApplicationOverlays({ children }: PropsWithChildren): ReactEleme
   return (
     <SettingsModalProvider>
       <NotificationFailurePromptHost />
-      <AgentSessionTranscriptDialogHost>
-        <NotificationNavigationRegistrar />
-        <NotificationAttentionFocus />
-        <TaskWorkflowActionsProvider>{children}</TaskWorkflowActionsProvider>
-        <AppUpdatePrompt />
-      </AgentSessionTranscriptDialogHost>
+      <TaskWorkflowActionsProvider>
+        <AgentSessionTranscriptDialogHost>
+          <NotificationNavigationRegistrar />
+          <NotificationAttentionFocus />
+          {children}
+          <AppUpdatePrompt />
+        </AgentSessionTranscriptDialogHost>
+      </TaskWorkflowActionsProvider>
     </SettingsModalProvider>
   );
 }

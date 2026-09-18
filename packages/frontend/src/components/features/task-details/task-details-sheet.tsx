@@ -1,5 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
-import type { ReactElement } from "react";
+import { type ReactElement, useEffect } from "react";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
 import {
   resolveHistoricalSessionRoles,
@@ -54,12 +54,6 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
     open,
     onOpenChange,
     onEdit = workflowActions?.onEdit,
-    onDetectPullRequest,
-    gitProviderContext,
-    gitProviderReadError = null,
-    onUnlinkPullRequest,
-    detectingPullRequestTaskId = null,
-    unlinkingPullRequestTaskId = null,
   } = props;
   const contextTaskSessions =
     task && workflowActions ? workflowActions.taskSessionsByTaskId.get(task.id) : undefined;
@@ -88,6 +82,21 @@ export function TaskDetailsSheet(props: TaskDetailsSheetProps): ReactElement {
   const onResetTask = props.onResetTask ?? workflowActions?.onResetTask;
   const onCloseTask = props.onCloseTask ?? workflowActions?.onCloseTask;
   const onDelete = props.onDelete ?? workflowActions?.onDelete;
+  const onDetectPullRequest = props.onDetectPullRequest ?? workflowActions?.onDetectPullRequest;
+  const onUnlinkPullRequest = props.onUnlinkPullRequest ?? workflowActions?.onUnlinkPullRequest;
+  const detectingPullRequestTaskId =
+    props.detectingPullRequestTaskId ?? workflowActions?.detectingPullRequestTaskId ?? null;
+  const unlinkingPullRequestTaskId =
+    props.unlinkingPullRequestTaskId ?? workflowActions?.unlinkingPullRequestTaskId ?? null;
+  const gitProviderContext = props.gitProviderContext ?? workflowActions?.gitProviderContext;
+  const gitProviderReadError =
+    props.gitProviderReadError ?? workflowActions?.gitProviderReadError ?? null;
+  useEffect(() => {
+    if (!workflowActions) {
+      return;
+    }
+    return workflowActions.registerTaskDetailsClose(() => onOpenChange(false));
+  }, [onOpenChange, workflowActions]);
   const viewModelInput = getTaskDetailsViewModelInput({
     activeWorkspace,
     task,

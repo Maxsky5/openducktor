@@ -1,5 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { type PropsWithChildren, type ReactElement, useCallback, useMemo, useState } from "react";
+import {
+  type PropsWithChildren,
+  type ReactElement,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "react-router";
 import { SessionStartModal } from "@/components/features/agents/session-start-modal";
 import { TaskCreateModal } from "@/components/features/task-create/task-create-modal";
@@ -10,6 +17,7 @@ import {
 } from "@/features/git-conflict-resolution";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
+import { gitProviderReadError } from "@/lib/git-provider-health";
 import { buildAgentStudioHref } from "@/pages/agents/query-sync/agent-studio-navigation";
 import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import { TaskApprovalModal } from "@/pages/kanban/task-approval-modal";
@@ -53,6 +61,10 @@ export function TaskWorkflowActionsProvider({ children }: PropsWithChildren): Re
     humanApproveTask,
     humanRequestChangesTask,
     setTaskTargetBranch,
+    syncPullRequests,
+    unlinkPullRequest,
+    detectingPullRequestTaskId,
+    unlinkingPullRequestTaskId,
   } = useTasksState();
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const openAgentStudioTabOnBackgroundSessionStart =
@@ -90,10 +102,23 @@ export function TaskWorkflowActionsProvider({ children }: PropsWithChildren): Re
     runSessionStartWorkflow,
   });
 
+  const taskDetailsCloseRef = useRef<Array<() => void>>([]);
+  const registerTaskDetailsClose = useCallback((close: () => void): (() => void) => {
+    taskDetailsCloseRef.current.push(close);
+    return () => {
+      taskDetailsCloseRef.current = taskDetailsCloseRef.current.filter((entry) => entry !== close);
+    };
+  }, []);
+  const closeTaskDetails = useCallback((): void => {
+    for (const close of taskDetailsCloseRef.current.slice()) {
+      close();
+    }
+  }, []);
+
   const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
     tasks,
     resetTaskImplementation,
-    closeTaskDetails: () => {},
+    closeTaskDetails,
   });
 
   const { handleResolveGitConflict } = useGitConflictResolution({
@@ -176,12 +201,23 @@ export function TaskWorkflowActionsProvider({ children }: PropsWithChildren): Re
       onEdit,
       onHumanApprove: openTaskApproval,
       onHumanRequestChanges,
-      onResetImplementation: (taskId) => {
-        openResetImplementation(taskId);
+      onResetImplementation: (taskId, options) => {
+        openResetImplementation(taskId, options);
       },
       onResetTask: resetTask,
       onCloseTask: closeTask,
       onDelete: (taskId, options) => deleteTask(taskId, options.deleteSubtasks),
+      onDetectPullRequest: (taskId) => {
+        void syncPullRequests(taskId);
+      },
+      onUnlinkPullRequest: (taskId) => {
+        void unlinkPullRequest(taskId);
+      },
+      detectingPullRequestTaskId,
+      unlinkingPullRequestTaskId,
+      gitProviderContext: gitProvider.context,
+      gitProviderReadError: gitProviderReadError(gitProvider.error),
+      registerTaskDetailsClose,
       taskSessionsByTaskId: sessionContext.taskSessionsByTaskId,
       historicalSessionsByTaskId: sessionContext.historicalSessionsByTaskId,
       activeTaskSessionContextByTaskId: sessionContext.activeTaskSessionContextByTaskId,
@@ -189,6 +225,9 @@ export function TaskWorkflowActionsProvider({ children }: PropsWithChildren): Re
     [
       closeTask,
       deleteTask,
+      detectingPullRequestTaskId,
+      gitProvider.context,
+      gitProvider.error,
       onBuild,
       onDelegate,
       onEdit,
@@ -199,10 +238,14 @@ export function TaskWorkflowActionsProvider({ children }: PropsWithChildren): Re
       onQaStart,
       openResetImplementation,
       openTaskApproval,
+      registerTaskDetailsClose,
       resetTask,
       sessionContext.activeTaskSessionContextByTaskId,
       sessionContext.historicalSessionsByTaskId,
       sessionContext.taskSessionsByTaskId,
+      syncPullRequests,
+      unlinkingPullRequestTaskId,
+      unlinkPullRequest,
     ],
   );
 

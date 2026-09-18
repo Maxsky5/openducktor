@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, RepositoryGitProviderContext } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { createContext, useContext } from "react";
 import type {
@@ -21,6 +21,13 @@ export type TaskWorkflowActions = {
   onResetTask: (taskId: string) => Promise<void>;
   onCloseTask: (taskId: string) => Promise<void>;
   onDelete: (taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>;
+  onDetectPullRequest: (taskId: string) => void;
+  onUnlinkPullRequest: (taskId: string) => void;
+  detectingPullRequestTaskId: string | null;
+  unlinkingPullRequestTaskId: string | null;
+  gitProviderContext: RepositoryGitProviderContext | undefined;
+  gitProviderReadError: string | null;
+  registerTaskDetailsClose: (close: () => void) => () => void;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   activeTaskSessionContextByTaskId: Map<string, ActiveTaskSessionContext>;
