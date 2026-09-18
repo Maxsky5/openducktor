@@ -861,7 +861,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     }
   });
 
-  test("revalidates a retained transcript when the workspace returns", async () => {
+  test("keeps a retained transcript when the workspace returns", async () => {
     const baselineHistory: AgentSessionHistoryMessage[] = [
       {
         messageId: "history-1",
@@ -871,21 +871,11 @@ describe("use-agent-orchestrator-operations session state", () => {
         parts: [],
       },
     ];
-    const revalidatedHistory: AgentSessionHistoryMessage[] = [
-      ...baselineHistory,
-      {
-        messageId: "history-2",
-        role: "assistant",
-        timestamp: "2026-02-22T08:00:02.000Z",
-        text: "Produced while inactive",
-        parts: [],
-      },
-    ];
     let historyCalls = 0;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
     OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
       historyCalls += 1;
-      return historyCalls === 1 ? baselineHistory : revalidatedHistory;
+      return baselineHistory;
     };
 
     const liveStream = createLiveSessionStreamFixture([createAgentSessionLiveSnapshotFixture()]);
@@ -943,21 +933,22 @@ describe("use-agent-orchestrator-operations session state", () => {
         tasks: [taskFixtureWithPersistedBuildSession],
       });
 
-      const revalidated = await harness.waitFor((state) =>
+      const restored = await harness.waitFor((state) =>
         listHarnessSessions(state).some(
           (entry) =>
             entry.externalSessionId === "external-1" &&
+            hasLoadedSessionHistory(entry) &&
             sessionMessagesToArray(entry).some(
-              (message) => message.content === "Produced while inactive",
+              (message) => message.content === "Retained transcript",
             ),
         ),
       );
-      const revalidatedSession = listHarnessSessions(revalidated).find(
+      const restoredSession = listHarnessSessions(restored).find(
         (entry) => entry.externalSessionId === "external-1",
       );
 
-      expect(revalidatedSession?.historyLoadState).toBe("loaded");
-      expect(historyCalls).toBe(2);
+      expect(restoredSession?.historyLoadState).toBe("loaded");
+      expect(historyCalls).toBe(1);
     } finally {
       await harness.unmount();
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;

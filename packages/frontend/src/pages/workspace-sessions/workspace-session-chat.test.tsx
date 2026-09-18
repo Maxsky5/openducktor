@@ -176,6 +176,7 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
                       runtimeReads += 1;
                       return session;
                     },
+                    revalidateAgentSessionHistory: async () => session,
                   }}
                 >
                   <AgentSessionReadModelStateContext value={readModel}>

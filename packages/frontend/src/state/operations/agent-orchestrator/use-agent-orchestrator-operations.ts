@@ -10,7 +10,6 @@ import { refreshAgentSessionListQuery } from "@/state/queries/agent-sessions";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
@@ -185,34 +184,21 @@ export function useAgentOrchestratorOperations({
     workspaceId,
     workspaceRepoPath,
   ]);
-  const reloadHistoryForLoadedSessions = useCallback(
-    async (
-      loadHistory: (sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>,
-    ): Promise<void> => {
-      const loadedSessions = sessionStore
-        .listSessionSnapshots()
-        .filter((session) => session.historyLoadState === "loaded");
+  const recoverTranscriptGap = useCallback(async (): Promise<void> => {
+    const loadedSessions = sessionStore
+      .listSessionSnapshots()
+      .filter((session) => session.historyLoadState === "loaded");
 
-      await Promise.all([
-        ...loadedSessions.map((session) => loadHistory(toAgentSessionIdentity(session))),
-        queryClient.invalidateQueries({
-          queryKey: agentSessionHistoryQueryKeys.all,
-          refetchType: "active",
-        }),
-      ]);
-    },
-    [queryClient, sessionStore],
-  );
-  const recoverTranscriptGap = useCallback(
-    (): Promise<void> =>
-      reloadHistoryForLoadedSessions(sessionHistoryLoaders.reloadAgentSessionHistory),
-    [reloadHistoryForLoadedSessions, sessionHistoryLoaders],
-  );
-  const revalidateRetainedSessionHistory = useCallback(
-    (): Promise<void> =>
-      reloadHistoryForLoadedSessions(sessionHistoryLoaders.revalidateAgentSessionHistory),
-    [reloadHistoryForLoadedSessions, sessionHistoryLoaders],
-  );
+    await Promise.all([
+      ...loadedSessions.map((session) =>
+        sessionHistoryLoaders.reloadAgentSessionHistory(toAgentSessionIdentity(session)),
+      ),
+      queryClient.invalidateQueries({
+        queryKey: agentSessionHistoryQueryKeys.all,
+        refetchType: "active",
+      }),
+    ]);
+  }, [queryClient, sessionHistoryLoaders, sessionStore]);
   const currentSessionReadModel = useRepoSessionReadModel({
     workspaceRepoPath,
     workspaceId,
@@ -224,7 +210,6 @@ export function useAgentOrchestratorOperations({
     liveSessionPort: liveSessionHostPort,
     transcriptEvents,
     recoverTranscriptGap,
-    revalidateRetainedSessionHistory,
     queryClient,
     sessionReadPort: hostPort,
   });
@@ -346,6 +331,7 @@ export function useAgentOrchestratorOperations({
   const historyLoadActions = useMemo<AgentSessionHistoryLoadContextValue>(
     () => ({
       loadSelectedSessionBaselineHistory: sessionHistoryLoaders.loadSelectedSessionBaselineHistory,
+      revalidateAgentSessionHistory: sessionHistoryLoaders.revalidateAgentSessionHistory,
     }),
     [sessionHistoryLoaders],
   );

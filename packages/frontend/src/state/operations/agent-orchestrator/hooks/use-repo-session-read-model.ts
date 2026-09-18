@@ -79,7 +79,6 @@ type UseRepoSessionReadModelArgs = {
   liveSessionPort: AgentSessionLiveFrontendPort;
   transcriptEvents: AgentSessionTranscriptEventConsumer;
   recoverTranscriptGap: (message: string) => Promise<void>;
-  revalidateRetainedSessionHistory: () => Promise<void>;
   queryClient: QueryClient;
   sessionReadPort: AgentSessionReadPort;
 };
@@ -133,7 +132,6 @@ export const useRepoSessionReadModel = ({
   liveSessionPort,
   transcriptEvents,
   recoverTranscriptGap,
-  revalidateRetainedSessionHistory,
   queryClient,
   sessionReadPort,
 }: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
@@ -216,7 +214,6 @@ export const useRepoSessionReadModel = ({
   const recoverTranscriptHistory = useEffectEvent((message: string) =>
     recoverTranscriptGap(message),
   );
-  const revalidateRetainedHistory = useEffectEvent(() => revalidateRetainedSessionHistory());
   const clearSessionFaults = useCallback(() => {
     setSessionFaults((current) => (current.size === 0 ? current : new Map()));
   }, []);
@@ -717,7 +714,6 @@ export const useRepoSessionReadModel = ({
     const commitInitialSnapshot = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
-      const isFirstLiveSnapshot = !initialLiveSnapshotReceivedRef.current;
       commitProjected((current) => {
         const registered = applyWorkspaceRecords(applyLoadedRecords(current, current), current);
         const projected = buildAgentSessionLiveCollection({
@@ -729,13 +725,6 @@ export const useRepoSessionReadModel = ({
       initialLiveSnapshotReceivedRef.current = true;
       if (isStaleRepoOperation()) {
         return;
-      }
-      if (isFirstLiveSnapshot) {
-        runOrchestratorSideEffect(
-          "agent-session-live-revalidate-retained-history",
-          revalidateRetainedHistory(),
-          { tags: { repoPath } },
-        );
       }
       // Any fresh authoritative snapshot proves the stream recovered.
       const recoveredLiveFailure = liveStreamFailureRef.current !== null;

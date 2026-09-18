@@ -60,6 +60,10 @@ interface LoadSelectedSessionBaselineHistoryRefContract {
   current: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"];
 }
 
+interface RevalidateAgentSessionHistoryRefContract {
+  current: AgentSessionHistoryLoadContextValue["revalidateAgentSessionHistory"];
+}
+
 interface ReadSessionTodosRefContract {
   current: AgentOperationsContextValue["readSessionTodos"];
 }
@@ -83,6 +87,9 @@ const sessionReadModelLoadStateRef: SessionReadModelLoadStateRefContract = {
 const loadSelectedSessionBaselineHistoryRef: LoadSelectedSessionBaselineHistoryRefContract = {
   current: async () => null,
 };
+const revalidateAgentSessionHistoryRef: RevalidateAgentSessionHistoryRefContract = {
+  current: async () => null,
+};
 const readSessionTodosRef: ReadSessionTodosRefContract = {
   current: async () => [],
 };
@@ -99,6 +106,7 @@ type HookArgs = Parameters<UseAgentStudioSelectionControllerHook>[0];
 type TestContextOverrides = {
   sessionReadModelLoadState?: AgentSessionReadModelLoadState;
   loadSelectedSessionBaselineHistory?: AgentSessionHistoryLoadContextValue["loadSelectedSessionBaselineHistory"];
+  revalidateAgentSessionHistory?: AgentSessionHistoryLoadContextValue["revalidateAgentSessionHistory"];
   readSessionTodos?: AgentOperationsContextValue["readSessionTodos"];
   loadAgentSessionContext?: AgentOperationsContextValue["loadAgentSessionContext"];
   getSessionFault?: (session: AgentSessionIdentity | null) => AgentSessionTransientFault | null;
@@ -183,6 +191,8 @@ const applyTestContextOverrides = (
     defaultSessionReadModelLoadState(hookArgs.workspaceRepoPath);
   loadSelectedSessionBaselineHistoryRef.current =
     contextOverrides.loadSelectedSessionBaselineHistory ?? (async () => null);
+  revalidateAgentSessionHistoryRef.current =
+    contextOverrides.revalidateAgentSessionHistory ?? (async () => null);
   readSessionTodosRef.current = contextOverrides.readSessionTodos ?? (async () => []);
   loadAgentSessionContextRef.current =
     contextOverrides.loadAgentSessionContext ?? (async () => undefined);
@@ -232,6 +242,7 @@ const createHookHarness = (initialProps: HookArgs, contextOverrides: TestContext
   });
   const agentSessionHistoryLoadValue = (): AgentSessionHistoryLoadContextValue => ({
     loadSelectedSessionBaselineHistory: loadSelectedSessionBaselineHistoryRef.current,
+    revalidateAgentSessionHistory: revalidateAgentSessionHistoryRef.current,
   });
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
     <AgentOperationsContext.Provider value={agentOperationsValue()}>

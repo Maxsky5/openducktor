@@ -20,7 +20,7 @@ Rules:
 - Read one selected session through the store reader. Do not request a full collection only to prepare or load one session.
 - Pass summaries to render code as snapshots. Do not build a mutable mirror.
 - All reads and writes target the active repository. A session outside the active collection resolves to no session.
-- A repository switch keeps retained transcripts. The store serves the retained transcript immediately and the read model revalidates in the background.
+- A repository switch keeps retained transcripts. The store serves the retained transcript immediately and the selected session revalidates its history in the background.
 - An unfinished history load returns to not requested when its repository becomes inactive, so the next visit loads the baseline history again.
 
 ## Activity state
