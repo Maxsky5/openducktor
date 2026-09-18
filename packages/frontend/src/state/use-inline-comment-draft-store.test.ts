@@ -574,7 +574,7 @@ describe("use-inline-comment-draft-store", () => {
     ]);
   });
 
-  test("reports storage unavailability when hydration cannot read storage", () => {
+  test("reports storage unavailability when hydration fails", () => {
     setInlineCommentDraftStorageForTests(createThrowingStorage());
 
     useInlineCommentDraftStore.getState().hydrate();

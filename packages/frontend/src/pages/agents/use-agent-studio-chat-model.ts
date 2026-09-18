@@ -342,10 +342,6 @@ export function useAgentStudioChatModel({
     onSend: sessionActions.onSend,
   });
   const reviewCommentPersistenceWarning = reviewCommentComposer.persistenceWarning;
-  const reviewCommentWarning =
-    reviewCommentPersistenceWarning === null
-      ? null
-      : REVIEW_COMMENT_PERSISTENCE_WARNINGS[reviewCommentPersistenceWarning];
   const interruptedTurnResume = useMemo<AgentChatInterruptedTurnResumeModel | undefined>(
     () =>
       sessionActions.canResumeSession
@@ -373,11 +369,11 @@ export function useAgentStudioChatModel({
       count,
       accessibleLabel: `${count} pending review ${commentLabel}`,
     };
-    if (reviewCommentWarning !== null) {
-      items.warning = reviewCommentWarning;
+    if (reviewCommentPersistenceWarning !== null) {
+      items.warning = REVIEW_COMMENT_PERSISTENCE_WARNINGS[reviewCommentPersistenceWarning];
     }
     return items;
-  }, [reviewCommentComposer.pendingInlineCommentCount, reviewCommentWarning]);
+  }, [reviewCommentComposer.pendingInlineCommentCount, reviewCommentPersistenceWarning]);
 
   const composerConfig = useMemo<AgentChatComposerConfig>(() => {
     const config: AgentChatComposerConfig = {

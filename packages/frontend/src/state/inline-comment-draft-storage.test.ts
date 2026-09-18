@@ -129,7 +129,7 @@ describe("inline comment draft storage", () => {
     });
   });
 
-  test("removes an empty stored value instead of leaving the key", () => {
+  test("removes an empty stored value", () => {
     const storage = createMemoryStorage();
     storage.setItem(OWNER, "");
 

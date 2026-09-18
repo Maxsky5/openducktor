@@ -117,22 +117,19 @@ export function useAgentStudioReviewCommentComposerAdapter({
       return;
     }
 
-    const flushComments = (): void => {
-      adapter.flush();
-    };
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === "hidden") {
-        flushComments();
+        adapter.flush();
       }
     };
 
-    window.addEventListener("pagehide", flushComments);
+    window.addEventListener("pagehide", adapter.flush);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener("pagehide", flushComments);
+      window.removeEventListener("pagehide", adapter.flush);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      flushComments();
+      adapter.flush();
     };
   }, [adapter]);
 
