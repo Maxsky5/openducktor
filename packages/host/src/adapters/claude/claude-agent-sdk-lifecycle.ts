@@ -40,21 +40,20 @@ const pendingUserTurnCount = (session: ClaudeLifecycleSession): number =>
 const activeSdkUserTurnCount = (session: ClaudeLifecycleSession): number =>
   session.activeSdkUserTurnCount ?? 0;
 
-const emitSessionIdle = ({
-  emit,
-  session,
-  settle = false,
-  timestamp,
-}: ClaudeLifecycleInput & { settle?: boolean }): void => {
-  if (!settle && session.activity === "idle") {
-    return;
-  }
+const publishSessionIdle = ({ emit, session, timestamp }: ClaudeLifecycleInput): void => {
   session.activity = "idle";
   emit({
     type: "session_idle",
     externalSessionId: session.externalSessionId,
     timestamp,
   });
+};
+
+const emitSessionIdle = (input: ClaudeLifecycleInput): void => {
+  if (input.session.activity === "idle") {
+    return;
+  }
+  publishSessionIdle(input);
 };
 
 const emitSessionBusy = ({ emit, session, timestamp }: ClaudeLifecycleInput): void => {
@@ -119,6 +118,8 @@ const applySdkStateLifecycleEvent = (
 };
 
 const applySdkTurnStartedLifecycleEvent = (input: ClaudeLifecycleInput): void => {
+  // A task-notification user message starts a turn before any host send, so the
+  // session must go busy. A replayed sdk_state "running" frame does not start a turn.
   if (input.session.activity !== "idle") {
     return;
   }
@@ -153,7 +154,7 @@ const applyResultLifecycleEvent = (
   input.session.sdkState = "idle";
   // A finalized SDK-initiated turn can end while the renderer is running from
   // transcript activity, so the settle signal must not depend on host activity.
-  emitSessionIdle({ ...input, settle: true });
+  publishSessionIdle(input);
 };
 
 export const applyClaudeLifecycleEvent = (

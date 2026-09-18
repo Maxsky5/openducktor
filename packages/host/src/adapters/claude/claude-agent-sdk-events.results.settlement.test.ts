@@ -522,4 +522,71 @@ describe("handleClaudeSdkMessage result settlement", () => {
       }),
     );
   });
+
+  test("settles a finalized wake-up turn when the host went idle before the result", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("idle");
+    const commonInput = {
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model: string) => ({
+        providerId: "claude",
+        modelId: model,
+        runtimeKind: "claude" as const,
+      }),
+      emit: (event: AgentEvent) => events.push(event),
+    };
+
+    handleClaudeSdkMessage({
+      ...commonInput,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: "5a91c77d-22be-4340-8676-aa50b78359cc",
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        message: { role: "user", content: "Task completed" },
+        origin: { kind: "task-notification" },
+      }),
+    });
+    expect(session.activity).toBe("running");
+
+    handleClaudeSdkMessage({
+      ...commonInput,
+      timestamp: "2026-06-25T20:00:02.000Z",
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "session_state_changed",
+        state: "idle",
+        uuid: "1d5aad36-4756-4086-8757-943eeef071df",
+        session_id: "session-1",
+      }),
+    });
+    expect(session.activity).toBe("idle");
+
+    handleClaudeSdkMessage({
+      ...commonInput,
+      timestamp: "2026-06-25T20:00:03.000Z",
+      message: claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: "e8e45018-5f3b-46ee-82da-0c358b384386",
+        session_id: "session-1",
+        is_error: false,
+        result: "All background reviews are complete.",
+        stop_reason: "end_turn",
+        terminal_reason: "completed",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        origin: { kind: "task-notification" },
+      }),
+    });
+
+    expect(session.activity).toBe("idle");
+    expect(events.at(-1)).toEqual(
+      expect.objectContaining({
+        type: "session_idle",
+        externalSessionId: "session-1",
+      }),
+    );
+  });
 });
