@@ -14,6 +14,7 @@ import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
+import { toRuntimeWorkingDirectoryRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import { resolveSessionRuntimeScope } from "@/state/operations/agent-orchestrator/support/session-runtime-scope";
 import {
   type AgentSessionTranscriptEmptyReason,
@@ -141,11 +142,12 @@ export function useRuntimeTranscriptSessionHistory({
     () =>
       runtimeSessionRef === null
         ? null
-        : {
+        : toRuntimeWorkingDirectoryRef({
             repoPath: runtimeSessionRef.repoPath,
             runtimeKind: runtimeSessionRef.runtimeKind,
             workingDirectory: runtimeSessionRef.workingDirectory,
-          },
+            action: "read the transcript runtime catalog",
+          }),
     [runtimeSessionRef],
   );
   const runtimePolicyError = runtimeSessionRefQuery.error

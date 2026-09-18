@@ -98,6 +98,23 @@ export const toClaudeModelCatalog = (models: ModelInfo[]): AgentModelCatalog => 
   profiles: [],
 });
 
+const readClaudeCatalogSurfaces = async (
+  sdkQuery: ClaudeCatalogQuery,
+): Promise<AgentRuntimeCatalogRead> => {
+  let commands: Promise<SlashCommand[]> | undefined;
+  const readCommands = (): Promise<SlashCommand[]> => {
+    commands ??= sdkQuery.supportedCommands();
+    return commands;
+  };
+  const [models, slashCommands, skills, subagents] = await Promise.all([
+    readCatalogSurface(async () => toClaudeModelCatalog(await sdkQuery.supportedModels())),
+    readCatalogSurface(async () => toClaudeSlashCommandCatalog(await readCommands())),
+    readCatalogSurface(async () => toClaudeSkillCatalog(await readCommands())),
+    readCatalogSurface(async () => toClaudeSubagentCatalog(await sdkQuery.supportedAgents())),
+  ]);
+  return { runtime: CLAUDE_RUNTIME_DESCRIPTOR, models, slashCommands, skills, subagents };
+};
+
 export const loadClaudeRuntimeCatalog = async (
   input: ListAgentRuntimeCatalogInput,
   processEnv: NodeJS.ProcessEnv | undefined,
@@ -115,23 +132,8 @@ export const loadClaudeRuntimeCatalog = async (
     claudeExecutablePath,
     createQuery,
   );
-  let commands: Promise<SlashCommand[]> | undefined;
-  const readCommands = (): Promise<SlashCommand[]> => {
-    commands ??= session.sdkQuery.supportedCommands();
-    return commands;
-  };
   try {
-    const [models, slashCommands, skills, subagents] = await Promise.all([
-      readCatalogSurface(async () =>
-        toClaudeModelCatalog(await session.sdkQuery.supportedModels()),
-      ),
-      readCatalogSurface(async () => toClaudeSlashCommandCatalog(await readCommands())),
-      readCatalogSurface(async () => toClaudeSkillCatalog(await readCommands())),
-      readCatalogSurface(async () =>
-        toClaudeSubagentCatalog(await session.sdkQuery.supportedAgents()),
-      ),
-    ]);
-    return { runtime: CLAUDE_RUNTIME_DESCRIPTOR, models, slashCommands, skills, subagents };
+    return await readClaudeCatalogSurfaces(session.sdkQuery);
   } finally {
     closeClaudeCatalogSession(session);
   }

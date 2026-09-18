@@ -15,6 +15,7 @@ export const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
 
 export const runtimeCatalogQueryKeys = {
   all: ["runtime-catalog"] as const,
+  skipped: ["runtime-catalog", SKIPPED_QUERY_KEY_SEGMENT] as const,
   catalog: ({ repoPath, runtimeKind, workingDirectory }: RuntimeWorkingDirectoryRef) =>
     [
       ...runtimeCatalogQueryKeys.all,
@@ -64,7 +65,7 @@ export const runtimeCatalogQueryOptions = (
 
 export const skippedRuntimeCatalogQueryOptions = () =>
   skippedQueryOptions<AgentRuntimeCatalog>({
-    queryKey: [...runtimeCatalogQueryKeys.all, SKIPPED_QUERY_KEY_SEGMENT, "catalog"],
+    queryKey: runtimeCatalogQueryKeys.skipped,
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
