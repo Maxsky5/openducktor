@@ -7,7 +7,6 @@ import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { AgentQuestionDraftEntry } from "./agent-session-question-draft";
 
 type QuestionTabProps = {
-  requestId: string;
   question: AgentQuestionRequest["questions"][number];
   questionIndex: number;
   entry: AgentQuestionDraftEntry | undefined;
@@ -18,8 +17,15 @@ type QuestionTabProps = {
   panelProps?: HTMLAttributes<HTMLDivElement> | undefined;
 };
 
+const renderOptionIcon = (multiple: boolean, selected: boolean): ReactElement => {
+  const className = selected ? "size-3.5 text-foreground" : "size-3.5 text-muted-foreground";
+  if (multiple) {
+    return selected ? <CheckSquare className={className} /> : <Square className={className} />;
+  }
+  return selected ? <CheckCircle2 className={className} /> : <Circle className={className} />;
+};
+
 export const QuestionTab = ({
-  requestId,
   question,
   questionIndex,
   entry,
@@ -54,11 +60,11 @@ export const QuestionTab = ({
             const isSelected = Boolean(entry?.selectedOptionLabels.includes(option.label));
             return (
               <button
-                key={`${requestId}:option:${questionIndex}:${option.label}`}
+                key={`option:${questionIndex}:${option.label}`}
                 type="button"
                 disabled={disabled}
                 className={cn(
-                  "w-full cursor-pointer rounded-md border px-2 py-1 text-left transition-colors",
+                  "w-full cursor-pointer rounded-md border px-2 py-1 text-left",
                   isSelected
                     ? "border-muted-foreground bg-secondary text-foreground"
                     : "border-border bg-card text-foreground hover:border-input hover:bg-accent",
@@ -68,17 +74,7 @@ export const QuestionTab = ({
               >
                 <div className="flex items-start gap-1.5">
                   <span className="inline-flex size-4 shrink-0 items-center justify-center pt-0.5">
-                    {question.multiple ? (
-                      isSelected ? (
-                        <CheckSquare className="size-3.5 text-foreground" />
-                      ) : (
-                        <Square className="size-3.5 text-muted-foreground" />
-                      )
-                    ) : isSelected ? (
-                      <CheckCircle2 className="size-3.5 text-foreground" />
-                    ) : (
-                      <Circle className="size-3.5 text-muted-foreground" />
-                    )}
+                    {renderOptionIcon(Boolean(question.multiple), isSelected)}
                   </span>
                   <span className="min-w-0">
                     <span className="block text-[12px] font-medium leading-4">{option.label}</span>
@@ -104,7 +100,10 @@ export const QuestionTab = ({
             grow="hug"
             size="xs"
             inactiveClassName="bg-card text-foreground hover:bg-accent"
-            className="gap-1 border border-input px-2"
+            className={cn(
+              "gap-1 border px-2 transition-none",
+              entry?.useFreeText ? "border-transparent" : "border-input",
+            )}
             disabled={disabled}
             onClick={onToggleFreeText}
           >

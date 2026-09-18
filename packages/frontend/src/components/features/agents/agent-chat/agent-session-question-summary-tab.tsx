@@ -6,7 +6,7 @@ import {
   type AgentQuestionDraftEntry,
   isAgentQuestionAnswered,
 } from "./agent-session-question-draft";
-import { buildQuestionRenderEntries } from "./agent-session-question-keys";
+import { buildQuestionContentEntries } from "./agent-session-question-keys";
 
 type QuestionSummaryTabProps = {
   request: AgentQuestionRequest;
@@ -37,7 +37,7 @@ export const QuestionSummaryTab = ({
   onSelectQuestion,
   panelProps,
 }: QuestionSummaryTabProps): ReactElement => {
-  const questionRenderEntries = buildQuestionRenderEntries(request.requestId, request.questions);
+  const questionContentEntries = buildQuestionContentEntries(request.questions);
   const { className: panelClassName, ...rootProps } = panelProps ?? {};
 
   return (
@@ -45,11 +45,11 @@ export const QuestionSummaryTab = ({
       {...rootProps}
       className={cn("space-y-1.5 rounded-lg border border-input bg-card p-1.5", panelClassName)}
     >
-      {questionRenderEntries.map(({ question, key }, index) => {
+      {questionContentEntries.map(({ question, contentKey }, index) => {
         const answered = isAgentQuestionAnswered(question, draft[index]);
         return (
           <button
-            key={key}
+            key={contentKey}
             type="button"
             className="w-full cursor-pointer rounded-md px-2 py-1 text-left hover:bg-accent"
             onClick={() => onSelectQuestion(index)}

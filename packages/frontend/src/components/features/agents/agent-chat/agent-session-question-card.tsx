@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import { isAgentQuestionAnswered } from "./agent-session-question-draft";
-import { buildQuestionRenderEntries } from "./agent-session-question-keys";
+import { buildQuestionContentEntries } from "./agent-session-question-keys";
 import { QuestionSubmitFooter } from "./agent-session-question-submit-footer";
 import { QuestionSummaryTab } from "./agent-session-question-summary-tab";
 import { QuestionTab } from "./agent-session-question-tab";
@@ -53,9 +53,22 @@ export function AgentSessionQuestionCard({
   }
 
   const sourceLabel = request.source?.kind === "subagent" ? "Subagent request" : null;
-  const questionRenderEntries = buildQuestionRenderEntries(request.requestId, request.questions);
+  const nextQuestionIndex =
+    hasMultipleQuestions &&
+    activeQuestionIndex >= 0 &&
+    activeQuestionIndex + 1 < request.questions.length
+      ? activeQuestionIndex + 1
+      : null;
+  const questionContentEntries = buildQuestionContentEntries(request.questions);
+  const questionTabClassName = (active: boolean): string =>
+    cn("h-7 gap-1 border px-2 transition-none", active ? "border-transparent" : "border-input");
   const getTabId = (tabId: string): string => `${tabGroupId}-tab-${tabId}`;
   const getPanelId = (tabId: string): string => `${tabGroupId}-panel-${tabId}`;
+  const goToQuestionTab = (index: number): void => {
+    const tabId = String(index);
+    setActiveTabId(tabId);
+    document.getElementById(getTabId(tabId))?.focus();
+  };
   const getTabPanelProps = (tabId: string): HTMLAttributes<HTMLDivElement> | undefined => {
     if (!hasMultipleQuestions) {
       return undefined;
@@ -97,13 +110,13 @@ export function AgentSessionQuestionCard({
             className="h-auto flex-wrap bg-transparent p-0"
             aria-label="Questions"
           >
-            {questionRenderEntries.map(({ question, key }, index) => {
+            {questionContentEntries.map(({ question, contentKey }, index) => {
               const tabId = String(index);
               const isTabActive = activeTabId === tabId;
               const answered = isAgentQuestionAnswered(question, normalizedDraft[index]);
               return (
                 <SegmentedControlItem
-                  key={key}
+                  key={contentKey}
                   active={isTabActive}
                   role="tab"
                   id={getTabId(tabId)}
@@ -111,7 +124,7 @@ export function AgentSessionQuestionCard({
                   grow="hug"
                   size="xs"
                   inactiveClassName="bg-card text-foreground hover:bg-accent"
-                  className="h-7 gap-1 border border-input px-2"
+                  className={questionTabClassName(isTabActive)}
                   onClick={() => setActiveTabId(tabId)}
                 >
                   {answered ? (
@@ -143,7 +156,7 @@ export function AgentSessionQuestionCard({
               grow="hug"
               size="xs"
               inactiveClassName="bg-card text-foreground hover:bg-muted"
-              className="h-7 gap-1 border border-input px-2"
+              className={questionTabClassName(isSummaryTab)}
               onClick={() => setActiveTabId(QUESTION_SUMMARY_TAB_ID)}
             >
               <ListChecks className="size-3.5" />
@@ -161,7 +174,6 @@ export function AgentSessionQuestionCard({
           />
         ) : activeQuestion ? (
           <QuestionTab
-            requestId={request.requestId}
             question={activeQuestion}
             questionIndex={activeQuestionIndex}
             entry={activeEntry}
@@ -184,6 +196,7 @@ export function AgentSessionQuestionCard({
           isSubmitting={isSubmitting}
           isComplete={isComplete}
           onReset={resetDraft}
+          onNext={nextQuestionIndex === null ? undefined : () => goToQuestionTab(nextQuestionIndex)}
           onSubmit={() => {
             clearSubmitError();
             const answers = buildAnswers();

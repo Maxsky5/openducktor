@@ -175,33 +175,28 @@ describe("useQuestionDraft", () => {
     await harness.unmount();
   });
 
-  test("resets active tab, draft, and submit error when request changes", async () => {
-    const requestOne = buildRequest({
-      requestId: "request-1",
-      questions: [baseQuestion(), baseQuestion({ header: "Question 2" })],
+  test("keeps active tab, answers, and free text when the request is re-projected", async () => {
+    const request = buildRequest({
+      questions: [baseQuestion({ header: "Question 1" }), baseQuestion({ header: "Question 2" })],
     });
-    const requestTwo = buildRequest({
-      requestId: "request-2",
-      questions: [baseQuestion({ header: "Fresh question", options: [] })],
-    });
-
-    const harness = createHookHarness(requestOne);
+    const harness = createHookHarness(request);
     await harness.mount();
 
     await harness.run((state) => {
       state.selectOption(0, "Frontend");
-      state.setSubmitError("Submission failed");
+      state.toggleFreeText(1);
+      state.updateFreeText(1, "Custom answer");
     });
     expect(harness.getLatest().activeTabId).toBe("1");
-    expect(harness.getLatest().submitError).toBe("Submission failed");
 
-    await harness.update({ request: requestTwo });
+    const reProjected = structuredClone(request);
+    await harness.update({ request: reProjected });
 
     const latest = harness.getLatest();
-    expect(latest.activeTabId).toBe("0");
-    expect(latest.submitError).toBeNull();
-    expect(latest.answeredCount).toBe(0);
-    expect(latest.normalizedDraft[0]?.freeText).toBe("");
+    expect(latest.activeTabId).toBe("1");
+    expect(latest.answeredCount).toBe(2);
+    expect(latest.isComplete).toBe(true);
+    expect(latest.buildAnswers()).toEqual([["Frontend"], ["Custom answer"]]);
 
     await harness.unmount();
   });
