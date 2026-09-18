@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import { isAgentQuestionAnswered } from "./agent-session-question-draft";
-import { buildQuestionRenderEntries } from "./agent-session-question-keys";
+import { buildQuestionContentEntries } from "./agent-session-question-keys";
 import { QuestionSubmitFooter } from "./agent-session-question-submit-footer";
 import { QuestionSummaryTab } from "./agent-session-question-summary-tab";
 import { QuestionTab } from "./agent-session-question-tab";
@@ -59,7 +59,7 @@ export function AgentSessionQuestionCard({
     activeQuestionIndex + 1 < request.questions.length
       ? activeQuestionIndex + 1
       : null;
-  const questionRenderEntries = buildQuestionRenderEntries(request.questions);
+  const questionContentEntries = buildQuestionContentEntries(request.questions);
   const questionTabClassName = (active: boolean): string =>
     cn("h-7 gap-1 border px-2 transition-none", active ? "border-transparent" : "border-input");
   const getTabId = (tabId: string): string => `${tabGroupId}-tab-${tabId}`;
@@ -105,13 +105,13 @@ export function AgentSessionQuestionCard({
             className="h-auto flex-wrap bg-transparent p-0"
             aria-label="Questions"
           >
-            {questionRenderEntries.map(({ question, key }, index) => {
+            {questionContentEntries.map(({ question, contentKey }, index) => {
               const tabId = String(index);
               const isTabActive = activeTabId === tabId;
               const answered = isAgentQuestionAnswered(question, normalizedDraft[index]);
               return (
                 <SegmentedControlItem
-                  key={key}
+                  key={contentKey}
                   active={isTabActive}
                   role="tab"
                   id={getTabId(tabId)}

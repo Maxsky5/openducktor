@@ -13,6 +13,8 @@ import { buildQuestionDraftKey } from "./agent-session-question-keys";
 
 export const QUESTION_SUMMARY_TAB_ID = "__summary__";
 
+const FIRST_QUESTION_TAB_ID = "0";
+
 type QuestionDraftUiState = {
   activeTabId: string;
   draft: AgentQuestionDraftEntry[];
@@ -50,20 +52,20 @@ const EMPTY_DRAFT_ENTRY: AgentQuestionDraftEntry = {
   useFreeText: false,
 };
 
+const createInitialUiState = (request: AgentQuestionRequest): QuestionDraftUiState => ({
+  activeTabId: FIRST_QUESTION_TAB_ID,
+  draft: createAgentQuestionDraft(request),
+});
+
 export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestionDraftState => {
-  const [uiState, setUiState] = useState<QuestionDraftUiState>(() => ({
-    activeTabId: "0",
-    draft: createAgentQuestionDraft(request),
-  }));
+  const [uiState, setUiState] = useState<QuestionDraftUiState>(() => createInitialUiState(request));
   const [submitError, setSubmitErrorState] = useState<string | null>(null);
   const [draftKey, setDraftKey] = useState(() => buildQuestionDraftKey(request));
+  const requestDraftKey = buildQuestionDraftKey(request);
 
-  if (draftKey !== buildQuestionDraftKey(request)) {
-    setDraftKey(buildQuestionDraftKey(request));
-    setUiState({
-      activeTabId: "0",
-      draft: createAgentQuestionDraft(request),
-    });
+  if (draftKey !== requestDraftKey) {
+    setDraftKey(requestDraftKey);
+    setUiState(createInitialUiState(request));
     setSubmitErrorState(null);
   }
 
@@ -217,10 +219,7 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
 
   const resetDraft = useCallback(() => {
     clearSubmitError();
-    setUiState({
-      activeTabId: "0",
-      draft: createAgentQuestionDraft(request),
-    });
+    setUiState(createInitialUiState(request));
   }, [request, clearSubmitError]);
 
   const buildAnswers = useCallback(

@@ -2,11 +2,6 @@ import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 
 type AgentQuestion = AgentQuestionRequest["questions"][number];
 
-type AgentQuestionRenderEntry = {
-  question: AgentQuestion;
-  key: string;
-};
-
 type AgentQuestionContentEntry = {
   question: AgentQuestion;
   contentKey: string;
@@ -28,7 +23,7 @@ const buildQuestionBaseKey = (question: AgentQuestion): string => {
   ].join(":");
 };
 
-const buildQuestionContentEntries = (
+export const buildQuestionContentEntries = (
   questions: AgentQuestionRequest["questions"],
 ): AgentQuestionContentEntry[] => {
   const countsByBaseKey = new Map<string, number>();
@@ -44,14 +39,6 @@ const buildQuestionContentEntries = (
     };
   });
 };
-
-export const buildQuestionRenderEntries = (
-  questions: AgentQuestionRequest["questions"],
-): AgentQuestionRenderEntry[] =>
-  buildQuestionContentEntries(questions).map(({ question, contentKey }) => ({
-    question,
-    key: contentKey,
-  }));
 
 export const buildQuestionDraftKey = (request: AgentQuestionRequest): string => {
   const origin = request.source ? `subagent:${request.source.childExternalSessionId}` : "direct";

@@ -17,6 +17,14 @@ type QuestionTabProps = {
   panelProps?: HTMLAttributes<HTMLDivElement> | undefined;
 };
 
+const renderOptionIcon = (multiple: boolean, selected: boolean): ReactElement => {
+  const className = selected ? "size-3.5 text-foreground" : "size-3.5 text-muted-foreground";
+  if (multiple) {
+    return selected ? <CheckSquare className={className} /> : <Square className={className} />;
+  }
+  return selected ? <CheckCircle2 className={className} /> : <Circle className={className} />;
+};
+
 export const QuestionTab = ({
   question,
   questionIndex,
@@ -66,17 +74,7 @@ export const QuestionTab = ({
               >
                 <div className="flex items-start gap-1.5">
                   <span className="inline-flex size-4 shrink-0 items-center justify-center pt-0.5">
-                    {question.multiple ? (
-                      isSelected ? (
-                        <CheckSquare className="size-3.5 text-foreground" />
-                      ) : (
-                        <Square className="size-3.5 text-muted-foreground" />
-                      )
-                    ) : isSelected ? (
-                      <CheckCircle2 className="size-3.5 text-foreground" />
-                    ) : (
-                      <Circle className="size-3.5 text-muted-foreground" />
-                    )}
+                    {renderOptionIcon(Boolean(question.multiple), isSelected)}
                   </span>
                   <span className="min-w-0">
                     <span className="block text-[12px] font-medium leading-4">{option.label}</span>
