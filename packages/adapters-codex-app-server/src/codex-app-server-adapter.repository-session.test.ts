@@ -35,7 +35,7 @@ class ResumeFailingTransport extends RecordingTransport {
 
 const expectedThreadPolicy = {
   approvalPolicy: "on-request",
-  approvalsReviewer: "user",
+  approvalsReviewer: "auto_review",
   sandbox: "workspace-write",
 };
 

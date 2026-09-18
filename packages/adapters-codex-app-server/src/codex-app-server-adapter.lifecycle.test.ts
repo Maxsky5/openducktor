@@ -19,7 +19,7 @@ import { CodexAppServerAdapter } from "./index";
 
 const expectedThreadPolicy = {
   approvalPolicy: "on-request",
-  approvalsReviewer: "user",
+  approvalsReviewer: "auto_review",
   sandbox: "workspace-write",
 };
 const workflowThreadConfig = (role: AgentRole) => ({
@@ -28,7 +28,7 @@ const workflowThreadConfig = (role: AgentRole) => ({
 });
 const expectedTurnPolicy = (workingDirectory: string) => ({
   approvalPolicy: "on-request",
-  approvalsReviewer: "user",
+  approvalsReviewer: "auto_review",
   sandboxPolicy: codexSandboxPolicy(defaultCodexEffectivePolicy(), workingDirectory),
 });
 const codexPolicy = (
@@ -235,7 +235,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       workingDirectory: "/repo",
       sandboxMode: "workspace-write",
       approvalPolicy: "on-request",
-      promptReviewer: "user",
+      promptReviewer: "auto_review",
       networkAccess: false,
     });
     expect(logSessionPolicy).toHaveBeenNthCalledWith(2, {
@@ -245,7 +245,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       workingDirectory: "/repo",
       sandboxMode: "workspace-write",
       approvalPolicy: "on-request",
-      promptReviewer: "user",
+      promptReviewer: "auto_review",
       networkAccess: false,
     });
   });

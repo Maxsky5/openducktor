@@ -73,7 +73,7 @@ export const CODEX_APPROVALS_REVIEWER_VALUES = ["user", "auto_review"] as const;
 export const DEFAULT_CODEX_RUNTIME_POLICY = {
   sandboxMode: "workspace-write",
   approvalPolicy: "on-request",
-  approvalsReviewer: "user",
+  approvalsReviewer: "auto_review",
   commandNetworkAccess: false,
 } as const;
 
