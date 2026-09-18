@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { pendingInputIdentity } from "@/lib/pending-input-identity";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
   type AgentQuestionDraftEntry,
@@ -55,10 +56,10 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
     draft: createAgentQuestionDraft(request),
   }));
   const [submitError, setSubmitErrorState] = useState<string | null>(null);
-  const [draftRequestId, setDraftRequestId] = useState(request.requestId);
+  const [draftRequestId, setDraftRequestId] = useState(() => pendingInputIdentity(request));
 
-  if (draftRequestId !== request.requestId) {
-    setDraftRequestId(request.requestId);
+  if (draftRequestId !== pendingInputIdentity(request)) {
+    setDraftRequestId(pendingInputIdentity(request));
     setUiState({
       activeTabId: "0",
       draft: createAgentQuestionDraft(request),

@@ -180,23 +180,7 @@ describe("AgentSessionQuestionCard", () => {
         },
       ],
     });
-    const reProject = (): AgentQuestionRequest => ({
-      requestId: request.requestId,
-      questions: request.questions.map((question) => {
-        const projectedQuestion: AgentQuestionRequest["questions"][number] = {
-          header: question.header,
-          question: question.question,
-          options: question.options.map((option) => ({ ...option })),
-        };
-        if (question.multiple !== undefined) {
-          projectedQuestion.multiple = question.multiple;
-        }
-        if (question.custom !== undefined) {
-          projectedQuestion.custom = question.custom;
-        }
-        return projectedQuestion;
-      }),
-    });
+    const reProject = (): AgentQuestionRequest => structuredClone(request);
     const onSubmit = mock(async () => {});
     const harness = createCardHarness({ request, onSubmit });
     await harness.mount();

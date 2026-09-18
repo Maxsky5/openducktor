@@ -220,13 +220,7 @@ describe("useQuestionDraft", () => {
     });
     expect(harness.getLatest().activeTabId).toBe("1");
 
-    const reProjected: AgentQuestionRequest = {
-      requestId: request.requestId,
-      questions: request.questions.map((question) => ({
-        ...question,
-        options: question.options.map((option) => ({ ...option })),
-      })),
-    };
+    const reProjected = structuredClone(request);
     await harness.update({ request: reProjected });
 
     const latest = harness.getLatest();
