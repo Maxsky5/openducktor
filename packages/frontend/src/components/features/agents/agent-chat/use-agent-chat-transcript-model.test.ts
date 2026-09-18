@@ -413,33 +413,39 @@ describe("useAgentChatTranscriptModel", () => {
       externalSessionId: "session-active-update",
       messages: createSessionMessagesState("session-active-update", messages, 1),
     });
-    const harness = await mountHarness({
-      session,
-      showThinkingMessages: true,
-    });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
-      timeoutMs: 1_000,
-    });
-    const resolvedRows = harness.getLatest().transcriptState.rows;
+    const observedStates: HookResult[] = [];
+    const Probe = (props: HarnessProps) => {
+      observedStates.push(useAgentChatTranscriptModel(props));
+      return null;
+    };
+    const rendered = render(createElement(Probe, { session, showThinkingMessages: true }));
+    await flushTranscriptDerivation(
+      () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+      { timeoutMs: 1_000 },
+    );
+    const resolvedRows = observedStates.at(-1)?.transcriptState.rows;
 
-    await harness.update({
-      session: buildSession({
-        ...session,
-        messages: createSessionMessagesState(
-          "session-active-update",
-          [
-            buildMessage("user", "Changed first message", { id: "message-1" }),
-            ...messages.slice(1),
-          ],
-          2,
-        ),
+    const observationsBeforeUpdate = observedStates.length;
+    rendered.rerender(
+      createElement(Probe, {
+        session: buildSession({
+          ...session,
+          messages: createSessionMessagesState(
+            "session-active-update",
+            [
+              buildMessage("user", "Changed first message", { id: "message-1" }),
+              ...messages.slice(1),
+            ],
+            2,
+          ),
+        }),
+        showThinkingMessages: true,
       }),
-      showThinkingMessages: true,
-    });
+    );
 
-    expect(harness.getLatest().transcriptState.rows).toBe(resolvedRows);
-    expect(harness.getLatest().isTranscriptModelPending).toBe(true);
-    await harness.unmount();
+    expect(observedStates[observationsBeforeUpdate]?.transcriptState.rows).toBe(resolvedRows);
+    expect(observedStates[observationsBeforeUpdate]?.isTranscriptModelPending).toBe(true);
+    rendered.unmount();
   });
 
   test("falls back to full derivation for earlier change plus assistant tail edit", async () => {
@@ -458,11 +464,17 @@ describe("useAgentChatTranscriptModel", () => {
       externalSessionId: "session-earlier-change-tail-edit",
       messages: createSessionMessagesState("session-earlier-change-tail-edit", messages, 1),
     });
-    const harness = await mountHarness({ session, showThinkingMessages: true });
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
-      timeoutMs: 1_000,
-    });
-    const resolvedRows = harness.getLatest().transcriptState.rows;
+    const observedStates: HookResult[] = [];
+    const Probe = (props: HarnessProps) => {
+      observedStates.push(useAgentChatTranscriptModel(props));
+      return null;
+    };
+    const rendered = render(createElement(Probe, { session, showThinkingMessages: true }));
+    await flushTranscriptDerivation(
+      () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+      { timeoutMs: 1_000 },
+    );
+    const resolvedRows = observedStates.at(-1)?.transcriptState.rows;
 
     const nextMessages = messages.slice();
     nextMessages[10] = buildMessage("user", "Earlier changed", { id: "message-11" });
@@ -470,35 +482,39 @@ describe("useAgentChatTranscriptModel", () => {
       id: "assistant-tail",
       meta: { kind: "assistant", isFinal: false },
     });
-    await harness.update({
-      session: buildSession({
-        ...session,
-        messages: createSessionMessagesState("session-earlier-change-tail-edit", nextMessages, 2),
+    const observationsBeforeUpdate = observedStates.length;
+    rendered.rerender(
+      createElement(Probe, {
+        session: buildSession({
+          ...session,
+          messages: createSessionMessagesState("session-earlier-change-tail-edit", nextMessages, 2),
+        }),
+        showThinkingMessages: true,
       }),
-      showThinkingMessages: true,
-    });
+    );
 
-    expect(harness.getLatest().transcriptState.rows).toBe(resolvedRows);
-    expect(harness.getLatest().isTranscriptModelPending).toBe(true);
+    expect(observedStates[observationsBeforeUpdate]?.transcriptState.rows).toBe(resolvedRows);
+    expect(observedStates[observationsBeforeUpdate]?.isTranscriptModelPending).toBe(true);
 
-    await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
-      timeoutMs: 1_000,
-    });
+    await flushTranscriptDerivation(
+      () => Boolean(observedStates.at(-1)?.hasCurrentRowsForActiveSession),
+      { timeoutMs: 1_000 },
+    );
     expect(
-      harness
-        .getLatest()
-        .transcriptState.rows.some(
+      observedStates
+        .at(-1)
+        ?.transcriptState.rows.some(
           (row) => row.kind === "message" && row.message.content === "Tail edited",
         ),
     ).toBe(true);
     expect(
-      harness
-        .getLatest()
-        .transcriptState.rows.some(
+      observedStates
+        .at(-1)
+        ?.transcriptState.rows.some(
           (row) => row.kind === "message" && row.message.content === "Earlier changed",
         ),
     ).toBe(true);
-    await harness.unmount();
+    rendered.unmount();
   });
 
   test("reuses cached rows when switching back to an equivalent SessionMessagesState", async () => {
