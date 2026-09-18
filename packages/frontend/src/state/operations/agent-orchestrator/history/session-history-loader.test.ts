@@ -20,6 +20,7 @@ import { createSessionMessagesState } from "../support/messages";
 import { createTaskCardFixture } from "../test-utils";
 import {
   createLoadAgentSessionHistory,
+  createRevalidateAgentSessionHistory,
   loadSelectedSessionBaselineHistoryIntoStore,
   loadSessionHistoryIntoStore,
   reloadSessionHistoryIntoStore,
@@ -627,6 +628,70 @@ describe("session history loader", () => {
       "Retained transcript",
       "Produced while inactive",
     ]);
+  });
+
+  test("does not start a second retained revalidation while one is in flight", async () => {
+    const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("external-1", [
+        {
+          id: "retained-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:00.000Z",
+          content: "Retained transcript",
+        },
+      ]),
+    });
+    const started = Promise.withResolvers<void>();
+    const loadSessionHistory = mock(async () => {
+      started.resolve();
+      return historyPromise.promise;
+    });
+    const revalidateAgentSessionHistory = createRevalidateAgentSessionHistory({
+      workspaceRepoPath: "/repo",
+      adapter: { loadSessionHistory },
+      repoEpochRef: { current: 0 },
+      currentWorkspaceRepoPathRef: { current: "/repo" },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      loadSystemPromptContext: async () => undefined,
+    });
+
+    const firstLoad = revalidateAgentSessionHistory(sessionTarget);
+    await started.promise;
+    const skippedLoad = await revalidateAgentSessionHistory(sessionTarget);
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(skippedLoad?.historyLoadState).toBe("loaded");
+
+    historyPromise.resolve([
+      {
+        messageId: "retained-1",
+        role: "assistant",
+        timestamp: "2026-06-12T08:00:00.000Z",
+        text: "Retained transcript",
+        parts: [],
+      },
+      {
+        messageId: "missed-1",
+        role: "assistant",
+        timestamp: "2026-06-12T08:00:02.000Z",
+        text: "Produced while inactive",
+        parts: [],
+      },
+    ]);
+    await firstLoad;
+
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+      "Produced while inactive",
+    ]);
+
+    await revalidateAgentSessionHistory(sessionTarget);
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(2);
   });
 
   test("keeps the retained transcript and records the failure when a revalidation fails", async () => {

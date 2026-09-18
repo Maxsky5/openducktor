@@ -2,6 +2,7 @@ import type { SessionHistoryFailure } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
 import type { MutableRefObject } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
@@ -261,9 +262,12 @@ const createLoadSessionHistoryWithPolicy = ({
   loadSystemPromptContext,
   loadSettingsSnapshot,
   policy,
+  dedupeConcurrentLoads = false,
 }: CreateLoadAgentSessionHistoryArgs & {
   policy: SessionHistoryLoadPolicy;
+  dedupeConcurrentLoads?: boolean;
 }): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) => {
+  const inFlightSessionKeys = new Set<string>();
   return async (sessionIdentity: AgentSessionIdentity): Promise<AgentSessionState | null> => {
     const session = readSessionSnapshot(sessionIdentity);
     if (!session) {
@@ -292,7 +296,20 @@ const createLoadSessionHistoryWithPolicy = ({
     if (loadSettingsSnapshot) {
       input.loadSettingsSnapshot = loadSettingsSnapshot;
     }
-    return loadSessionHistoryIntoStoreWithPolicy(input);
+    if (!dedupeConcurrentLoads) {
+      return loadSessionHistoryIntoStoreWithPolicy(input);
+    }
+
+    const sessionKey = agentSessionIdentityKey(sessionIdentity);
+    if (inFlightSessionKeys.has(sessionKey)) {
+      return readSessionSnapshot(sessionIdentity);
+    }
+    inFlightSessionKeys.add(sessionKey);
+    try {
+      return await loadSessionHistoryIntoStoreWithPolicy(input);
+    } finally {
+      inFlightSessionKeys.delete(sessionKey);
+    }
   };
 };
 
@@ -326,4 +343,5 @@ export const createRevalidateAgentSessionHistory = (
   createLoadSessionHistoryWithPolicy({
     ...args,
     policy: retainedSessionRevalidationHistoryLoadPolicy,
+    dedupeConcurrentLoads: true,
   });

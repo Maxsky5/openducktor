@@ -966,7 +966,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       );
 
       expect(revalidatedSession?.historyLoadState).toBe("loaded");
-      expect(historyCalls).toBeGreaterThanOrEqual(2);
+      expect(historyCalls).toBe(2);
     } finally {
       await harness.unmount();
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
