@@ -47,18 +47,20 @@ const sessionRecord = (id: string): WorkspaceSession => ({
   archivedAt: null,
 });
 
+const worktreeRecord = (id: string): WorkspaceSession => ({
+  ...sessionRecord(id),
+  executionTarget: {
+    kind: "local_worktree",
+    workingDirectory: `/worktrees/${id.toLowerCase()}`,
+    branchName: `feature/${id.toLowerCase()}`,
+    worktreeState: "present",
+  },
+});
+
 test.each([true, false])(
   "worktree archive opens a modal on the first click and sends removal=%s only after confirmation",
   async (removeWorktree) => {
-    const worktree: WorkspaceSession = {
-      ...sessionRecord("Second"),
-      executionTarget: {
-        kind: "local_worktree",
-        workingDirectory: "/worktrees/second",
-        branchName: "feature/second",
-        worktreeState: "present",
-      },
-    };
+    const worktree = worktreeRecord("Second");
     const requests: unknown[] = [];
     configureShellBridge(
       createShellBridgeFixture({
@@ -811,15 +813,7 @@ test("archive targets its tab, restore preserves selection, and the final archiv
 });
 
 test("a slow worktree archive keeps its loader on the tab while the dialog is pending and removes the tab on success", async () => {
-  const worktree: WorkspaceSession = {
-    ...sessionRecord("Second"),
-    executionTarget: {
-      kind: "local_worktree",
-      workingDirectory: "/worktrees/second",
-      branchName: "feature/second",
-      worktreeState: "present",
-    },
-  };
+  const worktree = worktreeRecord("Second");
   const requests: WorkspaceSessionArchiveInput[] = [];
   let complete!: (record: WorkspaceSession) => void;
   configureShellBridge(

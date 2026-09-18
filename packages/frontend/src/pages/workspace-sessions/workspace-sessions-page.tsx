@@ -80,6 +80,12 @@ function WorkspaceSessionTab(props: WorkspaceSessionTabProps): ReactElement {
   );
 }
 
+const archiveButtonLabel = (title: string, confirming: boolean, archiving: boolean): string => {
+  if (archiving) return `Archiving ${title}`;
+  if (confirming) return `Confirm stop and archive ${title}`;
+  return `Archive ${title}`;
+};
+
 function WorkspaceSessionTabView({
   record,
   selected,
@@ -103,9 +109,7 @@ function WorkspaceSessionTabView({
   const statusLabel = statusAvailable ? (activity ?? "idle") : "Status unavailable";
   const running = isAgentSessionActivityActive(activity);
   const title = workspaceSessionTitle(record);
-  let archiveLabel = `Archive ${title}`;
-  if (confirming) archiveLabel = `Confirm stop and archive ${title}`;
-  if (archiving) archiveLabel = `Archiving ${title}`;
+  const archiveLabel = archiveButtonLabel(title, confirming, archiving);
   return (
     <div
       {...shellProps}
@@ -141,8 +145,7 @@ function WorkspaceSessionTabView({
         size="icon"
         className={cn(
           "relative mr-1 size-6 shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100 focus-visible:opacity-100 data-[active=true]:opacity-100",
-          confirming && "text-foreground opacity-100",
-          archiving && "text-foreground opacity-100",
+          (confirming || archiving) && "text-foreground opacity-100",
         )}
         data-active={selected}
         aria-label={archiveLabel}
@@ -308,7 +311,6 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
   );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<WorkspaceSession | null>(null);
-  const [archivingId, setArchivingId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const mounted = useMountedRef();
   const selected = useWorkspaceSessionSelection({
@@ -327,22 +329,18 @@ function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement 
       updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, record);
       if (!mounted.current) return;
       setArchiveTarget(null);
-      setArchivingId(null);
       if (selectedId === record.id)
         updateNavigation({
           sessionId: orderedSessions.find((entry) => entry.id !== record.id)?.id ?? null,
         });
     },
-    onError: () => {
-      setArchivingId(null);
-    },
     onSettled: () => {
       void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
     },
   });
+  const archivingId = archive.isPending ? (archive.variables?.sessionId ?? null) : null;
   const beginArchive = (sessionId: string, removeWorktree: boolean) => {
     archive.reset();
-    setArchivingId(sessionId);
     archive.mutate({ sessionId, confirmStop: true, removeWorktree });
   };
   const handleTabArchive = (target: WorkspaceSession) => {
