@@ -39,7 +39,7 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 
 ## Parallel runs
 
-- `packages/frontend` and `packages/host` run with `bun test --parallel --no-isolate`.
+- `packages/frontend` runs with `bun test --parallel --no-isolate` and `packages/host` runs with `bun test --parallel`.
 - Other workspaces run serially.
 - The preload gives each worker its own temp directory and config directory.
 - The preload removes the document theme class after each test file.
