@@ -23,6 +23,7 @@ import {
   loadSelectedSessionBaselineHistoryIntoStore,
   loadSessionHistoryIntoStore,
   reloadSessionHistoryIntoStore,
+  revalidateSessionHistoryIntoStore,
 } from "./session-history-loader";
 import { createWorkflowSessionHistoryPromptPolicy } from "./workflow-session-history-policy";
 
@@ -570,6 +571,114 @@ describe("session history loader", () => {
     expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
       "Last known transcript",
     ]);
+  });
+
+  test("revalidates a retained transcript without hiding it behind a loading state", async () => {
+    const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("external-1", [
+        {
+          id: "retained-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:00.000Z",
+          content: "Retained transcript",
+        },
+      ]),
+    });
+
+    const loadPromise = revalidateSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory: async () => historyPromise.promise },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+    ]);
+
+    historyPromise.resolve([
+      {
+        messageId: "retained-1",
+        role: "assistant",
+        timestamp: "2026-06-12T08:00:00.000Z",
+        text: "Retained transcript",
+        parts: [],
+      },
+      {
+        messageId: "missed-1",
+        role: "assistant",
+        timestamp: "2026-06-12T08:00:02.000Z",
+        text: "Produced while inactive",
+        parts: [],
+      },
+    ]);
+
+    await loadPromise;
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.historyLoadFailure).toBeNull();
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+      "Produced while inactive",
+    ]);
+  });
+
+  test("keeps the retained transcript and records the failure when a revalidation fails", async () => {
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("external-1", [
+        {
+          id: "retained-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:00.000Z",
+          content: "Retained transcript",
+        },
+      ]),
+    });
+
+    await revalidateSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          throw new Error("history unavailable");
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.historyLoadFailure).toMatchObject({ code: "request_failed" });
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+    ]);
+  });
+
+  test("does not revalidate a retained session before its history loaded", async () => {
+    const loadSessionHistory = mock(async () => []);
+    const harness = createHistoryLoadHarness();
+
+    const session = await revalidateSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(session?.historyLoadState).toBe("not_requested");
+    expect(harness.session.historyLoadState).toBe("not_requested");
   });
 
   test("loads transcript history without owning live input state", async () => {

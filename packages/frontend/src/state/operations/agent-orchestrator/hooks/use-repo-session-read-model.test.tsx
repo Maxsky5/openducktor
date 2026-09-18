@@ -163,6 +163,7 @@ const createState = (
     close: mock(() => undefined),
   };
   const recoverTranscriptGap = mock(async (_message: string) => undefined);
+  const revalidateRetainedSessionHistory = mock(async () => undefined);
   const props: Parameters<typeof useRepoSessionReadModel>[0] = {
     workspaceRepoPath: "/repo",
     taskIds: ["task-1"],
@@ -173,6 +174,7 @@ const createState = (
     liveSessionPort,
     transcriptEvents,
     recoverTranscriptGap,
+    revalidateRetainedSessionHistory,
     queryClient,
     sessionReadPort,
   };
@@ -200,6 +202,7 @@ const createState = (
     unsubscribe,
     agentSessionLiveReplyApproval,
     recoverTranscriptGap,
+    revalidateRetainedSessionHistory,
     transcriptEvents,
     emit: (payload: AgentSessionLiveEnvelope) => {
       if (!listener) {
@@ -287,6 +290,27 @@ describe("useRepoSessionReadModel", () => {
       }
     },
   );
+  test("revalidates retained session history once per live observation", async () => {
+    const state = createState((emit) => {
+      emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+    });
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.revalidateRetainedSessionHistory).toHaveBeenCalledTimes(1);
+
+      await state.harness.run(() => {
+        state.emit({ type: "snapshot", repoPath: "/repo", sessions: [snapshot()] });
+      });
+
+      expect(state.revalidateRetainedSessionHistory).toHaveBeenCalledTimes(1);
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
   test("commits activity and child input before the transcript consumer runs", async () => {
     const root = snapshot();
     const child = snapshot({

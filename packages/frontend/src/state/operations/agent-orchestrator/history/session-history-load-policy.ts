@@ -10,7 +10,7 @@ type SessionHistoryLoadPolicySession = Pick<
 >;
 
 export type SessionHistoryLoadPolicy = {
-  canClaimLoad(session: SessionHistoryLoadPolicySession): boolean;
+  claimLoad(session: AgentSessionState): AgentSessionState | null;
   propagateFailure: boolean;
   abandonLoad(session: AgentSessionState): AgentSessionState;
   failLoad(session: AgentSessionState, failure: SessionHistoryFailure): AgentSessionState;
@@ -20,6 +20,12 @@ export type SessionHistoryLoadPolicy = {
     messagesAtReadStart?: AgentSessionState["messages"],
   ): AgentSessionState;
 };
+
+const markSessionHistoryLoading = (session: AgentSessionState): AgentSessionState => ({
+  ...session,
+  historyLoadState: "loading",
+  historyLoadFailure: null,
+});
 
 const abandonBaselineLoad = (session: AgentSessionState): AgentSessionState =>
   session.historyLoadState === "loading"
@@ -54,8 +60,11 @@ export const shouldRequestSelectedSessionBaselineHistory = (
 ): boolean => session.historyLoadState === "not_requested";
 
 export const requestedSessionHistoryLoadPolicy: SessionHistoryLoadPolicy = {
-  canClaimLoad: (session) =>
-    !hasLoadedSessionHistory(session) || session.historyLoadFailure != null,
+  claimLoad: (session) =>
+    session.historyLoadState === "loading" ||
+    (hasLoadedSessionHistory(session) && session.historyLoadFailure == null)
+      ? null
+      : markSessionHistoryLoading(session),
   propagateFailure: false,
   abandonLoad: abandonBaselineLoad,
   failLoad: failBaselineLoad,
@@ -63,7 +72,10 @@ export const requestedSessionHistoryLoadPolicy: SessionHistoryLoadPolicy = {
 };
 
 export const selectedSessionBaselineHistoryLoadPolicy: SessionHistoryLoadPolicy = {
-  canClaimLoad: shouldRequestSelectedSessionBaselineHistory,
+  claimLoad: (session) =>
+    shouldRequestSelectedSessionBaselineHistory(session)
+      ? markSessionHistoryLoading(session)
+      : null,
   propagateFailure: false,
   abandonLoad: abandonBaselineLoad,
   failLoad: failBaselineLoad,
@@ -71,9 +83,19 @@ export const selectedSessionBaselineHistoryLoadPolicy: SessionHistoryLoadPolicy 
 };
 
 export const transcriptGapRecoveryHistoryLoadPolicy: SessionHistoryLoadPolicy = {
-  canClaimLoad: hasLoadedSessionHistory,
+  claimLoad: (session) =>
+    hasLoadedSessionHistory(session) ? markSessionHistoryLoading(session) : null,
   propagateFailure: true,
   abandonLoad: restoreLoadedHistoryState,
+  failLoad: markLoadedHistoryFailed,
+  applyLoadedHistory: applyLoadedSessionHistory,
+};
+
+export const retainedSessionRevalidationHistoryLoadPolicy: SessionHistoryLoadPolicy = {
+  claimLoad: (session) =>
+    hasLoadedSessionHistory(session) ? { ...session, historyLoadFailure: null } : null,
+  propagateFailure: false,
+  abandonLoad: (session) => session,
   failLoad: markLoadedHistoryFailed,
   applyLoadedHistory: applyLoadedSessionHistory,
 };

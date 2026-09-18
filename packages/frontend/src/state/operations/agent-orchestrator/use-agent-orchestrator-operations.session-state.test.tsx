@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
@@ -857,6 +858,118 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
       host.agentRuntimeLoadSessionHistory = originalCodexLoadSessionHistory;
+    }
+  });
+
+  test("revalidates a retained transcript when the workspace returns", async () => {
+    const histories: AgentSessionHistoryMessage[][] = [
+      [
+        {
+          messageId: "history-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:01.000Z",
+          text: "Retained transcript",
+          parts: [],
+        },
+      ],
+      [
+        {
+          messageId: "history-1",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:01.000Z",
+          text: "Retained transcript",
+          parts: [],
+        },
+        {
+          messageId: "history-2",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "Produced while inactive",
+          parts: [],
+        },
+      ],
+    ];
+    let historyCalls = 0;
+    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => {
+      const history = histories[Math.min(historyCalls, histories.length - 1)] ?? [];
+      historyCalls += 1;
+      return history;
+    };
+
+    const liveStream = createLiveSessionStreamFixture([createAgentSessionLiveSnapshotFixture()]);
+
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo-a",
+      tasks: [taskFixtureWithPersistedBuildSession],
+      refreshTaskData: async () => {},
+      dependencies: createTestDependencies(
+        {
+          agentSessionsList: async () => [persistedSessionFixture],
+          agentSessionsListForTasks: async (repoPath) =>
+            repoPath === "/tmp/repo-a"
+              ? [{ taskId: "task-1", agentSessions: [persistedSessionFixture] }]
+              : [{ taskId: "task-1", agentSessions: [] }],
+        },
+        {},
+        liveStream.portOverrides,
+      ),
+    });
+
+    try {
+      await harness.mount();
+      const loadedState = await harness.waitFor((state) =>
+        listHarnessSessions(state).some((entry) => entry.externalSessionId === "external-1"),
+      );
+      const session = listHarnessSessions(loadedState).find(
+        (entry) => entry.externalSessionId === "external-1",
+      );
+      if (!session) {
+        throw new Error("Expected loaded session");
+      }
+
+      await harness.run(async () => {
+        await harness.getLatest().operations.loadAgentSessionHistory({
+          externalSessionId: session.externalSessionId,
+          runtimeKind: session.runtimeKind,
+          workingDirectory: session.workingDirectory,
+        });
+      });
+      await harness.waitFor((state) =>
+        listHarnessSessions(state).some(
+          (entry) =>
+            entry.externalSessionId === "external-1" &&
+            hasLoadedSessionHistory(entry) &&
+            sessionMessagesToArray(entry).some(
+              (message) => message.content === "Retained transcript",
+            ),
+        ),
+      );
+
+      await harness.updateArgs({ activeRepo: "/tmp/repo-b", tasks: [taskFixture] });
+      await harness.updateArgs({
+        activeRepo: "/tmp/repo-a",
+        tasks: [taskFixtureWithPersistedBuildSession],
+      });
+
+      const revalidated = await harness.waitFor((state) =>
+        listHarnessSessions(state).some(
+          (entry) =>
+            entry.externalSessionId === "external-1" &&
+            sessionMessagesToArray(entry).some(
+              (message) => message.content === "Produced while inactive",
+            ),
+        ),
+      );
+      const revalidatedSession = listHarnessSessions(revalidated).find(
+        (entry) => entry.externalSessionId === "external-1",
+      );
+
+      expect(revalidatedSession?.historyLoadState).toBe("loaded");
+      expect(historyCalls).toBeGreaterThanOrEqual(2);
+    } finally {
+      await harness.unmount();
+      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     }
   });
 

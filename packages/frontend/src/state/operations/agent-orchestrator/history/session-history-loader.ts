@@ -10,6 +10,7 @@ import { resolveRuntimeSessionContextRef } from "../support/session-runtime-poli
 import { requireBoundSessionAssociation } from "../support/session-runtime-ref";
 import {
   requestedSessionHistoryLoadPolicy,
+  retainedSessionRevalidationHistoryLoadPolicy,
   type SessionHistoryLoadPolicy,
   selectedSessionBaselineHistoryLoadPolicy,
   transcriptGapRecoveryHistoryLoadPolicy,
@@ -36,7 +37,7 @@ type SessionHistoryLoadClaim = {
 
 const SESSION_HISTORY_LOAD_LIMIT = 600;
 
-const markSessionHistoryLoading = ({
+const claimSessionHistoryLoad = ({
   identity,
   policy,
   readSessionSnapshot,
@@ -52,26 +53,17 @@ const markSessionHistoryLoading = ({
     return { session: null, claimedLoad: false };
   }
 
-  if (!policy.canClaimLoad(currentSession)) {
+  let claimedLoad = false;
+  const claimedSession = updateSession(identity, (current) => {
+    const claimed = policy.claimLoad(current);
+    claimedLoad = claimed !== null;
+    return claimed ?? current;
+  });
+  if (!claimedLoad) {
     return { session: currentSession, claimedLoad: false };
   }
 
-  let claimedLoad = false;
-  const loadingSession = updateSession(identity, (current) => {
-    if (!policy.canClaimLoad(current)) {
-      claimedLoad = false;
-      return current;
-    }
-
-    if (current.historyLoadState === "loading") {
-      return current;
-    }
-
-    claimedLoad = true;
-    return { ...current, historyLoadState: "loading", historyLoadFailure: null };
-  });
-
-  return { session: loadingSession, claimedLoad: loadingSession !== null && claimedLoad };
+  return { session: claimedSession ?? readSessionSnapshot(identity), claimedLoad: true };
 };
 
 const resetLoadingSessionHistory = (
@@ -142,7 +134,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     requireBoundSessionAssociation(currentSession, "load history");
   }
 
-  const loadClaim = markSessionHistoryLoading({
+  const loadClaim = claimSessionHistoryLoad({
     identity,
     policy,
     readSessionSnapshot,
@@ -251,6 +243,14 @@ export const reloadSessionHistoryIntoStore = async (
     policy: transcriptGapRecoveryHistoryLoadPolicy,
   });
 
+export const revalidateSessionHistoryIntoStore = async (
+  args: LoadSessionHistoryIntoStoreArgs,
+): Promise<AgentSessionState | null> =>
+  loadSessionHistoryIntoStoreWithPolicy({
+    ...args,
+    policy: retainedSessionRevalidationHistoryLoadPolicy,
+  });
+
 const createLoadSessionHistoryWithPolicy = ({
   workspaceRepoPath,
   adapter,
@@ -318,4 +318,12 @@ export const createReloadAgentSessionHistory = (
   createLoadSessionHistoryWithPolicy({
     ...args,
     policy: transcriptGapRecoveryHistoryLoadPolicy,
+  });
+
+export const createRevalidateAgentSessionHistory = (
+  args: CreateLoadAgentSessionHistoryArgs,
+): ((sessionIdentity: AgentSessionIdentity) => Promise<AgentSessionState | null>) =>
+  createLoadSessionHistoryWithPolicy({
+    ...args,
+    policy: retainedSessionRevalidationHistoryLoadPolicy,
   });
