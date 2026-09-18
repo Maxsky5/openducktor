@@ -5,7 +5,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type WorkspaceSession,
 } from "@openducktor/contracts";
-import { act, useState } from "react";
+import { act, type ReactElement, useState } from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { useIsFetching } from "@tanstack/react-query";
 import * as messageContent from "@/components/features/agents/agent-chat/agent-chat-message-card-content";
@@ -31,9 +31,11 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type {
+  ActiveWorkspace,
   AgentOperationsContextValue,
   AgentSessionReadModelStateContextValue,
 } from "@/types/state-slices";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
 import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
@@ -46,6 +48,149 @@ function QueryStatus() {
     </output>
   );
 }
+
+type WorkspaceChatScenario = "retry" | "streaming" | "draft" | "record-failure" | "switch-return";
+
+type WorkspaceChatCounters = {
+  runtimeReads: number;
+  baselineLoads: number;
+  revalidations: number;
+};
+
+const createWorkspaceChatHarness = ({
+  workspace,
+  entry,
+  session,
+  store,
+  scenario,
+  counters,
+}: {
+  workspace: ActiveWorkspace;
+  entry: WorkspaceSession;
+  session: AgentSessionState;
+  store: ReturnType<typeof createAgentSessionsStore>;
+  scenario: WorkspaceChatScenario;
+  counters: WorkspaceChatCounters;
+}) => {
+  const operations: AgentOperationsContextValue = {
+    describeGeneratedImages: async () => {
+      throw new Error("Unexpected image metadata read");
+    },
+    beginGeneratedImageBatch: async () => {
+      throw new Error("Unexpected image batch");
+    },
+    releaseGeneratedImageBatch: async () => {
+      throw new Error("Unexpected image batch release");
+    },
+    readGeneratedImage: async () => {
+      throw new Error("Unexpected image read");
+    },
+    readSessionTodos: async () => {
+      counters.runtimeReads += 1;
+      return [];
+    },
+    readSessionHistory: async () => [],
+    loadAgentSessionHistory: async () => {
+      counters.runtimeReads += 1;
+      return session;
+    },
+    loadAgentSessionContext: async () => {
+      counters.runtimeReads += 1;
+    },
+    startAgentSession: async () => {
+      throw new Error("Unexpected session startup");
+    },
+    sendAgentMessage: async () => {
+      throw new Error("Unexpected message send");
+    },
+    stopAgentSession: async () => {},
+    continueInterruptedTurn: async () => undefined,
+    updateAgentSessionModel: () => {},
+    replyAgentApproval: async () => {},
+    answerAgentQuestion: async () => {},
+  };
+  const definitions: RuntimeDefinitionsContextValue = {
+    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+    isLoadingRuntimeSettings: false,
+    runtimeSettingsError: null,
+    hasRuntimeSettingsSnapshot: true,
+    refreshRuntimeSettings: async () => {},
+    loadRepoRuntimeCatalog: async () => ({ models: [], defaultModelsByProvider: {} }),
+    loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
+    loadRepoRuntimeSkills: async () => ({ skills: [] }),
+    loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
+    loadRepoRuntimeFileSearch: async () => [],
+  };
+  const health = { opencode: createRepoRuntimeHealthFixture() };
+  let completeObservation = (): void => {};
+
+  function Harness(): ReactElement {
+    const [phase, setPhase] = useState<"fault" | "loading" | "ready">(
+      scenario === "retry" || scenario === "record-failure" ? "fault" : "ready",
+    );
+    completeObservation = () => setPhase("ready");
+    const readModel: AgentSessionReadModelStateContextValue = {
+      workspaceSessionRecordsError:
+        scenario === "record-failure" && phase !== "ready" ? "Chat records failed" : null,
+      sessionReadModelLoadState: {
+        kind: phase === "loading" ? "loading" : "ready",
+        workspaceRepoPath: "/repo",
+      },
+      getSessionFault: () =>
+        phase === "fault" && scenario === "retry"
+          ? { source: "workspace-target", message: "Runtime directory mismatch" }
+          : null,
+      reloadSessionReadModel: () => setPhase("loading"),
+    };
+    return (
+      <QueryProvider useIsolatedClient>
+        <QueryStatus />
+        <RuntimeDefinitionsContext value={definitions}>
+          <RepoRuntimeHealthContext
+            value={{
+              runtimeHealthByRuntime: health,
+              isLoadingRepoRuntimeHealth: false,
+              refreshRepoRuntimeHealth: async () => health,
+            }}
+          >
+            <AgentOperationsContext value={operations}>
+              <AgentSessionHistoryLoadContext
+                value={{
+                  loadSelectedSessionBaselineHistory: async () => {
+                    counters.baselineLoads += 1;
+                    return session;
+                  },
+                  revalidateAgentSessionHistory: async () => {
+                    counters.revalidations += 1;
+                    return session;
+                  },
+                }}
+              >
+                <AgentSessionReadModelStateContext value={readModel}>
+                  <AgentSessionsContext value={store}>
+                    <WorkspaceSessionChat
+                      workspace={workspace}
+                      record={entry}
+                      chatSettings={DEFAULT_CHAT_SETTINGS}
+                      reusablePrompts={[]}
+                    />
+                  </AgentSessionsContext>
+                </AgentSessionReadModelStateContext>
+              </AgentSessionHistoryLoadContext>
+            </AgentOperationsContext>
+          </RepoRuntimeHealthContext>
+        </RuntimeDefinitionsContext>
+      </QueryProvider>
+    );
+  }
+
+  return { Harness, completeObservation: () => completeObservation() };
+};
 
 test.each(["retry", "streaming", "draft", "record-failure"] as const)(
   "workspace chat %s preserves readiness and completed turns",
@@ -83,119 +228,19 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
     });
     const store = createAgentSessionsStore("/repo");
     if (scenario !== "draft") store.replaceSession(session);
-    let runtimeReads = 0;
-    const operations: AgentOperationsContextValue = {
-      describeGeneratedImages: async () => {
-        throw new Error("Unexpected image metadata read");
-      },
-      beginGeneratedImageBatch: async () => {
-        throw new Error("Unexpected image batch");
-      },
-      releaseGeneratedImageBatch: async () => {
-        throw new Error("Unexpected image batch release");
-      },
-      readGeneratedImage: async () => {
-        throw new Error("Unexpected image read");
-      },
-      readSessionTodos: async () => {
-        runtimeReads += 1;
-        return [];
-      },
-      readSessionHistory: async () => [],
-      loadAgentSessionHistory: async () => {
-        runtimeReads += 1;
-        return session;
-      },
-      loadAgentSessionContext: async () => {
-        runtimeReads += 1;
-      },
-      startAgentSession: async () => {
-        throw new Error("Unexpected session startup");
-      },
-      sendAgentMessage: async () => {
-        throw new Error("Unexpected message send");
-      },
-      stopAgentSession: async () => {},
-      continueInterruptedTurn: async () => undefined,
-      updateAgentSessionModel: () => {},
-      replyAgentApproval: async () => {},
-      answerAgentQuestion: async () => {},
+    const counters: WorkspaceChatCounters = {
+      runtimeReads: 0,
+      baselineLoads: 0,
+      revalidations: 0,
     };
-    const definitions: RuntimeDefinitionsContextValue = {
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-      isLoadingRuntimeDefinitions: false,
-      runtimeDefinitionsError: null,
-      refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-      isLoadingRuntimeSettings: false,
-      runtimeSettingsError: null,
-      hasRuntimeSettingsSnapshot: true,
-      refreshRuntimeSettings: async () => {},
-      loadRepoRuntimeCatalog: async () => ({ models: [], defaultModelsByProvider: {} }),
-      loadRepoRuntimeSlashCommands: async () => ({ commands: [] }),
-      loadRepoRuntimeSkills: async () => ({ skills: [] }),
-      loadRepoRuntimeSubagents: async () => ({ subagents: [] }),
-      loadRepoRuntimeFileSearch: async () => [],
-    };
-    const health = { opencode: createRepoRuntimeHealthFixture() };
-    let completeObservation!: () => void;
-    function Harness() {
-      const [phase, setPhase] = useState<"fault" | "loading" | "ready">(
-        scenario === "retry" || scenario === "record-failure" ? "fault" : "ready",
-      );
-      completeObservation = () => setPhase("ready");
-      const readModel: AgentSessionReadModelStateContextValue = {
-        workspaceSessionRecordsError:
-          scenario === "record-failure" && phase !== "ready" ? "Chat records failed" : null,
-        sessionReadModelLoadState: {
-          kind: phase === "loading" ? "loading" : "ready",
-          workspaceRepoPath: "/repo",
-        },
-        getSessionFault: () =>
-          phase === "fault" && scenario === "retry"
-            ? { source: "workspace-target", message: "Runtime directory mismatch" }
-            : null,
-        reloadSessionReadModel: () => setPhase("loading"),
-      };
-      return (
-        <QueryProvider useIsolatedClient>
-          <QueryStatus />
-          <RuntimeDefinitionsContext value={definitions}>
-            <RepoRuntimeHealthContext
-              value={{
-                runtimeHealthByRuntime: health,
-                isLoadingRepoRuntimeHealth: false,
-                refreshRepoRuntimeHealth: async () => health,
-              }}
-            >
-              <AgentOperationsContext value={operations}>
-                <AgentSessionHistoryLoadContext
-                  value={{
-                    loadSelectedSessionBaselineHistory: async () => {
-                      runtimeReads += 1;
-                      return session;
-                    },
-                    revalidateAgentSessionHistory: async () => session,
-                  }}
-                >
-                  <AgentSessionReadModelStateContext value={readModel}>
-                    <AgentSessionsContext value={store}>
-                      <WorkspaceSessionChat
-                        workspace={workspace}
-                        record={entry}
-                        chatSettings={DEFAULT_CHAT_SETTINGS}
-                        reusablePrompts={[]}
-                      />
-                    </AgentSessionsContext>
-                  </AgentSessionReadModelStateContext>
-                </AgentSessionHistoryLoadContext>
-              </AgentOperationsContext>
-            </RepoRuntimeHealthContext>
-          </RuntimeDefinitionsContext>
-        </QueryProvider>
-      );
-    }
+    const { Harness, completeObservation } = createWorkspaceChatHarness({
+      workspace,
+      entry,
+      session,
+      store,
+      scenario,
+      counters,
+    });
     configureShellBridge(
       createShellBridgeFixture({
         client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
@@ -229,7 +274,7 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
           "true",
         );
         expect(view.queryByText("Loading session")).toBeNull();
-        expect(runtimeReads).toBe(0);
+        expect(counters.runtimeReads).toBe(0);
         return;
       }
       if (scenario === "streaming") {
@@ -291,3 +336,71 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
   },
   5000,
 );
+
+test("workspace chat keeps a retained transcript when the workspace switches away and back", async () => {
+  const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };
+  const entry: WorkspaceSession = {
+    id: "session-1",
+    runtimeKind: "opencode",
+    externalSessionId: "native-1",
+    executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
+    roleSnapshot: null,
+    selectedModel: null,
+    generatedTitle: null,
+    manualTitle: null,
+    createdAt: 1000,
+    updatedAt: 1000,
+    archivedAt: null,
+  };
+  const session = createAgentSessionFixture({
+    runtimeKind: "opencode",
+    externalSessionId: "native-1",
+    workingDirectory: "/repo",
+    sessionAssociation: { kind: "repository" },
+    historyLoadState: "loaded",
+    status: "idle",
+    messages: [buildMessage("assistant", "Retained answer", { id: "assistant-1" })],
+    pendingApprovals: [],
+    pendingQuestions: [],
+  });
+  const store = createAgentSessionsStore("/repo");
+  store.replaceSession(session);
+  const counters: WorkspaceChatCounters = {
+    runtimeReads: 0,
+    baselineLoads: 0,
+    revalidations: 0,
+  };
+  const { Harness } = createWorkspaceChatHarness({
+    workspace,
+    entry,
+    session,
+    store,
+    scenario: "switch-return",
+    counters,
+  });
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+    }),
+  );
+
+  const view = render(<Harness />);
+  try {
+    await view.findByText("Retained answer", {}, { timeout: 2000 });
+    await waitFor(() => expect(counters.revalidations).toBe(1));
+    expect(counters.baselineLoads).toBe(0);
+
+    await act(async () => {
+      store.resetWorkspace("/other");
+      store.resetWorkspace("/repo");
+      view.rerender(<Harness key="return" />);
+    });
+
+    await view.findByText("Retained answer", {}, { timeout: 2000 });
+    expect(counters.baselineLoads).toBe(0);
+    await waitFor(() => expect(counters.revalidations).toBe(2));
+  } finally {
+    view.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+}, 5000);
