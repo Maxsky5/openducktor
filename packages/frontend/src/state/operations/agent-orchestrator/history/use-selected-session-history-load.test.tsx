@@ -141,6 +141,82 @@ describe("useSelectedSessionHistoryLoad", () => {
     }
   });
 
+  test("does not revalidate the history that a baseline load delivered through loading", async () => {
+    const loadSessionHistory = mock(async () => null);
+    const revalidateSessionHistory = mock(async () => null);
+    const harness = createHistoryLoadHarness(
+      createProps(),
+      loadSessionHistory,
+      revalidateSessionHistory,
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+
+      await harness.update(
+        createProps({
+          session: createSession({ historyLoadState: "loading" }),
+        }),
+      );
+      await harness.update(
+        createProps({
+          session: createSession({ historyLoadState: "loaded" }),
+        }),
+      );
+
+      expect(revalidateSessionHistory).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("revalidates a retained session after the selection clears and returns", async () => {
+    const revalidateSessionHistory = mock(async () => null);
+    const loadedSession = createSession({ historyLoadState: "loaded" });
+    const harness = createHistoryLoadHarness(
+      createProps({ session: loadedSession }),
+      mock(async () => null),
+      revalidateSessionHistory,
+    );
+
+    try {
+      await harness.mount();
+
+      expect(revalidateSessionHistory).toHaveBeenCalledTimes(1);
+
+      await harness.update(createProps({ session: null }));
+      await harness.update(createProps({ session: loadedSession }));
+
+      expect(revalidateSessionHistory).toHaveBeenCalledTimes(2);
+      expect(revalidateSessionHistory).toHaveBeenLastCalledWith(selectedSessionIdentity);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("requests a new baseline for a selected session whose baseline failed", async () => {
+    const loadSessionHistory = mock(async () => null);
+    const revalidateSessionHistory = mock(async () => null);
+    const harness = createHistoryLoadHarness(
+      createProps({
+        session: createSession({ historyLoadState: "failed" }),
+      }),
+      loadSessionHistory,
+      revalidateSessionHistory,
+    );
+
+    try {
+      await harness.mount();
+
+      expect(loadSessionHistory).toHaveBeenCalledWith(selectedSessionIdentity);
+      expect(revalidateSessionHistory).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("revalidates a loaded selected session once", async () => {
     const loadSessionHistory = mock(async () => null);
     const revalidateSessionHistory = mock(async () => null);

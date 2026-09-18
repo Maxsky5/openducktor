@@ -49,9 +49,10 @@ export const useSelectedSessionHistoryLoad = ({
   });
   const stableTarget = useStableAgentSessionIdentity(action?.identity ?? null);
   const previousTargetKeyRef = useRef<string | null>(null);
+  const hasSelectedSession = session !== null;
 
   useEffect(() => {
-    if (stableTarget === null) {
+    if (!hasSelectedSession) {
       previousTargetKeyRef.current = null;
       return;
     }
@@ -59,12 +60,15 @@ export const useSelectedSessionHistoryLoad = ({
     // Run once per selected session, not on every state it passes through. A
     // baseline load turns the state loading, then loaded; both must not start a
     // revalidation of the history that just arrived.
-    const targetKey = agentSessionIdentityKey(stableTarget);
-    const isNewTarget = previousTargetKeyRef.current !== targetKey;
-    previousTargetKeyRef.current = targetKey;
-    if (!isNewTarget) {
+    if (stableTarget === null) {
       return;
     }
+
+    const targetKey = agentSessionIdentityKey(stableTarget);
+    if (previousTargetKeyRef.current === targetKey) {
+      return;
+    }
+    previousTargetKeyRef.current = targetKey;
 
     if (action?.kind === "revalidate") {
       runOrchestratorSideEffect(
@@ -82,6 +86,7 @@ export const useSelectedSessionHistoryLoad = ({
     );
   }, [
     action?.kind,
+    hasSelectedSession,
     loadSelectedSessionBaselineHistory,
     revalidateAgentSessionHistory,
     stableTarget,
