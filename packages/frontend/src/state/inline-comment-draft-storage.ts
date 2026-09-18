@@ -153,7 +153,7 @@ export const parseInlineCommentDraftsPayload = ({
   ownerKey: string;
   now: Date;
 }): InlineCommentDraftsStorageReadResult => {
-  if (!raw) {
+  if (raw === null) {
     return { status: "empty" };
   }
 

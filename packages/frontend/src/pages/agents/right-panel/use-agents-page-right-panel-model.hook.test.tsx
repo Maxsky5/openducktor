@@ -406,6 +406,7 @@ beforeEach(async () => {
 afterEach(() => {
   for (const testSpy of testSpies) testSpy.mockRestore();
   testSpies = [];
+  resetInlineCommentDraftStoreForTests();
 });
 
 const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({

@@ -102,7 +102,6 @@ const ownerEntries = new Map<string, OwnerPersistenceEntry>();
 const validatedOwnerScopes = new Set<string>();
 
 let storageOverride: InlineCommentDraftStorage | null = null;
-let nowProvider = (): Date => new Date();
 let scheduleFlushTask: ScheduleTask = scheduleTask;
 let didRunHydration = false;
 let persistenceErrorReporter: PersistenceErrorReporter = (error) => {
@@ -273,12 +272,18 @@ const setPersistenceWarning = (
 const readOwnerDrafts = (ownerKey: string): InlineCommentDraft[] =>
   useInlineCommentDraftStore.getState().draftsByOwner[ownerKey] ?? [];
 
+const clearStorageUnavailable = (): void => {
+  useInlineCommentDraftStore.setState((state) =>
+    state.isStorageUnavailable ? { isStorageUnavailable: false } : state,
+  );
+};
+
 const persistOwner = (ownerKey: string): InlineCommentPersistenceWarning | null => {
   const result = writeInlineCommentDraftsToStorage({
     storage: getInlineCommentStorage(),
     ownerKey,
     comments: readOwnerDrafts(ownerKey).map(toPersistedDraft),
-    updatedAt: nowProvider().toISOString(),
+    updatedAt: new Date().toISOString(),
   });
   return result.status === "oversized" ? "oversized" : null;
 };
@@ -293,6 +298,7 @@ const flushOwner = (ownerKey: string): void => {
   const version = entry.version;
   try {
     setPersistenceWarning(ownerKey, persistOwner(ownerKey));
+    clearStorageUnavailable();
     entry.persistedVersion = version;
   } catch (error) {
     setPersistenceWarning(ownerKey, "storage_unavailable");
@@ -581,7 +587,7 @@ export const useInlineCommentDraftStore = create<InlineCommentDraftStore>((set, 
     try {
       const entries = readAllInlineCommentDraftsFromStorage({
         storage: getInlineCommentStorage(),
-        now: nowProvider(),
+        now: new Date(),
       });
       const currentDraftsByOwner = get().draftsByOwner;
       for (const entry of entries) {
@@ -629,10 +635,6 @@ export const setInlineCommentDraftPersistenceErrorReporter = (
   persistenceErrorReporter = reporter;
 };
 
-export const setInlineCommentDraftNowProviderForTests = (provider: (() => Date) | null): void => {
-  nowProvider = provider ?? (() => new Date());
-};
-
 export const setInlineCommentDraftScheduleTaskForTests = (scheduler: ScheduleTask | null): void => {
   scheduleFlushTask = scheduler ?? scheduleTask;
 };
@@ -644,7 +646,6 @@ export const resetInlineCommentDraftStoreForTests = (): void => {
   ownerEntries.clear();
   validatedOwnerScopes.clear();
   storageOverride = null;
-  nowProvider = () => new Date();
   scheduleFlushTask = scheduleTask;
   didRunHydration = false;
   persistenceErrorReporter = (error) => {

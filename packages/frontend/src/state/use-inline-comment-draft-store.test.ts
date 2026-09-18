@@ -585,4 +585,19 @@ describe("use-inline-comment-draft-store", () => {
     );
     expect(persistenceErrors).toHaveLength(1);
   });
+
+  test("clears the storage unavailability warning after a successful write", () => {
+    setInlineCommentDraftStorageForTests(createThrowingStorage());
+    useInlineCommentDraftStore.getState().hydrate();
+    expect(useInlineCommentDraftStore.getState().getPersistenceWarning(OWNER)).toBe(
+      "storage_unavailable",
+    );
+
+    setInlineCommentDraftStorageForTests(createMemoryStorage());
+    useInlineCommentDraftStore.getState().addDraft(OWNER, buildInput());
+    useInlineCommentDraftStore.getState().flush();
+
+    expect(useInlineCommentDraftStore.getState().getPersistenceWarning(OWNER)).toBeNull();
+    expect(useInlineCommentDraftStore.getState().getDraftCount(OWNER)).toBe(1);
+  });
 });

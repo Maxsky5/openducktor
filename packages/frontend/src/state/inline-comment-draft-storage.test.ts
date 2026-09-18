@@ -129,6 +129,16 @@ describe("inline comment draft storage", () => {
     });
   });
 
+  test("removes an empty stored value instead of leaving the key", () => {
+    const storage = createMemoryStorage();
+    storage.setItem(OWNER, "");
+
+    expect(readInlineCommentDraftsFromStorage({ storage, ownerKey: OWNER })).toMatchObject({
+      status: "invalid",
+    });
+    expect(storage.getItem(OWNER)).toBeNull();
+  });
+
   test("expires entries after the draft TTL and rejects future update dates", () => {
     const storage = createMemoryStorage();
     const updatedAt = new Date("2026-09-01T10:00:00.000Z");

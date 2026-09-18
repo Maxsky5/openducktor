@@ -7,12 +7,13 @@ import type {
   InlineCommentDraft,
   InlineCommentDraftSnapshot,
 } from "@/state/use-inline-comment-draft-store";
+import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
 import {
   type AgentStudioReviewCommentStore,
   createAgentStudioReviewCommentComposerAdapter,
 } from "./use-agent-studio-review-comment-composer-adapter";
 
-const OWNER = "openducktor:git-diff-comments:v1:workspace-1:task-1";
+const OWNER = toInlineCommentDraftStorageKey({ workspaceId: "workspace-1", taskId: "task-1" });
 
 type FakeReviewCommentStore = {
   getStore: () => AgentStudioReviewCommentStore;
