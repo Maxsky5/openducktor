@@ -11,6 +11,10 @@ import {
 } from "@/state/use-inline-comment-draft-store";
 
 const OWNER_KEY = toInlineCommentDraftStorageKey({ workspaceId: "workspace-1", taskId: "task-1" });
+const OTHER_OWNER_KEY = toInlineCommentDraftStorageKey({
+  workspaceId: "workspace-1",
+  taskId: "task-2",
+});
 
 type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
 
@@ -281,6 +285,51 @@ function ScopeSwitchFileDiffListHarness(): ReactElement {
   );
 }
 
+function OwnerSwitchFileDiffListHarness(): ReactElement {
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set(["src/example.ts"]));
+  const [ownerKey, setOwnerKey] = useState(OWNER_KEY);
+
+  return (
+    <TooltipProvider>
+      <button type="button" onClick={() => setOwnerKey(OTHER_OWNER_KEY)}>
+        Switch owner
+      </button>
+      <FileDiffList
+        fileDiffs={[
+          {
+            file: "src/example.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 1,
+            diff: "@@ -1 +1 @@\n-old\n+new\n",
+          },
+        ]}
+        diffScope="uncommitted"
+        ownerKey={ownerKey}
+        conflictedFiles={new Set()}
+        diffStyle="unified"
+        setDiffStyle={() => {}}
+        expandedFiles={expandedFiles}
+        onToggleFile={(filePath) => {
+          setExpandedFiles((previous) => {
+            const next = new Set(previous);
+            if (next.has(filePath)) {
+              next.delete(filePath);
+            } else {
+              next.add(filePath);
+            }
+            return next;
+          });
+        }}
+        preloadLimit={1}
+        canResetFiles={false}
+        isResetDisabled={false}
+        resetDisabledReason={null}
+      />
+    </TooltipProvider>
+  );
+}
+
 describe("FileDiffList", () => {
   test("keeps row expansion working while preload entries are mounted", () => {
     render(<FileDiffListHarness />);
@@ -384,6 +433,16 @@ describe("FileDiffList", () => {
     expect(screen.getByTestId("agent-studio-git-new-comment-form")).toBeDefined();
 
     fireEvent.click(screen.getByRole("button", { name: "Switch scope" }));
+    expect(screen.queryByTestId("agent-studio-git-new-comment-form")).toBeNull();
+  });
+
+  test("clears an unsaved selection form when the comment owner changes for the same file row", () => {
+    render(<OwnerSwitchFileDiffListHarness />);
+
+    fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
+    expect(screen.getByTestId("agent-studio-git-new-comment-form")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch owner" }));
     expect(screen.queryByTestId("agent-studio-git-new-comment-form")).toBeNull();
   });
 
