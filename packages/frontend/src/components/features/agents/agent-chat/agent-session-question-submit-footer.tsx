@@ -43,8 +43,8 @@ export const QuestionSubmitFooter = ({
             disabled={disabled || isSubmitting}
             onClick={onNext}
           >
-            <ChevronRight className="size-3.5" />
             Next
+            <ChevronRight className="size-3.5" />
           </Button>
         ) : (
           <Button

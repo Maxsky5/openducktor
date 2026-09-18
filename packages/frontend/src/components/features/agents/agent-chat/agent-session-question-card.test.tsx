@@ -240,6 +240,42 @@ describe("AgentSessionQuestionCard", () => {
     await harness.unmount();
   });
 
+  test("reuses question tab nodes when the request id changes with the same questions", async () => {
+    const request = buildRequest({
+      questions: [
+        {
+          header: "First",
+          question: "Pick the first answer",
+          options: [{ label: "Frontend", description: "UI work" }],
+          multiple: false,
+        },
+        {
+          header: "Second",
+          question: "Pick the second answer",
+          options: [{ label: "Backend", description: "API work" }],
+          multiple: false,
+        },
+      ],
+    });
+    const onSubmit = mock(async () => {});
+    const harness = createCardHarness({ request, onSubmit });
+    await harness.mount();
+
+    await harness.clickButtonByText("Frontend");
+    const secondTabBefore = screen.getByRole("tab", { name: /Second/i });
+    const optionBefore = screen.getByRole("button", { name: /Backend/ });
+
+    await harness.rerender({
+      request: { ...structuredClone(request), requestId: "request-2" },
+      onSubmit,
+    });
+
+    expect(screen.getByRole("tab", { name: /Second/i })).toBe(secondTabBefore);
+    expect(screen.getByRole("button", { name: /Backend/ })).toBe(optionBefore);
+
+    await harness.unmount();
+  });
+
   test("enables submit after completion and sends normalized answers", async () => {
     const onSubmit = mock(async () => {});
     const harness = createCardHarness({

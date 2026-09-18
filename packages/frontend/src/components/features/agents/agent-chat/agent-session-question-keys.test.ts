@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
-import { buildQuestionDraftKey } from "./agent-session-question-keys";
+import { buildQuestionDraftKey, buildQuestionRenderEntries } from "./agent-session-question-keys";
 
 const buildRequest = (overrides: Partial<AgentQuestionRequest> = {}): AgentQuestionRequest => ({
   requestId: "request-1",
@@ -51,5 +51,12 @@ describe("buildQuestionDraftKey", () => {
       },
     });
     expect(buildQuestionDraftKey(subagent)).not.toBe(buildQuestionDraftKey(request));
+  });
+
+  test("builds render keys that do not change with object identity", () => {
+    const request = buildRequest();
+    expect(buildQuestionRenderEntries(structuredClone(request.questions))).toEqual(
+      buildQuestionRenderEntries(request.questions),
+    );
   });
 });

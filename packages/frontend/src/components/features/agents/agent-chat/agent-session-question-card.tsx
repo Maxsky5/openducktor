@@ -59,7 +59,7 @@ export function AgentSessionQuestionCard({
     activeQuestionIndex + 1 < request.questions.length
       ? activeQuestionIndex + 1
       : null;
-  const questionRenderEntries = buildQuestionRenderEntries(request.requestId, request.questions);
+  const questionRenderEntries = buildQuestionRenderEntries(request.questions);
   const getTabId = (tabId: string): string => `${tabGroupId}-tab-${tabId}`;
   const getPanelId = (tabId: string): string => `${tabGroupId}-panel-${tabId}`;
   const getTabPanelProps = (tabId: string): HTMLAttributes<HTMLDivElement> | undefined => {
@@ -167,7 +167,6 @@ export function AgentSessionQuestionCard({
           />
         ) : activeQuestion ? (
           <QuestionTab
-            requestId={request.requestId}
             question={activeQuestion}
             questionIndex={activeQuestionIndex}
             entry={activeEntry}

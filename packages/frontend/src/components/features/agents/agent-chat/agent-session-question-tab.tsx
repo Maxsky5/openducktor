@@ -7,7 +7,6 @@ import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { AgentQuestionDraftEntry } from "./agent-session-question-draft";
 
 type QuestionTabProps = {
-  requestId: string;
   question: AgentQuestionRequest["questions"][number];
   questionIndex: number;
   entry: AgentQuestionDraftEntry | undefined;
@@ -19,7 +18,6 @@ type QuestionTabProps = {
 };
 
 export const QuestionTab = ({
-  requestId,
   question,
   questionIndex,
   entry,
@@ -54,7 +52,7 @@ export const QuestionTab = ({
             const isSelected = Boolean(entry?.selectedOptionLabels.includes(option.label));
             return (
               <button
-                key={`${requestId}:option:${questionIndex}:${option.label}`}
+                key={`option:${questionIndex}:${option.label}`}
                 type="button"
                 disabled={disabled}
                 className={cn(

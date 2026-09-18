@@ -37,7 +37,7 @@ export const QuestionSummaryTab = ({
   onSelectQuestion,
   panelProps,
 }: QuestionSummaryTabProps): ReactElement => {
-  const questionRenderEntries = buildQuestionRenderEntries(request.requestId, request.questions);
+  const questionRenderEntries = buildQuestionRenderEntries(request.questions);
   const { className: panelClassName, ...rootProps } = panelProps ?? {};
 
   return (

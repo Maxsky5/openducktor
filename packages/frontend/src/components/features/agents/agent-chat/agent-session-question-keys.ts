@@ -46,12 +46,11 @@ const buildQuestionContentEntries = (
 };
 
 export const buildQuestionRenderEntries = (
-  requestId: string,
   questions: AgentQuestionRequest["questions"],
 ): AgentQuestionRenderEntry[] =>
   buildQuestionContentEntries(questions).map(({ question, contentKey }) => ({
     question,
-    key: `${requestId}:${contentKey}`,
+    key: contentKey,
   }));
 
 export const buildQuestionDraftKey = (request: AgentQuestionRequest): string => {
