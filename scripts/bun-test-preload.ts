@@ -29,6 +29,9 @@ beforeAll((): void => {
 afterAll((): void => {
   removeQuietly(configDir);
   removeQuietly(workerTmpDir);
+  if (globalThis.document !== undefined) {
+    globalThis.document.documentElement.classList.remove("light", "dark");
+  }
 });
 
 const repoRoot = path.resolve(import.meta.dir, "..");
