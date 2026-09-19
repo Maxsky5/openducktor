@@ -37,6 +37,7 @@ import type { CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import type { CodexTokenUsageTotals } from "./codex-app-server-transcript";
 import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
 import type { CodexAsyncQuestionState } from "./codex-async-questions";
+import { parseCodexAsyncQuestionItem } from "./codex-async-questions";
 
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexSessionLookup } from "./codex-local-session-state";
@@ -601,6 +602,13 @@ export class CodexRuntimeSessionEvents {
       return;
     }
     if (isServerRequest || notification?.method === "serverRequest/resolved") {
+      this.markSnapshotChanged(event.runtimeId, threadId);
+    }
+    if (
+      notification?.method === "item/completed" &&
+      notification.params.item.type === "agentMessage" &&
+      parseCodexAsyncQuestionItem(notification.params.item).kind === "questions"
+    ) {
       this.markSnapshotChanged(event.runtimeId, threadId);
     }
     if (notification?.method === "serverRequest/resolved") {

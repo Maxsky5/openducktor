@@ -7,7 +7,8 @@ import { haveSameMessageTimestamp } from "@/state/operations/agent-orchestrator/
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
 import {
-  markAsyncQuestionsHandled,
+  type AgentAsyncQuestionProjection,
+  mergeAsyncQuestionHistory,
   projectAsyncQuestionsFromHistory,
 } from "@/state/operations/agent-orchestrator/support/async-questions";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
@@ -111,11 +112,16 @@ const areStringSetsEquivalent = (left: ReadonlySet<string>, right: ReadonlySet<s
 export const mergeReadonlyRuntimeHistory = (
   session: AgentSessionState,
   history: AgentSessionHistoryMessage[],
+  asyncQuestionsAtReadStart?: AgentAsyncQuestionProjection,
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, { role: null });
-  const asyncQuestions = markAsyncQuestionsHandled(
+  const asyncQuestions = mergeAsyncQuestionHistory(
     projectAsyncQuestionsFromHistory(history),
-    session.handledAsyncQuestionIds ?? new Set(),
+    {
+      pendingAsyncQuestions: session.pendingAsyncQuestions ?? [],
+      handledAsyncQuestionIds: session.handledAsyncQuestionIds ?? new Set(),
+    },
+    asyncQuestionsAtReadStart,
   );
   const mergedMessageState = settleImageGenerationMessages({
     ...session,

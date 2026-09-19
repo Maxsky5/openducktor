@@ -286,6 +286,88 @@ describe("CodexAppServerAdapter streaming", () => {
     }
   });
 
+  test("waits for native acceptance when an ordinary send handles a history-only question", async () => {
+    const { subscribeEvents } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+    await adapter.startSession(codexStartSessionInput());
+    const unsubscribe = await observeSessionState(adapter, "thread/start-runtime-live");
+    const questionItemId = '["request_user_input_async","history-question",0]';
+
+    try {
+      const input = {
+        ...codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [{ kind: "text", text: "Use the safest option" }],
+        }),
+        asyncQuestionItemIds: [questionItemId],
+      };
+      const send = adapter.sendUserMessage(input);
+      await flushCodexAdapterWork();
+      const transport = transports.get("runtime-live");
+      if (!transport) throw new Error("Expected the runtime transport.");
+      transport.turnStartDeferred.reject(new Error("turn start rejected"));
+
+      await expect(send).rejects.toThrow("turn start rejected");
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("includes the async question snapshot in its item/completed mutation", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const mutations: CodexLiveSessionMutation[] = [];
+    const { adapter } = createHarness({
+      subscribeEvents,
+      onLiveSessionMutation: (mutation) => {
+        mutations.push(mutation);
+      },
+    });
+    await adapter.startSession(codexStartSessionInput());
+    const unsubscribe = await observeSessionState(adapter, "thread/start-runtime-live");
+
+    try {
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_650,
+          item: {
+            type: "agentMessage",
+            id: "async-question-notification",
+            phase: "commentary",
+            text: "Which environment should I use?",
+            memoryCitation: null,
+            delivery: "async",
+            questions: [
+              {
+                title: "Which environment should I use?",
+                options: ["Staging", "Production"],
+              },
+            ],
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      const mutation = mutations.findLast((candidate) =>
+        candidate.transcriptEvents.some((event) => event.type === "assistant_message"),
+      );
+      expect(mutation?.snapshots).toMatchObject([
+        {
+          asyncQuestionsAuthoritative: true,
+          pendingAsyncQuestions: [
+            {
+              questionItemId: '["request_user_input_async","async-question-notification",0]',
+            },
+          ],
+        },
+      ]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("skips all pending questions after an ordinary message receives native acceptance", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });

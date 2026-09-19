@@ -293,6 +293,16 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         ...runtimeSessionRef,
         parts: normalizedParts,
       };
+      const replyQuestionItemIds = normalizedParts.flatMap((part) =>
+        part.kind === "async_question_reply" ? [part.questionItemId] : [],
+      );
+      const asyncQuestionItemIds =
+        replyQuestionItemIds.length > 0
+          ? replyQuestionItemIds
+          : (readySession.pendingAsyncQuestions ?? []).map((question) => question.questionItemId);
+      if (asyncQuestionItemIds.length > 0) {
+        sendInput.asyncQuestionItemIds = asyncQuestionItemIds;
+      }
       if (readySession.selectedModel) {
         sendInput.model = readySession.selectedModel;
       }

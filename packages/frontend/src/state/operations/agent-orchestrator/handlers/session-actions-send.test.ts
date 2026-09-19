@@ -634,6 +634,46 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     }
   });
 
+  test("tells the runtime which history-restored async questions an ordinary send handles", async () => {
+    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+    const originalSendUserMessage = adapter.sendUserMessage;
+    const inputs: Parameters<typeof adapter.sendUserMessage>[0][] = [];
+    adapter.sendUserMessage = async (input) => {
+      inputs.push(input);
+      return acceptedUserMessage(input);
+    };
+    const questionItemId = '["request_user_input_async","history-question",0]';
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        pendingAsyncQuestions: [
+          {
+            questionItemId,
+            sourceMessageId: "history-question",
+            questionIndex: 0,
+            title: "Which environment?",
+            options: ["Staging", "Production"],
+          },
+        ],
+      }),
+    ]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureExistingSessionRuntime: async () => {},
+    });
+
+    try {
+      await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "text", text: "Use the safest option" },
+      ]);
+
+      expect(inputs[0]).toMatchObject({ asyncQuestionItemIds: [questionItemId] });
+    } finally {
+      adapter.sendUserMessage = originalSendUserMessage;
+    }
+  });
+
   const blockingInputCases: Array<{
     label: string;
     pendingInput: Partial<Pick<AgentSessionState, "pendingApprovals" | "pendingQuestions">>;

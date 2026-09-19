@@ -397,11 +397,15 @@ export const createCodexLiveSessionAdapterPreparer =
         sendUserMessage: (input) =>
           bindControlPolicy(input, "send-user-message").pipe(
             Effect.flatMap((boundInput) => {
-              const { model, parts, systemPrompt, ...requiredInput } = boundInput;
+              const { asyncQuestionItemIds, model, parts, systemPrompt, ...requiredInput } =
+                boundInput;
               const request: Parameters<typeof controller.sendUserMessage>[0] = {
                 ...requiredInput,
                 parts: parts.map(toCodexUserMessagePart),
               };
+              if (asyncQuestionItemIds !== undefined) {
+                request.asyncQuestionItemIds = asyncQuestionItemIds;
+              }
               if (model !== undefined) {
                 request.model = model;
               }

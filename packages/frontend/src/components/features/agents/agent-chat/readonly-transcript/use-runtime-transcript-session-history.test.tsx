@@ -370,6 +370,43 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
+  test("keeps an async question that arrives while history is loading", async () => {
+    const history = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const readSessionHistory = mock(() => history.promise);
+    const harness = createHarness(session({ runtimeKind: "opencode" }), readSessionHistory);
+    const question = {
+      questionItemId: '["request_user_input_async","question-live",0]',
+      sourceMessageId: "question-live",
+      questionIndex: 0,
+      title: "Which environment?",
+      options: ["Staging", "Production"],
+    };
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+      await harness.update({
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "thread-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
+        repoReadinessState: "ready",
+        liveSession: session({ runtimeKind: "opencode", pendingAsyncQuestions: [question] }),
+      });
+      await harness.run(() => {
+        history.resolve([]);
+      });
+      await harness.waitFor((state) => !state.isRetryingHistory);
+
+      expect(harness.getLatest().session?.pendingAsyncQuestions).toEqual([question]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("shows Claude history before the runtime catalog resolves", async () => {
     const history: AgentSessionHistoryMessage[] = [
       {

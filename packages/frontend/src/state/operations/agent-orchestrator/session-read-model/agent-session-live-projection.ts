@@ -299,13 +299,21 @@ const applyDirectSnapshot = (
   const activity = projectSessionSnapshotActivity(current, snapshot);
   const directApprovals = snapshot.pendingApprovals.map((request) => toApprovalRequest(request));
   const directQuestions = snapshot.pendingQuestions.map((request) => toQuestionRequest(request));
-  const asyncQuestions = applyAsyncQuestionAnnotation(
-    {
-      pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
-      handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
-    },
-    { status: "pending", questions: snapshot.pendingAsyncQuestions },
-  );
+  const handledAsyncQuestionIds = current.handledAsyncQuestionIds ?? new Set<string>();
+  const asyncQuestions = snapshot.asyncQuestionsAuthoritative
+    ? {
+        pendingAsyncQuestions: snapshot.pendingAsyncQuestions.filter(
+          (question) => !handledAsyncQuestionIds.has(question.questionItemId),
+        ),
+        handledAsyncQuestionIds,
+      }
+    : applyAsyncQuestionAnnotation(
+        {
+          pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
+          handledAsyncQuestionIds,
+        },
+        { status: "pending", questions: snapshot.pendingAsyncQuestions },
+      );
   const childApprovals = current.pendingApprovals.filter((request) => request.source !== undefined);
   const childQuestions = current.pendingQuestions.filter((request) => request.source !== undefined);
 

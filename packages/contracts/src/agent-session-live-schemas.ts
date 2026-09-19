@@ -107,6 +107,7 @@ export const agentSessionLiveSnapshotSchema = z
     pendingApprovals: z.array(agentSessionLivePendingApprovalRequestSchema),
     pendingQuestions: z.array(agentSessionLivePendingQuestionRequestSchema),
     pendingAsyncQuestions: z.array(agentAsyncQuestionSchema),
+    asyncQuestionsAuthoritative: z.boolean().optional(),
     contextUsage: agentSessionContextUsageSchema.nullable(),
     model: agentModelSelectionSchema.optional(),
   })

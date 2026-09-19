@@ -153,7 +153,11 @@ export class CodexAsyncQuestionState {
   }
 
   pendingForSession(runtimeId: string, threadId: string): AgentAsyncQuestion[] {
-    return [...this.state(runtimeId, threadId).pending.values()];
+    return [...(this.sessions.get(sessionKey(runtimeId, threadId))?.pending.values() ?? [])];
+  }
+
+  isAuthoritative(runtimeId: string, threadId: string): boolean {
+    return this.sessions.has(sessionKey(runtimeId, threadId));
   }
 
   clearSession(runtimeId: string, threadId: string): void {

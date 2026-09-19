@@ -270,6 +270,29 @@ describe("agent session live projection", () => {
     expect(refreshedSession?.handledAsyncQuestionIds).toEqual(new Set());
   });
 
+  test("clears a pending async question from an authoritative empty snapshot", () => {
+    const question = {
+      questionItemId: '["request_user_input_async","question-remote",0]',
+      sourceMessageId: "question-remote",
+      questionIndex: 0,
+      title: "Which environment?",
+      options: ["Staging", "Production"],
+    };
+    const pendingSnapshot = snapshot("thread-1", {
+      pendingAsyncQuestions: [question],
+    });
+    const initial = build({ snapshots: [pendingSnapshot] });
+    const authoritativeEmptySnapshot: AgentSessionLiveSnapshot = {
+      ...pendingSnapshot,
+      pendingAsyncQuestions: [],
+      asyncQuestionsAuthoritative: true,
+    };
+
+    const refreshed = build({ current: initial, snapshots: [authoritativeEmptySnapshot] });
+
+    expect(getAgentSession(refreshed, identity("thread-1"))?.pendingAsyncQuestions).toEqual([]);
+  });
+
   test.each(["stopped", "error"] as const)(
     "keeps last-known context for %s sessions until a measurement arrives",
     (status) => {

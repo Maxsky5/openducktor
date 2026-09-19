@@ -735,7 +735,8 @@ export class CodexAppServerAdapter
       return acceptedUserMessage;
     }
     const replyParts = input.parts.filter((part) => part.kind === "async_question_reply");
-    const pendingQuestionItemIds = replyParts.map((part) => part.questionItemId);
+    const pendingQuestionItemIds =
+      input.asyncQuestionItemIds ?? replyParts.map((part) => part.questionItemId);
     const hasPendingAsyncQuestions =
       replyParts.length === 0 &&
       this.asyncQuestions.pendingForSession(session.runtimeId, session.threadId).length > 0;
@@ -750,6 +751,7 @@ export class CodexAppServerAdapter
     if (replyParts.length > 0) {
       this.asyncQuestions.resolve(session.runtimeId, session.threadId, pendingQuestionItemIds);
     } else {
+      this.asyncQuestions.resolve(session.runtimeId, session.threadId, pendingQuestionItemIds);
       this.asyncQuestions.skipPending(session.runtimeId, session.threadId);
     }
     return accepted;
@@ -1301,6 +1303,10 @@ export class CodexAppServerAdapter
       pendingApprovals,
       pendingQuestions,
       pendingAsyncQuestions,
+      asyncQuestionsAuthoritative: this.asyncQuestions.isAuthoritative(
+        session.runtimeId,
+        session.threadId,
+      ),
       contextUsage: this.runtimeEvents.latestContextUsage(session.runtimeId, session.threadId),
     };
     if (session.summary.sessionAssociation.kind === "repository") {
@@ -1354,6 +1360,10 @@ export class CodexAppServerAdapter
       pendingApprovals,
       pendingQuestions,
       pendingAsyncQuestions,
+      asyncQuestionsAuthoritative: this.asyncQuestions.isAuthoritative(
+        parentSession.runtimeId,
+        route.childExternalSessionId,
+      ),
       contextUsage,
     };
     if (parentSession.summary.sessionAssociation.kind === "repository") {

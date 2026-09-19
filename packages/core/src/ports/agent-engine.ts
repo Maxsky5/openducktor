@@ -144,6 +144,7 @@ export type ForkAgentSessionInput = StartAgentSessionInput & {
 
 export type SendAgentUserMessageInput = PolicyBoundSessionControlRef & {
   parts: AgentUserMessagePart[];
+  asyncQuestionItemIds?: string[];
   model?: AgentModelSelection;
 };
 

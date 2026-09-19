@@ -40,6 +40,14 @@ describe("agent-session live contracts", () => {
   test("parses snapshots with explicit unknown or populated context usage", () => {
     expect(agentSessionLiveSnapshotSchema.parse(snapshot)).toEqual(snapshot);
 
+    const authoritativeAsyncQuestions = {
+      ...snapshot,
+      asyncQuestionsAuthoritative: true,
+    };
+    expect(agentSessionLiveSnapshotSchema.parse(authoritativeAsyncQuestions)).toEqual(
+      authoritativeAsyncQuestions,
+    );
+
     const populated = {
       ...snapshot,
       contextUsage: {

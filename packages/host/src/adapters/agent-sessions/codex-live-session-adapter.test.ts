@@ -670,6 +670,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         ...ref,
         sessionScope,
         parts: [{ kind: "text", text: "Hello" }],
+        asyncQuestionItemIds: ['["request_user_input_async","question-1",0]'],
       }),
     );
 
@@ -685,6 +686,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         }),
       ]);
     }
+    expect(harness.controlInputs.sends[0]?.asyncQuestionItemIds).toEqual([
+      '["request_user_input_async","question-1",0]',
+    ]);
   });
 
   test("requires scope and accepts repository scope for direct Codex controls", async () => {

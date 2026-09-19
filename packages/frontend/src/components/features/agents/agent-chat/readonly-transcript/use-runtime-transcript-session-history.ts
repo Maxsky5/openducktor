@@ -9,7 +9,7 @@ import {
   type RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
@@ -17,6 +17,10 @@ import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
 import { toRuntimeWorkingDirectoryRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import { resolveSessionRuntimeScope } from "@/state/operations/agent-orchestrator/support/session-runtime-scope";
+import {
+  type AgentAsyncQuestionProjection,
+  emptyAgentAsyncQuestionProjection,
+} from "@/state/operations/agent-orchestrator/support/async-questions";
 import {
   type AgentSessionTranscriptEmptyReason,
   type AgentSessionTranscriptState,
@@ -96,6 +100,34 @@ type RuntimeTranscriptSessionHistory = {
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
 };
 
+type SuccessfulHistoryReadBaseline = {
+  targetKey: string;
+  asyncQuestions: AgentAsyncQuestionProjection;
+};
+
+const runtimeTranscriptHistoryTargetKey = (
+  target: AgentSessionTranscriptTarget | null,
+): string | null =>
+  target
+    ? JSON.stringify([target.runtimeKind, target.workingDirectory, target.externalSessionId])
+    : null;
+
+const asyncQuestionProjectionFromSession = (
+  session: AgentSessionState | null,
+): AgentAsyncQuestionProjection =>
+  session
+    ? {
+        pendingAsyncQuestions: [...(session.pendingAsyncQuestions ?? [])],
+        handledAsyncQuestionIds: new Set(session.handledAsyncQuestionIds ?? []),
+      }
+    : emptyAgentAsyncQuestionProjection();
+
+const historyReadBaselineForTarget = (
+  baseline: SuccessfulHistoryReadBaseline | null,
+  targetKey: string | null,
+): AgentAsyncQuestionProjection =>
+  baseline?.targetKey === targetKey ? baseline.asyncQuestions : emptyAgentAsyncQuestionProjection();
+
 const useTranscriptTargetResolution = ({
   isOpen,
   repoPath,
@@ -162,6 +194,8 @@ export function useRuntimeTranscriptSessionHistory({
       target,
       liveSession,
     });
+  const historyTargetKey = runtimeTranscriptHistoryTargetKey(stableTarget);
+  const successfulHistoryReadBaseline = useRef<SuccessfulHistoryReadBaseline | null>(null);
   const targetScope = stableTarget?.sessionScope ?? null;
   const scopeResult = useMemo(
     () =>
@@ -211,9 +245,23 @@ export function useRuntimeTranscriptSessionHistory({
     emptyReason === null &&
     runtimeSessionRef !== null &&
     matchingSession?.historyLoadState !== "loaded";
+  const readTranscriptSessionHistory = useCallback(
+    async (input: Parameters<typeof readSessionHistory>[0]) => {
+      const asyncQuestionsAtReadStart = asyncQuestionProjectionFromSession(matchingSession);
+      const history = await readSessionHistory(input);
+      if (historyTargetKey !== null) {
+        successfulHistoryReadBaseline.current = {
+          targetKey: historyTargetKey,
+          asyncQuestions: asyncQuestionsAtReadStart,
+        };
+      }
+      return history;
+    },
+    [historyTargetKey, matchingSession, readSessionHistory],
+  );
   const historyQuery = useQuery(
     shouldLoadHistory && repoReadinessState === "ready" && runtimeSessionRef !== null
-      ? sessionHistoryQueryOptions(runtimeSessionRef, readSessionHistory)
+      ? sessionHistoryQueryOptions(runtimeSessionRef, readTranscriptSessionHistory)
       : skippedTranscriptHistoryQueryOptions,
   );
   const { refetch: refetchHistory } = historyQuery;
@@ -228,11 +276,15 @@ export function useRuntimeTranscriptSessionHistory({
   );
   const skillSurface = resolveRuntimeCatalogSurface(skillsQuery.data?.skills, skillsQuery.error);
   const session = useMemo(() => {
+    const recordedBaseline = historyReadBaselineForTarget(
+      successfulHistoryReadBaseline.current,
+      historyTargetKey,
+    );
     let transcriptSession: AgentChatTranscriptSession | null = null;
     if (matchingSession !== null) {
       transcriptSession = toAgentChatTranscriptSession(
         historyQuery.data
-          ? mergeReadonlyRuntimeHistory(matchingSession, historyQuery.data)
+          ? mergeReadonlyRuntimeHistory(matchingSession, historyQuery.data, recordedBaseline)
           : matchingSession,
       );
     } else if (shouldLoadHistory && historyQuery.data && stableTarget !== null) {
@@ -244,7 +296,14 @@ export function useRuntimeTranscriptSessionHistory({
     return transcriptSession
       ? withClaudeSkillMentions(transcriptSession, skillSurface.catalog?.skills ?? [])
       : null;
-  }, [historyQuery.data, matchingSession, shouldLoadHistory, skillSurface.catalog, stableTarget]);
+  }, [
+    historyQuery.data,
+    historyTargetKey,
+    matchingSession,
+    shouldLoadHistory,
+    skillSurface.catalog,
+    stableTarget,
+  ]);
   const transcriptState = useMemo<AgentSessionTranscriptState>(() => {
     if (scopeResult.kind === "conflict") {
       return { kind: "failed", message: scopeResult.message };
