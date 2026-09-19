@@ -1408,6 +1408,40 @@ test.each(["fault", "transcript_gap"] as const)(
   },
 );
 
+test("does not report a session-scoped fault as an observation failure", async () => {
+  let receive = (_envelope: AgentSessionLiveEnvelope): void => {};
+  const onFailure = mock(() => {});
+  const taskObserver = createNotificationTaskObserver({
+    loadTasks: async () => [createTaskCardFixture({ id: "task-1" })],
+    loadSessionRecords: loadWorkflowSessionRecords,
+    publish: () => {},
+    onFailure,
+  });
+  const observer = createNotificationWorkspaceObserver({
+    observe: async (_input, listener) => {
+      receive = listener;
+      return () => {};
+    },
+    taskObserver,
+    publish: () => {},
+    onFailure,
+  });
+  await observer.syncWorkspaces([{ repoPath: "/repo-a", repositoryLabel: "Repo A" }]);
+  const ref = liveSnapshot([]).sessions[0]?.ref;
+  if (!ref) throw new Error("The live session fixture is missing.");
+
+  receive({
+    type: "fault",
+    repoPath: "/repo-a",
+    ref,
+    operation: "agent-session.persist",
+    message: "Session activity persistence failed.",
+  });
+
+  expect(onFailure).not.toHaveBeenCalled();
+  observer.dispose();
+});
+
 test("preserves buffered transitions when snapshot refresh has already read their final state", async () => {
   const initial = createTaskCardFixture({ id: "task-1", title: "Task", status: "open" });
   const final = { ...initial, status: "ready_for_dev" as const };
