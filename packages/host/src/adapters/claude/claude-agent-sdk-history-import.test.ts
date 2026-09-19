@@ -6,7 +6,7 @@ import type { SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
 import { AgentRuntimeQueryError } from "@openducktor/core";
 import {
   filterClaudeHistoryMessages,
-  isClaudeSessionUnavailableError,
+  isClaudeSessionMissingError,
   loadClaudeRawHistoryMessages,
   readSubagentAgentIdsByToolUseId,
 } from "./claude-agent-sdk-history-import";
@@ -166,9 +166,9 @@ describe("Claude SDK history import", () => {
     }
   }, 15_000);
 
-  test("classifies only the known missing-session history error", () => {
+  test("matches only the known missing-session history error", () => {
     expect(
-      isClaudeSessionUnavailableError(
+      isClaudeSessionMissingError(
         new AgentRuntimeQueryError(
           "request_failed",
           "The selected Claude session is unavailable. Check its history on the host.",
@@ -176,10 +176,10 @@ describe("Claude SDK history import", () => {
       ),
     ).toBe(true);
     expect(
-      isClaudeSessionUnavailableError(
+      isClaudeSessionMissingError(
         new AgentRuntimeQueryError("request_failed", "Claude history import failed."),
       ),
     ).toBe(false);
-    expect(isClaudeSessionUnavailableError(new Error("request_failed"))).toBe(false);
+    expect(isClaudeSessionMissingError(new Error("request_failed"))).toBe(false);
   });
 });

@@ -86,13 +86,13 @@ export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: numbe
   }
 };
 
-const codexRpcFailureSchema = z.object({
+const codexRpcErrorSchema = z.object({
   cause: z.object({ code: z.number(), message: z.string() }),
   details: z.object({ method: z.string() }),
 });
 
-export const isCodexEmptyRolloutThreadReadError = (cause: unknown): boolean => {
-  const parsed = codexRpcFailureSchema.safeParse(cause);
+export const isCodexEmptyRolloutError = (cause: unknown): boolean => {
+  const parsed = codexRpcErrorSchema.safeParse(cause);
   if (
     !parsed.success ||
     parsed.data.details.method !== "thread/read" ||
@@ -101,8 +101,8 @@ export const isCodexEmptyRolloutThreadReadError = (cause: unknown): boolean => {
     return false;
   }
 
-  // Codex can report this before a fresh rollout has its first session_meta record.
-  // Keep this compatibility case until the minimum Codex version fixes https://github.com/openai/codex/issues/25621.
+  // Codex can report this before a new rollout has its first session_meta record.
+  // Keep this case until the oldest supported Codex version fixes https://github.com/openai/codex/issues/25621.
   const match =
     /^failed to read thread: thread-store internal error: failed to read thread ([^\r\n]+): rollout at ([^\r\n]+) is empty$/.exec(
       parsed.data.cause.message,

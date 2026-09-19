@@ -687,7 +687,7 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("propagates an empty rollout for a resumed local session", async () => {
+  test("throws an empty rollout for a resumed local session", async () => {
     const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
     const baseTransport = new RecordingTransport("runtime-live", false);
     const transport: CodexJsonRpcTransport = {
@@ -707,7 +707,7 @@ describe("CodexAppServerAdapter history loading", () => {
     await expect(adapter.loadSessionTodos(input)).rejects.toBe(failure);
   });
 
-  test("propagates an empty rollout when the fresh session is released during the read", async () => {
+  test("throws an empty rollout when the fresh session is released during the read", async () => {
     const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
     const readRequested = createDeferred<void>();
     const readResult = createDeferred<never>();
