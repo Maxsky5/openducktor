@@ -4,28 +4,34 @@ OpenDucktor is an Agentic Development Environment built around tasks, repositori
 
 It uses a workspace-scoped SQLite task store as the task source of truth, orchestrates Specification, Planner, Builder, and QA sessions, and keeps documents, approvals, and delivery state attached to each task instead of scattered across chat threads.
 
-![Kanban board placeholder](docs/assets/screenshots/kanban-board.png)
+![OpenDucktor Kanban board](docs/assets/screenshots/kanban-board.png)
 
 <details>
 <summary>More screenshots</summary>
 
-![Task workflows placeholder](docs/assets/screenshots/agent-studio-builder.png)
+![Welcome step of the setup wizard](docs/assets/screenshots/onboarding-welcome.png)
 
-![Task workflows placeholder](docs/assets/screenshots/agent-studio-planner.png)
+![Configure coding agents step of the setup wizard](docs/assets/screenshots/onboarding-coding-agents.png)
 
-![Task workflows placeholder](docs/assets/screenshots/agent-studio-spec-question.png)
+![Start Spec session dialog with the runtime and model picker](docs/assets/screenshots/start-spec-session.png)
 
-![Task workflows placeholder](docs/assets/screenshots/settings-repo-config.png)
+![Spec session with the specification document panel](docs/assets/screenshots/agent-studio-spec.png)
 
-![Task workflows placeholder](docs/assets/screenshots/settings-autopilot.png)
+![Builder session with the branch changes panel and a diff](docs/assets/screenshots/agent-studio-builder.png)
 
-![Task workflows placeholder](docs/assets/screenshots/settings-customize-prompts.png)
+![Builder plan review with a question that needs an answer](docs/assets/screenshots/agent-studio-builder-question.png)
 
-![Task workflows placeholder](docs/assets/screenshots/settings-default-models.png)
+![File preview beside the workspace file tree](docs/assets/screenshots/agent-studio-file-preview.png)
 
-![Task workflows placeholder](docs/assets/screenshots/create-task-1.png)
+![Builder session with pull request checks and comments](docs/assets/screenshots/agent-studio-pull-request.png)
 
-![Task workflows placeholder](docs/assets/screenshots/create-task-2.png)
+![Agent chat that creates a task](docs/assets/screenshots/agent-chat-create-task.png)
+
+![Agent runtimes settings with sandbox mode](docs/assets/screenshots/settings-agent-runtimes.png)
+
+![Per-role default models for a repository](docs/assets/screenshots/settings-default-models.png)
+
+![Notification settings](docs/assets/screenshots/settings-notifications.png)
 
 </details>
 
