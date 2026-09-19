@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { MixedItem, MixedSearchResult, Score } from "@ff-labs/fff-node";
 import type { AgentFileSearchResult } from "@openducktor/core";
+import type { ClaudeSession } from "./claude-agent-sdk-types";
 import {
   createClaudeWorkspaceFileSearch,
   createNativeClaudeFileFinder,
@@ -14,6 +15,7 @@ import {
   toClaudeFileSearchResults,
   trackClaudeFileSearchSessions,
   waitForClaudeFileScan,
+  type ClaudeFileSearchSessionStore,
   type ClaudeWorkspaceFileFinder,
   type ClaudeWorkspaceFileSearch,
 } from "./claude-agent-sdk-file-search";
@@ -291,20 +293,23 @@ describe("createClaudeWorkspaceFileSearch", () => {
 });
 
 describe("trackClaudeFileSearchSessions", () => {
-  type ClosedSession = { input: { workingDirectory: string } };
-
-  const createSessionStore = (workingDirectories: string[]) => {
-    const listeners = new Set<(session: ClosedSession) => void>();
-    const live = workingDirectories.map((workingDirectory) => ({ input: { workingDirectory } }));
+  const createSessionStore = (
+    workingDirectories: string[],
+  ): ClaudeFileSearchSessionStore & { close(index: number): void } => {
+    const listeners = new Set<(session: ClaudeSession) => void>();
+    // SAFETY: The tracker reads only input.workingDirectory from each session.
+    const live = workingDirectories.map((workingDirectory) => ({
+      input: { workingDirectory },
+    })) as ClaudeSession[];
     return {
-      subscribeClose: (listener: (session: ClosedSession) => void) => {
+      subscribeClose: (listener) => {
         listeners.add(listener);
         return () => {
           listeners.delete(listener);
         };
       },
       values: () => live.values(),
-      close: (index: number) => {
+      close: (index) => {
         const [session] = live.splice(index, 1);
         if (!session) {
           throw new Error(`No session at index ${index}.`);
