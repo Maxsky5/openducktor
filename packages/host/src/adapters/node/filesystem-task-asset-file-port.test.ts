@@ -379,7 +379,7 @@ describe("node task asset file port", () => {
     );
   });
 
-  // The production probe reads a real child process and starts PowerShell on Windows.
+  // The production probe starts PowerShell on Windows, which can stall behind security scanning.
   test("keeps staging for a live owner when the start-time probe uses local ps output", async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
     roots.push(configDir);
@@ -421,7 +421,7 @@ describe("node task asset file port", () => {
       child.kill();
       await Effect.runPromise(port.cleanupCurrentOwner());
     }
-  }, 10_000);
+  }, 30_000);
 
   test("keeps staging when a live owner's start-time probe fails", async () => {
     const { aliveProcessIds, configDir, createPort, port, probeFailures, processStartedAtMs } =
