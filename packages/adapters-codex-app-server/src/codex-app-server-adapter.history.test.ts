@@ -3,6 +3,7 @@ import type { CodexAppServerThread, CodexAppServerTurn } from "@openducktor/cont
 import {
   createAdapterWithTransport,
   codexSessionRef,
+  codexSessionRuntimeRef,
   codexThreadStartResultFixture,
   codexThreadFixture,
   codexTurnFixture,
@@ -683,6 +684,95 @@ describe("CodexAppServerAdapter history loading", () => {
     await expect(pendingTodos).resolves.toEqual([
       expect.objectContaining({ content: "Use live todo", status: "in_progress" }),
     ]);
+  });
+
+  test("propagates an empty rollout for a resumed local session", async () => {
+    const failure = codexRpcRequestError(
+      "thread/read",
+      -32603,
+      "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty",
+    );
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async (request: CodexJsonRpcRequest) => {
+        if (request.method === "thread/read") {
+          throw failure;
+        }
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+    const input = codexSessionRuntimeRef("thread-idle");
+
+    await adapter.resumeSession(input);
+
+    await expect(adapter.loadSessionHistory(input)).rejects.toBe(failure);
+    await expect(adapter.loadSessionTodos(input)).rejects.toBe(failure);
+  });
+
+  test("propagates an empty rollout when the fresh session is released during the read", async () => {
+    const failure = codexRpcRequestError(
+      "thread/read",
+      -32603,
+      "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty",
+    );
+    const readRequested = createDeferred<void>();
+    const readResult = createDeferred<never>();
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async (request: CodexJsonRpcRequest) => {
+        if (request.method === "thread/read") {
+          readRequested.resolve();
+          return readResult.promise;
+        }
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession(codexSessionRuntimeRef());
+    const pendingHistory = adapter.loadSessionHistory(codexSessionRef());
+    await readRequested.promise;
+    await adapter.releaseSession(codexSessionRef());
+    readResult.reject(failure);
+
+    await expect(pendingHistory).rejects.toBe(failure);
+  });
+
+  test("propagates a later empty rollout after the fresh session materializes", async () => {
+    const threadId = "thread/start-runtime-live";
+    const failure = codexRpcRequestError(
+      "thread/read",
+      -32603,
+      "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty",
+    );
+    const thread = { id: threadId, cwd: "/repo", turns: [] };
+    let rolloutExists = true;
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async (request: CodexJsonRpcRequest) => {
+        if (request.method === "thread/read") {
+          if (!rolloutExists) {
+            throw failure;
+          }
+          return paginatedThreadReadResponse(thread);
+        }
+        if (request.method === "thread/turns/list") {
+          return paginatedTurnsListResponse(thread);
+        }
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession(codexSessionRuntimeRef());
+    await expect(adapter.loadSessionHistory(codexSessionRef())).resolves.toEqual([
+      expect.objectContaining({ role: "system" }),
+    ]);
+
+    rolloutExists = false;
+    await expect(adapter.loadSessionHistory(codexSessionRef())).rejects.toBe(failure);
+    await expect(adapter.loadSessionTodos(codexSessionRef())).rejects.toBe(failure);
   });
 
   test("projects supplied prompt context for cold persisted history reads", async () => {

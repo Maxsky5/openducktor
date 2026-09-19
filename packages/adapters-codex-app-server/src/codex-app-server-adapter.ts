@@ -210,6 +210,8 @@ export class CodexAppServerAdapter
   private readonly sessionEvents = new CodexSessionEventBus();
   private readonly pendingInput = new CodexPendingInputState();
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
+  // Only thread/start sessions can use the empty-rollout compatibility path.
+  private readonly freshSessionsAwaitingRollout = new WeakSet<CodexSessionState>();
   private readonly localSessions: CodexLocalSessionState;
   private readonly contextUsageLoader: CodexContextUsageLoader;
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
@@ -423,6 +425,7 @@ export class CodexAppServerAdapter
     const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
+    this.freshSessionsAwaitingRollout.add(session);
     this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
     await client.threadSetName({
       threadId: session.threadId,
@@ -787,6 +790,7 @@ export class CodexAppServerAdapter
       runtime,
       threadInventory: this.threadInventory,
       prepareImageGenerations: this.options.prepareImageGenerations,
+      ...this.freshRolloutReadGuard(session),
     });
     if (!mergeImage) return history;
     return history.map((message) =>
@@ -885,6 +889,7 @@ export class CodexAppServerAdapter
       externalSessionId: input.externalSessionId,
       workingDirectory: input.workingDirectory,
       allowUnmaterialized: session !== undefined,
+      ...this.freshRolloutReadGuard(session),
     });
     const historyTodos = codexTodosFromThreadRead(response);
     const latestLiveTodos = this.runtimeEvents.latestTodos(input.externalSessionId);
@@ -945,6 +950,22 @@ export class CodexAppServerAdapter
       );
     }
     return session;
+  }
+
+  private freshRolloutReadGuard(session: CodexSessionState | undefined) {
+    if (!session) {
+      return {};
+    }
+    return {
+      resolveEmptyRolloutWorkingDirectory: () =>
+        this.localSessions.get(session.threadId) === session &&
+        this.freshSessionsAwaitingRollout.has(session)
+          ? session.workingDirectory
+          : undefined,
+      onThreadMaterialized: () => {
+        this.freshSessionsAwaitingRollout.delete(session);
+      },
+    };
   }
 
   async updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void> {
