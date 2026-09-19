@@ -115,4 +115,5 @@ export type ClaudeAgentSdkService = {
     input: LoadAgentFileStatusInput,
   ): Effect.Effect<FileStatus[], ClaudeAgentSdkServiceError>;
   stopSessionsForRuntime(runtimeId: string): Effect.Effect<void, HostOperationErrorAggregate>;
+  dispose(): void;
 };

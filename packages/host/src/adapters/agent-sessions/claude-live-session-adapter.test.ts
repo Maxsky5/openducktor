@@ -147,6 +147,7 @@ const createHarness = async (
   let releaseSessionImpl: ClaudeAgentSdkService["releaseSession"] = () => Effect.void;
   let stopSessionsForRuntimeImpl: ClaudeAgentSdkService["stopSessionsForRuntime"] = () =>
     Effect.void;
+  let disposeImpl: ClaudeAgentSdkService["dispose"] = () => {};
   let failNextMutationAfterApply = false;
   let failMutationEventType: string | undefined;
   let mutationBarrier: MutationBarrier | undefined;
@@ -197,6 +198,7 @@ const createHarness = async (
     stopSession: (input: Parameters<ClaudeAgentSdkService["stopSession"]>[0]) =>
       stopSessionImpl(input),
     stopSessionsForRuntime: (runtimeId: string) => stopSessionsForRuntimeImpl(runtimeId),
+    dispose: () => disposeImpl(),
     releaseSession: (input: Parameters<ClaudeAgentSdkService["releaseSession"]>[0]) =>
       releaseSessionImpl(input),
   } satisfies Parameters<typeof createClaudeLiveSessionAdapterPreparer>[0]["service"];
@@ -305,6 +307,9 @@ const createHarness = async (
       implementation: ClaudeAgentSdkService["stopSessionsForRuntime"],
     ) => {
       stopSessionsForRuntimeImpl = implementation;
+    },
+    setDispose: (implementation: ClaudeAgentSdkService["dispose"]) => {
+      disposeImpl = implementation;
     },
   };
 };
@@ -1620,6 +1625,10 @@ describe("Claude host live-session adapter", () => {
     const harness = await createHarness();
     await Effect.runPromise(harness.adapter.startSession(startInput));
     let cleanupAttempts = 0;
+    let disposeCalls = 0;
+    harness.setDispose(() => {
+      disposeCalls += 1;
+    });
     harness.setStopSessionsForRuntime(() => {
       cleanupAttempts += 1;
       return cleanupAttempts === 1
@@ -1635,6 +1644,7 @@ describe("Claude host live-session adapter", () => {
     await expect(Effect.runPromise(harness.adapter.releaseRuntime())).rejects.toThrow(
       "Claude cleanup failed.",
     );
+    expect(disposeCalls).toBe(0);
     await expect(
       Effect.runPromise(
         harness.adapter.readSnapshot({
@@ -1655,6 +1665,7 @@ describe("Claude host live-session adapter", () => {
       },
     ]);
     expect(cleanupAttempts).toBe(2);
+    expect(disposeCalls).toBe(1);
   });
 
   test("serializes live model updates in selection order", async () => {

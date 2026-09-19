@@ -32,6 +32,7 @@ import type { OpenDucktorMcpBridgeConnection } from "../mcp/openducktor-mcp-envi
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import type { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
+import type { ClaudeWorkspaceFileSearch } from "./claude-agent-sdk-file-search";
 
 export type ClaudeMcpBridgeConnectionResolver = (
   repoPath: string,
@@ -40,6 +41,7 @@ export type ClaudeMcpBridgeConnectionResolver = (
 export type CreateClaudeAgentSdkServiceInput = {
   claudeExecutablePath: string;
   emit?: (session: ClaudeSessionContext, event: ClaudeAgentSdkEvent) => void;
+  fileSearch?: ClaudeWorkspaceFileSearch;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;

@@ -48,6 +48,7 @@ const createService = (
   session: ClaudeSession | null,
   emit?: ClaudeAgentSdkEventEmitter,
   existingSessionStore?: ClaudeSessionStore,
+  overrides: Partial<Parameters<typeof createClaudeAgentSdkService>[0]> = {},
 ) => {
   const sessionStore =
     existingSessionStore ??
@@ -59,6 +60,7 @@ const createService = (
   }
   const serviceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
     claudeExecutablePath: process.execPath,
+    fileSearch: { dispose: () => {}, prewarm: () => {}, release: () => {}, search: async () => [] },
     now: () => "2026-06-25T20:00:00.000Z",
     onBackgroundFailure: () => Effect.void,
     resolveMcpBridgeConnection: () => {
@@ -85,6 +87,7 @@ const createService = (
             })
           : Effect.die("unused"),
     },
+    ...overrides,
   };
   if (emit) {
     serviceInput.emit = emit;
@@ -534,6 +537,75 @@ describe("createClaudeAgentSdkService", () => {
         }),
       ),
     ).resolves.toEqual([todo]);
+  });
+
+  test("fails the session start before store ownership when the file search prewarm fails", async () => {
+    const sessionStore = createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const service = createService(null, undefined, sessionStore, {
+      fileSearch: {
+        dispose: () => {},
+        prewarm: () => {
+          throw new Error("fff native library not found");
+        },
+        release: () => {},
+        search: async () => [],
+      },
+      resolveMcpBridgeConnection: () =>
+        Effect.succeed({
+          workspaceId: "workspace-1",
+          hostUrl: "http://127.0.0.1:1",
+          hostToken: "bridge-secret-value",
+        }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.startSession(
+          {
+            repoPath: "/repo/",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree/",
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            systemPrompt: "Build",
+          },
+          "runtime-claude",
+        ),
+      ),
+    ).rejects.toThrow("fff native library not found");
+
+    expect([...sessionStore.values()]).toEqual([]);
+  });
+
+  test("disposes the file search and stops close tracking when the service stops", async () => {
+    const sessionStore = createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const calls: string[] = [];
+    const service = createService(createSession(), undefined, sessionStore, {
+      fileSearch: {
+        dispose: () => {
+          calls.push("dispose");
+        },
+        prewarm: () => {},
+        release: (workingDirectory) => {
+          calls.push(`release:${workingDirectory}`);
+        },
+        search: async () => [],
+      },
+    });
+
+    await Effect.runPromise(sessionStore.stopSessionsForRuntime("runtime-1"));
+    expect(calls).toEqual(["release:/repo/worktree/"]);
+
+    service.dispose();
+    expect(calls).toEqual(["release:/repo/worktree/", "dispose"]);
+
+    sessionStore.set(createSession());
+    await Effect.runPromise(sessionStore.stopSessionsForRuntime("runtime-1"));
+    expect(calls).toEqual(["release:/repo/worktree/", "dispose"]);
   });
 
   test("validates existing live session refs before resuming", async () => {

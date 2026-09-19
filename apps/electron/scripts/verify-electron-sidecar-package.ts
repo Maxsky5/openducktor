@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import { ElectronOperationError, errorMessage } from "../src/effect/electron-errors";
+import { resolvePackagedAppResourcesDirectory } from "./electron-packaged-layout";
 import type { ElectronReleaseArch, ElectronReleasePlatform } from "./electron-release-targets";
 import {
   ELECTRON_SIDECAR_IDS,
@@ -32,44 +33,18 @@ type PackagedSidecarInput = {
   sidecarId: ElectronSidecarId;
 };
 
-const unpackedDirectoryName = ({
-  arch,
-  platform,
-}: Pick<PackagedSidecarInput, "arch" | "platform">): string => {
-  if (platform === "macos") {
-    return arch === "x64" ? "mac" : `mac-${arch}`;
-  }
-
-  const prefix = platform === "windows" ? "win" : "linux";
-  return arch === "x64" ? `${prefix}-unpacked` : `${prefix}-${arch}-unpacked`;
-};
-
 export const resolvePackagedElectronSidecarPath = ({
   arch,
   platform,
   releaseDirectory,
   sidecarId,
 }: PackagedSidecarInput): string => {
-  const unpackedDirectory = unpackedDirectoryName({ arch, platform });
-  if (platform === "macos") {
-    return join(
-      releaseDirectory,
-      unpackedDirectory,
-      "OpenDucktor.app",
-      "Contents",
-      "Resources",
-      "bin",
-      electronSidecarExecutableName(sidecarId, platform),
-    );
-  }
-
-  return join(
+  const resourcesDirectory = resolvePackagedAppResourcesDirectory({
+    arch,
+    platform,
     releaseDirectory,
-    unpackedDirectory,
-    "resources",
-    "bin",
-    electronSidecarExecutableName(sidecarId, platform),
-  );
+  });
+  return join(resourcesDirectory, "bin", electronSidecarExecutableName(sidecarId, platform));
 };
 
 const assertPackagedSidecarFileEffect = ({

@@ -48,6 +48,7 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
     | "loadSessionDiff"
     | "loadFileStatus"
     | "continueInterruptedTurn"
+    | "dispose"
     | "forkSession"
     | "loadSessionContextUsage"
     | "prepareApprovalReply"

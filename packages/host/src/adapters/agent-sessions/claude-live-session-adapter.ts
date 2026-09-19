@@ -312,6 +312,7 @@ export const createClaudeLiveSessionAdapterPreparer =
               .pipe(
                 Effect.tap(() =>
                   Effect.sync(() => {
+                    service.dispose();
                     unsubscribe();
                   }),
                 ),
