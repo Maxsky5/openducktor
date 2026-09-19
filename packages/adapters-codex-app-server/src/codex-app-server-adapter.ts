@@ -110,7 +110,7 @@ import {
   type CodexSubagentRoute,
   codexSubagentRouteEventFields,
 } from "./codex-subagent-link-state";
-import { CodexThreadInventoryReader } from "./codex-thread-inventory";
+import { CodexThreadInventoryReader, type CodexThreadReadGuard } from "./codex-thread-inventory";
 import {
   requireNormalizedCodexToolInvocation,
   toCodexToolQuestions,
@@ -210,6 +210,8 @@ export class CodexAppServerAdapter
   private readonly sessionEvents = new CodexSessionEventBus();
   private readonly pendingInput = new CodexPendingInputState();
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
+  // An empty rollout is safe only for reads started before this process first reads the thread.
+  private readonly freshSessions = new WeakSet<CodexSessionState>();
   private readonly localSessions: CodexLocalSessionState;
   private readonly contextUsageLoader: CodexContextUsageLoader;
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
@@ -423,6 +425,7 @@ export class CodexAppServerAdapter
     const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
+    this.freshSessions.add(session);
     this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
     await client.threadSetName({
       threadId: session.threadId,
@@ -787,6 +790,7 @@ export class CodexAppServerAdapter
       runtime,
       threadInventory: this.threadInventory,
       prepareImageGenerations: this.options.prepareImageGenerations,
+      ...this.freshThreadReadGuard(session),
     });
     if (!mergeImage) return history;
     return history.map((message) =>
@@ -885,6 +889,7 @@ export class CodexAppServerAdapter
       externalSessionId: input.externalSessionId,
       workingDirectory: input.workingDirectory,
       allowUnmaterialized: session !== undefined,
+      ...this.freshThreadReadGuard(session),
     });
     const historyTodos = codexTodosFromThreadRead(response);
     const latestLiveTodos = this.runtimeEvents.latestTodos(input.externalSessionId);
@@ -945,6 +950,27 @@ export class CodexAppServerAdapter
       );
     }
     return session;
+  }
+
+  private freshThreadReadGuard(session: CodexSessionState | undefined): CodexThreadReadGuard {
+    if (
+      !session ||
+      this.localSessions.get(session.threadId) !== session ||
+      !this.freshSessions.has(session)
+    ) {
+      return {};
+    }
+    return {
+      getFreshThreadCwd: () =>
+        this.localSessions.get(session.threadId) === session &&
+        session.liveStatus !== undefined &&
+        session.liveStatus.classification !== "idle"
+          ? session.workingDirectory
+          : undefined,
+      onThreadRead: () => {
+        this.freshSessions.delete(session);
+      },
+    };
   }
 
   async updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void> {

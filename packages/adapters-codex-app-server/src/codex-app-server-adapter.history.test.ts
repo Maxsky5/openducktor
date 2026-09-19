@@ -3,16 +3,20 @@ import type { CodexAppServerThread, CodexAppServerTurn } from "@openducktor/cont
 import {
   createAdapterWithTransport,
   codexSessionRef,
+  codexSessionRuntimeRef,
   codexThreadStartResultFixture,
   codexThreadFixture,
   codexTurnFixture,
+  createDeferred,
   createHarness,
+  createRuntimeStreamSubscription,
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
   RecordingTransport,
   requestThreadId,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
+import { codexRpcRequestError, EMPTY_ROLLOUT_MESSAGE } from "./test-fixtures/codex-rpc-error";
 import {
   codexAgentMessageItemFixture,
   codexCollabAgentToolCallFixture,
@@ -596,6 +600,248 @@ describe("CodexAppServerAdapter history loading", () => {
         parts: [],
       },
     ]);
+  });
+
+  test("keeps fresh history and todos readable until the rollout materializes and live todos arrive", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const materializedTurns = createDeferred<ReturnType<typeof paginatedTurnsListResponse>>();
+    const turnsRequested = createDeferred<void>();
+    const threadId = "thread/start-runtime-live";
+    const firstRolloutThread = {
+      id: threadId,
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-first-record",
+          status: "completed",
+          items: [
+            codexDynamicToolCallFixture({
+              id: "todo-before-live-update",
+              namespace: "functions",
+              tool: "update_plan",
+              arguments: { plan: [{ step: "Stale rollout todo", status: "pending" }] },
+            }),
+          ],
+        },
+      ],
+    };
+    let rolloutMaterialized = false;
+    const transport: CodexJsonRpcTransport = {
+      request: async (request: CodexJsonRpcRequest) => {
+        if (request.method === "thread/read") {
+          if (!rolloutMaterialized) {
+            throw codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
+          }
+          return paginatedThreadReadResponse(firstRolloutThread);
+        }
+        if (request.method === "thread/turns/list") {
+          turnsRequested.resolve();
+          return materializedTurns.promise;
+        }
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport, {
+      subscribeEvents: runtimeStream.subscribeEvents,
+    });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const ref = codexSessionRef(threadId);
+    const [history, todos] = await Promise.all([
+      adapter.loadSessionHistory(ref),
+      adapter.loadSessionTodos(ref),
+    ]);
+    expect(history).toEqual([expect.objectContaining({ role: "system" })]);
+    expect(todos).toEqual([]);
+
+    rolloutMaterialized = true;
+    const pendingTodos = adapter.loadSessionTodos(ref);
+    await turnsRequested.promise;
+    runtimeStream.emitNotification({
+      method: "turn/plan/updated",
+      params: {
+        explanation: "The live event is authoritative.",
+        plan: [{ step: "Use live todo", status: "inProgress" }],
+        threadId,
+        turnId: "turn-live",
+      },
+    });
+    await flushCodexAdapterWork();
+    materializedTurns.resolve(paginatedTurnsListResponse(firstRolloutThread));
+
+    await expect(pendingTodos).resolves.toEqual([
+      expect.objectContaining({ content: "Use live todo", status: "in_progress" }),
+    ]);
+  });
+
+  test("keeps a pending fresh read valid when a parallel read finds the thread", async () => {
+    const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
+    const firstReadRequested = createDeferred<void>();
+    const firstRead = createDeferred<never>();
+    const thread = { id: "thread/start-runtime-live", cwd: "/repo", turns: [] };
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    let readCount = 0;
+    const transport: CodexJsonRpcTransport = {
+      request: async (request: CodexJsonRpcRequest) => {
+        if (request.method === "thread/read") {
+          readCount += 1;
+          if (readCount === 1) {
+            firstReadRequested.resolve();
+            return firstRead.promise;
+          }
+          return paginatedThreadReadResponse(thread);
+        }
+        if (request.method === "thread/turns/list") {
+          return paginatedTurnsListResponse(thread);
+        }
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession(codexSessionRuntimeRef());
+    const pendingHistory = adapter.loadSessionHistory(codexSessionRef());
+    await firstReadRequested.promise;
+    await expect(adapter.loadSessionTodos(codexSessionRef())).resolves.toEqual([]);
+    firstRead.reject(failure);
+
+    await expect(pendingHistory).resolves.toEqual([expect.objectContaining({ role: "system" })]);
+  });
+
+  test("rethrows the empty-rollout error after the fresh session becomes idle", async () => {
+    const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
+    const runtimeStream = createRuntimeStreamSubscription();
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async (request: CodexJsonRpcRequest) => {
+        if (request.method === "thread/read") {
+          throw failure;
+        }
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport, {
+      subscribeEvents: runtimeStream.subscribeEvents,
+    });
+
+    await adapter.startSession(codexSessionRuntimeRef());
+    runtimeStream.emitNotification({
+      method: "thread/status/changed",
+      params: {
+        threadId: "thread/start-runtime-live",
+        status: { type: "idle" },
+      },
+    });
+    await flushCodexAdapterWork();
+
+    await expect(adapter.loadSessionHistory(codexSessionRef())).rejects.toBe(failure);
+    await expect(adapter.loadSessionTodos(codexSessionRef())).rejects.toBe(failure);
+  });
+
+  test("rethrows an unrelated error for a fresh owned thread", async () => {
+    const failure = codexRpcRequestError("thread/read", -32603, "runtime database is unavailable");
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async (request: CodexJsonRpcRequest) => {
+        if (request.method === "thread/read") {
+          throw failure;
+        }
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession(codexSessionRuntimeRef());
+
+    await expect(adapter.loadSessionHistory(codexSessionRef())).rejects.toBe(failure);
+    await expect(adapter.loadSessionTodos(codexSessionRef())).rejects.toBe(failure);
+  });
+
+  test("rethrows the empty-rollout error for a resumed local session", async () => {
+    const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async (request: CodexJsonRpcRequest) => {
+        if (request.method === "thread/read") {
+          throw failure;
+        }
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+    const input = codexSessionRuntimeRef("thread-idle");
+
+    await adapter.resumeSession(input);
+
+    await expect(adapter.loadSessionHistory(input)).rejects.toBe(failure);
+    await expect(adapter.loadSessionTodos(input)).rejects.toBe(failure);
+  });
+
+  test("rethrows the empty-rollout error when the fresh session is released during the read", async () => {
+    const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
+    const readRequested = createDeferred<void>();
+    const readResult = createDeferred<never>();
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async (request: CodexJsonRpcRequest) => {
+        if (request.method === "thread/read") {
+          readRequested.resolve();
+          return readResult.promise;
+        }
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession(codexSessionRuntimeRef());
+    const pendingHistory = adapter.loadSessionHistory(codexSessionRef());
+    await readRequested.promise;
+    await adapter.releaseSession(codexSessionRef());
+    readResult.reject(failure);
+
+    await expect(pendingHistory).rejects.toBe(failure);
+  });
+
+  test("rethrows a later empty-rollout error after the first thread read", async () => {
+    const threadId = "thread/start-runtime-live";
+    const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
+    const thread = { id: threadId, cwd: "/repo", turns: [] };
+    let rolloutExists = true;
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const transport: CodexJsonRpcTransport = {
+      request: async (request: CodexJsonRpcRequest) => {
+        if (request.method === "thread/read") {
+          if (!rolloutExists) {
+            throw failure;
+          }
+          return paginatedThreadReadResponse(thread);
+        }
+        if (request.method === "thread/turns/list") {
+          return paginatedTurnsListResponse(thread);
+        }
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.startSession(codexSessionRuntimeRef());
+    await expect(adapter.loadSessionHistory(codexSessionRef())).resolves.toEqual([
+      expect.objectContaining({ role: "system" }),
+    ]);
+
+    rolloutExists = false;
+    await expect(adapter.loadSessionHistory(codexSessionRef())).rejects.toBe(failure);
+    await expect(adapter.loadSessionTodos(codexSessionRef())).rejects.toBe(failure);
   });
 
   test("projects supplied prompt context for cold persisted history reads", async () => {

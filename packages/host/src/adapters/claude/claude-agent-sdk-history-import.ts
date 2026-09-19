@@ -270,16 +270,21 @@ export type ClaudeHistoryProjectionInput = {
   subagentAgentIdsByToolUseId: Map<string, string>;
 };
 
+const CLAUDE_SESSION_MISSING_MESSAGE =
+  "The selected Claude session is unavailable. Check its history on the host.";
+
+export const isClaudeSessionMissingError = (cause: unknown): boolean =>
+  cause instanceof AgentRuntimeQueryError &&
+  cause.code === "request_failed" &&
+  cause.message === CLAUDE_SESSION_MISSING_MESSAGE;
+
 export const loadClaudeHistoryProjectionInput = async (
   input: LoadAgentSessionHistoryInput,
 ): Promise<ClaudeHistoryProjectionInput> => {
   const target = parseClaudeTranscriptTarget(input.externalSessionId);
   const session = await getSessionInfo(target.sessionId, { dir: input.workingDirectory });
   if (!session || session.sessionId !== target.sessionId) {
-    throw new AgentRuntimeQueryError(
-      "request_failed",
-      "The selected Claude session is unavailable. Check its history on the host.",
-    );
+    throw new AgentRuntimeQueryError("request_failed", CLAUDE_SESSION_MISSING_MESSAGE);
   }
   if (session.cwd !== input.workingDirectory) {
     throw new AgentRuntimeQueryError(
