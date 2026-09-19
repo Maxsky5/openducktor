@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
+import type { TaskStorePort } from "../../ports/task-repository-ports";
 import {
   createAgentSessionRecord,
   describeTaskStorePortContract,
 } from "../../ports/task-store-port-contract.test-support";
 import { createSqliteTaskRepository } from "./sqlite-task-repository";
-import { createSqliteTaskStoreHarness } from "./sqlite-task-store-test-support";
+import { createSqliteTaskStoreHarness, insertRawTask } from "./sqlite-task-store-test-support";
 
 describeTaskStorePortContract("SQLite TaskStorePort contract", createSqliteTaskStoreHarness);
 
@@ -199,6 +200,155 @@ describe("SQLite task session model updates", () => {
         providerId: "openai",
         modelId: "gpt-5.6-sol",
       });
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+describe("SQLite task session batches with nullable optional selection fields", () => {
+  const nullableSessionsJson = JSON.stringify([
+    {
+      externalSessionId: "legacy-session",
+      role: "build",
+      startedAt: "2026-06-10T10:00:00.000Z",
+      runtimeKind: "codex",
+      workingDirectory: "/repos/fairnest/worktrees/legacy-session",
+      selectedModel: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-6-astra",
+        variant: null,
+        profileId: null,
+      },
+    },
+    {
+      externalSessionId: "target-session",
+      role: "qa",
+      startedAt: "2026-06-10T11:00:00.000Z",
+      runtimeKind: "codex",
+      workingDirectory: "/repos/fairnest/worktrees/target-session",
+      selectedModel: null,
+    },
+  ]);
+
+  const targetIdentity = {
+    externalSessionId: "target-session",
+    runtimeKind: "codex",
+    workingDirectory: "/repos/fairnest/worktrees/target-session",
+  } as const;
+
+  const createTaskWithNullableSession = async () => {
+    const harness = await createSqliteTaskStoreHarness();
+    await Effect.runPromise(harness.store.diagnoseRepoStore({ repoPath: harness.repoPath }));
+    const taskId = "fairnest-nullable-session";
+    insertRawTask({
+      databasePath: harness.databasePath,
+      taskId,
+      agentSessionsJson: nullableSessionsJson,
+    });
+    return { ...harness, taskId };
+  };
+
+  const expectLegacySessionSelection = async (
+    store: TaskStorePort,
+    repoPath: string,
+    taskId: string,
+  ) => {
+    const metadata = await Effect.runPromise(store.getTaskMetadata({ repoPath, taskId }));
+    const legacy = metadata.agentSessions.find(
+      (entry) => entry.externalSessionId === "legacy-session",
+    );
+    expect(legacy?.selectedModel).toStrictEqual({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-6-astra",
+    });
+    return metadata.agentSessions;
+  };
+
+  test("upserts a session next to an unchanged sibling with nullable fields", async () => {
+    const { cleanup, repoPath, store, taskId } = await createTaskWithNullableSession();
+    try {
+      await expect(
+        Effect.runPromise(
+          store.upsertAgentSession({
+            repoPath,
+            taskId,
+            session: createAgentSessionRecord({
+              externalSessionId: "added-session",
+              role: "build",
+              startedAt: "2026-06-10T12:00:00.000Z",
+            }),
+          }),
+        ),
+      ).resolves.toBe(true);
+
+      const sessions = await expectLegacySessionSelection(store, repoPath, taskId);
+      expect(sessions.map((session) => session.externalSessionId)).toEqual([
+        "added-session",
+        "target-session",
+        "legacy-session",
+      ]);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("updates a model next to an unchanged sibling with nullable fields", async () => {
+    const { cleanup, repoPath, store, taskId } = await createTaskWithNullableSession();
+    try {
+      await expect(
+        Effect.runPromise(
+          store.updateAgentSessionModel({
+            repoPath,
+            taskId,
+            identity: targetIdentity,
+            selectedModel: {
+              runtimeKind: "codex",
+              providerId: "openai",
+              modelId: "gpt-5.6-sol",
+            },
+          }),
+        ),
+      ).resolves.toBe(true);
+
+      const sessions = await expectLegacySessionSelection(store, repoPath, taskId);
+      expect(
+        sessions.find((session) => session.externalSessionId === "target-session")?.selectedModel,
+      ).toStrictEqual({
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5.6-sol",
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("clears sessions by role next to an unchanged sibling with nullable fields", async () => {
+    const { cleanup, repoPath, store, taskId } = await createTaskWithNullableSession();
+    try {
+      await expect(
+        Effect.runPromise(store.clearAgentSessionsByRoles({ repoPath, taskId, roles: ["qa"] })),
+      ).resolves.toBe(true);
+
+      const sessions = await expectLegacySessionSelection(store, repoPath, taskId);
+      expect(sessions.map((session) => session.externalSessionId)).toEqual(["legacy-session"]);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test("deletes a session next to an unchanged sibling with nullable fields", async () => {
+    const { cleanup, repoPath, store, taskId } = await createTaskWithNullableSession();
+    try {
+      await expect(
+        Effect.runPromise(store.deleteAgentSession({ repoPath, taskId, identity: targetIdentity })),
+      ).resolves.toBe(true);
+
+      const sessions = await expectLegacySessionSelection(store, repoPath, taskId);
+      expect(sessions.map((session) => session.externalSessionId)).toEqual(["legacy-session"]);
     } finally {
       await cleanup();
     }

@@ -162,12 +162,14 @@ export const readTaskColumnNullability = (
 
 export const insertRawTask = ({
   databasePath,
+  agentSessionsJson = "[]",
   issueType = "task",
   qaRequired = 1,
   status = "open",
   taskId,
 }: {
   readonly databasePath: string;
+  readonly agentSessionsJson?: string;
   readonly issueType?: string;
   readonly qaRequired?: number;
   readonly status?: string;
@@ -194,7 +196,7 @@ export const insertRawTask = ({
           null,
           qaRequired,
           "[]",
-          "[]",
+          agentSessionsJson,
           null,
           null,
           null,

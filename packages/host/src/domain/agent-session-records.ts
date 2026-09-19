@@ -57,6 +57,11 @@ const withoutUndefinedSelectionFields = (
   return compacted;
 };
 
+export const toJsonSafeAgentSessionRecord = (session: AgentSessionRecord): AgentSessionRecord => ({
+  ...session,
+  selectedModel: withoutUndefinedSelectionFields(session.selectedModel),
+});
+
 export const compactAgentSessionRecord = (
   session: CompactableAgentSessionRecord,
 ): AgentSessionRecordCompactionResult => {
@@ -89,13 +94,7 @@ export const compactAgentSessionRecord = (
   });
 
   if (parsed.success) {
-    return {
-      success: true,
-      session: {
-        ...parsed.data,
-        selectedModel: withoutUndefinedSelectionFields(parsed.data.selectedModel),
-      },
-    };
+    return { success: true, session: toJsonSafeAgentSessionRecord(parsed.data) };
   }
 
   return compactionFailure(
