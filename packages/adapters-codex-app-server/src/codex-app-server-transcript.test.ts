@@ -6,6 +6,7 @@ import {
 } from "./codex-app-server-transcript";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
+import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
 import {
   codexUserInputsFromItem,
@@ -928,7 +929,7 @@ describe("Codex App Server transcript parsing", () => {
 
     expect(message).toMatchObject({
       role: "user",
-      text: "Inspect this screenshot /tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot 2026-05-20.png /tmp/openducktor-local-attachments/Screenshot 2026-05-20.png C:\\Temp\\openducktor-local-attachments\\550e8400-e29b-41d4-a716-446655440000-Windows Screenshot.png",
+      text: "Inspect this screenshot",
       displayParts: [
         { kind: "text", text: "Inspect this screenshot" },
         {
@@ -960,5 +961,42 @@ describe("Codex App Server transcript parsing", () => {
         },
       ],
     });
+  });
+
+  test("keeps an image-only user message in canonical history", () => {
+    const events = createCodexEventMapperPipeline().runThreadItem(
+      {
+        item: {
+          id: "user-1",
+          type: "userMessage",
+          content: [
+            {
+              type: "localImage",
+              path: "/tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot.png",
+            },
+          ],
+        },
+        index: 0,
+      },
+      { source: "thread_read", threadId: "thread-1" },
+    );
+
+    expect(projectCodexCanonicalEventsToHistory(events)).toEqual([
+      expect.objectContaining({
+        role: "user",
+        text: "",
+        displayParts: [
+          {
+            kind: "attachment",
+            attachment: {
+              id: "codex-local-image:user-1:0",
+              kind: "image",
+              name: "Screenshot.png",
+              path: "/tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot.png",
+            },
+          },
+        ],
+      }),
+    ]);
   });
 });

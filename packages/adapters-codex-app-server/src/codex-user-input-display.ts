@@ -579,6 +579,9 @@ const textInputHasFileMentionElement = (
 const codexUserInputTextContributions = (input: CodexUserInput[]): string[] => {
   const markedSkills = collectCodexMarkedSkillMarkerCounts(input);
   return input.map((current, index) => {
+    if (current.type === "localImage") {
+      return "";
+    }
     if (current.type !== "skill" && current.type !== "mention") {
       return userInputText(current);
     }

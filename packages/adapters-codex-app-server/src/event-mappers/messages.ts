@@ -33,10 +33,11 @@ export const userMessageMapper: CodexEventMapper = {
     }
     const parts = codexUserInputsFromItem(input.item);
     const message = codexUserInputListToText(parts);
-    if (message.trim().length === 0) {
+    const messageId = input.item.id;
+    const displayParts = codexUserInputsToDisplayParts(parts, messageId);
+    if (message.trim().length === 0 && displayParts.length === 0) {
       return emptyCodexMappingResult();
     }
-    const messageId = input.item.id;
     const timestamp = ctx.timestamp ?? input.timestamp;
     const event: CodexCanonicalUserMessageEvent = {
       kind: "user_message",
@@ -45,7 +46,7 @@ export const userMessageMapper: CodexEventMapper = {
       threadId: ctx.threadId,
       messageId,
       message,
-      displayParts: codexUserInputsToDisplayParts(parts, messageId),
+      displayParts,
       state: "read",
     };
     if (timestamp) {
