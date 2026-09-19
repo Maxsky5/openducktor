@@ -63,6 +63,7 @@ describe("OpenCode approval classifier", () => {
         "git log --oneline -5",
         "git -C /repo log --oneline",
         "cat < input.txt",
+        "find . -depth -print",
         "sort -T/tmp input.txt",
       ],
       expected: "read_only",
@@ -88,6 +89,7 @@ describe("OpenCode approval classifier", () => {
 
   test.each([
     'find . "" -delete',
+    "find . -depth -delete",
     "sort input.txt '' -o output.txt",
     "sort -T/tmp input.txt -o output.txt",
     'git log "" --output=log.txt',
@@ -112,6 +114,7 @@ describe("OpenCode approval classifier", () => {
     "curl --etag-save etag.txt https://example.test",
     "curl --libcurl generated.c file:///etc/hosts",
     "curl --form-string name=value https://example.test",
+    "curl --remote-name-all file:///tmp/source.txt",
     "dd if=input.img of=output.img",
     "cat < input.txt > output.txt",
     "rm output.txt",

@@ -41,7 +41,7 @@ const MUTATING_FIND_ACTIONS = words(
   "-delete -exec -execdir -fls -fprint -fprint0 -fprintf -ok -okdir",
 );
 const READ_ONLY_FIND_OPTIONS = words(
-  "-- -H -L -P -a -and -empty -not -o -or -print -print0 -prune",
+  "-- -H -L -P -a -and -depth -empty -not -o -or -print -print0 -prune",
 );
 const READ_ONLY_FIND_OPTIONS_WITH_VALUE = words(
   "-group -iname -maxdepth -mindepth -mtime -name -newer -path -perm -regex -regextype -size -type -user",
@@ -56,7 +56,7 @@ const READ_ONLY_SORT_OPTIONS_WITH_VALUE = words(
 const UNKNOWN_SORT_OPTIONS_WITH_VALUE = words("--compress-program");
 
 const MUTATING_CURL_OPTIONS = words(
-  "-F -O -T -d --data --data-ascii --data-binary --data-raw --data-urlencode --form --form-string --json --remote-name --upload-file",
+  "-F -O -T -d --data --data-ascii --data-binary --data-raw --data-urlencode --form --form-string --json --remote-name --remote-name-all --upload-file",
 );
 const CURL_FILE_OUTPUT_OPTIONS = words(
   "-D -c -o --cookie-jar --dump-header --etag-save --libcurl --output --trace --trace-ascii",
