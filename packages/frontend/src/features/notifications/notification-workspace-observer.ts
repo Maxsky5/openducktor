@@ -90,7 +90,7 @@ export const createNotificationWorkspaceObserver = ({
       if (observation.cancelled) {
         return;
       }
-      if (envelope.type === "fault" || envelope.type === "transcript_gap") {
+      if ((envelope.type === "fault" && !envelope.ref) || envelope.type === "transcript_gap") {
         onFailure({
           repoPath: workspace.repoPath,
           source: "session",
