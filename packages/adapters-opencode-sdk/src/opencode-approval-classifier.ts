@@ -24,6 +24,7 @@ const READ_ONLY_GIT_OPTIONS = wordSet(
   "-b -p -s -u -z --all --branch --cached --decorate --graph --name-only --name-status --no-patch --oneline --patch --porcelain --raw --short --staged --stat --summary",
 );
 const READ_ONLY_GIT_OPTIONS_WITH_ARGUMENT = wordSet("-n --max-count");
+const UNKNOWN_GIT_OPTIONS_WITH_ARGUMENT = wordSet("--since");
 const READ_ONLY_GIT_OPTION_PREFIXES = [
   "--column=",
   "--decorate=",
@@ -43,11 +44,13 @@ const READ_ONLY_FIND_OPTIONS = wordSet(
 const READ_ONLY_FIND_OPTIONS_WITH_ARGUMENT = wordSet(
   "-group -iname -maxdepth -mindepth -mtime -name -newer -path -perm -size -type -user",
 );
+const UNKNOWN_FIND_OPTIONS_WITH_ARGUMENT = wordSet("-regextype");
 
 const MUTATING_CURL_OPTIONS = wordSet(
   "-F -O -T -d -o --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --output --remote-name --upload-file",
 );
 const MUTATING_HTTP_METHODS = wordSet("DELETE PATCH POST PUT");
+const CURL_OPTIONS_WITH_ARGUMENT = wordSet("-H --header");
 
 const READ_ONLY_SORT_OPTIONS = wordSet(
   "-b -d -f -g -h -i -M -m -n -R -r -s -u -V -z --check --dictionary-order --general-numeric-sort --human-numeric-sort --ignore-case --ignore-leading-blanks --merge --month-sort --numeric-sort --random-sort --reverse --stable --unique --version-sort --zero-terminated",
@@ -231,6 +234,7 @@ const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation =>
     return "unknown";
   }
 
+  let hasUnknownOption = false;
   for (let index = 2; index < tokens.length; index += 1) {
     const option = tokens[index];
     if (!option || option === "--") {
@@ -246,6 +250,15 @@ const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation =>
       index += 1;
       continue;
     }
+    if (UNKNOWN_GIT_OPTIONS_WITH_ARGUMENT.has(option)) {
+      hasUnknownOption = true;
+      index += 1;
+      continue;
+    }
+    if (option.startsWith("--since=")) {
+      hasUnknownOption = true;
+      continue;
+    }
     if (/^-\d+$/.test(option)) {
       continue;
     }
@@ -253,13 +266,14 @@ const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation =>
       !READ_ONLY_GIT_OPTIONS.has(option) &&
       !READ_ONLY_GIT_OPTION_PREFIXES.some((prefix) => option.startsWith(prefix))
     ) {
-      return "unknown";
+      hasUnknownOption = true;
     }
   }
-  return "read_only";
+  return hasUnknownOption ? "unknown" : "read_only";
 };
 
 const classifyFindCommand = (tokens: readonly string[]): AgentApprovalMutation => {
+  let hasUnknownOption = false;
   for (let index = 1; index < tokens.length; index += 1) {
     const token = tokens[index];
     if (!token || token === "--") {
@@ -272,11 +286,16 @@ const classifyFindCommand = (tokens: readonly string[]): AgentApprovalMutation =
       index += 1;
       continue;
     }
+    if (UNKNOWN_FIND_OPTIONS_WITH_ARGUMENT.has(token)) {
+      hasUnknownOption = true;
+      index += 1;
+      continue;
+    }
     if (token.startsWith("-") && !READ_ONLY_FIND_OPTIONS.has(token)) {
-      return "unknown";
+      hasUnknownOption = true;
     }
   }
-  return "read_only";
+  return hasUnknownOption ? "unknown" : "read_only";
 };
 
 const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation => {
@@ -294,6 +313,13 @@ const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation =
         return "mutating";
       }
       index += 1;
+      continue;
+    }
+    if (CURL_OPTIONS_WITH_ARGUMENT.has(token)) {
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("--header=")) {
       continue;
     }
     if (token.startsWith("--request=")) {
@@ -318,7 +344,7 @@ const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation =
       }
     }
     if (token.startsWith("-")) {
-      return "unknown";
+      continue;
     }
   }
   return "unknown";
@@ -409,7 +435,7 @@ const classifyCommandTokens = (tokens: readonly string[]): AgentApprovalMutation
         !option.startsWith("--check=") &&
         !/^-\d+$/.test(option)
       ) {
-        return "unknown";
+        hasUnknownOption = true;
       }
     }
     return hasUnknownOption ? "unknown" : "read_only";

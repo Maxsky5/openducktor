@@ -184,6 +184,35 @@ describe("OpenCode approval classifier", () => {
   });
 
   test.each([
+    "curl -s -o output.txt https://example.test",
+    "curl --silent -X POST https://example.test",
+    "git log --since yesterday --output=log.txt",
+    "find . -regextype posix-extended -delete",
+    "sort --debug -o output.txt input.txt",
+  ])("finds a write after an unlisted read option: %s", (command) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [command],
+        command,
+      }),
+    ).toBe("mutating");
+  });
+
+  test.each(["git log --since yesterday", "find . -regextype posix-extended", "sort --debug"])(
+    "keeps an unlisted read option unknown without a proved mutation: %s",
+    (command) => {
+      expect(
+        classifyOpenCodeApprovalMutation({
+          permission: "bash",
+          patterns: [command],
+          command,
+        }),
+      ).toBe("unknown");
+    },
+  );
+
+  test.each([
     { command: "sort -- -o output.txt", expected: "read_only" },
     { command: "git log -- --output=log.txt", expected: "read_only" },
     { command: "find -- -delete", expected: "read_only" },
@@ -207,9 +236,12 @@ describe("OpenCode approval classifier", () => {
     { command: "find . -name output.txt -delete", expected: "mutating" },
     { command: "git log -n --output=log.txt", expected: "read_only" },
     { command: "git log -n 5 --output=log.txt", expected: "mutating" },
+    { command: "git log --since --output=log.txt", expected: "unknown" },
+    { command: "find . -regextype -delete", expected: "unknown" },
     { command: "sort --compress-program -o input.txt", expected: "unknown" },
     { command: "sort --compress-program gzip -o output.txt", expected: "mutating" },
     { command: "curl -H -o https://example.test", expected: "unknown" },
+    { command: "curl --header -o https://example.test", expected: "unknown" },
   ] as const)(
     "does not scan an option argument as a separate option: $command",
     ({ command, expected }) => {
