@@ -5,7 +5,11 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { useAgentSession, useAgentSessionVisiblePendingInput } from "@/state/app-state-provider";
+import {
+  useAgentOperations,
+  useAgentSession,
+  useAgentSessionVisiblePendingInput,
+} from "@/state/app-state-provider";
 import {
   resolveRuntimeCatalogSurface,
   runtimeCatalogQueryOptions,
@@ -17,6 +21,7 @@ import { resolveAgentChatRuntimePresentation } from "../agent-chat-runtime-prese
 import { resolveAgentChatTranscriptPresentation } from "../agent-chat-transcript-presentation";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
+import { useAgentAsyncQuestionActions } from "../use-agent-async-question-actions";
 import { deriveRuntimeTranscriptSurfaceState } from "./runtime-transcript-surface-state";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
@@ -37,6 +42,7 @@ export function useSessionTranscriptSurfaceModel({
   const hasWorkspace = workspaceRepoPath !== null;
   const liveSession = useAgentSession(isOpen ? target : null);
   const visiblePendingInput = useAgentSessionVisiblePendingInput(isOpen ? target : null);
+  const { sendAgentMessage } = useAgentOperations();
   const { loadRepoRuntimeCatalog, runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
     hasWorkspace,
@@ -62,6 +68,11 @@ export function useSessionTranscriptSurfaceModel({
     isRuntimeReady: runtimeReadiness.state === "ready",
     replyAgentApproval: sessionHistory.replyAgentApproval,
     answerAgentQuestion: sessionHistory.answerAgentQuestion,
+  });
+  const asyncQuestions = useAgentAsyncQuestionActions({
+    sessionIdentity: sessionHistory.interactionSession,
+    canSubmit: runtimeReadiness.state === "ready",
+    sendAgentMessage,
   });
 
   const transcriptSurfaceState = deriveRuntimeTranscriptSurfaceState({
@@ -188,6 +199,7 @@ export function useSessionTranscriptSurfaceModel({
     emptyState: transcriptSurfaceState.emptyState,
     pendingApprovalRequests: transcriptInteractions.pendingApprovalRequests,
     pendingQuestionRequests: transcriptInteractions.pendingQuestionRequests,
+    asyncQuestions,
     todos: EMPTY_TODOS,
     pendingQuestions: transcriptInteractions.pendingQuestions,
     approvals: transcriptInteractions.approvals,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentAsyncQuestionSchema } from "./agent-async-question-schemas";
 import { isoTimestampSchema } from "./string-schemas";
 import {
   runtimeApprovalReplyOutcomeSchema,
@@ -105,6 +106,7 @@ export const agentSessionLiveSnapshotSchema = z
     parentExternalSessionId: nonEmptyStringSchema.optional(),
     pendingApprovals: z.array(agentSessionLivePendingApprovalRequestSchema),
     pendingQuestions: z.array(agentSessionLivePendingQuestionRequestSchema),
+    pendingAsyncQuestions: z.array(agentAsyncQuestionSchema),
     contextUsage: agentSessionContextUsageSchema.nullable(),
     model: agentModelSelectionSchema.optional(),
   })

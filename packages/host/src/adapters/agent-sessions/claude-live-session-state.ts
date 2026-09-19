@@ -20,7 +20,6 @@ import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude
 import type { ClaudeRuntimeInstance } from "./claude-live-session-adapter-contract";
 
 type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
-
 const refKey = (ref: AgentSessionLiveRef): string =>
   [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
 
@@ -170,6 +169,7 @@ export const createClaudeLiveSessionState = ({
       startedAt: isRoot ? session.startedAt : timestamp,
       pendingApprovals: [],
       pendingQuestions: [],
+      pendingAsyncQuestions: [],
       contextUsage: null,
     };
     if (session.summary.sessionAssociation.kind === "repository") {
@@ -484,6 +484,7 @@ export const createClaudeLiveSessionState = ({
         startedAt: summary.startedAt,
         pendingApprovals: current?.pendingApprovals ?? [],
         pendingQuestions: current?.pendingQuestions ?? [],
+        pendingAsyncQuestions: [],
         contextUsage: current?.contextUsage ?? null,
       };
       if (summary.sessionAssociation.kind === "repository") {

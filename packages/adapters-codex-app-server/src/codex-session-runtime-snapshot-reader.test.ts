@@ -3,6 +3,7 @@ import { createCodexAppServerClient } from "./app-server-client";
 import { defaultCodexEffectivePolicy } from "./codex-app-server-adapter.test-harness";
 import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-server-threads";
 import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
+import { CodexAsyncQuestionState } from "./codex-async-questions";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexSessionRuntimeSnapshotReaderDeps } from "./codex-session-runtime-snapshot-reader";
 import {
@@ -50,6 +51,7 @@ const createDeps = (
     },
   },
   pendingInput: new CodexPendingInputState(),
+  asyncQuestions: new CodexAsyncQuestionState(),
   hasActiveTurn: () => false,
 });
 

@@ -52,6 +52,7 @@ export type AgentSessionRuntimeSnapshotSource = {
   runtimeActivity: AgentSessionRuntimeActivity;
   pendingApprovals: AgentPendingApprovalRequest[];
   pendingQuestions: AgentPendingQuestionRequest[];
+  pendingAsyncQuestions?: AgentSessionRuntimeSnapshot["pendingAsyncQuestions"];
 };
 
 export const toAgentSessionRuntimeSnapshot = (
@@ -71,7 +72,7 @@ export const toAgentSessionRuntimeSnapshot = (
   }
 
   const classification = classifyAgentSessionActivity(snapshot);
-  const runtimeSnapshot: AgentSessionRuntimeSnapshot = {
+  const runtimeSnapshot: Extract<AgentSessionRuntimeSnapshot, { availability: "runtime" }> = {
     availability: "runtime",
     classification,
     ref,
@@ -79,6 +80,7 @@ export const toAgentSessionRuntimeSnapshot = (
     startedAt: snapshot.startedAt,
     pendingApprovals: snapshot.pendingApprovals,
     pendingQuestions: snapshot.pendingQuestions,
+    pendingAsyncQuestions: snapshot.pendingAsyncQuestions ?? [],
   };
   if (snapshot.parentExternalSessionId) {
     runtimeSnapshot.parentExternalSessionId = snapshot.parentExternalSessionId;
@@ -94,4 +96,5 @@ export const toMissingAgentSessionRuntimeSnapshot = (
   ref,
   pendingApprovals: [],
   pendingQuestions: [],
+  pendingAsyncQuestions: [],
 });

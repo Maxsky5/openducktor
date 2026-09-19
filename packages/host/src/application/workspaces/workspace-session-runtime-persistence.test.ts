@@ -576,6 +576,7 @@ describe("Workspace Session persistence through the shared command module", () =
                   startedAt: "2026-09-07T10:00:00Z",
                   pendingApprovals: [],
                   pendingQuestions: [],
+                  pendingAsyncQuestions: [],
                   contextUsage: null,
                 },
               };

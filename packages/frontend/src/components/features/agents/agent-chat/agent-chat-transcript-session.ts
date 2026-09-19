@@ -15,6 +15,7 @@ type AgentChatTranscriptSessionSource = Pick<
   | "messages"
   | "pendingApprovals"
   | "pendingQuestions"
+  | "pendingAsyncQuestions"
 >;
 
 export const toAgentChatTranscriptSession = (
@@ -25,6 +26,7 @@ export const toAgentChatTranscriptSession = (
     activityState: getAgentSessionActivityStateFromSession(session),
     runtimeStatusMessage: session.runtimeStatusMessage,
     messages: toSessionMessagesState(session),
+    pendingAsyncQuestions: session.pendingAsyncQuestions ?? [],
   };
   if (session.title) {
     transcriptSession.title = session.title;

@@ -198,6 +198,8 @@ const claudePartLabel = (part: AgentUserMessagePart): string => {
       return "subagent reference";
     case "attachment":
       return `${part.attachment.kind} attachment`;
+    case "async_question_reply":
+      return "Codex asynchronous question reply";
   }
 };
 
@@ -227,6 +229,13 @@ const encodeClaudeFileReference = (path: string): string => {
 };
 
 export const encodeClaudePromptTextWithSourceRanges = (parts: AgentUserMessagePart[]) => {
+  if (parts.some((part) => part.kind === "async_question_reply")) {
+    throw new HostValidationError({
+      field: "parts",
+      message: "Claude Agent SDK runtime does not support Codex asynchronous question replies.",
+      details: { partKind: "async_question_reply" },
+    });
+  }
   let text = "";
   let previousPart: AgentUserMessagePart | null = null;
   const sourceTextByPartIndex: (AgentUserMessageSourceText | undefined)[] = Array.from({
@@ -301,6 +310,13 @@ export const encodeClaudePromptText = (parts: AgentUserMessagePart[]): string =>
 export const toClaudeMessageFromParts = async (
   parts: AgentUserMessagePart[],
 ): Promise<SDKUserMessage> => {
+  if (parts.some((part) => part.kind === "async_question_reply")) {
+    throw new HostValidationError({
+      field: "parts",
+      message: "Claude Agent SDK runtime does not support Codex asynchronous question replies.",
+      details: { partKind: "async_question_reply" },
+    });
+  }
   const hasAttachments = parts.some((part) => part.kind === "attachment");
   if (!hasAttachments) {
     return toClaudeMessage(encodeClaudePromptText(parts));

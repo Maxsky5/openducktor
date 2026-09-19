@@ -19,6 +19,7 @@ import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { buildQuestionCardKey } from "./agent-session-question-keys";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
+import { AgentAsyncQuestionCard } from "./agent-async-question-card";
 import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import { ScrollToBottomButton } from "./scroll-to-bottom-button";
@@ -120,6 +121,10 @@ type AgentChatBottomStackProps = {
   resumeDisabled: boolean;
   pendingQuestions: AgentChatThreadModel["pendingQuestionRequests"];
   pendingApprovals: AgentChatThreadModel["pendingApprovalRequests"];
+  pendingAsyncQuestions: NonNullable<
+    AgentChatThreadModel["transcript"]["session"]
+  >["pendingAsyncQuestions"];
+  asyncQuestions: AgentChatThreadModel["asyncQuestions"];
   todos: readonly AgentSessionTodoItem[];
   sessionAuxiliaryError: string | null;
   runtimeStatusMessage: string | null;
@@ -216,6 +221,8 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
   resumeDisabled,
   pendingQuestions,
   pendingApprovals,
+  pendingAsyncQuestions,
+  asyncQuestions,
   todos,
   sessionAuxiliaryError,
   runtimeStatusMessage,
@@ -258,6 +265,19 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
           disabled={!canSubmitQuestionAnswers}
           isSubmitting={Boolean(isSubmittingQuestionByRequestId[request.requestId])}
           onSubmit={onSubmitQuestionAnswers}
+        />
+      ))}
+
+      {pendingAsyncQuestions.map((question) => (
+        <AgentAsyncQuestionCard
+          key={question.questionItemId}
+          question={question}
+          disabled={!asyncQuestions.canSubmit}
+          isSubmitting={Boolean(asyncQuestions.isSubmittingByQuestionId[question.questionItemId])}
+          {...(asyncQuestions.errorByQuestionId[question.questionItemId]
+            ? { error: asyncQuestions.errorByQuestionId[question.questionItemId] }
+            : {})}
+          onSubmit={asyncQuestions.onSubmit}
         />
       ))}
 
@@ -332,6 +352,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     sessionAgentColors,
     pendingApprovalRequests,
     pendingQuestionRequests,
+    asyncQuestions,
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
     todos,
@@ -391,13 +412,14 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const rowRefByKey = rowRefByKeyRef.current;
   const { registerRowElement } = useAgentChatRowMotion();
   const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
+  const pendingAsyncQuestions = session?.pendingAsyncQuestions ?? [];
   const hasWaitingInput = pendingQuestionRequests.length > 0 || pendingApprovalRequests.length > 0;
   const runtimeStatusMessage = isSessionWorking && session ? session.runtimeStatusMessage : null;
   const transcriptEmptyState = session === null ? emptyState : null;
   const hasBottomStack = resolveHasBottomStack({
     hasSession: Boolean(session),
     hasWaitingInput,
-    hasVisibleTodo,
+    hasVisibleTodo: hasVisibleTodo || pendingAsyncQuestions.length > 0,
     sessionAuxiliaryError,
     runtimeStatusMessage,
     hasInterruptedTurnResume: interruptedTurnResume !== undefined,
@@ -490,6 +512,8 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
               resumeDisabled={!isInteractionEnabled || isSending || isStarting}
               pendingQuestions={pendingQuestionRequests}
               pendingApprovals={pendingApprovalRequests}
+              pendingAsyncQuestions={pendingAsyncQuestions}
+              asyncQuestions={asyncQuestions}
               todos={todos}
               canSubmitQuestionAnswers={canSubmitQuestionAnswers}
               isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}

@@ -156,6 +156,7 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   contextUsage: null,
   pendingApprovals: [],
   pendingQuestions: [],
+  pendingAsyncQuestions: [],
   selectedModel: null,
 };
 

@@ -11,6 +11,7 @@ import {
 import type { CodexThreadInventory } from "./codex-app-server-threads";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
+import type { CodexAsyncQuestionState } from "./codex-async-questions";
 import type { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexSessionState } from "./types";
@@ -20,6 +21,7 @@ export type CodexSessionRuntimeSnapshotReaderDeps = {
   threadInventory: Pick<CodexThreadInventoryReader, "read" | "refresh">;
   sessions: CodexSessionLookup;
   pendingInput: CodexPendingInputState;
+  asyncQuestions: CodexAsyncQuestionState;
   hasActiveTurn: (externalSessionId: string) => boolean;
 };
 
@@ -45,6 +47,10 @@ const toLocalRuntimeSnapshot = async (
     pendingQuestions: deps.pendingInput.pendingQuestionsForSession(
       session.threadId,
       session.runtimeId,
+    ),
+    pendingAsyncQuestions: deps.asyncQuestions.pendingForSession(
+      session.runtimeId,
+      session.threadId,
     ),
     hasActiveTurn: deps.hasActiveTurn(session.threadId),
   };
@@ -93,6 +99,10 @@ export const listCodexSessionRuntimeSnapshots = async (
           session.threadId,
           session.runtimeId,
         ),
+        pendingAsyncQuestions: deps.asyncQuestions.pendingForSession(
+          session.runtimeId,
+          session.threadId,
+        ),
         hasActiveTurn: deps.hasActiveTurn(session.threadId),
       }),
     ),
@@ -124,5 +134,6 @@ export const readCodexSessionRuntimeSnapshot = async (
   return toRuntimeSnapshotFromThread(snapshot, input, {
     pendingApprovals: deps.pendingInput.pendingApprovalsForSession(snapshot.id, runtimeId),
     pendingQuestions: deps.pendingInput.pendingQuestionsForSession(snapshot.id, runtimeId),
+    pendingAsyncQuestions: deps.asyncQuestions.pendingForSession(runtimeId, snapshot.id),
   });
 };

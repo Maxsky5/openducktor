@@ -145,6 +145,7 @@ const snapshot = (): AgentSessionLiveSnapshot => ({
   startedAt: "2026-05-10T10:00:00.000Z",
   pendingApprovals: [],
   pendingQuestions: [],
+  pendingAsyncQuestions: [],
   contextUsage: null,
 });
 describe("createRuntimeTaskActivityGuard", () => {

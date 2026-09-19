@@ -3,6 +3,7 @@ import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { applyLoadedSessionHistory } from "../support/session-history-chat-messages";
 import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
+import type { AgentAsyncQuestionProjection } from "../support/async-questions";
 
 type SessionHistoryLoadPolicySession = Pick<
   AgentSessionState,
@@ -18,6 +19,7 @@ export type SessionHistoryLoadPolicy = {
     session: AgentSessionState,
     history: AgentSessionHistoryMessage[],
     messagesAtReadStart?: AgentSessionState["messages"],
+    asyncQuestionsAtReadStart?: AgentAsyncQuestionProjection,
   ): AgentSessionState;
 };
 

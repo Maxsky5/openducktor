@@ -33,6 +33,7 @@ import { removeRunningSessionCompactionNotices } from "../support/session-notice
 import { toBoundRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 import { toUserChatMessage } from "../support/user-message-event";
+import { applyAsyncQuestionUserMessage } from "../support/async-questions";
 import type { PreparedSessionSend } from "./prepare-session-send";
 
 export type SendAgentMessageDependencies = {
@@ -171,10 +172,20 @@ const upsertAcceptedUserMessage = (
   acceptedUserMessage: Awaited<ReturnType<AgentEnginePort["sendUserMessage"]>>,
   updateSession: UpdateSession,
 ): void => {
-  updateSession(session, (current) => ({
-    ...current,
-    messages: upsertUserSessionMessage(current, toUserChatMessage(acceptedUserMessage)),
-  }));
+  updateSession(session, (current) => {
+    const asyncState = applyAsyncQuestionUserMessage(
+      {
+        pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
+        handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
+      },
+      acceptedUserMessage.asyncQuestionReplies,
+    );
+    return {
+      ...current,
+      ...asyncState,
+      messages: upsertUserSessionMessage(current, toUserChatMessage(acceptedUserMessage)),
+    };
+  });
 };
 
 export const createSendAgentMessage = (dependencies: SendAgentMessageDependencies) => {

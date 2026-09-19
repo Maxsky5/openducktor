@@ -14,6 +14,7 @@ const snapshot: AgentSessionLiveSnapshot = {
   startedAt: "2026-09-01T00:00:00Z",
   pendingApprovals: [],
   pendingQuestions: [],
+  pendingAsyncQuestions: [],
   contextUsage: null,
 };
 

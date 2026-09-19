@@ -22,6 +22,7 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
   startedAt: "2026-08-31T10:00:00.000Z",
   executionEpisodeId: "episode-1",
   pendingApprovals: [],
+  pendingAsyncQuestions: [],
   pendingQuestions: [],
   contextUsage: null,
   ...overrides,
@@ -120,6 +121,56 @@ describe("session occurrence projector", () => {
       { type: "pending_input", inputKind: "question", requestId: "question-1" },
     ]);
     expect(projector.accept({ type: "session_upsert", session: next })).toEqual([]);
+  });
+
+  test("notifies once for a new asynchronous question and uses snapshots as a baseline", () => {
+    const projector = createProjector();
+    const existingQuestion = {
+      questionItemId: '["request_user_input_async","message-1",0]',
+      sourceMessageId: "message-1",
+      questionIndex: 0,
+      title: "Existing question",
+      options: ["A", "B"],
+    };
+    projector.accept({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [snapshot({ pendingAsyncQuestions: [existingQuestion] })],
+    });
+    expect(
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({ pendingAsyncQuestions: [existingQuestion] }),
+      }),
+    ).toEqual([]);
+
+    const newQuestion = {
+      ...existingQuestion,
+      questionItemId: '["request_user_input_async","message-2",0]',
+      sourceMessageId: "message-2",
+      title: "Which provider should we use?",
+    };
+    const occurrences = projector.accept({
+      type: "session_upsert",
+      session: snapshot({ pendingAsyncQuestions: [existingQuestion, newQuestion] }),
+    });
+    expect(occurrences).toMatchObject([
+      {
+        kind: "agent.question_asked",
+        status: "Which provider should we use?",
+        navigationTarget: {
+          type: "pending_input",
+          inputKind: "question",
+          requestId: newQuestion.questionItemId,
+        },
+      },
+    ]);
+    expect(
+      projector.accept({
+        type: "session_upsert",
+        session: snapshot({ pendingAsyncQuestions: [existingQuestion, newQuestion] }),
+      }),
+    ).toEqual([]);
   });
 
   test("keeps the remaining question count within the status limit", () => {

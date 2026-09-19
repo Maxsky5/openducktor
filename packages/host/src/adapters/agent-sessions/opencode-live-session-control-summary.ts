@@ -42,6 +42,7 @@ export const toOpenCodeLiveSession = ({
     startedAt: summary.startedAt,
     pendingApprovals: previous?.snapshot.pendingApprovals ?? [],
     pendingQuestions: previous?.snapshot.pendingQuestions ?? [],
+    pendingAsyncQuestions: [],
     contextUsage: contextUsage ?? previous?.snapshot.contextUsage ?? null,
   };
   if (summary.sessionAssociation.kind === "repository") {

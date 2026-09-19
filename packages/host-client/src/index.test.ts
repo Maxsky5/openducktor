@@ -386,6 +386,7 @@ describe("HostClient", () => {
       startedAt: "2026-07-16T10:00:00.000Z",
       pendingApprovals: [],
       pendingQuestions: [],
+      pendingAsyncQuestions: [],
       contextUsage: null,
     };
     const { client, calls } = createClient((command) => {

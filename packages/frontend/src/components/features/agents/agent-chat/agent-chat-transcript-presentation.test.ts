@@ -10,6 +10,7 @@ const createSession = (): AgentChatTranscriptSession => ({
   workingDirectory: "/repo",
   activityState: null,
   runtimeStatusMessage: null,
+  pendingAsyncQuestions: [],
   messages: createSessionMessagesState("session-1"),
 });
 

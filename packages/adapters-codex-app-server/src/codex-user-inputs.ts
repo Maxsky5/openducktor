@@ -1,6 +1,7 @@
 import type { CodexAppServerThreadItem } from "@openducktor/contracts";
 import type { AgentUserMessagePart } from "@openducktor/core";
 import { utf8ByteLength } from "./codex-user-input-display";
+import { encodeCodexAsyncQuestionReply } from "./codex-async-questions";
 import type { CodexUserInput } from "./types";
 
 type CodexUserMessageItem = Extract<CodexAppServerThreadItem, { type: "userMessage" }>;
@@ -23,6 +24,17 @@ const toCodexUserInput = (part: AgentUserMessagePart): CodexUserInput => {
   }
   if (part.kind === "attachment" && part.attachment.kind === "image") {
     return { type: "localImage", path: part.attachment.path };
+  }
+  if (part.kind === "async_question_reply") {
+    return {
+      type: "text",
+      text: encodeCodexAsyncQuestionReply({
+        questionItemId: part.questionItemId,
+        question: part.question,
+        answer: part.answer.trim(),
+      }),
+      text_elements: [],
+    };
   }
 
   throw new Error(`Codex app-server does not support '${part.kind}' user message parts.`);

@@ -72,6 +72,14 @@ export const agentSessionUserMessagePartSchema = z.discriminatedUnion("kind", [
       attachment: attachmentReferenceSchema,
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal("async_question_reply"),
+      questionItemId: nonEmptyStringSchema,
+      question: nonEmptyStringSchema,
+      answer: nonEmptyStringSchema,
+    })
+    .strict(),
 ]);
 export type AgentSessionUserMessagePart = z.infer<typeof agentSessionUserMessagePartSchema>;
 

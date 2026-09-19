@@ -48,6 +48,7 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
   startedAt: "2026-09-12T12:00:00Z",
   pendingApprovals: [],
   pendingQuestions: [],
+  pendingAsyncQuestions: [],
   contextUsage: null,
   ...overrides,
 });

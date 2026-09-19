@@ -96,6 +96,12 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
     sessionAgentColors: {},
     pendingApprovalRequests: [],
     pendingQuestionRequests: [],
+    asyncQuestions: {
+      canSubmit: false,
+      isSubmittingByQuestionId: {},
+      errorByQuestionId: {},
+      onSubmit: () => Promise.resolve(),
+    },
     todos: [],
     canSubmitQuestionAnswers: true,
     isSubmittingQuestionByRequestId: {},

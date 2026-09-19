@@ -36,6 +36,7 @@ import {
 import type { CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import type { CodexTokenUsageTotals } from "./codex-app-server-transcript";
 import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
+import type { CodexAsyncQuestionState } from "./codex-async-questions";
 
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexSessionLookup } from "./codex-local-session-state";
@@ -75,6 +76,7 @@ type CodexRuntimeSessionEventsDepsBase = {
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   sessionEvents: CodexSessionEventBus;
   pendingInput: CodexPendingInputState;
+  asyncQuestions: CodexAsyncQuestionState;
   subagents: CodexSubagentLinkState;
   updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
@@ -969,6 +971,22 @@ export class CodexRuntimeSessionEvents {
       modelByTurnKey: this.modelByTurnKey,
       latestTodosBySessionId: this.latestTodosBySessionId,
       eventMapperPipeline: this.eventMapperPipeline,
+      asyncQuestions: this.deps.asyncQuestions,
+      runtimeIdForThread: (threadId) => {
+        if (scopedSession) {
+          return scopedSession.runtimeId;
+        }
+        const directSession = this.deps.sessions.get(threadId);
+        if (directSession) {
+          return directSession.runtimeId;
+        }
+        for (const session of this.deps.sessions.values()) {
+          if (this.deps.subagents.routeForChild(threadId, session.runtimeId)) {
+            return session.runtimeId;
+          }
+        }
+        return undefined;
+      },
       startImageGenerationTurn: (session, turnId, timestamp) => {
         this.imageGenerations.startTurn(session.runtimeId, session.threadId, turnId, timestamp);
         this.emitSessionEventForSession(session, {

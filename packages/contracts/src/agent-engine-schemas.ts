@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  agentAsyncQuestionAnnotationSchema,
+  agentAsyncQuestionReplySchema,
+} from "./agent-async-question-schemas";
 import { runtimeDescriptorSchema } from "./agent-runtime-schemas";
 import {
   agentSessionTodoItemSchema,
@@ -114,6 +118,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
       displayParts: z.array(agentUserMessageDisplayPartSchema),
       state: z.enum(["queued", "read"]),
       model: agentModelSelectionSchema.optional(),
+      asyncQuestionReplies: z.array(agentAsyncQuestionReplySchema).optional(),
       parts: z.array(agentStreamPartSchema),
     })
     .strict(),
@@ -125,6 +130,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
       totalTokens: z.number().optional(),
       contextWindow: z.number().optional(),
       model: agentModelSelectionSchema.optional(),
+      asyncQuestion: agentAsyncQuestionAnnotationSchema.optional(),
       parts: z.array(agentStreamPartSchema),
     })
     .strict(),

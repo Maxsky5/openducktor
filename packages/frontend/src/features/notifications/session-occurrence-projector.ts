@@ -1,5 +1,6 @@
 import { normalizeSessionErrorMessage } from "@/lib/session-error-message";
 import type {
+  AgentAsyncQuestion,
   AgentSessionLiveEnvelope,
   AgentSessionLivePendingApprovalRequest,
   AgentSessionLivePendingQuestionRequest,
@@ -33,6 +34,7 @@ type SessionProjection = {
   isSubagent: boolean;
   lastAssistantMessage: { id: string; text: string } | null;
   pendingApprovals: Set<string>;
+  pendingAsyncQuestions: Set<string>;
   pendingQuestions: Set<string>;
   running: boolean;
   ref: AgentSessionLiveSnapshot["ref"];
@@ -63,6 +65,9 @@ const createProjection = (
   isSubagent: snapshot.parentExternalSessionId !== undefined,
   lastAssistantMessage: null,
   pendingApprovals: new Set(snapshot.pendingApprovals.map(pendingInputIdentity)),
+  pendingAsyncQuestions: new Set(
+    snapshot.pendingAsyncQuestions.map((question) => question.questionItemId),
+  ),
   pendingQuestions: new Set(snapshot.pendingQuestions.map(pendingInputIdentity)),
   running: snapshot.activity !== "idle",
   ref: snapshot.ref,
@@ -286,6 +291,22 @@ export const createSessionOccurrenceProjector = ({
     });
   };
 
+  const projectAsyncQuestion = (
+    projection: SessionProjection,
+    question: AgentAsyncQuestion,
+  ): NotificationOccurrence =>
+    sessionOccurrence(projection, {
+      kind: "agent.question_asked",
+      suffix: question.questionItemId,
+      status: toNotificationStatus(question.title),
+      navigationTarget: {
+        type: "pending_input",
+        ...sessionTarget(projection),
+        inputKind: "question",
+        requestId: question.questionItemId,
+      },
+    });
+
   const applyUpsert = (snapshot: AgentSessionLiveSnapshot): NotificationOccurrence[] => {
     const key = agentSessionIdentityKey(snapshot.ref);
     const association = resolveAssociation(snapshot.ref);
@@ -325,6 +346,9 @@ export const createSessionOccurrenceProjector = ({
       unownedInputs.delete(key);
       unownedTerminals.delete(key);
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
+      projection.pendingAsyncQuestions = new Set(
+        snapshot.pendingAsyncQuestions.map((question) => question.questionItemId),
+      );
       projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
       return [];
     }
@@ -337,6 +361,9 @@ export const createSessionOccurrenceProjector = ({
       occurrences.push(...reconcilePendingOwnership(projection, snapshot));
     }
     const nextApprovals = pendingRequestsByIdentity(snapshot.pendingApprovals);
+    const nextAsyncQuestions = new Map(
+      snapshot.pendingAsyncQuestions.map((question) => [question.questionItemId, question]),
+    );
     const nextQuestions = pendingRequestsByIdentity(snapshot.pendingQuestions);
     for (const [identity, request] of nextApprovals) {
       if (association && !projection.pendingApprovals.has(identity)) {
@@ -348,7 +375,13 @@ export const createSessionOccurrenceProjector = ({
         occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
       }
     }
+    for (const [questionItemId, question] of nextAsyncQuestions) {
+      if (association && !projection.pendingAsyncQuestions.has(questionItemId)) {
+        occurrences.push(projectAsyncQuestion(projection, question));
+      }
+    }
     projection.pendingApprovals = new Set(nextApprovals.keys());
+    projection.pendingAsyncQuestions = new Set(nextAsyncQuestions.keys());
     projection.pendingQuestions = new Set(nextQuestions.keys());
 
     if (snapshot.activity !== "idle" && !projection.errorNotified && !projection.idleNotified) {

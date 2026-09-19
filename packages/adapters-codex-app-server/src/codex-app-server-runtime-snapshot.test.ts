@@ -70,6 +70,7 @@ describe("toRuntimeSnapshot", () => {
         inventory: createInventory(),
         pendingApprovals: [],
         pendingQuestions: [],
+        pendingAsyncQuestions: [],
         hasActiveTurn: true,
       }),
     ).toMatchObject({
@@ -94,6 +95,7 @@ describe("toRuntimeSnapshot", () => {
         inventory: createInventory(),
         pendingApprovals: [],
         pendingQuestions: [],
+        pendingAsyncQuestions: [],
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -111,6 +113,7 @@ describe("toRuntimeSnapshot", () => {
         inventory: createInventory(),
         pendingApprovals: [],
         pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        pendingAsyncQuestions: [],
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -181,6 +184,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory: createInventory({ thread: createThread("active") }),
         pendingApprovals: [],
         pendingQuestions: [],
+        pendingAsyncQuestions: [],
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -197,6 +201,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory: createInventory({ thread: createThread("active") }),
         pendingApprovals: [],
         pendingQuestions: [],
+        pendingAsyncQuestions: [],
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -219,6 +224,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         }),
         pendingApprovals: [],
         pendingQuestions: [],
+        pendingAsyncQuestions: [],
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -245,6 +251,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory,
         pendingApprovals: [],
         pendingQuestions: [],
+        pendingAsyncQuestions: [],
         hasActiveTurn: true,
       }),
     ).toMatchObject({ classification: "running", title: "Codex" });
@@ -254,6 +261,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory,
         pendingApprovals: [],
         pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        pendingAsyncQuestions: [],
         hasActiveTurn: false,
       }),
     ).toMatchObject({ classification: "waiting_for_question", title: "Codex" });
@@ -269,6 +277,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         }),
         pendingApprovals: [],
         pendingQuestions: [],
+        pendingAsyncQuestions: [],
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -291,6 +300,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         }),
         pendingApprovals: [],
         pendingQuestions: [],
+        pendingAsyncQuestions: [],
         hasActiveTurn: false,
       }),
     ).toMatchObject({ classification: "running", title: "Codex" });
@@ -303,6 +313,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory: createInventory({ thread: createThread("idle") }),
         pendingApprovals: [],
         pendingQuestions: [],
+        pendingAsyncQuestions: [],
         hasActiveTurn: true,
       }),
     ).toMatchObject({
@@ -332,6 +343,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         }),
         pendingApprovals: [],
         pendingQuestions: [{ requestId: "question-1", questions: [] }],
+        pendingAsyncQuestions: [],
         hasActiveTurn: false,
       }),
     ).toMatchObject({
@@ -350,6 +362,7 @@ describe("resolveCodexRuntimeSnapshotSource", () => {
         inventory: createInventory(),
         pendingApprovals: [],
         pendingQuestions: [],
+        pendingAsyncQuestions: [],
         hasActiveTurn: false,
       }),
     ).toMatchObject({

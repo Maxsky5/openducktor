@@ -78,6 +78,7 @@ import { CodexContextUsageLoader } from "./codex-context-usage-loader";
 import { fileDiffsFromUnifiedDiff } from "./codex-file-diffs";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import { CodexPendingInputState } from "./codex-pending-input-state";
+import { CodexAsyncQuestionState } from "./codex-async-questions";
 import { findRetainedSessionOwner } from "./codex-retained-session-owner";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
@@ -209,6 +210,7 @@ export class CodexAppServerAdapter
   private readonly runtimeClients: CodexRuntimeClientResolver;
   private readonly sessionEvents = new CodexSessionEventBus();
   private readonly pendingInput = new CodexPendingInputState();
+  private readonly asyncQuestions = new CodexAsyncQuestionState();
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
   // An empty rollout is safe only for reads started before this process first reads the thread.
   private readonly freshSessions = new WeakSet<CodexSessionState>();
@@ -242,6 +244,7 @@ export class CodexAppServerAdapter
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       sessionEvents: this.sessionEvents,
       pendingInput: this.pendingInput,
+      asyncQuestions: this.asyncQuestions,
       subagents: this.subagents,
       updateThreadStatus: (
         runtimeId: string,
@@ -352,6 +355,7 @@ export class CodexAppServerAdapter
         this.localSessions.releaseRuntime(runtimeId);
       },
       clearPendingInput: () => this.pendingInput.clearRuntime(runtimeId),
+      clearAsyncQuestions: () => this.asyncQuestions.clearRuntime(runtimeId),
       clearSubagents: () => this.subagents.clearRuntime(runtimeId),
       clearRuntimeEvents: () => this.runtimeEvents.clearRuntime(runtimeId),
       disposeThreadInventory: () => this.threadInventory.disposeRuntime(runtimeId),
@@ -730,13 +734,24 @@ export class CodexAppServerAdapter
       }
       return acceptedUserMessage;
     }
-    return startCodexTurnForSession(
+    const accepted = await startCodexTurnForSession(
       this.turnLifecycleContext(),
       input.externalSessionId,
       input.parts,
       acceptedUserMessage,
       input.model,
     );
+    const replyParts = input.parts.filter((part) => part.kind === "async_question_reply");
+    if (replyParts.length > 0) {
+      this.asyncQuestions.resolve(
+        session.runtimeId,
+        session.threadId,
+        replyParts.map((part) => part.questionItemId),
+      );
+    } else {
+      this.asyncQuestions.skipPending(session.runtimeId, session.threadId);
+    }
+    return accepted;
   }
 
   private flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void {
@@ -1263,6 +1278,10 @@ export class CodexAppServerAdapter
     const pendingQuestions = this.pendingInput
       .pendingQuestionsForSession(session.threadId, session.runtimeId)
       .map(toLivePendingQuestion);
+    const pendingAsyncQuestions = this.asyncQuestions.pendingForSession(
+      session.runtimeId,
+      session.threadId,
+    );
     const runtimeActivity =
       session.liveStatus?.classification ??
       (session.summary.status === "running" || session.summary.status === "starting"
@@ -1280,6 +1299,7 @@ export class CodexAppServerAdapter
       startedAt: session.summary.startedAt,
       pendingApprovals,
       pendingQuestions,
+      pendingAsyncQuestions,
       contextUsage: this.runtimeEvents.latestContextUsage(session.runtimeId, session.threadId),
     };
     if (session.summary.sessionAssociation.kind === "repository") {
@@ -1304,6 +1324,10 @@ export class CodexAppServerAdapter
     const pendingQuestions = this.pendingInput
       .pendingQuestionsForSession(route.childExternalSessionId, parentSession.runtimeId)
       .map(toLivePendingQuestion);
+    const pendingAsyncQuestions = this.asyncQuestions.pendingForSession(
+      parentSession.runtimeId,
+      route.childExternalSessionId,
+    );
     const contextUsage = this.runtimeEvents.latestContextUsage(
       parentSession.runtimeId,
       route.childExternalSessionId,
@@ -1328,6 +1352,7 @@ export class CodexAppServerAdapter
       parentExternalSessionId: route.parentExternalSessionId,
       pendingApprovals,
       pendingQuestions,
+      pendingAsyncQuestions,
       contextUsage,
     };
     if (parentSession.summary.sessionAssociation.kind === "repository") {
@@ -1460,6 +1485,7 @@ export class CodexAppServerAdapter
       },
     );
     this.generatedImages.releaseSession({ ...codexSessionRef(session), runtimeKind: "codex" });
+    this.asyncQuestions.clearSession(session.runtimeId, session.threadId);
     for (const route of descendants.toReversed()) {
       this.generatedImages.releaseSession({
         ...codexSessionRef(session),
@@ -1470,6 +1496,7 @@ export class CodexAppServerAdapter
         ...codexSessionRef(session),
         externalSessionId: route.childExternalSessionId,
       });
+      this.asyncQuestions.clearSession(session.runtimeId, route.childExternalSessionId);
       if (this.localSessions.has(route.childExternalSessionId)) {
         this.localSessions.release(route.childExternalSessionId);
       }
@@ -1484,6 +1511,7 @@ export class CodexAppServerAdapter
       threadInventory: this.threadInventory,
       sessions: this.localSessions,
       pendingInput: this.pendingInput,
+      asyncQuestions: this.asyncQuestions,
       hasActiveTurn: (externalSessionId: string) => {
         const activeTurn = this.activeTurnsBySessionId.get(externalSessionId);
         return Boolean(activeTurn && !activeTurn.isTurnSettled());

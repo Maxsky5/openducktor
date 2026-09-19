@@ -14,6 +14,56 @@ const historyOwner = (messages: AgentChatMessage[]) => ({
 });
 
 describe("agent-orchestrator/support/session-history-chat-messages", () => {
+  test("hides structured question source text and keeps malformed fallback text actionable", () => {
+    const pendingQuestion = {
+      status: "pending" as const,
+      questions: [
+        {
+          questionItemId: '["request_user_input_async","question-1",0]',
+          sourceMessageId: "question-1",
+          questionIndex: 0,
+          title: "Which environment?",
+          options: ["Staging", "Production"],
+        },
+      ],
+    };
+    const messages = historyToChatMessages(
+      [
+        {
+          role: "assistant",
+          messageId: "question-1",
+          timestamp: "2026-09-19T10:00:00.000Z",
+          text: "Which environment?",
+          parts: [],
+          asyncQuestion: pendingQuestion,
+        },
+        {
+          role: "assistant",
+          messageId: "question-2",
+          timestamp: "2026-09-19T10:01:00.000Z",
+          text: "Readable fallback question",
+          parts: [],
+          asyncQuestion: {
+            status: "invalid",
+            error:
+              "OpenDucktor could not open this structured question. Answer through the main chat composer.",
+          },
+        },
+      ],
+      { role: "build" },
+    );
+
+    expect(messages).toMatchObject([
+      { id: "question-2", role: "assistant", content: "Readable fallback question" },
+      {
+        id: "async-question-error:question-2",
+        role: "system",
+        content:
+          "OpenDucktor could not open this structured question. Answer through the main chat composer.",
+      },
+    ]);
+  });
+
   test("maps empty history to empty chat messages", () => {
     const messages = historyToChatMessages([], {
       role: "build",

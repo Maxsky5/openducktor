@@ -206,7 +206,14 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     if (systemPromptContext) {
       historyInput.systemPromptContext = systemPromptContext;
     }
-    const messagesAtReadStart = readSessionSnapshot(identity)?.messages;
+    const sessionAtReadStart = readSessionSnapshot(identity);
+    const messagesAtReadStart = sessionAtReadStart?.messages;
+    const asyncQuestionsAtReadStart = sessionAtReadStart
+      ? {
+          pendingAsyncQuestions: sessionAtReadStart.pendingAsyncQuestions ?? [],
+          handledAsyncQuestionIds: sessionAtReadStart.handledAsyncQuestionIds ?? new Set<string>(),
+        }
+      : undefined;
     const history = await adapter.loadSessionHistory(historyInput);
     if (isStaleRepoOperation()) {
       return finishStaleHistoryLoad();
@@ -216,7 +223,7 @@ const loadSessionHistoryIntoStoreWithPolicy = async ({
     }
 
     return updateSession(identity, (current) =>
-      policy.applyLoadedHistory(current, history, messagesAtReadStart),
+      policy.applyLoadedHistory(current, history, messagesAtReadStart, asyncQuestionsAtReadStart),
     );
   } catch (error) {
     if (isStaleRepoOperation()) {

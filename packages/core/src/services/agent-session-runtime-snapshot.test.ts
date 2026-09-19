@@ -105,6 +105,7 @@ describe("agent-session-runtime-snapshot", () => {
       startedAt: "2026-02-22T12:00:00.000Z",
       pendingApprovals: [],
       pendingQuestions: [],
+      pendingAsyncQuestions: [],
     });
   });
 
@@ -154,6 +155,7 @@ describe("agent-session-runtime-snapshot", () => {
       ref,
       pendingApprovals: [],
       pendingQuestions: [],
+      pendingAsyncQuestions: [],
     });
   });
 
@@ -171,6 +173,7 @@ describe("agent-session-runtime-snapshot", () => {
       ref,
       pendingApprovals: [],
       pendingQuestions: [],
+      pendingAsyncQuestions: [],
     });
   });
 });

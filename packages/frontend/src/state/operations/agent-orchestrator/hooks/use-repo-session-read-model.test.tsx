@@ -94,6 +94,7 @@ const snapshot = (overrides: Partial<AgentSessionLiveSnapshot> = {}): AgentSessi
   startedAt: record.startedAt,
   pendingApprovals: [],
   pendingQuestions: [],
+  pendingAsyncQuestions: [],
   contextUsage: null,
   ...overrides,
 });

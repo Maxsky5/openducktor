@@ -38,6 +38,7 @@ const snapshot = (entry: WorkspaceSession): AgentSessionLiveSnapshot => ({
   startedAt: new Date(1000).toISOString(),
   pendingApprovals: [],
   pendingQuestions: [],
+  pendingAsyncQuestions: [],
   contextUsage: null,
 });
 

@@ -340,6 +340,9 @@ const toAdmittedUserDisplayParts = (
   parts: SendAgentUserMessageInput["parts"],
 ): AgentUserMessageDisplayPart[] =>
   normalizeAgentUserMessageParts(parts, { preserveTextWhitespace: true }).map((part) => {
+    if (part.kind === "async_question_reply") {
+      throw new Error("OpenCode does not support Codex asynchronous question replies.");
+    }
     if (part.kind === "slash_command") {
       return { kind: "text", text: `/${part.command.trigger}` };
     }

@@ -1,4 +1,5 @@
 import type {
+  AgentAsyncQuestion,
   AgentComputerUse,
   AgentImageGenerationPart,
   AgentSessionAssociation,
@@ -218,6 +219,8 @@ export type AgentSessionState = {
   contextUsageError?: string | null;
   pendingApprovals: AgentApprovalRequest[];
   pendingQuestions: AgentQuestionRequest[];
+  pendingAsyncQuestions?: readonly AgentAsyncQuestion[];
+  handledAsyncQuestionIds?: ReadonlySet<string>;
   selectedModel: AgentModelSelection | null;
   runtimeAvailability?: AgentSessionRuntimeAvailability;
   pendingUserMessageStartedAt?: number | undefined;

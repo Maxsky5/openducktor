@@ -298,6 +298,15 @@ const applyDirectSnapshot = (
   const activity = projectSessionSnapshotActivity(current, snapshot);
   const directApprovals = snapshot.pendingApprovals.map((request) => toApprovalRequest(request));
   const directQuestions = snapshot.pendingQuestions.map((request) => toQuestionRequest(request));
+  const snapshotAsyncQuestionIds = new Set(
+    snapshot.pendingAsyncQuestions.map((question) => question.questionItemId),
+  );
+  const handledAsyncQuestionIds = new Set(current.handledAsyncQuestionIds ?? []);
+  for (const question of current.pendingAsyncQuestions ?? []) {
+    if (!snapshotAsyncQuestionIds.has(question.questionItemId)) {
+      handledAsyncQuestionIds.add(question.questionItemId);
+    }
+  }
   const childApprovals = current.pendingApprovals.filter((request) => request.source !== undefined);
   const childQuestions = current.pendingQuestions.filter((request) => request.source !== undefined);
 
@@ -311,6 +320,8 @@ const applyDirectSnapshot = (
     liveParentExternalSessionId: snapshot.parentExternalSessionId,
     pendingApprovals: [...directApprovals, ...childApprovals],
     pendingQuestions: [...directQuestions, ...childQuestions],
+    pendingAsyncQuestions: snapshot.pendingAsyncQuestions,
+    handledAsyncQuestionIds,
     contextUsage,
   };
 };
@@ -331,6 +342,8 @@ const createObservedSession = (snapshot: AgentSessionLiveSnapshot): AgentSession
       contextUsage: null,
       pendingApprovals: [],
       pendingQuestions: [],
+      pendingAsyncQuestions: [],
+      handledAsyncQuestionIds: new Set(),
       selectedModel: null,
     },
     snapshot,

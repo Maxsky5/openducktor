@@ -230,6 +230,8 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
     text: z.string(),
     phase: z.enum(["commentary", "final_answer"]).nullable(),
     memoryCitation: codexAppServerMemoryCitationSchema.nullable(),
+    delivery: z.literal("async").optional(),
+    questions: z.unknown().optional(),
   }),
   z.object({ type: z.literal("plan"), id: z.string(), text: z.string() }),
   z.object({

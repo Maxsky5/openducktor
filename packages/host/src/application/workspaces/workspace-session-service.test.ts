@@ -264,6 +264,7 @@ describe("host-owned Workspace Session lifecycle", () => {
                       startedAt: "2026-09-07T00:00:00Z",
                       pendingApprovals: [],
                       pendingQuestions: [],
+                      pendingAsyncQuestions: [],
                       contextUsage: null,
                     },
                   };

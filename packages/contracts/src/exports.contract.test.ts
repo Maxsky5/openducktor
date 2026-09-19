@@ -2,6 +2,9 @@ import { describe, expect, test } from "bun:test";
 import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
+  "agentAsyncQuestionAnnotationSchema",
+  "agentAsyncQuestionReplySchema",
+  "agentAsyncQuestionSchema",
   "agentSessionRuntimePolicySchema",
   "agentRuntimePolicyBindingSchema",
   "policyBoundSessionRefSchema",

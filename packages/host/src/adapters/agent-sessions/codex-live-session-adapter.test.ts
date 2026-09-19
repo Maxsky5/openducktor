@@ -125,6 +125,7 @@ const liveSnapshot = (): AgentSessionLiveSnapshot => ({
     },
   ],
   pendingQuestions: [],
+  pendingAsyncQuestions: [],
   contextUsage: null,
 });
 

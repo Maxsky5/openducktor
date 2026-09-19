@@ -23,6 +23,9 @@ export const projectCodexCanonicalEventsToHistory = (
       if (resolvedModel) {
         message.model = resolvedModel;
       }
+      if (event.asyncQuestionReplies) {
+        message.asyncQuestionReplies = event.asyncQuestionReplies;
+      }
       messages.push(message);
       continue;
     }
@@ -37,6 +40,9 @@ export const projectCodexCanonicalEventsToHistory = (
       };
       if (resolvedModel) {
         message.model = resolvedModel;
+      }
+      if (event.asyncQuestion) {
+        message.asyncQuestion = event.asyncQuestion;
       }
       if (event.totalTokens !== undefined) {
         message.totalTokens = event.totalTokens;

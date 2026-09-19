@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  agentAsyncQuestionAnnotationSchema,
+  agentAsyncQuestionReplySchema,
+} from "./agent-async-question-schemas";
 import { isoTimestampSchema } from "./string-schemas";
 import { agentImageGenerationPartSchema } from "./agent-image-generation-schemas";
 import {
@@ -307,6 +311,7 @@ export const agentUserMessageEventSchema = transcriptEventSchema({
   parts: z.array(agentUserMessageDisplayPartSchema),
   state: z.enum(["queued", "read"]),
   model: agentModelSelectionSchema.optional(),
+  asyncQuestionReplies: z.array(agentAsyncQuestionReplySchema).optional(),
 });
 
 const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
@@ -328,6 +333,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
     totalTokens: finiteNonNegativeNumberSchema.optional(),
     contextWindow: finiteNonNegativeNumberSchema.optional(),
     model: agentModelSelectionSchema.optional(),
+    asyncQuestion: agentAsyncQuestionAnnotationSchema.optional(),
   }),
   transcriptEventSchema({
     type: z.literal("transcript_retracted"),

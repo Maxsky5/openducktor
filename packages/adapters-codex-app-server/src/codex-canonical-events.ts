@@ -1,3 +1,4 @@
+import type { AgentAsyncQuestionAnnotation, AgentAsyncQuestionReply } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentSessionTodoItem,
@@ -34,6 +35,7 @@ export type CodexCanonicalUserMessageEvent = CodexCanonicalEventBase & {
   displayParts: AgentUserMessageDisplayPart[];
   state: "read";
   model?: AgentModelSelection;
+  asyncQuestionReplies?: AgentAsyncQuestionReply[];
 };
 
 export type CodexCanonicalAssistantMessageEvent = CodexCanonicalEventBase & {
@@ -43,6 +45,7 @@ export type CodexCanonicalAssistantMessageEvent = CodexCanonicalEventBase & {
   model?: AgentModelSelection;
   totalTokens?: number;
   contextWindow?: number;
+  asyncQuestion?: AgentAsyncQuestionAnnotation;
 };
 
 export type CodexCanonicalAssistantDeltaEvent = CodexCanonicalEventBase & {

@@ -12,6 +12,7 @@ import { deriveAgentChatReadiness } from "@/components/features/agents/agent-cha
 import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
 import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
+import { useAgentAsyncQuestionActions } from "@/components/features/agents/agent-chat/use-agent-async-question-actions";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
@@ -225,6 +226,11 @@ export function WorkspaceSessionChat({
     canAnswerQuestions: canInteract,
     answerAgentQuestion: operations.answerAgentQuestion,
   });
+  const asyncQuestions = useAgentAsyncQuestionActions({
+    sessionIdentity: identity,
+    canSubmit: canInteract,
+    sendAgentMessage: operations.sendAgentMessage,
+  });
   const transcript = resolveAgentChatTranscriptPresentation({
     repoPath: workspace.repoPath,
     sessionKey,
@@ -262,6 +268,7 @@ export function WorkspaceSessionChat({
     emptyState: null,
     pendingApprovalRequests: pendingApprovals,
     pendingQuestionRequests: pendingQuestions,
+    asyncQuestions,
     todos: runtimeData.todos,
     sessionAgentColors: picker.agentAccentColorsByProfileId,
     approvals: {

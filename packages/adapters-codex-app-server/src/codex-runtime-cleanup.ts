@@ -2,6 +2,7 @@ type CodexRuntimeCleanupPlan = {
   cancelContextUsage(): void;
   releaseSessions(): void;
   clearPendingInput(): void;
+  clearAsyncQuestions(): void;
   clearSubagents(): void;
   clearRuntimeEvents(): void;
   disposeThreadInventory(): void;
@@ -23,6 +24,7 @@ export const releaseCodexRuntimeState = (
   cleanup("context usage", plan.cancelContextUsage);
   cleanup("sessions", plan.releaseSessions);
   cleanup("pending input", plan.clearPendingInput);
+  cleanup("asynchronous questions", plan.clearAsyncQuestions);
   cleanup("subagents", plan.clearSubagents);
   cleanup("runtime events", plan.clearRuntimeEvents);
   cleanup("thread inventory", plan.disposeThreadInventory);

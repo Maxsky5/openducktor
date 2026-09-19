@@ -5,6 +5,7 @@ import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/supp
 import { haveSameMessageTimestamp } from "@/state/operations/agent-orchestrator/support/message-timestamp";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
+import { projectAsyncQuestionsFromHistory } from "@/state/operations/agent-orchestrator/support/async-questions";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatTranscriptSession } from "../agent-chat.types";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
@@ -43,18 +44,22 @@ export const createReadonlyTranscriptSession = ({
   runtimeKind,
   workingDirectory,
   history,
-}: ReadonlyTranscriptSessionInput): AgentChatTranscriptSession => ({
-  ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
-  activityState: null,
-  runtimeStatusMessage: null,
-  messages: createSessionMessagesState(
-    externalSessionId,
-    historyToChatMessages(history, {
-      role: null,
-    }),
-    transcriptHistoryVersion(history),
-  ),
-});
+}: ReadonlyTranscriptSessionInput): AgentChatTranscriptSession => {
+  const asyncQuestions = projectAsyncQuestionsFromHistory(history);
+  return {
+    ...toAgentSessionIdentity({ externalSessionId, runtimeKind, workingDirectory }),
+    activityState: null,
+    runtimeStatusMessage: null,
+    pendingAsyncQuestions: asyncQuestions.pendingAsyncQuestions,
+    messages: createSessionMessagesState(
+      externalSessionId,
+      historyToChatMessages(history, {
+        role: null,
+      }),
+      transcriptHistoryVersion(history),
+    ),
+  };
+};
 
 const areMessagesEquivalent = (left: AgentChatMessage, right: AgentChatMessage): boolean =>
   left.id === right.id &&
@@ -81,6 +86,7 @@ export const mergeReadonlyRuntimeHistory = (
   history: AgentSessionHistoryMessage[],
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, { role: null });
+  const asyncQuestions = projectAsyncQuestionsFromHistory(history);
   const mergedMessageState = settleImageGenerationMessages({
     ...session,
     messages: mergeHistoryMessages(
@@ -103,5 +109,6 @@ export const mergeReadonlyRuntimeHistory = (
     startedAt: history[0]?.timestamp ?? session.startedAt,
     historyLoadState: "loaded",
     messages: mergedMessageState,
+    ...asyncQuestions,
   };
 };

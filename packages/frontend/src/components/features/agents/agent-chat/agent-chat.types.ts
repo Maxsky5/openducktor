@@ -1,5 +1,6 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type {
+  AgentAsyncQuestion,
   ChatSettings,
   RuntimeApprovalReplyOutcome,
   RuntimeKind,
@@ -33,6 +34,7 @@ import type {
 import type { AgentSessionActivityState } from "@/types/agent-session-activity";
 import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
 import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
+import type { AgentAsyncQuestionActions } from "./use-agent-async-question-actions";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
 export type AgentChatEmptyStateModel = {
@@ -48,6 +50,7 @@ export type AgentChatTranscriptSession = AgentSessionIdentity & {
   activityState: AgentSessionActivityState | null;
   runtimeStatusMessage: string | null;
   messages: SessionMessagesState;
+  pendingAsyncQuestions: readonly AgentAsyncQuestion[];
 };
 
 export type AgentChatTranscriptNoticeAction = {
@@ -126,6 +129,7 @@ export type AgentChatThreadModel = {
   sessionAgentColors: Record<string, string>;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];
+  asyncQuestions: AgentAsyncQuestionActions;
   subagentPendingApprovalCountBySessionKey?: Record<string, number>;
   subagentPendingQuestionCountBySessionKey?: Record<string, number>;
   todos: readonly AgentSessionTodoItem[];

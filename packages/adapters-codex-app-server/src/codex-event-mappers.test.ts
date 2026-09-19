@@ -51,6 +51,97 @@ describe("Codex event mapper pipeline", () => {
 
     expect(result).toEqual({ events: [], handled: false });
   });
+
+  test("projects asynchronous questions with live and history parity", () => {
+    const item = {
+      type: "agentMessage" as const,
+      id: "question-message-1",
+      text: "Which environment should I use?",
+      phase: "commentary" as const,
+      memoryCitation: null,
+      delivery: "async" as const,
+      questions: [
+        {
+          title: "Which environment should I use?",
+          options: ["Staging", "Production"],
+        },
+      ],
+    };
+    const livePipeline = createCodexEventMapperPipeline();
+    const historyPipeline = createCodexEventMapperPipeline();
+    const live = projectCodexCanonicalEvents(
+      livePipeline.runLive(
+        { kind: "item_completed", item },
+        {
+          source: "live",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          timestamp: "2026-09-19T10:00:00.000Z",
+        },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      historyPipeline.runThreadItem(
+        { item, index: 0, timestamp: "2026-09-19T10:00:00.000Z" },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+
+    const expectedQuestion = {
+      questionItemId: '["request_user_input_async","question-message-1",0]',
+      sourceMessageId: "question-message-1",
+      questionIndex: 0,
+      title: "Which environment should I use?",
+      options: ["Staging", "Production"],
+    };
+    expect(live).toEqual([
+      expect.objectContaining({
+        type: "assistant_message",
+        messageId: "question-message-1",
+        asyncQuestion: { status: "pending", questions: [expectedQuestion] },
+      }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({
+        role: "assistant",
+        messageId: "question-message-1",
+        asyncQuestion: { status: "pending", questions: [expectedQuestion] },
+      }),
+    ]);
+  });
+
+  test("projects contextual question replies as readable user messages", () => {
+    const pipeline = createCodexEventMapperPipeline();
+    const result = projectCodexCanonicalEventsToHistory(
+      pipeline.runThreadItem(
+        {
+          index: 0,
+          item: {
+            type: "userMessage",
+            id: "reply-1",
+            content: [
+              {
+                type: "text",
+                text: '<send_user_message_question_reply>{"answer":"Staging","question":"Which environment?","questionItemId":"question-1"}</send_user_message_question_reply>',
+                text_elements: [],
+              },
+            ],
+          },
+        },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        role: "user",
+        text: "> Which environment?\n\nStaging",
+        asyncQuestionReplies: [
+          { questionItemId: "question-1", question: "Which environment?", answer: "Staging" },
+        ],
+      }),
+    ]);
+  });
 });
 
 describe("Codex todo event mapper", () => {

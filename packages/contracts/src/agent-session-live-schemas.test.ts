@@ -32,6 +32,7 @@ const snapshot = {
     },
   ],
   pendingQuestions: [],
+  pendingAsyncQuestions: [],
   contextUsage: null,
 } as const;
 

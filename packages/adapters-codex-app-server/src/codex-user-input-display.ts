@@ -30,6 +30,9 @@ const toDisplayPart = (part: AgentUserMessagePart): AgentUserMessageDisplayPart 
   if (part.kind === "attachment") {
     return { kind: "attachment", attachment: part.attachment };
   }
+  if (part.kind === "async_question_reply") {
+    return { kind: "text", text: `> ${part.question}\n\n${part.answer.trim()}` };
+  }
   return null;
 };
 

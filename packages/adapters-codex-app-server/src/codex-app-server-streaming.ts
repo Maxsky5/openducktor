@@ -42,13 +42,14 @@ import {
 } from "./codex-canonical-projector";
 import type { CodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexTimedThreadItem } from "./codex-event-mapper";
-import {
-  codexUserInputListToText,
-  codexUserInputsToDisplayParts,
-  toDisplayParts,
-} from "./codex-user-input-display";
+import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
 import { codexUserInputsFromItem, toCodexUserInputList } from "./codex-user-inputs";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
+import {
+  type CodexAsyncQuestionState,
+  codexAsyncQuestionReplyText,
+  parseCodexAsyncQuestionItem,
+} from "./codex-async-questions";
 
 type CodexAgentMessageItem = Extract<CodexTimedThreadItem, { type: "agentMessage" }>;
 
@@ -71,6 +72,8 @@ export type CodexStreamingContext = {
   modelByTurnKey: Map<string, AgentModelSelection>;
   latestTodosBySessionId: Map<string, AgentSessionTodoItem[]>;
   eventMapperPipeline: CodexEventMapperPipeline;
+  asyncQuestions: CodexAsyncQuestionState;
+  runtimeIdForThread(threadId: string): string | undefined;
   startImageGenerationTurn(session: CodexSessionState, turnId: string, timestamp: string): void;
   settleImageGenerations(session: CodexSessionState, end: CodexImageGenerationEnd): void;
   recordStartedItemTimestamp(
@@ -133,6 +136,26 @@ const emitCanonicalEvents = (
     const threadId = events.find((event) => event.kind === "todo_update")?.threadId;
     if (threadId) {
       context.latestTodosBySessionId.set(threadId, todos);
+    }
+  }
+  for (const event of events) {
+    if (event.kind === "assistant_message" && event.asyncQuestion?.status === "pending") {
+      const runtimeId = context.runtimeIdForThread(event.threadId);
+      if (!runtimeId) continue;
+      context.asyncQuestions.add(runtimeId, event.threadId, event.asyncQuestion.questions);
+    }
+    if (event.kind === "user_message") {
+      const runtimeId = context.runtimeIdForThread(event.threadId);
+      if (!runtimeId) continue;
+      if (event.asyncQuestionReplies) {
+        context.asyncQuestions.resolve(
+          runtimeId,
+          event.threadId,
+          event.asyncQuestionReplies.map((reply) => reply.questionItemId),
+        );
+      } else {
+        context.asyncQuestions.skipPending(runtimeId, event.threadId);
+      }
     }
   }
   for (const event of projectCodexCanonicalEvents(events)) {
@@ -270,15 +293,28 @@ export const createCodexAcceptedUserMessage = ({
   parts: AgentUserMessagePart[];
   model: AgentModelSelection | undefined;
 }): AcceptedAgentUserMessage => {
+  const asyncQuestionReplies = parts
+    .filter((part) => part.kind === "async_question_reply")
+    .map((part) => ({
+      questionItemId: part.questionItemId,
+      question: part.question,
+      answer: part.answer.trim(),
+    }));
   const event: AcceptedAgentUserMessage = {
     type: "user_message",
     externalSessionId: session.threadId,
     timestamp: new Date().toISOString(),
     messageId: createCodexAcceptedUserMessageId(),
-    message: serializeAgentUserMessagePartsToText(parts),
+    message:
+      asyncQuestionReplies.length > 0
+        ? codexAsyncQuestionReplyText(asyncQuestionReplies)
+        : serializeAgentUserMessagePartsToText(parts),
     parts: toDisplayParts(parts),
     state: "read",
   };
+  if (asyncQuestionReplies.length > 0) {
+    event.asyncQuestionReplies = asyncQuestionReplies;
+  }
 
   if (model) {
     event.model = model;
@@ -362,22 +398,11 @@ const emitCompletedItem = (
     if (consumeSyntheticUserMessage(context, session.threadId, message)) {
       return;
     }
-    const model =
-      modelForTurn(context, session, turnId) ??
-      context.activeTurnsBySessionId.get(session.threadId)?.model;
-    const event: AcceptedAgentUserMessage = {
-      type: "user_message",
-      externalSessionId: session.threadId,
-      timestamp,
-      messageId: itemId,
-      message,
-      parts: codexUserInputsToDisplayParts(input, itemId),
-      state: "read",
-    };
-    if (model) {
-      event.model = model;
-    }
-    emitCodexSessionEvent(context, session.threadId, event);
+    const canonicalEvents = context.eventMapperPipeline.runLive(
+      { kind: "item_completed", item },
+      { source: "live", runtimeId: session.runtimeId, threadId: session.threadId, timestamp },
+    );
+    emitCanonicalEvents(context, withTurnModel(context, canonicalEvents, session, turnId));
     return;
   }
 
@@ -386,6 +411,15 @@ const emitCompletedItem = (
   }
 
   if (codexItemTypeMatches(item, "agentMessage")) {
+    const asyncQuestion = parseCodexAsyncQuestionItem(item);
+    if (asyncQuestion.kind !== "not_async_question") {
+      const canonicalEvents = context.eventMapperPipeline.runLive(
+        { kind: "item_completed", item },
+        { source: "live", runtimeId: session.runtimeId, threadId: session.threadId, timestamp },
+      );
+      emitCanonicalEvents(context, withTurnModel(context, canonicalEvents, session, turnId));
+      return;
+    }
     const text = item.text;
     if (text) {
       emitCodexSessionEvent(context, session.threadId, {

@@ -47,6 +47,7 @@ export const createAgentSessionLiveSnapshotFixture = (
     startedAt: "2026-02-22T08:00:00.000Z",
     pendingApprovals: [],
     pendingQuestions: [],
+    pendingAsyncQuestions: [],
     contextUsage: null,
     ...snapshotOverrides,
   };

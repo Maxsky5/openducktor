@@ -26,6 +26,7 @@ import {
   codexCommandExecutionItemFixture,
   codexTokenUsageFixture,
 } from "./test-fixtures/codex-protocol";
+import { encodeCodexAsyncQuestionReply } from "./codex-async-questions";
 
 const observeSessionState = async (
   adapter: CodexAppServerAdapter,
@@ -40,6 +41,96 @@ const observeSessionState = async (
 };
 
 describe("CodexAppServerAdapter streaming", () => {
+  test("keeps asynchronous questions pending without blocking the turn and sends contextual replies", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents });
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    try {
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_650,
+          item: {
+            type: "agentMessage",
+            id: "async-question-1",
+            phase: "commentary",
+            text: "Which environment should I use?",
+            memoryCitation: null,
+            delivery: "async",
+            questions: [
+              {
+                title: "Which environment should I use?",
+                options: ["Staging", "Production"],
+              },
+            ],
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      const questionItemId = '["request_user_input_async","async-question-1",0]';
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "assistant_message",
+          asyncQuestion: {
+            status: "pending",
+            questions: [expect.objectContaining({ questionItemId })],
+          },
+        }),
+      );
+      await expect(
+        adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
+      ).resolves.toMatchObject({
+        classification: "running",
+        pendingAsyncQuestions: [expect.objectContaining({ questionItemId })],
+      });
+
+      await adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [
+            {
+              kind: "async_question_reply",
+              questionItemId,
+              question: "Which environment should I use?",
+              answer: "Staging",
+            },
+          ],
+        }),
+      );
+      await flushCodexAdapterWork();
+
+      const turnStart = transports
+        .get("runtime-live")
+        ?.calls.findLast((call) => call.method === "turn/start");
+      expect(turnStart?.params).toMatchObject({
+        input: [
+          {
+            type: "text",
+            text: encodeCodexAsyncQuestionReply({
+              questionItemId,
+              question: "Which environment should I use?",
+              answer: "Staging",
+            }),
+          },
+        ],
+      });
+      await expect(
+        adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
+      ).resolves.toMatchObject({ pendingAsyncQuestions: [] });
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test.each(["image", "localImage"] as const)(
     "delivers streamed %s user messages with null detail without session errors",
     async (imageType) => {

@@ -246,6 +246,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     onResumeSession: () => {},
     startLaunchKickoff: async () => {},
     onSend: async () => true,
+    sendAgentMessage: async () => {},
     stopAgentSession: async () => {},
     loadAgentSessionHistory: async () => null,
     ...overrides.sessionActions,
