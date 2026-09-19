@@ -412,6 +412,36 @@ describe("Claude host live-session adapter", () => {
     });
   });
 
+  test("preserves source-specific recovery advice before native admission", async () => {
+    const harness = await createHarness(workingDirectoryDependencies);
+    harness.setContinueInterruptedTurn(() =>
+      Effect.fail(
+        new HostOperationError({
+          operation: "claudeRuntime.createSession",
+          message: "Claude initialization timed out. Check authentication and connectivity.",
+        }),
+      ),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        harness.adapter.continueInterruptedTurn({
+          ...startInput,
+          externalSessionId: "session-1",
+        }),
+      ),
+    );
+
+    expect(hostInvokeFailureFromError(failure)).toMatchObject({
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "continuation_failed",
+        message: "Claude initialization timed out. Check authentication and connectivity.",
+        nextAction: "Resolve the reported runtime failure, then retry Resume.",
+      },
+    });
+  });
+
   test("serializes inspect-session advice when retaining an admitted continuation fails", async () => {
     const harness = await createHarness(workingDirectoryDependencies);
     harness.setContinueInterruptedTurn((_input, _runtimeId, onContinuationAdmission) =>

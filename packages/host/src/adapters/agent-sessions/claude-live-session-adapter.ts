@@ -12,10 +12,11 @@ import {
 } from "@openducktor/contracts";
 import {
   AgentSessionResumeError,
+  type AgentSessionResumeNextActionOverrides,
   toAgentSessionResumeError,
 } from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
-import type { AgentSessionSummary } from "@openducktor/core";
+import { type AgentSessionSummary, InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
@@ -23,6 +24,7 @@ import { requireRuntimeWorkingDirectory } from "../../application/runtimes/runti
 import {
   type HostError,
   type HostOperationErrorAggregate,
+  HostOperationError,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
@@ -65,6 +67,11 @@ export type {
   CreateClaudeLiveSessionAdapterPreparerInput,
   PreparedClaudeLiveSessionAdapter,
 } from "./claude-live-session-adapter-contract";
+
+const preAdmissionNextActionOverrides = (cause: unknown): AgentSessionResumeNextActionOverrides =>
+  cause instanceof HostOperationError && cause.cause instanceof InterruptedTurnResumeError
+    ? { continuation_failed: "Send a new message to continue." }
+    : {};
 
 export const createClaudeLiveSessionAdapterPreparer =
   ({
@@ -356,9 +363,12 @@ export const createClaudeLiveSessionAdapterPreparer =
                         "Inspect the runtime and this session. Retry Resume only if the turn is still unfinished.",
                       cause,
                     })
-                  : toAgentSessionResumeError(cause, sessionRef, operation, {
-                      continuation_failed: "Send a new message to continue.",
-                    }),
+                  : toAgentSessionResumeError(
+                      cause,
+                      sessionRef,
+                      operation,
+                      preAdmissionNextActionOverrides(cause),
+                    ),
               ),
             );
           }),
