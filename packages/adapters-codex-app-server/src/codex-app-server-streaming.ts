@@ -288,10 +288,12 @@ export const createCodexAcceptedUserMessage = ({
   session,
   parts,
   model,
+  asyncQuestionItemIds,
 }: {
   session: CodexSessionState;
   parts: AgentUserMessagePart[];
   model: AgentModelSelection | undefined;
+  asyncQuestionItemIds: readonly string[];
 }): AcceptedAgentUserMessage => {
   const asyncQuestionReplies = parts
     .filter((part) => part.kind === "async_question_reply")
@@ -311,6 +313,7 @@ export const createCodexAcceptedUserMessage = ({
         : serializeAgentUserMessagePartsToText(parts),
     parts: toDisplayParts(parts),
     state: "read",
+    asyncQuestionItemIds: [...asyncQuestionItemIds],
   };
   if (asyncQuestionReplies.length > 0) {
     event.asyncQuestionReplies = asyncQuestionReplies;

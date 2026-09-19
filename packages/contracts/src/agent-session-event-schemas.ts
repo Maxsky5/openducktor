@@ -312,6 +312,7 @@ export const agentUserMessageEventSchema = transcriptEventSchema({
   state: z.enum(["queued", "read"]),
   model: agentModelSelectionSchema.optional(),
   asyncQuestionReplies: z.array(agentAsyncQuestionReplySchema).optional(),
+  asyncQuestionItemIds: z.array(z.string().trim().min(1)).optional(),
 });
 
 const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [

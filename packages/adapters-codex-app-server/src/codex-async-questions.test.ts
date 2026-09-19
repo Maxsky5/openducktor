@@ -143,6 +143,7 @@ describe("Codex asynchronous questions", () => {
         },
         parts: [part],
         model: undefined,
+        asyncQuestionItemIds: [part.questionItemId],
       }),
     ).toMatchObject({
       type: "user_message",

@@ -307,10 +307,8 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       const sendInput: Parameters<typeof dependencies.adapter.sendUserMessage>[0] = {
         ...runtimeSessionRef,
         parts: normalizedParts,
+        asyncQuestionItemIds,
       };
-      if (asyncQuestionItemIds.length > 0) {
-        sendInput.asyncQuestionItemIds = asyncQuestionItemIds;
-      }
       if (readySession.selectedModel) {
         sendInput.model = readySession.selectedModel;
       }

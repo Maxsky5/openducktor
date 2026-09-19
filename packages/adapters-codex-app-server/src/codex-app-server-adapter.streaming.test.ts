@@ -422,7 +422,12 @@ describe("CodexAppServerAdapter streaming", () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
     await adapter.startSession(codexStartSessionInput());
-    const unsubscribe = await observeSessionState(adapter, "thread/start-runtime-live");
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+    await flushCodexAdapterWork();
 
     try {
       const emitQuestion = (id: string) =>
@@ -467,7 +472,15 @@ describe("CodexAppServerAdapter streaming", () => {
         }),
       });
 
-      await send;
+      const accepted = await send;
+      const capturedQuestionItemId = '["request_user_input_async","async-question-before-send",0]';
+      expect(accepted).toMatchObject({ asyncQuestionItemIds: [capturedQuestionItemId] });
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "user_message",
+          asyncQuestionItemIds: [capturedQuestionItemId],
+        }),
+      );
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({

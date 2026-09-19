@@ -3,7 +3,7 @@ import { startSessionWorkflow } from "@/features/session-start/session-start-wor
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
-import type { AcceptedAgentUserMessage } from "@openducktor/core";
+import type { AcceptedAgentUserMessage, AgentEnginePort, AgentEvent } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import {
@@ -15,6 +15,7 @@ import {
   createSessionUpdater as createEventSessionUpdater,
   listenToAgentSessionEvents,
 } from "../events/session-events-test-harness";
+import type { SessionEventAdapter } from "../events/session-event-test-types";
 import { createTaskCardFixture } from "../test-utils";
 import {
   buildSession,
@@ -676,56 +677,96 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     }
   });
 
-  test("keeps an async question that arrives while an ordinary send awaits acceptance", async () => {
-    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
-    const entered = Promise.withResolvers<Parameters<typeof adapter.sendUserMessage>[0]>();
-    const accepted = Promise.withResolvers<AcceptedAgentUserMessage>();
-    adapter.sendUserMessage = (input) => {
-      entered.resolve(input);
-      return accepted.promise;
-    };
-    const beforeSend = {
-      questionItemId: '["request_user_input_async","question-before-send",0]',
-      sourceMessageId: "question-before-send",
-      questionIndex: 0,
-      title: "Question before send",
-      options: null,
-    };
-    const duringSend = {
-      questionItemId: '["request_user_input_async","question-during-send",0]',
-      sourceMessageId: "question-during-send",
-      questionIndex: 0,
-      title: "Question during send",
-      options: null,
-    };
-    const sessionsRef = createSessionsRef([
-      buildSession({ status: "idle", pendingAsyncQuestions: [beforeSend] }),
-    ]);
-    const actions = createSessionActions({
-      adapter,
-      sessionsRef,
-      ensureExistingSessionRuntime: async () => {},
-    });
+  test.each([
+    {
+      label: "one captured question",
+      beforeSend: [
+        {
+          questionItemId: '["request_user_input_async","question-before-send",0]',
+          sourceMessageId: "question-before-send",
+          questionIndex: 0,
+          title: "Question before send",
+          options: null,
+        },
+      ],
+    },
+    { label: "an empty captured set", beforeSend: [] },
+  ])(
+    "keeps a question that arrives during native admission after $label",
+    async ({ beforeSend }) => {
+      const handlers: Array<(event: AgentEvent) => void> = [];
+      const adapter: AgentEnginePort & SessionEventAdapter = {
+        ...createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter()),
+        subscribeEvents: async (_sessionRef, handler) => {
+          handlers.push(handler);
+          return () => {};
+        },
+        replyApproval: async () => {},
+      };
+      const entered = Promise.withResolvers<Parameters<typeof adapter.sendUserMessage>[0]>();
+      const admit = Promise.withResolvers<void>();
+      const emittedEvents: AcceptedAgentUserMessage[] = [];
+      adapter.sendUserMessage = async (input) => {
+        entered.resolve(input);
+        await admit.promise;
+        const emittedEvent = acceptedUserMessage(input);
+        if (input.asyncQuestionItemIds !== undefined) {
+          emittedEvent.asyncQuestionItemIds = input.asyncQuestionItemIds;
+        }
+        emittedEvents.push(emittedEvent);
+        for (const handler of handlers) {
+          handler(emittedEvent);
+        }
+        return emittedEvent;
+      };
+      const duringSend = {
+        questionItemId: '["request_user_input_async","question-during-send",0]',
+        sourceMessageId: "question-during-send",
+        questionIndex: 0,
+        title: "Question during send",
+        options: null,
+      };
+      const sessionsRef = createSessionsRef([
+        buildSession({ status: "idle", pendingAsyncQuestions: beforeSend }),
+      ]);
+      const unsubscribe = await listenToAgentSessionEvents({
+        adapter,
+        sessionsRef,
+        updateSession: createEventSessionUpdater(sessionsRef),
+        externalSessionId: "session-1",
+        repoPath: "/tmp/repo",
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => {},
+      });
+      const actions = createSessionActions({
+        adapter,
+        sessionsRef,
+        ensureExistingSessionRuntime: async () => {},
+      });
 
-    const sending = actions.sendAgentMessage(getSession(sessionsRef), [
-      { kind: "text", text: "Continue" },
-    ]);
-    const input = await entered.promise;
-    const current = getSession(sessionsRef);
-    sessionsRef.current = replaceAgentSession(sessionsRef.current, {
-      ...current,
-      pendingAsyncQuestions: [...(current.pendingAsyncQuestions ?? []), duringSend],
-    });
-    accepted.resolve(acceptedUserMessage(input));
-    await sending;
+      try {
+        const sending = actions.sendAgentMessage(getSession(sessionsRef), [
+          { kind: "text", text: "Continue" },
+        ]);
+        const input = await entered.promise;
+        const current = getSession(sessionsRef);
+        sessionsRef.current = replaceAgentSession(sessionsRef.current, {
+          ...current,
+          pendingAsyncQuestions: [...(current.pendingAsyncQuestions ?? []), duringSend],
+        });
+        admit.resolve();
+        await sending;
 
-    expect(input.asyncQuestionItemIds).toEqual([beforeSend.questionItemId]);
-    expect(getSession(sessionsRef)?.pendingAsyncQuestions).toEqual([duringSend]);
-    expect(getSession(sessionsRef)?.handledAsyncQuestionIds).toContain(beforeSend.questionItemId);
-    expect(getSession(sessionsRef)?.handledAsyncQuestionIds).not.toContain(
-      duringSend.questionItemId,
-    );
-  });
+        const capturedIds = beforeSend.map((question) => question.questionItemId);
+        expect(input.asyncQuestionItemIds).toEqual(capturedIds);
+        expect(emittedEvents[0]?.asyncQuestionItemIds).toEqual(capturedIds);
+        expect(getSession(sessionsRef)?.pendingAsyncQuestions).toEqual([duringSend]);
+        expect(getSession(sessionsRef)?.handledAsyncQuestionIds).toEqual(new Set(capturedIds));
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
 
   const blockingInputCases: Array<{
     label: string;

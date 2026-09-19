@@ -719,10 +719,21 @@ export class CodexAppServerAdapter
     session: CodexSessionState,
     systemInvocation: ReturnType<typeof classifySystemSlashCommandInvocation>,
   ): Promise<AcceptedAgentUserMessage> {
+    const replyParts = input.parts.filter((part) => part.kind === "async_question_reply");
+    const pendingQuestionItemIds =
+      systemInvocation.kind === "manual_session_compaction"
+        ? []
+        : (input.asyncQuestionItemIds ??
+          (replyParts.length > 0
+            ? replyParts.map((part) => part.questionItemId)
+            : this.asyncQuestions
+                .pendingForSession(session.runtimeId, session.threadId)
+                .map((question) => question.questionItemId)));
     const acceptedUserMessage = createCodexAcceptedUserMessage({
       session,
       parts: input.parts,
       model: input.model ?? session.model ?? undefined,
+      asyncQuestionItemIds: pendingQuestionItemIds,
     });
     if (systemInvocation.kind === "manual_session_compaction") {
       await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
@@ -735,14 +746,6 @@ export class CodexAppServerAdapter
       }
       return acceptedUserMessage;
     }
-    const replyParts = input.parts.filter((part) => part.kind === "async_question_reply");
-    const pendingQuestionItemIds =
-      input.asyncQuestionItemIds ??
-      (replyParts.length > 0
-        ? replyParts.map((part) => part.questionItemId)
-        : this.asyncQuestions
-            .pendingForSession(session.runtimeId, session.threadId)
-            .map((question) => question.questionItemId));
     const accepted = await startCodexTurnForSession(
       this.turnLifecycleContext(),
       input.externalSessionId,

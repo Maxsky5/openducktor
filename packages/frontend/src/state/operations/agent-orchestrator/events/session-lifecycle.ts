@@ -243,6 +243,7 @@ export const handleUserMessage = (
       },
       event.asyncQuestionReplies,
       { messageId: event.messageId, timestamp: event.timestamp, text: event.message },
+      event.asyncQuestionItemIds,
     );
     return {
       ...current,
