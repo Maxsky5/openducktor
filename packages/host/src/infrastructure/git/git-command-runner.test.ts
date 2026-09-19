@@ -67,3 +67,26 @@ describe("createDefaultGitRunner", () => {
     });
   });
 });
+
+for (const stdin of [undefined, ""]) {
+  test(`preserves Git exit statuses with ${stdin === undefined ? "execFile" : "spawn"}`, async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "odt-git-exit-"));
+    try {
+      await writeFile(path.join(root, "file.txt"), "hello\n");
+      const runner = createDefaultGitRunner(process.env, { command: "git" });
+      for (const [args, code] of [
+        [["diff", "--no-index", "--", "file.txt", "file.txt"], 0],
+        [["diff", "--no-index", "--", "/dev/null", "file.txt"], 1],
+        [["diff", "--no-index", "--", "/dev/null", "missing.txt"], 1],
+        [["diff", "--invalid-option"], 129],
+      ] as const) {
+        const options: Parameters<typeof runner>[2] = { allowFailure: true };
+        if (stdin !== undefined) options.stdin = stdin;
+        const result = await Effect.runPromise(runner(root, [...args], options));
+        expect(result).toMatchObject({ ok: code === 0, exitCode: code });
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
