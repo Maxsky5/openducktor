@@ -109,16 +109,6 @@ Desktop-managed sessions use that MCP internally, and the same task surface is a
 
 That keeps the workflow task-centric and auditable: agents act through a controlled task interface, while OpenDucktor keeps task state, documents, approvals, and delivery history connected in one place.
 
-### File links in Agent Chat
-
-Click a Markdown file link in Agent Chat or a Subagent Transcript to open the existing file preview. Relative paths use the Task's Build Worktree. Absolute paths and local `file:///` links must stay within that same Build Worktree. Line references such as `:42`, `:42:7`, and `#L42-L50` open the file without scrolling to a line.
-
-The preview keeps its file access limits and unsaved-edit checks. Invalid links and unavailable files show an error. Plain paths and code blocks do not become links.
-
-Use `./a:42` for a single-letter filename with a line reference. The form `a:42` is ambiguous with a Windows drive-relative path. Filenames such as `dir/a:b.ts` are supported.
-
-In a transcript dialog, Escape closes the file preview before the conversation. Unsaved edits still require confirmation, and a save in progress blocks preview close. Closing the preview returns keyboard focus to its link.
-
 ## Current Scope
 
 - Platform support today: macOS is the primary supported desktop target.
@@ -141,7 +131,6 @@ Files rotate on the host's local calendar day. OpenDucktor retains the current d
 
 - [docs/README.md](docs/README.md)
 - [docs/architecture-overview.md](docs/architecture-overview.md)
-- [docs/tanstack-query-cache-strategy.md](docs/tanstack-query-cache-strategy.md)
 - [docs/runtime-integration-guide.md](docs/runtime-integration-guide.md)
 - [docs/web-runner.md](docs/web-runner.md)
 - [docs/task-workflow-status-model.md](docs/task-workflow-status-model.md)
