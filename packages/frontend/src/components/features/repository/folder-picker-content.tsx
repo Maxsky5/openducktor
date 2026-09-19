@@ -220,20 +220,26 @@ export function FolderPickerContent({
         onSelectFile={selectFile}
       />
 
-      {helperMessage ? (
-        <div className="rounded-md border border-warning-border bg-warning-surface px-3 py-2.5 text-sm text-warning-surface-foreground">
-          {helperMessage}
-        </div>
-      ) : null}
+      <div
+        data-slot="folder-picker-feedback"
+        className="grid min-h-[2.625rem] gap-4"
+        aria-live="polite"
+      >
+        {helperMessage ? (
+          <div className="rounded-md border border-warning-border bg-warning-surface px-3 py-2.5 text-sm text-warning-surface-foreground">
+            {helperMessage}
+          </div>
+        ) : null}
 
-      {activeError ? (
-        <div
-          className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-muted"
-          role="alert"
-        >
-          {activeError}
-        </div>
-      ) : null}
+        {activeError ? (
+          <div
+            className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-muted"
+            role="alert"
+          >
+            {activeError}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

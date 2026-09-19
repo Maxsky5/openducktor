@@ -116,6 +116,9 @@ describe("FolderPickerDialog", () => {
       const directoryList = dialog.querySelector('[data-slot="scroll-area"]');
       expect(directoryList?.classList.contains("min-h-0")).toBe(true);
       expect(directoryList?.classList.contains("flex-1")).toBe(true);
+
+      const feedback = dialog.querySelector('[data-slot="folder-picker-feedback"]');
+      expect(feedback?.classList.contains("min-h-[2.625rem]")).toBe(true);
     } finally {
       rendered.unmount();
     }
