@@ -109,7 +109,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       sessionStoreInput.emit = input.emit;
     }
     this.sessionStore = input.sessionStore ?? createClaudeAgentSdkSessionStore(sessionStoreInput);
-    this.fileSearch = createClaudeWorkspaceFileSearch();
+    this.fileSearch = input.fileSearch ?? createClaudeWorkspaceFileSearch();
     trackClaudeFileSearchSessions({ fileSearch: this.fileSearch, sessionStore: this.sessionStore });
   }
 
@@ -400,6 +400,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         ),
       );
       const mcpBridgeConnection = yield* this.input.resolveMcpBridgeConnection(input.repoPath);
+      yield* fromPromise("claudeRuntime.prewarmFileSearch", async () => {
+        this.fileSearch.prewarm(input.workingDirectory);
+      });
       const createSessionInput: CreateClaudeAgentSdkSessionInput = {
         emit: this.emit.bind(this),
         initialTodos,
@@ -421,12 +424,6 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       }
       return yield* fromPromise("claudeRuntime.createSession", () =>
         createClaudeAgentSdkSession(createSessionInput),
-      ).pipe(
-        Effect.tap(() =>
-          Effect.sync(() => {
-            this.fileSearch.prewarm(input.workingDirectory);
-          }),
-        ),
       );
     });
   }
