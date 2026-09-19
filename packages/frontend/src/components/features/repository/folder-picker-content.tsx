@@ -9,12 +9,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { FolderPickerController } from "./use-folder-picker-controller";
 
+type FolderPickerTreeHeight = "fill" | "fixed";
+
 function FolderPickerDirectoryBrowser({
   requestedPath,
   listing,
   filteredEntries,
   filterText,
   selectedFilePath,
+  treeHeight,
   status,
   onFilterTextChange,
   onLoadDirectory,
@@ -25,6 +28,7 @@ function FolderPickerDirectoryBrowser({
   filteredEntries: DirectoryListing["entries"];
   filterText: string;
   selectedFilePath: string | null;
+  treeHeight: FolderPickerTreeHeight;
   status: {
     isSubmitting: boolean;
     isInitialLoad: boolean;
@@ -111,7 +115,7 @@ function FolderPickerDirectoryBrowser({
 
       <div
         data-slot="folder-picker-directory-tree"
-        className="relative min-h-0 flex-1"
+        className={cn("relative", treeHeight === "fill" ? "min-h-0 flex-1" : "h-80")}
         aria-busy={isInitialLoad}
       >
         <div data-slot="folder-picker-directory-scroll" className="absolute inset-0">
@@ -171,8 +175,10 @@ function FolderPickerDirectoryBrowser({
 
 export function FolderPickerContent({
   controller,
+  treeHeight,
 }: {
   controller: FolderPickerController;
+  treeHeight: FolderPickerTreeHeight;
 }): ReactElement {
   const {
     requestedPath,
@@ -225,6 +231,7 @@ export function FolderPickerContent({
         filteredEntries={filteredEntries}
         filterText={filterText}
         selectedFilePath={selectedFilePath}
+        treeHeight={treeHeight}
         status={{ isSubmitting, isInitialLoad, isRefreshing }}
         onFilterTextChange={changeFilterText}
         onLoadDirectory={loadDirectory}

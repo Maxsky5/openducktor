@@ -68,7 +68,7 @@ export function FolderPickerDialogSession({
         </DialogHeader>
 
         <DialogBody className="flex flex-col overflow-hidden px-1 pt-4">
-          <FolderPickerContent controller={controller} />
+          <FolderPickerContent controller={controller} treeHeight="fill" />
         </DialogBody>
 
         <DialogFooter className="mt-4 block border-t-0 px-1 pt-0">

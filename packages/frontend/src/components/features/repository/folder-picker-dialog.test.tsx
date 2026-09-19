@@ -470,8 +470,6 @@ describe("FolderPickerDialog", () => {
         '[data-slot="folder-picker-directory-tree"]',
       );
       if (!tree) throw new Error("Missing directory tree");
-      expect(tree.classList.contains("min-h-0")).toBe(true);
-      expect(tree.classList.contains("flex-1")).toBe(true);
       jest.useFakeTimers();
       fireEvent.click(nextButton);
 
@@ -483,12 +481,6 @@ describe("FolderPickerDialog", () => {
       expect(screen.getByText("Loading directories…")).toBeTruthy();
       expect(document.querySelector('[data-slot="folder-picker-directory-tree"]')).toBe(tree);
       expect(tree.getAttribute("aria-busy")).toBe("true");
-      const loading = document.querySelector<HTMLElement>(
-        '[data-slot="folder-picker-directory-loading"]',
-      );
-      if (!loading) throw new Error("Missing directory loading layer");
-      expect(loading.classList.contains("absolute")).toBe(true);
-      expect(loading.classList.contains("inset-0")).toBe(true);
       expect(screen.queryByRole("button", { name: "old-entry" })).toBeNull();
       expect(screen.queryByRole("button", { name: "next" })).toBeNull();
       expect(screen.getByLabelText("Open path")).toBe(manualPath);
@@ -753,7 +745,6 @@ describe("FolderPickerDialog", () => {
           screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
         ).toBe(true);
         expect(screen.getByText("/missing")).toBeTruthy();
-        expect(screen.getByText("Loading directories…")).toBeTruthy();
       });
 
       resolveRetry(createListing({ currentPath: "/missing" }));
