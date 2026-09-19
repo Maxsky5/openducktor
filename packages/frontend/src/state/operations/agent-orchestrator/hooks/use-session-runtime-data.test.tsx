@@ -509,7 +509,7 @@ describe("useSessionRuntimeData", () => {
       );
       expect(harness.getLatest().runtimeData).toEqual(
         expect.objectContaining({
-          modelCatalog: emptyCatalog,
+          modelCatalog: null,
           isLoadingModelCatalog: false,
           catalogError: "Catalog refresh failed",
         }),

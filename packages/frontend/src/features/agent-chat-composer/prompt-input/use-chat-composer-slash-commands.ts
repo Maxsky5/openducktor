@@ -73,10 +73,10 @@ export const useChatComposerSlashCommands = ({
     supports: runtimeSupportsSlashCommands,
     loadRuntimeCatalog,
   });
-  const resolved = resolveRuntimeCatalogSurface(
-    slashCommandsQuery.data?.slashCommands,
-    slashCommandsQuery.error,
-  );
+  const resolved = resolveRuntimeCatalogSurface(slashCommandsQuery.data?.slashCommands, {
+    error: slashCommandsQuery.error,
+    isFetching: slashCommandsQuery.isFetching,
+  });
   const runtimeSlashCommandCatalog =
     promptInputRuntime.state === "available" ? resolved.catalog : null;
   const reusablePromptSlashCommands = useMemo(

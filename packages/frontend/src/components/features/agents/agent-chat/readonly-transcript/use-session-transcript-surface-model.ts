@@ -83,10 +83,10 @@ export function useSessionTranscriptSurfaceModel({
       : skippedRuntimeCatalogQueryOptions()),
     enabled: runtimeRef !== null && runtimeReadiness.state === "ready",
   });
-  const modelSurface = resolveRuntimeCatalogSurface(
-    modelCatalogQuery.data?.models,
-    modelCatalogQuery.error,
-  );
+  const modelSurface = resolveRuntimeCatalogSurface(modelCatalogQuery.data?.models, {
+    error: modelCatalogQuery.error,
+    isFetching: modelCatalogQuery.isFetching,
+  });
   const runtimeBlockedAction = useMemo(
     () => ({
       label: "Recheck",

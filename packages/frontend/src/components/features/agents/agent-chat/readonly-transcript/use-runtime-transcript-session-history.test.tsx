@@ -11,6 +11,7 @@ import { QueryProvider } from "@/lib/query-provider";
 import { createRuntimeDefinitionsContextValue } from "@/pages/agents/agent-studio-test-utils";
 import { AgentOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
@@ -523,6 +524,103 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
       expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(2);
       expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("drops retained skill mentions after a failed background refresh", async () => {
+    const history: AgentSessionHistoryMessage[] = [
+      {
+        messageId: "user-skill-1",
+        role: "user",
+        timestamp: "2026-07-27T10:00:00.000Z",
+        text: "/grill-me",
+        displayParts: [{ kind: "text", text: "/grill-me" }],
+        state: "read",
+        parts: [],
+      },
+    ];
+    const readSessionHistory = mock(async () => history);
+    let rejectRefresh: ((reason: Error) => void) | undefined;
+    const refresh = new Promise<AgentRuntimeCatalog>((_resolve, reject) => {
+      rejectRefresh = reject;
+    });
+    const catalogRequests = [
+      Promise.resolve(
+        createRuntimeCatalogFixture({
+          skills: { skills: [{ id: "grill-me", name: "grill-me", path: "grill-me" }] },
+        }),
+      ),
+      refresh,
+    ];
+    const loadRepoRuntimeCatalog = mock(() => {
+      const request = catalogRequests.shift();
+      if (!request) {
+        throw new Error("unexpected catalog request");
+      }
+      return request;
+    });
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>
+        <RuntimeDefinitionsContext.Provider
+          value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
+        >
+          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
+            {children}
+          </AgentOperationsContext.Provider>
+        </RuntimeDefinitionsContext.Provider>
+      </QueryClientProvider>
+    );
+    const harness = createHookHarness(
+      useRuntimeTranscriptSessionHistory,
+      {
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "claude-thread",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+        },
+        repoReadinessState: "ready" as const,
+        liveSession: null,
+      },
+      { wrapper },
+    );
+    const catalogKey = runtimeCatalogQueryKeys.catalog({
+      repoPath: "/repo",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/worktree",
+    });
+    const messageHasSkillMention = (): boolean => {
+      const item = harness.getLatest().session?.messages.items[0];
+      return (
+        item?.meta?.kind === "user" &&
+        item.meta.parts?.some((part) => part.kind === "skill_mention") === true
+      );
+    };
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => messageHasSkillMention());
+
+      await harness.run(() => {
+        void queryClient.invalidateQueries({ queryKey: catalogKey, exact: true });
+      });
+      await harness.waitFor(
+        () => queryClient.getQueryState(catalogKey)?.fetchStatus === "fetching",
+      );
+      expect(messageHasSkillMention()).toBe(true);
+
+      rejectRefresh?.(new Error("catalog offline"));
+      await harness.waitFor((state) => state.skillSurfaceError === "catalog offline");
+
+      expect(messageHasSkillMention()).toBe(false);
     } finally {
       await harness.unmount();
     }

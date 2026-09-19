@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "@openducktor/core";
+import { AGENT_ROLE_TOOL_POLICY, AgentRuntimeQueryError, type AgentRole } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
@@ -44,6 +44,18 @@ class FailingSkillsTransport extends RecordingTransport {
   async request(request: CodexJsonRpcRequest) {
     if (request.method === "skills/list") {
       throw new Error("skill index unavailable");
+    }
+    return super.request(request);
+  }
+}
+
+class UnreachableRuntimeTransport extends RecordingTransport {
+  async request(request: CodexJsonRpcRequest) {
+    if (request.method === "model/list") {
+      throw new AgentRuntimeQueryError(
+        "runtime_unavailable",
+        "The Codex runtime is not reachable. Start the runtime and retry.",
+      );
     }
     return super.request(request);
   }
@@ -211,6 +223,24 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(
       catalog.skills?.status === "failed" ? String(catalog.skills.cause) : undefined,
     ).toContain("skill index unavailable");
+  });
+
+  test("fails the combined catalog when the runtime transport is unreachable", async () => {
+    const transport = new UnreachableRuntimeTransport("runtime-live", false);
+    const adapter = new CodexAppServerAdapter({
+      repoRuntimeResolver: {
+        requireRepoRuntime: async () => makeRuntimeSummary("runtime-live"),
+      },
+      transportFactory: () => transport,
+    });
+
+    await expect(
+      adapter.loadRuntimeCatalog({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+      }),
+    ).rejects.toMatchObject({ code: "runtime_unavailable" });
   });
 
   test("resumes and forks sessions through the live runtime id", async () => {

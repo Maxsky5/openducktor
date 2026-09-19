@@ -1,3 +1,4 @@
+import { AgentRuntimeQueryError } from "@openducktor/core";
 import { z } from "zod";
 import { OpenCodeRequestError } from "./request-errors";
 
@@ -14,6 +15,15 @@ export const unwrapData = <T>(
 ): NonNullable<T> => {
   if (payload.data !== undefined && payload.data !== null) {
     return payload.data;
+  }
+
+  // No HTTP response means the request never reached the runtime. This is a
+  // transport loss, so it fails the whole read instead of one surface.
+  if (payload.response === undefined && payload.error instanceof Error) {
+    throw new AgentRuntimeQueryError(
+      "runtime_unavailable",
+      `The OpenCode runtime did not answer the ${action} request. Start the runtime and retry.`,
+    );
   }
 
   const parsedError = opencodeErrorSchema.safeParse(payload.error);

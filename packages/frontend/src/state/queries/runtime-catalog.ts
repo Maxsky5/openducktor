@@ -124,21 +124,30 @@ export type ResolvedRuntimeCatalogSurface<Catalog> = {
   error: string | null;
 };
 
+export type RuntimeCatalogQueryState = {
+  error: unknown;
+  isFetching: boolean;
+};
+
+/**
+ * Projects one catalog surface for a consumer. TanStack Query keeps the last
+ * data and error after a failed refetch, so a settled whole-request failure
+ * discards every retained surface and reports the query error. Retained data
+ * stays visible only while a refresh is in flight.
+ */
 export const resolveRuntimeCatalogSurface = <Catalog>(
   surface: AgentRuntimeCatalogSurface<Catalog> | undefined,
-  cause: unknown,
+  queryState: RuntimeCatalogQueryState,
 ): ResolvedRuntimeCatalogSurface<Catalog> => {
+  const hasQueryError = queryState.error !== null && queryState.error !== undefined;
+  if (hasQueryError && !queryState.isFetching) {
+    return { catalog: null, error: errorMessage(queryState.error) };
+  }
   if (surface?.status === "available") {
-    return {
-      catalog: surface.catalog,
-      error: cause !== null && cause !== undefined ? errorMessage(cause) : null,
-    };
+    return { catalog: surface.catalog, error: null };
   }
   if (surface?.status === "failed") {
     return { catalog: null, error: surface.message };
-  }
-  if (cause !== null && cause !== undefined) {
-    return { catalog: null, error: errorMessage(cause) };
   }
   return { catalog: null, error: null };
 };

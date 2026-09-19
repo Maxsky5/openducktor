@@ -1,3 +1,4 @@
+import { AgentRuntimeQueryError } from "@openducktor/core";
 import { type FailureKind, failureKindSchema } from "@openducktor/contracts";
 import { z } from "zod";
 
@@ -262,7 +263,12 @@ export const toOpenCodeRequestError = (
   action: string,
   cause: unknown,
   response?: ResponseMetadata,
-): OpenCodeRequestError => {
+): OpenCodeRequestError | AgentRuntimeQueryError => {
+  // A transport failure already carries the runtime failure code. Wrapping it
+  // would hide the unreachable runtime behind a surface-specific error.
+  if (cause instanceof AgentRuntimeQueryError) {
+    return cause;
+  }
   const failure = extractRequestFailure(action, cause, response);
   const messageFailure: OpenCodeRequestMessageFailure = { message: failure.message };
   if (failure.status !== undefined) {

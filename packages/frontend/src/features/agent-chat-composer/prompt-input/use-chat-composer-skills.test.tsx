@@ -172,6 +172,64 @@ describe("useChatComposerSkills", () => {
     }
   });
 
+  test("drops retained skills after a settled background refresh failure", async () => {
+    const catalog: AgentSkillCatalog = {
+      skills: [
+        {
+          id: "review",
+          name: "review",
+          path: "/repo/.codex/skills/review/SKILL.md",
+        },
+      ],
+    };
+    let rejectRefresh: ((reason: Error) => void) | undefined;
+    const refresh = new Promise<AgentRuntimeCatalog>((_resolve, reject) => {
+      rejectRefresh = reject;
+    });
+    const catalogRequests = [
+      Promise.resolve(createRuntimeCatalogFixture({ skills: catalog })),
+      refresh,
+    ];
+    const loadRuntimeCatalog = mock(() => {
+      const request = catalogRequests.shift();
+      if (!request) {
+        throw new Error("unexpected catalog request");
+      }
+      return request;
+    });
+    const harness = createHookHarness(
+      useSkillsWithLiveReader,
+      {
+        promptInputRuntime: sessionRuntime,
+        supportsSkillReferences: true,
+        loadRuntimeCatalog,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.composer.skills.length === 1);
+
+      await harness.run(({ queryClient }) => {
+        void queryClient.invalidateQueries({
+          queryKey: runtimeCatalogQueryKeys.catalog(sessionRuntimeRef),
+          exact: true,
+        });
+      });
+      await harness.waitFor((state) => state.liveQuery.isFetching);
+      expect(harness.getLatest().composer.skills).toEqual(catalog.skills);
+
+      rejectRefresh?.(new Error("catalog offline"));
+      await harness.waitFor((state) => state.composer.skillsError === "catalog offline");
+
+      expect(harness.getLatest().composer.skills).toEqual([]);
+      expect(harness.getLatest().composer.skillCatalog).toEqual(EMPTY_CATALOG);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reads session-scoped skills using the session working directory", async () => {
     const catalog: AgentSkillCatalog = {
       skills: [

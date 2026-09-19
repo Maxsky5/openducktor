@@ -229,7 +229,10 @@ export function useRuntimeTranscriptSessionHistory({
       loadRepoRuntimeCatalog,
     }),
   );
-  const skillSurface = resolveRuntimeCatalogSurface(skillsQuery.data?.skills, skillsQuery.error);
+  const skillSurface = resolveRuntimeCatalogSurface(skillsQuery.data?.skills, {
+    error: skillsQuery.error,
+    isFetching: skillsQuery.isFetching,
+  });
   const session = useMemo(() => {
     let transcriptSession: AgentChatTranscriptSession | null = null;
     if (matchingSession !== null) {

@@ -115,7 +115,12 @@ describe("runtime catalog queries", () => {
   });
 
   test("projects an available surface", () => {
-    expect(resolveRuntimeCatalogSurface(runtimeCatalogFixture.models, null)).toEqual({
+    expect(
+      resolveRuntimeCatalogSurface(runtimeCatalogFixture.models, {
+        error: null,
+        isFetching: false,
+      }),
+    ).toEqual({
       catalog: modelCatalogFixture,
       error: null,
     });
@@ -125,26 +130,46 @@ describe("runtime catalog queries", () => {
     expect(
       resolveRuntimeCatalogSurface(
         { status: "failed", message: "Claude could not load skill catalog." },
-        null,
+        { error: null, isFetching: false },
       ),
     ).toEqual({ catalog: null, error: "Claude could not load skill catalog." });
   });
 
-  test("keeps a retained surface and reports the request failure", () => {
+  test("drops a retained surface after a settled request failure", () => {
     expect(
-      resolveRuntimeCatalogSurface(runtimeCatalogFixture.models, new Error("Refetch failed.")),
-    ).toEqual({ catalog: modelCatalogFixture, error: "Refetch failed." });
+      resolveRuntimeCatalogSurface(runtimeCatalogFixture.models, {
+        error: new Error("Refetch failed."),
+        isFetching: false,
+      }),
+    ).toEqual({ catalog: null, error: "Refetch failed." });
+  });
+
+  test("keeps a retained surface while a refresh is in flight", () => {
+    expect(
+      resolveRuntimeCatalogSurface(runtimeCatalogFixture.models, {
+        error: new Error("Refetch failed."),
+        isFetching: true,
+      }),
+    ).toEqual({ catalog: modelCatalogFixture, error: null });
   });
 
   test("uses the query error when the whole catalog request failed", () => {
-    expect(resolveRuntimeCatalogSurface(undefined, new Error("Runtime is unavailable."))).toEqual({
+    expect(
+      resolveRuntimeCatalogSurface(undefined, {
+        error: new Error("Runtime is unavailable."),
+        isFetching: false,
+      }),
+    ).toEqual({
       catalog: null,
       error: "Runtime is unavailable.",
     });
   });
 
   test("reports no error for a surface the runtime does not support", () => {
-    expect(resolveRuntimeCatalogSurface(undefined, null)).toEqual({ catalog: null, error: null });
+    expect(resolveRuntimeCatalogSurface(undefined, { error: null, isFetching: false })).toEqual({
+      catalog: null,
+      error: null,
+    });
   });
 
   test("searches files only for a concrete runtime working-directory ref", async () => {
@@ -276,7 +301,17 @@ describe("runtime catalog queries", () => {
     expect(state?.error).toEqual(
       new Error("The runtime changed during this read. Reload the runtime data."),
     );
-    expect(queryClient.getQueryData<AgentRuntimeCatalog>(queryKey)).toEqual(runtimeCatalogFixture);
+    const retainedCatalog = queryClient.getQueryData<AgentRuntimeCatalog>(queryKey);
+    expect(retainedCatalog).toEqual(runtimeCatalogFixture);
+    expect(
+      resolveRuntimeCatalogSurface(retainedCatalog?.models, {
+        error: state?.error,
+        isFetching: state?.fetchStatus === "fetching",
+      }),
+    ).toEqual({
+      catalog: null,
+      error: "The runtime changed during this read. Reload the runtime data.",
+    });
   });
 
   test("refreshes a stale combined catalog and reuses a fresh entry", async () => {

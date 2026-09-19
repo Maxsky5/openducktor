@@ -61,14 +61,16 @@ export function useRuntimeModelCatalogs({
         }
         const isEnabled = repoPath !== null && enabledRuntimeKindSet.has(runtimeKind);
         const isFetching = query.isFetching;
-        const surface = resolveRuntimeCatalogSurface(query.data?.models, query.error);
-        const hasUsableCatalog = isFetching || surface.error === null;
+        const surface = resolveRuntimeCatalogSurface(query.data?.models, {
+          error: query.error,
+          isFetching,
+        });
         return {
           runtimeKind,
-          catalog: hasUsableCatalog ? surface.catalog : null,
+          catalog: surface.catalog,
           isFetching,
           isEnabled,
-          error: isFetching ? null : surface.error,
+          error: surface.error,
           retry: async (): Promise<void> => {
             if (repoPath === null) {
               throw new Error("A repository path is required to retry the model catalog.");

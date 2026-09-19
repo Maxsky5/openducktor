@@ -31,10 +31,10 @@ export const useChatComposerCatalogSurface = <Catalog>({
     supports,
     loadRuntimeCatalog,
   });
-  const resolved = resolveRuntimeCatalogSurface(
-    selectSurface(catalogQuery.data),
-    catalogQuery.error,
-  );
+  const resolved = resolveRuntimeCatalogSurface(selectSurface(catalogQuery.data), {
+    error: catalogQuery.error,
+    isFetching: catalogQuery.isFetching,
+  });
 
   let catalog = emptyCatalog;
   let error: string | null = null;

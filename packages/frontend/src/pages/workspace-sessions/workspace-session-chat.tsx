@@ -115,7 +115,10 @@ export function WorkspaceSessionChat({
     ...runtimeCatalogQueryOptions(runtimeRef, runtime.loadRepoRuntimeCatalog),
     enabled: runtimeReadiness.state === "ready",
   });
-  const modelSurface = resolveRuntimeCatalogSurface(catalogQuery.data?.models, catalogQuery.error);
+  const modelSurface = resolveRuntimeCatalogSurface(catalogQuery.data?.models, {
+    error: catalogQuery.error,
+    isFetching: catalogQuery.isFetching,
+  });
   const modelCatalog = modelSurface.catalog;
   const catalogError = modelSurface.error;
   const isLoadingModelCatalog = catalogQuery.isFetching;

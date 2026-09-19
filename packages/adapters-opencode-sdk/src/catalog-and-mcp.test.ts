@@ -17,12 +17,18 @@ const agentFixture = (overrides: Partial<Agent>): Agent => ({
   ...overrides,
 });
 
+type CatalogPayload = {
+  data: unknown;
+  error?: unknown;
+  response?: { status?: number; statusText?: string };
+};
+
 type CatalogClient = {
-  app: { agents: (input: { directory: string }) => Promise<{ data: unknown; error?: unknown }> };
+  app: { agents: (input: { directory: string }) => Promise<CatalogPayload> };
   config: {
-    providers: (input: { directory: string }) => Promise<{ data: unknown; error?: unknown }>;
+    providers: (input: { directory: string }) => Promise<CatalogPayload>;
   };
-  command: { list: (input: { directory: string }) => Promise<{ data: unknown; error?: unknown }> };
+  command: { list: (input: { directory: string }) => Promise<CatalogPayload> };
 };
 
 const catalogClient = (overrides: Partial<CatalogClient>): CatalogClient => ({
@@ -205,6 +211,24 @@ describe("catalog-and-mcp combined runtime catalog", () => {
     expect(failureMessage(catalog.slashCommands)).toContain(
       "OpenCode request failed: list slash commands: boom",
     );
+  });
+
+  test("rejects the combined read when the runtime connection is lost", async () => {
+    const transportLoss = {
+      data: undefined,
+      error: new TypeError("fetch failed"),
+      response: undefined,
+    };
+
+    await expect(
+      loadCatalog(
+        catalogClient({
+          app: { agents: async () => transportLoss },
+          config: { providers: async () => transportLoss },
+          command: { list: async () => transportLoss },
+        }),
+      ),
+    ).rejects.toThrow(expect.objectContaining({ code: "runtime_unavailable" }));
   });
 
   test("fails a surface without removing the other surfaces from the catalog", async () => {

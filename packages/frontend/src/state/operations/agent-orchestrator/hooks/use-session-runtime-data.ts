@@ -164,11 +164,11 @@ export const useSessionRuntimeData = ({
       return EMPTY_SELECTED_SESSION_RUNTIME_DATA;
     }
 
-    const modelSurface = resolveRuntimeCatalogSurface(
-      catalogQuery.data?.models,
-      catalogQuery.error,
-    );
-    const catalogQueryError = catalogQuery.isFetching ? null : modelSurface.error;
+    const modelSurface = resolveRuntimeCatalogSurface(catalogQuery.data?.models, {
+      error: catalogQuery.error,
+      isFetching: catalogQuery.isFetching,
+    });
+    const catalogQueryError = modelSurface.error;
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
     const contextError = runtimeDataRefs.kind === "unavailable" ? runtimeDataRefs.error : null;
     const resolvedCatalog = modelSurface.catalog;
