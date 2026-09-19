@@ -38,7 +38,7 @@ The Electron package build verifies the unpacked payload after electron-builder.
 
 Packaging needs a host that matches the target platform and architecture. The native payload only loads on its target, so the verifier rejects a cross-target run before the probe and names the required host.
 
-The Claude service owns finder lifetime. The service prewarms the finder before it creates the session, so a load failure fails the session start with an actionable error. The cache destroys a finder released during a search when the last search settles.
+The Claude service owns finder lifetime. The service prewarms the finder before it creates the session, so a load failure fails the session start with an actionable error. The cache destroys a finder released during a search when the last search settles. The runtime release disposes the service, which removes the store close subscription and destroys the cached finders.
 
 ## References
 

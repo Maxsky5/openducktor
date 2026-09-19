@@ -278,6 +278,41 @@ describe("createClaudeWorkspaceFileSearch", () => {
     expect(destroyed).toEqual(["/repo/a"]);
   });
 
+  test("disposes every cached finder", () => {
+    const { createFinder, created, destroyed } = createFinderFactory();
+    const fileSearch = createClaudeWorkspaceFileSearch({ createFinder });
+
+    fileSearch.prewarm("/repo/a");
+    fileSearch.prewarm("/repo/b");
+    fileSearch.dispose();
+
+    expect(destroyed).toEqual(["/repo/a", "/repo/b"]);
+
+    fileSearch.prewarm("/repo/a");
+    expect(created).toEqual(["/repo/a", "/repo/b", "/repo/a"]);
+  });
+
+  test("defers disposal of a finder with an in-flight search", async () => {
+    const destroyed: string[] = [];
+    const pendingSearch = Promise.withResolvers<AgentFileSearchResult[]>();
+    const fileSearch = createClaudeWorkspaceFileSearch({
+      createFinder: () => ({
+        search: () => pendingSearch.promise,
+        destroy: () => {
+          destroyed.push("/repo/a");
+        },
+      }),
+    });
+
+    const pending = searchFiles(fileSearch, "/repo/a", "index");
+    fileSearch.dispose();
+    expect(destroyed).toEqual([]);
+
+    pendingSearch.resolve([]);
+    await expect(pending).resolves.toEqual([]);
+    expect(destroyed).toEqual(["/repo/a"]);
+  });
+
   test("reports a load failure when the finder cannot be created", async () => {
     const fileSearch = createClaudeWorkspaceFileSearch({
       createFinder: () => {
@@ -348,6 +383,19 @@ describe("trackClaudeFileSearchSessions", () => {
     sessionStore.close(1);
 
     expect(destroyed).toEqual(["/repo/b"]);
+  });
+
+  test("stops releasing finders after the tracking subscription is removed", () => {
+    const { createFinder, destroyed } = createFinderFactory();
+    const fileSearch = createClaudeWorkspaceFileSearch({ createFinder });
+    const sessionStore = createSessionStore(["/repo/a"]);
+    const untrack = trackClaudeFileSearchSessions({ fileSearch, sessionStore });
+
+    fileSearch.prewarm("/repo/a");
+    untrack();
+    sessionStore.close(0);
+
+    expect(destroyed).toEqual([]);
   });
 });
 

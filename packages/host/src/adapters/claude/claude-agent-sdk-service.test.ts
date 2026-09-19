@@ -60,7 +60,7 @@ const createService = (
   }
   const serviceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
     claudeExecutablePath: process.execPath,
-    fileSearch: { prewarm: () => {}, release: () => {}, search: async () => [] },
+    fileSearch: { dispose: () => {}, prewarm: () => {}, release: () => {}, search: async () => [] },
     now: () => "2026-06-25T20:00:00.000Z",
     onBackgroundFailure: () => Effect.void,
     resolveMcpBridgeConnection: () => {
@@ -545,6 +545,7 @@ describe("createClaudeAgentSdkService", () => {
     });
     const service = createService(null, undefined, sessionStore, {
       fileSearch: {
+        dispose: () => {},
         prewarm: () => {
           throw new Error("fff native library not found");
         },
@@ -576,6 +577,35 @@ describe("createClaudeAgentSdkService", () => {
     ).rejects.toThrow("fff native library not found");
 
     expect([...sessionStore.values()]).toEqual([]);
+  });
+
+  test("disposes the file search and stops close tracking when the service stops", async () => {
+    const sessionStore = createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const calls: string[] = [];
+    const service = createService(createSession(), undefined, sessionStore, {
+      fileSearch: {
+        dispose: () => {
+          calls.push("dispose");
+        },
+        prewarm: () => {},
+        release: (workingDirectory) => {
+          calls.push(`release:${workingDirectory}`);
+        },
+        search: async () => [],
+      },
+    });
+
+    await Effect.runPromise(sessionStore.stopSessionsForRuntime("runtime-1"));
+    expect(calls).toEqual(["release:/repo/worktree/"]);
+
+    service.dispose();
+    expect(calls).toEqual(["release:/repo/worktree/", "dispose"]);
+
+    sessionStore.set(createSession());
+    await Effect.runPromise(sessionStore.stopSessionsForRuntime("runtime-1"));
+    expect(calls).toEqual(["release:/repo/worktree/", "dispose"]);
   });
 
   test("validates existing live session refs before resuming", async () => {

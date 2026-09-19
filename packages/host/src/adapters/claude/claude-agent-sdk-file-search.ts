@@ -28,6 +28,7 @@ export type ClaudeWorkspaceFileSearch = {
   prewarm(workingDirectory: string): void;
   release(workingDirectory: string): void;
   search(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]>;
+  dispose(): void;
 };
 
 type CachedClaudeFileFinder = {
@@ -44,7 +45,7 @@ export const trackClaudeFileSearchSessions = ({
 }: {
   fileSearch: ClaudeWorkspaceFileSearch;
   sessionStore: ClaudeFileSearchSessionStore;
-}): void => {
+}): (() => void) =>
   sessionStore.subscribeClose((session) => {
     const workingDirectory = session.input.workingDirectory;
     const inUse = [...sessionStore.values()].some(
@@ -54,7 +55,6 @@ export const trackClaudeFileSearchSessions = ({
       fileSearch.release(workingDirectory);
     }
   });
-};
 
 export const toClaudeFileSearchResults = (result: MixedSearchResult): AgentFileSearchResult[] =>
   result.items
@@ -201,6 +201,12 @@ export const createClaudeWorkspaceFileSearch = ({
       }
       findersByDirectory.delete(workingDirectory);
       destroyCachedFinder(cached);
+    },
+    dispose: () => {
+      for (const cached of findersByDirectory.values()) {
+        destroyCachedFinder(cached);
+      }
+      findersByDirectory.clear();
     },
     search: async (input) => {
       const cached = ensureFinder(input.workingDirectory);

@@ -95,6 +95,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   private readonly randomId: () => string;
   private readonly sessionStore: ClaudeSessionStore;
   private readonly fileSearch: ClaudeWorkspaceFileSearch;
+  private readonly untrackFileSearchSessions: () => void;
 
   constructor(
     private readonly input: CreateClaudeAgentSdkServiceInput,
@@ -110,7 +111,15 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     }
     this.sessionStore = input.sessionStore ?? createClaudeAgentSdkSessionStore(sessionStoreInput);
     this.fileSearch = input.fileSearch ?? createClaudeWorkspaceFileSearch();
-    trackClaudeFileSearchSessions({ fileSearch: this.fileSearch, sessionStore: this.sessionStore });
+    this.untrackFileSearchSessions = trackClaudeFileSearchSessions({
+      fileSearch: this.fileSearch,
+      sessionStore: this.sessionStore,
+    });
+  }
+
+  dispose(): void {
+    this.untrackFileSearchSessions();
+    this.fileSearch.dispose();
   }
 
   startSession(input: StartAgentSessionInput, runtimeId: string) {
