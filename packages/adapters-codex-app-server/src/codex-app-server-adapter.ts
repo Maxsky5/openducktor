@@ -110,10 +110,7 @@ import {
   type CodexSubagentRoute,
   codexSubagentRouteEventFields,
 } from "./codex-subagent-link-state";
-import {
-  CodexThreadInventoryReader,
-  type CodexThreadMaterializationGuard,
-} from "./codex-thread-inventory";
+import { CodexThreadInventoryReader, type CodexThreadReadGuard } from "./codex-thread-inventory";
 import {
   requireNormalizedCodexToolInvocation,
   toCodexToolQuestions,
@@ -213,8 +210,8 @@ export class CodexAppServerAdapter
   private readonly sessionEvents = new CodexSessionEventBus();
   private readonly pendingInput = new CodexPendingInputState();
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
-  // Only thread/start sessions can use the empty-rollout compatibility path.
-  private readonly freshSessionsAwaitingRollout = new WeakSet<CodexSessionState>();
+  // An empty rollout is safe only before the first read of a thread started here.
+  private readonly freshSessions = new WeakSet<CodexSessionState>();
   private readonly localSessions: CodexLocalSessionState;
   private readonly contextUsageLoader: CodexContextUsageLoader;
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
@@ -428,7 +425,7 @@ export class CodexAppServerAdapter
     const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
     const { summary } = session;
     this.localSessions.remember(session);
-    this.freshSessionsAwaitingRollout.add(session);
+    this.freshSessions.add(session);
     this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
     await client.threadSetName({
       threadId: session.threadId,
@@ -793,7 +790,7 @@ export class CodexAppServerAdapter
       runtime,
       threadInventory: this.threadInventory,
       prepareImageGenerations: this.options.prepareImageGenerations,
-      ...this.freshRolloutReadGuard(session),
+      ...this.freshThreadReadGuard(session),
     });
     if (!mergeImage) return history;
     return history.map((message) =>
@@ -892,7 +889,7 @@ export class CodexAppServerAdapter
       externalSessionId: input.externalSessionId,
       workingDirectory: input.workingDirectory,
       allowUnmaterialized: session !== undefined,
-      ...this.freshRolloutReadGuard(session),
+      ...this.freshThreadReadGuard(session),
     });
     const historyTodos = codexTodosFromThreadRead(response);
     const latestLiveTodos = this.runtimeEvents.latestTodos(input.externalSessionId);
@@ -955,20 +952,17 @@ export class CodexAppServerAdapter
     return session;
   }
 
-  private freshRolloutReadGuard(
-    session: CodexSessionState | undefined,
-  ): CodexThreadMaterializationGuard {
+  private freshThreadReadGuard(session: CodexSessionState | undefined): CodexThreadReadGuard {
     if (!session) {
       return {};
     }
     return {
-      resolveEmptyRolloutWorkingDirectory: () =>
-        this.localSessions.get(session.threadId) === session &&
-        this.freshSessionsAwaitingRollout.has(session)
+      getFreshThreadCwd: () =>
+        this.localSessions.get(session.threadId) === session && this.freshSessions.has(session)
           ? session.workingDirectory
           : undefined,
-      onThreadMaterialized: () => {
-        this.freshSessionsAwaitingRollout.delete(session);
+      onThreadRead: () => {
+        this.freshSessions.delete(session);
       },
     };
   }

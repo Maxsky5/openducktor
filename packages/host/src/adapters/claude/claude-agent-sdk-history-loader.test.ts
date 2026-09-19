@@ -146,7 +146,7 @@ describe("loadClaudeHistory", () => {
     ]);
   });
 
-  test("propagates a missing transcript after fresh live work is no longer active", async () => {
+  test("throws for a missing transcript after fresh live work stops", async () => {
     await expect(
       loadClaudeHistory(
         {

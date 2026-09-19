@@ -596,12 +596,12 @@ describe("CodexThreadInventoryReader", () => {
         externalSessionId: "thread-local",
         workingDirectory: "/repo",
         allowUnmaterialized: true,
-        resolveEmptyRolloutWorkingDirectory: () => "/repo",
+        getFreshThreadCwd: () => "/repo",
       }),
     ).resolves.toEqual({ thread: { id: "thread-local", cwd: "/repo", turns: [] } });
   });
 
-  test("propagates an empty rollout when only legacy unmaterialized reads are allowed", async () => {
+  test("throws an empty rollout when only pre-message reads are allowed", async () => {
     const reader = new CodexThreadInventoryReader();
     const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
     const client = createInventoryClient({
@@ -619,7 +619,7 @@ describe("CodexThreadInventoryReader", () => {
     ).rejects.toBe(failure);
   });
 
-  test("propagates an empty-rollout failure without a matching live local session", async () => {
+  test("throws an empty rollout without a matching live local session", async () => {
     const reader = new CodexThreadInventoryReader();
     const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
     const client = createInventoryClient({
@@ -640,26 +640,23 @@ describe("CodexThreadInventoryReader", () => {
     ["another RPC method", "thread/list", -32603, EMPTY_ROLLOUT_MESSAGE],
     ["another RPC code", "thread/read", -32602, EMPTY_ROLLOUT_MESSAGE],
     ["another internal error", "thread/read", -32603, "runtime database is unavailable"],
-  ] as const)(
-    "propagates an empty-rollout lookalike from %s",
-    async (_case, method, code, message) => {
-      const reader = new CodexThreadInventoryReader();
-      const failure = codexRpcRequestError(method, code, message);
-      const client = createInventoryClient({
-        threadRead: async () => {
-          throw failure;
-        },
-      });
+  ] as const)("throws an empty-rollout lookalike from %s", async (_case, method, code, message) => {
+    const reader = new CodexThreadInventoryReader();
+    const failure = codexRpcRequestError(method, code, message);
+    const client = createInventoryClient({
+      threadRead: async () => {
+        throw failure;
+      },
+    });
 
-      await expect(
-        reader.readThreadHistory(client, {
-          externalSessionId: "thread-local",
-          workingDirectory: "/repo",
-          allowUnmaterialized: true,
-        }),
-      ).rejects.toBe(failure);
-    },
-  );
+    await expect(
+      reader.readThreadHistory(client, {
+        externalSessionId: "thread-local",
+        workingDirectory: "/repo",
+        allowUnmaterialized: true,
+      }),
+    ).rejects.toBe(failure);
+  });
 
   test("preserves empty history when paginated turns are unavailable before the first message", async () => {
     const reader = new CodexThreadInventoryReader();
