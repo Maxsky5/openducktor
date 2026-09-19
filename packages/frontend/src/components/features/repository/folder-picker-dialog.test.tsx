@@ -69,7 +69,7 @@ describe("FolderPickerDialog", () => {
     );
     scrollAreaSpy = spyOn(actualScrollAreaModule, "ScrollArea").mockImplementation(
       ({ children, ...props }: Parameters<typeof actualScrollAreaModule.ScrollArea>[0]) =>
-        createElement("div", props, children ?? null),
+        createElement("div", { ...props, "data-slot": "scroll-area" }, children ?? null),
     );
 
     ({ FolderPickerDialog } = await import("./folder-picker-dialog"));
@@ -105,6 +105,21 @@ describe("FolderPickerDialog", () => {
       </QueryProvider>,
     );
   };
+
+  test("fills the available height to keep directory navigation stable", () => {
+    const rendered = renderDialog();
+
+    try {
+      const dialog = screen.getByRole("dialog");
+      expect(dialog.classList.contains("h-[calc(100dvh-2rem)]")).toBe(true);
+
+      const directoryList = dialog.querySelector('[data-slot="scroll-area"]');
+      expect(directoryList?.classList.contains("min-h-0")).toBe(true);
+      expect(directoryList?.classList.contains("flex-1")).toBe(true);
+    } finally {
+      rendered.unmount();
+    }
+  });
 
   test("loads directories, filters entries, and navigates into a child directory", async () => {
     filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {

@@ -37,7 +37,7 @@ function FolderPickerDirectoryBrowser({
   const { isBusy, isInitialLoad, isRefreshing } = status;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="border-b border-border p-3">
         <Label htmlFor="folder-picker-filter" className="sr-only">
           Filter directories
@@ -105,7 +105,7 @@ function FolderPickerDirectoryBrowser({
         </div>
       </div>
 
-      <ScrollArea className="h-80">
+      <ScrollArea className="h-80 min-h-0 flex-1">
         <div className="p-1">
           {isInitialLoad ? (
             <div className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground">
@@ -184,7 +184,7 @@ export function FolderPickerContent({
   } = controller;
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <form className="grid gap-2" action={loadManualPath}>
         <Label htmlFor="folder-picker-manual-path" className="sr-only">
           Open path
@@ -234,6 +234,6 @@ export function FolderPickerContent({
           {activeError}
         </div>
       ) : null}
-    </>
+    </div>
   );
 }
