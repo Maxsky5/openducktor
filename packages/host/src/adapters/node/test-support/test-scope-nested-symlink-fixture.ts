@@ -1,37 +1,36 @@
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Cause, Effect, Exit } from "effect";
 import { z } from "zod";
 import { createNodeTaskAssetFilePort } from "../filesystem-task-asset-file-port";
 
-export type TestScopeNestedSymlinkResult = {
+export type TestScopeNestedSymlinkAction = "stage" | "removeStaged" | "promote" | "quarantine";
+export type TestScopeNestedSymlinkLiveScope = "production" | "development";
+
+export type TestScopeNestedSymlinkCaseResult = {
+  action: TestScopeNestedSymlinkAction;
   bytes: number[] | null;
   error: string | null;
+  liveScope: TestScopeNestedSymlinkLiveScope;
 };
+
+export const NESTED_SYMLINK_ACTIONS = ["stage", "removeStaged", "promote", "quarantine"] as const;
+export const NESTED_SYMLINK_LIVE_SCOPES = ["production", "development"] as const;
 
 const ownerId = "10000000-0000-4000-8000-000000000001";
 const workspaceId = "fixture-workspace";
 const taskId = "fixture-task";
 const assetId = "550e8400-e29b-41d4-a716-446655440000";
 
-const run = async (): Promise<TestScopeNestedSymlinkResult> => {
-  const action = process.argv[2];
-  if (
-    action !== "stage" &&
-    action !== "removeStaged" &&
-    action !== "promote" &&
-    action !== "quarantine"
-  ) {
-    throw new Error("Expected a stage, removeStaged, promote, or quarantine action.");
-  }
-  const liveScope = process.argv[3];
-  if (liveScope !== "production" && liveScope !== "development") {
-    throw new Error("Expected a production or development config scope.");
-  }
-  const homeDir = process.argv[4];
-  if (!homeDir || !path.isAbsolute(homeDir)) {
-    throw new Error("Expected an absolute test home directory.");
-  }
+const runCase = async ({
+  action,
+  liveScope,
+  homeDir,
+}: {
+  action: TestScopeNestedSymlinkAction;
+  liveScope: TestScopeNestedSymlinkLiveScope;
+  homeDir: string;
+}): Promise<TestScopeNestedSymlinkCaseResult> => {
   const liveRoot = path.join(
     homeDir,
     liveScope === "production" ? ".openducktor" : ".openducktor-dev",
@@ -91,9 +90,28 @@ const run = async (): Promise<TestScopeNestedSymlinkResult> => {
       throw cause;
     },
   );
-  return { bytes, error };
+  return { action, bytes, error, liveScope };
+};
+
+export const runTestScopeNestedSymlinkCases = async ({
+  homeDir,
+}: {
+  homeDir: string;
+}): Promise<TestScopeNestedSymlinkCaseResult[]> => {
+  const results: TestScopeNestedSymlinkCaseResult[] = [];
+  for (const liveScope of NESTED_SYMLINK_LIVE_SCOPES) {
+    for (const action of NESTED_SYMLINK_ACTIONS) {
+      results.push(await runCase({ action, homeDir, liveScope }));
+      await rm(homeDir, { force: true, recursive: true });
+    }
+  }
+  return results;
 };
 
 if (import.meta.main) {
-  console.log(JSON.stringify(await run()));
+  const homeDir = process.argv[2];
+  if (!homeDir || !path.isAbsolute(homeDir)) {
+    throw new Error("Expected an absolute test home directory.");
+  }
+  console.log(JSON.stringify(await runTestScopeNestedSymlinkCases({ homeDir })));
 }

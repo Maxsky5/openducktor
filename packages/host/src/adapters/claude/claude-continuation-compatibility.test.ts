@@ -139,6 +139,12 @@ describe("Claude interrupted-turn resume compatibility", () => {
 
     expect(statSync(binaryPath).size).toBe(entry.size);
     expect(await sha256OfFile(binaryPath)).toBe(entry.checksum);
+  });
+
+  test("runs the bundled CLI version this continuation contract was verified against", () => {
+    const manifest = readClaudeSdkManifest();
+    const { binaryPath } = resolveBundledCli(manifest);
+
     expect(readBundledCliVersion(binaryPath)).toContain(SUPPORTED_CLAUDE_CLI_VERSION);
   });
 

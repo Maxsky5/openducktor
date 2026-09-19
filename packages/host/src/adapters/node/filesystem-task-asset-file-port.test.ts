@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import {
@@ -13,12 +13,12 @@ import {
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { Cause, Effect, Exit } from "effect";
 import { z } from "zod";
+import { runFixtureProcess } from "../../test-support/fixture-process";
 import { createNodeTaskAssetFilePort } from "./filesystem-task-asset-file-port";
 import type { TaskAssetOwnerProbeFailure } from "./filesystem-task-asset-ownership";
-import type { TestScopeNestedSymlinkResult } from "./test-support/test-scope-nested-symlink-fixture";
+import type { TestScopeNestedSymlinkCaseResult } from "./test-support/test-scope-nested-symlink-fixture";
 
 const roots: string[] = [];
 
@@ -71,11 +71,6 @@ const createHarness = async () => {
 const workspaceId = "fairnest";
 const taskId = "task-1";
 const assetId = "550e8400-e29b-41d4-a716-446655440000";
-const nestedSymlinkResultSchema = z.object({
-  bytes: z.array(z.number()).nullable(),
-  error: z.string().nullable(),
-}) satisfies z.ZodType<TestScopeNestedSymlinkResult>;
-
 describe("node task asset file port", () => {
   test("promotes, quarantines, restores, and purges within the dedicated namespace", async () => {
     const { configDir, port } = await createHarness();
@@ -385,6 +380,7 @@ describe("node task asset file port", () => {
     );
   });
 
+  // The production probe reads a real child process through PowerShell on Windows and ps elsewhere.
   test("keeps staging for a live owner when the start-time probe uses local ps output", async () => {
     const configDir = await mkdtemp(path.join(tmpdir(), "odt-task-assets-"));
     roots.push(configDir);
@@ -429,7 +425,7 @@ describe("node task asset file port", () => {
       }
       await Effect.runPromise(port.cleanupCurrentOwner());
     }
-  }, 1_000);
+  }, 3_000);
 
   test("keeps staging when a live owner's start-time probe fails", async () => {
     const { aliveProcessIds, configDir, createPort, port, probeFailures, processStartedAtMs } =
@@ -485,54 +481,52 @@ describe("node task asset file port", () => {
     },
   );
 
-  test.each([
-    ["production", "staged write", "stage", null],
-    ["production", "staged delete", "removeStaged", [7]],
-    ["production", "durable copy", "promote", null],
-    ["production", "durable move", "quarantine", [7]],
-    ["development", "staged write", "stage", null],
-    ["development", "staged delete", "removeStaged", [7]],
-    ["development", "durable copy", "promote", null],
-    ["development", "durable move", "quarantine", [7]],
-  ] as const)(
-    "refuses a %s %s through a nested symlink",
-    async (liveScope, _, action, expectedBytes) => {
+  describe("nested symlink guard", () => {
+    const resultsByCase = new Map<string, TestScopeNestedSymlinkCaseResult>();
+
+    beforeAll(async () => {
       const temporaryHome = await mkdtemp(path.join(tmpdir(), "openducktor-nested-guard-"));
       roots.push(temporaryHome);
-      const environment: NodeJS.ProcessEnv = {
-        ...process.env,
-        HOME: temporaryHome,
-        USERPROFILE: temporaryHome,
-      };
-      delete environment.OPENDUCKTOR_CONFIG_DIR;
-      const child = Bun.spawn({
-        cmd: [
-          process.execPath,
-          fileURLToPath(
-            new URL("./test-support/test-scope-nested-symlink-fixture.ts", import.meta.url),
-          ),
-          action,
-          liveScope,
-          temporaryHome,
-        ],
-        env: environment,
-        stderr: "pipe",
-        stdout: "pipe",
+      const stdout = await runFixtureProcess({
+        args: [temporaryHome],
+        fixtureUrl: new URL("./test-support/test-scope-nested-symlink-fixture.ts", import.meta.url),
+        homeDir: temporaryHome,
       });
-      const [exitCode, stderr, stdout] = await Promise.all([
-        child.exited,
-        new Response(child.stderr).text(),
-        new Response(child.stdout).text(),
-      ]);
+      const resultSchema = z.object({
+        action: z.enum(["stage", "removeStaged", "promote", "quarantine"]),
+        bytes: z.array(z.number()).nullable(),
+        error: z.string().nullable(),
+        liveScope: z.enum(["production", "development"]),
+      }) satisfies z.ZodType<TestScopeNestedSymlinkCaseResult>;
+      for (const result of z.array(resultSchema).parse(JSON.parse(stdout))) {
+        resultsByCase.set(`${result.liveScope} ${result.action}`, result);
+      }
+    });
 
-      expect(exitCode, stderr).toBe(0);
-      const result = nestedSymlinkResultSchema.parse(JSON.parse(stdout));
-      expect(result.error).toContain(
-        `Test scope refuses task asset access under the ${liveScope} config directory`,
-      );
-      expect(result.bytes).toEqual(expectedBytes === null ? null : [...expectedBytes]);
-    },
-  );
+    test.each([
+      ["production", "staged write", "stage", null],
+      ["production", "staged delete", "removeStaged", [7]],
+      ["production", "durable copy", "promote", null],
+      ["production", "durable move", "quarantine", [7]],
+      ["development", "staged write", "stage", null],
+      ["development", "staged delete", "removeStaged", [7]],
+      ["development", "durable copy", "promote", null],
+      ["development", "durable move", "quarantine", [7]],
+    ] as const)(
+      "refuses a %s %s through a nested symlink",
+      (liveScope, _, action, expectedBytes) => {
+        const result = resultsByCase.get(`${liveScope} ${action}`);
+        if (!result) {
+          throw new Error(`Expected a nested symlink result for ${liveScope} ${action}.`);
+        }
+
+        expect(result.error).toContain(
+          `Test scope refuses task asset access under the ${liveScope} config directory`,
+        );
+        expect(result.bytes).toEqual(expectedBytes === null ? null : [...expectedBytes]);
+      },
+    );
+  });
 
   test("keeps crash cleanup bounded across repeated owner generations", async () => {
     const { aliveProcessIds, configDir, createPort } = await createHarness();
