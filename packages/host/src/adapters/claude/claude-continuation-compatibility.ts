@@ -18,16 +18,17 @@ import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
  *    resume switch, and the hidden continuation turn.
  * 3. Change the adapter code when the CLI contract changed.
  */
-export const CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION = "2.1.251";
+export const CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION = "2.1.273";
 
 /**
  * Claude Code releases whose binary carries the verified continuation contract: the
  * `CLAUDE_CODE_RESUME_INTERRUPTED_TURN` switch, the hidden continuation text, and the `isMeta`
- * marker. OpenDucktor verified 2.1.239 by inspecting the released binary. A release that is
- * not listed fails closed until someone verifies it.
+ * marker. OpenDucktor verified 2.1.251 and 2.1.239 by inspecting the released binary. A release
+ * that is not listed fails closed until someone verifies it.
  */
 const CLAUDE_INTERRUPTED_TURN_RESUME_SUPPORTED_VERSIONS = [
   CLAUDE_INTERRUPTED_TURN_RESUME_VERIFIED_VERSION,
+  "2.1.251",
   "2.1.239",
 ] as const;
 

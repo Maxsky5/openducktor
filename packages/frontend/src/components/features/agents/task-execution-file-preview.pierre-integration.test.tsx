@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { CodeViewFileItem } from "@pierre/diffs";
-import { Editor, type EditorOptions } from "@pierre/diffs/edit";
+import type { CodeViewFileItem, CodeViewItem } from "@pierre/diffs";
+import {
+  Editor,
+  type EditorChangeEvent,
+  type EditorFactory,
+  type EditorOptions,
+  type EditorType,
+} from "@pierre/diffs/edit";
 import { CodeView, EditProvider } from "@pierre/diffs/react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
@@ -23,20 +29,32 @@ const createTextMetrics = (width: number): TextMetrics => ({
   ideographicBaseline: 0,
 });
 
+type PierreEditor = Editor<EditorType, undefined, undefined>;
+type PierreEditorOptions = Omit<EditorOptions<EditorType, undefined, undefined>, "onChange">;
+
 type PierreSaveContinuityHarnessProps = {
-  onAttach: (editor: Editor<undefined>) => void;
+  onAttach: (editor: PierreEditor) => void;
 };
 
-const createPierreEditor = (options: EditorOptions<undefined>): Editor<undefined> =>
-  new Editor<undefined>(options);
+const createPierreEditor: EditorFactory<undefined, undefined> = (
+  editorType,
+  options,
+  editStateKey,
+) => new Editor(editorType, options, editStateKey);
 
 function PierreSaveContinuityHarness({ onAttach }: PierreSaveContinuityHarnessProps): ReactElement {
   const [draft, setDraft] = useState("one");
   const [savedContents, setSavedContents] = useState("one");
-  const editorOptions = useMemo<EditorOptions<undefined>>(() => ({ onAttach }), [onAttach]);
-  const handleEditChange = useCallback((_item: CodeViewFileItem, file: { contents: string }) => {
-    setDraft(file.contents);
-  }, []);
+  const editorOptions = useMemo<PierreEditorOptions>(() => ({ onAttach }), [onAttach]);
+  const handleEditChange = useCallback(
+    (
+      event: EditorChangeEvent<EditorType, undefined, undefined>,
+      _item: CodeViewItem<undefined>,
+    ) => {
+      setDraft(event.file.contents);
+    },
+    [],
+  );
   const items = useMemo<CodeViewFileItem[]>(
     () => [
       {
@@ -84,7 +102,7 @@ describe("Pierre CodeView editor continuity", () => {
       configurable: true,
       value: () => textMeasurementContext,
     });
-    const attachedEditors: Editor<undefined>[] = [];
+    const attachedEditors: PierreEditor[] = [];
     let view: ReturnType<typeof render> | undefined;
     try {
       view = render(
@@ -112,14 +130,14 @@ describe("Pierre CodeView editor continuity", () => {
           direction: "none",
         },
       ]);
-      const stateBeforeSave = editor.getState();
+      const stateBeforeSave = editor.getViewState();
 
       fireEvent.click(screen.getByRole("button", { name: "Save snapshot one" }));
 
       expect(screen.getByRole("button", { name: "Save snapshot two" })).toBeTruthy();
       expect(attachedEditors).toEqual([editor]);
       expect(editor.getText()).toBe("two");
-      expect(editor.getState()).toEqual(stateBeforeSave);
+      expect(editor.getViewState()).toEqual(stateBeforeSave);
       expect(editor.canUndo).toBe(true);
       act(() => editor.undo());
       expect(editor.getText()).toBe("one");

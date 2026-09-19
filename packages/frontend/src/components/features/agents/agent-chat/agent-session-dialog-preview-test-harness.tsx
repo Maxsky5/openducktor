@@ -1,5 +1,6 @@
 import { mock, spyOn } from "bun:test";
 import { File } from "@pierre/diffs";
+import type { EditorType } from "@pierre/diffs/edit";
 import type { HostClient } from "@openducktor/host-client";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -103,7 +104,8 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
       const input = useRef<HTMLTextAreaElement>(null);
       useEffect(() => {
         if (!props.editorOptions) return;
-        const editor = createEditor(props.editorOptions);
+        const editorType: EditorType = "file";
+        const editor = createEditor<EditorType>(editorType, props.editorOptions);
         const focus = spyOn(editor, "focus").mockImplementation(() => input.current?.focus());
         props.editorOptions.onAttach?.(editor, new File());
         return () => focus.mockRestore();
