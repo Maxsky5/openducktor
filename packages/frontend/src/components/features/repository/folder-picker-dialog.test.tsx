@@ -113,6 +113,10 @@ describe("FolderPickerDialog", () => {
       const dialog = screen.getByRole("dialog");
       expect(dialog.classList.contains("h-[calc(100dvh-2rem)]")).toBe(true);
 
+      const body = dialog.querySelector('[data-slot="folder-picker-dialog-body"]');
+      expect(body?.classList.contains("overflow-y-auto")).toBe(true);
+      expect(body?.classList.contains("overflow-hidden")).toBe(false);
+
       const tree = dialog.querySelector('[data-slot="folder-picker-directory-tree"]');
       expect(tree?.classList.contains("min-h-0")).toBe(true);
       expect(tree?.classList.contains("flex-1")).toBe(true);
@@ -478,7 +482,7 @@ describe("FolderPickerDialog", () => {
       act(() => jest.advanceTimersByTime(499));
       expect(screen.queryByText("Loading directories…")).toBeNull();
       act(() => jest.advanceTimersByTime(1));
-      expect(screen.getByText("Loading directories…")).toBeTruthy();
+      expect(screen.getByRole("status").textContent).toContain("Loading directories…");
       expect(document.querySelector('[data-slot="folder-picker-directory-tree"]')).toBe(tree);
       expect(tree.getAttribute("aria-busy")).toBe("true");
       expect(screen.queryByRole("button", { name: "old-entry" })).toBeNull();
@@ -496,6 +500,7 @@ describe("FolderPickerDialog", () => {
         name: "Select Folder",
       });
       expect(confirmButton.disabled).toBe(true);
+      jest.useRealTimers();
 
       await act(async () => {
         resolveNext(

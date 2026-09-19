@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { DIRECTORY_LOADING_DELAY_MS } from "./constants";
 import type { FolderPickerController } from "./use-folder-picker-controller";
 
 type FolderPickerTreeHeight = "fill" | "fixed";
@@ -262,8 +263,6 @@ export function FolderPickerContent({
   );
 }
 
-const DIRECTORY_LOADING_DELAY_MS = 500;
-
 function DelayedDirectoryLoading(): ReactElement | null {
   const [isVisible, setIsVisible] = useState(false);
 
@@ -277,7 +276,10 @@ function DelayedDirectoryLoading(): ReactElement | null {
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground">
+    <div
+      className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground"
+      role="status"
+    >
       <LoaderCircle className="size-4 animate-spin" />
       Loading directories…
     </div>
