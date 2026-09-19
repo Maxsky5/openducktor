@@ -91,8 +91,8 @@ describe("toClaudeFileSearchResults", () => {
     ).toEqual([
       { id: "src/index.ts", path: "src/index.ts", name: "index.ts", kind: "code" },
       {
-        id: "src/components/",
-        path: "src/components/",
+        id: "src/components",
+        path: "src/components",
         name: "components",
         kind: "directory",
       },
@@ -106,12 +106,12 @@ describe("toClaudeFileSearchResults", () => {
     ).toEqual([]);
   });
 
-  test("keeps the trailing slash that marks a directory path", () => {
+  test("strips the trailing slash from a directory path", () => {
     const [result] = toClaudeFileSearchResults(mixedResult([directoryItem("src/lib/", "lib/")]));
 
     expect(result).toEqual({
-      id: "src/lib/",
-      path: "src/lib/",
+      id: "src/lib",
+      path: "src/lib",
       name: "lib",
       kind: "directory",
     });
@@ -132,7 +132,7 @@ describe("toClaudeFileSearchResults", () => {
       ),
     ).toEqual([
       { id: "src/index.ts", path: "src/index.ts", name: "index.ts", kind: "code" },
-      { id: "src/lib/", path: "src/lib/", name: "lib", kind: "directory" },
+      { id: "src/lib", path: "src/lib", name: "lib", kind: "directory" },
     ]);
   });
 });
@@ -155,9 +155,12 @@ describe("resolveUnpackedAsarModulePath", () => {
     );
   });
 
-  test("keeps the asar path when no unpacked copy exists", () => {
-    expect(resolveUnpackedAsarModulePath("/repo/app.asar/node_modules/fff/index.cjs")).toBe(
-      "/repo/app.asar/node_modules/fff/index.cjs",
+  test("reports an asar path whose unpacked copy is missing", async () => {
+    const directory = await createTempDirectory();
+    const modulePath = join(directory, "app.asar", "node_modules", "fff", "index.cjs");
+
+    expect(() => resolveUnpackedAsarModulePath(modulePath)).toThrow(
+      "Missing unpacked Claude file search module at",
     );
   });
 });
@@ -275,20 +278,17 @@ describe("createClaudeWorkspaceFileSearch", () => {
     expect(destroyed).toEqual(["/repo/a"]);
   });
 
-  test("reports a load failure on search and keeps prewarm silent", async () => {
-    let attempts = 0;
+  test("reports a load failure when the finder cannot be created", async () => {
     const fileSearch = createClaudeWorkspaceFileSearch({
       createFinder: () => {
-        attempts += 1;
         throw new Error("fff native library not found");
       },
     });
 
-    expect(() => fileSearch.prewarm("/repo/a")).not.toThrow();
+    expect(() => fileSearch.prewarm("/repo/a")).toThrow("fff native library not found");
     await expect(searchFiles(fileSearch, "/repo/a", "index")).rejects.toThrow(
       "fff native library not found",
     );
-    expect(attempts).toBe(2);
   });
 });
 
@@ -395,7 +395,7 @@ describe("createNativeClaudeFileFinder", () => {
         (await finder.search(query)).map((result) => result.path);
 
       expect(await paths("untracked.ts")).toContain("untracked.ts");
-      expect(await paths("empty-dir")).toContain("empty-dir/");
+      expect(await paths("empty-dir")).toContain("empty-dir");
       expect(await paths("ignored")).not.toContain("ignored.log");
     } finally {
       finder.destroy();

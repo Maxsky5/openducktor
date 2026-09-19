@@ -74,6 +74,7 @@ const createService = (
   emit?: ClaudeAgentSdkEventEmitter,
   systemCommands: SystemCommandPort = createClaudeSystemCommands(),
   existingSessionStore?: ClaudeSessionStore,
+  overrides: Partial<Parameters<typeof createClaudeAgentSdkService>[0]> = {},
 ) => {
   const sessionStore =
     existingSessionStore ??
@@ -84,6 +85,7 @@ const createService = (
     sessionStore.set(session);
   }
   const serviceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
+    fileSearch: { prewarm: () => {}, release: () => {}, search: async () => [] },
     now: () => "2026-06-25T20:00:00.000Z",
     onBackgroundFailure: () => Effect.void,
     resolveMcpBridgeConnection: () => {
@@ -112,6 +114,7 @@ const createService = (
             })
           : Effect.die("unused"),
     },
+    ...overrides,
   };
   if (emit) {
     serviceInput.emit = emit;
@@ -583,6 +586,45 @@ describe("createClaudeAgentSdkService", () => {
 
     expect([...sessionStore.values()]).toEqual([]);
     await expectNoNewClaudeMcpTokenDirectories(before);
+  });
+
+  test("fails the session start before store ownership when the file search prewarm fails", async () => {
+    const sessionStore = createClaudeAgentSdkSessionStore({
+      now: () => "2026-06-25T20:00:00.000Z",
+    });
+    const service = createService(null, undefined, undefined, sessionStore, {
+      fileSearch: {
+        prewarm: () => {
+          throw new Error("fff native library not found");
+        },
+        release: () => {},
+        search: async () => [],
+      },
+      resolveMcpBridgeConnection: () =>
+        Effect.succeed({
+          workspaceId: "workspace-1",
+          hostUrl: "http://127.0.0.1:1",
+          hostToken: "bridge-secret-value",
+        }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.startSession(
+          {
+            repoPath: "/repo/",
+            runtimeKind: "claude",
+            workingDirectory: "/repo/worktree/",
+            runtimePolicy: { kind: "claude" },
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            systemPrompt: "Build",
+          },
+          "runtime-claude",
+        ),
+      ),
+    ).rejects.toThrow("fff native library not found");
+
+    expect([...sessionStore.values()]).toEqual([]);
   });
 
   test("validates existing live session refs before resuming", async () => {

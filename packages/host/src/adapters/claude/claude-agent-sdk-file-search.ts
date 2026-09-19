@@ -7,7 +7,11 @@ import {
   detectAgentFileReferenceKind,
   type SearchAgentFilesInput,
 } from "@openducktor/core";
-import { normalizePathSeparators } from "@openducktor/path-support";
+import {
+  basenameForPath,
+  normalizePathSeparators,
+  trimTrailingPathSeparators,
+} from "@openducktor/path-support";
 import type { ClaudeSessionStore } from "./claude-agent-sdk-types";
 
 export const FILE_SEARCH_LIMIT = 30;
@@ -71,11 +75,11 @@ const toFileResult = (item: FileItem): AgentFileSearchResult => {
 };
 
 const toDirectoryResult = (item: DirItem): AgentFileSearchResult => {
-  const path = normalizePathSeparators(item.relativePath);
+  const path = trimTrailingPathSeparators(normalizePathSeparators(item.relativePath));
   return {
     id: path,
     path,
-    name: item.dirName.replace(/[\\/]+$/u, ""),
+    name: basenameForPath(path),
     kind: "directory",
   };
 };
@@ -85,7 +89,12 @@ export const resolveUnpackedAsarModulePath = (modulePath: string): string => {
     return modulePath;
   }
   const unpackedPath = modulePath.replace(ASAR_SEGMENT, `${sep}app.asar.unpacked${sep}`);
-  return existsSync(unpackedPath) ? unpackedPath : modulePath;
+  if (!existsSync(unpackedPath)) {
+    throw new Error(
+      `Missing unpacked Claude file search module at '${unpackedPath}'. Reinstall OpenDucktor.`,
+    );
+  }
+  return unpackedPath;
 };
 
 const loadFileFinderModule = (): typeof import("@ff-labs/fff-node") => {
@@ -183,12 +192,7 @@ export const createClaudeWorkspaceFileSearch = ({
 
   return {
     prewarm: (workingDirectory) => {
-      try {
-        ensureFinder(workingDirectory);
-      } catch {
-        // A failed prewarm stays silent so the session opens. The '@' search
-        // reports the load failure when the composer requests results.
-      }
+      ensureFinder(workingDirectory);
     },
     release: (workingDirectory) => {
       const cached = findersByDirectory.get(workingDirectory);
