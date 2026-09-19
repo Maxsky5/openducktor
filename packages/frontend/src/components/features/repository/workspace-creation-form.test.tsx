@@ -47,7 +47,14 @@ function InlineWorkspaceCreationForm({
       currentPathIsGitRepo: true,
       parentPath: "/",
       homePath: "/repo",
-      entries: [],
+      entries: [
+        {
+          name: "child",
+          path: "/repo/child",
+          isDirectory: true,
+          isGitRepo: false,
+        },
+      ],
     });
     setReady(true);
   }, [queryClient]);
@@ -163,6 +170,9 @@ describe("WorkspaceCreationForm", () => {
     mountedViews.add(view);
 
     expect(await screen.findByText("/repo")).toBeTruthy();
+    const tree = document.querySelector('[data-slot="folder-picker-directory-tree"]');
+    expect(tree?.classList.contains("h-80")).toBe(true);
+    expect(screen.getByRole("button", { name: "child" })).toBeTruthy();
     expect(screen.queryByText("Choose a local Git repository to continue.")).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /choose this folder/i }));

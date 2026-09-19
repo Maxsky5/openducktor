@@ -1,30 +1,37 @@
 import type { DirectoryListing } from "@openducktor/contracts";
 import { ChevronUp, File, Folder, GitBranch, Home, LoaderCircle, Search } from "lucide-react";
-import type { ReactElement } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { DIRECTORY_LOADING_DELAY_MS } from "./constants";
 import type { FolderPickerController } from "./use-folder-picker-controller";
 
+type FolderPickerTreeHeight = "fill" | "fixed";
+
 function FolderPickerDirectoryBrowser({
-  confirmedListing,
+  requestedPath,
+  listing,
   filteredEntries,
   filterText,
   selectedFilePath,
+  treeHeight,
   status,
   onFilterTextChange,
   onLoadDirectory,
   onSelectFile,
 }: {
-  confirmedListing: DirectoryListing | null;
+  requestedPath: string | undefined;
+  listing: DirectoryListing | null;
   filteredEntries: DirectoryListing["entries"];
   filterText: string;
   selectedFilePath: string | null;
+  treeHeight: FolderPickerTreeHeight;
   status: {
-    isBusy: boolean;
+    isSubmitting: boolean;
     isInitialLoad: boolean;
     isRefreshing: boolean;
   };
@@ -32,10 +39,12 @@ function FolderPickerDirectoryBrowser({
   onLoadDirectory: (path?: string | null) => void;
   onSelectFile: (path: string) => void;
 }): ReactElement {
-  const { isBusy, isInitialLoad, isRefreshing } = status;
+  const { isSubmitting, isInitialLoad, isRefreshing } = status;
+  const parentPath = listing?.parentPath ?? null;
+  const homePath = listing?.homePath ?? null;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="border-b border-border p-3">
         <Label htmlFor="folder-picker-filter" className="sr-only">
           Filter directories
@@ -47,7 +56,7 @@ function FolderPickerDirectoryBrowser({
             value={filterText}
             placeholder="Search this folder"
             className="pl-9"
-            disabled={isBusy || !confirmedListing}
+            disabled={isSubmitting}
             onChange={(event) => onFilterTextChange(event.currentTarget.value)}
           />
         </div>
@@ -59,9 +68,10 @@ function FolderPickerDirectoryBrowser({
           variant="outline"
           size="icon"
           aria-label="Go to parent folder"
+          aria-disabled={isSubmitting || !parentPath}
           title="Parent"
-          disabled={!confirmedListing?.parentPath || isBusy}
-          onClick={() => onLoadDirectory(confirmedListing?.parentPath ?? null)}
+          disabled={isSubmitting}
+          onClick={() => onLoadDirectory(parentPath)}
         >
           <ChevronUp className="size-4" />
         </Button>
@@ -70,16 +80,17 @@ function FolderPickerDirectoryBrowser({
           variant="outline"
           size="icon"
           aria-label="Go to home folder"
+          aria-disabled={isSubmitting || !homePath}
           title="Home"
-          disabled={!confirmedListing?.homePath || isBusy}
-          onClick={() => onLoadDirectory(confirmedListing?.homePath ?? null)}
+          disabled={isSubmitting}
+          onClick={() => onLoadDirectory(homePath)}
         >
           <Home className="size-4" />
         </Button>
 
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md border border-input bg-muted/40 px-3 py-2">
           <span className="min-w-0 truncate font-mono text-sm text-foreground">
-            {confirmedListing?.currentPath ?? "Loading…"}
+            {listing?.currentPath ?? requestedPath ?? "Loading…"}
           </span>
           <div className="flex shrink-0 items-center gap-2">
             {isRefreshing ? (
@@ -88,13 +99,13 @@ function FolderPickerDirectoryBrowser({
                 Loading…
               </span>
             ) : null}
-            {confirmedListing?.currentPathIsGitRepo ? (
+            {listing?.currentPathIsGitRepo ? (
               <Badge variant="success" className="gap-1 whitespace-nowrap">
                 <GitBranch className="size-3" />
                 Git repo
               </Badge>
             ) : null}
-            {confirmedListing ? (
+            {listing ? (
               <p className="text-xs whitespace-nowrap text-muted-foreground">
                 {filteredEntries.length} visible
               </p>
@@ -103,75 +114,85 @@ function FolderPickerDirectoryBrowser({
         </div>
       </div>
 
-      <ScrollArea className="h-80">
-        <div className="p-1">
-          {isInitialLoad ? (
-            <div className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground">
-              <LoaderCircle className="size-4 animate-spin" />
-              Loading directories…
-            </div>
-          ) : null}
-
-          {!isInitialLoad && confirmedListing && filteredEntries.length === 0 ? (
-            <div className="px-3 py-6 text-sm text-muted-foreground">
-              No entries match this view.
-            </div>
-          ) : null}
-
-          {filteredEntries.map((entry) => (
-            <Button
-              key={entry.path}
-              type="button"
-              variant="ghost"
-              className={cn(
-                "h-9 w-full justify-between gap-3 rounded-md px-3 text-left",
-                !entry.isDirectory && selectedFilePath === entry.path && "bg-accent",
-              )}
-              disabled={isBusy}
-              aria-pressed={entry.isDirectory ? undefined : selectedFilePath === entry.path}
-              data-selected={entry.isDirectory ? undefined : selectedFilePath === entry.path}
-              onClick={() =>
-                entry.isDirectory ? onLoadDirectory(entry.path) : onSelectFile(entry.path)
-              }
-            >
-              <span className="flex min-w-0 items-center gap-2.5">
-                {entry.isDirectory ? (
-                  <Folder className="size-4 shrink-0 text-primary" />
-                ) : (
-                  <File className="size-4 shrink-0 text-muted-foreground" />
-                )}
-                <span className="min-w-0 truncate text-sm text-foreground">{entry.name}</span>
-              </span>
-              {entry.isGitRepo ? (
-                <Badge variant="success" className="shrink-0 gap-1 whitespace-nowrap">
-                  <GitBranch className="size-3" />
-                  Git repo
-                </Badge>
+      <div
+        data-slot="folder-picker-directory-tree"
+        className={cn("relative", treeHeight === "fill" ? "min-h-0 flex-1" : "h-80")}
+        aria-busy={isInitialLoad}
+      >
+        <div data-slot="folder-picker-directory-scroll" className="absolute inset-0">
+          <ScrollArea className="size-full">
+            <div className="p-1">
+              {!isInitialLoad && listing && filteredEntries.length === 0 ? (
+                <div className="px-3 py-6 text-sm text-muted-foreground">
+                  No entries match this view.
+                </div>
               ) : null}
-            </Button>
-          ))}
+
+              {filteredEntries.map((entry) => (
+                <Button
+                  key={entry.path}
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    "h-9 w-full justify-between gap-3 rounded-md px-3 text-left",
+                    !entry.isDirectory && selectedFilePath === entry.path && "bg-accent",
+                  )}
+                  disabled={isSubmitting}
+                  aria-pressed={entry.isDirectory ? undefined : selectedFilePath === entry.path}
+                  data-selected={entry.isDirectory ? undefined : selectedFilePath === entry.path}
+                  onClick={() =>
+                    entry.isDirectory ? onLoadDirectory(entry.path) : onSelectFile(entry.path)
+                  }
+                >
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    {entry.isDirectory ? (
+                      <Folder className="size-4 shrink-0 text-primary" />
+                    ) : (
+                      <File className="size-4 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="min-w-0 truncate text-sm text-foreground">{entry.name}</span>
+                  </span>
+                  {entry.isGitRepo ? (
+                    <Badge variant="success" className="shrink-0 gap-1 whitespace-nowrap">
+                      <GitBranch className="size-3" />
+                      Git repo
+                    </Badge>
+                  ) : null}
+                </Button>
+              ))}
+            </div>
+          </ScrollArea>
         </div>
-      </ScrollArea>
+
+        {isInitialLoad ? (
+          <div data-slot="folder-picker-directory-loading" className="absolute inset-0 bg-card p-1">
+            <DelayedDirectoryLoading key={requestedPath} />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
 
 export function FolderPickerContent({
   controller,
+  treeHeight,
 }: {
   controller: FolderPickerController;
+  treeHeight: FolderPickerTreeHeight;
 }): ReactElement {
   const {
+    requestedPath,
     manualPath,
     filterText,
-    confirmedListing,
+    listing,
     selectedFilePath,
     filteredEntries,
     activeError,
     helperMessage,
     isInitialLoad,
     isRefreshing,
-    isBusy,
+    isSubmitting,
     selectionMode,
     loadManualPath,
     loadDirectory,
@@ -181,7 +202,7 @@ export function FolderPickerContent({
   } = controller;
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <form className="grid gap-2" action={loadManualPath}>
         <Label htmlFor="folder-picker-manual-path" className="sr-only">
           Open path
@@ -192,13 +213,13 @@ export function FolderPickerContent({
             value={manualPath}
             placeholder={selectionMode === "file" ? "/path/to/folder" : "/path/to/your/repo"}
             className="font-mono"
-            disabled={isBusy}
+            disabled={isSubmitting}
             onChange={(event) => changeManualPath(event.currentTarget.value)}
           />
           <Button
             type="submit"
             variant="outline"
-            disabled={isBusy || manualPath.trim().length === 0}
+            disabled={isSubmitting || manualPath.trim().length === 0}
           >
             Load path
           </Button>
@@ -206,30 +227,61 @@ export function FolderPickerContent({
       </form>
 
       <FolderPickerDirectoryBrowser
-        confirmedListing={confirmedListing}
+        requestedPath={requestedPath}
+        listing={listing}
         filteredEntries={filteredEntries}
         filterText={filterText}
         selectedFilePath={selectedFilePath}
-        status={{ isBusy, isInitialLoad, isRefreshing }}
+        treeHeight={treeHeight}
+        status={{ isSubmitting, isInitialLoad, isRefreshing }}
         onFilterTextChange={changeFilterText}
         onLoadDirectory={loadDirectory}
         onSelectFile={selectFile}
       />
 
-      {helperMessage ? (
-        <div className="rounded-md border border-warning-border bg-warning-surface px-3 py-2.5 text-sm text-warning-surface-foreground">
-          {helperMessage}
-        </div>
-      ) : null}
+      <div
+        data-slot="folder-picker-feedback"
+        className="grid min-h-[2.625rem] gap-4"
+        aria-live="polite"
+      >
+        {helperMessage ? (
+          <div className="rounded-md border border-warning-border bg-warning-surface px-3 py-2.5 text-sm text-warning-surface-foreground">
+            {helperMessage}
+          </div>
+        ) : null}
 
-      {activeError ? (
-        <div
-          className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-muted"
-          role="alert"
-        >
-          {activeError}
-        </div>
-      ) : null}
-    </>
+        {activeError ? (
+          <div
+            className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-muted"
+            role="alert"
+          >
+            {activeError}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function DelayedDirectoryLoading(): ReactElement | null {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = globalThis.setTimeout(() => setIsVisible(true), DIRECTORY_LOADING_DELAY_MS);
+    return () => globalThis.clearTimeout(timer);
+  }, []);
+
+  if (!isVisible) {
+    return null;
+  }
+
+  return (
+    <div
+      className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground"
+      role="status"
+    >
+      <LoaderCircle className="size-4 animate-spin" />
+      Loading directories…
+    </div>
   );
 }

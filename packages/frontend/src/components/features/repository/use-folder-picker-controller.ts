@@ -1,6 +1,6 @@
 import type { DirectoryListing } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useReducer, useRef } from "react";
+import { useEffect, useMemo, useReducer } from "react";
 import { errorMessage } from "@/lib/errors";
 import { directoryListingQueryOptions } from "@/state/queries/filesystem";
 
@@ -18,9 +18,7 @@ type FolderPickerState = {
   requestedPath: string | undefined;
   manualPath: string;
   filterText: string;
-  confirmedListing: DirectoryListing | null;
   selectedFilePath: string | null;
-  hasResolvedRequestedPath: boolean;
   submitError: string | null;
   isSubmitting: boolean;
 };
@@ -29,71 +27,17 @@ type FolderPickerAction =
   | { type: "manualPathChanged"; value: string }
   | { type: "filterTextChanged"; value: string }
   | { type: "directoryRequested"; path: string }
-  | { type: "directoryConfirmed"; listing: DirectoryListing }
   | { type: "fileSelected"; path: string }
+  | { type: "fileSelectionCleared" }
   | { type: "submitStarted" }
   | { type: "submitFailed"; error: string }
   | { type: "submitFinished" };
 
-const initialFolderPickerState = (initialPath: string | undefined): FolderPickerState => ({
-  requestedPath: initialPath,
-  manualPath: "",
-  filterText: "",
-  confirmedListing: null,
-  selectedFilePath: null,
-  hasResolvedRequestedPath: false,
-  submitError: null,
-  isSubmitting: false,
-});
-
-const folderPickerReducer = (
-  state: FolderPickerState,
-  action: FolderPickerAction,
-): FolderPickerState => {
-  switch (action.type) {
-    case "manualPathChanged":
-      return { ...state, manualPath: action.value };
-    case "filterTextChanged":
-      return { ...state, filterText: action.value };
-    case "directoryRequested":
-      return {
-        ...state,
-        requestedPath: action.path,
-        filterText: "",
-        hasResolvedRequestedPath: false,
-        selectedFilePath: null,
-        submitError: null,
-      };
-    case "directoryConfirmed": {
-      const selectedFileStillExists = action.listing.entries.some(
-        (entry) => !entry.isDirectory && entry.path === state.selectedFilePath,
-      );
-      return {
-        ...state,
-        confirmedListing: action.listing,
-        selectedFilePath:
-          state.hasResolvedRequestedPath && selectedFileStillExists ? state.selectedFilePath : null,
-        hasResolvedRequestedPath: true,
-      };
-    }
-    case "fileSelected":
-      if (!state.hasResolvedRequestedPath) {
-        return state;
-      }
-      return { ...state, selectedFilePath: action.path, submitError: null };
-    case "submitStarted":
-      return { ...state, submitError: null, isSubmitting: true };
-    case "submitFailed":
-      return { ...state, submitError: action.error };
-    case "submitFinished":
-      return { ...state, isSubmitting: false };
-  }
-};
-
 export type FolderPickerController = {
+  requestedPath: string | undefined;
   manualPath: string;
   filterText: string;
-  confirmedListing: DirectoryListing | null;
+  listing: DirectoryListing | null;
   selectedFilePath: string | null;
   filteredEntries: DirectoryListing["entries"];
   activeError: string | null;
@@ -101,7 +45,6 @@ export type FolderPickerController = {
   isSubmitting: boolean;
   isInitialLoad: boolean;
   isRefreshing: boolean;
-  isBusy: boolean;
   isCurrentPathSelectable: boolean;
   canDismiss: boolean;
   selectionMode: "directory" | "file";
@@ -130,69 +73,46 @@ export function useFolderPickerController({
   onConfirm: (path: string) => Promise<void> | void;
 }): FolderPickerController {
   const [state, dispatch] = useReducer(folderPickerReducer, initialPath, initialFolderPickerState);
-  const requestedPathRef = useRef(initialPath);
-  const {
-    requestedPath,
-    manualPath,
-    filterText,
-    confirmedListing,
-    selectedFilePath,
-    hasResolvedRequestedPath,
-    submitError,
-    isSubmitting,
-  } = state;
+  const { requestedPath, manualPath, filterText, selectedFilePath, submitError, isSubmitting } =
+    state;
 
-  const directoryQuery = useQuery({
+  const listingQuery = useQuery({
     ...directoryListingQueryOptions(requestedPath, undefined, selectionMode === "file"),
     enabled: open,
   });
+  const listing = listingQuery.data ?? null;
+  const listedFilePath = hasFile(listing, selectedFilePath) ? selectedFilePath : null;
 
   useEffect(() => {
-    if (!directoryQuery.data) {
+    if (!selectedFilePath || !listing || listedFilePath) {
       return;
     }
 
-    dispatch({ type: "directoryConfirmed", listing: directoryQuery.data });
-  }, [directoryQuery.data]);
+    dispatch({ type: "fileSelectionCleared" });
+  }, [listedFilePath, listing, selectedFilePath]);
 
-  const isInitialLoad = directoryQuery.isPending && !confirmedListing;
-  const isRefreshing = directoryQuery.isFetching && Boolean(confirmedListing);
-  const directoryError = directoryQuery.error ? errorMessage(directoryQuery.error) : null;
-  const hasVerifiedDirectory = Boolean(
-    confirmedListing && hasResolvedRequestedPath && !isRefreshing && !directoryError,
-  );
+  const isInitialLoad = listingQuery.isPending && !listing;
+  const isRefreshing = listingQuery.isFetching && Boolean(listing);
+  const loadError = listingQuery.error ? errorMessage(listingQuery.error) : null;
+  const readyListing =
+    listingQuery.isSuccess && !listingQuery.isFetching && !listingQuery.error ? listing : null;
+  const confirmPath = getConfirmPath({
+    filePath: listedFilePath,
+    listing: readyListing,
+    requireGitRepo,
+    selectionMode,
+  });
 
-  const filteredEntries = useMemo(() => {
-    if (!confirmedListing) {
-      return [];
-    }
-
-    const normalizedFilter = filterText.trim().toLocaleLowerCase();
-    if (!normalizedFilter) {
-      return confirmedListing.entries;
-    }
-
-    return confirmedListing.entries.filter((entry) => {
-      return (
-        entry.name.toLocaleLowerCase().includes(normalizedFilter) ||
-        entry.path.toLocaleLowerCase().includes(normalizedFilter)
-      );
-    });
-  }, [confirmedListing, filterText]);
+  const filteredEntries = useMemo(() => filterEntries(listing, filterText), [listing, filterText]);
 
   const loadDirectory = (path?: string | null): void => {
     if (!path) {
       return;
     }
     if (path === requestedPath) {
-      void directoryQuery.refetch().then(({ data }) => {
-        if (data && requestedPathRef.current === path) {
-          dispatch({ type: "directoryConfirmed", listing: data });
-        }
-      });
+      void listingQuery.refetch();
       return;
     }
-    requestedPathRef.current = path;
     dispatch({ type: "directoryRequested", path });
   };
 
@@ -206,16 +126,13 @@ export function useFolderPickerController({
   };
 
   const confirm = async (): Promise<void> => {
-    if (!confirmedListing || !hasVerifiedDirectory) {
+    if (!confirmPath) {
       return;
     }
 
-    const selectedPath = selectionMode === "file" ? selectedFilePath : confirmedListing.currentPath;
-    if (!selectedPath) return;
-
     dispatch({ type: "submitStarted" });
     try {
-      await onConfirm(selectedPath);
+      await onConfirm(confirmPath);
       onOpenChange(false);
     } catch (error: unknown) {
       dispatch({ type: "submitFailed", error: errorMessage(error) });
@@ -224,33 +141,22 @@ export function useFolderPickerController({
     }
   };
 
-  const activeError = submitError ?? directoryError;
-  const isBusy = isSubmitting || isInitialLoad;
-  const isCurrentPathSelectable = Boolean(
-    hasVerifiedDirectory &&
-    confirmedListing &&
-    (selectionMode === "file"
-      ? selectedFilePath
-      : !requireGitRepo || confirmedListing.currentPathIsGitRepo),
-  );
-  const helperMessage =
-    requireGitRepo && confirmedListing && !confirmedListing.currentPathIsGitRepo
-      ? "Only Git repositories can be opened. Navigate into a repository before continuing."
-      : null;
+  const activeError = submitError ?? loadError;
+  const helperMessage = getRepoHint(listing, requireGitRepo);
 
   return {
+    requestedPath,
     manualPath,
     filterText,
-    confirmedListing,
-    selectedFilePath,
+    listing,
+    selectedFilePath: listedFilePath,
     filteredEntries,
     activeError,
     helperMessage,
     isSubmitting,
     isInitialLoad,
     isRefreshing,
-    isBusy,
-    isCurrentPathSelectable,
+    isCurrentPathSelectable: confirmPath !== null,
     canDismiss: !isSubmitting,
     selectionMode,
     loadManualPath,
@@ -262,3 +168,102 @@ export function useFolderPickerController({
     selectFile: (path) => dispatch({ type: "fileSelected", path }),
   };
 }
+
+const initialFolderPickerState = (initialPath: string | undefined): FolderPickerState => ({
+  requestedPath: initialPath,
+  manualPath: "",
+  filterText: "",
+  selectedFilePath: null,
+  submitError: null,
+  isSubmitting: false,
+});
+
+const folderPickerReducer = (
+  state: FolderPickerState,
+  action: FolderPickerAction,
+): FolderPickerState => {
+  switch (action.type) {
+    case "manualPathChanged":
+      return { ...state, manualPath: action.value };
+    case "filterTextChanged":
+      return { ...state, filterText: action.value };
+    case "directoryRequested":
+      return {
+        ...state,
+        requestedPath: action.path,
+        filterText: "",
+        selectedFilePath: null,
+        submitError: null,
+      };
+    case "fileSelected":
+      return { ...state, selectedFilePath: action.path, submitError: null };
+    case "fileSelectionCleared":
+      return { ...state, selectedFilePath: null };
+    case "submitStarted":
+      return { ...state, submitError: null, isSubmitting: true };
+    case "submitFailed":
+      return { ...state, submitError: action.error };
+    case "submitFinished":
+      return { ...state, isSubmitting: false };
+  }
+};
+
+const hasFile = (listing: DirectoryListing | null, filePath: string | null): boolean => {
+  if (!listing || !filePath) {
+    return false;
+  }
+
+  return listing.entries.some((entry) => !entry.isDirectory && entry.path === filePath);
+};
+
+const filterEntries = (
+  listing: DirectoryListing | null,
+  filterText: string,
+): DirectoryListing["entries"] => {
+  if (!listing) {
+    return [];
+  }
+
+  const filter = filterText.trim().toLocaleLowerCase();
+  if (!filter) {
+    return listing.entries;
+  }
+
+  return listing.entries.filter((entry) => {
+    return (
+      entry.name.toLocaleLowerCase().includes(filter) ||
+      entry.path.toLocaleLowerCase().includes(filter)
+    );
+  });
+};
+
+const getConfirmPath = ({
+  filePath,
+  listing,
+  requireGitRepo,
+  selectionMode,
+}: {
+  filePath: string | null;
+  listing: DirectoryListing | null;
+  requireGitRepo: boolean;
+  selectionMode: "directory" | "file";
+}): string | null => {
+  if (!listing) {
+    return null;
+  }
+  if (selectionMode === "file") {
+    return filePath;
+  }
+  if (requireGitRepo && !listing.currentPathIsGitRepo) {
+    return null;
+  }
+  return listing.currentPath;
+};
+
+const getRepoHint = (listing: DirectoryListing | null, requireGitRepo: boolean): string | null => {
+  if (!requireGitRepo || !listing || listing.currentPathIsGitRepo) {
+    return null;
+  }
+
+  return "Only Git repositories can be opened. Navigate into a repository before continuing.";
+};

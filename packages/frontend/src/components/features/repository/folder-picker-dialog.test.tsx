@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, spyOn, test } from "bun:test";
 import type { DirectoryListing, FilesystemListDirectoryInput } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
@@ -35,6 +35,14 @@ const filesystemListDirectoryMock = mock(
   async (_input?: ListDirectoryInput): Promise<DirectoryListing> => createListing(),
 );
 
+// TanStack Query sends query updates on the next task.
+const flushQueryResult = async (result: Promise<unknown>): Promise<void> => {
+  await act(async () => {
+    await result;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+};
+
 describe("FolderPickerDialog", () => {
   let FolderPickerDialog: (props: {
     open: boolean;
@@ -61,7 +69,7 @@ describe("FolderPickerDialog", () => {
     );
     scrollAreaSpy = spyOn(actualScrollAreaModule, "ScrollArea").mockImplementation(
       ({ children, ...props }: Parameters<typeof actualScrollAreaModule.ScrollArea>[0]) =>
-        createElement("div", props, children ?? null),
+        createElement("div", { ...props, "data-slot": "scroll-area" }, children ?? null),
     );
 
     ({ FolderPickerDialog } = await import("./folder-picker-dialog"));
@@ -97,6 +105,35 @@ describe("FolderPickerDialog", () => {
       </QueryProvider>,
     );
   };
+
+  test("fills the available height to keep directory navigation stable", () => {
+    const rendered = renderDialog();
+
+    try {
+      const dialog = screen.getByRole("dialog");
+      expect(dialog.classList.contains("h-[calc(100dvh-2rem)]")).toBe(true);
+
+      const body = dialog.querySelector('[data-slot="folder-picker-dialog-body"]');
+      expect(body?.classList.contains("overflow-y-auto")).toBe(true);
+      expect(body?.classList.contains("overflow-hidden")).toBe(false);
+
+      const tree = dialog.querySelector('[data-slot="folder-picker-directory-tree"]');
+      expect(tree?.classList.contains("min-h-0")).toBe(true);
+      expect(tree?.classList.contains("flex-1")).toBe(true);
+
+      const directoryScroll = dialog.querySelector('[data-slot="folder-picker-directory-scroll"]');
+      expect(directoryScroll?.classList.contains("absolute")).toBe(true);
+      expect(directoryScroll?.classList.contains("inset-0")).toBe(true);
+
+      const directoryList = dialog.querySelector('[data-slot="scroll-area"]');
+      expect(directoryList?.classList.contains("size-full")).toBe(true);
+
+      const feedback = dialog.querySelector('[data-slot="folder-picker-feedback"]');
+      expect(feedback?.classList.contains("min-h-[2.625rem]")).toBe(true);
+    } finally {
+      rendered.unmount();
+    }
+  });
 
   test("loads directories, filters entries, and navigates into a child directory", async () => {
     filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
@@ -220,7 +257,11 @@ describe("FolderPickerDialog", () => {
     try {
       fireEvent.click(await screen.findByRole("button", { name: "old-cli" }));
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "next" }));
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "old-cli" }));
+
+      expect(screen.queryByRole("button", { name: "old-cli" })).toBeNull();
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }).disabled,
+      ).toBe(true);
 
       await act(async () => {
         resolveNextDirectory(
@@ -279,15 +320,18 @@ describe("FolderPickerDialog", () => {
       });
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
-      await waitFor(() => expect(requestCount).toBe(2));
       const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
         name: "Select Folder",
       });
-      expect(confirmButton.disabled).toBe(true);
+      await waitFor(() => {
+        expect(requestCount).toBe(2);
+        expect(confirmButton.disabled).toBe(true);
+      });
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
 
-      await act(async () => resolveRefresh(createListing()));
+      resolveRefresh(createListing());
+      await flushQueryResult(refreshListing);
 
       await waitFor(() => {
         expect(screen.queryByRole("button", { name: "codex" })).toBeNull();
@@ -391,26 +435,22 @@ describe("FolderPickerDialog", () => {
     }
   });
 
-  test("does not restore a superseded directory after its refresh completes", async () => {
-    const onConfirm = mock(async (_path: string) => {});
-    let rootRequestCount = 0;
-    let resolveRefresh = (_listing: DirectoryListing): void => undefined;
-    let rejectNextDirectory = (_error: Error): void => undefined;
-    const refreshListing = new Promise<DirectoryListing>((resolve) => {
-      resolveRefresh = resolve;
-    });
-    const nextDirectory = new Promise<DirectoryListing>((_resolve, reject) => {
-      rejectNextDirectory = reject;
+  test("removes previous entries without remounting or shrinking the directory tree", async () => {
+    let resolveNext = (_listing: DirectoryListing): void => undefined;
+    const nextListing = new Promise<DirectoryListing>((resolve) => {
+      resolveNext = resolve;
     });
     filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
       const path = pathFromInput(input);
-      if (path === "/Users/dev/next") return nextDirectory;
-      if (path !== "/Users/dev") throw new Error(`Unexpected path: ${String(path)}`);
-
-      rootRequestCount += 1;
-      if (rootRequestCount > 1) return refreshListing;
+      if (path === "/Users/dev/next") return nextListing;
       return createListing({
         entries: [
+          {
+            name: "old-entry",
+            path: "/Users/dev/old-entry",
+            isDirectory: true,
+            isGitRepo: false,
+          },
           {
             name: "next",
             path: "/Users/dev/next",
@@ -420,29 +460,69 @@ describe("FolderPickerDialog", () => {
         ],
       });
     });
-    const rendered = renderDialog({ onConfirm, initialPath: "/Users/dev" });
+    const rendered = renderDialog({ initialPath: "/Users/dev" });
 
     try {
       const nextButton = await screen.findByRole("button", { name: "next" });
-      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
-        target: { value: "/Users/dev" },
+      const manualPath = screen.getByLabelText<HTMLInputElement>("Open path");
+      const filter = screen.getByLabelText<HTMLInputElement>("Filter directories");
+      const parent = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Go to parent folder",
       });
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
-      await waitFor(() => expect(rootRequestCount).toBe(2));
-
+      const home = screen.getByRole<HTMLButtonElement>("button", { name: "Go to home folder" });
+      const tree = document.querySelector<HTMLElement>(
+        '[data-slot="folder-picker-directory-tree"]',
+      );
+      if (!tree) throw new Error("Missing directory tree");
+      jest.useFakeTimers();
       fireEvent.click(nextButton);
-      await act(async () => rejectNextDirectory(new Error("Failed to load next directory")));
-      await screen.findByText("Failed to load next directory");
 
-      await act(async () => resolveRefresh(createListing({ currentPathIsGitRepo: true })));
+      expect(screen.getByText("/Users/dev/next")).toBeTruthy();
+      expect(screen.queryByText("Loading directories…")).toBeNull();
+      act(() => jest.advanceTimersByTime(499));
+      expect(screen.queryByText("Loading directories…")).toBeNull();
+      act(() => jest.advanceTimersByTime(1));
+      expect(screen.getByRole("status").textContent).toContain("Loading directories…");
+      expect(document.querySelector('[data-slot="folder-picker-directory-tree"]')).toBe(tree);
+      expect(tree.getAttribute("aria-busy")).toBe("true");
+      expect(screen.queryByRole("button", { name: "old-entry" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "next" })).toBeNull();
+      expect(screen.getByLabelText("Open path")).toBe(manualPath);
+      expect(screen.getByLabelText("Filter directories")).toBe(filter);
+      expect(manualPath.disabled).toBe(false);
+      expect(filter.disabled).toBe(false);
+      expect(parent.disabled).toBe(false);
+      expect(parent.getAttribute("aria-disabled")).toBe("true");
+      expect(home.disabled).toBe(false);
+      expect(home.getAttribute("aria-disabled")).toBe("true");
 
       const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
         name: "Select Folder",
       });
       expect(confirmButton.disabled).toBe(true);
-      fireEvent.click(confirmButton);
-      expect(onConfirm).not.toHaveBeenCalled();
+      jest.useRealTimers();
+
+      await act(async () => {
+        resolveNext(
+          createListing({
+            currentPath: "/Users/dev/next",
+            parentPath: "/Users/dev",
+            entries: [
+              {
+                name: "new-entry",
+                path: "/Users/dev/next/new-entry",
+                isDirectory: true,
+                isGitRepo: false,
+              },
+            ],
+          }),
+        );
+      });
+      expect(await screen.findByRole("button", { name: "new-entry" })).toBeTruthy();
+      expect(document.querySelector('[data-slot="folder-picker-directory-tree"]')).toBe(tree);
+      expect(tree.getAttribute("aria-busy")).toBe("false");
     } finally {
+      jest.useRealTimers();
       rendered.unmount();
     }
   });
@@ -465,7 +545,14 @@ describe("FolderPickerDialog", () => {
             currentPath: "/Users/dev",
             parentPath: "/Users",
             homePath: "/Users/home",
-            entries: [],
+            entries: [
+              {
+                name: "cached-entry",
+                path: "/Users/dev/cached-entry",
+                isDirectory: true,
+                isGitRepo: false,
+              },
+            ],
           });
         case "/Users/home":
           return createListing({
@@ -480,7 +567,14 @@ describe("FolderPickerDialog", () => {
             currentPathIsGitRepo: true,
             parentPath: "/Users/dev",
             homePath: "/Users/home",
-            entries: [],
+            entries: [
+              {
+                name: "repo-entry",
+                path: "/Users/dev/repo-one/repo-entry",
+                isDirectory: true,
+                isGitRepo: false,
+              },
+            ],
           });
         default:
           throw new Error(`Unexpected path: ${String(path)}`);
@@ -497,6 +591,7 @@ describe("FolderPickerDialog", () => {
         screen.getByRole<HTMLButtonElement>("button", { name: /go to parent folder/i }),
       );
       await screen.findByText("/Users/dev");
+      expect(screen.getByRole("button", { name: "cached-entry" })).toBeTruthy();
       expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe("");
 
       fireEvent.click(
@@ -511,6 +606,7 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("/Users/dev/repo-one");
+      expect(screen.getByRole("button", { name: "repo-entry" })).toBeTruthy();
       expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe(
         "/Users/dev/repo-one",
       );
@@ -518,7 +614,11 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(
         screen.getByRole<HTMLButtonElement>("button", { name: /go to parent folder/i }),
       );
-      await screen.findByText("/Users/dev");
+
+      expect(screen.getByText("/Users/dev")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "cached-entry" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "repo-entry" })).toBeNull();
+      expect(screen.queryByText("Loading directories…")).toBeNull();
       expect(screen.getByLabelText<HTMLInputElement>("Open path").value).toBe(
         "/Users/dev/repo-one",
       );
@@ -599,15 +699,19 @@ describe("FolderPickerDialog", () => {
   });
 
   test("retries the same manual path after an error and restores confirmation when it resolves", async () => {
-    let missingPathAttempts = 0;
+    let missingLoads = 0;
+    let resolveRetry = (_listing: DirectoryListing): void => undefined;
+    const retryListing = new Promise<DirectoryListing>((resolve) => {
+      resolveRetry = resolve;
+    });
     filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
       const path = pathFromInput(input);
       if (path === "/missing") {
-        missingPathAttempts += 1;
-        if (missingPathAttempts === 1) {
+        missingLoads += 1;
+        if (missingLoads === 1) {
           throw new Error("Directory does not exist: /missing");
         }
-        return createListing({ currentPath: "/missing" });
+        return retryListing;
       }
 
       return createListing();
@@ -629,7 +733,8 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("Directory does not exist: /missing");
-      expect(screen.getByText("/Users/dev")).toBeTruthy();
+      expect(screen.getByText("/missing")).toBeTruthy();
+      expect(screen.queryByText("/Users/dev")).toBeNull();
       expect(
         screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
       ).toBe(true);
@@ -640,8 +745,18 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await waitFor(() => {
-        expect(missingPathAttempts).toBe(2);
+        expect(missingLoads).toBe(2);
+        expect(
+          screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
+        ).toBe(true);
         expect(screen.getByText("/missing")).toBeTruthy();
+      });
+
+      resolveRetry(createListing({ currentPath: "/missing" }));
+      await flushQueryResult(retryListing);
+
+      await waitFor(() => {
+        expect(screen.queryByText("Loading directories…")).toBeNull();
         expect(
           screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
         ).toBe(false);

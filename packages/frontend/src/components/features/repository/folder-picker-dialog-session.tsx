@@ -49,7 +49,7 @@ export function FolderPickerDialogSession({
       }}
     >
       <DialogContent
-        className="max-w-4xl px-5 pb-8 pt-6 sm:px-6"
+        className="my-0 h-[calc(100dvh-2rem)] max-w-4xl px-5 pb-8 pt-6 sm:px-6"
         {...(controller.canDismiss ? {} : { closeButton: null })}
         onEscapeKeyDown={(event) => {
           if (!controller.canDismiss) {
@@ -67,8 +67,8 @@ export function FolderPickerDialogSession({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="space-y-4 px-1 pt-4">
-          <FolderPickerContent controller={controller} />
+        <DialogBody data-slot="folder-picker-dialog-body" className="flex flex-col px-1 pt-4">
+          <FolderPickerContent controller={controller} treeHeight="fill" />
         </DialogBody>
 
         <DialogFooter className="mt-4 block border-t-0 px-1 pt-0">
