@@ -358,6 +358,7 @@ describe("KanbanTaskCard active sessions", () => {
       priority: 1,
       labels: ["frontend", "phase:open"],
       subtaskIds: ["SUB-1"],
+      availableActions: ["set_spec"],
     });
 
     const html = renderToStaticMarkup(
@@ -385,7 +386,11 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain('aria-label="Priority: High"');
     expect(html).toContain('aria-label="Copy task ID"');
     expect(html).toContain("Compact card title");
-    expect(html).toContain("1 subtasks");
+    expect(html).toContain("1 subtask");
+    expect(html).toContain('data-density="compact"');
+    expect(html).toContain("rounded-lg shadow-none");
+    expect(html).toContain("[&amp;_button]:h-7");
+    expect(html).not.toContain("border-t border-border pt-2.5");
     expect(html).not.toContain("frontend");
     expect(html).not.toContain("phase:open");
     expect(html).not.toContain(">TASK-COMPACT<");

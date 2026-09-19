@@ -47,7 +47,7 @@ function TaskIdBadgeComponent({
               variant="ghost"
               size="icon"
               className={cn(
-                iconOnly ? "size-7" : "size-4",
+                iconOnly ? "size-6" : "size-4",
                 "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
               onClick={handleCopy}

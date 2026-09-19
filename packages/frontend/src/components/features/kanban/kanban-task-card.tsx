@@ -330,41 +330,37 @@ function CompactTaskMeta({
   const priorityStyle = getPriorityStyle(task.priority);
 
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <div className="flex min-w-0 items-center gap-2">
       <Tooltip>
         <TooltipTrigger asChild>
-          <Badge
-            variant="outline"
-            className={cn("size-6 shrink-0 rounded-full p-0", issueTypeStyle.className)}
+          <span
+            className="inline-flex size-5 shrink-0 items-center justify-center text-muted-foreground"
             aria-label={`Issue type: ${issueTypeStyle.label}`}
+            role="img"
             tabIndex={0}
           >
-            <IssueTypeIcon className="size-3" aria-hidden="true" />
-          </Badge>
+            <IssueTypeIcon className="size-4" aria-hidden="true" />
+          </span>
         </TooltipTrigger>
         <TooltipContent side="top">{issueTypeStyle.label}</TooltipContent>
       </Tooltip>
-      <Badge
-        variant="outline"
-        className={cn(
-          "h-6 shrink-0 gap-1 rounded-full px-2 text-[10px] font-semibold",
-          priorityStyle.badgeClassName,
-        )}
-        aria-label={`Priority: ${priorityStyle.hint}`}
-        title={priorityStyle.hint}
-      >
-        <span className={cn("size-1.5 rounded-full", priorityStyle.dotClassName)} />
-        {priorityStyle.label}
-      </Badge>
       <button
         type="button"
         aria-label={`Open details for ${task.title}`}
-        className="min-w-0 flex-1 truncate rounded-sm text-left text-sm font-semibold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="min-w-0 flex-1 truncate rounded-sm text-left text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         title={task.title}
         onClick={() => onOpenDetails(task.id)}
       >
         {task.title}
       </button>
+      <span
+        className="inline-flex h-5 shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground"
+        aria-label={`Priority: ${priorityStyle.hint}`}
+        title={priorityStyle.hint}
+      >
+        <span className={cn("size-1.5 rounded-full", priorityStyle.dotClassName)} />
+        {priorityStyle.label}
+      </span>
     </div>
   );
 }
@@ -416,7 +412,7 @@ function CompactTaskIdentity({
   onOpenDetails: (taskId: string) => void;
 }): ReactElement {
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <div className="flex min-w-0 items-center gap-1">
       <div className="min-w-0 flex-1">
         <CompactTaskMeta task={task} onOpenDetails={onOpenDetails} />
       </div>
@@ -435,16 +431,52 @@ function CompactTaskStatus({ task }: { task: TaskCard }): ReactElement | null {
     <div className="flex flex-wrap items-center gap-1.5">
       <QaRejectedBadge task={task} />
       {task.subtaskIds.length > 0 ? (
-        <Badge variant="secondary" className="h-6 rounded-full px-2 text-[10px]">
-          {task.subtaskIds.length} subtasks
+        <Badge variant="secondary" className="h-6 rounded-full px-2 text-xs">
+          {task.subtaskIds.length === 1 ? "1 subtask" : `${task.subtaskIds.length} subtasks`}
         </Badge>
       ) : null}
       {task.pullRequest ? (
-        <TaskPullRequestLink pullRequest={task.pullRequest} className="h-6 px-2 py-0 text-[10px]" />
+        <TaskPullRequestLink pullRequest={task.pullRequest} className="h-6 px-2 py-0 text-xs" />
       ) : null}
     </div>
   );
 }
+
+const taskActionsContainerClassName = (compact: boolean): string =>
+  cn("cursor-default", compact ? "mt-1.5" : "mt-2 border-t border-border pt-2.5");
+
+const taskActionsGroupClassName = (compact: boolean): string =>
+  compact ? "gap-1.5 [&_button]:h-7 [&_button]:rounded-md" : "";
+
+const taskActionsPrimaryClassName = ({
+  compact,
+  hasActiveSession,
+  isWaitingInput,
+}: {
+  compact: boolean;
+  hasActiveSession: boolean;
+  isWaitingInput: boolean;
+}): string => {
+  if (hasActiveSession) {
+    return cn(
+      compact
+        ? "h-7 rounded-md px-2 py-0 text-xs font-medium shadow-none"
+        : "h-9 rounded-lg px-2 py-1 text-[11px] font-semibold shadow-none",
+      getSessionChipClassName(isWaitingInput),
+    );
+  }
+
+  return compact
+    ? "h-7 rounded-md px-2 text-xs font-medium shadow-none"
+    : "h-9 rounded-lg font-semibold shadow-sm";
+};
+
+const taskActionSessionStatusClassName = (compact: boolean, isWaitingInput: boolean): string =>
+  cn(
+    compact ? "text-xs" : "text-[10px]",
+    "font-medium",
+    getSessionStatusTextClassName(isWaitingInput),
+  );
 
 function TaskActions({
   task,
@@ -462,6 +494,7 @@ function TaskActions({
   hasActiveSession,
   activeSessionRole,
   taskActivityState,
+  compact = false,
 }: {
   task: TaskCard;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
@@ -478,6 +511,7 @@ function TaskActions({
   hasActiveSession: boolean;
   activeSessionRole?: AgentRole;
   taskActivityState: KanbanTaskActivityState;
+  compact?: boolean;
 }): ReactElement | null {
   if (task.status === "closed") {
     return null;
@@ -565,7 +599,7 @@ function TaskActions({
     }
   };
   return (
-    <div className="mt-2 cursor-default border-t border-border pt-2.5">
+    <div className={taskActionsContainerClassName(compact)}>
       <TaskWorkflowActionGroup
         task={task}
         includeActions={TASK_CARD_WORKFLOW_ACTIONS}
@@ -576,24 +610,19 @@ function TaskActions({
         size="sm"
         expandPrimary
         compactMenuTrigger
-        primaryClassName={cn(
-          hasActiveSession
-            ? [
-                "h-9 rounded-lg px-2 py-1 text-[11px] font-semibold shadow-none",
-                getSessionChipClassName(primarySessionIsWaitingInput),
-              ]
-            : "h-9 rounded-lg font-semibold shadow-sm",
-        )}
+        className={taskActionsGroupClassName(compact)}
+        primaryClassName={taskActionsPrimaryClassName({
+          compact,
+          hasActiveSession,
+          isWaitingInput: primarySessionIsWaitingInput,
+        })}
         primaryContent={
           hasActiveSession && primaryActiveSession ? (
             <>
               <PlayCircle className="size-3" />
               {AGENT_ROLE_LABELS[primaryActiveSession.role] ?? primaryActiveSession.role}
               <span
-                className={cn(
-                  "text-[10px] font-medium",
-                  getSessionStatusTextClassName(primarySessionIsWaitingInput),
-                )}
+                className={taskActionSessionStatusClassName(compact, primarySessionIsWaitingInput)}
               >
                 {getSessionStatusLabel({
                   session: primaryActiveSession,
@@ -637,8 +666,12 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
 
   return (
     <article
+      data-density={taskCardView}
       className={cn(
-        "group min-w-0 rounded-xl border border-border/90 bg-card/95 shadow-sm hover:border-info-border hover:shadow-md",
+        "group min-w-0 border border-border/90 bg-card/95 hover:border-info-border",
+        isCompact
+          ? "rounded-lg shadow-none hover:shadow-sm"
+          : "rounded-xl shadow-sm hover:shadow-md",
         cardActivityClassName,
       )}
     >
@@ -649,7 +682,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
       <div
         className={cn(
           "kanban-active-session-content flex min-w-0 flex-col gap-y-1",
-          isCompact ? "p-2.5" : "p-3.5",
+          isCompact ? "p-2" : "p-3.5",
         )}
       >
         {isCompact ? (
@@ -665,6 +698,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           hasActiveSession={hasActiveSessionValue}
           {...(activeSessionRole ? { activeSessionRole } : {})}
           taskActivityState={taskActivityState}
+          compact={isCompact}
           onPlan={onPlan}
           onBuild={onBuild}
           onDelegate={onDelegate}

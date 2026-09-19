@@ -962,11 +962,15 @@ describe("KanbanPage session start modal flow", () => {
       </WorkspaceStateContext>,
     );
     try {
-      expect(renderer.getByRole("group", { name: "Task card view" })).not.toBeNull();
-      expect(renderer.getByRole("button", { name: "Normal" }).getAttribute("aria-pressed")).toBe(
-        "true",
-      );
-      fireEvent.click(renderer.getByRole("button", { name: "Compact" }));
+      expect(renderer.getByRole("radiogroup", { name: "Task card view" })).not.toBeNull();
+      const normalOption = renderer.getByRole("radio", { name: "Normal" });
+      const compactOption = renderer.getByRole("radio", { name: "Compact" });
+      expect(normalOption.getAttribute("data-state")).toBe("checked");
+      expect(normalOption.textContent).toBe("");
+      expect(compactOption.textContent).toBe("");
+      expect(normalOption.querySelector("svg.lucide-rows-3")).not.toBeNull();
+      expect(compactOption.querySelector("svg.lucide-rows-2")).not.toBeNull();
+      fireEvent.click(compactOption);
       expect(onTaskCardViewChange).toHaveBeenCalledWith("compact");
 
       const newTask = renderer.getByRole("button", { name: "New task" });

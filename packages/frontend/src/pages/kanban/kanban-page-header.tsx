@@ -1,7 +1,8 @@
-import { Loader2, Plus, RefreshCcw } from "lucide-react";
+import { Loader2, Plus, RefreshCcw, Rows2, Rows3 } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
+import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useChecksState, useWorkspaceState } from "@/state";
 import { isKanbanTaskCreationDisabled } from "./kanban-page-header-model";
 import type { KanbanPageHeaderModel } from "./kanban-page-model-types";
@@ -9,6 +10,11 @@ import type { KanbanPageHeaderModel } from "./kanban-page-model-types";
 type KanbanPageHeaderProps = {
   model: KanbanPageHeaderModel;
 };
+
+const TASK_CARD_VIEW_OPTIONS = [
+  { value: "normal", label: "Normal", icon: Rows3 },
+  { value: "compact", label: "Compact", icon: Rows2 },
+] as const;
 
 export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement {
   const { activeWorkspace } = useWorkspaceState();
@@ -20,22 +26,44 @@ export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement
       <h2 className="text-lg font-semibold tracking-tight text-foreground">Kanban Board</h2>
       <div className="flex flex-wrap items-center justify-end gap-2">
         <div className="flex items-center gap-2" aria-busy={model.isTaskCardViewPending}>
-          <SegmentedControlRoot size="sm" aria-label="Task card view">
-            {(["normal", "compact"] as const).map((taskCardView) => (
-              <SegmentedControlItem
-                key={taskCardView}
-                size="sm"
-                active={model.taskCardView === taskCardView}
-                disabled={model.taskCardView === null || model.isTaskCardViewPending}
-                onClick={() => model.onTaskCardViewChange(taskCardView)}
-              >
-                {taskCardView === "normal" ? "Normal" : "Compact"}
-              </SegmentedControlItem>
-            ))}
-          </SegmentedControlRoot>
+          <TooltipProvider>
+            <RadioGroup
+              aria-label="Task card view"
+              value={model.taskCardView ?? ""}
+              disabled={model.taskCardView === null || model.isTaskCardViewPending}
+              data-variant="segmented"
+              className="flex h-8 w-auto items-center gap-1 rounded-lg bg-muted p-1"
+              onValueChange={(taskCardView) => {
+                if (taskCardView === "normal" || taskCardView === "compact") {
+                  model.onTaskCardViewChange(taskCardView);
+                }
+              }}
+            >
+              {TASK_CARD_VIEW_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                return (
+                  <Tooltip key={option.value}>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex">
+                        <RadioGroupSegmentItem
+                          value={option.value}
+                          aria-label={option.label}
+                          className="size-6 flex-none p-0 text-foreground/70 [&_svg]:size-3.5"
+                        >
+                          <Icon aria-hidden="true" />
+                        </RadioGroupSegmentItem>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">{option.label}</TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </RadioGroup>
+          </TooltipProvider>
           {model.isTaskCardViewPending ? (
-            <span className="text-xs text-muted-foreground" role="status">
-              Saving...
+            <span className="text-muted-foreground" role="status">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              <span className="sr-only">Saving task card view</span>
             </span>
           ) : null}
         </div>
