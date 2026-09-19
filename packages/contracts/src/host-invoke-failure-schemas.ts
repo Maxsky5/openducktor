@@ -18,7 +18,6 @@ export const agentSessionResumeFailureReasonSchema = z.enum([
   "session_not_found",
   "identity_mismatch",
   "probe_failed",
-  "compatibility_rejected",
   "continuation_failed",
 ]);
 export type AgentSessionResumeFailureReason = z.infer<typeof agentSessionResumeFailureReasonSchema>;

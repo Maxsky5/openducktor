@@ -15,8 +15,6 @@ const agentSessionResumeNextActions = {
   identity_mismatch:
     "Reopen the session from the session list so the stored identity matches, then retry Resume.",
   probe_failed: "Fix the reported runtime connection or protocol error, then retry Resume.",
-  compatibility_rejected:
-    "Use a runtime version that supports interrupted-turn resume, or send a new message to start new work.",
   continuation_failed: "Resolve the reported runtime failure, then retry Resume.",
 } as const satisfies Record<AgentSessionResumeFailureReason, string>;
 
@@ -28,6 +26,10 @@ export type AgentSessionResumeErrorInput = {
   readonly cause?: unknown;
   readonly nextAction?: string;
 };
+
+export type AgentSessionResumeNextActionOverrides = Partial<
+  Record<AgentSessionResumeFailureReason, string>
+>;
 
 export class AgentSessionResumeError extends HostOperationError {
   readonly reason: AgentSessionResumeFailureReason;
@@ -56,30 +58,34 @@ export const toAgentSessionResumeError = (
   cause: unknown,
   sessionRef: AgentSessionLiveRef,
   operation: string,
+  nextActionOverrides: AgentSessionResumeNextActionOverrides = {},
 ): AgentSessionResumeError => {
   if (cause instanceof AgentSessionResumeError) {
     return cause;
   }
   if (cause instanceof HostOperationError && cause.cause instanceof InterruptedTurnResumeError) {
-    return toAgentSessionResumeError(cause.cause, sessionRef, operation);
+    return toAgentSessionResumeError(cause.cause, sessionRef, operation, nextActionOverrides);
   }
   if (cause instanceof InterruptedTurnResumeError) {
     // SAFETY: the core reasons are a subset of the wire reasons, so the cast cannot widen.
     const reason = cause.reason as AgentSessionResumeFailureReason;
-    const input: AgentSessionResumeErrorInput = {
+    const input = {
       reason,
       sessionRef,
       operation,
       message: cause.message,
       cause: cause.resumeCause ?? cause,
     };
-    return new AgentSessionResumeError(input);
+    const nextAction = nextActionOverrides[reason];
+    return new AgentSessionResumeError(nextAction === undefined ? input : { ...input, nextAction });
   }
-  return new AgentSessionResumeError({
+  const input = {
     reason: "continuation_failed",
     sessionRef,
     operation,
     message: cause instanceof Error ? cause.message : String(cause),
     cause,
-  });
+  } as const;
+  const nextAction = nextActionOverrides.continuation_failed;
+  return new AgentSessionResumeError(nextAction === undefined ? input : { ...input, nextAction });
 };

@@ -10,9 +10,13 @@ import {
   agentSessionContextUsageSchema,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
+import {
+  AgentSessionResumeError,
+  type AgentSessionResumeNextActionOverrides,
+  toAgentSessionResumeError,
+} from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
-import { type AgentSessionSummary, interruptedTurnResumeError } from "@openducktor/core";
+import { type AgentSessionSummary, InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
@@ -20,6 +24,7 @@ import { requireRuntimeWorkingDirectory } from "../../application/runtimes/runti
 import {
   type HostError,
   type HostOperationErrorAggregate,
+  HostOperationError,
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
@@ -63,11 +68,15 @@ export type {
   PreparedClaudeLiveSessionAdapter,
 } from "./claude-live-session-adapter-contract";
 
+const preAdmissionNextActionOverrides = (cause: unknown): AgentSessionResumeNextActionOverrides =>
+  cause instanceof HostOperationError && cause.cause instanceof InterruptedTurnResumeError
+    ? { continuation_failed: "Send a new message to continue." }
+    : {};
+
 export const createClaudeLiveSessionAdapterPreparer =
   ({
     eventHub,
     liveSessionLifecycle,
-    resumeInterruptedTurnEnabled = true,
     service,
     sessionStore,
     workingDirectoryDependencies,
@@ -327,33 +336,42 @@ export const createClaudeLiveSessionAdapterPreparer =
             ),
           ),
         continueInterruptedTurn: (input) =>
-          requireSessionWorkingDirectory(input, "continue-interrupted-turn").pipe(
-            Effect.flatMap(() => {
-              if (!resumeInterruptedTurnEnabled) {
-                return Effect.fail(
-                  toAgentSessionResumeError(
-                    interruptedTurnResumeError({
-                      reason: "unsupported",
-                      message:
-                        "Interrupted-turn resume is disabled for this Claude runtime configuration.",
-                    }),
-                    toClaudeLiveSessionRef(input),
-                    "claude-live-session.continue-interrupted-turn",
+          Effect.suspend(() => {
+            const operation = "claude-live-session.continue-interrupted-turn";
+            const sessionRef = toClaudeLiveSessionRef(input);
+            let continuationAdmitted = false;
+            return requireSessionWorkingDirectory(input, "continue-interrupted-turn").pipe(
+              Effect.flatMap(() =>
+                runSummary(operation, () =>
+                  service.continueInterruptedTurn(
+                    toClaudeContinueInput(input),
+                    runtime.runtimeId,
+                    () => {
+                      continuationAdmitted = true;
+                    },
                   ),
-                );
-              }
-              return runSummary("claude-live-session.continue-interrupted-turn", () =>
-                service.continueInterruptedTurn(toClaudeContinueInput(input), runtime.runtimeId),
-              );
-            }),
-            Effect.mapError((cause) =>
-              toAgentSessionResumeError(
-                cause,
-                toClaudeLiveSessionRef(input),
-                "claude-live-session.continue-interrupted-turn",
+                ),
               ),
-            ),
-          ),
+              Effect.mapError((cause) =>
+                continuationAdmitted
+                  ? new AgentSessionResumeError({
+                      reason: "continuation_failed",
+                      sessionRef,
+                      operation,
+                      message: `${cause.message} The adapter already accepted the continuation, so the runtime can be working on it.`,
+                      nextAction:
+                        "Inspect the runtime and this session. Retry Resume only if the turn is still unfinished.",
+                      cause,
+                    })
+                  : toAgentSessionResumeError(
+                      cause,
+                      sessionRef,
+                      operation,
+                      preAdmissionNextActionOverrides(cause),
+                    ),
+              ),
+            );
+          }),
         forkSession: (input) =>
           requireSessionWorkingDirectory(input, "fork-session").pipe(
             Effect.flatMap(() =>

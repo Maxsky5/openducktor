@@ -82,7 +82,6 @@ const createRuntimeDefinitions = (
   kinds: RuntimeDescriptor["kind"][] = ["opencode", "codex"],
 ): RuntimeDefinitionsService => ({
   listRuntimeDefinitions: () => kinds.map(runtimeDefinition),
-  listEffectiveRuntimeDefinitions: () => Effect.succeed(kinds.map(runtimeDefinition)),
 });
 const createRuntimeHealthPort = (
   healthByKind: Partial<Record<RuntimeHealth["kind"], RuntimeHealth>> = {},

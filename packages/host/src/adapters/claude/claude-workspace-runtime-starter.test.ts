@@ -91,6 +91,7 @@ const createLiveSessionDependencies = ({
   releaseFailures?: number;
 } = {}) => {
   const calls = { discarded: 0, forwarded: 0, registered: 0, released: 0 };
+  const executablePaths: string[] = [];
   let remainingReleaseFailures = releaseFailures;
   const adapter: AgentSessionLiveAdapterPort = {
     queries: unexpectedRuntimeQueries,
@@ -134,19 +135,22 @@ const createLiveSessionDependencies = ({
         Effect.map(mutation, ({ value }) => value),
       ),
   };
-  const prepareLiveSessionAdapter: ClaudeLiveSessionAdapterPreparer = () =>
-    Effect.succeed({
-      adapter,
-      startForwarding: () =>
-        Effect.sync(() => {
-          calls.forwarded += 1;
-        }),
-      discard: () =>
-        Effect.sync(() => {
-          calls.discarded += 1;
-        }),
+  const prepareLiveSessionAdapter: ClaudeLiveSessionAdapterPreparer = (_runtime, executablePath) =>
+    Effect.sync(() => {
+      executablePaths.push(executablePath);
+      return {
+        adapter,
+        startForwarding: () =>
+          Effect.sync(() => {
+            calls.forwarded += 1;
+          }),
+        discard: () =>
+          Effect.sync(() => {
+            calls.discarded += 1;
+          }),
+      };
     });
-  return { calls, liveSessionLifecycle, prepareLiveSessionAdapter };
+  return { calls, executablePaths, liveSessionLifecycle, prepareLiveSessionAdapter };
 };
 
 describe("createClaudeWorkspaceRuntimeStarter", () => {
@@ -196,6 +200,37 @@ describe("createClaudeWorkspaceRuntimeStarter", () => {
     const handle = await Effect.runPromise(starter.startWorkspaceRuntime(createStartInput()));
 
     expect(probeCalls).toEqual([process.execPath]);
+    expect(liveSession.executablePaths).toEqual([process.execPath]);
+    await Effect.runPromise(handle.stop());
+  });
+
+  test("binds the probed executable without rereading changed settings", async () => {
+    const liveSession = createLiveSessionDependencies();
+    let configuredPath = process.execPath;
+    let settingsReads = 0;
+    const baseSettings = createFixedRuntimeSettingsConfig("claude", configuredPath);
+    const settingsConfig = {
+      ...baseSettings,
+      readConfig: () => {
+        settingsReads += 1;
+        return createFixedRuntimeSettingsConfig("claude", configuredPath).readConfig();
+      },
+    };
+    const starter = createClaudeWorkspaceRuntimeStarter({
+      liveSessionLifecycle: liveSession.liveSessionLifecycle,
+      prepareLiveSessionAdapter: liveSession.prepareLiveSessionAdapter,
+      runtimeId: () => "runtime-claude",
+      runtimeExecutableProbe: successfulRuntimeExecutableProbe,
+      settingsConfig,
+      toolDiscovery: createToolDiscovery(),
+    });
+
+    const handle = await Effect.runPromise(starter.startWorkspaceRuntime(createStartInput()));
+    configuredPath = "/new/settings/claude";
+
+    expect(settingsReads).toBe(1);
+    expect(liveSession.executablePaths).toEqual([process.execPath]);
+    expect(handle.isAlive()).toBe(true);
     await Effect.runPromise(handle.stop());
   });
 

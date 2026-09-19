@@ -9,9 +9,7 @@ import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
-import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
-import { createClaudeSystemCommands } from "./claude-agent-sdk-system-commands.test-support";
 import {
   buildClaudeAgentSdkBaseOptions,
   buildClaudeAgentSdkOptions,
@@ -101,6 +99,7 @@ const createServiceInput = (events?: {
   onBackgroundFailure?: () => void;
   resolvedBridgeRepoPaths?: string[];
 }): CreateClaudeAgentSdkServiceInput => ({
+  claudeExecutablePath: process.execPath,
   onBackgroundFailure: (failure) =>
     Effect.sync(() => {
       events?.backgroundFailures?.push(failure);
@@ -130,8 +129,6 @@ const createServiceInput = (events?: {
       executablePath: process.execPath,
     },
   }),
-  settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-  systemCommands: createClaudeSystemCommands(),
   toolDiscovery: {
     discoverTool: () => Effect.die("unused"),
     resolveTool: () => Effect.die("unused"),
