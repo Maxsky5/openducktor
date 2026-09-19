@@ -1,6 +1,6 @@
 import type { DirectoryListing } from "@openducktor/contracts";
 import { ChevronUp, File, Folder, GitBranch, Home, LoaderCircle, Search } from "lucide-react";
-import { type ReactElement, useEffect, useRef } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -257,26 +257,22 @@ export function FolderPickerContent({
 
 const DIRECTORY_LOADING_DELAY_MS = 500;
 
-const DelayedDirectoryLoading = (): ReactElement => {
-  const messageRef = useRef<HTMLDivElement>(null);
+function DelayedDirectoryLoading(): ReactElement | null {
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    const timer = globalThis.setTimeout(() => {
-      if (messageRef.current) {
-        messageRef.current.hidden = false;
-      }
-    }, DIRECTORY_LOADING_DELAY_MS);
+    const timer = globalThis.setTimeout(() => setIsVisible(true), DIRECTORY_LOADING_DELAY_MS);
     return () => globalThis.clearTimeout(timer);
   }, []);
 
+  if (!isVisible) {
+    return null;
+  }
+
   return (
-    <div
-      ref={messageRef}
-      hidden
-      className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground"
-    >
+    <div className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground">
       <LoaderCircle className="size-4 animate-spin" />
       Loading directories…
     </div>
   );
-};
+}

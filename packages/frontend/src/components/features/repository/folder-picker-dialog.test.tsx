@@ -476,12 +476,11 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(nextButton);
 
       expect(screen.getByText("/Users/dev/next")).toBeTruthy();
-      const loadingMessage = screen.getByText<HTMLDivElement>("Loading directories…");
-      expect(loadingMessage.hidden).toBe(true);
+      expect(screen.queryByText("Loading directories…")).toBeNull();
       act(() => jest.advanceTimersByTime(499));
-      expect(loadingMessage.hidden).toBe(true);
+      expect(screen.queryByText("Loading directories…")).toBeNull();
       act(() => jest.advanceTimersByTime(1));
-      expect(loadingMessage.hidden).toBe(false);
+      expect(screen.getByText("Loading directories…")).toBeTruthy();
       expect(document.querySelector('[data-slot="folder-picker-directory-tree"]')).toBe(tree);
       expect(tree.getAttribute("aria-busy")).toBe("true");
       const loading = document.querySelector<HTMLElement>(
