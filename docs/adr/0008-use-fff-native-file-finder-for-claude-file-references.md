@@ -34,7 +34,7 @@ Use `@ff-labs/fff-node` in the host Claude adapter.
 
 The package adds one native dependency per platform. CI must install the platform package and run the host tests under Bun. A packaged macOS build must keep the binary packages outside the asar archive.
 
-The Electron package build verifies the unpacked payload after electron-builder. It loads the packaged module, scans a probe file, and fails the build when the payload is missing or resolves outside the packaged app. It also checks that the archive unpacks `@ff-labs/fff-node`, `ffi-rs`, and the native packages for the target platform.
+The Electron package build verifies the unpacked payload after electron-builder. It resolves `@ff-labs/fff-node`, `ffi-rs`, and the native packages for the target platform inside the packaged app, loads the packaged module, scans a probe file, and fails the build when the payload is missing or resolves outside the packaged app.
 
 Packaging needs a host that matches the target platform and architecture. The native payload only loads on its target, so the verifier rejects a cross-target run before the probe and names the required host.
 

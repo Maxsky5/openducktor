@@ -3,8 +3,6 @@ import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createPackage, createPackageWithOptions } from "@electron/asar";
-import { resolvePackagedAppResourcesDirectory } from "./electron-packaged-layout";
 import {
   resolvePackagedFffNodeModulesDirectory,
   verifyPackagedFffFileSearch,
@@ -78,8 +76,11 @@ const nativePackageNamesByPlatform = {
   windows: ["@ff-labs/fff-bin-win32-x64", "@yuuang/ffi-rs-win32-x64-msvc"],
 } satisfies Record<TestPlatform, string[]>;
 
-const writePackage = async (appDirectory: string, packageName: string): Promise<void> => {
-  const packageDirectory = join(appDirectory, "node_modules", ...packageName.split("/"));
+const writePackageFile = async (
+  nodeModulesDirectory: string,
+  packageName: string,
+): Promise<void> => {
+  const packageDirectory = join(nodeModulesDirectory, ...packageName.split("/"));
   await mkdir(packageDirectory, { recursive: true });
   await writeFile(join(packageDirectory, "package.json"), JSON.stringify({ name: packageName }));
 };
@@ -95,34 +96,25 @@ const writePackagedFffModule = async ({
   source: string;
   omitNativePackage?: boolean;
 }): Promise<string> => {
-  const appDirectory = join(releaseDirectory, "asar-source");
-  const moduleDirectory = join(appDirectory, "node_modules", "@ff-labs", "fff-node");
+  const nodeModulesDirectory = resolvePackagedFffNodeModulesDirectory({
+    arch: "x64",
+    platform,
+    releaseDirectory,
+  });
+  const moduleDirectory = join(nodeModulesDirectory, "@ff-labs", "fff-node");
   await mkdir(moduleDirectory, { recursive: true });
   await writeFile(
     join(moduleDirectory, "package.json"),
     JSON.stringify({ name: "@ff-labs/fff-node", main: "index.cjs" }),
   );
   await writeFile(join(moduleDirectory, "index.cjs"), source);
-  await writePackage(appDirectory, "ffi-rs");
+  await writePackageFile(nodeModulesDirectory, "ffi-rs");
   if (!omitNativePackage) {
     for (const packageName of nativePackageNamesByPlatform[platform]) {
-      await writePackage(appDirectory, packageName);
+      await writePackageFile(nodeModulesDirectory, packageName);
     }
   }
-  const resourcesDirectory = resolvePackagedAppResourcesDirectory({
-    arch: "x64",
-    platform,
-    releaseDirectory,
-  });
-  await mkdir(resourcesDirectory, { recursive: true });
-  await createPackageWithOptions(appDirectory, join(resourcesDirectory, "app.asar"), {
-    unpack: "**/node_modules/**",
-  });
-  return join(
-    resolvePackagedFffNodeModulesDirectory({ arch: "x64", platform, releaseDirectory }),
-    "@ff-labs",
-    "fff-node",
-  );
+  return moduleDirectory;
 };
 
 const verifyPayload = (
@@ -135,25 +127,6 @@ const verifyPayload = (
     releaseDirectory,
     host: { arch: "x64", platform },
   });
-
-const writePackagedAsarWithoutFff = async ({
-  platform,
-  releaseDirectory,
-}: {
-  platform: "linux" | "macos" | "windows";
-  releaseDirectory: string;
-}): Promise<void> => {
-  const appDirectory = join(releaseDirectory, "asar-source-without-fff");
-  await mkdir(appDirectory, { recursive: true });
-  await writeFile(join(appDirectory, "index.html"), "<html></html>\n");
-  const resourcesDirectory = resolvePackagedAppResourcesDirectory({
-    arch: "x64",
-    platform,
-    releaseDirectory,
-  });
-  await mkdir(resourcesDirectory, { recursive: true });
-  await createPackage(appDirectory, join(resourcesDirectory, "app.asar"));
-};
 
 describe("resolvePackagedFffNodeModulesDirectory", () => {
   test("resolves the unpacked node modules of the packaged app", async () => {
@@ -232,16 +205,7 @@ describe("verifyPackagedFffFileSearch", () => {
     ).rejects.toThrow("must be verified on a matching host");
   });
 
-  test("rejects a payload whose archive does not contain the package", async () => {
-    const releaseDirectory = await makeReleaseDirectory();
-    await writePackagedAsarWithoutFff({ platform: "linux", releaseDirectory });
-
-    await expect(verifyPayload("linux", releaseDirectory)).rejects.toThrow(
-      "the app.asar archive does not contain",
-    );
-  });
-
-  test("rejects a payload whose archive does not contain a native package", async () => {
+  test("rejects a payload that is missing a native package", async () => {
     const releaseDirectory = await makeReleaseDirectory();
     await writePackagedFffModule({
       platform: "linux",
@@ -250,41 +214,48 @@ describe("verifyPackagedFffFileSearch", () => {
       omitNativePackage: true,
     });
 
+    await expect(verifyPayload("linux", releaseDirectory)).rejects.toThrow("fff-bin-linux-x64-gnu");
+  });
+
+  test("rejects a payload whose native package resolves outside the packaged app", async () => {
+    const releaseDirectory = await makeReleaseDirectory();
+    await writePackagedFffModule({
+      platform: "linux",
+      releaseDirectory,
+      source: fffModuleSource(successfulFinder),
+      omitNativePackage: true,
+    });
+    await writePackageFile(
+      join(releaseDirectory, "node_modules"),
+      "@ff-labs/fff-bin-linux-x64-gnu",
+    );
+
     await expect(verifyPayload("linux", releaseDirectory)).rejects.toThrow(
-      join("@ff-labs", "fff-bin-linux-x64-gnu"),
+      "outside the packaged app",
     );
   });
 
   test("rejects a payload that resolves outside the packaged app", async () => {
     const releaseDirectory = await makeReleaseDirectory();
-    const fallbackModuleDirectory = join(releaseDirectory, "node_modules", "@ff-labs", "fff-node");
-    await mkdir(fallbackModuleDirectory, { recursive: true });
-    await writeFile(
-      join(fallbackModuleDirectory, "package.json"),
-      JSON.stringify({ name: "@ff-labs/fff-node", main: "index.cjs" }),
-    );
-    await writeFile(join(fallbackModuleDirectory, "index.cjs"), fffModuleSource(successfulFinder));
-    const packagedReleaseDirectory = join(releaseDirectory, "release");
     await writePackagedFffModule({
       platform: "linux",
-      releaseDirectory: packagedReleaseDirectory,
+      releaseDirectory,
       source: fffModuleSource(successfulFinder),
     });
-    await rm(
-      join(
-        resolvePackagedFffNodeModulesDirectory({
-          arch: "x64",
-          platform: "linux",
-          releaseDirectory: packagedReleaseDirectory,
-        }),
-        "@ff-labs",
-        "fff-node",
-      ),
-      { force: true, recursive: true },
+    const nodeModulesDirectory = resolvePackagedFffNodeModulesDirectory({
+      arch: "x64",
+      platform: "linux",
+      releaseDirectory,
+    });
+    await rm(join(nodeModulesDirectory, "@ff-labs", "fff-node"), { force: true, recursive: true });
+    await writePackageFile(join(releaseDirectory, "node_modules"), "@ff-labs/fff-node");
+    await writeFile(
+      join(releaseDirectory, "node_modules", "@ff-labs", "fff-node", "index.cjs"),
+      fffModuleSource(successfulFinder),
     );
 
-    await expect(verifyPayload("linux", packagedReleaseDirectory)).rejects.toThrow(
-      "resolved the Claude file search module outside the packaged app",
+    await expect(verifyPayload("linux", releaseDirectory)).rejects.toThrow(
+      "outside the packaged app",
     );
   });
 

@@ -1,9 +1,8 @@
 import { realpathSync } from "node:fs";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
-import { statFile } from "@electron/asar";
 import { Effect } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import { ElectronOperationError, errorMessage } from "../src/effect/electron-errors";
@@ -17,9 +16,6 @@ import {
 
 const probeScanTimeoutMs = 5_000;
 const probeFileName = "openducktor-fff-package-check.txt";
-// SAFETY: statFile from @electron/asar splits archive entries by path.sep,
-// so the entries must use the native separators of the build host.
-const fffPackageArchiveEntry = join("node_modules", "@ff-labs", "fff-node", "package.json");
 
 type VerifyPackagedFffFileSearchHost = {
   arch: ElectronReleaseArch;
@@ -63,11 +59,6 @@ export const verifyPackagedFffFileSearchEffect = ({
     arch: resolveHostReleaseArch(process.arch),
     platform: resolveHostReleasePlatform(process.platform),
   };
-  const resourcesDirectory = resolvePackagedAppResourcesDirectory({
-    arch,
-    platform,
-    releaseDirectory,
-  });
   const nodeModulesDirectory = resolvePackagedFffNodeModulesDirectory({
     arch,
     platform,
@@ -87,8 +78,7 @@ export const verifyPackagedFffFileSearchEffect = ({
   }
   return Effect.tryPromise({
     try: async () => {
-      await assertPackagedAsarContainsFff(join(resourcesDirectory, "app.asar"), platform, arch);
-      const loaded = loadPackagedFffModule(nodeModulesDirectory);
+      const loaded = loadPackagedFffModule({ arch, nodeModulesDirectory, platform });
       await probePackagedFffScan(loaded.module);
       return { modulePath: loaded.modulePath };
     },
@@ -97,7 +87,7 @@ export const verifyPackagedFffFileSearchEffect = ({
         operation: "electron.fff.verify-packaged",
         message: `Invalid packaged Claude file search payload for ${platform}: ${errorMessage(
           cause,
-        )}. Expected ${fffPackageArchiveEntry} and its native packages in app.asar, unpacked under ${nodeModulesDirectory}`,
+        )}. Expected the file search package and its native packages unpacked under ${nodeModulesDirectory}`,
         arch,
         path: nodeModulesDirectory,
         platform,
@@ -128,37 +118,25 @@ const fffNativePackageNames = (
   return [`@ff-labs/fff-bin-win32-${arch}`, `@yuuang/ffi-rs-win32-${arch}-msvc`];
 };
 
-const requiredUnpackedArchiveEntries = (
+const packagedDependencyRequests = (
   platform: ElectronReleasePlatform,
   arch: ElectronReleaseArch,
 ): string[] => [
-  fffPackageArchiveEntry,
-  join("node_modules", "ffi-rs", "package.json"),
-  ...fffNativePackageNames(platform, arch).map((packageName) =>
-    join("node_modules", ...packageName.split("/"), "package.json"),
-  ),
+  "ffi-rs/package.json",
+  ...fffNativePackageNames(platform, arch).map((packageName) => `${packageName}/package.json`),
 ];
 
-const assertPackagedAsarContainsFff = async (
-  asarPath: string,
-  platform: ElectronReleasePlatform,
-  arch: ElectronReleaseArch,
-): Promise<void> => {
-  const metadata = await stat(asarPath);
-  if (!metadata.isFile() || metadata.size === 0) {
-    throw new Error(`expected a non-empty app.asar archive at ${asarPath}`);
+const resolvePackagedModulePath = (
+  requireFromPackagedApp: NodeRequire,
+  request: string,
+  nodeModulesDirectory: string,
+): string => {
+  const modulePath = requireFromPackagedApp.resolve(request);
+  const relativeModulePath = relative(realpathSync(nodeModulesDirectory), realpathSync(modulePath));
+  if (relativeModulePath.startsWith("..") || isAbsolute(relativeModulePath)) {
+    throw new Error(`resolved ${request} outside the packaged app: ${modulePath}`);
   }
-  for (const entry of requiredUnpackedArchiveEntries(platform, arch)) {
-    let info: ReturnType<typeof statFile>;
-    try {
-      info = statFile(asarPath, entry);
-    } catch (cause) {
-      throw new Error(`the app.asar archive does not contain ${entry}`, { cause });
-    }
-    if (info.unpacked !== true) {
-      throw new Error(`the app.asar archive does not unpack ${entry}`);
-    }
-  }
+  return modulePath;
 };
 
 type LoadedPackagedFffModule = {
@@ -166,14 +144,23 @@ type LoadedPackagedFffModule = {
   module: typeof import("@ff-labs/fff-node");
 };
 
-const loadPackagedFffModule = (nodeModulesDirectory: string): LoadedPackagedFffModule => {
+const loadPackagedFffModule = ({
+  arch,
+  nodeModulesDirectory,
+  platform,
+}: {
+  arch: ElectronReleaseArch;
+  nodeModulesDirectory: string;
+  platform: ElectronReleasePlatform;
+}): LoadedPackagedFffModule => {
   const requireFromPackagedApp = createRequire(join(nodeModulesDirectory, "package.json"));
-  const modulePath = requireFromPackagedApp.resolve("@ff-labs/fff-node");
-  const relativeModulePath = relative(realpathSync(nodeModulesDirectory), realpathSync(modulePath));
-  if (relativeModulePath.startsWith("..") || isAbsolute(relativeModulePath)) {
-    throw new Error(
-      `resolved the Claude file search module outside the packaged app: ${modulePath}`,
-    );
+  const modulePath = resolvePackagedModulePath(
+    requireFromPackagedApp,
+    "@ff-labs/fff-node",
+    nodeModulesDirectory,
+  );
+  for (const request of packagedDependencyRequests(platform, arch)) {
+    resolvePackagedModulePath(requireFromPackagedApp, request, nodeModulesDirectory);
   }
   // SAFETY: The resolved path points at the @ff-labs/fff-node entry, so the
   // loaded value has the package API type.
