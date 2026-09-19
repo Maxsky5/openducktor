@@ -140,7 +140,7 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
           >
             {isSidebarOpen ? (
               <>
-                <div className="electron-sidebar-content-open flex-1 space-y-3 overflow-y-auto p-4">
+                <div className="electron-sidebar-content-open hide-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
                   <div className="electron-sidebar-heading flex items-center justify-between gap-2">
                     <div className="electron-sidebar-brand">
                       <AppBrand />
