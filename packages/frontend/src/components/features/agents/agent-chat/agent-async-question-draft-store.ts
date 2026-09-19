@@ -31,16 +31,16 @@ export const pruneAgentAsyncQuestionDrafts = (
   pendingIds: readonly string[],
 ): void => {
   const sessionKey = agentSessionIdentityKey(sessionIdentity);
-  const oldIds = trackedIdsBySession.get(sessionKey);
-  const nextIds = new Set(pendingIds);
-  if (oldIds) {
-    for (const questionItemId of oldIds) {
-      if (!nextIds.has(questionItemId)) {
+  const trackedIds = trackedIdsBySession.get(sessionKey);
+  const pendingSet = new Set(pendingIds);
+  if (trackedIds) {
+    for (const questionItemId of trackedIds) {
+      if (!pendingSet.has(questionItemId)) {
         writeDraft(agentAsyncQuestionDraftKey(sessionIdentity, questionItemId), "");
       }
     }
   }
-  trackedIdsBySession.set(sessionKey, nextIds);
+  trackedIdsBySession.set(sessionKey, pendingSet);
 };
 
 export const useAgentAsyncQuestionDraft = (
