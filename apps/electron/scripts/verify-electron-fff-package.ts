@@ -17,7 +17,9 @@ import {
 
 const probeScanTimeoutMs = 5_000;
 const probeFileName = "openducktor-fff-package-check.txt";
-const fffPackageArchiveEntry = "node_modules/@ff-labs/fff-node/package.json";
+// SAFETY: statFile from @electron/asar splits archive entries by path.sep,
+// so the entries must use the native separators of the build host.
+const fffPackageArchiveEntry = join("node_modules", "@ff-labs", "fff-node", "package.json");
 
 type VerifyPackagedFffFileSearchHost = {
   arch: ElectronReleaseArch;
@@ -131,9 +133,9 @@ const requiredUnpackedArchiveEntries = (
   arch: ElectronReleaseArch,
 ): string[] => [
   fffPackageArchiveEntry,
-  "node_modules/ffi-rs/package.json",
-  ...fffNativePackageNames(platform, arch).map(
-    (packageName) => `node_modules/${packageName}/package.json`,
+  join("node_modules", "ffi-rs", "package.json"),
+  ...fffNativePackageNames(platform, arch).map((packageName) =>
+    join("node_modules", ...packageName.split("/"), "package.json"),
   ),
 ];
 
