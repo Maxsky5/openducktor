@@ -1,4 +1,5 @@
 import { settleImageGenerationMessages } from "@/state/operations/agent-orchestrator/support/image-generation-settlement";
+import type { AgentAsyncQuestion } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/support/history-message-merge";
@@ -81,6 +82,29 @@ const areMessageListsEquivalent = (
   });
 };
 
+const areAsyncQuestionsEquivalent = (
+  left: readonly AgentAsyncQuestion[],
+  right: readonly AgentAsyncQuestion[],
+): boolean => {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((question, index) => {
+    const nextQuestion = right[index];
+    return (
+      nextQuestion !== undefined &&
+      question.questionItemId === nextQuestion.questionItemId &&
+      question.sourceMessageId === nextQuestion.sourceMessageId &&
+      question.questionIndex === nextQuestion.questionIndex &&
+      question.title === nextQuestion.title &&
+      JSON.stringify(question.options) === JSON.stringify(nextQuestion.options)
+    );
+  });
+};
+
+const areStringSetsEquivalent = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
+  left.size === right.size && [...left].every((value) => right.has(value));
+
 export const mergeReadonlyRuntimeHistory = (
   session: AgentSessionState,
   history: AgentSessionHistoryMessage[],
@@ -99,7 +123,15 @@ export const mergeReadonlyRuntimeHistory = (
 
   if (
     session.historyLoadState === "loaded" &&
-    areMessageListsEquivalent(session.messages.items, mergedMessages)
+    areMessageListsEquivalent(session.messages.items, mergedMessages) &&
+    areAsyncQuestionsEquivalent(
+      session.pendingAsyncQuestions ?? [],
+      asyncQuestions.pendingAsyncQuestions,
+    ) &&
+    areStringSetsEquivalent(
+      session.handledAsyncQuestionIds ?? new Set(),
+      asyncQuestions.handledAsyncQuestionIds,
+    )
   ) {
     return session;
   }

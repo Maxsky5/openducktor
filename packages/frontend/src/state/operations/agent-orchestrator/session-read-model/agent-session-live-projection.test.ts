@@ -217,6 +217,33 @@ describe("agent session live projection", () => {
     expect(getAgentSession(updated, identity("thread-1"))?.title).toBe("Renamed");
   });
 
+  test("does not reopen an async question handled before a stale snapshot", () => {
+    const question = {
+      questionItemId: '["request_user_input_async","question-1",0]',
+      sourceMessageId: "question-1",
+      questionIndex: 0,
+      title: "Which environment?",
+      options: ["Staging", "Production"],
+    };
+    const liveSnapshot = snapshot("thread-1", { pendingAsyncQuestions: [question] });
+    const initial = build({ snapshots: [liveSnapshot] });
+    const session = getAgentSession(initial, identity("thread-1"));
+    if (!session) {
+      throw new Error("Expected the live session before applying a stale snapshot.");
+    }
+    const handled = replaceAgentSession(initial, {
+      ...session,
+      pendingAsyncQuestions: [],
+      handledAsyncQuestionIds: new Set([question.questionItemId]),
+    });
+
+    const refreshed = build({ current: handled, snapshots: [liveSnapshot] });
+    const refreshedSession = getAgentSession(refreshed, identity("thread-1"));
+
+    expect(refreshedSession?.pendingAsyncQuestions).toEqual([]);
+    expect(refreshedSession?.handledAsyncQuestionIds).toContain(question.questionItemId);
+  });
+
   test.each(["stopped", "error"] as const)(
     "keeps last-known context for %s sessions until a measurement arrives",
     (status) => {

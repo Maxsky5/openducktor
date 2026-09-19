@@ -170,4 +170,37 @@ describe("createReadonlyTranscriptSession", () => {
       status: "completed",
     });
   });
+
+  test("projects a structured async question when history adds no chat row", () => {
+    const question = {
+      questionItemId: '["request_user_input_async","question-1",0]',
+      sourceMessageId: "question-1",
+      questionIndex: 0,
+      title: "Which environment?",
+      options: ["Staging", "Production"],
+    };
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionAssociation: { kind: "unbound" },
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("session-1"),
+    });
+
+    const merged = mergeReadonlyRuntimeHistory(session, [
+      {
+        messageId: "question-1",
+        role: "assistant",
+        timestamp: "2026-09-19T10:00:00.000Z",
+        text: question.title,
+        parts: [],
+        asyncQuestion: { status: "pending", questions: [question] },
+      },
+    ]);
+
+    expect(merged).not.toBe(session);
+    expect(merged.messages.items).toEqual([]);
+    expect(merged.pendingAsyncQuestions).toEqual([question]);
+  });
 });

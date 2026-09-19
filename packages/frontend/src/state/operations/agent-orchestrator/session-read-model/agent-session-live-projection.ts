@@ -307,6 +307,9 @@ const applyDirectSnapshot = (
       handledAsyncQuestionIds.add(question.questionItemId);
     }
   }
+  const pendingAsyncQuestions = snapshot.pendingAsyncQuestions.filter(
+    (question) => !handledAsyncQuestionIds.has(question.questionItemId),
+  );
   const childApprovals = current.pendingApprovals.filter((request) => request.source !== undefined);
   const childQuestions = current.pendingQuestions.filter((request) => request.source !== undefined);
 
@@ -320,7 +323,7 @@ const applyDirectSnapshot = (
     liveParentExternalSessionId: snapshot.parentExternalSessionId,
     pendingApprovals: [...directApprovals, ...childApprovals],
     pendingQuestions: [...directQuestions, ...childQuestions],
-    pendingAsyncQuestions: snapshot.pendingAsyncQuestions,
+    pendingAsyncQuestions,
     handledAsyncQuestionIds,
     contextUsage,
   };
