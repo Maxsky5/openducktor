@@ -8,16 +8,27 @@ import { Effect } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import { ElectronOperationError, errorMessage } from "../src/effect/electron-errors";
 import { resolvePackagedAppResourcesDirectory } from "./electron-packaged-layout";
-import type { ElectronReleaseArch, ElectronReleasePlatform } from "./electron-release-targets";
+import {
+  resolveHostReleaseArch,
+  resolveHostReleasePlatform,
+  type ElectronReleaseArch,
+  type ElectronReleasePlatform,
+} from "./electron-release-targets";
 
 const probeScanTimeoutMs = 5_000;
 const probeFileName = "openducktor-fff-package-check.txt";
 const fffPackageArchiveEntry = "node_modules/@ff-labs/fff-node/package.json";
 
+type VerifyPackagedFffFileSearchHost = {
+  arch: ElectronReleaseArch;
+  platform: ElectronReleasePlatform;
+};
+
 type VerifyPackagedFffFileSearchInput = {
   arch: ElectronReleaseArch;
   platform: ElectronReleasePlatform;
   releaseDirectory: string;
+  host?: VerifyPackagedFffFileSearchHost | undefined;
 };
 
 type PackagedFffErrorDetails = { readonly nodeModulesDirectory: string };
@@ -41,10 +52,15 @@ export const verifyPackagedFffFileSearchEffect = ({
   arch,
   platform,
   releaseDirectory,
+  host,
 }: VerifyPackagedFffFileSearchInput): Effect.Effect<
   VerifiedPackagedFffFileSearch,
   ElectronOperationError<PackagedFffErrorDetails>
 > => {
+  const verifyHost = host ?? {
+    arch: resolveHostReleaseArch(process.arch),
+    platform: resolveHostReleasePlatform(process.platform),
+  };
   const resourcesDirectory = resolvePackagedAppResourcesDirectory({
     arch,
     platform,
@@ -55,9 +71,21 @@ export const verifyPackagedFffFileSearchEffect = ({
     platform,
     releaseDirectory,
   });
+  if (verifyHost.platform !== platform || verifyHost.arch !== arch) {
+    return Effect.fail(
+      new ElectronOperationError({
+        operation: "electron.fff.verify-packaged",
+        message: `The packaged Claude file search payload for ${platform} ${arch} must be verified on a matching host. This host is ${verifyHost.platform} ${verifyHost.arch}. Build the package on a ${platform} ${arch} host.`,
+        arch,
+        path: nodeModulesDirectory,
+        platform,
+        details: { nodeModulesDirectory },
+      }),
+    );
+  }
   return Effect.tryPromise({
     try: async () => {
-      await assertPackagedAsarContainsFff(join(resourcesDirectory, "app.asar"));
+      await assertPackagedAsarContainsFff(join(resourcesDirectory, "app.asar"), platform, arch);
       const loaded = loadPackagedFffModule(nodeModulesDirectory);
       await probePackagedFffScan(loaded.module);
       return { modulePath: loaded.modulePath };
@@ -67,7 +95,8 @@ export const verifyPackagedFffFileSearchEffect = ({
         operation: "electron.fff.verify-packaged",
         message: `Invalid packaged Claude file search payload for ${platform}: ${errorMessage(
           cause,
-        )}. Expected ${fffPackageArchiveEntry} in app.asar and the unpacked payload under ${nodeModulesDirectory}`,
+        )}. Expected ${fffPackageArchiveEntry} and its native packages in app.asar, unpacked under ${nodeModulesDirectory}`,
+        arch,
         path: nodeModulesDirectory,
         platform,
         cause,
@@ -80,22 +109,53 @@ export const verifyPackagedFffFileSearch = ({
   arch,
   platform,
   releaseDirectory,
+  host,
 }: VerifyPackagedFffFileSearchInput): Promise<VerifiedPackagedFffFileSearch> =>
-  runElectronEffect(verifyPackagedFffFileSearchEffect({ arch, platform, releaseDirectory }));
+  runElectronEffect(verifyPackagedFffFileSearchEffect({ arch, platform, releaseDirectory, host }));
 
-const assertPackagedAsarContainsFff = async (asarPath: string): Promise<void> => {
+const fffNativePackageNames = (
+  platform: ElectronReleasePlatform,
+  arch: ElectronReleaseArch,
+): string[] => {
+  if (platform === "macos") {
+    return [`@ff-labs/fff-bin-darwin-${arch}`, `@yuuang/ffi-rs-darwin-${arch}`];
+  }
+  if (platform === "linux") {
+    return [`@ff-labs/fff-bin-linux-${arch}-gnu`, `@yuuang/ffi-rs-linux-${arch}-gnu`];
+  }
+  return [`@ff-labs/fff-bin-win32-${arch}`, `@yuuang/ffi-rs-win32-${arch}-msvc`];
+};
+
+const requiredUnpackedArchiveEntries = (
+  platform: ElectronReleasePlatform,
+  arch: ElectronReleaseArch,
+): string[] => [
+  fffPackageArchiveEntry,
+  "node_modules/ffi-rs/package.json",
+  ...fffNativePackageNames(platform, arch).map(
+    (packageName) => `node_modules/${packageName}/package.json`,
+  ),
+];
+
+const assertPackagedAsarContainsFff = async (
+  asarPath: string,
+  platform: ElectronReleasePlatform,
+  arch: ElectronReleaseArch,
+): Promise<void> => {
   const metadata = await stat(asarPath);
   if (!metadata.isFile() || metadata.size === 0) {
     throw new Error(`expected a non-empty app.asar archive at ${asarPath}`);
   }
-  let entry: ReturnType<typeof statFile>;
-  try {
-    entry = statFile(asarPath, fffPackageArchiveEntry);
-  } catch (cause) {
-    throw new Error(`the app.asar archive does not contain ${fffPackageArchiveEntry}`, { cause });
-  }
-  if (entry.unpacked !== true) {
-    throw new Error(`the app.asar archive does not unpack ${fffPackageArchiveEntry}`);
+  for (const entry of requiredUnpackedArchiveEntries(platform, arch)) {
+    let info: ReturnType<typeof statFile>;
+    try {
+      info = statFile(asarPath, entry);
+    } catch (cause) {
+      throw new Error(`the app.asar archive does not contain ${entry}`, { cause });
+    }
+    if (info.unpacked !== true) {
+      throw new Error(`the app.asar archive does not unpack ${entry}`);
+    }
   }
 };
 
