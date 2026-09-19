@@ -208,11 +208,31 @@ describe("OpenCode approval classifier", () => {
     ).toBe("read_only");
   });
 
+  test.each([`printf "" -v PATH .`, "printf '' -v PATH ."])(
+    "preserves a quoted empty printf format operand: %s",
+    (command) => {
+      expect(
+        classifyOpenCodeApprovalMutation({
+          permission: "bash",
+          patterns: [command],
+          command,
+        }),
+      ).toBe("read_only");
+    },
+  );
+
   test.each([
     "bash -n script.sh",
+    "bash -nv script.sh",
+    "bash -vn script.sh",
+    "bash --norc -n script.sh",
+    "bash -o noexec script.sh",
     "sh -n script.sh",
+    "sh -nv script.sh",
     "git stash list",
     "git clean -n",
+    "git clean -dfn",
+    "git clean -nd",
     "git clean --dry-run",
     "git clean -f --dry-run",
   ])("keeps a no-write command mode on the human approval path: %s", (command) => {
@@ -227,9 +247,14 @@ describe("OpenCode approval classifier", () => {
 
   test.each([
     "bash script.sh",
+    "bash -n +n script.sh",
+    "bash -i -n script.sh",
+    "bash --rcfile -n script.sh",
     "sh script.sh",
     "git stash push",
     "git clean -f",
+    "git clean -e -n",
+    "git clean -e-n",
     "git clean -- -n",
   ])("keeps a state-changing command mode mutating: %s", (command) => {
     expect(

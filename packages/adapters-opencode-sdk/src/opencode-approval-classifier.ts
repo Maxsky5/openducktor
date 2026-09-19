@@ -146,14 +146,16 @@ const hasOutputProcessSubstitutionTarget = (pattern: string, redirectIndex: numb
 const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
   const tokens: string[] = [];
   let token = "";
+  let tokenStarted = false;
   let quote: "'" | '"' | null = null;
   let escaped = false;
   let hasUnknownSyntax = false;
 
   const pushToken = (): void => {
-    if (token.length > 0) {
+    if (tokenStarted) {
       tokens.push(token);
       token = "";
+      tokenStarted = false;
     }
   };
 
@@ -161,6 +163,7 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
     const character = pattern.charAt(index);
     if (escaped) {
       token += character;
+      tokenStarted = true;
       escaped = false;
       continue;
     }
@@ -181,6 +184,7 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
     }
     if (character === "'" || character === '"') {
       quote = character;
+      tokenStarted = true;
       continue;
     }
     if (character === "\n" || character === "\r") {
@@ -192,7 +196,7 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
       pushToken();
       continue;
     }
-    if (character === "#" && (token.length === 0 || "|&;()<>".includes(pattern[index - 1] ?? ""))) {
+    if (character === "#" && (!tokenStarted || "|&;()<>".includes(pattern[index - 1] ?? ""))) {
       hasUnknownSyntax = true;
       break;
     }
@@ -247,6 +251,7 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
       continue;
     }
     token += character;
+    tokenStarted = true;
   }
 
   if (escaped || quote) {
@@ -268,12 +273,36 @@ const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation =>
     return "unknown";
   }
   if (subcommand === "clean") {
-    for (const option of tokens.slice(2)) {
+    for (let index = 2; index < tokens.length; index += 1) {
+      const option = tokens[index];
+      if (!option) {
+        break;
+      }
       if (option === "--" || !option.startsWith("-")) {
         break;
       }
-      if (option === "-n" || option === "--dry-run") {
+      if (option === "--dry-run") {
         return "unknown";
+      }
+      if (option === "--exclude") {
+        index += 1;
+        continue;
+      }
+      if (option.startsWith("--")) {
+        continue;
+      }
+      const shortOptions = option.slice(1);
+      for (let optionIndex = 0; optionIndex < shortOptions.length; optionIndex += 1) {
+        const shortOption = shortOptions.charAt(optionIndex);
+        if (shortOption === "n") {
+          return "unknown";
+        }
+        if (shortOption === "e") {
+          if (optionIndex === shortOptions.length - 1) {
+            index += 1;
+          }
+          break;
+        }
       }
     }
   }
@@ -472,6 +501,53 @@ const classifyPrintfCommand = (tokens: readonly string[]): AgentApprovalMutation
   return firstArgument === "-v" || /^-v.+/.test(firstArgument) ? "mutating" : "unknown";
 };
 
+const hasActiveShellNoExecOption = (tokens: readonly string[]): boolean => {
+  let noExec = false;
+  let interactive = false;
+  for (let index = 1; index < tokens.length; index += 1) {
+    const option = tokens[index];
+    if (
+      !option ||
+      option === "-" ||
+      option === "--" ||
+      (!option.startsWith("-") && !option.startsWith("+"))
+    ) {
+      break;
+    }
+    if (option === "--init-file" || option === "--rcfile") {
+      index += 1;
+      continue;
+    }
+    if (option.startsWith("--")) {
+      continue;
+    }
+
+    const enabled = option.startsWith("-");
+    const shortOptions = option.slice(1);
+    if (shortOptions === "o") {
+      if (tokens[index + 1] === "noexec") {
+        noExec = enabled;
+      }
+      index += 1;
+      continue;
+    }
+    if (shortOptions === "O") {
+      index += 1;
+      continue;
+    }
+    if (shortOptions.includes("n")) {
+      noExec = enabled;
+    }
+    if (shortOptions.includes("i")) {
+      interactive = enabled;
+    }
+    if (shortOptions.includes("c")) {
+      break;
+    }
+  }
+  return noExec && !interactive;
+};
+
 const classifyCommandTokens = (tokens: readonly string[]): AgentApprovalMutation => {
   const command = tokens[0];
   if (!command) {
@@ -480,7 +556,7 @@ const classifyCommandTokens = (tokens: readonly string[]): AgentApprovalMutation
   if (command.includes("/") || command.includes("\\")) {
     return "unknown";
   }
-  if ((command === "bash" || command === "sh") && tokens[1] === "-n") {
+  if ((command === "bash" || command === "sh") && hasActiveShellNoExecOption(tokens)) {
     return "unknown";
   }
   if (MUTATING_COMMANDS.has(command)) {
