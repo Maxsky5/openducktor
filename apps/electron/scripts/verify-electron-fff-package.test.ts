@@ -3,6 +3,8 @@ import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createPackage, createPackageWithOptions } from "@electron/asar";
+import { resolvePackagedAppResourcesDirectory } from "./electron-packaged-layout";
 import {
   resolvePackagedFffNodeModulesDirectory,
   verifyPackagedFffFileSearch,
@@ -77,19 +79,47 @@ const writePackagedFffModule = async ({
   releaseDirectory: string;
   source: string;
 }): Promise<string> => {
-  const nodeModulesDirectory = resolvePackagedFffNodeModulesDirectory({
-    arch: "x64",
-    platform,
-    releaseDirectory,
-  });
-  const moduleDirectory = join(nodeModulesDirectory, "@ff-labs", "fff-node");
+  const appDirectory = join(releaseDirectory, "asar-source");
+  const moduleDirectory = join(appDirectory, "node_modules", "@ff-labs", "fff-node");
   await mkdir(moduleDirectory, { recursive: true });
   await writeFile(
     join(moduleDirectory, "package.json"),
     JSON.stringify({ name: "@ff-labs/fff-node", main: "index.cjs" }),
   );
   await writeFile(join(moduleDirectory, "index.cjs"), source);
-  return moduleDirectory;
+  const resourcesDirectory = resolvePackagedAppResourcesDirectory({
+    arch: "x64",
+    platform,
+    releaseDirectory,
+  });
+  await mkdir(resourcesDirectory, { recursive: true });
+  await createPackageWithOptions(appDirectory, join(resourcesDirectory, "app.asar"), {
+    unpack: "**/node_modules/@ff-labs/fff-node/**",
+  });
+  return join(
+    resolvePackagedFffNodeModulesDirectory({ arch: "x64", platform, releaseDirectory }),
+    "@ff-labs",
+    "fff-node",
+  );
+};
+
+const writePackagedAsarWithoutFff = async ({
+  platform,
+  releaseDirectory,
+}: {
+  platform: "linux" | "macos" | "windows";
+  releaseDirectory: string;
+}): Promise<void> => {
+  const appDirectory = join(releaseDirectory, "asar-source-without-fff");
+  await mkdir(appDirectory, { recursive: true });
+  await writeFile(join(appDirectory, "index.html"), "<html></html>\n");
+  const resourcesDirectory = resolvePackagedAppResourcesDirectory({
+    arch: "x64",
+    platform,
+    releaseDirectory,
+  });
+  await mkdir(resourcesDirectory, { recursive: true });
+  await createPackage(appDirectory, join(resourcesDirectory, "app.asar"));
 };
 
 describe("resolvePackagedFffNodeModulesDirectory", () => {
@@ -162,6 +192,15 @@ describe("verifyPackagedFffFileSearch", () => {
     );
   });
 
+  test("rejects a payload whose archive does not contain the package", async () => {
+    const releaseDirectory = await makeReleaseDirectory();
+    await writePackagedAsarWithoutFff({ platform: "linux", releaseDirectory });
+
+    await expect(
+      verifyPackagedFffFileSearch({ arch: "x64", platform: "linux", releaseDirectory }),
+    ).rejects.toThrow("the app.asar archive does not contain");
+  });
+
   test("rejects a payload that resolves outside the packaged app", async () => {
     const releaseDirectory = await makeReleaseDirectory();
     const fallbackModuleDirectory = join(releaseDirectory, "node_modules", "@ff-labs", "fff-node");
@@ -172,13 +211,22 @@ describe("verifyPackagedFffFileSearch", () => {
     );
     await writeFile(join(fallbackModuleDirectory, "index.cjs"), fffModuleSource(successfulFinder));
     const packagedReleaseDirectory = join(releaseDirectory, "release");
-    await mkdir(
-      resolvePackagedFffNodeModulesDirectory({
-        arch: "x64",
-        platform: "linux",
-        releaseDirectory: packagedReleaseDirectory,
-      }),
-      { recursive: true },
+    await writePackagedFffModule({
+      platform: "linux",
+      releaseDirectory: packagedReleaseDirectory,
+      source: fffModuleSource(successfulFinder),
+    });
+    await rm(
+      join(
+        resolvePackagedFffNodeModulesDirectory({
+          arch: "x64",
+          platform: "linux",
+          releaseDirectory: packagedReleaseDirectory,
+        }),
+        "@ff-labs",
+        "fff-node",
+      ),
+      { force: true, recursive: true },
     );
 
     await expect(
