@@ -44,13 +44,17 @@ const READ_ONLY_FIND_OPTIONS = wordSet(
 const READ_ONLY_FIND_OPTIONS_WITH_ARGUMENT = wordSet(
   "-group -iname -maxdepth -mindepth -mtime -name -newer -path -perm -size -type -user",
 );
-const UNKNOWN_FIND_OPTIONS_WITH_ARGUMENT = wordSet("-regextype");
+const UNKNOWN_FIND_OPTIONS_WITH_ARGUMENT = wordSet("-regex -regextype");
 
 const MUTATING_CURL_OPTIONS = wordSet(
   "-F -O -T -d -o --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --output --remote-name --upload-file",
 );
 const MUTATING_HTTP_METHODS = wordSet("DELETE PATCH POST PUT");
-const CURL_OPTIONS_WITH_ARGUMENT = wordSet("-H --header");
+const MUTATING_CURL_SHORT_OPTIONS = wordSet("F O T d o");
+const CURL_SHORT_OPTIONS_WITH_ARGUMENT = wordSet("H K");
+const CURL_SHORT_OPTIONS_WITHOUT_ARGUMENT = wordSet("s S");
+const CURL_LONG_OPTIONS_WITH_ARGUMENT = wordSet("--config --header");
+const CURL_LONG_OPTIONS_WITHOUT_ARGUMENT = wordSet("--show-error --silent");
 
 const READ_ONLY_SORT_OPTIONS = wordSet(
   "-b -d -f -g -h -i -M -m -n -R -r -s -u -V -z --check --dictionary-order --general-numeric-sort --human-numeric-sort --ignore-case --ignore-leading-blanks --merge --month-sort --numeric-sort --random-sort --reverse --stable --unique --version-sort --zero-terminated",
@@ -266,7 +270,7 @@ const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation =>
       !READ_ONLY_GIT_OPTIONS.has(option) &&
       !READ_ONLY_GIT_OPTION_PREFIXES.some((prefix) => option.startsWith(prefix))
     ) {
-      hasUnknownOption = true;
+      return "unknown";
     }
   }
   return hasUnknownOption ? "unknown" : "read_only";
@@ -292,7 +296,7 @@ const classifyFindCommand = (tokens: readonly string[]): AgentApprovalMutation =
       continue;
     }
     if (token.startsWith("-") && !READ_ONLY_FIND_OPTIONS.has(token)) {
-      hasUnknownOption = true;
+      return "unknown";
     }
   }
   return hasUnknownOption ? "unknown" : "read_only";
@@ -315,11 +319,14 @@ const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation =
       index += 1;
       continue;
     }
-    if (CURL_OPTIONS_WITH_ARGUMENT.has(token)) {
+    if (CURL_LONG_OPTIONS_WITH_ARGUMENT.has(token)) {
       index += 1;
       continue;
     }
-    if (token.startsWith("--header=")) {
+    if (
+      CURL_LONG_OPTIONS_WITHOUT_ARGUMENT.has(token) ||
+      [...CURL_LONG_OPTIONS_WITH_ARGUMENT].some((option) => token.startsWith(`${option}=`))
+    ) {
       continue;
     }
     if (token.startsWith("--request=")) {
@@ -343,8 +350,39 @@ const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation =
         return "mutating";
       }
     }
-    if (token.startsWith("-")) {
+    if (token.startsWith("--")) {
+      return "unknown";
+    }
+    if (!token.startsWith("-") || token === "-") {
       continue;
+    }
+
+    const shortOptions = token.slice(1);
+    for (let optionIndex = 0; optionIndex < shortOptions.length; optionIndex += 1) {
+      const option = shortOptions.charAt(optionIndex);
+      if (MUTATING_CURL_SHORT_OPTIONS.has(option)) {
+        return "mutating";
+      }
+      if (option === "X") {
+        const attachedMethod = shortOptions.slice(optionIndex + 1);
+        const method = (attachedMethod || tokens[index + 1] || "").toUpperCase();
+        if (MUTATING_HTTP_METHODS.has(method)) {
+          return "mutating";
+        }
+        if (!attachedMethod) {
+          index += 1;
+        }
+        break;
+      }
+      if (CURL_SHORT_OPTIONS_WITH_ARGUMENT.has(option)) {
+        if (optionIndex === shortOptions.length - 1) {
+          index += 1;
+        }
+        break;
+      }
+      if (!CURL_SHORT_OPTIONS_WITHOUT_ARGUMENT.has(option)) {
+        return "unknown";
+      }
     }
   }
   return "unknown";
@@ -435,7 +473,11 @@ const classifyCommandTokens = (tokens: readonly string[]): AgentApprovalMutation
         !option.startsWith("--check=") &&
         !/^-\d+$/.test(option)
       ) {
-        hasUnknownOption = true;
+        if (option === "--debug") {
+          hasUnknownOption = true;
+          continue;
+        }
+        return "unknown";
       }
     }
     return hasUnknownOption ? "unknown" : "read_only";

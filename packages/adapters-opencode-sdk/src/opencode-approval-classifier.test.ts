@@ -171,6 +171,8 @@ describe("OpenCode approval classifier", () => {
 
   test.each([
     "curl -X GET -o output.txt",
+    "curl -sO https://example.test/file",
+    "curl -sXPOST https://example.test",
     "git log --all --output=log.txt",
     "sort --compress-program=gzip -o out.txt",
   ])("finds a write option after an earlier non-mutating option: %s", (command) => {
@@ -242,6 +244,10 @@ describe("OpenCode approval classifier", () => {
     { command: "sort --compress-program gzip -o output.txt", expected: "mutating" },
     { command: "curl -H -o https://example.test", expected: "unknown" },
     { command: "curl --header -o https://example.test", expected: "unknown" },
+    { command: "curl --config -o https://example.test", expected: "unknown" },
+    { command: "curl -K -o https://example.test", expected: "unknown" },
+    { command: "curl -sHfooO https://example.test", expected: "unknown" },
+    { command: "find . -regex -delete", expected: "unknown" },
   ] as const)(
     "does not scan an option argument as a separate option: $command",
     ({ command, expected }) => {
@@ -254,6 +260,21 @@ describe("OpenCode approval classifier", () => {
       ).toBe(expected);
     },
   );
+
+  test.each([
+    "curl --unclassified -o output.txt",
+    "git log --unclassified --output=log.txt",
+    "find . -unclassified -delete",
+    "sort --unclassified -o output.txt",
+  ])("does not scan past an option with unknown arity: %s", (command) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [command],
+        command,
+      }),
+    ).toBe("unknown");
+  });
 
   test("does not treat file-descriptor duplication as a file write", () => {
     expect(
