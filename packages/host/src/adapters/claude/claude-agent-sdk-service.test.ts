@@ -254,6 +254,51 @@ describe("createClaudeAgentSdkService", () => {
     }
   });
 
+  test("loads live accepted history before a fresh session transcript exists", async () => {
+    const session = createSession({
+      activeSdkUserTurnCount: 1,
+      activity: "running",
+      acceptedUserMessages: [
+        {
+          messageId: "user-1",
+          parts: [],
+          text: "Inspect the prompt builder.",
+          timestamp: "2026-06-25T20:00:01.000Z",
+        },
+      ],
+      input: {
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        runtimePolicy: { kind: "claude" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        systemPrompt: "Build",
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        createService(session).loadSessionHistory({
+          repoPath: "/repo/",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree/",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+        }),
+      ),
+    ).resolves.toEqual([
+      {
+        messageId: "user-1",
+        role: "user",
+        timestamp: "2026-06-25T20:00:01.000Z",
+        text: "Inspect the prompt builder.",
+        displayParts: [],
+        state: "read",
+        parts: [],
+      },
+    ]);
+  });
+
   test("rejects live history reads from another working directory", () => {
     const service = createService(createSession());
 

@@ -10,6 +10,7 @@ import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { isLiveFinalAssistantStopReason } from "./claude-agent-sdk-history-assistant";
 import {
   type ClaudeHistoryMessage,
+  isClaudeSessionMissingError,
   loadClaudeHistoryProjectionInput,
 } from "./claude-agent-sdk-history-import";
 import type { ClaudeLiveUserMessage } from "./claude-agent-sdk-history-support";
@@ -18,6 +19,7 @@ import {
   isClaudeSubagentTranscriptTarget,
   parseClaudeTranscriptTarget,
 } from "./claude-agent-sdk-subagent-transcripts";
+import { hasActiveClaudeWork } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 import { readStringProp } from "./claude-agent-sdk-utils";
 
@@ -34,15 +36,14 @@ const claudeSubagentAssistantMessageSchema = z.looseObject({
 });
 
 export type ClaudeLiveHistoryContext = {
+  hasActiveWork: () => boolean;
   source: "fresh" | "persisted";
   userMessages: readonly ClaudeLiveUserMessage[];
 };
 
-/**
- * Describes the live session for a history read. A session started in this process is
- * fresh; a resumed or forked session owns a persisted transcript.
- */
+/** A resumed or forked session must load its saved transcript. */
 export const claudeLiveHistoryContext = (session: ClaudeSession): ClaudeLiveHistoryContext => ({
+  hasActiveWork: () => hasActiveClaudeWork(session),
   source:
     "externalSessionId" in session.input || "parentExternalSessionId" in session.input
       ? "persisted"
@@ -229,7 +230,22 @@ export const loadClaudeHistory = async (
   if (liveContext?.source === "fresh" && liveContext.userMessages.length === 0) {
     return finalizeClaudeHistory(input, []);
   }
-  const { messages, subagentAgentIdsByToolUseId } = await loadClaudeHistoryProjectionInput(input);
+  const projectionInput = await loadClaudeHistoryProjectionInput(input).catch((cause: unknown) => {
+    // The UI can read history after the first live message but before Claude writes the
+    // transcript. In this gap, the fresh session and its live events hold the new messages.
+    if (
+      liveContext?.source !== "fresh" ||
+      !liveContext.hasActiveWork() ||
+      !isClaudeSessionMissingError(cause)
+    ) {
+      throw cause;
+    }
+    return {
+      messages: [],
+      subagentAgentIdsByToolUseId: new Map<string, string>(),
+    };
+  });
+  const { messages, subagentAgentIdsByToolUseId } = projectionInput;
   const history = toClaudeHistoryMessages(messages, now, liveContext?.userMessages ?? [], {
     includeNestedEntries: isClaudeSubagentTranscriptTarget(input.externalSessionId),
     subagentAgentIdsByToolUseId,

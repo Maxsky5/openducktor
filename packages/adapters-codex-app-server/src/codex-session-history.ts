@@ -22,7 +22,7 @@ import {
   resolveCodexForkBoundary,
 } from "./codex-fork-boundary";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
-import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
+import type { CodexThreadInventoryReader, CodexThreadReadGuard } from "./codex-thread-inventory";
 import type {
   CodexAppServerClient,
   CodexSessionState,
@@ -34,7 +34,7 @@ type CodexSessionHistoryRuntime = {
   runtimeId: string;
 };
 
-type CodexSessionHistoryInput = {
+type CodexSessionHistoryInput = CodexThreadReadGuard & {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
   runtime: CodexSessionHistoryRuntime;
@@ -207,11 +207,15 @@ export const loadCodexSessionHistory = async ({
   runtime,
   threadInventory,
   prepareImageGenerations,
+  getFreshThreadCwd,
+  onThreadRead,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
   const { client, runtimeId } = runtime;
   const response = await threadInventory.readThreadHistory(client, {
     ...input,
     allowUnmaterialized: session !== undefined,
+    getFreshThreadCwd,
+    onThreadRead,
   });
   if (!response) {
     return [];

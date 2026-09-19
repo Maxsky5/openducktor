@@ -1,6 +1,9 @@
 import { AgentRuntimeQueryError } from "@openducktor/core";
 import type { CodexAppServerThreadListParams, CodexAppServerTurn } from "@openducktor/contracts";
-import { isCodexUnmaterializedThreadError } from "./codex-app-server-shared";
+import {
+  isCodexEmptyRolloutError,
+  isCodexUnmaterializedThreadError,
+} from "./codex-app-server-shared";
 import {
   type CodexThreadInventory,
   type CodexThreadSnapshot,
@@ -9,6 +12,15 @@ import {
   codexThreadList,
 } from "./codex-app-server-threads";
 import type { CodexAppServerClient, CodexThreadHistoryReadResponse } from "./types";
+
+export type CodexThreadReadGuard = {
+  getFreshThreadCwd?: (() => string | undefined) | undefined;
+  onThreadRead?: (() => void) | undefined;
+};
+
+type CodexThreadReadOptions = CodexThreadReadGuard & {
+  localThreadCwd?: string | undefined;
+};
 
 type PendingInventoryRead = {
   mode: "read" | "refresh";
@@ -168,13 +180,13 @@ export class CodexThreadInventoryReader {
       externalSessionId: string;
       workingDirectory: string;
       allowUnmaterialized?: boolean;
-    },
+    } & CodexThreadReadGuard,
   ): Promise<CodexThreadHistoryReadResponse> {
-    const response = await this.readThreadWithTurns(
-      client,
-      input.externalSessionId,
-      input.allowUnmaterialized ? input.workingDirectory : undefined,
-    );
+    const response = await this.readThreadWithTurns(client, input.externalSessionId, {
+      localThreadCwd: input.allowUnmaterialized ? input.workingDirectory : undefined,
+      getFreshThreadCwd: input.getFreshThreadCwd,
+      onThreadRead: input.onThreadRead,
+    });
     if (!response) {
       throw new AgentRuntimeQueryError(
         "request_failed",
@@ -196,22 +208,28 @@ export class CodexThreadInventoryReader {
   async readThreadWithTurns(
     client: CodexAppServerClient,
     threadId: string,
-    unmaterializedWorkingDirectory?: string,
+    options: CodexThreadReadOptions = {},
   ): Promise<CodexThreadHistoryReadResponse | undefined> {
+    const { localThreadCwd, getFreshThreadCwd, onThreadRead } = options;
     let response: Awaited<ReturnType<CodexAppServerClient["threadRead"]>>;
     let pagedTurns: CodexAppServerTurn[];
     try {
       response = await client.threadRead({ threadId, includeTurns: false });
+      onThreadRead?.();
       pagedTurns = await this.fetchThreadTurns(client, threadId, "full");
     } catch (error) {
-      if (isCodexUnmaterializedThreadError(error) && unmaterializedWorkingDirectory) {
+      let emptyThreadCwd: string | undefined;
+      if (isCodexEmptyRolloutError(error)) {
+        emptyThreadCwd = getFreshThreadCwd?.();
+      } else if (isCodexUnmaterializedThreadError(error)) {
+        emptyThreadCwd = localThreadCwd;
+      }
+      if (emptyThreadCwd !== undefined) {
         const thread: CodexThreadHistoryReadResponse["thread"] = {
           id: threadId,
           turns: [],
+          cwd: emptyThreadCwd,
         };
-        if (unmaterializedWorkingDirectory) {
-          thread.cwd = unmaterializedWorkingDirectory;
-        }
         return {
           thread,
         };
