@@ -110,7 +110,10 @@ import {
   type CodexSubagentRoute,
   codexSubagentRouteEventFields,
 } from "./codex-subagent-link-state";
-import { CodexThreadInventoryReader } from "./codex-thread-inventory";
+import {
+  CodexThreadInventoryReader,
+  type CodexThreadMaterializationGuard,
+} from "./codex-thread-inventory";
 import {
   requireNormalizedCodexToolInvocation,
   toCodexToolQuestions,
@@ -952,7 +955,9 @@ export class CodexAppServerAdapter
     return session;
   }
 
-  private freshRolloutReadGuard(session: CodexSessionState | undefined) {
+  private freshRolloutReadGuard(
+    session: CodexSessionState | undefined,
+  ): CodexThreadMaterializationGuard {
     if (!session) {
       return {};
     }

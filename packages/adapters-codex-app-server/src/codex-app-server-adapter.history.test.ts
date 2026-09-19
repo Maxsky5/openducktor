@@ -55,6 +55,9 @@ const paginatedTurnsListResponse = (thread: PaginatedThreadFixture) => ({
 const paginatedTurnsResponse = (turns: PaginatedTurnFixture[]) =>
   paginatedTurnsListResponse({ id: "fixture-thread", status: { type: "idle" }, turns });
 
+const EMPTY_ROLLOUT_MESSAGE =
+  "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty";
+
 const paginatedThreadListResponse = (threads: ThreadListFixture[]) => ({
   data: threads.map((thread) => {
     const activeStatus =
@@ -608,8 +611,6 @@ describe("CodexAppServerAdapter history loading", () => {
     const materializedTurns = createDeferred<ReturnType<typeof paginatedTurnsListResponse>>();
     const turnsRequested = createDeferred<void>();
     const threadId = "thread/start-runtime-live";
-    const emptyRolloutMessage =
-      "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty";
     const firstRolloutThread = {
       id: threadId,
       cwd: "/repo",
@@ -633,7 +634,7 @@ describe("CodexAppServerAdapter history loading", () => {
       request: async (request: CodexJsonRpcRequest) => {
         if (request.method === "thread/read") {
           if (!rolloutMaterialized) {
-            throw codexRpcRequestError("thread/read", -32603, emptyRolloutMessage);
+            throw codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
           }
           return paginatedThreadReadResponse(firstRolloutThread);
         }
@@ -687,11 +688,7 @@ describe("CodexAppServerAdapter history loading", () => {
   });
 
   test("propagates an empty rollout for a resumed local session", async () => {
-    const failure = codexRpcRequestError(
-      "thread/read",
-      -32603,
-      "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty",
-    );
+    const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
     const baseTransport = new RecordingTransport("runtime-live", false);
     const transport: CodexJsonRpcTransport = {
       request: async (request: CodexJsonRpcRequest) => {
@@ -711,11 +708,7 @@ describe("CodexAppServerAdapter history loading", () => {
   });
 
   test("propagates an empty rollout when the fresh session is released during the read", async () => {
-    const failure = codexRpcRequestError(
-      "thread/read",
-      -32603,
-      "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty",
-    );
+    const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
     const readRequested = createDeferred<void>();
     const readResult = createDeferred<never>();
     const baseTransport = new RecordingTransport("runtime-live", false);
@@ -741,11 +734,7 @@ describe("CodexAppServerAdapter history loading", () => {
 
   test("propagates a later empty rollout after the fresh session materializes", async () => {
     const threadId = "thread/start-runtime-live";
-    const failure = codexRpcRequestError(
-      "thread/read",
-      -32603,
-      "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty",
-    );
+    const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
     const thread = { id: threadId, cwd: "/repo", turns: [] };
     let rolloutExists = true;
     const baseTransport = new RecordingTransport("runtime-live", false);
