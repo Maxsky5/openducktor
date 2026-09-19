@@ -41,31 +41,6 @@ const compactionFailure = (field: string, message: string): AgentSessionRecordCo
   error: { field, message },
 });
 
-const withoutUndefinedSelectionFields = (
-  selectedModel: AgentSessionModelSelection | null,
-): AgentSessionModelSelection | null => {
-  if (selectedModel === null) {
-    return null;
-  }
-  const selection: AgentSessionModelSelection = {
-    runtimeKind: selectedModel.runtimeKind,
-    providerId: selectedModel.providerId,
-    modelId: selectedModel.modelId,
-  };
-  if (selectedModel.variant !== undefined) {
-    selection.variant = selectedModel.variant;
-  }
-  if (selectedModel.profileId !== undefined) {
-    selection.profileId = selectedModel.profileId;
-  }
-  return selection;
-};
-
-export const toJsonSafeAgentSessionRecord = (session: AgentSessionRecord): AgentSessionRecord => ({
-  ...session,
-  selectedModel: withoutUndefinedSelectionFields(session.selectedModel),
-});
-
 export const compactAgentSessionRecord = (
   session: CompactableAgentSessionRecord,
 ): AgentSessionRecordCompactionResult => {
@@ -98,7 +73,7 @@ export const compactAgentSessionRecord = (
   });
 
   if (parsed.success) {
-    return { success: true, session: toJsonSafeAgentSessionRecord(parsed.data) };
+    return { success: true, session: parsed.data };
   }
 
   return compactionFailure(

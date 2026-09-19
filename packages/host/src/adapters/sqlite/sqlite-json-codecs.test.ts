@@ -5,7 +5,12 @@ import {
   createAgentSessionRecord,
   expectFailureTag,
 } from "../../ports/task-store-port-contract.test-support";
-import { agentSessionsFromRow, encodeJson, labelsFromRow } from "./sqlite-json-codecs";
+import {
+  agentSessionsFromRow,
+  encodeAgentSessionBatch,
+  encodeJson,
+  labelsFromRow,
+} from "./sqlite-json-codecs";
 import { taskRowFixture } from "./sqlite-task-row-test-fixtures";
 
 describe("SQLite JSON codecs", () => {
@@ -31,6 +36,37 @@ describe("SQLite JSON codecs", () => {
     );
 
     expect(failure).toMatchObject({ field: "labels_json" });
+  });
+
+  test("drops undefined optional selection fields from an encoded session batch", () => {
+    const encoded = encodeAgentSessionBatch([
+      createAgentSessionRecord({
+        externalSessionId: "codex-session",
+        runtimeKind: "codex",
+        selectedModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5.6",
+          profileId: undefined,
+        },
+      }),
+    ]);
+
+    const parsed: unknown = JSON.parse(encoded);
+    expect(parsed).toStrictEqual([
+      {
+        externalSessionId: "codex-session",
+        role: "build",
+        startedAt: "2026-06-10T10:00:00.000Z",
+        runtimeKind: "codex",
+        workingDirectory: "/repos/fairnest/worktrees/session-1",
+        selectedModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5.6",
+        },
+      },
+    ]);
   });
 
   test("sorts decoded agent sessions from newest to oldest", async () => {
