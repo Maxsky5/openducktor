@@ -187,10 +187,12 @@ type ControlDeps = Parameters<typeof createAgentSessionCommandService>[0];
 
 const createModelUpdateService = ({
   selectedModel = storedModel,
+  runtimeKind = "opencode",
   updateRuntimeModel,
   updateStoredModel,
 }: {
   selectedModel?: AgentSessionRecord["selectedModel"];
+  runtimeKind?: AgentSessionRecord["runtimeKind"];
   updateRuntimeModel: ControlDeps["runtime"]["updateSessionModel"];
   updateStoredModel: ControlDeps["tasks"]["agentSessionUpdateModel"];
 }) =>
@@ -207,7 +209,8 @@ const createModelUpdateService = ({
       releaseSession: () => Effect.dieMessage("unexpected release"),
     },
     tasks: {
-      agentSessionsList: () => Effect.succeed([{ ...summary, role: "build", selectedModel }]),
+      agentSessionsList: () =>
+        Effect.succeed([{ ...summary, runtimeKind, role: "build", selectedModel }]),
       agentSessionUpsert: () => Effect.dieMessage("unexpected store"),
       agentSessionUpdateModel: updateStoredModel,
     },
@@ -1099,6 +1102,35 @@ describe("createAgentSessionCommandService", () => {
           profileId: "build",
         },
       },
+    ]);
+  });
+
+  test("stores a model switch without an undefined profile key when no profile is stored", async () => {
+    const storedModels: unknown[] = [];
+    const service = createModelUpdateService({
+      runtimeKind: "codex",
+      selectedModel: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-6-astra" },
+      updateRuntimeModel: () => Effect.void,
+      updateStoredModel: (input) =>
+        Effect.sync(() => {
+          storedModels.push(input.selectedModel);
+          return true;
+        }),
+    });
+
+    await Effect.runPromise(
+      service.updateSessionModel({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree",
+        externalSessionId: "session-1",
+        sessionScope: workflowStart.sessionScope,
+        model: { providerId: "openai", modelId: "gpt-5.6-sol" },
+      }),
+    );
+
+    expect(storedModels).toStrictEqual([
+      { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5.6-sol" },
     ]);
   });
 

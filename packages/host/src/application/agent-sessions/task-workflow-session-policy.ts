@@ -145,6 +145,25 @@ const toRuntimeModel = (
   return variant === undefined ? { providerId, modelId } : { providerId, modelId, variant };
 };
 
+const toRecordModelSelection = (
+  model: AgentSessionModelSettings,
+  stored: AgentSessionRecord,
+): NonNullable<AgentSessionRecord["selectedModel"]> => {
+  const selection: NonNullable<AgentSessionRecord["selectedModel"]> = {
+    runtimeKind: stored.runtimeKind,
+    providerId: model.providerId,
+    modelId: model.modelId,
+  };
+  if (model.variant !== undefined) {
+    selection.variant = model.variant;
+  }
+  const profileId = stored.selectedModel?.profileId;
+  if (profileId !== undefined) {
+    selection.profileId = profileId;
+  }
+  return selection;
+};
+
 export type TaskSessionModelPersistence = (
   input: Parameters<TaskSessions["agentSessionUpdateModel"]>[0],
 ) => Effect.Effect<{ updated: boolean; publish: Effect.Effect<void, HostError> }, HostError>;
@@ -286,13 +305,7 @@ export const createTaskWorkflowSessionPolicy = ({
           runtimeKind: stored.runtimeKind,
           workingDirectory: stored.workingDirectory,
         };
-        const selectedModel = input.model
-          ? {
-              ...input.model,
-              runtimeKind: stored.runtimeKind,
-              profileId: stored.selectedModel?.profileId,
-            }
-          : null;
+        const selectedModel = input.model ? toRecordModelSelection(input.model, stored) : null;
         return {
           input: runtimeInput,
           previousModel: toRuntimeModel(stored.selectedModel),

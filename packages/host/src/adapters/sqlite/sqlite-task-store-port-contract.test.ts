@@ -151,4 +151,56 @@ describe("SQLite task session model updates", () => {
       await cleanup();
     }
   });
+
+  test("stores a selection that omits an undefined profile", async () => {
+    const { cleanup, repoPath, store } = await createSqliteTaskStoreHarness();
+    try {
+      const task = await Effect.runPromise(
+        store.createTask({
+          repoPath,
+          task: {
+            title: "Codex session model",
+            issueType: "bug",
+            priority: 1,
+            aiReviewEnabled: true,
+          },
+        }),
+      );
+      const session = createAgentSessionRecord({
+        externalSessionId: "codex-session",
+        runtimeKind: "codex",
+      });
+      await Effect.runPromise(store.upsertAgentSession({ repoPath, taskId: task.id, session }));
+
+      await expect(
+        Effect.runPromise(
+          store.updateAgentSessionModel({
+            repoPath,
+            taskId: task.id,
+            identity: session,
+            selectedModel: {
+              runtimeKind: "codex",
+              providerId: "openai",
+              modelId: "gpt-5.6-sol",
+              profileId: undefined,
+            },
+          }),
+        ),
+      ).resolves.toBe(true);
+
+      const metadata = await Effect.runPromise(
+        store.getTaskMetadata({ repoPath, taskId: task.id }),
+      );
+      const storedSession = metadata.agentSessions.find(
+        (entry) => entry.externalSessionId === "codex-session",
+      );
+      expect(storedSession?.selectedModel).toStrictEqual({
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5.6-sol",
+      });
+    } finally {
+      await cleanup();
+    }
+  });
 });
