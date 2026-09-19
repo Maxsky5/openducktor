@@ -85,7 +85,35 @@ export const trimOldestMapKeys = <Value>(map: Map<string, Value>, maxSize: numbe
     map.delete(oldestKey);
   }
 };
+
+const codexRpcFailureSchema = z.object({
+  cause: z.object({ code: z.number(), message: z.string() }),
+  details: z.object({ method: z.string() }),
+});
+
+const isCodexEmptyRolloutThreadReadError = (cause: unknown): boolean => {
+  const parsed = codexRpcFailureSchema.safeParse(cause);
+  if (
+    !parsed.success ||
+    parsed.data.details.method !== "thread/read" ||
+    parsed.data.cause.code !== -32603
+  ) {
+    return false;
+  }
+
+  // Codex can report this before a fresh rollout has its first session_meta record.
+  // Keep this compatibility case until the minimum Codex version fixes https://github.com/openai/codex/issues/25621.
+  const match =
+    /^failed to read thread: thread-store internal error: failed to read thread ([^\r\n]+): rollout at ([^\r\n]+) is empty$/.exec(
+      parsed.data.cause.message,
+    );
+  return match !== null && match[1] === match[2];
+};
+
 export const isCodexUnmaterializedThreadError = (cause: unknown): boolean => {
+  if (isCodexEmptyRolloutThreadReadError(cause)) {
+    return true;
+  }
   const message = cause instanceof Error ? cause.message : String(cause);
   const inlineTurnsUnavailable =
     message.includes("is not materialized yet") &&

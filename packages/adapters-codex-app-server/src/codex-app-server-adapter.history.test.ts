@@ -6,13 +6,16 @@ import {
   codexThreadStartResultFixture,
   codexThreadFixture,
   codexTurnFixture,
+  createDeferred,
   createHarness,
+  createRuntimeStreamSubscription,
   defaultCodexEffectivePolicy,
   flushCodexAdapterWork,
   RecordingTransport,
   requestThreadId,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
+import { codexRpcRequestError } from "./test-fixtures/codex-rpc-error";
 import {
   codexAgentMessageItemFixture,
   codexCollabAgentToolCallFixture,
@@ -595,6 +598,90 @@ describe("CodexAppServerAdapter history loading", () => {
         text: "System prompt:\n\nUse the repo rules.",
         parts: [],
       },
+    ]);
+  });
+
+  test("keeps fresh history and todos readable until the rollout materializes and live todos arrive", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const baseTransport = new RecordingTransport("runtime-live", false);
+    const materializedTurns = createDeferred<ReturnType<typeof paginatedTurnsListResponse>>();
+    const turnsRequested = createDeferred<void>();
+    const threadId = "thread/start-runtime-live";
+    const emptyRolloutMessage =
+      "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty";
+    const firstRolloutThread = {
+      id: threadId,
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn-first-record",
+          status: "completed",
+          items: [
+            codexDynamicToolCallFixture({
+              id: "todo-before-live-update",
+              namespace: "functions",
+              tool: "update_plan",
+              arguments: { plan: [{ step: "Stale rollout todo", status: "pending" }] },
+            }),
+          ],
+        },
+      ],
+    };
+    let rolloutMaterialized = false;
+    const transport: CodexJsonRpcTransport = {
+      request: async (request: CodexJsonRpcRequest) => {
+        if (request.method === "thread/read") {
+          if (!rolloutMaterialized) {
+            throw codexRpcRequestError("thread/read", -32603, emptyRolloutMessage);
+          }
+          return paginatedThreadReadResponse(firstRolloutThread);
+        }
+        if (request.method === "thread/turns/list") {
+          turnsRequested.resolve();
+          return materializedTurns.promise;
+        }
+        return baseTransport.request(request);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport, {
+      subscribeEvents: runtimeStream.subscribeEvents,
+    });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const ref = codexSessionRef(threadId);
+    const [history, todos] = await Promise.all([
+      adapter.loadSessionHistory(ref),
+      adapter.loadSessionTodos(ref),
+    ]);
+    expect(history).toEqual([expect.objectContaining({ role: "system" })]);
+    expect(todos).toEqual([]);
+
+    rolloutMaterialized = true;
+    const pendingTodos = adapter.loadSessionTodos(ref);
+    await turnsRequested.promise;
+    runtimeStream.emitNotification({
+      method: "turn/plan/updated",
+      params: {
+        explanation: "The live event is authoritative.",
+        plan: [{ step: "Use live todo", status: "inProgress" }],
+        threadId,
+        turnId: "turn-live",
+      },
+    });
+    await flushCodexAdapterWork();
+    materializedTurns.resolve(paginatedTurnsListResponse(firstRolloutThread));
+
+    await expect(pendingTodos).resolves.toEqual([
+      expect.objectContaining({ content: "Use live todo", status: "in_progress" }),
     ]);
   });
 
