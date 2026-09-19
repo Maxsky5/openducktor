@@ -59,7 +59,7 @@ const MUTATING_CURL_OPTIONS = words(
   "-F -O -T -d --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --remote-name --upload-file",
 );
 const CURL_FILE_OUTPUT_OPTIONS = words(
-  "-D -c -o --cookie-jar --dump-header --output --trace --trace-ascii",
+  "-D -c -o --cookie-jar --dump-header --etag-save --output --trace --trace-ascii",
 );
 const CURL_OPTIONS_WITH_VALUE = words("-H -K --config --header");
 const MUTATING_HTTP_METHODS = words("DELETE PATCH POST PUT");
@@ -175,16 +175,26 @@ const readSimpleCommand = (value: string): SimpleCommandScan | null => {
 };
 
 const classifyGit = (tokens: SimpleCommand): AgentApprovalMutation => {
-  const subcommand = tokens[1];
-  if (!subcommand) {
+  let subcommandIndex = 1;
+  while (tokens[subcommandIndex] === "-C") {
+    if (!tokens[subcommandIndex + 1]) {
+      return "unknown";
+    }
+    subcommandIndex += 2;
+  }
+
+  const subcommand = tokens[subcommandIndex];
+  if (!subcommand || subcommand.startsWith("-")) {
     return "unknown";
   }
-  if (subcommand === "stash" && tokens[2] === "list") {
+  if (subcommand === "stash" && tokens[subcommandIndex + 1] === "list") {
     return "unknown";
   }
   if (
     subcommand === "clean" &&
-    tokens.slice(2).some((option) => option === "--dry-run" || /^-[^-]*n/.test(option))
+    tokens
+      .slice(subcommandIndex + 1)
+      .some((option) => option === "--dry-run" || /^-[^-]*n/.test(option))
   ) {
     return "unknown";
   }
@@ -195,7 +205,7 @@ const classifyGit = (tokens: SimpleCommand): AgentApprovalMutation => {
     return "unknown";
   }
 
-  for (let index = 2; index < tokens.length; index += 1) {
+  for (let index = subcommandIndex + 1; index < tokens.length; index += 1) {
     const option = tokens[index];
     if (option === "--") {
       break;
@@ -397,6 +407,9 @@ const classifySimpleCommand = (tokens: SimpleCommand): AgentApprovalMutation => 
   }
   if (command === "curl") {
     return classifyCurl(tokens);
+  }
+  if (command === "dd") {
+    return tokens.slice(1).some((operand) => /^of=.+/.test(operand)) ? "mutating" : "unknown";
   }
   if (command === "printf") {
     return tokens[1] === "-v" ? "mutating" : "read_only";

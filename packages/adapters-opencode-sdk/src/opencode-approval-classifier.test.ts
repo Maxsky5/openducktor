@@ -58,7 +58,7 @@ describe("OpenCode approval classifier", () => {
     },
     {
       name: "safe reads",
-      patterns: ["ls -la", "git log --oneline -5"],
+      patterns: ["ls -la", "git log --oneline -5", "git -C /repo log --oneline"],
       expected: "read_only",
     },
   ] as const)("classifies every native V1 pattern for $name", ({ patterns, expected }) => {
@@ -88,6 +88,8 @@ describe("OpenCode approval classifier", () => {
     "printf data 2>errors.txt",
     "git restore file.txt",
     "git rm file.txt",
+    "git -C /repo clean -fd",
+    "git -C /repo -C nested clean -fd",
     "sed -i s/old/new/ file.txt",
     "sed --in-place=.bak s/old/new/ file.txt",
     "perl -i -pe s/old/new/ file.txt",
@@ -97,6 +99,8 @@ describe("OpenCode approval classifier", () => {
     "curl -Dheaders.txt https://example.test",
     "curl --trace-ascii trace.txt https://example.test",
     "curl --trace-ascii=trace.txt https://example.test",
+    "curl --etag-save etag.txt https://example.test",
+    "dd if=input.img of=output.img",
   ])("finds explicit mutation syntax: %s", (command) => {
     expect(classifyShell([command], command)).toBe("mutating");
   });
@@ -123,6 +127,7 @@ describe("OpenCode approval classifier", () => {
     "python build.py",
     "./ls -la",
     "git log --since yesterday",
+    "git -c core.pager=helper log",
     "find -- . -delete",
     "find -- -delete",
     "find . -unlisted value",
@@ -133,6 +138,8 @@ describe("OpenCode approval classifier", () => {
     "rg --pre helper pattern",
     "curl -o- https://example.test",
     "curl --trace-ascii=- https://example.test",
+    "curl --etag-save - https://example.test",
+    "dd if=input.img",
     "echo >",
   ])("keeps an unproved command unknown: %s", (command) => {
     expect(classifyShell([command], command)).toBe("unknown");
