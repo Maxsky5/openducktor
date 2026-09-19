@@ -964,6 +964,8 @@ describe("Codex App Server transcript parsing", () => {
   });
 
   test("keeps an image-only user message in canonical history", () => {
+    const imagePath =
+      "/tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot.png";
     const events = createCodexEventMapperPipeline().runThreadItem(
       {
         item: {
@@ -972,7 +974,7 @@ describe("Codex App Server transcript parsing", () => {
           content: [
             {
               type: "localImage",
-              path: "/tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot.png",
+              path: imagePath,
             },
           ],
         },
@@ -992,11 +994,27 @@ describe("Codex App Server transcript parsing", () => {
               id: "codex-local-image:user-1:0",
               kind: "image",
               name: "Screenshot.png",
-              path: "/tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot.png",
+              path: imagePath,
             },
           },
         ],
       }),
     ]);
+  });
+
+  test("drops a blank text-only user message from canonical history", () => {
+    const events = createCodexEventMapperPipeline().runThreadItem(
+      {
+        item: {
+          id: "user-1",
+          type: "userMessage",
+          content: [{ type: "text", text: "  ", text_elements: [] }],
+        },
+        index: 0,
+      },
+      { source: "thread_read", threadId: "thread-1" },
+    );
+
+    expect(projectCodexCanonicalEventsToHistory(events)).toEqual([]);
   });
 });

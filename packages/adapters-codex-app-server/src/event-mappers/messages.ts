@@ -35,7 +35,8 @@ export const userMessageMapper: CodexEventMapper = {
     const message = codexUserInputListToText(parts);
     const messageId = input.item.id;
     const displayParts = codexUserInputsToDisplayParts(parts, messageId);
-    if (message.trim().length === 0 && displayParts.length === 0) {
+    const hasAttachment = displayParts.some((part) => part.kind === "attachment");
+    if (message.trim().length === 0 && !hasAttachment) {
       return emptyCodexMappingResult();
     }
     const timestamp = ctx.timestamp ?? input.timestamp;

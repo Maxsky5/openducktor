@@ -72,6 +72,9 @@ const userInputText = (input: CodexUserInput): string => {
   if (input.type === "image" || input.type === "audio") {
     return input.url;
   }
+  if (input.type === "localImage") {
+    return "";
+  }
   return input.path;
 };
 
@@ -579,9 +582,6 @@ const textInputHasFileMentionElement = (
 const codexUserInputTextContributions = (input: CodexUserInput[]): string[] => {
   const markedSkills = collectCodexMarkedSkillMarkerCounts(input);
   return input.map((current, index) => {
-    if (current.type === "localImage") {
-      return "";
-    }
     if (current.type !== "skill" && current.type !== "mention") {
       return userInputText(current);
     }
