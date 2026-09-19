@@ -411,6 +411,34 @@ describe("Claude host live-session adapter", () => {
     });
   });
 
+  test("serializes inspect-session advice when retaining an admitted continuation fails", async () => {
+    const harness = await createHarness(workingDirectoryDependencies);
+    harness.setContinueInterruptedTurn(() =>
+      Effect.succeed({ ...summary, status: "running" as const }),
+    );
+    harness.failNextMutationAfterStateApply();
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        harness.adapter.continueInterruptedTurn({
+          ...startInput,
+          externalSessionId: "session-1",
+        }),
+      ),
+    );
+
+    expect(hostInvokeFailureFromError(failure)).toMatchObject({
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "continuation_failed",
+        message:
+          "Publication failed. The adapter already accepted the continuation, so the runtime can be working on it.",
+        nextAction:
+          "Inspect the runtime and this session. Retry Resume only if the turn is still unfinished.",
+      },
+    });
+  });
+
   test.each(["user_message", "session_status"])(
     "retains acceptance when %s publication fails",
     async (eventType) => {

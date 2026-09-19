@@ -10,7 +10,10 @@ import {
   agentSessionContextUsageSchema,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
+import {
+  AgentSessionResumeError,
+  toAgentSessionResumeError,
+} from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
 import type { AgentSessionSummary } from "@openducktor/core";
 import { Effect } from "effect";
@@ -326,21 +329,41 @@ export const createClaudeLiveSessionAdapterPreparer =
             ),
           ),
         continueInterruptedTurn: (input) =>
-          requireSessionWorkingDirectory(input, "continue-interrupted-turn").pipe(
-            Effect.flatMap(() =>
-              runSummary("claude-live-session.continue-interrupted-turn", () =>
-                service.continueInterruptedTurn(toClaudeContinueInput(input), runtime.runtimeId),
+          Effect.suspend(() => {
+            const operation = "claude-live-session.continue-interrupted-turn";
+            const sessionRef = toClaudeLiveSessionRef(input);
+            let continuationAccepted = false;
+            return requireSessionWorkingDirectory(input, "continue-interrupted-turn").pipe(
+              Effect.flatMap(() =>
+                runSummary(operation, () =>
+                  service
+                    .continueInterruptedTurn(toClaudeContinueInput(input), runtime.runtimeId)
+                    .pipe(
+                      Effect.tap(() =>
+                        Effect.sync(() => {
+                          continuationAccepted = true;
+                        }),
+                      ),
+                    ),
+                ),
               ),
-            ),
-            Effect.mapError((cause) =>
-              toAgentSessionResumeError(
-                cause,
-                toClaudeLiveSessionRef(input),
-                "claude-live-session.continue-interrupted-turn",
-                { continuation_failed: "Send a new message to continue." },
+              Effect.mapError((cause) =>
+                continuationAccepted
+                  ? new AgentSessionResumeError({
+                      reason: "continuation_failed",
+                      sessionRef,
+                      operation,
+                      message: `${cause.message} The adapter already accepted the continuation, so the runtime can be working on it.`,
+                      nextAction:
+                        "Inspect the runtime and this session. Retry Resume only if the turn is still unfinished.",
+                      cause,
+                    })
+                  : toAgentSessionResumeError(cause, sessionRef, operation, {
+                      continuation_failed: "Send a new message to continue.",
+                    }),
               ),
-            ),
-          ),
+            );
+          }),
         forkSession: (input) =>
           requireSessionWorkingDirectory(input, "fork-session").pipe(
             Effect.flatMap(() =>
