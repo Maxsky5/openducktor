@@ -2,7 +2,7 @@ import { isCodexContextualUserMessage } from "../codex-app-server-shared";
 import {
   codexAsyncQuestionReplyText,
   parseCodexAsyncQuestionItem,
-  parseCodexAsyncQuestionReplies,
+  parseCodexAsyncQuestionReplyInputs,
 } from "../codex-async-questions";
 import { codexItemTypeMatches, terminalHistoryPart } from "../codex-app-server-transcript";
 import type {
@@ -35,7 +35,7 @@ export const userMessageMapper: CodexEventMapper = {
     }
     const parts = codexUserInputsFromItem(input.item);
     const message = codexUserInputListToText(parts);
-    const asyncQuestionReplies = parseCodexAsyncQuestionReplies(message);
+    const asyncQuestionReplies = parseCodexAsyncQuestionReplyInputs(parts);
     if (!asyncQuestionReplies && isCodexContextualUserMessage(input.item)) {
       return { handled: true, events: [] };
     }

@@ -12,6 +12,10 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  agentAsyncQuestionDraftKey,
+  pruneAgentAsyncQuestionDrafts,
+} from "@/state/agent-async-question-draft-store";
 import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
@@ -20,10 +24,6 @@ import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { buildQuestionCardKey } from "./agent-session-question-keys";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { AgentAsyncQuestionCard } from "./agent-async-question-card";
-import {
-  agentAsyncQuestionDraftKey,
-  pruneAgentAsyncQuestionDrafts,
-} from "./agent-async-question-draft-store";
 import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 import { ScrollToBottomButton } from "./scroll-to-bottom-button";

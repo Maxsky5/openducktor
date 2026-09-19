@@ -1,7 +1,8 @@
-import type {
-  AgentAsyncQuestion,
-  AgentAsyncQuestionAnnotation,
-  AgentAsyncQuestionReply,
+import {
+  agentAsyncQuestionMatchesReplyId,
+  type AgentAsyncQuestion,
+  type AgentAsyncQuestionAnnotation,
+  type AgentAsyncQuestionReply,
 } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { AgentAsyncQuestionSkipMessage } from "@/types/agent-orchestrator";
@@ -112,7 +113,10 @@ export const applyAsyncQuestionAnnotation = (
     current.pendingAsyncQuestions.map((question) => [question.questionItemId, question]),
   );
   for (const question of annotation.questions) {
-    if (!current.handledAsyncQuestionIds.has(question.questionItemId)) {
+    if (
+      !current.handledAsyncQuestionIds.has(question.questionItemId) &&
+      !current.handledAsyncQuestionIds.has(question.sourceMessageId)
+    ) {
       pendingById.set(question.questionItemId, question);
     }
   }
@@ -127,7 +131,14 @@ export const applyAsyncQuestionUserMessage = (
 ): AgentAsyncQuestionProjection => {
   const handled = new Set(current.handledAsyncQuestionIds);
   if (replies) {
-    for (const reply of replies) handled.add(reply.questionItemId);
+    for (const reply of replies) {
+      handled.add(reply.questionItemId);
+      for (const question of current.pendingAsyncQuestions) {
+        if (agentAsyncQuestionMatchesReplyId(question, reply.questionItemId)) {
+          handled.add(question.questionItemId);
+        }
+      }
+    }
   } else {
     const skippedQuestionItemIds =
       questionItemIds ?? current.pendingAsyncQuestions.map((question) => question.questionItemId);
@@ -135,7 +146,7 @@ export const applyAsyncQuestionUserMessage = (
   }
   return {
     pendingAsyncQuestions: current.pendingAsyncQuestions.filter(
-      (question) => !handled.has(question.questionItemId),
+      (question) => !handled.has(question.questionItemId) && !handled.has(question.sourceMessageId),
     ),
     handledAsyncQuestionIds: handled,
     asyncQuestionSkipMessages: replies
@@ -153,7 +164,7 @@ export const markAsyncQuestionsHandled = (
   return {
     ...current,
     pendingAsyncQuestions: current.pendingAsyncQuestions.filter(
-      (question) => !handled.has(question.questionItemId),
+      (question) => !handled.has(question.questionItemId) && !handled.has(question.sourceMessageId),
     ),
     handledAsyncQuestionIds: handled,
   };

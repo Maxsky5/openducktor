@@ -141,6 +141,42 @@ describe("Codex event mapper pipeline", () => {
     ]);
   });
 
+  test("projects async assistant messages without questions as normal messages", () => {
+    const item = {
+      type: "agentMessage" as const,
+      id: "async-message-1",
+      text: "I am still working on this.",
+      phase: "commentary" as const,
+      memoryCitation: null,
+      delivery: "async" as const,
+      questions: null,
+    };
+    const live = projectCodexCanonicalEvents(
+      createCodexEventMapperPipeline().runLive(
+        { kind: "item_completed", item },
+        { source: "live", threadId: "thread-1", turnId: "turn-1" },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      createCodexEventMapperPipeline().runThreadItem(
+        { item, index: 0 },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+
+    expect(live).toEqual([
+      expect.objectContaining({
+        type: "assistant_message",
+        message: "I am still working on this.",
+      }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({ role: "assistant", text: "I am still working on this." }),
+    ]);
+    expect(live[0]).not.toHaveProperty("asyncQuestion");
+    expect(history[0]).not.toHaveProperty("asyncQuestion");
+  });
+
   test("keeps malformed async questions visible with an actionable error", () => {
     const item = {
       type: "agentMessage" as const,
@@ -149,7 +185,7 @@ describe("Codex event mapper pipeline", () => {
       phase: "commentary" as const,
       memoryCitation: null,
       delivery: "async" as const,
-      questions: null,
+      questions: [],
     };
     const live = projectCodexCanonicalEvents(
       createCodexEventMapperPipeline().runLive(
@@ -231,11 +267,13 @@ describe("Codex event mapper pipeline", () => {
       type: "userMessage" as const,
       id: "reply-wrapped",
       content: [
+        { type: "skill" as const, name: "review", path: "/skills/review" },
         {
           type: "text" as const,
           text: `# Context from my IDE setup:\n\nThe second question remains pending.\n\n## My request for Codex:\n${reply}`,
           text_elements: [],
         },
+        { type: "mention" as const, name: "config.ts", path: "/repo/config.ts" },
       ],
     };
     const live = projectCodexCanonicalEvents(

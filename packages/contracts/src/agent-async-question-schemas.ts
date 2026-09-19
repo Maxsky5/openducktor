@@ -1,23 +1,25 @@
 import { z } from "zod";
 
-const nonEmptyStringSchema = z.string().trim().min(1);
+const nonBlankStringSchema = z.string().refine((value) => value.trim().length > 0, {
+  message: "String must contain non-whitespace text",
+});
 
 export const agentAsyncQuestionSchema = z
   .object({
-    questionItemId: nonEmptyStringSchema,
-    sourceMessageId: nonEmptyStringSchema,
+    questionItemId: nonBlankStringSchema,
+    sourceMessageId: nonBlankStringSchema,
     questionIndex: z.number().int().nonnegative(),
-    title: nonEmptyStringSchema,
-    options: z.array(nonEmptyStringSchema).nullable(),
+    title: nonBlankStringSchema,
+    options: z.array(nonBlankStringSchema).min(1).nullable(),
   })
   .strict();
 export type AgentAsyncQuestion = z.infer<typeof agentAsyncQuestionSchema>;
 
 export const agentAsyncQuestionReplySchema = z
   .object({
-    questionItemId: nonEmptyStringSchema,
-    question: nonEmptyStringSchema,
-    answer: nonEmptyStringSchema,
+    questionItemId: nonBlankStringSchema,
+    question: nonBlankStringSchema,
+    answer: nonBlankStringSchema,
   })
   .strict();
 export type AgentAsyncQuestionReply = z.infer<typeof agentAsyncQuestionReplySchema>;
@@ -32,8 +34,13 @@ export const agentAsyncQuestionAnnotationSchema = z.discriminatedUnion("status",
   z
     .object({
       status: z.literal("invalid"),
-      error: nonEmptyStringSchema,
+      error: nonBlankStringSchema,
     })
     .strict(),
 ]);
 export type AgentAsyncQuestionAnnotation = z.infer<typeof agentAsyncQuestionAnnotationSchema>;
+
+export const agentAsyncQuestionMatchesReplyId = (
+  question: AgentAsyncQuestion,
+  replyId: string,
+): boolean => question.questionItemId === replyId || question.sourceMessageId === replyId;

@@ -1,8 +1,10 @@
 import { z } from "zod";
-import type {
-  AgentAsyncQuestion,
-  AgentAsyncQuestionReply,
-  CodexAppServerThreadItem,
+import {
+  agentAsyncQuestionMatchesReplyId,
+  type AgentAsyncQuestion,
+  type AgentAsyncQuestionReply,
+  type CodexAppServerThreadItem,
+  type CodexAppServerUserInput,
 } from "@openducktor/contracts";
 
 const OPEN_TAG = "<send_user_message_question_reply>";
@@ -15,14 +17,17 @@ export const CODEX_ASYNC_QUESTION_FALLBACK_ERROR =
 type CodexAgentMessageItem = Extract<CodexAppServerThreadItem, { type: "agentMessage" }>;
 
 const sourceQuestionSchema = z.object({
-  title: z.string().trim().min(1),
-  options: z.array(z.string().trim().min(1)).nullable(),
+  title: z.string().refine((value) => value.trim().length > 0),
+  options: z
+    .array(z.string().refine((value) => value.trim().length > 0))
+    .min(1)
+    .nullable(),
 });
 
 const replySchema = z.object({
-  questionItemId: z.string().trim().min(1),
-  question: z.string().trim().min(1),
-  answer: z.string().trim().min(1),
+  questionItemId: z.string().refine((value) => value.trim().length > 0),
+  question: z.string().refine((value) => value.trim().length > 0),
+  answer: z.string().refine((value) => value.trim().length > 0),
 });
 
 export type ParsedCodexAsyncQuestion =
@@ -37,6 +42,9 @@ export const parseCodexAsyncQuestionItem = (
   item: CodexAgentMessageItem,
 ): ParsedCodexAsyncQuestion => {
   if (item.delivery !== "async") {
+    return { kind: "not_async_question" };
+  }
+  if (item.questions == null) {
     return { kind: "not_async_question" };
   }
   const parsed = z.array(sourceQuestionSchema).min(1).safeParse(item.questions);
@@ -92,6 +100,16 @@ export const parseCodexAsyncQuestionReplies = (text: string): AgentAsyncQuestion
   }
 };
 
+export const parseCodexAsyncQuestionReplyInputs = (
+  inputs: readonly CodexAppServerUserInput[],
+): AgentAsyncQuestionReply[] | null => {
+  const content = inputs.filter((input) => input.type !== "skill" && input.type !== "mention");
+  if (content.length !== 1 || content[0]?.type !== "text") {
+    return null;
+  }
+  return parseCodexAsyncQuestionReplies(content[0].text);
+};
+
 export const codexAsyncQuestionReplyText = (replies: AgentAsyncQuestionReply[]): string =>
   replies.map((reply) => `> ${reply.question}\n\n${reply.answer}`).join("\n\n");
 
@@ -136,7 +154,10 @@ export class CodexAsyncQuestionState {
     }
     state.seenSourceMessages.add(sourceMessageId);
     for (const question of questions) {
-      if (!state.handled.has(question.questionItemId)) {
+      if (
+        !state.handled.has(question.questionItemId) &&
+        !state.handled.has(question.sourceMessageId)
+      ) {
         state.pending.set(question.questionItemId, question);
       }
     }
@@ -144,9 +165,14 @@ export class CodexAsyncQuestionState {
 
   resolve(runtimeId: string, threadId: string, questionItemIds: readonly string[]): void {
     const state = this.state(runtimeId, threadId);
-    for (const questionItemId of questionItemIds) {
-      state.pending.delete(questionItemId);
-      state.handled.add(questionItemId);
+    for (const replyId of questionItemIds) {
+      state.handled.add(replyId);
+      for (const [questionItemId, question] of state.pending) {
+        if (agentAsyncQuestionMatchesReplyId(question, replyId)) {
+          state.pending.delete(questionItemId);
+          state.handled.add(questionItemId);
+        }
+      }
     }
   }
 

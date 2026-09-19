@@ -1,7 +1,12 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
+import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
+import {
+  clearAgentAsyncQuestionDrafts,
+  pruneAgentAsyncQuestionDrafts,
+} from "@/state/agent-async-question-draft-store";
+import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { AgentAsyncQuestionCard } from "./agent-async-question-card";
-import { pruneAgentAsyncQuestionDrafts } from "./agent-async-question-draft-store";
 
 describe("AgentAsyncQuestionCard", () => {
   const sessionIdentity = {
@@ -9,6 +14,10 @@ describe("AgentAsyncQuestionCard", () => {
     runtimeKind: "codex" as const,
     workingDirectory: "/repo",
   };
+
+  beforeEach(() => {
+    clearAgentAsyncQuestionDrafts(sessionIdentity);
+  });
 
   test("offers suggestions and accepts free text", async () => {
     const onSubmit = mock(async () => {});
@@ -245,5 +254,46 @@ describe("AgentAsyncQuestionCard", () => {
     }
     expect(firstInput.value).toBe("");
     expect(secondInput.value).toBe("Second remote draft");
+  });
+
+  test("clears drafts when the session store removes the session", () => {
+    const question = {
+      questionItemId: '["request_user_input_async","message-removed",0]',
+      sourceMessageId: "message-removed",
+      questionIndex: 0,
+      title: "Which draft should be cleared?",
+      options: null,
+    };
+    const initial = render(
+      <AgentAsyncQuestionCard
+        sessionIdentity={sessionIdentity}
+        question={question}
+        disabled={false}
+        isSubmitting={false}
+        onSubmit={async () => {}}
+      />,
+    );
+    fireEvent.change(initial.getByLabelText(`Answer: ${question.title}`), {
+      target: { value: "Remove this draft" },
+    });
+    initial.unmount();
+
+    const store = createAgentSessionsStore();
+    const session = createAgentSessionFixture(sessionIdentity);
+    store.replaceSession(session);
+    store.removeSession(session);
+
+    const restored = render(
+      <AgentAsyncQuestionCard
+        sessionIdentity={sessionIdentity}
+        question={question}
+        disabled={false}
+        isSubmitting={false}
+        onSubmit={async () => {}}
+      />,
+    );
+    const input = restored.getByLabelText(`Answer: ${question.title}`);
+    if (!(input instanceof HTMLInputElement)) throw new Error("Expected an answer input.");
+    expect(input.value).toBe("");
   });
 });

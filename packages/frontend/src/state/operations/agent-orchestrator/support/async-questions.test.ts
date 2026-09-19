@@ -219,4 +219,50 @@ describe("asynchronous question projection", () => {
     expect(projected.pendingAsyncQuestions).toEqual([second]);
     expect(projected.handledAsyncQuestionIds).toEqual(new Set([first.questionItemId]));
   });
+
+  test("history resolves all source questions from a legacy source-message reply ID", () => {
+    const first = question("message-legacy", 0);
+    const second = question("message-legacy", 1);
+    const projected = projectAsyncQuestionsFromHistory([
+      {
+        role: "assistant",
+        messageId: "message-legacy",
+        timestamp: "2026-09-19T10:00:00.000Z",
+        text: "Choose two settings",
+        parts: [],
+        asyncQuestion: { status: "pending", questions: [first, second] },
+      },
+      {
+        role: "user",
+        messageId: "reply-legacy",
+        timestamp: "2026-09-19T10:01:00.000Z",
+        text: "> Choose two settings\n\nDone",
+        displayParts: [],
+        state: "read",
+        parts: [],
+        asyncQuestionReplies: [
+          { questionItemId: "message-legacy", question: first.title, answer: "Done" },
+        ],
+      },
+    ]);
+
+    expect(projected.pendingAsyncQuestions).toEqual([]);
+    expect(projected.handledAsyncQuestionIds).toEqual(
+      new Set(["message-legacy", first.questionItemId, second.questionItemId]),
+    );
+  });
+
+  test("does not add source questions after an early legacy reply", () => {
+    const source = question("message-early");
+    const replied = applyAsyncQuestionUserMessage(
+      emptyAgentAsyncQuestionProjection(),
+      [{ questionItemId: source.sourceMessageId, question: source.title, answer: "Done" }],
+      userMessage("reply-early"),
+    );
+
+    expect(
+      applyAsyncQuestionAnnotation(replied, { status: "pending", questions: [source] })
+        .pendingAsyncQuestions,
+    ).toEqual([]);
+  });
 });

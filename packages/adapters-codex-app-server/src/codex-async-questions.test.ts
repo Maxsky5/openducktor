@@ -4,6 +4,7 @@ import {
   codexAsyncQuestionItemId,
   encodeCodexAsyncQuestionReply,
   parseCodexAsyncQuestionItem,
+  parseCodexAsyncQuestionReplyInputs,
   parseCodexAsyncQuestionReplies,
 } from "./codex-async-questions";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
@@ -38,12 +39,11 @@ describe("Codex asynchronous questions", () => {
   test.each([
     ["missing questions", undefined],
     ["null questions", null],
-    ["empty questions", []],
-  ])("classifies async items with %s as invalid", (_label, questions) => {
+  ])("treats async messages with %s as plain assistant messages", (_label, questions) => {
     const item: Parameters<typeof parseCodexAsyncQuestionItem>[0] = {
       type: "agentMessage",
-      id: "call-invalid",
-      text: "",
+      id: "message-async",
+      text: "Work continues",
       phase: "commentary",
       memoryCitation: null,
       delivery: "async",
@@ -51,7 +51,24 @@ describe("Codex asynchronous questions", () => {
     };
     if (questions === undefined) delete item.questions;
 
-    expect(parseCodexAsyncQuestionItem(item)).toEqual({
+    expect(parseCodexAsyncQuestionItem(item)).toEqual({ kind: "not_async_question" });
+  });
+
+  test.each([
+    ["an empty question list", []],
+    ["an empty option list", [{ title: "Which environment?", options: [] }]],
+  ])("classifies %s as invalid", (_label, questions) => {
+    expect(
+      parseCodexAsyncQuestionItem({
+        type: "agentMessage",
+        id: "call-invalid",
+        text: "Which environment?",
+        phase: "commentary",
+        memoryCitation: null,
+        delivery: "async",
+        questions,
+      }),
+    ).toEqual({
       kind: "invalid",
       error:
         "OpenDucktor could not open this structured question. Answer through the main chat composer.",
@@ -63,6 +80,49 @@ describe("Codex asynchronous questions", () => {
     expect(parseCodexAsyncQuestionReplies(encodeCodexAsyncQuestionReply(reply))).toEqual([reply]);
     expect(
       parseCodexAsyncQuestionReplies(`${encodeCodexAsyncQuestionReply(reply)} trailing`),
+    ).toBeNull();
+  });
+
+  test("preserves question and option text while checking for blank values", () => {
+    expect(
+      parseCodexAsyncQuestionItem({
+        type: "agentMessage",
+        id: "call-spaces",
+        text: "Choose",
+        phase: "commentary",
+        memoryCitation: null,
+        delivery: "async",
+        questions: [{ title: "  Keep title spacing  ", options: [" First ", "Second"] }],
+      }),
+    ).toEqual({
+      kind: "questions",
+      questions: [
+        {
+          questionItemId: codexAsyncQuestionItemId("call-spaces", 0),
+          sourceMessageId: "call-spaces",
+          questionIndex: 0,
+          title: "  Keep title spacing  ",
+          options: [" First ", "Second"],
+        },
+      ],
+    });
+  });
+
+  test("parses one reply text input and ignores Codex skill and mention inputs", () => {
+    const reply = { questionItemId: "question-1", question: "Which?", answer: "Staging" };
+
+    expect(
+      parseCodexAsyncQuestionReplyInputs([
+        { type: "skill", name: "review", path: "/skills/review" },
+        { type: "text", text: encodeCodexAsyncQuestionReply(reply), text_elements: [] },
+        { type: "mention", name: "config.ts", path: "/repo/config.ts" },
+      ]),
+    ).toEqual([reply]);
+    expect(
+      parseCodexAsyncQuestionReplyInputs([
+        { type: "text", text: encodeCodexAsyncQuestionReply(reply), text_elements: [] },
+        { type: "text", text: "extra", text_elements: [] },
+      ]),
     ).toBeNull();
   });
 
@@ -78,6 +138,38 @@ describe("Codex asynchronous questions", () => {
     state.add("runtime", "thread", [question]);
     state.resolve("runtime", "thread", [question.questionItemId]);
     state.add("runtime", "thread", [question]);
+    expect(state.pendingForSession("runtime", "thread")).toEqual([]);
+  });
+
+  test("resolves all source questions from a legacy source-message reply ID", () => {
+    const state = new CodexAsyncQuestionState();
+    const questions = [0, 1].map((questionIndex) => ({
+      questionItemId: codexAsyncQuestionItemId("call-legacy", questionIndex),
+      sourceMessageId: "call-legacy",
+      questionIndex,
+      title: `Question ${questionIndex + 1}`,
+      options: null,
+    }));
+
+    state.add("runtime", "thread", questions);
+    state.resolve("runtime", "thread", ["call-legacy"]);
+
+    expect(state.pendingForSession("runtime", "thread")).toEqual([]);
+  });
+
+  test("does not add questions after an early legacy source-message reply", () => {
+    const state = new CodexAsyncQuestionState();
+    const question = {
+      questionItemId: codexAsyncQuestionItemId("call-early", 0),
+      sourceMessageId: "call-early",
+      questionIndex: 0,
+      title: "Which?",
+      options: null,
+    };
+
+    state.resolve("runtime", "thread", ["call-early"]);
+    state.add("runtime", "thread", [question]);
+
     expect(state.pendingForSession("runtime", "thread")).toEqual([]);
   });
 

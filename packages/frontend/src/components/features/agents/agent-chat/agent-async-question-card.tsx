@@ -3,8 +3,8 @@ import { CircleHelp, LoaderCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAgentAsyncQuestionDraft } from "@/state/agent-async-question-draft-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { useAgentAsyncQuestionDraft } from "./agent-async-question-draft-store";
 
 export function AgentAsyncQuestionCard({
   sessionIdentity,
