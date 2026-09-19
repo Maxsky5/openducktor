@@ -50,7 +50,8 @@ beforeAll(async () => {
   for (const result of z.array(resultSchema).parse(JSON.parse(stdout))) {
     resultsByScenario.set(result.configScenario, result);
   }
-}, 15_000);
+  // The hook boots a real Bun child that exercises filesystem guards on a shared CI runner.
+}, 30_000);
 
 test.each([
   ["production root", "direct"],

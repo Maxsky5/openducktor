@@ -497,7 +497,8 @@ describe("node task asset file port", () => {
       for (const result of z.array(resultSchema).parse(JSON.parse(stdout))) {
         resultsByCase.set(`${result.liveScope} ${result.action}`, result);
       }
-    }, 15_000);
+      // The hook boots a real Bun child that exercises filesystem guards on a shared CI runner.
+    }, 30_000);
 
     test.each([
       ["production", "staged write", "stage", null],
