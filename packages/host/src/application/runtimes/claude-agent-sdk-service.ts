@@ -52,9 +52,11 @@ export type ClaudeAgentSdkService = {
     input: ResumeAgentSessionInput,
     runtimeId: string,
   ): Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
+  /** Reports native admission before the remaining continuation startup work settles. */
   continueInterruptedTurn(
     input: ContinueInterruptedAgentTurnInput,
     runtimeId: string,
+    onContinuationAdmission?: () => void,
   ): Effect.Effect<AgentSessionSummary, ClaudeAgentSdkServiceError>;
   forkSession(
     input: ForkAgentSessionInput,

@@ -44,7 +44,10 @@ import {
   prepareClaudeApprovalReply,
   prepareClaudeQuestionReply,
 } from "./claude-agent-sdk-pending-input";
-import { createClaudeAgentSdkSession } from "./claude-agent-sdk-session-factory";
+import {
+  createClaudeAgentSdkSession,
+  type CreateClaudeAgentSdkSessionInput,
+} from "./claude-agent-sdk-session-factory";
 import { applyClaudeSessionModel, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
   type ClaudeSessionLaunchInput,
@@ -128,7 +131,11 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     );
   }
 
-  continueInterruptedTurn(input: ContinueInterruptedAgentTurnInput, runtimeId: string) {
+  continueInterruptedTurn(
+    input: ContinueInterruptedAgentTurnInput,
+    runtimeId: string,
+    onContinuationAdmission?: () => void,
+  ) {
     return requireClaudeSessionScope(input.sessionScope, "continue interrupted Claude turn").pipe(
       Effect.flatMap((scope) =>
         Effect.gen(this, function* () {
@@ -146,6 +153,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
             input,
             runtimeId,
             continuedClaudeSessionLaunch(scope, input.externalSessionId),
+            onContinuationAdmission,
           ).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
@@ -362,6 +370,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     input: ClaudeSessionInput,
     runtimeId: string,
     sessionInput: ClaudeSessionLaunchInput,
+    onContinuationAdmission?: () => void,
   ) {
     return Effect.gen(this, function* () {
       const resumeSessionId = sessionInput.options.resume;
@@ -384,23 +393,27 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         ),
       );
       const mcpBridgeConnection = yield* this.input.resolveMcpBridgeConnection(input.repoPath);
+      const createSessionInput: CreateClaudeAgentSdkSessionInput = {
+        emit: this.emit.bind(this),
+        initialTodos,
+        input,
+        now: this.now,
+        randomId: this.randomId,
+        resolvedDependencies: {
+          claudeExecutablePath: this.input.claudeExecutablePath,
+          mcpBridgeConnection,
+          mcpCommand,
+        },
+        runtimeId,
+        serviceInput: this.input,
+        sessionInput,
+        sessionStore: this.sessionStore,
+      };
+      if (onContinuationAdmission) {
+        createSessionInput.onContinuationAdmission = onContinuationAdmission;
+      }
       return yield* fromPromise("claudeRuntime.createSession", () =>
-        createClaudeAgentSdkSession({
-          emit: this.emit.bind(this),
-          initialTodos,
-          input,
-          now: this.now,
-          randomId: this.randomId,
-          resolvedDependencies: {
-            claudeExecutablePath: this.input.claudeExecutablePath,
-            mcpBridgeConnection,
-            mcpCommand,
-          },
-          runtimeId,
-          serviceInput: this.input,
-          sessionInput,
-          sessionStore: this.sessionStore,
-        }),
+        createClaudeAgentSdkSession(createSessionInput),
       );
     });
   }

@@ -475,7 +475,7 @@ describe("createClaudeAgentSdkSession", () => {
     }
   });
 
-  test("fails creation when renaming a resumed Claude session fails", async () => {
+  test("reports continuation admission before a resumed session rename fails", async () => {
     const streamFinished = deferred<void>();
     const teardownFinished = deferred<void>();
     const teardownStarted = deferred<void>();
@@ -496,6 +496,13 @@ describe("createClaudeAgentSdkSession", () => {
         output_style: "default",
       }),
       async *[Symbol.asyncIterator]() {
+        yield claudeSdkMessageFixture({
+          type: "system",
+          subtype: "session_state_changed",
+          state: "running",
+          uuid: "7b7fe9e0-fd84-476f-8610-4c9ce2beb135",
+          session_id: "session-1",
+        });
         await streamFinished.promise;
         yield* [];
       },
@@ -510,6 +517,7 @@ describe("createClaudeAgentSdkSession", () => {
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
       const events: AgentEvent[] = [];
+      const onContinuationAdmission = mock(() => {});
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
@@ -534,6 +542,7 @@ describe("createClaudeAgentSdkSession", () => {
         },
         initialTodos: [],
         now: () => "2026-06-25T20:00:00.000Z",
+        onContinuationAdmission,
         randomId: () => "id",
         resolvedDependencies: {
           claudeExecutablePath: process.execPath,
@@ -549,6 +558,7 @@ describe("createClaudeAgentSdkSession", () => {
         sessionInput: {
           externalSessionId: "session-1",
           options: { resume: "session-1" },
+          resumeInterruptedTurn: true,
           startedMessage: "Resumed build session",
           title: "Builder",
         },
@@ -568,6 +578,7 @@ describe("createClaudeAgentSdkSession", () => {
       await Promise.resolve();
       await Promise.resolve();
 
+      expect(onContinuationAdmission).toHaveBeenCalledTimes(1);
       expect(queryReturn).toHaveBeenCalledTimes(1);
       await teardownStarted.promise;
       expect(creationSettled).toBe(false);
@@ -592,6 +603,16 @@ describe("createClaudeAgentSdkSession", () => {
       close: () => streamFinished.resolve(),
       async *[Symbol.asyncIterator]() {
         await admissionGate.promise;
+        yield {
+          ...claudeSdkMessageFixture({
+            type: "user",
+            message: { role: "user", content: [{ type: "text", text: "Continue" }] },
+            parent_tool_use_id: null,
+            session_id: "session-continuation",
+            uuid: "94db8937-6c10-4cfe-9aac-7bc9bc72f004",
+          }),
+          isSynthetic: true,
+        };
         yield claudeSdkMessageFixture({
           type: "system",
           subtype: "session_state_changed",
@@ -608,6 +629,7 @@ describe("createClaudeAgentSdkSession", () => {
     try {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
       const events: AgentEvent[] = [];
+      const onContinuationAdmission = mock(() => {});
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
         claudeExecutablePath: process.execPath,
@@ -632,6 +654,7 @@ describe("createClaudeAgentSdkSession", () => {
         },
         initialTodos: [],
         now: () => "2026-06-25T20:00:00.000Z",
+        onContinuationAdmission,
         randomId: () => "id",
         resolvedDependencies: {
           claudeExecutablePath: process.execPath,
@@ -663,6 +686,7 @@ describe("createClaudeAgentSdkSession", () => {
         status: "running",
       });
       expect(events.map((event) => event.type)).toEqual(["session_started"]);
+      expect(onContinuationAdmission).toHaveBeenCalledTimes(1);
       const session = sessionStore.get("session-continuation");
       if (!session) {
         throw new Error("Expected the admitted continuation session");

@@ -179,7 +179,8 @@ const createHarness = async (
     continueInterruptedTurn: (
       input: Parameters<ClaudeAgentSdkService["continueInterruptedTurn"]>[0],
       runtimeId: string,
-    ) => continueInterruptedTurnImpl(input, runtimeId),
+      onContinuationAdmission?: () => void,
+    ) => continueInterruptedTurnImpl(input, runtimeId, onContinuationAdmission),
     loadSessionContextUsage: (
       input: Parameters<ClaudeAgentSdkService["loadSessionContextUsage"]>[0],
     ) => loadSessionContextUsageImpl(input),
@@ -413,8 +414,10 @@ describe("Claude host live-session adapter", () => {
 
   test("serializes inspect-session advice when retaining an admitted continuation fails", async () => {
     const harness = await createHarness(workingDirectoryDependencies);
-    harness.setContinueInterruptedTurn(() =>
-      Effect.succeed({ ...summary, status: "running" as const }),
+    harness.setContinueInterruptedTurn((_input, _runtimeId, onContinuationAdmission) =>
+      Effect.sync(() => onContinuationAdmission?.()).pipe(
+        Effect.as({ ...summary, status: "running" as const }),
+      ),
     );
     harness.failNextMutationAfterStateApply();
 
@@ -433,6 +436,42 @@ describe("Claude host live-session adapter", () => {
         reason: "continuation_failed",
         message:
           "Publication failed. The adapter already accepted the continuation, so the runtime can be working on it.",
+        nextAction:
+          "Inspect the runtime and this session. Retry Resume only if the turn is still unfinished.",
+      },
+    });
+  });
+
+  test("serializes inspect-session advice when startup fails after native admission", async () => {
+    const harness = await createHarness(workingDirectoryDependencies);
+    harness.setContinueInterruptedTurn((_input, _runtimeId, onContinuationAdmission) =>
+      Effect.sync(() => onContinuationAdmission?.()).pipe(
+        Effect.zipRight(
+          Effect.fail(
+            new HostOperationError({
+              operation: "claudeRuntime.createSession",
+              message: "Claude startup failed after admission.",
+            }),
+          ),
+        ),
+      ),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        harness.adapter.continueInterruptedTurn({
+          ...startInput,
+          externalSessionId: "session-1",
+        }),
+      ),
+    );
+
+    expect(hostInvokeFailureFromError(failure)).toMatchObject({
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "continuation_failed",
+        message:
+          "Claude startup failed after admission. The adapter already accepted the continuation, so the runtime can be working on it.",
         nextAction:
           "Inspect the runtime and this session. Retry Resume only if the turn is still unfinished.",
       },

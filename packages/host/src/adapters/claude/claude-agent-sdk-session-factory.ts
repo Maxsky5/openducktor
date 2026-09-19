@@ -31,6 +31,7 @@ export type CreateClaudeAgentSdkSessionInput = {
   emit: ClaudeAgentSdkEventEmitter;
   input: ClaudeSessionInput;
   now: () => string;
+  onContinuationAdmission?: () => void;
   randomId: () => string;
   initialTodos: AgentSessionTodoItem[];
   resolvedDependencies: ClaudeAgentSdkOptionsDependencies;
@@ -90,6 +91,7 @@ export const createClaudeAgentSdkSession = async ({
   input,
   initialTodos,
   now,
+  onContinuationAdmission,
   randomId,
   resolvedDependencies,
   runtimeId,
@@ -160,6 +162,7 @@ export const createClaudeAgentSdkSession = async ({
   sessionStore.set(session);
   const isContinuation = sessionInput.resumeInterruptedTurn === true;
   const continuationAdmission = isContinuation ? Promise.withResolvers<void>() : null;
+  let continuationAdmissionReported = false;
   const consumptionInput: Parameters<typeof consumeClaudeSession>[0] = {
     session,
     sessionStore,
@@ -168,7 +171,12 @@ export const createClaudeAgentSdkSession = async ({
     onBackgroundFailure: serviceInput.onBackgroundFailure,
   };
   if (continuationAdmission) {
-    consumptionInput.onContinuationAdmission = () => continuationAdmission.resolve();
+    consumptionInput.onContinuationAdmission = () => {
+      if (continuationAdmissionReported) return;
+      continuationAdmissionReported = true;
+      continuationAdmission.resolve();
+      onContinuationAdmission?.();
+    };
   }
   const consumption = consumeClaudeSession(consumptionInput);
   try {

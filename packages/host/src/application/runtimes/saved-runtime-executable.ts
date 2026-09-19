@@ -38,12 +38,3 @@ export const resolveSavedRuntimeExecutableConfig = ({
     const resolved = yield* validateExactToolPath(toolDiscovery, kind, configuredPath);
     return { configuredPath, executablePath: resolved.path };
   });
-
-export const resolveSavedRuntimeExecutable = (input: {
-  kind: RuntimeKind;
-  settingsConfig: SettingsConfigPort;
-  toolDiscovery: ToolDiscoveryPort;
-}) =>
-  resolveSavedRuntimeExecutableConfig(input).pipe(
-    Effect.map(({ executablePath }) => executablePath),
-  );

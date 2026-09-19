@@ -336,15 +336,13 @@ export const createClaudeLiveSessionAdapterPreparer =
             return requireSessionWorkingDirectory(input, "continue-interrupted-turn").pipe(
               Effect.flatMap(() =>
                 runSummary(operation, () =>
-                  service
-                    .continueInterruptedTurn(toClaudeContinueInput(input), runtime.runtimeId)
-                    .pipe(
-                      Effect.tap(() =>
-                        Effect.sync(() => {
-                          continuationAdmitted = true;
-                        }),
-                      ),
-                    ),
+                  service.continueInterruptedTurn(
+                    toClaudeContinueInput(input),
+                    runtime.runtimeId,
+                    () => {
+                      continuationAdmitted = true;
+                    },
+                  ),
                 ),
               ),
               Effect.mapError((cause) =>
