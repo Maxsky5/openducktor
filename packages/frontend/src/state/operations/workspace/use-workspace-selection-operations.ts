@@ -368,7 +368,6 @@ export function useWorkspaceSelectionOperations({
           toast.error("Failed to switch repository", {
             description: errorMessage(error),
           });
-          setIsSwitchingWorkspace(false);
           throw error;
         }
       } finally {

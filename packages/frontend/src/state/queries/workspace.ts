@@ -126,10 +126,6 @@ export const writeWorkspaceListToQuery = (
     },
     { revert: false },
   );
-  if (Array.isArray(recordsOrUpdater)) {
-    queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), recordsOrUpdater);
-    return;
-  }
   queryClient.setQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list(), recordsOrUpdater);
 };
 
