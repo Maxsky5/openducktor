@@ -596,8 +596,27 @@ describe("CodexThreadInventoryReader", () => {
         externalSessionId: "thread-local",
         workingDirectory: "/repo",
         allowUnmaterialized: true,
+        resolveEmptyRolloutWorkingDirectory: () => "/repo",
       }),
     ).resolves.toEqual({ thread: { id: "thread-local", cwd: "/repo", turns: [] } });
+  });
+
+  test("propagates an empty rollout when only legacy unmaterialized reads are allowed", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
+    const client = createInventoryClient({
+      threadRead: async () => {
+        throw failure;
+      },
+    });
+
+    await expect(
+      reader.readThreadHistory(client, {
+        externalSessionId: "thread-local",
+        workingDirectory: "/repo",
+        allowUnmaterialized: true,
+      }),
+    ).rejects.toBe(failure);
   });
 
   test("propagates an empty-rollout failure without a matching live local session", async () => {

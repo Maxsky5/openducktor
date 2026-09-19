@@ -40,6 +40,8 @@ type CodexSessionHistoryInput = {
   runtime: CodexSessionHistoryRuntime;
   prepareImageGenerations?: CodexImageGenerationPreparer | undefined;
   threadInventory: Pick<CodexThreadInventoryReader, "readThreadHistory" | "readThreadTurnIds">;
+  resolveEmptyRolloutWorkingDirectory?: (() => string | undefined) | undefined;
+  onThreadMaterialized?: (() => void) | undefined;
 };
 
 const codexSystemPromptHistoryMessage = ({
@@ -207,11 +209,15 @@ export const loadCodexSessionHistory = async ({
   runtime,
   threadInventory,
   prepareImageGenerations,
+  resolveEmptyRolloutWorkingDirectory,
+  onThreadMaterialized,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
   const { client, runtimeId } = runtime;
   const response = await threadInventory.readThreadHistory(client, {
     ...input,
     allowUnmaterialized: session !== undefined,
+    resolveEmptyRolloutWorkingDirectory,
+    onThreadMaterialized,
   });
   if (!response) {
     return [];

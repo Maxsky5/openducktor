@@ -91,7 +91,7 @@ const codexRpcFailureSchema = z.object({
   details: z.object({ method: z.string() }),
 });
 
-const isCodexEmptyRolloutThreadReadError = (cause: unknown): boolean => {
+export const isCodexEmptyRolloutThreadReadError = (cause: unknown): boolean => {
   const parsed = codexRpcFailureSchema.safeParse(cause);
   if (
     !parsed.success ||
@@ -111,9 +111,6 @@ const isCodexEmptyRolloutThreadReadError = (cause: unknown): boolean => {
 };
 
 export const isCodexUnmaterializedThreadError = (cause: unknown): boolean => {
-  if (isCodexEmptyRolloutThreadReadError(cause)) {
-    return true;
-  }
   const message = cause instanceof Error ? cause.message : String(cause);
   const inlineTurnsUnavailable =
     message.includes("is not materialized yet") &&

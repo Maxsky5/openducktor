@@ -1,6 +1,9 @@
 import { AgentRuntimeQueryError } from "@openducktor/core";
 import type { CodexAppServerThreadListParams, CodexAppServerTurn } from "@openducktor/contracts";
-import { isCodexUnmaterializedThreadError } from "./codex-app-server-shared";
+import {
+  isCodexEmptyRolloutThreadReadError,
+  isCodexUnmaterializedThreadError,
+} from "./codex-app-server-shared";
 import {
   type CodexThreadInventory,
   type CodexThreadSnapshot,
@@ -168,12 +171,16 @@ export class CodexThreadInventoryReader {
       externalSessionId: string;
       workingDirectory: string;
       allowUnmaterialized?: boolean;
+      resolveEmptyRolloutWorkingDirectory?: (() => string | undefined) | undefined;
+      onThreadMaterialized?: (() => void) | undefined;
     },
   ): Promise<CodexThreadHistoryReadResponse> {
     const response = await this.readThreadWithTurns(
       client,
       input.externalSessionId,
       input.allowUnmaterialized ? input.workingDirectory : undefined,
+      input.resolveEmptyRolloutWorkingDirectory,
+      input.onThreadMaterialized,
     );
     if (!response) {
       throw new AgentRuntimeQueryError(
@@ -197,21 +204,27 @@ export class CodexThreadInventoryReader {
     client: CodexAppServerClient,
     threadId: string,
     unmaterializedWorkingDirectory?: string,
+    resolveEmptyRolloutWorkingDirectory?: () => string | undefined,
+    onThreadMaterialized?: () => void,
   ): Promise<CodexThreadHistoryReadResponse | undefined> {
     let response: Awaited<ReturnType<CodexAppServerClient["threadRead"]>>;
     let pagedTurns: CodexAppServerTurn[];
     try {
       response = await client.threadRead({ threadId, includeTurns: false });
+      onThreadMaterialized?.();
       pagedTurns = await this.fetchThreadTurns(client, threadId, "full");
     } catch (error) {
-      if (isCodexUnmaterializedThreadError(error) && unmaterializedWorkingDirectory) {
+      const syntheticWorkingDirectory = isCodexEmptyRolloutThreadReadError(error)
+        ? resolveEmptyRolloutWorkingDirectory?.()
+        : isCodexUnmaterializedThreadError(error)
+          ? unmaterializedWorkingDirectory
+          : undefined;
+      if (syntheticWorkingDirectory !== undefined) {
         const thread: CodexThreadHistoryReadResponse["thread"] = {
           id: threadId,
           turns: [],
+          cwd: syntheticWorkingDirectory,
         };
-        if (unmaterializedWorkingDirectory) {
-          thread.cwd = unmaterializedWorkingDirectory;
-        }
         return {
           thread,
         };
