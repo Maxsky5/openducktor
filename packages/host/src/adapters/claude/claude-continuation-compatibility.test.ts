@@ -72,7 +72,7 @@ const resolveBundledCli = (manifest: ClaudeSdkManifest) => {
 const sha256OfFile = (path: string): Promise<string> =>
   new Promise((resolve, reject) => {
     const hash = createHash("sha256");
-    createReadStream(path)
+    createReadStream(path, { highWaterMark: 8 * 1024 * 1024 })
       .on("error", reject)
       .on("data", (chunk) => hash.update(chunk))
       .on("end", () => resolve(hash.digest("hex")));
@@ -133,13 +133,14 @@ describe("Claude interrupted-turn resume compatibility", () => {
     ).toBe(SUPPORTED_CLAUDE_CLI_VERSION);
   });
 
+  // The bundled CLI is about 217 MB on win32-x64, so hashing it can outlast the 5000 ms host budget.
   test("ships the verified CLI build for this platform", async () => {
     const manifest = readClaudeSdkManifest();
     const { entry, binaryPath } = resolveBundledCli(manifest);
 
     expect(statSync(binaryPath).size).toBe(entry.size);
     expect(await sha256OfFile(binaryPath)).toBe(entry.checksum);
-  });
+  }, 10_000);
 
   test("runs the bundled CLI version this continuation contract was verified against", () => {
     const manifest = readClaudeSdkManifest();
