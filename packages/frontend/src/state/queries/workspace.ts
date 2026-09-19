@@ -147,7 +147,7 @@ export const writeWorkspaceCatalogToQuery = (
   queryClient.setQueryData<WorkspaceCatalog>(workspaceQueryKeys.catalog(), catalog);
 };
 
-export const markWorkspaceSettingsSnapshotChanged = async (
+export const invalidateWorkspaceSettingsSnapshot = async (
   queryClient: QueryClient,
 ): Promise<void> => {
   await queryClient.invalidateQueries({
@@ -161,14 +161,14 @@ export const markWorkspaceSettingsSnapshotChanged = async (
   });
 };
 
-export const markWorkspaceCachesChanged = async (queryClient: QueryClient): Promise<void> => {
+export const invalidateWorkspaceCaches = async (queryClient: QueryClient): Promise<void> => {
   await queryClient.invalidateQueries({
     queryKey: workspaceQueryKeys.list(),
   });
   await queryClient.invalidateQueries({
     queryKey: workspaceQueryKeys.catalog(),
   });
-  await markWorkspaceSettingsSnapshotChanged(queryClient);
+  await invalidateWorkspaceSettingsSnapshot(queryClient);
 };
 
 const queryKeyHasIdentity = (queryKey: readonly unknown[], identity: string): boolean =>

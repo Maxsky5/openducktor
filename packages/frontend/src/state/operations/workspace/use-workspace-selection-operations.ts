@@ -13,9 +13,9 @@ import { errorMessage } from "@/lib/errors";
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
   dropWorkspaceQueries,
+  invalidateWorkspaceCaches,
+  invalidateWorkspaceSettingsSnapshot,
   loadWorkspaceListFromQuery,
-  markWorkspaceCachesChanged,
-  markWorkspaceSettingsSnapshotChanged,
   workspaceCatalogQueryOptions,
   workspaceListQueryOptions,
   writeWorkspaceCatalogToQuery,
@@ -113,7 +113,7 @@ const resolveActiveWorkspaceFromRecords = ({
 
 const refreshAfterRemovalFailure = async (queryClient: QueryClient): Promise<void> => {
   try {
-    await markWorkspaceCachesChanged(queryClient);
+    await invalidateWorkspaceCaches(queryClient);
   } catch (error) {
     toast.error("Workspace removal failed, and workspace refresh also failed", {
       description: errorMessage(error),
@@ -281,6 +281,10 @@ export function useWorkspaceSelectionOperations({
           applyWorkspaceRecords(records);
         }
       } catch (error) {
+        toast.error("Failed to reorder repositories", {
+          description: errorMessage(error),
+        });
+
         if (workspaceReorderVersionRef.current === reorderVersion) {
           if (optimisticRecords) {
             writeWorkspaceRecords(previousRecords);
@@ -290,15 +294,24 @@ export function useWorkspaceSelectionOperations({
             });
             setActiveWorkspace(selectedWorkspace);
           }
+          return;
+        }
 
-          toast.error("Failed to reorder repositories", {
-            description: errorMessage(error),
+        try {
+          applyWorkspaceRecords(
+            await queryClient.fetchQuery({
+              ...workspaceListQueryOptions(hostClient),
+              staleTime: 0,
+            }),
+          );
+        } catch (refreshError) {
+          toast.error("Failed to reorder repositories, and workspace reload also failed", {
+            description: errorMessage(refreshError),
           });
-          throw error;
         }
       }
     },
-    [applyWorkspaceRecords, hostClient, setActiveWorkspace, writeWorkspaceRecords],
+    [applyWorkspaceRecords, hostClient, queryClient, setActiveWorkspace, writeWorkspaceRecords],
   );
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
@@ -308,10 +321,6 @@ export function useWorkspaceSelectionOperations({
     ]);
     applyWorkspaceRecords(data);
   }, [applyWorkspaceRecords, hostClient, queryClient]);
-
-  const refreshWorkspaceSettingsAfterMutation = useCallback(async (): Promise<void> => {
-    await markWorkspaceSettingsSnapshotChanged(queryClient);
-  }, [queryClient]);
 
   const addWorkspace = useCallback(
     async (input: WorkspaceSelectionOperationsInput): Promise<void> => {
@@ -333,12 +342,12 @@ export function useWorkspaceSelectionOperations({
       }
       const workspace = await hostClient.workspaceAdd(workspaceInput);
       applyWorkspaceRecord(workspace);
-      await refreshWorkspaceSettingsAfterMutation();
+      await invalidateWorkspaceSettingsSnapshot(queryClient);
       toast.success("Repository added", {
         description: workspace.repoPath,
       });
     },
-    [applyWorkspaceRecord, hostClient, refreshWorkspaceSettingsAfterMutation],
+    [applyWorkspaceRecord, hostClient, queryClient],
   );
 
   const selectWorkspace = useCallback(
@@ -383,7 +392,7 @@ export function useWorkspaceSelectionOperations({
       try {
         const success = await run();
         try {
-          await refreshWorkspaceSettingsAfterMutation();
+          await invalidateWorkspaceSettingsSnapshot(queryClient);
         } catch (error) {
           toast.error("Workspace changed, but settings refresh failed", {
             description: errorMessage(error),
@@ -395,7 +404,7 @@ export function useWorkspaceSelectionOperations({
         setIsSwitchingWorkspace(false);
       }
     },
-    [refreshWorkspaceSettingsAfterMutation],
+    [queryClient],
   );
 
   const closeWorkspace = useCallback(
