@@ -13,7 +13,6 @@ import {
 } from "../../effect/host-errors";
 import {
   combineOutput,
-  type GitCommandResult,
   type GitCommandRunner,
   requireNonEmptyEffect,
   runGit,
@@ -179,22 +178,6 @@ const inferDiffType = (diff: string): string => {
   }
   return "modified";
 };
-const ensureNoIndexDiffOutput = (
-  result: GitCommandResult & {
-    ok: boolean;
-  },
-  commandDescription: string,
-): Effect.Effect<string, HostOperationError> => {
-  if (result.ok || result.exitCode === 1) {
-    return Effect.succeed(result.stdout);
-  }
-  return Effect.fail(
-    gitOperationError(
-      `${commandDescription} failed (exit ${result.exitCode ?? "unknown"}): ${combineOutput(result.stdout, result.stderr)}`,
-      commandDescription,
-    ),
-  );
-};
 const loadNoIndexDiffPayload = (
   runner: GitCommandRunner,
   workingDirectory: string,
@@ -211,10 +194,16 @@ const loadNoIndexDiffPayload = (
       "/dev/null",
       filePath,
     ]);
-    const output = yield* ensureNoIndexDiffOutput(
-      result,
-      `git diff --no-index --numstat -z --patch -- /dev/null ${filePath}`,
-    );
+    if (!result.ok && result.exitCode !== 1) {
+      const commandDescription = `git diff --no-index --numstat -z --patch -- /dev/null ${filePath}`;
+      return yield* Effect.fail(
+        gitOperationError(
+          `${commandDescription} failed (exit ${result.exitCode ?? "unknown"}): ${combineOutput(result.stdout, result.stderr)}`,
+          commandDescription,
+        ),
+      );
+    }
+    const output = result.stdout;
     // -z keeps paths verbatim. A two-path numstat record starts with an empty path.
     const header = /^(\d+|-)\t(\d+|-)\t([^\0]*)\0/.exec(output);
     let offset = header?.[0].length ?? 0;
