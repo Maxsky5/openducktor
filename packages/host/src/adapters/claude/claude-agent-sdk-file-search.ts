@@ -25,6 +25,12 @@ export type ClaudeWorkspaceFileSearch = {
   search(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]>;
 };
 
+type CachedClaudeFileFinder = {
+  finder: ClaudeWorkspaceFileFinder;
+  released: boolean;
+  searchCount: number;
+};
+
 type ClaudeFileSearchSession = { input: { workingDirectory: string } };
 
 type ClaudeFileSearchSessionStore = {
@@ -140,7 +146,15 @@ export const createClaudeWorkspaceFileSearch = ({
   createFinder?: (workingDirectory: string) => ClaudeWorkspaceFileFinder;
   cacheLimit?: number;
 } = {}): ClaudeWorkspaceFileSearch => {
-  const findersByDirectory = new Map<string, ClaudeWorkspaceFileFinder>();
+  const findersByDirectory = new Map<string, CachedClaudeFileFinder>();
+
+  const destroyCachedFinder = (cached: CachedClaudeFileFinder): void => {
+    if (cached.searchCount > 0) {
+      cached.released = true;
+      return;
+    }
+    cached.finder.destroy();
+  };
 
   const destroyEvictedFinders = (): void => {
     while (findersByDirectory.size > cacheLimit) {
@@ -148,23 +162,27 @@ export const createClaudeWorkspaceFileSearch = ({
       if (!oldest) {
         return;
       }
-      const [workingDirectory, finder] = oldest;
+      const [workingDirectory, cached] = oldest;
       findersByDirectory.delete(workingDirectory);
-      finder.destroy();
+      destroyCachedFinder(cached);
     }
   };
 
-  const ensureFinder = (workingDirectory: string): ClaudeWorkspaceFileFinder => {
+  const ensureFinder = (workingDirectory: string): CachedClaudeFileFinder => {
     const existing = findersByDirectory.get(workingDirectory);
     if (existing) {
       findersByDirectory.delete(workingDirectory);
       findersByDirectory.set(workingDirectory, existing);
       return existing;
     }
-    const finder = createFinder(workingDirectory);
-    findersByDirectory.set(workingDirectory, finder);
+    const cached: CachedClaudeFileFinder = {
+      finder: createFinder(workingDirectory),
+      released: false,
+      searchCount: 0,
+    };
+    findersByDirectory.set(workingDirectory, cached);
     destroyEvictedFinders();
-    return finder;
+    return cached;
   };
 
   return {
@@ -177,13 +195,24 @@ export const createClaudeWorkspaceFileSearch = ({
       }
     },
     release: (workingDirectory) => {
-      const finder = findersByDirectory.get(workingDirectory);
-      if (!finder) {
+      const cached = findersByDirectory.get(workingDirectory);
+      if (!cached) {
         return;
       }
       findersByDirectory.delete(workingDirectory);
-      finder.destroy();
+      destroyCachedFinder(cached);
     },
-    search: async (input) => ensureFinder(input.workingDirectory).search(input.query),
+    search: async (input) => {
+      const cached = ensureFinder(input.workingDirectory);
+      cached.searchCount += 1;
+      try {
+        return await cached.finder.search(input.query);
+      } finally {
+        cached.searchCount -= 1;
+        if (cached.released && cached.searchCount === 0) {
+          cached.finder.destroy();
+        }
+      }
+    },
   };
 };

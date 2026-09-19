@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { MixedItem, MixedSearchResult, Score } from "@ff-labs/fff-node";
+import type { AgentFileSearchResult } from "@openducktor/core";
 import {
   createClaudeWorkspaceFileSearch,
   createNativeClaudeFileFinder,
@@ -230,6 +231,60 @@ describe("createClaudeWorkspaceFileSearch", () => {
     fileSearch.prewarm("/repo/a");
 
     expect(created).toEqual(["/repo/a", "/repo/a"]);
+    expect(destroyed).toEqual(["/repo/a"]);
+  });
+
+  test("destroys a released finder after its in-flight search finishes", async () => {
+    const destroyed: string[] = [];
+    let resolveSearch: ((results: AgentFileSearchResult[]) => void) | undefined;
+    const fileSearch = createClaudeWorkspaceFileSearch({
+      createFinder: () => ({
+        search: () =>
+          new Promise((resolve) => {
+            resolveSearch = resolve;
+          }),
+        destroy: () => {
+          destroyed.push("/repo/a");
+        },
+      }),
+    });
+
+    const pending = fileSearch.search({
+      repoPath: "/repo",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/a",
+      query: "index",
+    });
+    fileSearch.release("/repo/a");
+    expect(destroyed).toEqual([]);
+
+    resolveSearch?.([]);
+    await expect(pending).resolves.toEqual([]);
+    expect(destroyed).toEqual(["/repo/a"]);
+  });
+
+  test("destroys a released finder after its in-flight search rejects", async () => {
+    const destroyed: string[] = [];
+    const fileSearch = createClaudeWorkspaceFileSearch({
+      createFinder: () => ({
+        search: async () => {
+          throw new Error("search failed");
+        },
+        destroy: () => {
+          destroyed.push("/repo/a");
+        },
+      }),
+    });
+
+    const pending = fileSearch.search({
+      repoPath: "/repo",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/a",
+      query: "index",
+    });
+    fileSearch.release("/repo/a");
+
+    await expect(pending).rejects.toThrow("search failed");
     expect(destroyed).toEqual(["/repo/a"]);
   });
 
