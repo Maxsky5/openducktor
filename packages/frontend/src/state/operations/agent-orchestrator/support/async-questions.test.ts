@@ -148,6 +148,48 @@ describe("asynchronous question projection", () => {
     expect(replayed.pendingAsyncQuestions).toEqual([afterMessage]);
   });
 
+  test("does not match a new repeated message to history consumed at read start", () => {
+    const source = question("question-between-messages");
+    const oldMessage = userMessage("history-old", "2026-09-19T10:00:00.000Z");
+    const atReadStart = projectAsyncQuestionsFromHistory([
+      {
+        role: "user",
+        ...oldMessage,
+        displayParts: [{ kind: "text", text: oldMessage.text }],
+        state: "read",
+        parts: [],
+      },
+    ]);
+    const current = applyAsyncQuestionUserMessage(
+      atReadStart,
+      undefined,
+      userMessage("codex-user-new", "2026-09-19T10:00:05.000Z"),
+    );
+    const history = projectAsyncQuestionsFromHistory([
+      {
+        role: "user",
+        ...oldMessage,
+        displayParts: [{ kind: "text", text: oldMessage.text }],
+        state: "read",
+        parts: [],
+      },
+      {
+        role: "assistant",
+        messageId: source.sourceMessageId,
+        timestamp: "2026-09-19T10:00:03.000Z",
+        text: source.title,
+        parts: [],
+        asyncQuestion: { status: "pending", questions: [source] },
+      },
+    ]);
+
+    const merged = mergeAsyncQuestionHistory(history, current, atReadStart);
+
+    expect(history.pendingAsyncQuestions).toEqual([source]);
+    expect(merged.pendingAsyncQuestions).toEqual([]);
+    expect(merged.handledAsyncQuestionIds).toContain(source.questionItemId);
+  });
+
   test("history resolves only the stable ID in a contextual reply", () => {
     const first = question("message-1", 0);
     const second = question("message-1", 1);

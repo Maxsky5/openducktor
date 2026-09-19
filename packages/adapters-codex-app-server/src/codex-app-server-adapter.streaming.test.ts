@@ -418,7 +418,7 @@ describe("CodexAppServerAdapter streaming", () => {
     }
   });
 
-  test("skips all pending questions after an ordinary message receives native acceptance", async () => {
+  test("skips only questions captured before an ordinary message receives native acceptance", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
     await adapter.startSession(codexStartSessionInput());
@@ -470,7 +470,13 @@ describe("CodexAppServerAdapter streaming", () => {
       await send;
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
-      ).resolves.toMatchObject({ pendingAsyncQuestions: [] });
+      ).resolves.toMatchObject({
+        pendingAsyncQuestions: [
+          {
+            questionItemId: '["request_user_input_async","async-question-during-admission",0]',
+          },
+        ],
+      });
     } finally {
       unsubscribe();
     }

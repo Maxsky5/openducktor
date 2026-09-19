@@ -54,10 +54,15 @@ const takeMatchingSkipIndex = (
   unmatchedIndexes: Set<number>,
   message: AgentAsyncQuestionSkipMessage,
 ): number | undefined => {
-  const matchedIndex = [...unmatchedIndexes].find((index) => {
-    const candidate = candidates[index];
-    return candidate !== undefined && skipMessagesMatch(candidate, message);
-  });
+  const exactIndex = [...unmatchedIndexes].find(
+    (index) => candidates[index]?.messageId === message.messageId,
+  );
+  const matchedIndex =
+    exactIndex ??
+    [...unmatchedIndexes].find((index) => {
+      const candidate = candidates[index];
+      return candidate !== undefined && skipMessagesMatch(candidate, message);
+    });
   if (matchedIndex !== undefined) unmatchedIndexes.delete(matchedIndex);
   return matchedIndex;
 };
@@ -84,6 +89,9 @@ const findUnrepresentedLiveSkips = (
   const skipIdsAtReadStart = new Set(atReadStart.map((message) => message.messageId));
   const unmatchedHistoryIndexes = new Set(history.map((_, index) => index));
   const unrepresented: AgentAsyncQuestionSkipMessage[] = [];
+  for (const message of atReadStart) {
+    takeMatchingSkipIndex(history, unmatchedHistoryIndexes, message);
+  }
   for (const liveMessage of current) {
     if (skipIdsAtReadStart.has(liveMessage.messageId)) continue;
     if (takeMatchingSkipIndex(history, unmatchedHistoryIndexes, liveMessage) === undefined) {
@@ -115,12 +123,15 @@ export const applyAsyncQuestionUserMessage = (
   current: AgentAsyncQuestionProjection,
   replies: readonly AgentAsyncQuestionReply[] | undefined,
   message: AgentAsyncQuestionSkipMessage,
+  questionItemIds?: readonly string[],
 ): AgentAsyncQuestionProjection => {
   const handled = new Set(current.handledAsyncQuestionIds);
   if (replies) {
     for (const reply of replies) handled.add(reply.questionItemId);
   } else {
-    for (const question of current.pendingAsyncQuestions) handled.add(question.questionItemId);
+    const skippedQuestionItemIds =
+      questionItemIds ?? current.pendingAsyncQuestions.map((question) => question.questionItemId);
+    for (const questionItemId of skippedQuestionItemIds) handled.add(questionItemId);
   }
   return {
     pendingAsyncQuestions: current.pendingAsyncQuestions.filter(

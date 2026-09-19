@@ -185,6 +185,7 @@ const appendSendFailureNotice = (
 const upsertAcceptedUserMessage = (
   session: AgentSessionState,
   acceptedUserMessage: Awaited<ReturnType<AgentEnginePort["sendUserMessage"]>>,
+  asyncQuestionItemIds: readonly string[],
   updateSession: UpdateSession,
 ): void => {
   updateSession(session, (current) => {
@@ -200,6 +201,7 @@ const upsertAcceptedUserMessage = (
         timestamp: acceptedUserMessage.timestamp,
         text: acceptedUserMessage.message,
       },
+      asyncQuestionItemIds,
     );
     return {
       ...current,
@@ -288,6 +290,13 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const sendAttempt = isBusyQueuedSend
       ? undefined
       : markSessionRunningForSend(readySession, dependencies);
+    const replyQuestionItemIds = normalizedParts.flatMap((part) =>
+      part.kind === "async_question_reply" ? [part.questionItemId] : [],
+    );
+    const asyncQuestionItemIds =
+      replyQuestionItemIds.length > 0
+        ? replyQuestionItemIds
+        : (readySession.pendingAsyncQuestions ?? []).map((question) => question.questionItemId);
 
     try {
       const runtimeSessionRef = toBoundRuntimeSessionRef(
@@ -299,13 +308,6 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
         ...runtimeSessionRef,
         parts: normalizedParts,
       };
-      const replyQuestionItemIds = normalizedParts.flatMap((part) =>
-        part.kind === "async_question_reply" ? [part.questionItemId] : [],
-      );
-      const asyncQuestionItemIds =
-        replyQuestionItemIds.length > 0
-          ? replyQuestionItemIds
-          : (readySession.pendingAsyncQuestions ?? []).map((question) => question.questionItemId);
       if (asyncQuestionItemIds.length > 0) {
         sendInput.asyncQuestionItemIds = asyncQuestionItemIds;
       }
@@ -317,7 +319,12 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       }
       const acceptedUserMessage = await dependencies.adapter.sendUserMessage(sendInput);
       if (!isManualCompactionSend) {
-        upsertAcceptedUserMessage(readySession, acceptedUserMessage, dependencies.updateSession);
+        upsertAcceptedUserMessage(
+          readySession,
+          acceptedUserMessage,
+          asyncQuestionItemIds,
+          dependencies.updateSession,
+        );
       }
     } catch (error) {
       const acceptedMessage =
@@ -331,7 +338,12 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           : null;
       if (acceptedMessage) {
         if (!isManualCompactionSend) {
-          upsertAcceptedUserMessage(readySession, acceptedMessage, dependencies.updateSession);
+          upsertAcceptedUserMessage(
+            readySession,
+            acceptedMessage,
+            asyncQuestionItemIds,
+            dependencies.updateSession,
+          );
         }
         appendSendFailureNotice(
           readySession,

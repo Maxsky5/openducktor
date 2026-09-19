@@ -676,6 +676,57 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     }
   });
 
+  test("keeps an async question that arrives while an ordinary send awaits acceptance", async () => {
+    const adapter = createOpenCodeAgentEngineTestAdapter(new OpencodeSdkAdapter());
+    const entered = Promise.withResolvers<Parameters<typeof adapter.sendUserMessage>[0]>();
+    const accepted = Promise.withResolvers<AcceptedAgentUserMessage>();
+    adapter.sendUserMessage = (input) => {
+      entered.resolve(input);
+      return accepted.promise;
+    };
+    const beforeSend = {
+      questionItemId: '["request_user_input_async","question-before-send",0]',
+      sourceMessageId: "question-before-send",
+      questionIndex: 0,
+      title: "Question before send",
+      options: null,
+    };
+    const duringSend = {
+      questionItemId: '["request_user_input_async","question-during-send",0]',
+      sourceMessageId: "question-during-send",
+      questionIndex: 0,
+      title: "Question during send",
+      options: null,
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "idle", pendingAsyncQuestions: [beforeSend] }),
+    ]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+      ensureExistingSessionRuntime: async () => {},
+    });
+
+    const sending = actions.sendAgentMessage(getSession(sessionsRef), [
+      { kind: "text", text: "Continue" },
+    ]);
+    const input = await entered.promise;
+    const current = getSession(sessionsRef);
+    sessionsRef.current = replaceAgentSession(sessionsRef.current, {
+      ...current,
+      pendingAsyncQuestions: [...(current.pendingAsyncQuestions ?? []), duringSend],
+    });
+    accepted.resolve(acceptedUserMessage(input));
+    await sending;
+
+    expect(input.asyncQuestionItemIds).toEqual([beforeSend.questionItemId]);
+    expect(getSession(sessionsRef)?.pendingAsyncQuestions).toEqual([duringSend]);
+    expect(getSession(sessionsRef)?.handledAsyncQuestionIds).toContain(beforeSend.questionItemId);
+    expect(getSession(sessionsRef)?.handledAsyncQuestionIds).not.toContain(
+      duringSend.questionItemId,
+    );
+  });
+
   const blockingInputCases: Array<{
     label: string;
     pendingInput: Partial<Pick<AgentSessionState, "pendingApprovals" | "pendingQuestions">>;

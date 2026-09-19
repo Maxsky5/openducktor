@@ -737,24 +737,21 @@ export class CodexAppServerAdapter
     }
     const replyParts = input.parts.filter((part) => part.kind === "async_question_reply");
     const pendingQuestionItemIds =
-      input.asyncQuestionItemIds ?? replyParts.map((part) => part.questionItemId);
-    const hasPendingAsyncQuestions =
-      replyParts.length === 0 &&
-      this.asyncQuestions.pendingForSession(session.runtimeId, session.threadId).length > 0;
+      input.asyncQuestionItemIds ??
+      (replyParts.length > 0
+        ? replyParts.map((part) => part.questionItemId)
+        : this.asyncQuestions
+            .pendingForSession(session.runtimeId, session.threadId)
+            .map((question) => question.questionItemId));
     const accepted = await startCodexTurnForSession(
       this.turnLifecycleContext(),
       input.externalSessionId,
       input.parts,
       acceptedUserMessage,
       input.model,
-      pendingQuestionItemIds.length > 0 || hasPendingAsyncQuestions,
+      pendingQuestionItemIds.length > 0,
     );
-    if (replyParts.length > 0) {
-      this.asyncQuestions.resolve(session.runtimeId, session.threadId, pendingQuestionItemIds);
-    } else {
-      this.asyncQuestions.resolve(session.runtimeId, session.threadId, pendingQuestionItemIds);
-      this.asyncQuestions.skipPending(session.runtimeId, session.threadId);
-    }
+    this.asyncQuestions.resolve(session.runtimeId, session.threadId, pendingQuestionItemIds);
     return accepted;
   }
 
