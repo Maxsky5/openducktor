@@ -76,3 +76,15 @@ test("retires native frontend query bridges", () => {
     ),
   ).toBe(false);
 });
+
+test("accepts an optional non-empty surface filter for the combined catalog read", () => {
+  const input = { repoPath: "/repo", runtimeKind: "opencode", workingDirectory: "/repo/worktree" };
+  const schema = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.loadCatalog.inputSchema;
+  expect(schema.parse(input)).toEqual(input);
+  expect(schema.parse({ ...input, surfaces: ["models", "skills"] })).toEqual({
+    ...input,
+    surfaces: ["models", "skills"],
+  });
+  expect(schema.safeParse({ ...input, surfaces: [] }).success).toBe(false);
+  expect(schema.safeParse({ ...input, surfaces: ["models", "unknown"] }).success).toBe(false);
+});

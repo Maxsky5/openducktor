@@ -1,6 +1,7 @@
 import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type AgentRuntimeCatalogSurfaceName,
   slashCommandCatalogSchema,
   subagentCatalogSchema,
 } from "@openducktor/contracts";
@@ -10,6 +11,7 @@ import {
   type AgentRuntimeCatalogRead,
   type AgentSlashCommandCatalog,
   type AgentSubagentCatalog,
+  isAgentRuntimeCatalogSurfaceRequested,
   readAgentRuntimeCatalogSurface,
 } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
@@ -44,6 +46,7 @@ type ClientFactoryFor<Namespace extends keyof ReturnType<ClientFactory>> = (
 
 type OpencodeRuntimeCatalogInput = OpencodeRuntimeClientInput & {
   repoPath: string;
+  surfaces?: readonly AgentRuntimeCatalogSurfaceName[];
 };
 
 export const loadRuntimeCatalog = async (
@@ -95,13 +98,26 @@ export const loadRuntimeCatalog = async (
     }
   };
 
+  const wantsSurface = (surface: AgentRuntimeCatalogSurfaceName): boolean =>
+    isAgentRuntimeCatalogSurfaceRequested(input.surfaces, surface);
+
   const [models, slashCommands, subagents] = await Promise.all([
-    readAgentRuntimeCatalogSurface(readModels),
-    readAgentRuntimeCatalogSurface(readSlashCommands),
-    readAgentRuntimeCatalogSurface(readSubagents),
+    wantsSurface("models") ? readAgentRuntimeCatalogSurface(readModels) : undefined,
+    wantsSurface("slashCommands") ? readAgentRuntimeCatalogSurface(readSlashCommands) : undefined,
+    wantsSurface("subagents") ? readAgentRuntimeCatalogSurface(readSubagents) : undefined,
   ]);
 
-  return { runtime: OPENCODE_RUNTIME_DESCRIPTOR, models, slashCommands, subagents };
+  const catalog: AgentRuntimeCatalogRead = { runtime: OPENCODE_RUNTIME_DESCRIPTOR };
+  if (models) {
+    catalog.models = models;
+  }
+  if (slashCommands) {
+    catalog.slashCommands = slashCommands;
+  }
+  if (subagents) {
+    catalog.subagents = subagents;
+  }
+  return catalog;
 };
 
 export const searchFiles = async (

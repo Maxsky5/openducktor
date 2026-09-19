@@ -153,6 +153,8 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   modelPickerDisabled,
   onSelectAgent,
   onSelectVariant,
+  onAgentSelectorOpen,
+  onVariantSelectorOpen,
   contextUsage,
   canStopSession,
   onStopSession,
@@ -172,6 +174,8 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   modelPickerDisabled: boolean;
   onSelectAgent: AgentChatComposerModel["onSelectAgent"];
   onSelectVariant: AgentChatComposerModel["onSelectVariant"];
+  onAgentSelectorOpen: AgentChatComposerModel["onAgentSelectorOpen"];
+  onVariantSelectorOpen: AgentChatComposerModel["onVariantSelectorOpen"];
   contextUsage: AgentChatComposerModel["contextUsage"];
   canStopSession: boolean;
   onStopSession: AgentChatComposerModel["onStopSession"];
@@ -207,6 +211,11 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
               triggerClassName="!h-7 !w-auto max-w-[15rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
               disabled={selectorDisabled}
               onValueChange={onSelectAgent}
+              onOpenChange={(open) => {
+                if (open) {
+                  onAgentSelectorOpen();
+                }
+              }}
             />
           </div>
         ) : null}
@@ -238,6 +247,11 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
               triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
               disabled={selectorDisabled}
               onValueChange={onSelectVariant}
+              onOpenChange={(open) => {
+                if (open) {
+                  onVariantSelectorOpen();
+                }
+              }}
             />
           </div>
         ) : null}
@@ -362,7 +376,9 @@ function AgentChatComposerFormView({
     subagents,
     subagentsError,
     isSubagentsLoading,
-    retryCatalog,
+    retrySlashCommands,
+    retrySkills,
+    retrySubagents,
     onCatalogMenuOpen,
     searchFiles,
     agentOptions,
@@ -370,6 +386,8 @@ function AgentChatComposerFormView({
     variantOptions,
     onSelectAgent,
     onSelectVariant,
+    onAgentSelectorOpen,
+    onVariantSelectorOpen,
     contextUsage,
     canStopSession,
     onStopSession,
@@ -460,7 +478,9 @@ function AgentChatComposerFormView({
             subagents={subagents}
             subagentsError={subagentsError}
             isSubagentsLoading={isSubagentsLoading}
-            retryCatalog={retryCatalog}
+            retrySlashCommands={retrySlashCommands}
+            retrySkills={retrySkills}
+            retrySubagents={retrySubagents}
             onCatalogMenuOpen={onCatalogMenuOpen}
             searchFiles={searchFiles}
           />
@@ -478,6 +498,8 @@ function AgentChatComposerFormView({
             modelPickerDisabled={modelPickerDisabled}
             onSelectAgent={onSelectAgent}
             onSelectVariant={onSelectVariant}
+            onAgentSelectorOpen={onAgentSelectorOpen}
+            onVariantSelectorOpen={onVariantSelectorOpen}
             contextUsage={contextUsage}
             canStopSession={canStopSession}
             onStopSession={onStopSession}

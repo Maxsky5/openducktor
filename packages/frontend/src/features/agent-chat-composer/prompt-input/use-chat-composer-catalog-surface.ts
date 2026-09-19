@@ -1,15 +1,21 @@
+import type { AgentRuntimeCatalogSurfaceName } from "@openducktor/contracts";
 import type {
   AgentRuntimeCatalog,
   AgentRuntimeCatalogSurface,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { resolveRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  retryRuntimeCatalogSurface,
+  resolveRuntimeCatalogSurface,
+} from "@/state/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
 
 type UseChatComposerCatalogSurfaceArgs<Catalog> = {
   promptInputRuntime: ChatComposerPromptInputRuntime;
   supports: boolean;
+  surface: AgentRuntimeCatalogSurfaceName;
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
   selectSurface: (
     catalog: AgentRuntimeCatalog | undefined,
@@ -20,16 +26,18 @@ type UseChatComposerCatalogSurfaceArgs<Catalog> = {
 export const useChatComposerCatalogSurface = <Catalog>({
   promptInputRuntime,
   supports,
+  surface,
   loadRuntimeCatalog,
   selectSurface,
   emptyCatalog,
 }: UseChatComposerCatalogSurfaceArgs<Catalog>) => {
+  const queryClient = useQueryClient();
   const catalogQuery = useChatComposerRuntimeCatalogQuery({
     promptInputRuntime,
     supports,
     loadRuntimeCatalog,
   });
-  const surface = resolveRuntimeCatalogSurface(
+  const resolved = resolveRuntimeCatalogSurface(
     selectSurface(catalogQuery.data),
     catalogQuery.error,
   );
@@ -40,17 +48,25 @@ export const useChatComposerCatalogSurface = <Catalog>({
   if (supports && promptInputRuntime.state === "unavailable") {
     error = promptInputRuntime.error;
   } else if (supports && promptInputRuntime.state === "available") {
-    catalog = surface.catalog ?? emptyCatalog;
-    error = surface.error;
+    catalog = resolved.catalog ?? emptyCatalog;
+    error = resolved.error;
     isLoading = catalogQuery.isLoading;
   }
 
   // A failed surface stays retryable from the surface that needs it. The retry
-  // re-reads the combined catalog; the other surfaces keep their cached data.
+  // reads only that surface and merges it into the cached catalog entry, so
+  // surfaces that succeeded are not re-read.
+  const runtimeRef =
+    promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
   const retry =
-    supports && promptInputRuntime.state === "available"
+    supports && runtimeRef !== null
       ? () => {
-          void catalogQuery.refetch();
+          void retryRuntimeCatalogSurface({
+            queryClient,
+            runtimeRef,
+            surface,
+            loadRuntimeCatalog,
+          });
         }
       : null;
 

@@ -250,7 +250,9 @@ const EditorHarness = ({
         subagents={subagents}
         subagentsError={subagentsError}
         isSubagentsLoading={isSubagentsLoading}
-        retryCatalog={null}
+        retrySlashCommands={null}
+        retrySkills={null}
+        retrySubagents={null}
         onCatalogMenuOpen={onCatalogMenuOpen}
         onAddFiles={onAddFiles ?? (() => {})}
       />

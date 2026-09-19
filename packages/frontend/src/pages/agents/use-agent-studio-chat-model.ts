@@ -78,8 +78,12 @@ export type AgentStudioChatModelSelectionContext = {
   subagents: AgentChatModel["composer"]["subagents"];
   subagentsError: string | null;
   isSubagentsLoading: boolean;
-  retryCatalog: AgentChatModel["composer"]["retryCatalog"];
+  retrySlashCommands: AgentChatModel["composer"]["retrySlashCommands"];
+  retrySkills: AgentChatModel["composer"]["retrySkills"];
+  retrySubagents: AgentChatModel["composer"]["retrySubagents"];
   onCatalogMenuOpen: AgentChatModel["composer"]["onCatalogMenuOpen"];
+  onAgentSelectorOpen: AgentChatModel["composer"]["onAgentSelectorOpen"];
+  onVariantSelectorOpen: AgentChatModel["composer"]["onVariantSelectorOpen"];
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
   modelPicker: AgentChatModel["composer"]["modelPicker"];
@@ -422,8 +426,12 @@ export function useAgentStudioChatModel({
       subagents: modelSelection.subagents,
       subagentsError: modelSelection.subagentsError,
       isSubagentsLoading: modelSelection.isSubagentsLoading,
-      retryCatalog: modelSelection.retryCatalog,
+      retrySlashCommands: modelSelection.retrySlashCommands,
+      retrySkills: modelSelection.retrySkills,
+      retrySubagents: modelSelection.retrySubagents,
       onCatalogMenuOpen: modelSelection.onCatalogMenuOpen,
+      onAgentSelectorOpen: modelSelection.onAgentSelectorOpen,
+      onVariantSelectorOpen: modelSelection.onVariantSelectorOpen,
       searchFiles: modelSelection.searchFiles,
       agentOptions: modelSelection.agentOptions,
       modelPicker: modelSelection.modelPicker,
@@ -444,10 +452,14 @@ export function useAgentStudioChatModel({
     modelSelection.isSkillsLoading,
     modelSelection.isSubagentsLoading,
     modelSelection.modelPicker,
+    modelSelection.onAgentSelectorOpen,
     modelSelection.onCatalogMenuOpen,
+    modelSelection.onVariantSelectorOpen,
     modelSelection.onSelectAgent,
     modelSelection.onSelectVariant,
-    modelSelection.retryCatalog,
+    modelSelection.retrySkills,
+    modelSelection.retrySlashCommands,
+    modelSelection.retrySubagents,
     modelSelection.searchFiles,
     modelSelection.selectedModelDescriptor,
     modelSelection.selectedModelSelection,

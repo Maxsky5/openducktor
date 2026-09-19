@@ -49,7 +49,7 @@ import { availableDefaultSessionSelectionFor } from "@/features/session-start/se
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import { retryRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
 import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -90,16 +90,20 @@ type AgentStudioChatComposerState = {
   slashCommands: AgentSlashCommandCatalog["commands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  retrySlashCommands: (() => void) | null;
   skillCatalog: AgentSkillCatalog;
   skills: AgentSkillCatalog["skills"];
   skillsError: string | null;
   isSkillsLoading: boolean;
+  retrySkills: (() => void) | null;
   subagentCatalog: AgentSubagentCatalog;
   subagents: AgentSubagentCatalog["subagents"];
   subagentsError: string | null;
   isSubagentsLoading: boolean;
-  retryCatalog: (() => void) | null;
+  retrySubagents: (() => void) | null;
   onCatalogMenuOpen: () => void;
+  onAgentSelectorOpen: () => void;
+  onVariantSelectorOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentProfileOptions: ComboboxOption[];
   modelPicker: AgentChatComposerModel["modelPicker"];
@@ -344,13 +348,15 @@ export function useAgentStudioChatComposer({
                 "A repository path and session are required to refresh the session model catalog.",
               );
             }
-            await queryClient.invalidateQueries({
-              queryKey: runtimeCatalogQueryKeys.catalog({
+            await retryRuntimeCatalogSurface({
+              queryClient,
+              runtimeRef: {
                 repoPath: workspaceRepoPath,
                 runtimeKind: descriptor.kind,
                 workingDirectory: selectedSessionIdentity.workingDirectory,
-              }),
-              exact: true,
+              },
+              surface: "models",
+              loadRuntimeCatalog: loadCatalogForRepo,
             });
           },
         }),
@@ -359,6 +365,7 @@ export function useAgentStudioChatComposer({
   }, [
     hasSessionTarget,
     isSessionModelCatalogLoading,
+    loadCatalogForRepo,
     modelPickerRuntimeDefinitions,
     queryClient,
     repoModelPickerResources,
@@ -380,6 +387,7 @@ export function useAgentStudioChatComposer({
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    retrySlashCommands,
   } = useChatComposerSlashCommands({
     promptInputRuntime,
     runtimeSupportsSlashCommands,
@@ -393,7 +401,7 @@ export function useAgentStudioChatComposer({
       loadRuntimeCatalog: loadCatalogForRepo,
     },
   );
-  const { subagentCatalog, subagents, subagentsError, isSubagentsLoading } =
+  const { subagentCatalog, subagents, subagentsError, isSubagentsLoading, retrySubagents } =
     useChatComposerSubagents({
       promptInputRuntime,
       supportsSubagentReferences,
@@ -530,7 +538,15 @@ export function useAgentStudioChatComposer({
     selectionPolicy: modelPickerSelectionPolicy,
     favoriteState,
     onValueChange: handleSelectModelPair,
-    onOpenChange: setIsModelPickerOpen,
+    // The selected runtime catalog query stays enabled while the composer is
+    // mounted, so an enabled-transition refresh never runs for it. Refresh the
+    // cached catalog when the picker opens and the entry is stale.
+    onOpenChange: (open: boolean) => {
+      setIsModelPickerOpen(open);
+      if (open) {
+        refreshCatalogIfStale();
+      }
+    },
   };
 
   return {
@@ -551,16 +567,20 @@ export function useAgentStudioChatComposer({
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    retrySlashCommands,
     skillCatalog,
     skills,
     skillsError,
     isSkillsLoading,
+    retrySkills,
     subagentCatalog,
     subagents,
     subagentsError,
     isSubagentsLoading,
-    retryCatalog: retrySkills,
+    retrySubagents,
     onCatalogMenuOpen: refreshCatalogIfStale,
+    onAgentSelectorOpen: refreshCatalogIfStale,
+    onVariantSelectorOpen: refreshCatalogIfStale,
     searchFiles,
     agentProfileOptions,
     modelPicker,

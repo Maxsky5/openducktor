@@ -63,16 +63,20 @@ export type AgentChatComposerConfig = {
   slashCommands: AgentChatComposerModel["slashCommands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  retrySlashCommands: (() => void) | null;
   skillCatalog: AgentChatComposerModel["skillCatalog"];
   skills: AgentChatComposerModel["skills"];
   skillsError: string | null;
   isSkillsLoading: boolean;
+  retrySkills: (() => void) | null;
   subagentCatalog: AgentChatComposerModel["subagentCatalog"];
   subagents: AgentChatComposerModel["subagents"];
   subagentsError: string | null;
   isSubagentsLoading: boolean;
-  retryCatalog: (() => void) | null;
+  retrySubagents: (() => void) | null;
   onCatalogMenuOpen: () => void;
+  onAgentSelectorOpen: () => void;
+  onVariantSelectorOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelPicker: AgentChatComposerModel["modelPicker"];
@@ -149,16 +153,20 @@ export function useAgentChatComposerModel({
       slashCommands: composer.slashCommands,
       slashCommandsError: composer.slashCommandsError,
       isSlashCommandsLoading: composer.isSlashCommandsLoading,
+      retrySlashCommands: composer.retrySlashCommands,
       skillCatalog: composer.skillCatalog,
       skills: composer.skills,
       skillsError: composer.skillsError,
       isSkillsLoading: composer.isSkillsLoading,
+      retrySkills: composer.retrySkills,
       subagentCatalog: composer.subagentCatalog,
       subagents: composer.subagents,
       subagentsError: composer.subagentsError,
       isSubagentsLoading: composer.isSubagentsLoading,
-      retryCatalog: composer.retryCatalog,
+      retrySubagents: composer.retrySubagents,
       onCatalogMenuOpen: composer.onCatalogMenuOpen,
+      onAgentSelectorOpen: composer.onAgentSelectorOpen,
+      onVariantSelectorOpen: composer.onVariantSelectorOpen,
       searchFiles: composer.searchFiles,
       agentOptions: composer.agentOptions,
       modelPicker: composer.modelPicker,

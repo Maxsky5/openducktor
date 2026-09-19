@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { AgentRuntimeCatalogSurfaceName } from "@openducktor/contracts";
 import type { Agent, Command } from "@opencode-ai/sdk/v2/client";
 import { loadRuntimeCatalog, searchFiles } from "./catalog-and-mcp";
 
@@ -47,16 +48,22 @@ const catalogClient = (overrides: Partial<CatalogClient>): CatalogClient => ({
 const loadCatalog = (
   client: CatalogClient,
   directory = "/repo",
-): ReturnType<typeof loadRuntimeCatalog> =>
-  loadRuntimeCatalog(
+  surfaces?: readonly AgentRuntimeCatalogSurfaceName[],
+): ReturnType<typeof loadRuntimeCatalog> => {
+  const input: Parameters<typeof loadRuntimeCatalog>[1] = {
+    runtimeEndpoint: "http://127.0.0.1:1234",
+    workingDirectory: directory,
+    repoPath: directory,
+  };
+  if (surfaces) {
+    input.surfaces = surfaces;
+  }
+  return loadRuntimeCatalog(
     // SAFETY: The test client implements the three catalog namespaces used by the loader.
     (() => client) as never,
-    {
-      runtimeEndpoint: "http://127.0.0.1:1234",
-      workingDirectory: directory,
-      repoPath: directory,
-    },
+    input,
   );
+};
 
 const failureMessage = (surface: { status: string; cause?: unknown } | undefined): string => {
   if (surface?.status !== "failed") {
@@ -351,6 +358,49 @@ describe("catalog-and-mcp combined runtime catalog", () => {
     const catalog = await loadCatalog(catalogClient({}));
 
     expect(catalog.skills).toBeUndefined();
+  });
+
+  test("reads only the requested surfaces when a filter is set", async () => {
+    const providers = mock(async () => ({
+      data: { default: {}, providers: [] },
+      error: undefined,
+    }));
+    const commands = mock(async () => {
+      throw new Error("Unexpected command list read.");
+    });
+
+    const catalog = await loadCatalog(
+      catalogClient({ config: { providers }, command: { list: commands } }),
+      "/repo",
+      ["models"],
+    );
+
+    expect(Object.keys(catalog).sort()).toEqual(["models", "runtime"]);
+    expect(providers).toHaveBeenCalledTimes(1);
+    expect(commands).not.toHaveBeenCalled();
+  });
+
+  test("skips the provider and command reads for a subagent-only request", async () => {
+    const providers = mock(async () => {
+      throw new Error("Unexpected provider list read.");
+    });
+    const commands = mock(async () => {
+      throw new Error("Unexpected command list read.");
+    });
+    const agents = mock(async () => ({
+      data: [agentFixture({ name: "reviewer", hidden: false })],
+    }));
+
+    const catalog = await loadCatalog(
+      catalogClient({ app: { agents }, config: { providers }, command: { list: commands } }),
+      "/repo",
+      ["subagents"],
+    );
+
+    expect(catalog.subagents).toMatchObject({ status: "available" });
+    expect(agents).toHaveBeenCalledTimes(1);
+    expect(providers).not.toHaveBeenCalled();
+    expect(commands).not.toHaveBeenCalled();
   });
 });
 

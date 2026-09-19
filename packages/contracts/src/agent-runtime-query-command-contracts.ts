@@ -13,7 +13,10 @@ import {
   runtimeWorkingDirectoryRefSchema,
 } from "./agent-session-schemas";
 import { codexEffectivePolicySchema, type CodexEffectivePolicy } from "./config-schemas";
-import { agentRuntimeCatalogSchema } from "./runtime-catalog-schemas";
+import {
+  agentRuntimeCatalogSchema,
+  agentRuntimeLoadCatalogInputSchema,
+} from "./runtime-catalog-schemas";
 
 const opencodePolicySchema = z.object({ kind: z.literal("opencode") }).strict();
 const claudePolicySchema = z.object({ kind: z.literal("claude") }).strict();
@@ -104,7 +107,7 @@ export type AgentRuntimeQueryCommandContract<Input = unknown, Response = unknown
 export const AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS = {
   loadCatalog: {
     command: "agent_runtime_load_catalog",
-    inputSchema: runtimeWorkingDirectoryRefSchema,
+    inputSchema: agentRuntimeLoadCatalogInputSchema,
     responseSchema: agentRuntimeCatalogSchema,
   },
   searchFiles: {

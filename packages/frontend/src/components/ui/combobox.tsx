@@ -48,6 +48,7 @@ type ComboboxProps = {
   wrapOptionLabels?: boolean;
   matchAllSearchTerms?: boolean;
   searchable?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 type RenderGroup = {
@@ -225,6 +226,7 @@ export function Combobox({
   wrapOptionLabels,
   matchAllSearchTerms = false,
   searchable = true,
+  onOpenChange,
 }: ComboboxProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -301,6 +303,7 @@ export function Combobox({
     if (!nextOpen) {
       setSearchQuery("");
     }
+    onOpenChange?.(nextOpen);
   };
 
   const handleSearchQueryChange = (nextQuery: string): void => {

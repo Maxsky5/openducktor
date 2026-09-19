@@ -432,6 +432,29 @@ describe("loadClaudeRuntimeCatalog", () => {
     expect(catalog.skills?.status).toBe("available");
   });
 
+  test("reads only the requested surfaces when a filter is set", async () => {
+    const supportedAgents = mock(async () => agentFixtures);
+    const supportedCommands = mock(async () => commandFixtures);
+    const supportedModels = mock(async () => [modelFixture]);
+    const sdkQuery = createClaudeQueryFixture({
+      supportedAgents,
+      supportedCommands,
+      supportedModels,
+    });
+
+    const catalog = await loadClaudeRuntimeCatalog(
+      { ...catalogInput, surfaces: ["skills"] },
+      undefined,
+      process.execPath,
+      () => sdkQuery,
+    );
+
+    expect(Object.keys(catalog).sort()).toEqual(["runtime", "skills"]);
+    expect(supportedCommands).toHaveBeenCalledTimes(1);
+    expect(supportedModels).not.toHaveBeenCalled();
+    expect(supportedAgents).not.toHaveBeenCalled();
+  });
+
   test("fails the whole read and closes the session when initialization fails", async () => {
     const failure = new Error("Claude catalog initialization failed.");
     const close = mock(() => {});

@@ -30,7 +30,7 @@ import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hoo
 import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
 import {
   resolveRuntimeCatalogSurface,
-  runtimeCatalogQueryKeys,
+  retryRuntimeCatalogSurface,
   runtimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
@@ -129,15 +129,19 @@ export function WorkspaceSessionChat({
   });
   const retryModelCatalog = useCallback(
     () =>
-      queryClient.invalidateQueries({
-        queryKey: runtimeCatalogQueryKeys.catalog(runtimeRef),
+      retryRuntimeCatalogSurface({
+        queryClient,
+        runtimeRef,
+        surface: "models",
+        loadRuntimeCatalog: runtime.loadRepoRuntimeCatalog,
       }),
-    [queryClient, runtimeRef],
+    [queryClient, runtime.loadRepoRuntimeCatalog, runtimeRef],
   );
   const modelTarget = useMemo(
     () => ({
       identity,
       runtimeKind: record.runtimeKind,
+      runtimeRef,
       updateDraft: updateDraftModel,
       selection: selectedModel,
       catalog: modelCatalog,
@@ -149,6 +153,7 @@ export function WorkspaceSessionChat({
     [
       identity,
       record.runtimeKind,
+      runtimeRef,
       updateDraftModel,
       selectedModel,
       modelCatalog,
@@ -321,8 +326,9 @@ export function WorkspaceSessionChat({
       ...slashCommands,
       ...skills,
       ...subagents,
-      retryCatalog: skills.retrySkills,
       onCatalogMenuOpen: refreshCatalogIfStale,
+      onAgentSelectorOpen: refreshCatalogIfStale,
+      onVariantSelectorOpen: refreshCatalogIfStale,
       searchFiles,
       agentOptions: picker.agentProfileOptions,
       variantOptions: picker.variantOptions,

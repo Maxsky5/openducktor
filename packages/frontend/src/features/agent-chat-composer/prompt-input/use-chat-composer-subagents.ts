@@ -19,9 +19,10 @@ export const useChatComposerSubagents = ({
   supportsSubagentReferences,
   loadRuntimeCatalog,
 }: UseChatComposerSubagentsArgs) => {
-  const { catalog, error, isLoading } = useChatComposerCatalogSurface({
+  const { catalog, error, isLoading, retry } = useChatComposerCatalogSurface({
     promptInputRuntime,
     supports: supportsSubagentReferences,
+    surface: "subagents",
     loadRuntimeCatalog,
     selectSurface: (runtimeCatalog) => runtimeCatalog?.subagents,
     emptyCatalog: EMPTY_SUBAGENT_CATALOG,
@@ -32,10 +33,12 @@ export const useChatComposerSubagents = ({
     subagents: catalog.subagents,
     subagentsError: error,
     isSubagentsLoading: isLoading,
+    retrySubagents: retry,
   } satisfies {
     subagentCatalog: AgentSubagentCatalog;
     subagents: AgentSubagentCatalog["subagents"];
     subagentsError: string | null;
     isSubagentsLoading: boolean;
+    retrySubagents: (() => void) | null;
   };
 };

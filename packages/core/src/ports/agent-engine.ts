@@ -163,7 +163,8 @@ export type LoadAgentSessionHistoryInput =
 
 export type LoadAgentSessionTodosInput = PolicyBoundSessionRef;
 
-export type ListAgentRuntimeCatalogInput = RuntimeWorkingDirectoryRef;
+export type ListAgentRuntimeCatalogInput =
+  import("@openducktor/contracts").AgentRuntimeLoadCatalogInput;
 
 export type AgentRuntimeCatalogSurfaceRead<Catalog> =
   | { status: "available"; catalog: Catalog }

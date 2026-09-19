@@ -12,8 +12,10 @@ import { QueryClient, skipToken } from "@tanstack/react-query";
 import { SKIPPED_QUERY_KEY_SEGMENT } from "./skipped-query";
 import {
   loadRuntimeCatalogFromQuery,
+  refreshRuntimeCatalogIfStale,
   repoRuntimeFileSearchQueryOptions,
   resolveRuntimeCatalogSurface,
+  retryRuntimeCatalogSurface,
   runtimeCatalogQueryKeys,
   runtimeCatalogQueryOptions,
   skippedRuntimeCatalogQueryOptions,
@@ -170,5 +172,83 @@ describe("runtime catalog queries", () => {
     for (const key of liveKeys) {
       expect(key[1]).not.toBe(SKIPPED_QUERY_KEY_SEGMENT);
     }
+  });
+
+  test("retries only the failed surface when a combined entry exists", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture);
+    queryClient.setQueryData(queryKey, runtimeCatalogFixture);
+    const loadCatalog = mock(async (): Promise<AgentRuntimeCatalog> => ({
+      skills: { status: "available", catalog: skillCatalogFixture },
+    }));
+
+    await retryRuntimeCatalogSurface({
+      queryClient,
+      runtimeRef: workingDirectoryRefFixture,
+      surface: "skills",
+      loadRuntimeCatalog: loadCatalog,
+    });
+
+    expect(loadCatalog).toHaveBeenCalledWith({
+      ...workingDirectoryRefFixture,
+      surfaces: ["skills"],
+    });
+    expect(queryClient.getQueryData<AgentRuntimeCatalog>(queryKey)).toEqual(runtimeCatalogFixture);
+  });
+
+  test("reads the combined catalog when no entry exists to preserve", async () => {
+    const queryClient = new QueryClient();
+    const loadCatalog = mock(async () => runtimeCatalogFixture);
+
+    await retryRuntimeCatalogSurface({
+      queryClient,
+      runtimeRef: workingDirectoryRefFixture,
+      surface: "models",
+      loadRuntimeCatalog: loadCatalog,
+    });
+
+    expect(loadCatalog).toHaveBeenCalledWith(workingDirectoryRefFixture);
+    expect(
+      queryClient.getQueryData<AgentRuntimeCatalog>(
+        runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture),
+      ),
+    ).toBe(runtimeCatalogFixture);
+  });
+
+  test("records a failed surface and keeps the surfaces that already loaded", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture);
+    queryClient.setQueryData(queryKey, runtimeCatalogFixture);
+    const loadCatalog = mock(async () => {
+      throw new Error("Subagent list offline.");
+    });
+
+    await retryRuntimeCatalogSurface({
+      queryClient,
+      runtimeRef: workingDirectoryRefFixture,
+      surface: "subagents",
+      loadRuntimeCatalog: loadCatalog,
+    });
+
+    expect(queryClient.getQueryData<AgentRuntimeCatalog>(queryKey)).toEqual({
+      ...runtimeCatalogFixture,
+      subagents: { status: "failed", message: "Subagent list offline." },
+    });
+  });
+
+  test("refreshes a stale combined catalog and reuses a fresh entry", async () => {
+    const queryClient = new QueryClient();
+    const loadCatalog = mock(async () => runtimeCatalogFixture);
+    const queryKey = runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture);
+    queryClient.setQueryData(queryKey, runtimeCatalogFixture);
+
+    refreshRuntimeCatalogIfStale(queryClient, workingDirectoryRefFixture, loadCatalog);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(loadCatalog).toHaveBeenCalledTimes(0);
+
+    queryClient.setQueryData(queryKey, runtimeCatalogFixture, { updatedAt: 0 });
+    refreshRuntimeCatalogIfStale(queryClient, workingDirectoryRefFixture, loadCatalog);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(loadCatalog).toHaveBeenCalledTimes(1);
   });
 });

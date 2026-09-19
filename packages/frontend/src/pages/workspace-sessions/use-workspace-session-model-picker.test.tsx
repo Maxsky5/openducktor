@@ -4,7 +4,13 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentRuntimeCatalog,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -12,6 +18,10 @@ import {
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
 } from "@/state/app-state-contexts";
+import {
+  runtimeCatalogQueryKeys,
+  runtimeCatalogQueryOptions,
+} from "@/state/queries/runtime-catalog";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
@@ -295,6 +305,100 @@ test("prefills the creation picker from the repository Default Model when its ca
     });
   } finally {
     await harness.unmount();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});
+
+test("refreshes a stale session catalog when the model picker opens", async () => {
+  const catalog: AgentModelCatalog = {
+    models: [
+      {
+        id: "openai/gpt-5",
+        providerId: "openai",
+        modelId: "gpt-5",
+        modelName: "GPT 5",
+        providerName: "OpenAI",
+        variants: ["low"],
+      },
+    ],
+    defaultModelsByProvider: {},
+  };
+  const runtimeCatalogFixture: AgentRuntimeCatalog = createRuntimeCatalogFixture({
+    models: catalog,
+  });
+  const runtimeRef = {
+    repoPath: "/repo",
+    runtimeKind: "opencode" as const,
+    workingDirectory: "/repo/worktree",
+  };
+  const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+  const loadRuntimeCatalog = mock(
+    async (_runtimeRef: RuntimeWorkingDirectoryRef) => runtimeCatalogFixture,
+  );
+  await client.fetchQuery(runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog));
+  client.setQueryData(runtimeCatalogQueryKeys.catalog(runtimeRef), runtimeCatalogFixture, {
+    updatedAt: 0,
+  });
+  const definitions: RuntimeDefinitionsContextValue = {
+    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    isLoadingRuntimeDefinitions: false,
+    runtimeDefinitionsError: null,
+    refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+    isLoadingRuntimeSettings: false,
+    runtimeSettingsError: null,
+    hasRuntimeSettingsSnapshot: true,
+    refreshRuntimeSettings: async () => {},
+    loadRepoRuntimeCatalog: loadRuntimeCatalog,
+    loadRepoRuntimeFileSearch: async () => [],
+  };
+  const target = {
+    identity: {
+      runtimeKind: "opencode" as const,
+      externalSessionId: "native-1",
+      workingDirectory: "/repo/worktree",
+    },
+    runtimeKind: "opencode" as const,
+    runtimeRef,
+    selection: {
+      runtimeKind: "opencode" as const,
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "low",
+    },
+    catalog,
+    isLoading: false,
+    error: null,
+    retry: async () => {},
+    update: mock(() => {}),
+  };
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={client}>
+      <RuntimeDefinitionsContext value={definitions}>{children}</RuntimeDefinitionsContext>
+    </QueryClientProvider>
+  );
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+    }),
+  );
+  const harness = createHookHarness(
+    (session: typeof target) => useWorkspaceSessionModelPicker("/repo", session),
+    target,
+    { wrapper },
+  );
+  try {
+    await harness.mount();
+    await harness.waitFor((state) => state.selection?.modelId === "gpt-5");
+    expect(loadRuntimeCatalog).toHaveBeenCalledTimes(1);
+
+    await harness.run((state) => state.modelPicker.onOpenChange?.());
+    await waitFor(() => expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2));
+    expect(loadRuntimeCatalog.mock.calls[1]).toEqual([runtimeRef]);
+  } finally {
+    await harness.unmount();
+    client.clear();
     configureShellBridge(createUnavailableShellBridge());
   }
 });

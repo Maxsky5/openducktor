@@ -3,7 +3,7 @@ import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   type ReusablePrompt,
 } from "@openducktor/contracts";
-import type { AgentSlashCommand } from "@openducktor/core";
+import type { AgentSlashCommand, ListAgentRuntimeCatalogInput } from "@openducktor/core";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -202,6 +202,49 @@ describe("useChatComposerSlashCommands", () => {
 
       expect(loadRuntimeCatalog).toHaveBeenCalledWith(sessionRuntime.runtimeRef);
       expect(harness.getLatest().slashCommands).toEqual([runtimeCommand]);
+      expect(harness.getLatest().slashCommandsError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("retries only the slash command surface after a failed read", async () => {
+    const runtimeCommand: AgentSlashCommand = {
+      id: "runtime-review",
+      trigger: "runtime-review",
+      title: "Runtime review",
+      hints: [],
+    };
+    let attempts = 0;
+    const loadRuntimeCatalog = mock(async (_input: ListAgentRuntimeCatalogInput) => {
+      attempts += 1;
+      return attempts === 1
+        ? { slashCommands: { status: "failed" as const, message: "Slash command list offline." } }
+        : createRuntimeCatalogFixture({ slashCommands: { commands: [runtimeCommand] } });
+    });
+    const harness = createHookHarness(
+      useChatComposerSlashCommands,
+      {
+        promptInputRuntime: sessionRuntime,
+        runtimeSupportsSlashCommands: true,
+        reusablePrompts: [],
+        loadRuntimeCatalog,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.slashCommandsError === "Slash command list offline.");
+      expect(harness.getLatest().retrySlashCommands).not.toBeNull();
+
+      await harness.run((state) => state.retrySlashCommands?.());
+      await harness.waitFor((state) => state.slashCommands.length === 1);
+
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
+      expect(loadRuntimeCatalog.mock.calls[1]).toEqual([
+        { ...sessionRuntime.runtimeRef, surfaces: ["slashCommands"] },
+      ]);
       expect(harness.getLatest().slashCommandsError).toBeNull();
     } finally {
       await harness.unmount();

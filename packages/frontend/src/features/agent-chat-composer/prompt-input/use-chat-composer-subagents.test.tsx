@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSubagentCatalog, AgentRuntimeCatalog } from "@openducktor/core";
+import type {
+  AgentSubagentCatalog,
+  AgentRuntimeCatalog,
+  ListAgentRuntimeCatalogInput,
+} from "@openducktor/core";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -148,6 +152,45 @@ describe("useChatComposerSubagents", () => {
         workingDirectory: "/repo/worktree",
       });
       expect(harness.getLatest().subagents).toEqual(catalog.subagents);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("retries only the subagent surface after a failed read", async () => {
+    const catalog: AgentSubagentCatalog = {
+      subagents: [{ id: "reviewer", name: "reviewer", label: "Reviewer" }],
+    };
+    let attempts = 0;
+    const loadRuntimeCatalog = mock(async (_input: ListAgentRuntimeCatalogInput) => {
+      attempts += 1;
+      return attempts === 1
+        ? { subagents: { status: "failed" as const, message: "Subagent list offline." } }
+        : createRuntimeCatalogFixture({ subagents: catalog });
+    });
+    const harness = createHookHarness(
+      useChatComposerSubagents,
+      {
+        promptInputRuntime: sessionRuntime,
+        supportsSubagentReferences: true,
+        loadRuntimeCatalog,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.subagentsError === "Subagent list offline.");
+      expect(harness.getLatest().retrySubagents).not.toBeNull();
+
+      await harness.run((state) => state.retrySubagents?.());
+      await harness.waitFor((state) => state.subagents.length === 1);
+
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
+      expect(loadRuntimeCatalog.mock.calls[1]).toEqual([
+        { ...sessionRuntime.runtimeRef, surfaces: ["subagents"] },
+      ]);
+      expect(harness.getLatest().subagentsError).toBeNull();
     } finally {
       await harness.unmount();
     }

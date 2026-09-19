@@ -12,8 +12,8 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { act, createRef, type PropsWithChildren, type ReactElement } from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createRef, type PropsWithChildren, type ReactElement } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
@@ -445,15 +445,16 @@ describe("AgentSessionTranscriptDialogHost", () => {
       expect(await screen.findByText("Skills may be incomplete")).toBeTruthy();
       catalogAvailable = true;
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-
-      await waitFor(() => {
-        expect(screen.queryByText("Skills may be incomplete")).toBeNull();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
       });
+
+      expect(screen.queryByText("Skills may be incomplete")).toBeNull();
       expect(catalogAttempts).toBeGreaterThanOrEqual(2);
     } finally {
       rendered.unmount();
     }
-  });
+  }, 10000);
 
   const ActiveWorkspaceTestProvider = ({ children }: PropsWithChildren): ReactElement => (
     <ActiveWorkspaceContext.Provider

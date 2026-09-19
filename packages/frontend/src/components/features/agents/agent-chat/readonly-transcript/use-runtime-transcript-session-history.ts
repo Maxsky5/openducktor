@@ -9,7 +9,7 @@ import {
   type RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-readiness";
 import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
@@ -30,6 +30,7 @@ import {
 import {
   RUNTIME_CATALOG_STALE_TIME_MS,
   resolveRuntimeCatalogSurface,
+  retryRuntimeCatalogSurface,
   runtimeCatalogQueryOptions,
 } from "@/state/queries/runtime-catalog";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
@@ -228,7 +229,6 @@ export function useRuntimeTranscriptSessionHistory({
       loadRepoRuntimeCatalog,
     }),
   );
-  const { refetch: refetchSkills } = skillsQuery;
   const skillSurface = resolveRuntimeCatalogSurface(skillsQuery.data?.skills, skillsQuery.error);
   const session = useMemo(() => {
     let transcriptSession: AgentChatTranscriptSession | null = null;
@@ -282,9 +282,21 @@ export function useRuntimeTranscriptSessionHistory({
   const retryHistory = useCallback(() => {
     void refetchHistory();
   }, [refetchHistory]);
+  // Retry only the skill surface. The combined catalog entry keeps every other
+  // surface that already loaded.
+  const [isRetryingSkills, setIsRetryingSkills] = useState(false);
   const retrySkills = useCallback(() => {
-    void refetchSkills();
-  }, [refetchSkills]);
+    if (runtimeCatalogRef === null) {
+      return;
+    }
+    setIsRetryingSkills(true);
+    void retryRuntimeCatalogSurface({
+      queryClient,
+      runtimeRef: runtimeCatalogRef,
+      surface: "skills",
+      loadRuntimeCatalog: loadRepoRuntimeCatalog,
+    }).finally(() => setIsRetryingSkills(false));
+  }, [loadRepoRuntimeCatalog, queryClient, runtimeCatalogRef]);
 
   return {
     session,
@@ -294,7 +306,7 @@ export function useRuntimeTranscriptSessionHistory({
     isRetryingHistory: historyQuery.isFetching,
     skillSurfaceError: skillSurface.error,
     retrySkills: retryActionWhenFailed(skillSurface.error !== null, retrySkills),
-    isRetryingSkills: skillsQuery.isFetching,
+    isRetryingSkills,
     replyAgentApproval,
     answerAgentQuestion,
   };

@@ -366,7 +366,9 @@ type AgentChatComposerEditorProps = {
   subagents: AgentSubagentReference[];
   subagentsError: string | null;
   isSubagentsLoading: boolean;
-  retryCatalog: (() => void) | null;
+  retrySlashCommands: (() => void) | null;
+  retrySkills: (() => void) | null;
+  retrySubagents: (() => void) | null;
   onCatalogMenuOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
 };
@@ -451,7 +453,9 @@ export function AgentChatComposerEditor({
   subagents,
   subagentsError,
   isSubagentsLoading,
-  retryCatalog,
+  retrySlashCommands,
+  retrySkills,
+  retrySubagents,
   onCatalogMenuOpen,
   searchFiles,
 }: AgentChatComposerEditorProps): ReactElement {
@@ -597,7 +601,7 @@ export function AgentChatComposerEditor({
           supportsSubagentReferences={supportsSubagentReferences}
           subagentsError={subagentsError}
           isSubagentsLoading={isSubagentsLoading}
-          onRetrySubagents={retryWhenErrored(subagentsError, retryCatalog)}
+          onRetrySubagents={retryWhenErrored(subagentsError, retrySubagents)}
           onSelectFile={selectFileSearchResult}
           onSelectSubagent={selectSubagentReference}
         />
@@ -609,7 +613,7 @@ export function AgentChatComposerEditor({
           activeIndex={activeSlashIndex}
           slashCommandsError={slashCommandsError}
           isSlashCommandsLoading={isSlashCommandsLoading}
-          onRetry={retryWhenErrored(slashCommandsError, retryCatalog)}
+          onRetry={retryWhenErrored(slashCommandsError, retrySlashCommands)}
           onSelectCommand={selectSlashCommand}
         />
       ) : null}
@@ -620,7 +624,7 @@ export function AgentChatComposerEditor({
           activeIndex={activeSkillIndex}
           skillsError={skillsError}
           isSkillsLoading={isSkillsLoading}
-          onRetry={retryWhenErrored(skillsError, retryCatalog)}
+          onRetry={retryWhenErrored(skillsError, retrySkills)}
           onSelectSkill={selectSkillReference}
         />
       ) : null}

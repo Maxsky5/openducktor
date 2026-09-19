@@ -1,4 +1,5 @@
-import type { AgentModelSelection } from "@openducktor/core";
+import type { AgentModelSelection, RuntimeKind } from "@openducktor/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { type ModelPickerValue } from "@/components/features/agents/model-picker";
 import { coerceVisibleSelectionToCatalog } from "@/features/model-selection/model-selection-state";
@@ -7,6 +8,7 @@ import { useModelSelectionActions } from "@/features/agent-chat-composer/model-s
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
 import { host } from "@/state/operations/host";
+import { refreshRuntimeCatalogIfStale } from "@/state/queries/runtime-catalog";
 import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
 import {
   projectWorkspaceModelResources,
@@ -16,7 +18,6 @@ import {
 const rejectMissingSessionUpdate = (): never => {
   throw new Error("No existing session is selected.");
 };
-const onModelPickerOpenChange = (): void => {};
 const noCreationResources = [] as const;
 
 /** Uses the existing model picker and selection policies for both creation and chat. */
@@ -91,6 +92,37 @@ export function useWorkspaceSessionModelPicker(
     },
     [runtimes, handleSelectModelPair],
   );
+  const queryClient = useQueryClient();
+  const refreshRuntimeCatalog = useCallback(
+    (runtimeKind: RuntimeKind) => {
+      refreshRuntimeCatalogIfStale(
+        queryClient,
+        { repoPath, runtimeKind, workingDirectory: repoPath },
+        loadRepoRuntimeCatalog,
+      );
+    },
+    [loadRepoRuntimeCatalog, queryClient, repoPath],
+  );
+  const onCatalogSelectorOpen = useCallback(() => {
+    if (session?.runtimeRef) {
+      refreshRuntimeCatalogIfStale(queryClient, session.runtimeRef, loadRepoRuntimeCatalog);
+      return;
+    }
+    if (selection?.runtimeKind) {
+      refreshRuntimeCatalog(selection.runtimeKind);
+      return;
+    }
+    for (const runtimeKind of runtimeKinds) {
+      refreshRuntimeCatalog(runtimeKind);
+    }
+  }, [
+    loadRepoRuntimeCatalog,
+    queryClient,
+    refreshRuntimeCatalog,
+    runtimeKinds,
+    selection?.runtimeKind,
+    session?.runtimeRef,
+  ]);
   const modelPicker = useMemo(
     () => ({
       runtimes,
@@ -110,9 +142,9 @@ export function useWorkspaceSessionModelPicker(
         : { kind: "editable" as const },
       favoriteState,
       onValueChange,
-      onOpenChange: onModelPickerOpenChange,
+      onOpenChange: onCatalogSelectorOpen,
     }),
-    [runtimes, selection, sessionRuntimeKind, favoriteState, onValueChange],
+    [runtimes, selection, sessionRuntimeKind, favoriteState, onValueChange, onCatalogSelectorOpen],
   );
   return {
     selection,
@@ -122,5 +154,6 @@ export function useWorkspaceSessionModelPicker(
     ...actions,
     isLoading,
     modelPicker,
+    onCatalogSelectorOpen,
   };
 }

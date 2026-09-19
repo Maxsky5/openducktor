@@ -706,10 +706,15 @@ export class OpencodeSdkAdapter
   }
 
   async loadRuntimeCatalog(input: ListAgentRuntimeCatalogInput): Promise<AgentRuntimeCatalogRead> {
-    return loadRuntimeCatalog(this.createClient, {
-      ...(await this.resolveRuntimeClientInput(input, "load runtime catalog")),
+    const clientInput = await this.resolveRuntimeClientInput(input, "load runtime catalog");
+    const catalogInput: Parameters<typeof loadRuntimeCatalog>[1] = {
+      ...clientInput,
       repoPath: input.repoPath,
-    });
+    };
+    if (input.surfaces !== undefined) {
+      catalogInput.surfaces = input.surfaces;
+    }
+    return loadRuntimeCatalog(this.createClient, catalogInput);
   }
 
   async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {

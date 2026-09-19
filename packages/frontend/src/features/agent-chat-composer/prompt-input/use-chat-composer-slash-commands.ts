@@ -11,8 +11,12 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
-import { resolveRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
+import {
+  resolveRuntimeCatalogSurface,
+  retryRuntimeCatalogSurface,
+} from "@/state/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
 
@@ -66,17 +70,18 @@ export const useChatComposerSlashCommands = ({
   reusablePrompts: ReusablePrompt[];
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 }) => {
+  const queryClient = useQueryClient();
   const slashCommandsQuery = useChatComposerRuntimeCatalogQuery({
     promptInputRuntime,
     supports: runtimeSupportsSlashCommands,
     loadRuntimeCatalog,
   });
-  const surface = resolveRuntimeCatalogSurface(
+  const resolved = resolveRuntimeCatalogSurface(
     slashCommandsQuery.data?.slashCommands,
     slashCommandsQuery.error,
   );
   const runtimeSlashCommandCatalog =
-    promptInputRuntime.state === "available" ? surface.catalog : null;
+    promptInputRuntime.state === "available" ? resolved.catalog : null;
   const reusablePromptSlashCommands = useMemo(
     () => reusablePrompts.map(toReusablePromptSlashCommand),
     [reusablePrompts],
@@ -106,9 +111,25 @@ export const useChatComposerSlashCommands = ({
   if (runtimeSupportsSlashCommands && promptInputRuntime.state === "unavailable") {
     slashCommandsError = promptInputRuntime.error;
   } else if (runtimeSupportsSlashCommands && promptInputRuntime.state === "available") {
-    slashCommandsError = surface.error;
+    slashCommandsError = resolved.error;
     isSlashCommandsLoading = slashCommandsQuery.isLoading;
   }
+  // The retry reads only the slash-command surface and merges it into the cached
+  // catalog entry. OpenCode supports slash commands but not skills, so this
+  // surface owns its retry instead of borrowing the skill retry.
+  const runtimeRef =
+    promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
+  const retrySlashCommands =
+    runtimeSupportsSlashCommands && runtimeRef !== null
+      ? () => {
+          void retryRuntimeCatalogSurface({
+            queryClient,
+            runtimeRef,
+            surface: "slashCommands",
+            loadRuntimeCatalog,
+          });
+        }
+      : null;
 
   return {
     supportsSlashCommands: runtimeSupportsSlashCommands || reusablePrompts.length > 0,
@@ -116,11 +137,13 @@ export const useChatComposerSlashCommands = ({
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    retrySlashCommands,
   } satisfies {
     supportsSlashCommands: boolean;
     slashCommandCatalog: AgentSlashCommandCatalog;
     slashCommands: AgentSlashCommandCatalog["commands"];
     slashCommandsError: string | null;
     isSlashCommandsLoading: boolean;
+    retrySlashCommands: (() => void) | null;
   };
 };

@@ -1,7 +1,7 @@
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { runtimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
+import { refreshRuntimeCatalogIfStale } from "@/state/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
 type UseChatComposerCatalogRefreshArgs = {
@@ -23,8 +23,6 @@ export const useChatComposerCatalogRefresh = ({
     if (runtimeRef === null) {
       return;
     }
-    void queryClient
-      .fetchQuery(runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog))
-      .catch(() => undefined);
+    refreshRuntimeCatalogIfStale(queryClient, runtimeRef, loadRuntimeCatalog);
   }, [loadRuntimeCatalog, queryClient, runtimeRef]);
 };
