@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import { ElectronOperationError, errorMessage } from "../src/effect/electron-errors";
-import type { ElectronReleaseArch, ElectronReleasePlatform } from "./electron-release-targets";
 import { resolvePackagedAppResourcesDirectory } from "./electron-packaged-layout";
+import type { ElectronReleaseArch, ElectronReleasePlatform } from "./electron-release-targets";
 import {
   ELECTRON_SIDECAR_IDS,
   type ElectronSidecarId,

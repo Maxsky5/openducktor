@@ -29,29 +29,44 @@ afterEach(async () => {
   releaseDirectories.clear();
 });
 
-const successfulModuleSource = `
-module.exports = {
-  FileFinder: {
-    create: () => ({
+const fffModuleSource = (finder: string): string =>
+  `module.exports = { FileFinder: { create: () => (${finder}) } };\n`;
+
+const successfulFinder = `{
+  ok: true,
+  value: {
+    waitForScan: async () => ({ ok: true, value: true }),
+    mixedSearch: (query) => ({
       ok: true,
       value: {
-        waitForScan: async () => ({ ok: true, value: true }),
-        mixedSearch: (query) => ({
-          ok: true,
-          value: {
-            items: [{ type: "file", item: { relativePath: query, fileName: query } }],
-            scores: [],
-            totalMatched: 1,
-            totalFiles: 1,
-            totalDirs: 0,
-          },
-        }),
-        destroy: () => {},
+        items: [{ type: "file", item: { relativePath: query, fileName: query } }],
+        scores: [],
+        totalMatched: 1,
+        totalFiles: 1,
+        totalDirs: 0,
       },
     }),
+    destroy: () => {},
   },
-};
-`;
+}`;
+
+const timedOutFinder = `{
+  ok: true,
+  value: {
+    waitForScan: async () => ({ ok: true, value: false }),
+    mixedSearch: () => ({ ok: true, value: { items: [] } }),
+    destroy: () => {},
+  },
+}`;
+
+const finderWithoutProbeResult = `{
+  ok: true,
+  value: {
+    waitForScan: async () => ({ ok: true, value: true }),
+    mixedSearch: () => ({ ok: true, value: { items: [] } }),
+    destroy: () => {},
+  },
+}`;
 
 const writePackagedFffModule = async ({
   platform,
@@ -116,7 +131,7 @@ describe("verifyPackagedFffFileSearch", () => {
     const moduleDirectory = await writePackagedFffModule({
       platform: "linux",
       releaseDirectory,
-      source: successfulModuleSource,
+      source: fffModuleSource(successfulFinder),
     });
 
     await expect(
@@ -155,7 +170,7 @@ describe("verifyPackagedFffFileSearch", () => {
       join(fallbackModuleDirectory, "package.json"),
       JSON.stringify({ name: "@ff-labs/fff-node", main: "index.cjs" }),
     );
-    await writeFile(join(fallbackModuleDirectory, "index.cjs"), successfulModuleSource);
+    await writeFile(join(fallbackModuleDirectory, "index.cjs"), fffModuleSource(successfulFinder));
     const packagedReleaseDirectory = join(releaseDirectory, "release");
     await mkdir(
       resolvePackagedFffNodeModulesDirectory({
@@ -180,8 +195,7 @@ describe("verifyPackagedFffFileSearch", () => {
     await writePackagedFffModule({
       platform: "macos",
       releaseDirectory,
-      source:
-        "module.exports = { FileFinder: { create: () => ({ ok: false, error: 'native library missing' }) } };\n",
+      source: fffModuleSource(`{ ok: false, error: 'native library missing' }`),
     });
 
     await expect(
@@ -194,8 +208,7 @@ describe("verifyPackagedFffFileSearch", () => {
     await writePackagedFffModule({
       platform: "macos",
       releaseDirectory,
-      source:
-        "module.exports = { FileFinder: { create: () => ({ ok: true, value: { waitForScan: async () => ({ ok: true, value: false }), mixedSearch: () => ({ ok: true, value: { items: [] } }), destroy: () => {} } }) } };\n",
+      source: fffModuleSource(timedOutFinder),
     });
 
     await expect(
@@ -208,8 +221,7 @@ describe("verifyPackagedFffFileSearch", () => {
     await writePackagedFffModule({
       platform: "windows",
       releaseDirectory,
-      source:
-        "module.exports = { FileFinder: { create: () => ({ ok: true, value: { waitForScan: async () => ({ ok: true, value: true }), mixedSearch: () => ({ ok: true, value: { items: [] } }), destroy: () => {} } }) } };\n",
+      source: fffModuleSource(finderWithoutProbeResult),
     });
 
     await expect(
