@@ -16,7 +16,7 @@ import {
   requestThreadId,
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
-import { codexRpcRequestError } from "./test-fixtures/codex-rpc-error";
+import { codexRpcRequestError, EMPTY_ROLLOUT_MESSAGE } from "./test-fixtures/codex-rpc-error";
 import {
   codexAgentMessageItemFixture,
   codexCollabAgentToolCallFixture,
@@ -54,9 +54,6 @@ const paginatedTurnsListResponse = (thread: PaginatedThreadFixture) => ({
 
 const paginatedTurnsResponse = (turns: PaginatedTurnFixture[]) =>
   paginatedTurnsListResponse({ id: "fixture-thread", status: { type: "idle" }, turns });
-
-const EMPTY_ROLLOUT_MESSAGE =
-  "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /repo/rollout.jsonl is empty";
 
 const paginatedThreadListResponse = (threads: ThreadListFixture[]) => ({
   data: threads.map((thread) => {
@@ -687,7 +684,7 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("throws an empty rollout for a resumed local session", async () => {
+  test("rethrows the empty-rollout error for a resumed local session", async () => {
     const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
     const baseTransport = new RecordingTransport("runtime-live", false);
     const transport: CodexJsonRpcTransport = {
@@ -707,7 +704,7 @@ describe("CodexAppServerAdapter history loading", () => {
     await expect(adapter.loadSessionTodos(input)).rejects.toBe(failure);
   });
 
-  test("throws an empty rollout when the fresh session is released during the read", async () => {
+  test("rethrows the empty-rollout error when the fresh session is released during the read", async () => {
     const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
     const readRequested = createDeferred<void>();
     const readResult = createDeferred<never>();
@@ -732,7 +729,7 @@ describe("CodexAppServerAdapter history loading", () => {
     await expect(pendingHistory).rejects.toBe(failure);
   });
 
-  test("propagates a later empty rollout after the fresh session materializes", async () => {
+  test("rethrows a later empty-rollout error after the first thread read", async () => {
     const threadId = "thread/start-runtime-live";
     const failure = codexRpcRequestError("thread/read", -32603, EMPTY_ROLLOUT_MESSAGE);
     const thread = { id: threadId, cwd: "/repo", turns: [] };
