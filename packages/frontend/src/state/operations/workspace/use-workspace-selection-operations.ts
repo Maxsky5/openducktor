@@ -23,6 +23,7 @@ import {
   loadWorkspaceListFromQuery,
   workspaceCatalogQueryOptions,
   workspaceListQueryOptions,
+  workspaceQueryKeys,
   writeWorkspaceCatalogToQuery,
   writeWorkspaceListToQuery,
 } from "../../queries/workspace";
@@ -154,12 +155,10 @@ export function useWorkspaceSelectionOperations({
   const workspaceLoadError = workspaceQueryError
     ? new Error(errorMessage(workspaceQueryError), { cause: workspaceQueryError })
     : null;
-  const workspacesRef = useRef(workspaces);
 
   useLayoutEffect(() => {
     activeWorkspaceRef.current = activeWorkspace;
-    workspacesRef.current = workspaceListQuery.data ?? [];
-  }, [activeWorkspace, workspaceListQuery.data]);
+  }, [activeWorkspace]);
 
   const writeWorkspaceRecords = useCallback(
     (
@@ -277,7 +276,8 @@ export function useWorkspaceSelectionOperations({
   const reorderWorkspaces = useCallback(
     async (workspaceIds: string[]): Promise<void> => {
       const reorderVersion = ++workspaceReorderVersionRef.current;
-      const previousRecords = workspacesRef.current;
+      const previousRecords =
+        queryClient.getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list()) ?? [];
       const optimisticRecords = orderWorkspaceRecords(previousRecords, workspaceIds);
 
       if (optimisticRecords) {
