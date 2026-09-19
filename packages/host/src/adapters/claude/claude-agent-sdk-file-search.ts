@@ -28,7 +28,7 @@ export type ClaudeWorkspaceFileSearch = {
 type CachedClaudeFileFinder = {
   finder: ClaudeWorkspaceFileFinder;
   released: boolean;
-  searchCount: number;
+  searchesInFlight: number;
 };
 
 type ClaudeFileSearchSession = { input: { workingDirectory: string } };
@@ -56,6 +56,14 @@ export const trackClaudeFileSearchSessions = ({
   });
 };
 
+export const toClaudeFileSearchResults = (result: MixedSearchResult): AgentFileSearchResult[] =>
+  result.items
+    .map((entry) =>
+      entry.type === "directory" ? toDirectoryResult(entry.item) : toFileResult(entry.item),
+    )
+    .filter((entry) => entry.path.length > 0)
+    .slice(0, FILE_SEARCH_LIMIT);
+
 const toFileResult = (item: FileItem): AgentFileSearchResult => {
   const path = normalizePathSeparators(item.relativePath);
   return {
@@ -76,14 +84,6 @@ const toDirectoryResult = (item: DirItem): AgentFileSearchResult => {
   };
 };
 
-export const toClaudeFileSearchResults = (result: MixedSearchResult): AgentFileSearchResult[] =>
-  result.items
-    .map((entry) =>
-      entry.type === "directory" ? toDirectoryResult(entry.item) : toFileResult(entry.item),
-    )
-    .filter((entry) => entry.path.length > 0)
-    .slice(0, FILE_SEARCH_LIMIT);
-
 export const resolveUnpackedAsarModulePath = (modulePath: string): string => {
   if (!modulePath.includes(ASAR_SEGMENT)) {
     return modulePath;
@@ -93,8 +93,8 @@ export const resolveUnpackedAsarModulePath = (modulePath: string): string => {
 };
 
 const loadFileFinderModule = (): typeof import("@ff-labs/fff-node") => {
-  // fff resolves its native library next to the package. Inside an Electron asar
-  // archive that path cannot be opened by ffi-rs, so load the unpacked copy.
+  // fff loads its native library next to the package. ffi-rs cannot open that
+  // path inside an Electron asar archive, so load the unpacked copy.
   const require = createRequire(import.meta.url);
   const modulePath = resolveUnpackedAsarModulePath(require.resolve("@ff-labs/fff-node"));
   // SAFETY: The resolved path is the CommonJS entry of @ff-labs/fff-node, so the
@@ -149,7 +149,7 @@ export const createClaudeWorkspaceFileSearch = ({
   const findersByDirectory = new Map<string, CachedClaudeFileFinder>();
 
   const destroyCachedFinder = (cached: CachedClaudeFileFinder): void => {
-    if (cached.searchCount > 0) {
+    if (cached.searchesInFlight > 0) {
       cached.released = true;
       return;
     }
@@ -178,7 +178,7 @@ export const createClaudeWorkspaceFileSearch = ({
     const cached: CachedClaudeFileFinder = {
       finder: createFinder(workingDirectory),
       released: false,
-      searchCount: 0,
+      searchesInFlight: 0,
     };
     findersByDirectory.set(workingDirectory, cached);
     destroyEvictedFinders();
@@ -204,12 +204,12 @@ export const createClaudeWorkspaceFileSearch = ({
     },
     search: async (input) => {
       const cached = ensureFinder(input.workingDirectory);
-      cached.searchCount += 1;
+      cached.searchesInFlight += 1;
       try {
         return await cached.finder.search(input.query);
       } finally {
-        cached.searchCount -= 1;
-        if (cached.released && cached.searchCount === 0) {
+        cached.searchesInFlight -= 1;
+        if (cached.released && cached.searchesInFlight === 0) {
           cached.finder.destroy();
         }
       }

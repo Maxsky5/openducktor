@@ -36,7 +36,7 @@ The package adds one native dependency per platform. CI must install the platfor
 
 The Electron package build verifies the unpacked payload after electron-builder. It loads the packaged module, scans a probe file, and fails the build when the payload is missing or resolves outside the packaged app.
 
-The Claude service owns finder lifetime. A failed prewarm stays silent so the session opens, and the first `@` query reports the load error. A finder released during a search is destroyed when the last search settles.
+The Claude service owns finder lifetime. A failed prewarm stays silent so the session opens, and the first `@` query reports the load error. The cache destroys a finder released during a search when the last search settles.
 
 ## References
 
