@@ -547,7 +547,8 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           }),
         ),
       ).rejects.toThrow(
-        /Codex app-server closed: process exited with code 42 for runtime runtime-startup-exit: codex exploded before initialize/s,
+        // Windows can deliver the stdout close before the exit event wins the 25 ms race.
+        /Codex app-server (?:closed: process exited with code 42|stdout closed unexpectedly) for runtime runtime-startup-exit: codex exploded before initialize/s,
       );
     } finally {
       await removeTestDirectory(root);
