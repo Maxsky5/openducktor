@@ -17,6 +17,7 @@ const model: KanbanPageContentModel = {
   isLoadingTasks: false,
   isSwitchingWorkspace: false,
   emptyColumnDisplay: "show",
+  taskCardView: "normal",
   showHorizontalScrollbars: false,
   columns: [
     {

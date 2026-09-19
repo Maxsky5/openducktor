@@ -253,7 +253,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
                 hunkSeparators: "metadata",
               },
               reusablePrompts: [],
-              kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
+              kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
               autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
               notifications: DEFAULT_NOTIFICATION_SETTINGS,
               agentRuntimes: DEFAULT_AGENT_RUNTIMES,
@@ -305,7 +305,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
                 hunkSeparators: "metadata",
               },
               reusablePrompts: [],
-              kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
+              kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
               autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
               notifications: DEFAULT_NOTIFICATION_SETTINGS,
               agentRuntimes: DEFAULT_AGENT_RUNTIMES,
@@ -322,6 +322,34 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               message: cause instanceof Error ? cause.message : String(cause),
               cause: cause,
             }),
+        });
+      },
+      updateKanbanTaskCardView(taskCardView) {
+        calls.push("updateKanbanTaskCardView");
+        return Effect.succeed({
+          system: {},
+          customAgentRoles: [],
+          theme: "light",
+          git: { defaultMergeMethod: "merge_commit" },
+          general: { openAgentStudioTabOnBackgroundSessionStart: true },
+          appearance: { horizontalScrollbarVisibility: "system" },
+          chat: {
+            showThinkingMessages: false,
+            expandFileDiffsByDefault: false,
+            diffStyle: "split",
+            diffIndicators: "bars",
+            diffHeight: "full",
+            lineOverflow: "wrap",
+            hunkSeparators: "metadata",
+          },
+          reusablePrompts: [],
+          kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView },
+          autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
+          notifications: DEFAULT_NOTIFICATION_SETTINGS,
+          agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+          agentModelFavorites: [],
+          workspaces: {},
+          globalPromptOverrides: {},
         });
       },
       setTheme() {
@@ -437,7 +465,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           appearance: { horizontalScrollbarVisibility: "system" },
           chat: { showThinkingMessages: false },
           reusablePrompts: [],
-          kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
+          kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
           autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
           notifications: DEFAULT_NOTIFICATION_SETTINGS,
           agentRuntimes: {
@@ -457,6 +485,9 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
     ).resolves.toMatchObject({
       agentModelFavorites: [{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }],
     });
+    await expect(
+      router.invoke("workspace_update_kanban_task_card_view", { taskCardView: "compact" }),
+    ).resolves.toMatchObject({ kanban: { taskCardView: "compact" } });
     await expect(router.invoke("set_theme", { theme: "dark" })).resolves.toBeUndefined();
     await expect(
       router.invoke("workspace_update_global_git_config", {
@@ -477,6 +508,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       "getSettingsSnapshot",
       "saveSettingsSnapshot",
       "updateAgentModelFavorites",
+      "updateKanbanTaskCardView",
       "setTheme",
       "updateGlobalGitConfig",
     ]);
@@ -666,7 +698,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             hunkSeparators: "metadata",
           },
           reusablePrompts: [],
-          kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
+          kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },
           autopilot: { alwaysStartQaReviewsFresh: false, rules: [] },
           agentRuntimes: DEFAULT_AGENT_RUNTIMES,
           agentModelFavorites: [],

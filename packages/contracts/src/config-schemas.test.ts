@@ -27,6 +27,7 @@ import {
   HORIZONTAL_SCROLLBAR_VISIBILITY_VALUES,
   isSameAgentModelFavorite,
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
+  KANBAN_TASK_CARD_VIEW_VALUES,
   kanbanSettingsSchema,
   persistedGlobalConfigV2Schema,
   repoConfigSchema,
@@ -962,7 +963,11 @@ describe("config-schemas", () => {
   test("defaults missing kanban empty-column display to show", () => {
     const parsed = kanbanSettingsSchema.parse({ doneVisibleDays: 4 });
 
-    expect(parsed).toEqual({ doneVisibleDays: 4, emptyColumnDisplay: "show" });
+    expect(parsed).toEqual({
+      doneVisibleDays: 4,
+      emptyColumnDisplay: "show",
+      taskCardView: "normal",
+    });
   });
 
   test("accepts every supported kanban empty-column display mode", () => {
@@ -970,8 +975,20 @@ describe("config-schemas", () => {
       expect(kanbanSettingsSchema.parse({ doneVisibleDays: 1, emptyColumnDisplay })).toEqual({
         doneVisibleDays: 1,
         emptyColumnDisplay,
+        taskCardView: "normal",
       });
     }
+  });
+
+  test("accepts supported kanban task card views and rejects other values", () => {
+    for (const taskCardView of KANBAN_TASK_CARD_VIEW_VALUES) {
+      expect(kanbanSettingsSchema.parse({ doneVisibleDays: 1, taskCardView }).taskCardView).toBe(
+        taskCardView,
+      );
+    }
+    expect(() =>
+      kanbanSettingsSchema.parse({ doneVisibleDays: 1, taskCardView: "dense" }),
+    ).toThrow();
   });
 
   test("rejects invalid kanban empty-column display modes", () => {

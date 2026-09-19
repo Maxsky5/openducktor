@@ -1,4 +1,5 @@
 import type { KanbanColumn as KanbanColumnData } from "@openducktor/core";
+import type { KanbanTaskCardView } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   buildVirtualColumnLayout,
@@ -10,12 +11,14 @@ import {
 
 const VIRTUALIZATION_MIN_TASK_COUNT = 30;
 const VIRTUAL_CARD_ESTIMATED_HEIGHT_PX = 180;
+const VIRTUAL_COMPACT_CARD_ESTIMATED_HEIGHT_PX = 116;
 const VIRTUAL_CARD_GAP_PX = 12;
 const VIRTUAL_OVERSCAN_PX = 360;
 const INITIAL_VIEWPORT_HEIGHT_FALLBACK_PX = 900;
 
 type UseKanbanVirtualizationArgs = {
   tasks: KanbanColumnData["tasks"];
+  taskCardView?: KanbanTaskCardView;
 };
 
 type KanbanViewportSubscriber = {
@@ -53,6 +56,7 @@ type VirtualLayoutSnapshot = {
 
 type KanbanMeasurementState = {
   heightsByTaskId: Record<string, number>;
+  taskCardView: KanbanTaskCardView;
   taskIdsKey: string;
   version: number;
 };
@@ -62,6 +66,7 @@ type KanbanMeasurementAction =
       type: "sync-tasks";
       taskIds: Set<string>;
       taskIdsKey: string;
+      taskCardView: KanbanTaskCardView;
     }
   | {
       type: "record-height";
@@ -73,8 +78,15 @@ type KanbanMeasurementAction =
       type: "invalidate";
     };
 
-const createMeasurementState = (taskIdsKey: string): KanbanMeasurementState => ({
+const createMeasurementState = ({
+  taskIdsKey,
+  taskCardView = "normal",
+}: {
+  taskIdsKey: string;
+  taskCardView: KanbanTaskCardView;
+}): KanbanMeasurementState => ({
   heightsByTaskId: {},
+  taskCardView,
   taskIdsKey,
   version: 0,
 });
@@ -91,8 +103,17 @@ const reduceKanbanMeasurements = (
   }
 
   if (action.type === "sync-tasks") {
-    if (state.taskIdsKey === action.taskIdsKey) {
+    if (state.taskIdsKey === action.taskIdsKey && state.taskCardView === action.taskCardView) {
       return state;
+    }
+
+    if (state.taskCardView !== action.taskCardView) {
+      return {
+        heightsByTaskId: {},
+        taskCardView: action.taskCardView,
+        taskIdsKey: action.taskIdsKey,
+        version: state.version + 1,
+      };
     }
 
     const nextHeightsByTaskId: Record<string, number> = {};
@@ -107,6 +128,7 @@ const reduceKanbanMeasurements = (
 
     return {
       heightsByTaskId: removedMeasurement ? nextHeightsByTaskId : state.heightsByTaskId,
+      taskCardView: state.taskCardView,
       taskIdsKey: action.taskIdsKey,
       version: removedMeasurement ? state.version + 1 : state.version,
     };
@@ -124,6 +146,7 @@ const reduceKanbanMeasurements = (
       ...state.heightsByTaskId,
       [action.taskId]: action.height,
     },
+    taskCardView: state.taskCardView,
     taskIdsKey: state.taskIdsKey,
     version: state.version + 1,
   };
@@ -231,6 +254,7 @@ const registerViewportSubscriber = (subscriber: KanbanViewportSubscriber): (() =
 
 export function useKanbanVirtualization({
   tasks,
+  taskCardView = "normal",
 }: UseKanbanVirtualizationArgs): UseKanbanVirtualizationResult {
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
   const shouldVirtualize = tasks.length >= VIRTUALIZATION_MIN_TASK_COUNT;
@@ -241,7 +265,7 @@ export function useKanbanVirtualization({
   const taskIdsKey = useMemo(() => tasks.map((task) => task.id).join("\0"), [tasks]);
   const [measurementState, dispatchMeasurement] = useReducer(
     reduceKanbanMeasurements,
-    taskIdsKey,
+    { taskIdsKey, taskCardView },
     createMeasurementState,
   );
   const measurementVersion = measurementState.version;
@@ -251,8 +275,9 @@ export function useKanbanVirtualization({
       type: "sync-tasks",
       taskIds,
       taskIdsKey,
+      taskCardView,
     });
-  }, [taskIds, taskIdsKey]);
+  }, [taskCardView, taskIds, taskIdsKey]);
 
   const itemHeights = useMemo(() => {
     if (!shouldVirtualize) {
@@ -260,9 +285,13 @@ export function useKanbanVirtualization({
     }
 
     return tasks.map(
-      (task) => measurementState.heightsByTaskId[task.id] ?? VIRTUAL_CARD_ESTIMATED_HEIGHT_PX,
+      (task) =>
+        measurementState.heightsByTaskId[task.id] ??
+        (taskCardView === "compact"
+          ? VIRTUAL_COMPACT_CARD_ESTIMATED_HEIGHT_PX
+          : VIRTUAL_CARD_ESTIMATED_HEIGHT_PX),
     );
-  }, [measurementState.heightsByTaskId, shouldVirtualize, tasks]);
+  }, [measurementState.heightsByTaskId, shouldVirtualize, taskCardView, tasks]);
 
   const virtualLayout = useMemo(
     () => buildVirtualColumnLayout(itemHeights, VIRTUAL_CARD_GAP_PX),
@@ -275,11 +304,13 @@ export function useKanbanVirtualization({
     itemHeights,
     totalHeight: virtualLayout.totalHeight,
   });
-  layoutRef.current = {
-    itemOffsets: virtualLayout.itemOffsets,
-    itemHeights,
-    totalHeight: virtualLayout.totalHeight,
-  };
+  useEffect(() => {
+    layoutRef.current = {
+      itemOffsets: virtualLayout.itemOffsets,
+      itemHeights,
+      totalHeight: virtualLayout.totalHeight,
+    };
+  }, [itemHeights, virtualLayout.itemOffsets, virtualLayout.totalHeight]);
 
   const [visibleRange, setVisibleRange] = useState<VirtualWindowRange>(() =>
     findVirtualWindowRange({
@@ -295,45 +326,50 @@ export function useKanbanVirtualization({
   );
 
   const syncViewportRef = useRef<() => void>(() => {});
-  syncViewportRef.current = () => {
-    if (!shouldVirtualize || globalThis.window === undefined) {
-      return;
-    }
-
-    const viewportElement = containerElement;
-    if (!viewportElement) {
-      return;
-    }
-
-    const { itemOffsets, itemHeights: latestItemHeights, totalHeight } = layoutRef.current;
-    const rect = viewportElement.getBoundingClientRect();
-    const closestScrollContainer = viewportElement.closest("[data-main-scroll-container='true']");
-    const scrollContainer =
-      closestScrollContainer instanceof HTMLElement ? closestScrollContainer : null;
-    const containerRect = scrollContainer?.getBoundingClientRect();
-    const viewportHeight = scrollContainer?.clientHeight ?? window.innerHeight;
-    const { viewportStart, viewportEnd } = resolveVirtualViewportWindow({
-      laneTop: rect.top,
-      viewportTop: containerRect?.top ?? 0,
-      viewportHeight,
-    });
-
-    const nextRange = findVirtualWindowRange({
-      itemOffsets,
-      itemHeights: latestItemHeights,
-      totalHeight,
-      viewportStart: viewportStart - VIRTUAL_OVERSCAN_PX,
-      viewportEnd: viewportEnd + VIRTUAL_OVERSCAN_PX,
-    });
-
-    setVisibleRange((current) => {
-      if (current.startIndex === nextRange.startIndex && current.endIndex === nextRange.endIndex) {
-        return current;
+  useEffect(() => {
+    syncViewportRef.current = () => {
+      if (!shouldVirtualize || globalThis.window === undefined) {
+        return;
       }
 
-      return nextRange;
-    });
-  };
+      const viewportElement = containerElement;
+      if (!viewportElement) {
+        return;
+      }
+
+      const { itemOffsets, itemHeights: latestItemHeights, totalHeight } = layoutRef.current;
+      const rect = viewportElement.getBoundingClientRect();
+      const closestScrollContainer = viewportElement.closest("[data-main-scroll-container='true']");
+      const scrollContainer =
+        closestScrollContainer instanceof HTMLElement ? closestScrollContainer : null;
+      const containerRect = scrollContainer?.getBoundingClientRect();
+      const viewportHeight = scrollContainer?.clientHeight ?? window.innerHeight;
+      const { viewportStart, viewportEnd } = resolveVirtualViewportWindow({
+        laneTop: rect.top,
+        viewportTop: containerRect?.top ?? 0,
+        viewportHeight,
+      });
+
+      const nextRange = findVirtualWindowRange({
+        itemOffsets,
+        itemHeights: latestItemHeights,
+        totalHeight,
+        viewportStart: viewportStart - VIRTUAL_OVERSCAN_PX,
+        viewportEnd: viewportEnd + VIRTUAL_OVERSCAN_PX,
+      });
+
+      setVisibleRange((current) => {
+        if (
+          current.startIndex === nextRange.startIndex &&
+          current.endIndex === nextRange.endIndex
+        ) {
+          return current;
+        }
+
+        return nextRange;
+      });
+    };
+  }, [containerElement, shouldVirtualize]);
 
   useEffect(() => {
     if (!shouldVirtualize || globalThis.window === undefined || !containerElement) {

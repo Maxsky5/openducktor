@@ -42,6 +42,8 @@ export const withSerializedConfigWrites = (
     saveSettingsSnapshot: (snapshot) => serialize(service.saveSettingsSnapshot(snapshot)),
     updateAgentModelFavorites: (favorites) =>
       serialize(service.updateAgentModelFavorites(favorites)),
+    updateKanbanTaskCardView: (taskCardView) =>
+      serialize(service.updateKanbanTaskCardView(taskCardView)),
     setTheme: (theme) => serialize(service.setTheme(theme)),
     updateGlobalGitConfig: (git) => serialize(service.updateGlobalGitConfig(git)),
   };

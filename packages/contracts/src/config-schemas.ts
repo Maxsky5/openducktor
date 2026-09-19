@@ -58,8 +58,10 @@ export const DEFAULT_REUSABLE_PROMPTS = [] as const;
 export const DEFAULT_KANBAN_SETTINGS = {
   doneVisibleDays: 1,
   emptyColumnDisplay: "show",
+  taskCardView: "normal",
 } as const;
 export const KANBAN_EMPTY_COLUMN_DISPLAY_VALUES = ["show", "hidden", "collapsed"] as const;
+export const KANBAN_TASK_CARD_VIEW_VALUES = ["normal", "compact"] as const;
 const DEFAULT_THEME_PREFERENCE = "system" as const;
 
 export const CODEX_SANDBOX_MODE_VALUES = [
@@ -530,9 +532,12 @@ export const kanbanSettingsSchema = z.object({
   emptyColumnDisplay: z
     .enum(KANBAN_EMPTY_COLUMN_DISPLAY_VALUES)
     .default(DEFAULT_KANBAN_SETTINGS.emptyColumnDisplay),
+  taskCardView: z.enum(KANBAN_TASK_CARD_VIEW_VALUES).default(DEFAULT_KANBAN_SETTINGS.taskCardView),
 });
 export const kanbanEmptyColumnDisplaySchema = z.enum(KANBAN_EMPTY_COLUMN_DISPLAY_VALUES);
+export const kanbanTaskCardViewSchema = z.enum(KANBAN_TASK_CARD_VIEW_VALUES);
 export type KanbanEmptyColumnDisplay = z.infer<typeof kanbanEmptyColumnDisplaySchema>;
+export type KanbanTaskCardView = z.infer<typeof kanbanTaskCardViewSchema>;
 export type KanbanSettings = z.infer<typeof kanbanSettingsSchema>;
 
 export const autopilotEventIdSchema = z.enum(AUTOPILOT_EVENT_IDS);

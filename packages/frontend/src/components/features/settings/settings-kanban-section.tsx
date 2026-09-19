@@ -1,5 +1,6 @@
 import {
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES,
+  type KanbanTaskCardView,
   type KanbanEmptyColumnDisplay,
   type KanbanSettings,
 } from "@openducktor/contracts";
@@ -7,6 +8,7 @@ import type { ReactElement } from "react";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SettingsSegmentedOptionRow } from "./settings-segmented-option-row";
 
 type SettingsKanbanSectionProps = {
   kanban: KanbanSettings;
@@ -34,6 +36,11 @@ const EMPTY_COLUMN_DISPLAY_OPTIONS: ComboboxOption[] = [
 
 const isKanbanEmptyColumnDisplay = (value: string): value is KanbanEmptyColumnDisplay =>
   KANBAN_EMPTY_COLUMN_DISPLAY_VALUES.some((candidate) => candidate === value);
+
+const TASK_CARD_VIEW_OPTIONS = [
+  { value: "normal", label: "Normal" },
+  { value: "compact", label: "Compact" },
+] as const;
 
 export function SettingsKanbanSection({
   kanban,
@@ -105,6 +112,16 @@ export function SettingsKanbanSection({
           </p>
         </div>
       </div>
+      <SettingsSegmentedOptionRow<KanbanTaskCardView>
+        title="Task card view"
+        description="Choose the task-card density used on the Kanban board."
+        value={kanban.taskCardView}
+        options={TASK_CARD_VIEW_OPTIONS}
+        disabled={disabled}
+        onValueChange={(taskCardView) => {
+          onUpdateKanban((current) => ({ ...current, taskCardView }));
+        }}
+      />
     </div>
   );
 }

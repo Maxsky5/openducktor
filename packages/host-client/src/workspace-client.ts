@@ -5,6 +5,7 @@ import {
   customAgentRoleSchema,
   type GitProviderRepository,
   type GlobalGitConfig,
+  type KanbanTaskCardView,
   gitProviderRepositorySchema,
   type RepositoryGitProviderContext,
   repositoryGitProviderContextSchema,
@@ -182,6 +183,17 @@ const workspaceUpdateAgentModelFavorites = async (
   return invokeFn("workspace_update_agent_model_favorites", { favorites }, settingsSnapshotSchema);
 };
 
+const workspaceUpdateKanbanTaskCardView = async (
+  invokeFn: InvokeFn,
+  taskCardView: KanbanTaskCardView,
+): Promise<SettingsSnapshot> => {
+  return invokeFn(
+    "workspace_update_kanban_task_card_view",
+    { taskCardView },
+    settingsSnapshotSchema,
+  );
+};
+
 const workspaceUpdateGlobalGitConfig = async (
   invokeFn: InvokeFn,
   git: GlobalGitConfig,
@@ -344,6 +356,12 @@ export class HostWorkspaceClient {
     favorites: AgentModelFavorite[],
   ): Promise<SettingsSnapshot> {
     return workspaceUpdateAgentModelFavorites(this.invokeFn, favorites);
+  }
+
+  async workspaceUpdateKanbanTaskCardView(
+    taskCardView: KanbanTaskCardView,
+  ): Promise<SettingsSnapshot> {
+    return workspaceUpdateKanbanTaskCardView(this.invokeFn, taskCardView);
   }
 
   async workspaceUpdateGlobalGitConfig(git: GlobalGitConfig): Promise<void> {

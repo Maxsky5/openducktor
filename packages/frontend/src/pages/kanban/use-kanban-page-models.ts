@@ -8,6 +8,7 @@ import { errorMessage } from "@/lib/errors";
 import { gitProviderReadError } from "@/lib/git-provider-health";
 import { useTasksState, useWorkspaceState } from "@/state";
 import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
+import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
 import { useHorizontalScrollbarVisibility } from "@/state/queries/use-horizontal-scrollbar-visibility";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
@@ -69,6 +70,7 @@ export function useKanbanPageModels({
   const reportedPlatformErrorRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
+  const taskCardViewState = useKanbanTaskCardView();
   const doneVisibleDays = settingsSnapshotQuery.data?.kanban.doneVisibleDays;
   const horizontalScrollbarVisibility =
     settingsSnapshotQuery.data?.appearance.horizontalScrollbarVisibility;
@@ -181,6 +183,7 @@ export function useKanbanPageModels({
     isLoadingTasks: isLoadingKanbanTasks,
     isSwitchingWorkspace,
     emptyColumnDisplay,
+    taskCardView: taskCardViewState.taskCardView ?? DEFAULT_KANBAN_SETTINGS.taskCardView,
     showHorizontalScrollbars: horizontalScrollbarState.showHorizontalScrollbars,
     tasks: kanbanTasks,
     historicalSessionsByTaskId,
@@ -197,11 +200,13 @@ export function useKanbanPageModels({
     onHumanRequestChanges: actions.onHumanRequestChanges,
     onResetImplementation: actions.onResetImplementation,
   });
-
   return {
     header: {
       isLoadingTasks: isLoadingKanbanTasks,
       isSwitchingWorkspace,
+      taskCardView: taskCardViewState.taskCardView,
+      isTaskCardViewPending: taskCardViewState.isPending,
+      onTaskCardViewChange: taskCardViewState.changeTaskCardView,
       onCreateTask: actions.onCreateTask,
       onRefreshTasks,
     },

@@ -1,6 +1,7 @@
 import type {
   AgentSessionRecord,
   KanbanEmptyColumnDisplay,
+  KanbanTaskCardView,
   TaskCard,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
@@ -139,6 +140,7 @@ type UseKanbanBoardModelArgs = {
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
+  taskCardView: KanbanTaskCardView;
   showHorizontalScrollbars: boolean | null;
   tasks: TaskCard[];
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
@@ -160,6 +162,7 @@ export function useKanbanBoardModel({
   isLoadingTasks,
   isSwitchingWorkspace,
   emptyColumnDisplay,
+  taskCardView,
   showHorizontalScrollbars,
   tasks,
   historicalSessionsByTaskId,
@@ -196,6 +199,7 @@ export function useKanbanBoardModel({
     isLoadingTasks,
     isSwitchingWorkspace,
     emptyColumnDisplay,
+    taskCardView,
     showHorizontalScrollbars,
     columns: columnsWithSortedTasks,
     taskSessionsByTaskId,

@@ -1,6 +1,7 @@
 import { Loader2, Plus, RefreshCcw } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
+import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { useChecksState, useWorkspaceState } from "@/state";
 import { isKanbanTaskCreationDisabled } from "./kanban-page-header-model";
 import type { KanbanPageHeaderModel } from "./kanban-page-model-types";
@@ -17,7 +18,27 @@ export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement
   return (
     <div className="electron-titlebar-safe-area flex flex-wrap items-center justify-between gap-3 pl-2 pr-4">
       <h2 className="text-lg font-semibold tracking-tight text-foreground">Kanban Board</h2>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex items-center gap-2" aria-busy={model.isTaskCardViewPending}>
+          <SegmentedControlRoot size="sm" aria-label="Task card view">
+            {(["normal", "compact"] as const).map((taskCardView) => (
+              <SegmentedControlItem
+                key={taskCardView}
+                size="sm"
+                active={model.taskCardView === taskCardView}
+                disabled={model.taskCardView === null || model.isTaskCardViewPending}
+                onClick={() => model.onTaskCardViewChange(taskCardView)}
+              >
+                {taskCardView === "normal" ? "Normal" : "Compact"}
+              </SegmentedControlItem>
+            ))}
+          </SegmentedControlRoot>
+          {model.isTaskCardViewPending ? (
+            <span className="text-xs text-muted-foreground" role="status">
+              Saving...
+            </span>
+          ) : null}
+        </div>
         <Button
           type="button"
           size="default"

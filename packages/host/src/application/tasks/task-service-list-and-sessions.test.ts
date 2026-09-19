@@ -26,7 +26,7 @@ describe("createTaskService list and session reads", () => {
     const settingsInputs = [
       toSettingsSnapshot({
         ...createDefaultGlobalConfig(),
-        kanban: { doneVisibleDays: 0, emptyColumnDisplay: "show" },
+        kanban: { doneVisibleDays: 0, emptyColumnDisplay: "show", taskCardView: "normal" },
       }),
       toSettingsSnapshot(createDefaultGlobalConfig()),
     ];

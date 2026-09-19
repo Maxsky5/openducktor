@@ -144,6 +144,7 @@ export const HOST_COMMAND_NAMES = [
   "workspace_stage_local_attachment",
   "workspace_update_agent_model_favorites",
   "workspace_update_global_git_config",
+  "workspace_update_kanban_task_card_view",
   "workspace_update_repo_config",
   "workspace_update_repo_hooks",
 ] as const;

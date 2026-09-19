@@ -2,6 +2,7 @@ import type {
   AgentSessionRecord,
   GitTargetBranch,
   KanbanEmptyColumnDisplay,
+  KanbanTaskCardView,
   TaskCard,
 } from "@openducktor/contracts";
 import type { AgentRole, KanbanColumn as KanbanColumnData } from "@openducktor/core";
@@ -82,6 +83,9 @@ export type TaskApprovalModalModel =
 export type KanbanPageHeaderModel = {
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
+  taskCardView: KanbanTaskCardView | null;
+  isTaskCardViewPending: boolean;
+  onTaskCardViewChange: (taskCardView: KanbanTaskCardView) => void;
   onCreateTask: () => void;
   onRefreshTasks: () => void;
 };
@@ -90,6 +94,7 @@ export type KanbanPageContentModel = {
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
+  taskCardView: KanbanTaskCardView;
   showHorizontalScrollbars: boolean | null;
   columns: KanbanColumnData[];
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;

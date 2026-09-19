@@ -6,7 +6,11 @@ import { SettingsKanbanSection } from "./settings-kanban-section";
 
 describe("settings kanban section", () => {
   test("renders the done-task visibility setting", () => {
-    const kanban: KanbanSettings = { doneVisibleDays: 3, emptyColumnDisplay: "collapsed" };
+    const kanban: KanbanSettings = {
+      doneVisibleDays: 3,
+      emptyColumnDisplay: "collapsed",
+      taskCardView: "compact",
+    };
 
     const html = renderToStaticMarkup(
       createElement(SettingsKanbanSection, {
@@ -20,6 +24,7 @@ describe("settings kanban section", () => {
     expect(html).toContain("Done tasks visible for");
     expect(html).toContain("Empty columns");
     expect(html).toContain("Choose whether empty lanes stay visible");
+    expect(html).toContain("Task card view");
     expect(html).toContain('value="3"');
   });
 });

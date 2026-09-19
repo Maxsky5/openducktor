@@ -939,8 +939,9 @@ describe("KanbanPage session start modal flow", () => {
     },
   );
 
-  kanbanTest("uses the same New task label and icon as the sidebar", async () => {
+  kanbanTest("shows the task card view control and the shared New task button", async () => {
     const onCreateTask = mock(() => {});
+    const onTaskCardViewChange = mock(() => {});
     const renderer = render(
       <WorkspaceStateContext
         value={createWorkspaceStateValue({ settingsSnapshot: currentSettingsSnapshotFixture })}
@@ -950,6 +951,9 @@ describe("KanbanPage session start modal flow", () => {
             model={{
               isLoadingTasks: false,
               isSwitchingWorkspace: false,
+              taskCardView: "normal",
+              isTaskCardViewPending: false,
+              onTaskCardViewChange,
               onCreateTask,
               onRefreshTasks: () => {},
             }}
@@ -958,6 +962,13 @@ describe("KanbanPage session start modal flow", () => {
       </WorkspaceStateContext>,
     );
     try {
+      expect(renderer.getByRole("group", { name: "Task card view" })).not.toBeNull();
+      expect(renderer.getByRole("button", { name: "Normal" }).getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+      fireEvent.click(renderer.getByRole("button", { name: "Compact" }));
+      expect(onTaskCardViewChange).toHaveBeenCalledWith("compact");
+
       const newTask = renderer.getByRole("button", { name: "New task" });
       expect(newTask.querySelectorAll("svg")).toHaveLength(1);
       expect(newTask.querySelector("svg.lucide-plus")).not.toBeNull();
