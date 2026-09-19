@@ -27,7 +27,11 @@ import {
   codexTokenUsageFixture,
   codexUserMessageItemFixture,
 } from "./test-fixtures/codex-protocol";
-import { encodeCodexAsyncQuestionReply } from "./codex-async-questions";
+import {
+  encodeCodexAsyncQuestionReply,
+  parseCodexAsyncQuestionSkipIds,
+} from "./codex-async-questions";
+import { toCodexTurnInputList } from "./codex-user-inputs";
 
 const observeSessionState = async (
   adapter: CodexAppServerAdapter,
@@ -475,6 +479,13 @@ describe("CodexAppServerAdapter streaming", () => {
       const accepted = await send;
       const capturedQuestionItemId = '["request_user_input_async","async-question-before-send",0]';
       expect(accepted).toMatchObject({ asyncQuestionItemIds: [capturedQuestionItemId] });
+      const turnStart = transport.calls.findLast((call) => call.method === "turn/start");
+      if (!turnStart || !Array.isArray(turnStart.params.input)) {
+        throw new Error("Expected a turn/start call with user input.");
+      }
+      expect(parseCodexAsyncQuestionSkipIds(turnStart.params.input)).toEqual([
+        capturedQuestionItemId,
+      ]);
       expect(events).toContainEqual(
         expect.objectContaining({
           type: "user_message",
@@ -973,7 +984,7 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/steer",
       params: {
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Steer replacement turn", text_elements: [] }],
+        input: toCodexTurnInputList([{ kind: "text", text: "Steer replacement turn" }], []),
         expectedTurnId: "turn-new",
       },
     });
@@ -1023,7 +1034,7 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/steer",
       params: {
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Keep steering", text_elements: [] }],
+        input: toCodexTurnInputList([{ kind: "text", text: "Keep steering" }], []),
         expectedTurnId: "turn-live",
       },
     });
@@ -1077,7 +1088,7 @@ describe("CodexAppServerAdapter streaming", () => {
       method: "turn/steer",
       params: {
         threadId: "thread/start-runtime-live",
-        input: [{ type: "text", text: "Also inspect failing tests", text_elements: [] }],
+        input: toCodexTurnInputList([{ kind: "text", text: "Also inspect failing tests" }], []),
         expectedTurnId: "turn-active",
       },
     });

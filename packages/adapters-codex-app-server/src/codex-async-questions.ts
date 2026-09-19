@@ -9,9 +9,11 @@ import {
 
 const OPEN_TAG = "<send_user_message_question_reply>";
 const CLOSE_TAG = "</send_user_message_question_reply>";
+const SKIP_MARKER_PREFIX = "openducktor.async-question-skips:";
+export const CODEX_ASYNC_QUESTION_SKIP_CARRIER = "\u2063";
 const IDE_CONTEXT_PREFIX = "# Context from my IDE setup:\n";
 const IDE_REQUEST_DELIMITER = "\n## My request for Codex:\n";
-export const CODEX_ASYNC_QUESTION_FALLBACK_ERROR =
+const CODEX_ASYNC_QUESTION_FALLBACK_ERROR =
   "OpenDucktor could not open this structured question. Answer through the main chat composer.";
 
 type CodexAgentMessageItem = Extract<CodexAppServerThreadItem, { type: "agentMessage" }>;
@@ -29,6 +31,8 @@ const replySchema = z.object({
   question: z.string().refine((value) => value.trim().length > 0),
   answer: z.string().refine((value) => value.trim().length > 0),
 });
+
+const skipIdsSchema = z.array(z.string().trim().min(1));
 
 export type ParsedCodexAsyncQuestion =
   | { kind: "not_async_question" }
@@ -65,6 +69,49 @@ export const parseCodexAsyncQuestionItem = (
 
 export const encodeCodexAsyncQuestionReply = (reply: AgentAsyncQuestionReply): string =>
   `${OPEN_TAG}${JSON.stringify(reply)}${CLOSE_TAG}`;
+
+export const encodeCodexAsyncQuestionSkips = (questionItemIds: readonly string[]): string =>
+  `${SKIP_MARKER_PREFIX}${JSON.stringify(questionItemIds)}`;
+
+export const parseCodexAsyncQuestionSkipIds = (
+  inputs: readonly CodexAppServerUserInput[],
+): string[] | undefined => {
+  let marker: string | undefined;
+  for (const input of inputs) {
+    if (input.type !== "text") continue;
+    for (const element of input.text_elements) {
+      if (!element.placeholder?.startsWith(SKIP_MARKER_PREFIX)) continue;
+      if (marker !== undefined) {
+        throw new Error("Codex user message has more than one async question skip marker.");
+      }
+      marker = element.placeholder;
+    }
+  }
+  if (marker === undefined) return undefined;
+
+  try {
+    return skipIdsSchema.parse(JSON.parse(marker.slice(SKIP_MARKER_PREFIX.length)));
+  } catch {
+    throw new Error("Codex user message has an invalid async question skip marker.");
+  }
+};
+
+export const stripCodexAsyncQuestionSkipMarker = (
+  inputs: readonly CodexAppServerUserInput[],
+): CodexAppServerUserInput[] =>
+  inputs.flatMap((input): CodexAppServerUserInput[] => {
+    if (input.type !== "text") return [input];
+    const text_elements = input.text_elements.filter(
+      (element) => !element.placeholder?.startsWith(SKIP_MARKER_PREFIX),
+    );
+    if (
+      input.text === CODEX_ASYNC_QUESTION_SKIP_CARRIER &&
+      text_elements.length !== input.text_elements.length
+    ) {
+      return [];
+    }
+    return [{ ...input, text_elements }];
+  });
 
 const unwrapCodexIdeContext = (text: string): string | null => {
   if (!text.startsWith(IDE_CONTEXT_PREFIX)) {

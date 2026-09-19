@@ -178,7 +178,12 @@ export const projectAsyncQuestionsFromHistory = (
     if (message.role === "assistant") {
       projected = applyAsyncQuestionAnnotation(projected, message.asyncQuestion);
     } else if (message.role === "user") {
-      projected = applyAsyncQuestionUserMessage(projected, message.asyncQuestionReplies, message);
+      projected = applyAsyncQuestionUserMessage(
+        projected,
+        message.asyncQuestionReplies,
+        message,
+        message.asyncQuestionItemIds,
+      );
     }
   }
   return projected;

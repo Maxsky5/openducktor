@@ -124,8 +124,9 @@ const steerActiveTurn = async (
   parts: AgentUserMessagePart[],
   acceptedUserMessage: AcceptedAgentUserMessage,
   requireNativeAdmission: boolean,
+  asyncQuestionItemIds?: readonly string[],
 ): Promise<AcceptedAgentUserMessage | null> => {
-  const input = toCodexTurnInputList(parts);
+  const input = toCodexTurnInputList(parts, asyncQuestionItemIds);
   if (activeTurn.isTurnSettled()) {
     return null;
   }
@@ -183,6 +184,7 @@ const runCodexTurn = async (
   acceptedUserMessage: AcceptedAgentUserMessage | null,
   requestedModel?: AgentModelSelection,
   requireNativeAdmission = false,
+  asyncQuestionItemIds?: readonly string[],
 ): Promise<CodexTurnStart> => {
   const session = context.sessions.get(externalSessionId);
   if (!session) {
@@ -190,7 +192,7 @@ const runCodexTurn = async (
   }
   await context.ensureRuntimeEventSubscription(session.runtimeId);
   requireRetainedTurnSession(context, session);
-  const input = toCodexTurnInputList(parts);
+  const input = toCodexTurnInputList(parts, asyncQuestionItemIds);
 
   const existingActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
   if (existingActiveTurn && !existingActiveTurn.isTurnSettled()) {
@@ -205,6 +207,7 @@ const runCodexTurn = async (
       parts,
       acceptedUserMessage,
       requireNativeAdmission,
+      asyncQuestionItemIds,
     );
     if (accepted) {
       return { acceptedUserMessage: accepted, turnStartPromise: null };
@@ -325,6 +328,7 @@ export const startCodexTurnForSession = async (
   acceptedUserMessage: AcceptedAgentUserMessage,
   requestedModel?: AgentModelSelection,
   requireNativeAdmission = false,
+  asyncQuestionItemIds?: readonly string[],
 ): Promise<AcceptedAgentUserMessage> => {
   const started = await runCodexTurn(
     context,
@@ -333,6 +337,7 @@ export const startCodexTurnForSession = async (
     acceptedUserMessage,
     requestedModel,
     requireNativeAdmission,
+    asyncQuestionItemIds,
   );
   if (!started.acceptedUserMessage) {
     throw new Error(`Codex session '${externalSessionId}' did not accept the user message.`);

@@ -38,6 +38,9 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
     if (event.asyncQuestionReplies) {
       userMessage.asyncQuestionReplies = event.asyncQuestionReplies;
     }
+    if (event.asyncQuestionItemIds !== undefined) {
+      userMessage.asyncQuestionItemIds = event.asyncQuestionItemIds;
+    }
     return userMessage;
   }
 

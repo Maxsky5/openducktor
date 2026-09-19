@@ -756,6 +756,7 @@ export class CodexAppServerAdapter
       acceptedUserMessage,
       input.model,
       questionItemIds.length > 0,
+      replyParts.length === 0 ? questionItemIds : undefined,
     );
     this.asyncQuestions.resolve(session.runtimeId, session.threadId, questionItemIds);
     return accepted;

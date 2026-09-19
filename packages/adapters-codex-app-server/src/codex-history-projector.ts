@@ -26,6 +26,9 @@ export const projectCodexCanonicalEventsToHistory = (
       if (event.asyncQuestionReplies) {
         message.asyncQuestionReplies = event.asyncQuestionReplies;
       }
+      if (event.asyncQuestionItemIds !== undefined) {
+        message.asyncQuestionItemIds = event.asyncQuestionItemIds;
+      }
       messages.push(message);
       continue;
     }

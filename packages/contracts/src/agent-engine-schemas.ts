@@ -119,6 +119,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
       state: z.enum(["queued", "read"]),
       model: agentModelSelectionSchema.optional(),
       asyncQuestionReplies: z.array(agentAsyncQuestionReplySchema).optional(),
+      asyncQuestionItemIds: z.array(nonEmptyStringSchema).optional(),
       parts: z.array(agentStreamPartSchema),
     })
     .strict(),

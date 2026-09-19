@@ -6,6 +6,8 @@ import {
   parseCodexAsyncQuestionItem,
   parseCodexAsyncQuestionReplyInputs,
   parseCodexAsyncQuestionReplies,
+  parseCodexAsyncQuestionSkipIds,
+  stripCodexAsyncQuestionSkipMarker,
 } from "./codex-async-questions";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
 import { toCodexTurnInputList } from "./codex-user-inputs";
@@ -124,6 +126,56 @@ describe("Codex asynchronous questions", () => {
         { type: "text", text: "extra", text_elements: [] },
       ]),
     ).toBeNull();
+  });
+
+  test("stores captured skip IDs without changing user text", () => {
+    const questionItemIds = [codexAsyncQuestionItemId("call-1", 0)];
+    const inputs = toCodexTurnInputList([{ kind: "text", text: "Continue" }], questionItemIds);
+
+    expect(inputs[0]).toMatchObject({ type: "text", text: "Continue" });
+    expect(parseCodexAsyncQuestionSkipIds(inputs)).toEqual(questionItemIds);
+    expect(stripCodexAsyncQuestionSkipMarker(inputs)).toEqual([
+      { type: "text", text: "Continue", text_elements: [] },
+    ]);
+  });
+
+  test("stores an empty captured list on image-only input", () => {
+    const inputs = toCodexTurnInputList(
+      [
+        {
+          kind: "attachment",
+          attachment: {
+            id: "image-1",
+            path: "/tmp/image.png",
+            name: "image.png",
+            kind: "image",
+          },
+        },
+      ],
+      [],
+    );
+
+    expect(parseCodexAsyncQuestionSkipIds(inputs)).toEqual([]);
+    expect(stripCodexAsyncQuestionSkipMarker(inputs)).toEqual([
+      { type: "localImage", path: "/tmp/image.png" },
+    ]);
+  });
+
+  test("rejects malformed captured skip metadata", () => {
+    expect(() =>
+      parseCodexAsyncQuestionSkipIds([
+        {
+          type: "text",
+          text: "Continue",
+          text_elements: [
+            {
+              byteRange: { start: 8, end: 8 },
+              placeholder: "openducktor.async-question-skips:not-json",
+            },
+          ],
+        },
+      ]),
+    ).toThrow("Codex user message has an invalid async question skip marker.");
   });
 
   test("does not reopen handled questions", () => {

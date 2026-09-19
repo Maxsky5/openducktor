@@ -1,7 +1,11 @@
 import type { CodexAppServerThreadItem } from "@openducktor/contracts";
 import type { AgentUserMessagePart } from "@openducktor/core";
 import { utf8ByteLength } from "./codex-user-input-display";
-import { encodeCodexAsyncQuestionReply } from "./codex-async-questions";
+import {
+  CODEX_ASYNC_QUESTION_SKIP_CARRIER,
+  encodeCodexAsyncQuestionReply,
+  encodeCodexAsyncQuestionSkips,
+} from "./codex-async-questions";
 import type { CodexUserInput } from "./types";
 
 type CodexUserMessageItem = Extract<CodexAppServerThreadItem, { type: "userMessage" }>;
@@ -72,8 +76,11 @@ const toCodexMarkedTextInput = (
   ],
 });
 
-export const toCodexTurnInputList = (parts: AgentUserMessagePart[]): CodexUserInput[] => {
-  return parts.flatMap((part, index): CodexUserInput[] => {
+export const toCodexTurnInputList = (
+  parts: AgentUserMessagePart[],
+  asyncQuestionItemIds?: readonly string[],
+): CodexUserInput[] => {
+  const inputs = parts.flatMap((part, index): CodexUserInput[] => {
     if (part.kind === "file_reference") {
       const marker = `@${part.file.path}`;
       const placeholder = `@${part.file.name || part.file.path}`;
@@ -87,6 +94,46 @@ export const toCodexTurnInputList = (parts: AgentUserMessagePart[]): CodexUserIn
     const text = codexMarkerNeedsTrailingSpaceBefore(parts[index + 1]) ? `${marker} ` : marker;
     return [toCodexMarkedTextInput(text, marker, marker), toCodexUserInput(part)];
   });
+  if (asyncQuestionItemIds === undefined) return inputs;
+
+  const placeholder = encodeCodexAsyncQuestionSkips(asyncQuestionItemIds);
+  const textIndex = inputs.findIndex((input) => input.type === "text");
+  if (textIndex >= 0) {
+    const textInput = inputs[textIndex];
+    if (textInput?.type !== "text") return inputs;
+    inputs[textIndex] = {
+      ...textInput,
+      text_elements: [
+        ...textInput.text_elements,
+        {
+          byteRange: {
+            start: utf8ByteLength(textInput.text),
+            end: utf8ByteLength(textInput.text),
+          },
+          placeholder,
+        },
+      ],
+    };
+    return inputs;
+  }
+
+  // Codex stores text elements only on text input, so an image-only message needs a hidden carrier.
+  return [
+    {
+      type: "text",
+      text: CODEX_ASYNC_QUESTION_SKIP_CARRIER,
+      text_elements: [
+        {
+          byteRange: {
+            start: utf8ByteLength(CODEX_ASYNC_QUESTION_SKIP_CARRIER),
+            end: utf8ByteLength(CODEX_ASYNC_QUESTION_SKIP_CARRIER),
+          },
+          placeholder,
+        },
+      ],
+    },
+    ...inputs,
+  ];
 };
 
 export const assertCodexUserMessagePartsSupported = (parts: AgentUserMessagePart[]): void => {

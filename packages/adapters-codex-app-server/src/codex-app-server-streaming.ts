@@ -153,6 +153,8 @@ const emitCanonicalEvents = (
           event.threadId,
           event.asyncQuestionReplies.map((reply) => reply.questionItemId),
         );
+      } else if (event.asyncQuestionItemIds !== undefined) {
+        context.asyncQuestions.resolve(runtimeId, event.threadId, event.asyncQuestionItemIds);
       } else {
         context.asyncQuestions.skipPending(runtimeId, event.threadId);
       }

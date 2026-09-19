@@ -4,6 +4,7 @@ import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import { CodexSubagentLinkState } from "./codex-subagent-link-state";
+import { toCodexTurnInputList } from "./codex-user-inputs";
 import { createCodexEventMappers, todoMapper } from "./event-mappers";
 
 const TODO_PAYLOAD = {
@@ -252,6 +253,41 @@ describe("Codex event mapper pipeline", () => {
         asyncQuestionReplies: [
           { questionItemId: "question-1", question: "Which environment?", answer: "Staging" },
         ],
+      }),
+    ]);
+  });
+
+  test("projects captured async question skip IDs from Codex history", () => {
+    const questionItemIds = ['["request_user_input_async","question-message",0]'];
+    const item = {
+      type: "userMessage" as const,
+      id: "ordinary-message",
+      clientId: null,
+      content: toCodexTurnInputList([{ kind: "text", text: "Continue" }], questionItemIds),
+    };
+    const pipeline = createCodexEventMapperPipeline();
+    const live = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        { kind: "item_completed", item },
+        { source: "live", threadId: "thread-1", turnId: "turn-1" },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      pipeline.runThreadItem({ item, index: 0 }, { source: "thread_read", threadId: "thread-1" }),
+    );
+
+    expect(live).toEqual([
+      expect.objectContaining({
+        type: "user_message",
+        message: "Continue",
+        asyncQuestionItemIds: questionItemIds,
+      }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({
+        role: "user",
+        text: "Continue",
+        asyncQuestionItemIds: questionItemIds,
       }),
     ]);
   });

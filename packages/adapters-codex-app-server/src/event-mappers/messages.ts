@@ -3,6 +3,8 @@ import {
   codexAsyncQuestionReplyText,
   parseCodexAsyncQuestionItem,
   parseCodexAsyncQuestionReplyInputs,
+  parseCodexAsyncQuestionSkipIds,
+  stripCodexAsyncQuestionSkipMarker,
 } from "../codex-async-questions";
 import { codexItemTypeMatches, terminalHistoryPart } from "../codex-app-server-transcript";
 import type {
@@ -33,7 +35,9 @@ export const userMessageMapper: CodexEventMapper = {
     if (!codexItemTypeMatches(input.item, "userMessage")) {
       return emptyCodexMappingResult();
     }
-    const parts = codexUserInputsFromItem(input.item);
+    const sourceParts = codexUserInputsFromItem(input.item);
+    const asyncQuestionItemIds = parseCodexAsyncQuestionSkipIds(sourceParts);
+    const parts = stripCodexAsyncQuestionSkipMarker(sourceParts);
     const message = codexUserInputListToText(parts);
     const asyncQuestionReplies = parseCodexAsyncQuestionReplyInputs(parts);
     if (!asyncQuestionReplies && isCodexContextualUserMessage(input.item)) {
@@ -63,6 +67,9 @@ export const userMessageMapper: CodexEventMapper = {
     };
     if (asyncQuestionReplies) {
       event.asyncQuestionReplies = asyncQuestionReplies;
+    }
+    if (asyncQuestionItemIds !== undefined) {
+      event.asyncQuestionItemIds = asyncQuestionItemIds;
     }
     if (timestamp) {
       event.timestamp = timestamp;

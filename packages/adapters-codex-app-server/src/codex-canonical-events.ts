@@ -36,6 +36,7 @@ export type CodexCanonicalUserMessageEvent = CodexCanonicalEventBase & {
   state: "read";
   model?: AgentModelSelection;
   asyncQuestionReplies?: AgentAsyncQuestionReply[];
+  asyncQuestionItemIds?: string[];
 };
 
 export type CodexCanonicalAssistantMessageEvent = CodexCanonicalEventBase & {

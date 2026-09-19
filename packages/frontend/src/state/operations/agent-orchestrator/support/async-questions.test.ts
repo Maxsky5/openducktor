@@ -148,6 +148,43 @@ describe("asynchronous question projection", () => {
     expect(replayed.pendingAsyncQuestions).toEqual([afterMessage]);
   });
 
+  test("keeps a late question when history records the captured skip IDs", () => {
+    const captured = question("message-before");
+    const late = question("message-during-admission");
+    const projected = projectAsyncQuestionsFromHistory([
+      {
+        role: "assistant",
+        messageId: captured.sourceMessageId,
+        timestamp: "2026-09-19T10:00:00.000Z",
+        text: captured.title,
+        parts: [],
+        asyncQuestion: { status: "pending", questions: [captured] },
+      },
+      {
+        role: "assistant",
+        messageId: late.sourceMessageId,
+        timestamp: "2026-09-19T10:00:01.000Z",
+        text: late.title,
+        parts: [],
+        asyncQuestion: { status: "pending", questions: [late] },
+      },
+      {
+        role: "user",
+        messageId: "ordinary-message",
+        timestamp: "2026-09-19T10:00:02.000Z",
+        text: "Continue",
+        displayParts: [{ kind: "text", text: "Continue" }],
+        state: "read",
+        asyncQuestionItemIds: [captured.questionItemId],
+        parts: [],
+      },
+    ]);
+
+    expect(projected.pendingAsyncQuestions).toEqual([late]);
+    expect(projected.handledAsyncQuestionIds).toContain(captured.questionItemId);
+    expect(projected.handledAsyncQuestionIds).not.toContain(late.questionItemId);
+  });
+
   test("does not match a new repeated message to history consumed at read start", () => {
     const source = question("question-between-messages");
     const oldMessage = userMessage("history-old", "2026-09-19T10:00:00.000Z");
