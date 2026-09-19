@@ -78,6 +78,8 @@ export type AgentStudioChatModelSelectionContext = {
   subagents: AgentChatModel["composer"]["subagents"];
   subagentsError: string | null;
   isSubagentsLoading: boolean;
+  retryCatalog: AgentChatModel["composer"]["retryCatalog"];
+  onCatalogMenuOpen: AgentChatModel["composer"]["onCatalogMenuOpen"];
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
   modelPicker: AgentChatModel["composer"]["modelPicker"];
@@ -420,6 +422,8 @@ export function useAgentStudioChatModel({
       subagents: modelSelection.subagents,
       subagentsError: modelSelection.subagentsError,
       isSubagentsLoading: modelSelection.isSubagentsLoading,
+      retryCatalog: modelSelection.retryCatalog,
+      onCatalogMenuOpen: modelSelection.onCatalogMenuOpen,
       searchFiles: modelSelection.searchFiles,
       agentOptions: modelSelection.agentOptions,
       modelPicker: modelSelection.modelPicker,
@@ -440,8 +444,10 @@ export function useAgentStudioChatModel({
     modelSelection.isSkillsLoading,
     modelSelection.isSubagentsLoading,
     modelSelection.modelPicker,
+    modelSelection.onCatalogMenuOpen,
     modelSelection.onSelectAgent,
     modelSelection.onSelectVariant,
+    modelSelection.retryCatalog,
     modelSelection.searchFiles,
     modelSelection.selectedModelDescriptor,
     modelSelection.selectedModelSelection,

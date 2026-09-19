@@ -52,6 +52,8 @@ const buildComposerConfig = (
   subagents: [],
   subagentsError: null,
   isSubagentsLoading: false,
+  retryCatalog: null,
+  onCatalogMenuOpen: () => {},
   searchFiles: async () => [],
   agentOptions: [],
   modelPicker: {

@@ -462,6 +462,72 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
+  test("surfaces a failed skill read and retries it", async () => {
+    const readSessionHistory = mock(async () => []);
+    let attempt = 0;
+    const loadRepoRuntimeCatalog = mock(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        throw new Error("catalog offline");
+      }
+      return createRuntimeCatalogFixture({
+        skills: {
+          skills: [{ id: "grill-me", name: "grill-me", path: "grill-me" }],
+        },
+      });
+    });
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>
+        <RuntimeDefinitionsContext.Provider
+          value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
+        >
+          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
+            {children}
+          </AgentOperationsContext.Provider>
+        </RuntimeDefinitionsContext.Provider>
+      </QueryClientProvider>
+    );
+    const harness = createHookHarness(
+      useRuntimeTranscriptSessionHistory,
+      {
+        isOpen: true,
+        repoPath: "/repo",
+        target: {
+          externalSessionId: "claude-thread",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+        },
+        repoReadinessState: "ready" as const,
+        liveSession: null,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.skillSurfaceError !== null);
+
+      expect(harness.getLatest().skillSurfaceError).toBe("catalog offline");
+      expect(harness.getLatest().retrySkills).not.toBeNull();
+      expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+
+      await harness.run((state) => {
+        state.retrySkills?.();
+      });
+      await harness.waitFor((state) => state.skillSurfaceError === null);
+
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("does not request history again after it is loaded", async () => {
     const readSessionHistory = mock(async () => []);
     const harness = createHarness(session({ historyLoadState: "loaded" }), readSessionHistory);

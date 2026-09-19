@@ -110,6 +110,25 @@ export function useSessionTranscriptSurfaceModel({
         : null,
     [sessionHistory.isRetryingHistory, sessionHistory.retryHistory],
   );
+  const failedCatalogSurfaceAction = useMemo(
+    () =>
+      sessionHistory.retrySkills
+        ? {
+            label: "Retry",
+            onAction: sessionHistory.retrySkills,
+            disabled: sessionHistory.isRetryingSkills,
+            isPending: sessionHistory.isRetryingSkills,
+          }
+        : null,
+    [sessionHistory.isRetryingSkills, sessionHistory.retrySkills],
+  );
+  const catalogSurfaceFailure = useMemo(
+    () =>
+      sessionHistory.skillSurfaceError === null
+        ? null
+        : { message: sessionHistory.skillSurfaceError, action: failedCatalogSurfaceAction },
+    [failedCatalogSurfaceAction, sessionHistory.skillSurfaceError],
+  );
   const chatReadiness = useMemo(
     () =>
       deriveAgentChatReadiness({
@@ -120,8 +139,10 @@ export function useSessionTranscriptSurfaceModel({
         },
         runtimeBlockedAction,
         failedTranscriptAction,
+        catalogSurfaceFailure,
       }),
     [
+      catalogSurfaceFailure,
       failedTranscriptAction,
       runtimeBlockedAction,
       runtimeReadiness.message,

@@ -4,7 +4,7 @@ import type {
   AgentSlashCommand,
   AgentSubagentReference,
 } from "@openducktor/core";
-import { type ReactElement, useId, useLayoutEffect, useState } from "react";
+import { type ReactElement, useEffect, useId, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { badgeVariants } from "@/components/ui/badge-variants";
 import { cn } from "@/lib/utils";
@@ -366,7 +366,67 @@ type AgentChatComposerEditorProps = {
   subagents: AgentSubagentReference[];
   subagentsError: string | null;
   isSubagentsLoading: boolean;
+  retryCatalog: (() => void) | null;
+  onCatalogMenuOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
+};
+
+const retryWhenErrored = (error: string | null, retry: (() => void) | null): (() => void) | null =>
+  error === null ? null : retry;
+
+const useCatalogMenuOpenEffect = (
+  menuVisibility: readonly boolean[],
+  onCatalogMenuOpen: () => void,
+): void => {
+  const isCatalogMenuVisible = menuVisibility.some(Boolean);
+  useEffect(() => {
+    if (isCatalogMenuVisible) {
+      onCatalogMenuOpen();
+    }
+  }, [isCatalogMenuVisible, onCatalogMenuOpen]);
+};
+
+const resolveActiveComposerPopup = ({
+  isReferenceMenuVisible,
+  referenceListboxId,
+  activeReferenceIndex,
+  referenceMenuItemCount,
+  showSlashMenu,
+  slashListboxId,
+  activeSlashIndex,
+  filteredSlashCommandCount,
+  showSkillMenu,
+  skillListboxId,
+  activeSkillIndex,
+  filteredSkillCount,
+}: {
+  isReferenceMenuVisible: boolean;
+  referenceListboxId: string;
+  activeReferenceIndex: number;
+  referenceMenuItemCount: number;
+  showSlashMenu: boolean;
+  slashListboxId: string;
+  activeSlashIndex: number;
+  filteredSlashCommandCount: number;
+  showSkillMenu: boolean;
+  skillListboxId: string;
+  activeSkillIndex: number;
+  filteredSkillCount: number;
+}): ActiveComposerPopup | null => {
+  if (isReferenceMenuVisible) {
+    return buildActiveComposerPopup(
+      referenceListboxId,
+      activeReferenceIndex,
+      referenceMenuItemCount,
+    );
+  }
+  if (showSlashMenu) {
+    return buildActiveComposerPopup(slashListboxId, activeSlashIndex, filteredSlashCommandCount);
+  }
+  if (showSkillMenu) {
+    return buildActiveComposerPopup(skillListboxId, activeSkillIndex, filteredSkillCount);
+  }
+  return null;
 };
 
 export function AgentChatComposerEditor({
@@ -391,6 +451,8 @@ export function AgentChatComposerEditor({
   subagents,
   subagentsError,
   isSubagentsLoading,
+  retryCatalog,
+  onCatalogMenuOpen,
   searchFiles,
 }: AgentChatComposerEditorProps): ReactElement {
   const referenceListboxId = useId();
@@ -451,22 +513,24 @@ export function AgentChatComposerEditor({
       subagentsError,
       isSubagentsLoading,
     }).shouldRenderMenu;
-  let activePopup: ActiveComposerPopup | null = null;
-  if (isReferenceMenuVisible) {
-    activePopup = buildActiveComposerPopup(
-      referenceListboxId,
-      activeReferenceIndex,
-      referenceMenuItems.length,
-    );
-  } else if (showSlashMenu) {
-    activePopup = buildActiveComposerPopup(
-      slashListboxId,
-      activeSlashIndex,
-      filteredSlashCommands.length,
-    );
-  } else if (showSkillMenu) {
-    activePopup = buildActiveComposerPopup(skillListboxId, activeSkillIndex, filteredSkills.length);
-  }
+  // Opening a catalog menu is the next consumer action. Fetch the combined
+  // catalog when the cached entry is stale; a fresh entry is reused.
+  useCatalogMenuOpenEffect([showSlashMenu, showSkillMenu, showReferenceMenu], onCatalogMenuOpen);
+
+  const activePopup = resolveActiveComposerPopup({
+    isReferenceMenuVisible,
+    referenceListboxId,
+    activeReferenceIndex,
+    referenceMenuItemCount: referenceMenuItems.length,
+    showSlashMenu,
+    slashListboxId,
+    activeSlashIndex,
+    filteredSlashCommandCount: filteredSlashCommands.length,
+    showSkillMenu,
+    skillListboxId,
+    activeSkillIndex,
+    filteredSkillCount: filteredSkills.length,
+  });
 
   useLayoutEffect(() => {
     const editor = editorRef.current?.querySelector<HTMLDivElement>("[data-composer-content-root]");
@@ -533,6 +597,7 @@ export function AgentChatComposerEditor({
           supportsSubagentReferences={supportsSubagentReferences}
           subagentsError={subagentsError}
           isSubagentsLoading={isSubagentsLoading}
+          onRetrySubagents={retryWhenErrored(subagentsError, retryCatalog)}
           onSelectFile={selectFileSearchResult}
           onSelectSubagent={selectSubagentReference}
         />
@@ -544,6 +609,7 @@ export function AgentChatComposerEditor({
           activeIndex={activeSlashIndex}
           slashCommandsError={slashCommandsError}
           isSlashCommandsLoading={isSlashCommandsLoading}
+          onRetry={retryWhenErrored(slashCommandsError, retryCatalog)}
           onSelectCommand={selectSlashCommand}
         />
       ) : null}
@@ -554,6 +620,7 @@ export function AgentChatComposerEditor({
           activeIndex={activeSkillIndex}
           skillsError={skillsError}
           isSkillsLoading={isSkillsLoading}
+          onRetry={retryWhenErrored(skillsError, retryCatalog)}
           onSelectSkill={selectSkillReference}
         />
       ) : null}

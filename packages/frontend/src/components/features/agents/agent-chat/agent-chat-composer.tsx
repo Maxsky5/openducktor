@@ -362,6 +362,8 @@ function AgentChatComposerFormView({
     subagents,
     subagentsError,
     isSubagentsLoading,
+    retryCatalog,
+    onCatalogMenuOpen,
     searchFiles,
     agentOptions,
     modelPicker,
@@ -458,6 +460,8 @@ function AgentChatComposerFormView({
             subagents={subagents}
             subagentsError={subagentsError}
             isSubagentsLoading={isSubagentsLoading}
+            retryCatalog={retryCatalog}
+            onCatalogMenuOpen={onCatalogMenuOpen}
             searchFiles={searchFiles}
           />
 
@@ -501,9 +505,6 @@ function useAgentChatComposerFocus({
   const composerAutofocusStateRef = useRef<ReturnType<typeof createComposerAutofocusState> | null>(
     null,
   );
-  if (composerAutofocusStateRef.current === null) {
-    composerAutofocusStateRef.current = createComposerAutofocusState();
-  }
 
   const focusComposerEditor = useCallback(() => {
     const editor = composerEditorRef.current;
@@ -548,11 +549,11 @@ function useAgentChatComposerFocus({
   );
 
   useLayoutEffect(() => {
-    const composerAutofocusState = composerAutofocusStateRef.current;
-    if (composerAutofocusState === null) {
-      throw new Error("Composer autofocus state was not initialized.");
+    if (composerAutofocusStateRef.current === null) {
+      composerAutofocusStateRef.current = createComposerAutofocusState();
     }
 
+    const composerAutofocusState = composerAutofocusStateRef.current;
     const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
     const activeElement = globalThis.document?.activeElement ?? null;
     const focusInsideComposer = isFocusInsideComposer(activeElement);

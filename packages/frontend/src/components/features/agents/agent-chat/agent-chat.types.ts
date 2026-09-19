@@ -63,7 +63,8 @@ export type AgentChatTranscriptNotice = {
     | "session_loading"
     | "session_failed"
     | "session_history_warning"
-    | "runtime_blocked";
+    | "runtime_blocked"
+    | "catalog_warning";
   severity: "loading" | "error";
   title: string;
   description: string;
@@ -196,6 +197,8 @@ export type AgentChatComposerModel = {
   subagents: AgentSubagentReference[];
   subagentsError: string | null;
   isSubagentsLoading: boolean;
+  retryCatalog: (() => void) | null;
+  onCatalogMenuOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelPicker: AgentChatModelPicker;

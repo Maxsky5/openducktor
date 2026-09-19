@@ -78,6 +78,8 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
       subagents: [],
       subagentsError: null,
       isSubagentsLoading: false,
+      retryCatalog: null,
+      onCatalogMenuOpen: () => {},
       searchFiles: async () => [],
       agentOptions: [],
       modelPicker: {

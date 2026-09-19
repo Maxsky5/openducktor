@@ -94,18 +94,22 @@ export function useRepoRuntimeHealth({
         runtimeDefinitions,
         checkRepoRuntimeHealth,
       );
+      if (options?.reloadCatalogs) {
+        // Refetch the catalogs of every mounted consumer scope, including session
+        // worktree directories, and mark the cached but unmounted scopes stale for
+        // the next read. Invalidate before the health read so the bootstrap reloads
+        // the repository root when the health data changes.
+        await queryClient.invalidateQueries({
+          queryKey: runtimeCatalogQueryKeys.repoCatalogScope(activeRepoPath),
+          refetchType: "active",
+        });
+      }
       await queryClient.invalidateQueries({
         queryKey: queryOptions.queryKey,
         exact: true,
         refetchType: "none",
       });
       const runtimeHealth = await queryClient.fetchQuery(queryOptions);
-      if (options?.reloadCatalogs) {
-        await queryClient.invalidateQueries({
-          queryKey: runtimeCatalogQueryKeys.repoCatalogScope(activeRepoPath),
-          refetchType: "none",
-        });
-      }
       return runtimeHealth;
     },
     [activeRepoPath, checkRepoRuntimeHealth, queryClient, runtimeDefinitions],

@@ -57,6 +57,7 @@ describe("AgentChatComposerReferenceMenu", () => {
         subagentsError={null}
         isSubagentsLoading={false}
         onSelectFile={() => {}}
+        onRetrySubagents={null}
         onSelectSubagent={() => {}}
       />,
     );
@@ -77,6 +78,7 @@ describe("AgentChatComposerReferenceMenu", () => {
         subagentsError={null}
         isSubagentsLoading={true}
         onSelectFile={() => {}}
+        onRetrySubagents={null}
         onSelectSubagent={() => {}}
       />,
     );
@@ -105,6 +107,7 @@ describe("AgentChatComposerReferenceMenu", () => {
         subagentsError={null}
         isSubagentsLoading={false}
         onSelectFile={() => {}}
+        onRetrySubagents={null}
         onSelectSubagent={() => {}}
       />,
     );
@@ -126,6 +129,7 @@ describe("AgentChatComposerReferenceMenu", () => {
         subagentsError={null}
         isSubagentsLoading={true}
         onSelectFile={() => {}}
+        onRetrySubagents={null}
         onSelectSubagent={() => {}}
       />,
     );
@@ -147,6 +151,7 @@ describe("AgentChatComposerReferenceMenu", () => {
         subagentsError={null}
         isSubagentsLoading={false}
         onSelectFile={() => {}}
+        onRetrySubagents={null}
         onSelectSubagent={() => {}}
       />,
     );
@@ -185,6 +190,7 @@ describe("AgentChatComposerReferenceMenu", () => {
           subagentsError={null}
           isSubagentsLoading={false}
           onSelectFile={() => {}}
+          onRetrySubagents={null}
           onSelectSubagent={() => {}}
         />,
       );
@@ -201,6 +207,7 @@ describe("AgentChatComposerReferenceMenu", () => {
           subagentsError={null}
           isSubagentsLoading={false}
           onSelectFile={() => {}}
+          onRetrySubagents={null}
           onSelectSubagent={() => {}}
         />,
       );
@@ -227,6 +234,7 @@ describe("AgentChatComposerReferenceMenu", () => {
         supportsSubagentReferences={true}
         subagentsError={null}
         isSubagentsLoading={false}
+        onRetrySubagents={null}
         onSelectFile={onSelectFile}
         onSelectSubagent={onSelectSubagent}
       />,
@@ -252,6 +260,7 @@ describe("AgentChatComposerReferenceMenu", () => {
         subagentsError={null}
         isSubagentsLoading={false}
         onSelectFile={() => {}}
+        onRetrySubagents={null}
         onSelectSubagent={() => {}}
       />,
     );
@@ -281,6 +290,7 @@ describe("AgentChatComposerReferenceMenu", () => {
         subagentsError="Subagents unavailable."
         isSubagentsLoading={false}
         onSelectFile={() => {}}
+        onRetrySubagents={null}
         onSelectSubagent={() => {}}
       />,
     );
@@ -296,6 +306,30 @@ describe("AgentChatComposerReferenceMenu", () => {
     expect(errorFeedback.every((element) => !listbox.contains(element))).toBe(true);
   });
 
+  test("retries a failed subagent read from the error row", () => {
+    const onRetrySubagents = mock(() => {});
+    render(
+      <AgentChatComposerReferenceMenu
+        listboxId={LISTBOX_ID}
+        items={[]}
+        activeIndex={0}
+        fileSearchError={null}
+        isFileSearchPending={false}
+        isFileSearchLoading={false}
+        supportsSubagentReferences={true}
+        subagentsError="Subagents unavailable."
+        isSubagentsLoading={false}
+        onSelectFile={() => {}}
+        onRetrySubagents={onRetrySubagents}
+        onSelectSubagent={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(onRetrySubagents).toHaveBeenCalledTimes(1);
+  });
+
   test("mounts a controlled listbox for the visible empty state", () => {
     render(
       <AgentChatComposerReferenceMenu
@@ -309,6 +343,7 @@ describe("AgentChatComposerReferenceMenu", () => {
         subagentsError={null}
         isSubagentsLoading={false}
         onSelectFile={() => {}}
+        onRetrySubagents={null}
         onSelectSubagent={() => {}}
       />,
     );

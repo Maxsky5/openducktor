@@ -190,6 +190,7 @@ const EditorHarness = ({
   onDraftChange,
   disabled = false,
   onAddFiles,
+  onCatalogMenuOpen = () => {},
 }: {
   slashCommandsError: string | null;
   slashCommands: typeof COMMANDS;
@@ -209,6 +210,7 @@ const EditorHarness = ({
   onDraftChange?: (draft: AgentChatComposerDraft) => void;
   disabled?: boolean;
   onAddFiles?: (files: File[]) => void;
+  onCatalogMenuOpen?: () => void;
 }): ReactElement => {
   const [localDraft, setDraft] = useReducer(
     (_current: AgentChatComposerDraft, next: AgentChatComposerDraft) => next,
@@ -248,6 +250,8 @@ const EditorHarness = ({
         subagents={subagents}
         subagentsError={subagentsError}
         isSubagentsLoading={isSubagentsLoading}
+        retryCatalog={null}
+        onCatalogMenuOpen={onCatalogMenuOpen}
         onAddFiles={onAddFiles ?? (() => {})}
       />
       <output data-testid="draft-state">{JSON.stringify(draft)}</output>
@@ -704,6 +708,27 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(() => {
       expect(screen.getByText("review")).toBeDefined();
+    });
+  });
+
+  test("refreshes the catalog when a catalog menu opens", async () => {
+    const onCatalogMenuOpen = mock(() => {});
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={SKILLS}
+        onCatalogMenuOpen={onCatalogMenuOpen}
+      />,
+    );
+
+    expect(onCatalogMenuOpen).not.toHaveBeenCalled();
+
+    typeIntoEditor(rendered.container, "$");
+
+    await waitFor(() => {
+      expect(onCatalogMenuOpen).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -41,6 +41,7 @@ import {
 } from "@/features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime";
 import { createChatComposerFileSearch } from "@/features/agent-chat-composer/prompt-input/create-chat-composer-file-search";
 import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
+import { useChatComposerCatalogRefresh } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-catalog-refresh";
 import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { useChatComposerSubagents } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-subagents";
@@ -97,6 +98,8 @@ type AgentStudioChatComposerState = {
   subagents: AgentSubagentCatalog["subagents"];
   subagentsError: string | null;
   isSubagentsLoading: boolean;
+  retryCatalog: (() => void) | null;
+  onCatalogMenuOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentProfileOptions: ComboboxOption[];
   modelPicker: AgentChatComposerModel["modelPicker"];
@@ -383,11 +386,13 @@ export function useAgentStudioChatComposer({
     reusablePrompts,
     loadRuntimeCatalog: loadCatalogForRepo,
   });
-  const { skillCatalog, skills, skillsError, isSkillsLoading } = useChatComposerSkills({
-    promptInputRuntime,
-    supportsSkillReferences,
-    loadRuntimeCatalog: loadCatalogForRepo,
-  });
+  const { skillCatalog, skills, skillsError, isSkillsLoading, retrySkills } = useChatComposerSkills(
+    {
+      promptInputRuntime,
+      supportsSkillReferences,
+      loadRuntimeCatalog: loadCatalogForRepo,
+    },
+  );
   const { subagentCatalog, subagents, subagentsError, isSubagentsLoading } =
     useChatComposerSubagents({
       promptInputRuntime,
@@ -457,6 +462,10 @@ export function useAgentStudioChatComposer({
       }),
     [loadFileSearchForRepo, promptInputRuntime, queryClient, supportsFileSearch],
   );
+  const refreshCatalogIfStale = useChatComposerCatalogRefresh({
+    promptInputRuntime,
+    loadRuntimeCatalog: loadCatalogForRepo,
+  });
   const isSelectionCatalogLoading = hasSessionTarget
     ? isSessionModelCatalogLoading
     : isLoadingComposerCatalog;
@@ -550,6 +559,8 @@ export function useAgentStudioChatComposer({
     subagents,
     subagentsError,
     isSubagentsLoading,
+    retryCatalog: retrySkills,
+    onCatalogMenuOpen: refreshCatalogIfStale,
     searchFiles,
     agentProfileOptions,
     modelPicker,

@@ -69,6 +69,8 @@ const buildModel = () => ({
   subagents: [],
   subagentsError: null,
   isSubagentsLoading: false,
+  retryCatalog: null,
+  onCatalogMenuOpen: () => {},
   searchFiles: async () => [],
   agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
   modelPicker: {

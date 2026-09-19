@@ -280,6 +280,8 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     subagents: [],
     subagentsError: null,
     isSubagentsLoading: false,
+    retryCatalog: null,
+    onCatalogMenuOpen: () => {},
     searchFiles: async () => [],
     agentOptions: [{ value: "spec", label: "Spec" }],
     modelPicker: {

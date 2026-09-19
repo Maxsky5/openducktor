@@ -19,7 +19,7 @@ export const useChatComposerSkills = ({
   supportsSkillReferences,
   loadRuntimeCatalog,
 }: UseChatComposerSkillsArgs) => {
-  const { catalog, error, isLoading } = useChatComposerCatalogSurface({
+  const { catalog, error, isLoading, retry } = useChatComposerCatalogSurface({
     promptInputRuntime,
     supports: supportsSkillReferences,
     loadRuntimeCatalog,
@@ -32,10 +32,12 @@ export const useChatComposerSkills = ({
     skills: catalog.skills,
     skillsError: error,
     isSkillsLoading: isLoading,
+    retrySkills: retry,
   } satisfies {
     skillCatalog: AgentSkillCatalog;
     skills: AgentSkillCatalog["skills"];
     skillsError: string | null;
     isSkillsLoading: boolean;
+    retrySkills: (() => void) | null;
   };
 };

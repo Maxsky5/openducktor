@@ -96,6 +96,7 @@ describe("useChatComposerSkills", () => {
         skills: [],
         skillsError: null,
         isSkillsLoading: false,
+        retrySkills: null,
       });
     } finally {
       await harness.unmount();
@@ -127,6 +128,45 @@ describe("useChatComposerSkills", () => {
 
       expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
       expect(harness.getLatest().liveQuery.data).toEqual(emptyCatalogFixture);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("retries a failed skill read through the composer retry", async () => {
+    const catalogFixture = createRuntimeCatalogFixture({ skills: EMPTY_CATALOG });
+    let attempt = 0;
+    const loadRuntimeCatalog = mock(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        throw new Error("catalog offline");
+      }
+      return catalogFixture;
+    });
+    const harness = createHookHarness(
+      useChatComposerSkills,
+      {
+        promptInputRuntime: sessionRuntime,
+        supportsSkillReferences: true,
+        loadRuntimeCatalog,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.skillsError !== null);
+
+      expect(harness.getLatest().skillsError).toBe("catalog offline");
+      expect(harness.getLatest().retrySkills).not.toBeNull();
+
+      await harness.run((state) => {
+        state.retrySkills?.();
+      });
+      await harness.waitFor((state) => state.skillsError === null);
+
+      expect(loadRuntimeCatalog).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().skills).toEqual([]);
     } finally {
       await harness.unmount();
     }

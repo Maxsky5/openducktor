@@ -1,6 +1,7 @@
 import type { AgentSkillReference } from "@openducktor/core";
 import { Blocks, ChevronRight, LoaderCircle } from "lucide-react";
 import { type ReactElement, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getComposerPopupOptionId } from "./agent-chat-composer-menu-state";
 
@@ -10,6 +11,7 @@ type AgentChatComposerSkillMenuProps = {
   activeIndex: number;
   skillsError: string | null;
   isSkillsLoading: boolean;
+  onRetry: (() => void) | null;
   onSelectSkill: (skill: AgentSkillReference) => void;
 };
 
@@ -23,6 +25,7 @@ export function AgentChatComposerSkillMenu({
   activeIndex,
   skillsError,
   isSkillsLoading,
+  onRetry,
   onSelectSkill,
 }: AgentChatComposerSkillMenuProps): ReactElement {
   const skillButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -51,8 +54,22 @@ export function AgentChatComposerSkillMenu({
         </div>
       ) : null}
       {skillsError ? (
-        <div role="alert" className="border-b border-border px-3 py-2 text-sm text-destructive">
-          {skillsError}
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm text-destructive"
+        >
+          <span className="min-w-0">{skillsError}</span>
+          {onRetry ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 px-2"
+              onClick={onRetry}
+            >
+              Retry
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {skills.length === 0 && !isSkillsLoading && !skillsError ? (

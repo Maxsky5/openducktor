@@ -148,6 +148,8 @@ const createBaseArgs = (): BuildArgs => {
       subagents: [],
       subagentsError: null,
       isSubagentsLoading: false,
+      retryCatalog: null,
+      onCatalogMenuOpen: () => {},
       searchFiles: async () => [],
       agentProfileOptions: [],
       modelPicker: {

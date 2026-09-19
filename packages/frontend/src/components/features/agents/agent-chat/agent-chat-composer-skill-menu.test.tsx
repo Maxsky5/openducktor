@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSkillReference } from "@openducktor/core";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { AgentChatComposerSkillMenu } from "./agent-chat-composer-skill-menu";
 
 const SKILLS: AgentSkillReference[] = [
@@ -30,6 +30,7 @@ describe("AgentChatComposerSkillMenu", () => {
         activeIndex={0}
         skillsError={null}
         isSkillsLoading={false}
+        onRetry={null}
         onSelectSkill={() => {}}
       />,
     );
@@ -58,6 +59,7 @@ describe("AgentChatComposerSkillMenu", () => {
           activeIndex={0}
           skillsError={null}
           isSkillsLoading={false}
+          onRetry={null}
           onSelectSkill={() => {}}
         />,
       );
@@ -69,6 +71,7 @@ describe("AgentChatComposerSkillMenu", () => {
           activeIndex={1}
           skillsError={null}
           isSkillsLoading={false}
+          onRetry={null}
           onSelectSkill={() => {}}
         />,
       );
@@ -88,6 +91,7 @@ describe("AgentChatComposerSkillMenu", () => {
         activeIndex={0}
         skillsError={null}
         isSkillsLoading={true}
+        onRetry={null}
         onSelectSkill={() => {}}
       />,
     );
@@ -108,6 +112,7 @@ describe("AgentChatComposerSkillMenu", () => {
         activeIndex={0}
         skillsError="Skills unavailable"
         isSkillsLoading={false}
+        onRetry={null}
         onSelectSkill={() => {}}
       />,
     );
@@ -120,6 +125,41 @@ describe("AgentChatComposerSkillMenu", () => {
     expect(errorFeedback.textContent).toBe("Skills unavailable");
   });
 
+  test("retries a failed skill surface from the error row", () => {
+    const onRetry = mock(() => {});
+    render(
+      <AgentChatComposerSkillMenu
+        listboxId={LISTBOX_ID}
+        skills={[]}
+        activeIndex={0}
+        skillsError="Skills unavailable"
+        isSkillsLoading={false}
+        onRetry={onRetry}
+        onSelectSkill={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  test("omits the retry button when the surface cannot retry", () => {
+    render(
+      <AgentChatComposerSkillMenu
+        listboxId={LISTBOX_ID}
+        skills={[]}
+        activeIndex={0}
+        skillsError="Skills unavailable"
+        isSkillsLoading={false}
+        onRetry={null}
+        onSelectSkill={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+
   test("mounts the controlled listbox for the empty skill state", () => {
     render(
       <AgentChatComposerSkillMenu
@@ -128,6 +168,7 @@ describe("AgentChatComposerSkillMenu", () => {
         activeIndex={0}
         skillsError={null}
         isSkillsLoading={false}
+        onRetry={null}
         onSelectSkill={() => {}}
       />,
     );

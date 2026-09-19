@@ -163,6 +163,8 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "subagents"
   | "subagentsError"
   | "isSubagentsLoading"
+  | "retryCatalog"
+  | "onCatalogMenuOpen"
   | "searchFiles"
   | "agentProfileOptions"
   | "modelPicker"
@@ -312,6 +314,8 @@ export function useAgentStudioOrchestrationController({
     subagents,
     subagentsError,
     isSubagentsLoading,
+    retryCatalog,
+    onCatalogMenuOpen,
     searchFiles,
     agentProfileOptions,
     modelPicker,
@@ -499,6 +503,8 @@ export function useAgentStudioOrchestrationController({
       subagents,
       subagentsError,
       isSubagentsLoading,
+      retryCatalog,
+      onCatalogMenuOpen,
       searchFiles,
       agentProfileOptions,
       modelPicker,

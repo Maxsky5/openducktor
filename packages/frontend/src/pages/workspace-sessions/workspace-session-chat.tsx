@@ -167,15 +167,14 @@ export function WorkspaceSessionChat({
       }),
     [runtime.allRuntimeDefinitions, record.runtimeKind],
   );
-  const { support, slashCommands, skills, subagents, searchFiles } = useWorkspaceSessionPromptInput(
-    {
+  const { support, slashCommands, skills, subagents, searchFiles, refreshCatalogIfStale } =
+    useWorkspaceSessionPromptInput({
       repoPath: workspace.repoPath,
       record,
       identity,
       repoReadinessState: runtimeReadiness.state,
       reusablePrompts,
-    },
-  );
+    });
   const contextUsage = useSelectedSessionContextUsage({
     selectedSession: session,
     sessionModelCatalog: modelCatalog,
@@ -322,6 +321,8 @@ export function WorkspaceSessionChat({
       ...slashCommands,
       ...skills,
       ...subagents,
+      retryCatalog: skills.retrySkills,
+      onCatalogMenuOpen: refreshCatalogIfStale,
       searchFiles,
       agentOptions: picker.agentProfileOptions,
       variantOptions: picker.variantOptions,

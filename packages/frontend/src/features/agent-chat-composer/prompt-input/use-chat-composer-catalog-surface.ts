@@ -45,5 +45,14 @@ export const useChatComposerCatalogSurface = <Catalog>({
     isLoading = catalogQuery.isLoading;
   }
 
-  return { catalog, error, isLoading };
+  // A failed surface stays retryable from the surface that needs it. The retry
+  // re-reads the combined catalog; the other surfaces keep their cached data.
+  const retry =
+    supports && promptInputRuntime.state === "available"
+      ? () => {
+          void catalogQuery.refetch();
+        }
+      : null;
+
+  return { catalog, error, isLoading, retry };
 };
