@@ -36,14 +36,14 @@ const claudeSubagentAssistantMessageSchema = z.looseObject({
 });
 
 export type ClaudeLiveHistoryContext = {
-  hasActiveWork: boolean;
+  hasActiveWork: () => boolean;
   source: "fresh" | "persisted";
   userMessages: readonly ClaudeLiveUserMessage[];
 };
 
 /** A resumed or forked session must load its saved transcript. */
 export const claudeLiveHistoryContext = (session: ClaudeSession): ClaudeLiveHistoryContext => ({
-  hasActiveWork: hasActiveClaudeWork(session),
+  hasActiveWork: () => hasActiveClaudeWork(session),
   source:
     "externalSessionId" in session.input || "parentExternalSessionId" in session.input
       ? "persisted"
@@ -235,7 +235,7 @@ export const loadClaudeHistory = async (
     // transcript. In this gap, the fresh session and its live events hold the new messages.
     if (
       liveContext?.source !== "fresh" ||
-      !liveContext.hasActiveWork ||
+      !liveContext.hasActiveWork() ||
       !isClaudeSessionMissingError(cause)
     ) {
       throw cause;

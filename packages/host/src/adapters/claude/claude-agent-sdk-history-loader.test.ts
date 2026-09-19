@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import {
@@ -28,6 +31,17 @@ const projectedHistory: AgentSessionHistoryMessage[] = [
   },
   latestProjectedMessage,
 ];
+
+const withEmptyWorktree = async <Result>(
+  run: (workingDirectory: string) => Promise<Result>,
+): Promise<Result> => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "openducktor-claude-history-"));
+  try {
+    return await run(workingDirectory);
+  } finally {
+    await rm(workingDirectory, { recursive: true, force: true });
+  }
+};
 
 describe("finalizeClaudeHistory", () => {
   test("prepends the system prompt outside the transcript tail limit", () => {
@@ -96,7 +110,7 @@ describe("loadClaudeHistory", () => {
           },
         },
         () => "2026-07-17T10:01:01.000Z",
-        { hasActiveWork: false, source: "fresh", userMessages: [] },
+        { hasActiveWork: () => false, source: "fresh", userMessages: [] },
       ),
     ).resolves.toEqual([
       {
@@ -110,40 +124,42 @@ describe("loadClaudeHistory", () => {
   });
 
   test("keeps a fresh accepted user turn visible before Claude creates its transcript", async () => {
-    await expect(
-      loadClaudeHistory(
+    await withEmptyWorktree(async (workingDirectory) => {
+      await expect(
+        loadClaudeHistory(
+          {
+            repoPath: "/repo",
+            runtimeKind: "claude",
+            workingDirectory,
+            externalSessionId: "00000000-0000-4000-8000-000000000001",
+            runtimePolicy: { kind: "claude" },
+          },
+          () => "2026-07-17T10:01:01.000Z",
+          {
+            hasActiveWork: () => true,
+            source: "fresh",
+            userMessages: [
+              {
+                messageId: "user-1",
+                text: "Inspect the prompt builder.",
+                timestamp: "2026-07-17T10:01:00.000Z",
+                state: "read",
+              },
+            ],
+          },
+        ),
+      ).resolves.toEqual([
         {
-          repoPath: "/repo",
-          runtimeKind: "claude",
-          workingDirectory: "/missing-worktree",
-          externalSessionId: "fresh-session",
-          runtimePolicy: { kind: "claude" },
+          messageId: "user-1",
+          role: "user",
+          timestamp: "2026-07-17T10:01:00.000Z",
+          text: "Inspect the prompt builder.",
+          displayParts: [{ kind: "text", text: "Inspect the prompt builder." }],
+          state: "read",
+          parts: [],
         },
-        () => "2026-07-17T10:01:01.000Z",
-        {
-          hasActiveWork: true,
-          source: "fresh",
-          userMessages: [
-            {
-              messageId: "user-1",
-              text: "Inspect the prompt builder.",
-              timestamp: "2026-07-17T10:01:00.000Z",
-              state: "read",
-            },
-          ],
-        },
-      ),
-    ).resolves.toEqual([
-      {
-        messageId: "user-1",
-        role: "user",
-        timestamp: "2026-07-17T10:01:00.000Z",
-        text: "Inspect the prompt builder.",
-        displayParts: [{ kind: "text", text: "Inspect the prompt builder." }],
-        state: "read",
-        parts: [],
-      },
-    ]);
+      ]);
+    });
   });
 
   test("throws for a missing transcript after fresh live work stops", async () => {
@@ -158,7 +174,7 @@ describe("loadClaudeHistory", () => {
         },
         () => "2026-07-17T10:01:01.000Z",
         {
-          hasActiveWork: false,
+          hasActiveWork: () => false,
           source: "fresh",
           userMessages: [
             {
@@ -173,6 +189,36 @@ describe("loadClaudeHistory", () => {
     ).rejects.toMatchObject({ code: "request_failed" });
   });
 
+  test("rechecks fresh work after the transcript read starts", async () => {
+    let hasActiveWork = true;
+    const history = loadClaudeHistory(
+      {
+        repoPath: "/repo",
+        runtimeKind: "claude",
+        workingDirectory: "/missing-worktree",
+        externalSessionId: "fresh-session",
+        runtimePolicy: { kind: "claude" },
+      },
+      () => "2026-07-17T10:01:01.000Z",
+      {
+        hasActiveWork: () => hasActiveWork,
+        source: "fresh",
+        userMessages: [
+          {
+            messageId: "user-1",
+            text: "Inspect the prompt builder.",
+            timestamp: "2026-07-17T10:01:00.000Z",
+            state: "read",
+          },
+        ],
+      },
+    );
+
+    hasActiveWork = false;
+
+    await expect(history).rejects.toMatchObject({ code: "request_failed" });
+  });
+
   test("imports persisted history for a resumed live session without new user turns", async () => {
     await expect(
       loadClaudeHistory(
@@ -184,7 +230,7 @@ describe("loadClaudeHistory", () => {
           runtimePolicy: { kind: "claude" },
         },
         () => "2026-07-17T10:01:01.000Z",
-        { hasActiveWork: false, source: "persisted", userMessages: [] },
+        { hasActiveWork: () => false, source: "persisted", userMessages: [] },
       ),
     ).rejects.toMatchObject({
       code: "request_failed",
@@ -213,37 +259,39 @@ describe("claudeLiveHistoryContext", () => {
   const acceptedUserMessages = [acceptedUserMessage];
 
   test("marks a started session as fresh and reports the queued state of accepted turns", () => {
-    expect(
-      claudeLiveHistoryContext(
-        createClaudeSession({ acceptedUserMessages, queuedSdkMessages: [queuedMessage] }),
-      ),
-    ).toEqual({
-      hasActiveWork: true,
+    const context = claudeLiveHistoryContext(
+      createClaudeSession({ acceptedUserMessages, queuedSdkMessages: [queuedMessage] }),
+    );
+
+    expect(context).toEqual({
+      hasActiveWork: expect.any(Function),
       source: "fresh",
       userMessages: [{ ...acceptedUserMessage, state: "queued" }],
     });
+    expect(context.hasActiveWork()).toBe(true);
   });
 
   test("marks a resumed session as persisted and reads accepted turns as read", () => {
-    expect(
-      claudeLiveHistoryContext(
-        createClaudeSession({
-          acceptedUserMessages,
-          input: {
-            repoPath: "/repo",
-            runtimeKind: "claude",
-            workingDirectory: "/repo",
-            externalSessionId: "session-1",
-            runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-          },
-        }),
-      ),
-    ).toEqual({
-      hasActiveWork: false,
+    const context = claudeLiveHistoryContext(
+      createClaudeSession({
+        acceptedUserMessages,
+        input: {
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo",
+          externalSessionId: "session-1",
+          runtimePolicy: { kind: "claude" },
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+        },
+      }),
+    );
+
+    expect(context).toEqual({
+      hasActiveWork: expect.any(Function),
       source: "persisted",
       userMessages: [{ ...acceptedUserMessage, state: "read" }],
     });
+    expect(context.hasActiveWork()).toBe(false);
   });
 });
 

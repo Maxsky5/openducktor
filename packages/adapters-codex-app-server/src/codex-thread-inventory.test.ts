@@ -637,6 +637,12 @@ describe("CodexThreadInventoryReader", () => {
     ["another RPC method", "thread/list", -32603, EMPTY_ROLLOUT_MESSAGE],
     ["another RPC code", "thread/read", -32602, EMPTY_ROLLOUT_MESSAGE],
     ["another internal error", "thread/read", -32603, "runtime database is unavailable"],
+    [
+      "different rollout paths",
+      "thread/read",
+      -32603,
+      "failed to read thread: thread-store internal error: failed to read thread /repo/rollout.jsonl: rollout at /other/rollout.jsonl is empty",
+    ],
   ] as const)(
     "rethrows an empty-rollout lookalike from %s",
     async (_case, method, code, message) => {
@@ -653,6 +659,7 @@ describe("CodexThreadInventoryReader", () => {
           externalSessionId: "thread-local",
           workingDirectory: "/repo",
           allowUnmaterialized: true,
+          getFreshThreadCwd: () => "/repo",
         }),
       ).rejects.toBe(failure);
     },

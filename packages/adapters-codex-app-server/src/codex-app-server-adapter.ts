@@ -210,7 +210,7 @@ export class CodexAppServerAdapter
   private readonly sessionEvents = new CodexSessionEventBus();
   private readonly pendingInput = new CodexPendingInputState();
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
-  // An empty rollout is safe only before the first read of a thread started here.
+  // An empty rollout is safe only for reads started before this process first reads the thread.
   private readonly freshSessions = new WeakSet<CodexSessionState>();
   private readonly localSessions: CodexLocalSessionState;
   private readonly contextUsageLoader: CodexContextUsageLoader;
@@ -953,12 +953,18 @@ export class CodexAppServerAdapter
   }
 
   private freshThreadReadGuard(session: CodexSessionState | undefined): CodexThreadReadGuard {
-    if (!session) {
+    if (
+      !session ||
+      this.localSessions.get(session.threadId) !== session ||
+      !this.freshSessions.has(session)
+    ) {
       return {};
     }
     return {
       getFreshThreadCwd: () =>
-        this.localSessions.get(session.threadId) === session && this.freshSessions.has(session)
+        this.localSessions.get(session.threadId) === session &&
+        session.liveStatus !== undefined &&
+        session.liveStatus.classification !== "idle"
           ? session.workingDirectory
           : undefined,
       onThreadRead: () => {
