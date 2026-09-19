@@ -103,11 +103,15 @@ export const parseCodexAsyncQuestionReplies = (text: string): AgentAsyncQuestion
 export const parseCodexAsyncQuestionReplyInputs = (
   inputs: readonly CodexAppServerUserInput[],
 ): AgentAsyncQuestionReply[] | null => {
-  const content = inputs.filter((input) => input.type !== "skill" && input.type !== "mention");
-  if (content.length !== 1 || content[0]?.type !== "text") {
+  const replyInputs = inputs.filter((input) => input.type !== "skill" && input.type !== "mention");
+  if (replyInputs.length !== 1) {
     return null;
   }
-  return parseCodexAsyncQuestionReplies(content[0].text);
+  const replyInput = replyInputs[0];
+  if (replyInput?.type !== "text") {
+    return null;
+  }
+  return parseCodexAsyncQuestionReplies(replyInput.text);
 };
 
 export const codexAsyncQuestionReplyText = (replies: AgentAsyncQuestionReply[]): string =>
