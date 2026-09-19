@@ -629,11 +629,9 @@ describe("AppShell", () => {
     expect(
       within(workspaceFooter).getByRole("button", { name: "Back to notifications" }),
     ).toBeTruthy();
-    const openRepositoryButton = await within(workspaceFooter).findByRole(
-      "button",
-      { name: "Open repository" },
-      { timeout: 8000 },
-    );
+    const openRepositoryButton = await within(workspaceFooter).findByRole("button", {
+      name: "Open repository",
+    });
     fireEvent.click(openRepositoryButton);
 
     expect(await screen.findByRole("button", { name: "Opening repository..." })).toBeTruthy();
@@ -701,9 +699,7 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
     await screen.findByRole("heading", { name: "Open your first workspace" });
     fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Open repository" }, { timeout: 8000 }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Open repository" }));
 
     const backButton = screen.getByRole("button", { name: "Back to notifications" });
     if (!(backButton instanceof HTMLButtonElement)) {

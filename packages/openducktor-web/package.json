@@ -29,7 +29,7 @@
     "build:cli": "bun run scripts/build-cli.ts",
     "build:mcp": "bun run scripts/build-mcp.ts",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit",
-    "test": "bun test --preload ../../scripts/bun-test-preload.ts --timeout 15000",
+    "test": "bun test --preload ../../scripts/bun-test-preload.ts --timeout 1000",
     "lint": "oxlint -c ../../.oxlintrc.json src scripts",
     "publish:dry-run": "npm publish --dry-run --access public"
   },
