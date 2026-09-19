@@ -48,7 +48,7 @@ export function InlineFolderPickerContent({
       <p id={descriptionId} className="sr-only">
         {description}
       </p>
-      <FolderPickerContent controller={controller} />
+      <FolderPickerContent controller={controller} treeHeight="fixed" />
     </section>
   );
 }
