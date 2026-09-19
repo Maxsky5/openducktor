@@ -32,7 +32,6 @@ const codexImageDefinition = {
 };
 const definitions = {
   listRuntimeDefinitions: () => [codexImageDefinition],
-  listEffectiveRuntimeDefinitions: () => Effect.succeed([codexImageDefinition]),
 };
 
 test("reads through the scoped adapter without live snapshot or resume and rejects forged command fields", async () => {
@@ -135,7 +134,6 @@ test("unsupported capability prevents source and file reads", async () => {
     { read: () => Effect.dieMessage("unexpected file read") },
     {
       listRuntimeDefinitions: () => [],
-      listEffectiveRuntimeDefinitions: () => Effect.succeed([]),
     },
   );
   await expect(Effect.runPromise(service.read(input))).rejects.toThrow("does not support");

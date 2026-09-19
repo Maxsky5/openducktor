@@ -39,7 +39,7 @@ export type ClaudeAgentSdkOptionsDependencies = {
 
 /**
  * Private bundled CLI switch. It is absent from the public SDK type contract,
- * so it stays a named constant behind the host compatibility gate.
+ * so the Claude adapter keeps it behind the native continuation admission check.
  */
 export const CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV = "CLAUDE_CODE_RESUME_INTERRUPTED_TURN";
 

@@ -27,8 +27,6 @@ import type {
   HostOperationErrorAggregate,
   HostValidationErrorAggregate,
 } from "../../effect/host-errors";
-import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { OpenDucktorMcpBridgeConnection } from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
@@ -40,14 +38,13 @@ export type ClaudeMcpBridgeConnectionResolver = (
 ) => Effect.Effect<OpenDucktorMcpBridgeConnection, HostOperationErrorAggregate>;
 
 export type CreateClaudeAgentSdkServiceInput = {
+  claudeExecutablePath: string;
   emit?: (session: ClaudeSessionContext, event: ClaudeAgentSdkEvent) => void;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeDistribution: HostRuntimeDistribution;
   sessionStore?: ClaudeSessionStore;
-  settingsConfig: SettingsConfigPort;
-  systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
   now?: () => string;
   randomId?: () => string;

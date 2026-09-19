@@ -44,7 +44,6 @@ import {
   prepareClaudeApprovalReply,
   prepareClaudeQuestionReply,
 } from "./claude-agent-sdk-pending-input";
-import { resolveClaudeExecutable } from "./claude-agent-sdk-runtime";
 import { createClaudeAgentSdkSession } from "./claude-agent-sdk-session-factory";
 import { applyClaudeSessionModel, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
@@ -58,7 +57,6 @@ import {
 } from "./claude-agent-sdk-session-policy";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import {
-  assertClaudeContinuationExecutableCompatible,
   checkLiveClaudeContinuationEligibility,
   checkPersistedClaudeContinuationEligibility,
   resolveFailedClaudeContinuationSession,
@@ -134,7 +132,6 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     return requireClaudeSessionScope(input.sessionScope, "continue interrupted Claude turn").pipe(
       Effect.flatMap((scope) =>
         Effect.gen(this, function* () {
-          yield* assertClaudeContinuationExecutableCompatible(this.input, input);
           const existing = this.sessionStore.get(input.externalSessionId);
           if (existing) {
             yield* checkLiveClaudeContinuationEligibility(existing, input, this.now);
@@ -190,48 +187,24 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   listAvailableModels(input: ListAgentModelsInput) {
-    return Effect.gen(this, function* () {
-      const claudeExecutablePath = yield* resolveClaudeExecutable(
-        this.input,
-        "claudeRuntime.listAvailableModels",
-      );
-      return yield* fromPromise("claudeRuntime.listAvailableModels", () =>
-        listClaudeModels(input, this.input.processEnv, claudeExecutablePath),
-      );
-    });
+    return fromPromise("claudeRuntime.listAvailableModels", () =>
+      listClaudeModels(input, this.input.processEnv, this.input.claudeExecutablePath),
+    );
   }
   listAvailableSlashCommands(input: ListAgentSlashCommandsInput) {
-    return Effect.gen(this, function* () {
-      const claudeExecutablePath = yield* resolveClaudeExecutable(
-        this.input,
-        "claudeRuntime.listAvailableSlashCommands",
-      );
-      return yield* fromPromise("claudeRuntime.listAvailableSlashCommands", () =>
-        listClaudeSlashCommands(input, this.input.processEnv, claudeExecutablePath),
-      );
-    });
+    return fromPromise("claudeRuntime.listAvailableSlashCommands", () =>
+      listClaudeSlashCommands(input, this.input.processEnv, this.input.claudeExecutablePath),
+    );
   }
   listAvailableSkills(input: ListAgentSkillsInput) {
-    return Effect.gen(this, function* () {
-      const claudeExecutablePath = yield* resolveClaudeExecutable(
-        this.input,
-        "claudeRuntime.listAvailableSkills",
-      );
-      return yield* fromPromise("claudeRuntime.listAvailableSkills", () =>
-        listClaudeSkills(input, this.input.processEnv, claudeExecutablePath),
-      );
-    });
+    return fromPromise("claudeRuntime.listAvailableSkills", () =>
+      listClaudeSkills(input, this.input.processEnv, this.input.claudeExecutablePath),
+    );
   }
   listAvailableSubagents(input: ListAgentSubagentsInput) {
-    return Effect.gen(this, function* () {
-      const claudeExecutablePath = yield* resolveClaudeExecutable(
-        this.input,
-        "claudeRuntime.listAvailableSubagents",
-      );
-      return yield* fromPromise("claudeRuntime.listAvailableSubagents", () =>
-        listClaudeSubagents(input, this.input.processEnv, claudeExecutablePath),
-      );
-    });
+    return fromPromise("claudeRuntime.listAvailableSubagents", () =>
+      listClaudeSubagents(input, this.input.processEnv, this.input.claudeExecutablePath),
+    );
   }
 
   searchFiles(input: SearchAgentFilesInput) {
@@ -400,10 +373,6 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
             }),
           )
         : [];
-      const claudeExecutablePath = yield* resolveClaudeExecutable(
-        this.input,
-        "claudeRuntime.createSession",
-      );
       const mcpCommand = yield* resolveOpenDucktorMcpCommand({
         runtimeDistribution: this.input.runtimeDistribution,
         toolDiscovery: this.input.toolDiscovery,
@@ -423,7 +392,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           now: this.now,
           randomId: this.randomId,
           resolvedDependencies: {
-            claudeExecutablePath,
+            claudeExecutablePath: this.input.claudeExecutablePath,
             mcpBridgeConnection,
             mcpCommand,
           },

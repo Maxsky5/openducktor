@@ -13,6 +13,7 @@ import type {
 } from "../../application/runtimes/claude-agent-sdk-service";
 import type { RuntimeWorkingDirectoryDependencies } from "../../application/runtimes/runtime-working-directory";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
@@ -120,16 +121,8 @@ type MutationBarrier = {
   release: ReturnType<typeof deferred<void>>;
 };
 
-type MutableClaudePreparerInput = Omit<
-  Parameters<typeof createClaudeLiveSessionAdapterPreparer>[0],
-  "resumeInterruptedTurnEnabled"
-> & {
-  resumeInterruptedTurnEnabled?: boolean;
-};
-
 const createHarness = async (
   workingDirectoryDependenciesOverride: RuntimeWorkingDirectoryDependencies = workingDirectoryDependencies,
-  options: { resumeInterruptedTurnEnabled?: boolean } = {},
 ) => {
   const changes: AgentSessionLiveAdapterChange[] = [];
   const eventHub = createClaudeAgentSdkEventHub();
@@ -244,7 +237,7 @@ const createHarness = async (
         );
       }),
   };
-  const prepareInput: MutableClaudePreparerInput = {
+  const prepareInput: Parameters<typeof createClaudeLiveSessionAdapterPreparer>[0] = {
     eventHub,
     liveSessionLifecycle,
     service,
@@ -254,9 +247,6 @@ const createHarness = async (
     },
     workingDirectoryDependencies: workingDirectoryDependenciesOverride,
   };
-  if (options.resumeInterruptedTurnEnabled !== undefined) {
-    prepareInput.resumeInterruptedTurnEnabled = options.resumeInterruptedTurnEnabled;
-  }
   const prepare = createClaudeLiveSessionAdapterPreparer(prepareInput);
   const prepared = await Effect.runPromise(prepare(runtime));
   await Effect.runPromise(prepared.startForwarding());
@@ -322,10 +312,8 @@ const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[])
   changes.flatMap((change) => (change.type === "transcript_event" ? [change.event.type] : []));
 
 describe("Claude host live-session adapter", () => {
-  test("delegates interrupted-turn resume to the Claude service when the gate is on", async () => {
-    const harness = await createHarness(workingDirectoryDependencies, {
-      resumeInterruptedTurnEnabled: true,
-    });
+  test("delegates interrupted-turn resume to the Claude service", async () => {
+    const harness = await createHarness(workingDirectoryDependencies);
     const calls: Array<{ input: unknown; runtimeId: string }> = [];
     harness.setContinueInterruptedTurn((input, runtimeId) => {
       calls.push({ input, runtimeId });
@@ -356,9 +344,7 @@ describe("Claude host live-session adapter", () => {
   });
 
   test("maps a native continuation identity mismatch to the typed resume failure", async () => {
-    const harness = await createHarness(workingDirectoryDependencies, {
-      resumeInterruptedTurnEnabled: true,
-    });
+    const harness = await createHarness(workingDirectoryDependencies);
     harness.setContinueInterruptedTurn(() =>
       Effect.fail(
         toHostOperationError(
@@ -390,15 +376,20 @@ describe("Claude host live-session adapter", () => {
     });
   });
 
-  test("fails interrupted-turn resume with a typed unsupported error when the gate is off", async () => {
-    const harness = await createHarness(workingDirectoryDependencies, {
-      resumeInterruptedTurnEnabled: false,
-    });
-    let delegateCalls = 0;
-    harness.setContinueInterruptedTurn(() => {
-      delegateCalls += 1;
-      return Effect.succeed(summary);
-    });
+  test("serializes new-message advice when Claude does not admit the continuation", async () => {
+    const harness = await createHarness(workingDirectoryDependencies);
+    harness.setContinueInterruptedTurn(() =>
+      Effect.fail(
+        toHostOperationError(
+          interruptedTurnResumeError({
+            reason: "continuation_failed",
+            message:
+              "Claude Code did not start the continuation for session 'session-1'. Send a new message to continue.",
+          }),
+          "claudeRuntime.createSession",
+        ),
+      ),
+    );
 
     const failure = await Effect.runPromise(
       Effect.flip(
@@ -409,12 +400,43 @@ describe("Claude host live-session adapter", () => {
       ),
     );
 
-    expect(failure).toMatchObject({
-      reason: "unsupported",
-      operation: "claude-live-session.continue-interrupted-turn",
+    expect(hostInvokeFailureFromError(failure)).toMatchObject({
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "continuation_failed",
+        message:
+          "Claude Code did not start the continuation for session 'session-1'. Send a new message to continue.",
+        nextAction: "Send a new message to continue.",
+      },
     });
-    expect(failure.message).toContain("Interrupted-turn resume is disabled");
-    expect(delegateCalls).toBe(0);
+  });
+
+  test("serializes inspect-session advice when retaining an admitted continuation fails", async () => {
+    const harness = await createHarness(workingDirectoryDependencies);
+    harness.setContinueInterruptedTurn(() =>
+      Effect.succeed({ ...summary, status: "running" as const }),
+    );
+    harness.failNextMutationAfterStateApply();
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        harness.adapter.continueInterruptedTurn({
+          ...startInput,
+          externalSessionId: "session-1",
+        }),
+      ),
+    );
+
+    expect(hostInvokeFailureFromError(failure)).toMatchObject({
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "continuation_failed",
+        message:
+          "Publication failed. The adapter already accepted the continuation, so the runtime can be working on it.",
+        nextAction:
+          "Inspect the runtime and this session. Retry Resume only if the turn is still unfinished.",
+      },
+    });
   });
 
   test.each(["user_message", "session_status"])(

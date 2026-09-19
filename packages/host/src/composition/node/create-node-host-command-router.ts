@@ -159,7 +159,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const localAttachmentService = createLocalAttachmentService(localAttachments);
   const openInToolsService = createOpenInToolsService(openInTools);
-  const runtimeDefinitionsService = createHostRuntimeDefinitionsService(input, defaultPorts);
+  const runtimeDefinitionsService = createHostRuntimeDefinitionsService();
   const systemDiagnosticsService = createSystemDiagnosticsService({
     pathError: processEnvironmentError?.message ?? null,
     runtimeDefinitionsService,
@@ -177,14 +177,12 @@ export const assembleNodeEffectHostCommandRouter = (
   const resolveRuntimeMcpBridge = (kind: "codex" | "opencode", repoPath: string) =>
     resolveWorkspaceRuntimeMcpBridgeConnection(resolvedMcpHostBridge, kind, repoPath);
   const claudeRuntime = createClaudeRuntimeComposition({
-    interruptedTurnResumeEnabled: input.claudeInterruptedTurnResumeEnabled ?? true,
     liveSessionLifecycle: agentSessionLiveStateService,
     onBackgroundFailure,
     processEnv,
     runtimeExecutableProbe: runtimeExecutableProbes.claude,
     runtimeDistribution,
     settingsConfig,
-    systemCommands,
     toolDiscovery,
     workingDirectoryDependencies,
     resolveMcpBridgeConnection: (repoPath) =>

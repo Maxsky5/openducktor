@@ -8,7 +8,6 @@ export const interruptedTurnResumeFailureReasons = [
   "session_not_found",
   "identity_mismatch",
   "probe_failed",
-  "compatibility_rejected",
   "continuation_failed",
 ] as const;
 

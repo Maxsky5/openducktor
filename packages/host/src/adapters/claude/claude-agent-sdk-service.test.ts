@@ -1,18 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import { readdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { AgentRuntimeQueryError, InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
-import { HostDependencyError, HostOperationError } from "../../effect/host-errors";
-import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
-import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
-import type { SystemCommandPort } from "../../ports/system-command-port";
+import { HostOperationError } from "../../effect/host-errors";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
-import {
-  createClaudeSystemCommands,
-  createRecordingClaudeSystemCommands,
-} from "./claude-agent-sdk-system-commands.test-support";
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
 import {
   checkLiveClaudeContinuationEligibility,
@@ -53,26 +44,9 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
     ...overrides,
   });
 
-const listClaudeMcpTokenDirectories = async (): Promise<Set<string>> =>
-  new Set((await readdir(tmpdir())).filter((name) => name.startsWith("openducktor-claude-mcp-")));
-
-const expectNoNewClaudeMcpTokenDirectories = async (before: Set<string>): Promise<void> => {
-  let created: string[] = [];
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const after = await listClaudeMcpTokenDirectories();
-    created = [...after].filter((name) => !before.has(name));
-    if (created.length === 0) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  expect(created).toEqual([]);
-};
-
 const createService = (
   session: ClaudeSession | null,
   emit?: ClaudeAgentSdkEventEmitter,
-  systemCommands: SystemCommandPort = createClaudeSystemCommands(),
   existingSessionStore?: ClaudeSessionStore,
 ) => {
   const sessionStore =
@@ -84,6 +58,7 @@ const createService = (
     sessionStore.set(session);
   }
   const serviceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
+    claudeExecutablePath: process.execPath,
     now: () => "2026-06-25T20:00:00.000Z",
     onBackgroundFailure: () => Effect.void,
     resolveMcpBridgeConnection: () => {
@@ -96,8 +71,6 @@ const createService = (
       },
     }),
     sessionStore,
-    settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-    systemCommands,
     toolDiscovery: {
       discoverTool: () => Effect.die("unused"),
       resolveTool: () => Effect.die("unused"),
@@ -331,6 +304,7 @@ describe("createClaudeAgentSdkService", () => {
     });
     const service = createClaudeAgentSdkService(
       {
+        claudeExecutablePath: "/usr/local/bin/claude",
         now: () => "2026-06-25T20:00:00.000Z",
         onBackgroundFailure: () => Effect.void,
         processEnv: { HOME: "/home/user" },
@@ -344,8 +318,6 @@ describe("createClaudeAgentSdkService", () => {
           },
         }),
         sessionStore,
-        settingsConfig: createFixedRuntimeSettingsConfig("claude", "/usr/local/bin/claude"),
-        systemCommands: createClaudeSystemCommands(),
         toolDiscovery: {
           discoverTool: () => Effect.die("unused"),
           resolveTool: () => {
@@ -517,72 +489,6 @@ describe("createClaudeAgentSdkService", () => {
         }),
       ),
     ).resolves.toEqual([todo]);
-  });
-
-  test("cleans session-scoped MCP token files when Claude executable resolution fails before store ownership", async () => {
-    const before = await listClaudeMcpTokenDirectories();
-    const sessionStore = createClaudeAgentSdkSessionStore({
-      now: () => "2026-06-25T20:00:00.000Z",
-    });
-    const service = createClaudeAgentSdkService({
-      now: () => "2026-06-25T20:00:00.000Z",
-      onBackgroundFailure: () => Effect.void,
-      randomId: () => "session-1",
-      resolveMcpBridgeConnection: () =>
-        Effect.succeed({
-          workspaceId: "workspace-1",
-          hostUrl: "http://127.0.0.1:1",
-          hostToken: "bridge-secret-value",
-        }),
-      runtimeDistribution: createArtifactRuntimeDistribution({
-        mcpLauncher: {
-          kind: "executable",
-          executablePath: process.execPath,
-        },
-      }),
-      settingsConfig: createFixedRuntimeSettingsConfig("claude", "/usr/local/bin/claude"),
-      sessionStore,
-      systemCommands: createClaudeSystemCommands(),
-      toolDiscovery: {
-        discoverTool: () => Effect.die("unused"),
-        resolveTool: () => Effect.die("unused"),
-        resolveToolPath: (toolId) =>
-          toolId === "claude"
-            ? Effect.fail(
-                new HostDependencyError({
-                  dependency: "claude",
-                  message: "claude unavailable",
-                }),
-              )
-            : Effect.succeed(process.execPath),
-        validateToolPath: () =>
-          Effect.fail(
-            new HostDependencyError({
-              dependency: "claude",
-              message: "claude unavailable",
-            }),
-          ),
-      },
-    });
-
-    await expect(
-      Effect.runPromise(
-        service.startSession(
-          {
-            repoPath: "/repo/",
-            runtimeKind: "claude",
-            workingDirectory: "/repo/worktree/",
-            runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-            systemPrompt: "Build",
-          },
-          "runtime-claude",
-        ),
-      ),
-    ).rejects.toThrow("claude unavailable");
-
-    expect([...sessionStore.values()]).toEqual([]);
-    await expectNoNewClaudeMcpTokenDirectories(before);
   });
 
   test("validates existing live session refs before resuming", async () => {
@@ -1032,14 +938,6 @@ describe("continueInterruptedTurn eligibility", () => {
     sessionScope: { kind: "workflow" as const, taskId: "task-1", role: "build" as const },
   };
 
-  const continuationFailureReason = async (operation: Effect.Effect<unknown, unknown, never>) => {
-    const failure = await Effect.runPromise(Effect.flip(operation));
-    if (!(failure instanceof AgentSessionResumeError)) {
-      throw new Error(`Expected an AgentSessionResumeError, received: ${String(failure)}`);
-    }
-    return failure.reason;
-  };
-
   const resumeFailureReason = async (operation: Effect.Effect<unknown, unknown, never>) => {
     const failure = await Effect.runPromise(Effect.flip(operation));
     if (!(failure instanceof HostOperationError)) {
@@ -1113,53 +1011,6 @@ describe("continueInterruptedTurn eligibility", () => {
     ).resolves.toBe("identity_mismatch");
   });
 
-  test("refuses a continuation when the Claude executable is older than the verified version", async () => {
-    const service = createService(
-      null,
-      undefined,
-      createClaudeSystemCommands("2.1.250 (Claude Code)"),
-    );
-
-    await expect(
-      continuationFailureReason(
-        service.continueInterruptedTurn(continuationInput, "runtime-claude"),
-      ),
-    ).resolves.toBe("compatibility_rejected");
-  });
-
-  test("refuses a continuation when the Claude executable reports no version", async () => {
-    const service = createService(null, undefined, createClaudeSystemCommands(null));
-
-    await expect(
-      continuationFailureReason(
-        service.continueInterruptedTurn(continuationInput, "runtime-claude"),
-      ),
-    ).resolves.toBe("compatibility_rejected");
-  });
-
-  test("refuses a continuation when the Claude executable is a later unverified release", async () => {
-    const service = createService(
-      null,
-      undefined,
-      createClaudeSystemCommands("2.1.252 (Claude Code)"),
-    );
-
-    await expect(
-      continuationFailureReason(
-        service.continueInterruptedTurn(continuationInput, "runtime-claude"),
-      ),
-    ).resolves.toBe("compatibility_rejected");
-  });
-
-  test("checks the resolved Claude executable before continuing a turn", async () => {
-    const { systemCommands, versionCalls } = createRecordingClaudeSystemCommands();
-    const service = createService(null, undefined, systemCommands);
-
-    await resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude"));
-
-    expect(versionCalls).toEqual([[process.execPath, ["--version"], { timeoutMs: 2_000 }]]);
-  });
-
   test("refuses a live continuation that waits for pending input", async () => {
     const session = createSession({
       pendingApprovals: new Map([
@@ -1222,7 +1073,7 @@ describe("continueInterruptedTurn eligibility", () => {
       ],
     });
     const closeSession = mock((target: ClaudeSession) => sessionStore.close(target));
-    const service = createService(attached, undefined, undefined, {
+    const service = createService(attached, undefined, {
       ...sessionStore,
       close: closeSession,
     });
@@ -1251,7 +1102,7 @@ describe("continueInterruptedTurn eligibility", () => {
       ],
     });
     const closeSession = mock((target: ClaudeSession) => sessionStore.close(target));
-    const service = createService(attached, undefined, undefined, {
+    const service = createService(attached, undefined, {
       ...sessionStore,
       close: closeSession,
     });

@@ -101,10 +101,8 @@ const runtimeDefinitionsWithScopes = (supportedScopes: RuntimeSupportedScope[]) 
   };
   return {
     listRuntimeDefinitions: () => [descriptor],
-    listEffectiveRuntimeDefinitions: () => Effect.succeed([descriptor]),
   } satisfies {
     listRuntimeDefinitions(): RuntimeDescriptor[];
-    listEffectiveRuntimeDefinitions(): Effect.Effect<RuntimeDescriptor[]>;
   };
 };
 

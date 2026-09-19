@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { RuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
-import { HostValidationError } from "../../effect/host-errors";
+import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import type { HostCommandArgs } from "./command-inputs";
 
@@ -30,6 +30,9 @@ export const createRuntimeDefinitionsCommandHandlers = (
                   field: "args",
                 }),
         });
-        return yield* runtimeDefinitionsService.listEffectiveRuntimeDefinitions();
+        return yield* Effect.try({
+          try: () => runtimeDefinitionsService.listRuntimeDefinitions(),
+          catch: (cause) => toHostOperationError(cause, "runtimeDefinitions.list"),
+        });
       }),
   }) satisfies HostCommandHandlerDefinitions;
