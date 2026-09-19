@@ -57,13 +57,11 @@ const loadPackagedFffModule = (nodeModulesDirectory: string): LoadedPackagedFffM
   return { modulePath, module };
 };
 
-const probePackagedFffScan = async (
-  loaded: LoadedPackagedFffModule,
-): Promise<LoadedPackagedFffModule> => {
+const probePackagedFffScan = async (module: typeof import("@ff-labs/fff-node")): Promise<void> => {
   const workspace = await mkdtemp(join(tmpdir(), "openducktor-fff-package-check-"));
   try {
     await writeFile(join(workspace, probeFileName), "openducktor\n");
-    const created = loaded.module.FileFinder.create({ basePath: workspace });
+    const created = module.FileFinder.create({ basePath: workspace });
     if (!created.ok) {
       throw new Error(`FileFinder.create failed: ${created.error}`);
     }
@@ -92,7 +90,6 @@ const probePackagedFffScan = async (
   } finally {
     await rm(workspace, { force: true, recursive: true });
   }
-  return loaded;
 };
 
 export const verifyPackagedFffFileSearchEffect = ({
@@ -110,7 +107,11 @@ export const verifyPackagedFffFileSearchEffect = ({
       releaseDirectory,
     });
     const verified = yield* Effect.tryPromise({
-      try: async () => probePackagedFffScan(loadPackagedFffModule(nodeModulesDirectory)),
+      try: async () => {
+        const loaded = loadPackagedFffModule(nodeModulesDirectory);
+        await probePackagedFffScan(loaded.module);
+        return { modulePath: loaded.modulePath };
+      },
       catch: (cause) =>
         new ElectronOperationError({
           operation: "electron.fff.verify-packaged",
@@ -124,7 +125,7 @@ export const verifyPackagedFffFileSearchEffect = ({
         }),
     });
 
-    return { modulePath: verified.modulePath };
+    return verified;
   });
 
 export const verifyPackagedFffFileSearch = ({
