@@ -22,7 +22,7 @@ import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { AgentAsyncQuestionCard } from "./agent-async-question-card";
 import {
   agentAsyncQuestionDraftKey,
-  reconcileAgentAsyncQuestionDrafts,
+  pruneAgentAsyncQuestionDrafts,
 } from "./agent-async-question-draft-store";
 import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
@@ -426,7 +426,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const pendingAsyncQuestions = session?.pendingAsyncQuestions ?? NO_PENDING_ASYNC_QUESTIONS;
   useEffect(() => {
     if (session) {
-      reconcileAgentAsyncQuestionDrafts(
+      pruneAgentAsyncQuestionDrafts(
         session,
         pendingAsyncQuestions.map((question) => question.questionItemId),
       );

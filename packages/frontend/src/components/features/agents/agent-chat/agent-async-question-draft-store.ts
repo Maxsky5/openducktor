@@ -4,7 +4,7 @@ import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 const drafts = new Map<string, string>();
 const listeners = new Map<string, Set<() => void>>();
-const knownQuestionIdsBySession = new Map<string, Set<string>>();
+const trackedIdsBySession = new Map<string, Set<string>>();
 
 const emitDraftChange = (key: string): void => {
   for (const listener of listeners.get(key) ?? []) {
@@ -26,21 +26,21 @@ export const agentAsyncQuestionDraftKey = (
   questionItemId: string,
 ): string => JSON.stringify([agentSessionIdentityKey(sessionIdentity), questionItemId]);
 
-export const reconcileAgentAsyncQuestionDrafts = (
+export const pruneAgentAsyncQuestionDrafts = (
   sessionIdentity: AgentSessionIdentity,
-  pendingQuestionItemIds: readonly string[],
+  pendingIds: readonly string[],
 ): void => {
   const sessionKey = agentSessionIdentityKey(sessionIdentity);
-  const previousQuestionItemIds = knownQuestionIdsBySession.get(sessionKey);
-  const nextQuestionItemIds = new Set(pendingQuestionItemIds);
-  if (previousQuestionItemIds) {
-    for (const questionItemId of previousQuestionItemIds) {
-      if (!nextQuestionItemIds.has(questionItemId)) {
+  const oldIds = trackedIdsBySession.get(sessionKey);
+  const nextIds = new Set(pendingIds);
+  if (oldIds) {
+    for (const questionItemId of oldIds) {
+      if (!nextIds.has(questionItemId)) {
         writeDraft(agentAsyncQuestionDraftKey(sessionIdentity, questionItemId), "");
       }
     }
   }
-  knownQuestionIdsBySession.set(sessionKey, nextQuestionItemIds);
+  trackedIdsBySession.set(sessionKey, nextIds);
 };
 
 export const useAgentAsyncQuestionDraft = (

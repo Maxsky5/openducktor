@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { AgentAsyncQuestionCard } from "./agent-async-question-card";
-import { reconcileAgentAsyncQuestionDrafts } from "./agent-async-question-draft-store";
+import { pruneAgentAsyncQuestionDrafts } from "./agent-async-question-draft-store";
 
 describe("AgentAsyncQuestionCard", () => {
   const sessionIdentity = {
@@ -189,7 +189,7 @@ describe("AgentAsyncQuestionCard", () => {
       questionIndex: 1,
       title: "Remote second question?",
     };
-    reconcileAgentAsyncQuestionDrafts(sessionIdentity, [
+    pruneAgentAsyncQuestionDrafts(sessionIdentity, [
       firstQuestion.questionItemId,
       secondQuestion.questionItemId,
     ]);
@@ -219,7 +219,7 @@ describe("AgentAsyncQuestionCard", () => {
     });
     initial.unmount();
 
-    reconcileAgentAsyncQuestionDrafts(sessionIdentity, [secondQuestion.questionItemId]);
+    pruneAgentAsyncQuestionDrafts(sessionIdentity, [secondQuestion.questionItemId]);
     const restored = render(
       <>
         <AgentAsyncQuestionCard
