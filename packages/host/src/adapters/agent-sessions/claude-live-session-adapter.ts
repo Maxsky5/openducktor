@@ -337,6 +337,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                 cause,
                 toClaudeLiveSessionRef(input),
                 "claude-live-session.continue-interrupted-turn",
+                { continuation_failed: "Send a new message to continue." },
               ),
             ),
           ),

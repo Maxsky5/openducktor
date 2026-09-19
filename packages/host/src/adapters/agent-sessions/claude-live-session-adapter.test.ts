@@ -13,6 +13,7 @@ import type {
 } from "../../application/runtimes/claude-agent-sdk-service";
 import type { RuntimeWorkingDirectoryDependencies } from "../../application/runtimes/runtime-working-directory";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
@@ -372,6 +373,41 @@ describe("Claude host live-session adapter", () => {
       operation: "claude-live-session.continue-interrupted-turn",
       nextAction:
         "Reopen the session from the session list so the stored identity matches, then retry Resume.",
+    });
+  });
+
+  test("serializes new-message advice when Claude does not admit the continuation", async () => {
+    const harness = await createHarness(workingDirectoryDependencies);
+    harness.setContinueInterruptedTurn(() =>
+      Effect.fail(
+        toHostOperationError(
+          interruptedTurnResumeError({
+            reason: "continuation_failed",
+            message:
+              "Claude Code did not start the continuation for session 'session-1'. Send a new message to continue.",
+          }),
+          "claudeRuntime.createSession",
+        ),
+      ),
+    );
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        harness.adapter.continueInterruptedTurn({
+          ...startInput,
+          externalSessionId: "session-1",
+        }),
+      ),
+    );
+
+    expect(hostInvokeFailureFromError(failure)).toMatchObject({
+      kind: "agent_session_resume",
+      agentSessionResumeFailure: {
+        reason: "continuation_failed",
+        message:
+          "Claude Code did not start the continuation for session 'session-1'. Send a new message to continue.",
+        nextAction: "Send a new message to continue.",
+      },
     });
   });
 

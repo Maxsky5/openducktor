@@ -27,6 +27,10 @@ export type AgentSessionResumeErrorInput = {
   readonly nextAction?: string;
 };
 
+export type AgentSessionResumeNextActionOverrides = Partial<
+  Record<AgentSessionResumeFailureReason, string>
+>;
+
 export class AgentSessionResumeError extends HostOperationError {
   readonly reason: AgentSessionResumeFailureReason;
   readonly sessionRef: AgentSessionLiveRef;
@@ -54,30 +58,34 @@ export const toAgentSessionResumeError = (
   cause: unknown,
   sessionRef: AgentSessionLiveRef,
   operation: string,
+  nextActionOverrides: AgentSessionResumeNextActionOverrides = {},
 ): AgentSessionResumeError => {
   if (cause instanceof AgentSessionResumeError) {
     return cause;
   }
   if (cause instanceof HostOperationError && cause.cause instanceof InterruptedTurnResumeError) {
-    return toAgentSessionResumeError(cause.cause, sessionRef, operation);
+    return toAgentSessionResumeError(cause.cause, sessionRef, operation, nextActionOverrides);
   }
   if (cause instanceof InterruptedTurnResumeError) {
     // SAFETY: the core reasons are a subset of the wire reasons, so the cast cannot widen.
     const reason = cause.reason as AgentSessionResumeFailureReason;
-    const input: AgentSessionResumeErrorInput = {
+    const input = {
       reason,
       sessionRef,
       operation,
       message: cause.message,
       cause: cause.resumeCause ?? cause,
     };
-    return new AgentSessionResumeError(input);
+    const nextAction = nextActionOverrides[reason];
+    return new AgentSessionResumeError(nextAction === undefined ? input : { ...input, nextAction });
   }
-  return new AgentSessionResumeError({
+  const input = {
     reason: "continuation_failed",
     sessionRef,
     operation,
     message: cause instanceof Error ? cause.message : String(cause),
     cause,
-  });
+  } as const;
+  const nextAction = nextActionOverrides.continuation_failed;
+  return new AgentSessionResumeError(nextAction === undefined ? input : { ...input, nextAction });
 };
