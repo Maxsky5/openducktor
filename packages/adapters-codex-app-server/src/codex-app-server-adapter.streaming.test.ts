@@ -25,6 +25,7 @@ import {
   codexCollabAgentToolCallFixture,
   codexCommandExecutionItemFixture,
   codexTokenUsageFixture,
+  codexUserMessageItemFixture,
 } from "./test-fixtures/codex-protocol";
 import { encodeCodexAsyncQuestionReply } from "./codex-async-questions";
 
@@ -126,6 +127,85 @@ describe("CodexAppServerAdapter streaming", () => {
       await expect(
         adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
       ).resolves.toMatchObject({ pendingAsyncQuestions: [] });
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("resolves only the answered question from an IDE-wrapped live reply", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter } = createHarness({ subscribeEvents });
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-live"),
+      (event) => events.push(event),
+    );
+
+    try {
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_650,
+          item: {
+            type: "agentMessage",
+            id: "async-question-pair",
+            phase: "commentary",
+            text: "Choose an environment and region.",
+            memoryCitation: null,
+            delivery: "async",
+            questions: [
+              { title: "Which environment?", options: ["Staging", "Production"] },
+              { title: "Which region?", options: ["Europe", "US"] },
+            ],
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      const firstQuestionId = '["request_user_input_async","async-question-pair",0]';
+      const secondQuestionId = '["request_user_input_async","async-question-pair",1]';
+      const reply = encodeCodexAsyncQuestionReply({
+        questionItemId: firstQuestionId,
+        question: "Which environment?",
+        answer: "Staging",
+      });
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_700,
+          item: codexUserMessageItemFixture({
+            id: "ide-reply",
+            content: [
+              {
+                type: "text",
+                text: `# Context from my IDE setup:\n\nWorkspace context.\n\n## My request for Codex:\n${reply}`,
+                text_elements: [],
+              },
+            ],
+          }),
+        },
+      });
+      await flushCodexAdapterWork();
+
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "user_message",
+          message: "> Which environment?\n\nStaging",
+          asyncQuestionReplies: [
+            expect.objectContaining({ questionItemId: firstQuestionId, answer: "Staging" }),
+          ],
+        }),
+      );
+      await expect(
+        adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
+      ).resolves.toMatchObject({
+        pendingAsyncQuestions: [expect.objectContaining({ questionItemId: secondQuestionId })],
+      });
     } finally {
       unsubscribe();
     }

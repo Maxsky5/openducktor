@@ -7,6 +7,8 @@ import type {
 
 const OPEN_TAG = "<send_user_message_question_reply>";
 const CLOSE_TAG = "</send_user_message_question_reply>";
+const IDE_CONTEXT_PREFIX = "# Context from my IDE setup:\n";
+const IDE_REQUEST_DELIMITER = "\n## My request for Codex:\n";
 export const CODEX_ASYNC_QUESTION_FALLBACK_ERROR =
   "OpenDucktor could not open this structured question. Answer through the main chat composer.";
 
@@ -56,8 +58,22 @@ export const parseCodexAsyncQuestionItem = (
 export const encodeCodexAsyncQuestionReply = (reply: AgentAsyncQuestionReply): string =>
   `${OPEN_TAG}${JSON.stringify(reply)}${CLOSE_TAG}`;
 
+const unwrapCodexIdeContext = (text: string): string | null => {
+  if (!text.startsWith(IDE_CONTEXT_PREFIX)) {
+    return text;
+  }
+  const delimiterIndex = text.lastIndexOf(IDE_REQUEST_DELIMITER);
+  if (delimiterIndex < 0) {
+    return null;
+  }
+  return text.slice(delimiterIndex + IDE_REQUEST_DELIMITER.length).trim();
+};
+
 export const parseCodexAsyncQuestionReplies = (text: string): AgentAsyncQuestionReply[] | null => {
-  const trimmed = text.trim();
+  const trimmed = unwrapCodexIdeContext(text.trim());
+  if (trimmed === null) {
+    return null;
+  }
   if (!trimmed.startsWith(OPEN_TAG) || !trimmed.endsWith(CLOSE_TAG)) {
     return null;
   }

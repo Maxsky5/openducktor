@@ -219,6 +219,60 @@ describe("Codex event mapper pipeline", () => {
       }),
     ]);
   });
+
+  test("projects an IDE-wrapped reply with live and history parity", () => {
+    const firstQuestionId = '["request_user_input_async","question-message",0]';
+    const reply = `<send_user_message_question_reply>${JSON.stringify({
+      questionItemId: firstQuestionId,
+      question: "Which environment?",
+      answer: "Staging",
+    })}</send_user_message_question_reply>`;
+    const item = {
+      type: "userMessage" as const,
+      id: "reply-wrapped",
+      content: [
+        {
+          type: "text" as const,
+          text: `# Context from my IDE setup:\n\nThe second question remains pending.\n\n## My request for Codex:\n${reply}`,
+          text_elements: [],
+        },
+      ],
+    };
+    const live = projectCodexCanonicalEvents(
+      createCodexEventMapperPipeline().runLive(
+        { kind: "item_completed", item },
+        { source: "live", threadId: "thread-1", turnId: "turn-1" },
+      ),
+    );
+    const history = projectCodexCanonicalEventsToHistory(
+      createCodexEventMapperPipeline().runThreadItem(
+        { item, index: 0 },
+        { source: "thread_read", threadId: "thread-1" },
+      ),
+    );
+    const expectedReplies = [
+      {
+        questionItemId: firstQuestionId,
+        question: "Which environment?",
+        answer: "Staging",
+      },
+    ];
+
+    expect(live).toEqual([
+      expect.objectContaining({
+        type: "user_message",
+        message: "> Which environment?\n\nStaging",
+        asyncQuestionReplies: expectedReplies,
+      }),
+    ]);
+    expect(history).toEqual([
+      expect.objectContaining({
+        role: "user",
+        text: "> Which environment?\n\nStaging",
+        asyncQuestionReplies: expectedReplies,
+      }),
+    ]);
+  });
 });
 
 describe("Codex todo event mapper", () => {

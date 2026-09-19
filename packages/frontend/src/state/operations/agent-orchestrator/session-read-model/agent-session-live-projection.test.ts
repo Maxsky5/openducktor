@@ -244,6 +244,32 @@ describe("agent session live projection", () => {
     expect(refreshedSession?.handledAsyncQuestionIds).toContain(question.questionItemId);
   });
 
+  test("keeps a history question pending when the runtime snapshot has no tracker state", () => {
+    const question = {
+      questionItemId: '["request_user_input_async","question-history",0]',
+      sourceMessageId: "question-history",
+      questionIndex: 0,
+      title: "Which environment?",
+      options: ["Staging", "Production"],
+    };
+    const emptySnapshot = snapshot("thread-1");
+    const initial = build({ snapshots: [emptySnapshot] });
+    const session = getAgentSession(initial, identity("thread-1"));
+    if (!session) {
+      throw new Error("Expected the live session before restoring history state.");
+    }
+    const restored = replaceAgentSession(initial, {
+      ...session,
+      pendingAsyncQuestions: [question],
+    });
+
+    const refreshed = build({ current: restored, snapshots: [emptySnapshot] });
+    const refreshedSession = getAgentSession(refreshed, identity("thread-1"));
+
+    expect(refreshedSession?.pendingAsyncQuestions).toEqual([question]);
+    expect(refreshedSession?.handledAsyncQuestionIds).toEqual(new Set());
+  });
+
   test.each(["stopped", "error"] as const)(
     "keeps last-known context for %s sessions until a measurement arrives",
     (status) => {

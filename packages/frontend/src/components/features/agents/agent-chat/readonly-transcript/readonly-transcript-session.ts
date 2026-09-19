@@ -6,7 +6,10 @@ import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/supp
 import { haveSameMessageTimestamp } from "@/state/operations/agent-orchestrator/support/message-timestamp";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
-import { projectAsyncQuestionsFromHistory } from "@/state/operations/agent-orchestrator/support/async-questions";
+import {
+  markAsyncQuestionsHandled,
+  projectAsyncQuestionsFromHistory,
+} from "@/state/operations/agent-orchestrator/support/async-questions";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatTranscriptSession } from "../agent-chat.types";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
@@ -110,7 +113,10 @@ export const mergeReadonlyRuntimeHistory = (
   history: AgentSessionHistoryMessage[],
 ): AgentSessionState => {
   const historyMessages = historyToChatMessages(history, { role: null });
-  const asyncQuestions = projectAsyncQuestionsFromHistory(history);
+  const asyncQuestions = markAsyncQuestionsHandled(
+    projectAsyncQuestionsFromHistory(history),
+    session.handledAsyncQuestionIds ?? new Set(),
+  );
   const mergedMessageState = settleImageGenerationMessages({
     ...session,
     messages: mergeHistoryMessages(

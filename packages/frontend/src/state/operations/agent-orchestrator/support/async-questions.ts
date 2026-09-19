@@ -85,14 +85,8 @@ export const mergeAsyncQuestionHistory = (
   current: AgentAsyncQuestionProjection,
   atReadStart?: AgentAsyncQuestionProjection,
 ): AgentAsyncQuestionProjection => {
-  if (!atReadStart) return history;
-  let merged = history;
-  merged = markAsyncQuestionsHandled(
-    merged,
-    [...current.handledAsyncQuestionIds].filter(
-      (handledId) => !atReadStart.handledAsyncQuestionIds.has(handledId),
-    ),
-  );
+  let merged = markAsyncQuestionsHandled(history, current.handledAsyncQuestionIds);
+  if (!atReadStart) return merged;
   const pendingAtReadStart = new Set(
     atReadStart.pendingAsyncQuestions.map((question) => question.questionItemId),
   );

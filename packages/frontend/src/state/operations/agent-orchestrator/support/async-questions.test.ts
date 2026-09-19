@@ -67,4 +67,45 @@ describe("asynchronous question projection", () => {
         .pendingAsyncQuestions,
     ).toEqual([]);
   });
+
+  test("history does not reopen a question handled before the read began", () => {
+    const source = question("message-1");
+    const history = applyAsyncQuestionAnnotation(emptyAgentAsyncQuestionProjection(), {
+      status: "pending",
+      questions: [source],
+    });
+    const handled = applyAsyncQuestionUserMessage(history, undefined);
+
+    expect(mergeAsyncQuestionHistory(history, handled, handled)).toEqual(handled);
+  });
+
+  test("history resolves only the stable ID in a contextual reply", () => {
+    const first = question("message-1", 0);
+    const second = question("message-1", 1);
+    const projected = projectAsyncQuestionsFromHistory([
+      {
+        role: "assistant",
+        messageId: "message-1",
+        timestamp: "2026-09-19T10:00:00.000Z",
+        text: "Choose two settings",
+        parts: [],
+        asyncQuestion: { status: "pending", questions: [first, second] },
+      },
+      {
+        role: "user",
+        messageId: "reply-1",
+        timestamp: "2026-09-19T10:01:00.000Z",
+        text: "> Question 1\n\nYes",
+        displayParts: [],
+        state: "read",
+        parts: [],
+        asyncQuestionReplies: [
+          { questionItemId: first.questionItemId, question: first.title, answer: "Yes" },
+        ],
+      },
+    ]);
+
+    expect(projected.pendingAsyncQuestions).toEqual([second]);
+    expect(projected.handledAsyncQuestionIds).toEqual(new Set([first.questionItemId]));
+  });
 });

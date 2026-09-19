@@ -250,6 +250,15 @@ describe("session occurrence projector", () => {
             ],
           },
         ],
+        pendingAsyncQuestions: [
+          {
+            questionItemId: '["request_user_input_async","async-question",0]',
+            sourceMessageId: "async-question",
+            questionIndex: 0,
+            title: "Which runtime should we use?",
+            options: ["Codex", "OpenCode"],
+          },
+        ],
       });
       projector.accept({ type: "snapshot", repoPath: "/repo", sessions: [] });
       expect(projector.accept({ type: "session_upsert", session: pending })).toEqual([]);
@@ -261,6 +270,7 @@ describe("session occurrence projector", () => {
       expect(projector.accept(event).map(buildNotificationCopy)).toEqual([
         { title: "Builder", body: "Allow command: bun install" },
         { title: "Builder", body: "Which providers should we support?" },
+        { title: "Builder", body: "Which runtime should we use?" },
       ]);
       expect(projector.accept(event)).toEqual([]);
       expect(projector.accept({ type: "session_upsert", session: pending })).toEqual([]);
@@ -280,6 +290,15 @@ describe("session occurrence projector", () => {
       const pending = snapshot({
         pendingApprovals: [
           { requestId: "permission", requestType: "permission_grant", title: "Read" },
+        ],
+        pendingAsyncQuestions: [
+          {
+            questionItemId: '["request_user_input_async","async-question",0]',
+            sourceMessageId: "async-question",
+            questionIndex: 0,
+            title: "Which runtime should we use?",
+            options: null,
+          },
         ],
       });
       if (scenario === "subagent") pending.parentExternalSessionId = "parent";

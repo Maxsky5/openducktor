@@ -42,8 +42,10 @@ type SessionProjection = {
 
 type UnownedPendingInputs = {
   approvals: Set<string>;
+  asyncQuestions: Set<string>;
   questions: Set<string>;
   liveApprovals: Set<string>;
+  liveAsyncQuestions: Set<string>;
   liveQuestions: Set<string>;
 };
 
@@ -131,13 +133,23 @@ export const createSessionOccurrenceProjector = ({
     }
     const previous = unownedInputs.get(key);
     const approvals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
+    const asyncQuestions = new Set(
+      snapshot.pendingAsyncQuestions.map((question) => question.questionItemId),
+    );
     const questions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
     unownedInputs.set(key, {
       approvals,
+      asyncQuestions,
       questions,
       liveApprovals: new Set(
         [...approvals].filter(
           (id) => previous?.liveApprovals.has(id) || (live && !previous?.approvals.has(id)),
+        ),
+      ),
+      liveAsyncQuestions: new Set(
+        [...asyncQuestions].filter(
+          (id) =>
+            previous?.liveAsyncQuestions.has(id) || (live && !previous?.asyncQuestions.has(id)),
         ),
       ),
       liveQuestions: new Set(
@@ -315,8 +327,10 @@ export const createSessionOccurrenceProjector = ({
       if (previous?.association) {
         unownedInputs.set(key, {
           approvals: previous.pendingApprovals,
+          asyncQuestions: previous.pendingAsyncQuestions,
           questions: previous.pendingQuestions,
           liveApprovals: new Set(),
+          liveAsyncQuestions: new Set(),
           liveQuestions: new Set(),
         });
       }
@@ -357,6 +371,9 @@ export const createSessionOccurrenceProjector = ({
     if (ownershipResolved) {
       observeUnownedInputs(snapshot, true);
       projection.pendingApprovals = new Set(snapshot.pendingApprovals.map(pendingInputIdentity));
+      projection.pendingAsyncQuestions = new Set(
+        snapshot.pendingAsyncQuestions.map((question) => question.questionItemId),
+      );
       projection.pendingQuestions = new Set(snapshot.pendingQuestions.map(pendingInputIdentity));
       occurrences.push(...reconcilePendingOwnership(projection, snapshot));
     }
@@ -407,6 +424,11 @@ export const createSessionOccurrenceProjector = ({
     for (const [identity, request] of pendingRequestsByIdentity(snapshot.pendingQuestions)) {
       if (pending.liveQuestions.has(identity)) {
         occurrences.push(projectPendingInput(projection, { inputKind: "question", request }));
+      }
+    }
+    for (const question of snapshot.pendingAsyncQuestions) {
+      if (pending.liveAsyncQuestions.has(question.questionItemId)) {
+        occurrences.push(projectAsyncQuestion(projection, question));
       }
     }
     return occurrences;

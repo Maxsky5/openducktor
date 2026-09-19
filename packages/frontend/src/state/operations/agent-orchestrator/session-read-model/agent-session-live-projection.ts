@@ -27,6 +27,7 @@ import type {
   AgentSessionRuntimeTarget,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import { applyAsyncQuestionAnnotation } from "../support/async-questions";
 import { createSessionMessagesState } from "../support/messages";
 import { projectSessionTranscriptActivity } from "./agent-session-live-activity";
 
@@ -298,17 +299,12 @@ const applyDirectSnapshot = (
   const activity = projectSessionSnapshotActivity(current, snapshot);
   const directApprovals = snapshot.pendingApprovals.map((request) => toApprovalRequest(request));
   const directQuestions = snapshot.pendingQuestions.map((request) => toQuestionRequest(request));
-  const snapshotAsyncQuestionIds = new Set(
-    snapshot.pendingAsyncQuestions.map((question) => question.questionItemId),
-  );
-  const handledAsyncQuestionIds = new Set(current.handledAsyncQuestionIds ?? []);
-  for (const question of current.pendingAsyncQuestions ?? []) {
-    if (!snapshotAsyncQuestionIds.has(question.questionItemId)) {
-      handledAsyncQuestionIds.add(question.questionItemId);
-    }
-  }
-  const pendingAsyncQuestions = snapshot.pendingAsyncQuestions.filter(
-    (question) => !handledAsyncQuestionIds.has(question.questionItemId),
+  const asyncQuestions = applyAsyncQuestionAnnotation(
+    {
+      pendingAsyncQuestions: current.pendingAsyncQuestions ?? [],
+      handledAsyncQuestionIds: current.handledAsyncQuestionIds ?? new Set(),
+    },
+    { status: "pending", questions: snapshot.pendingAsyncQuestions },
   );
   const childApprovals = current.pendingApprovals.filter((request) => request.source !== undefined);
   const childQuestions = current.pendingQuestions.filter((request) => request.source !== undefined);
@@ -323,8 +319,7 @@ const applyDirectSnapshot = (
     liveParentExternalSessionId: snapshot.parentExternalSessionId,
     pendingApprovals: [...directApprovals, ...childApprovals],
     pendingQuestions: [...directQuestions, ...childQuestions],
-    pendingAsyncQuestions,
-    handledAsyncQuestionIds,
+    ...asyncQuestions,
     contextUsage,
   };
 };

@@ -203,4 +203,38 @@ describe("createReadonlyTranscriptSession", () => {
     expect(merged.messages.items).toEqual([]);
     expect(merged.pendingAsyncQuestions).toEqual([question]);
   });
+
+  test("does not reopen a handled question from stale read-only history", () => {
+    const question = {
+      questionItemId: '["request_user_input_async","question-stale",0]',
+      sourceMessageId: "question-stale",
+      questionIndex: 0,
+      title: "Which environment?",
+      options: ["Staging", "Production"],
+    };
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      sessionAssociation: { kind: "unbound" },
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("session-1"),
+      pendingAsyncQuestions: [],
+      handledAsyncQuestionIds: new Set([question.questionItemId]),
+    });
+
+    const merged = mergeReadonlyRuntimeHistory(session, [
+      {
+        messageId: "question-stale",
+        role: "assistant",
+        timestamp: "2026-09-19T10:00:00.000Z",
+        text: question.title,
+        parts: [],
+        asyncQuestion: { status: "pending", questions: [question] },
+      },
+    ]);
+
+    expect(merged.pendingAsyncQuestions).toEqual([]);
+    expect(merged.handledAsyncQuestionIds).toEqual(new Set([question.questionItemId]));
+  });
 });
