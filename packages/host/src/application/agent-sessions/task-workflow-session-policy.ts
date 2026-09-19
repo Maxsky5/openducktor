@@ -2,6 +2,7 @@ import type {
   AgentSessionControlSendInput,
   AgentSessionControlSummary,
   AgentSessionLiveRef,
+  AgentSessionModelSelection,
   AgentSessionModelSettings,
   AgentSessionRecord,
   AgentSessionWorkflowScope,
@@ -148,8 +149,8 @@ const toRuntimeModel = (
 const toRecordModelSelection = (
   model: AgentSessionModelSettings,
   stored: AgentSessionRecord,
-): NonNullable<AgentSessionRecord["selectedModel"]> => {
-  const selection: NonNullable<AgentSessionRecord["selectedModel"]> = {
+): AgentSessionModelSelection => {
+  const selection: AgentSessionModelSelection = {
     runtimeKind: stored.runtimeKind,
     providerId: model.providerId,
     modelId: model.modelId,

@@ -1,7 +1,11 @@
-import { type AgentSessionRecord, agentSessionRecordSchema } from "@openducktor/contracts";
+import {
+  type AgentSessionModelSelection,
+  type AgentSessionRecord,
+  agentSessionRecordSchema,
+} from "@openducktor/contracts";
 
 type CompactableAgentSessionModelSelection =
-  | (Omit<NonNullable<AgentSessionRecord["selectedModel"]>, "runtimeKind"> & {
+  | (Omit<AgentSessionModelSelection, "runtimeKind"> & {
       runtimeKind: string;
     })
   | null;
@@ -38,23 +42,23 @@ const compactionFailure = (field: string, message: string): AgentSessionRecordCo
 });
 
 const withoutUndefinedSelectionFields = (
-  selectedModel: AgentSessionRecord["selectedModel"],
-): AgentSessionRecord["selectedModel"] => {
+  selectedModel: AgentSessionModelSelection | null,
+): AgentSessionModelSelection | null => {
   if (selectedModel === null) {
     return null;
   }
-  const compacted: NonNullable<AgentSessionRecord["selectedModel"]> = {
+  const selection: AgentSessionModelSelection = {
     runtimeKind: selectedModel.runtimeKind,
     providerId: selectedModel.providerId,
     modelId: selectedModel.modelId,
   };
   if (selectedModel.variant !== undefined) {
-    compacted.variant = selectedModel.variant;
+    selection.variant = selectedModel.variant;
   }
   if (selectedModel.profileId !== undefined) {
-    compacted.profileId = selectedModel.profileId;
+    selection.profileId = selectedModel.profileId;
   }
-  return compacted;
+  return selection;
 };
 
 export const toJsonSafeAgentSessionRecord = (session: AgentSessionRecord): AgentSessionRecord => ({
