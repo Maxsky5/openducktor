@@ -82,27 +82,24 @@ export function useFolderPickerController({
     enabled: open,
   });
   const listing = listingQuery.data ?? null;
-  const fileStillListed = hasFile(listing, selectedFilePath);
-  const listedFilePath = fileStillListed ? selectedFilePath : null;
+  const listedFilePath = hasFile(listing, selectedFilePath) ? selectedFilePath : null;
 
   useEffect(() => {
-    if (!selectedFilePath || !listing || fileStillListed) {
+    if (!selectedFilePath || !listing || listedFilePath) {
       return;
     }
 
     dispatch({ type: "fileSelectionCleared" });
-  }, [fileStillListed, listing, selectedFilePath]);
+  }, [listedFilePath, listing, selectedFilePath]);
 
   const isInitialLoad = listingQuery.isPending && !listing;
   const isRefreshing = listingQuery.isFetching && Boolean(listing);
   const loadError = listingQuery.error ? errorMessage(listingQuery.error) : null;
-  const listingReady = Boolean(
-    listing && listingQuery.isSuccess && !listingQuery.isFetching && !listingQuery.error,
-  );
+  const readyListing =
+    listingQuery.isSuccess && !listingQuery.isFetching && !listingQuery.error ? listing : null;
   const confirmPath = getConfirmPath({
     filePath: listedFilePath,
-    listing,
-    listingReady,
+    listing: readyListing,
     requireGitRepo,
     selectionMode,
   });
@@ -214,10 +211,13 @@ const folderPickerReducer = (
   }
 };
 
-const hasFile = (listing: DirectoryListing | null, filePath: string | null): boolean =>
-  Boolean(
-    filePath && listing?.entries.some((entry) => !entry.isDirectory && entry.path === filePath),
-  );
+const hasFile = (listing: DirectoryListing | null, filePath: string | null): boolean => {
+  if (!listing || !filePath) {
+    return false;
+  }
+
+  return listing.entries.some((entry) => !entry.isDirectory && entry.path === filePath);
+};
 
 const filterEntries = (
   listing: DirectoryListing | null,
@@ -243,17 +243,15 @@ const filterEntries = (
 const getConfirmPath = ({
   filePath,
   listing,
-  listingReady,
   requireGitRepo,
   selectionMode,
 }: {
   filePath: string | null;
   listing: DirectoryListing | null;
-  listingReady: boolean;
   requireGitRepo: boolean;
   selectionMode: "directory" | "file";
 }): string | null => {
-  if (!listingReady || !listing) {
+  if (!listing) {
     return null;
   }
   if (selectionMode === "file") {

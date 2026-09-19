@@ -36,7 +36,7 @@ const filesystemListDirectoryMock = mock(
 );
 
 // TanStack Query sends query updates on the next task.
-const flushQueryResult = async <T,>(result: Promise<T>): Promise<void> => {
+const flushQueryResult = async (result: Promise<unknown>): Promise<void> => {
   await act(async () => {
     await result;
     await new Promise((resolve) => setTimeout(resolve, 0));
