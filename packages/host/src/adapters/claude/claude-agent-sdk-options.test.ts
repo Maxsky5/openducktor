@@ -416,7 +416,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     }
   });
 
-  test("enables the SDK safety acknowledgement for a trusted local bypass mode", async () => {
+  test("does not trust a local bypass mode the pinned SDK filters out", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "openducktor-claude-permissions-"));
     const session = createSession("spec");
     session.input = {
@@ -434,8 +434,8 @@ describe("buildClaudeAgentSdkOptions", () => {
 
       const options = await buildOptions(session);
 
-      expect(options.permissionMode).toBe("bypassPermissions");
-      expect(options.allowDangerouslySkipPermissions).toBe(true);
+      expect(options.permissionMode).toBe("default");
+      expect(options).not.toHaveProperty("allowDangerouslySkipPermissions");
       expect(
         await preToolUseHook(options, {
           permissionMode: "bypassPermissions",

@@ -115,7 +115,7 @@ describe("Claude interrupted-turn resume executable gate", () => {
       reason: "compatibility_rejected",
       sessionRef,
       message:
-        "Claude Code '2.1.250 (Claude Code)' at '/usr/local/bin/claude' is not a verified interrupted-turn resume release. OpenDucktor verified interrupted-turn resume with Claude Code 2.1.251 or 2.1.239.",
+        "Claude Code '2.1.250 (Claude Code)' at '/usr/local/bin/claude' is not a verified interrupted-turn resume release. OpenDucktor verified interrupted-turn resume with Claude Code 2.1.273 or 2.1.251 or 2.1.239.",
     });
   });
 
@@ -151,7 +151,7 @@ describe("Claude interrupted-turn resume executable gate", () => {
     expect(failure).toMatchObject({
       reason: "compatibility_rejected",
       message:
-        "Cannot read the version of the Claude executable '/usr/local/bin/claude'. OpenDucktor verified interrupted-turn resume with Claude Code 2.1.251 or 2.1.239.",
+        "Cannot read the version of the Claude executable '/usr/local/bin/claude'. OpenDucktor verified interrupted-turn resume with Claude Code 2.1.273 or 2.1.251 or 2.1.239.",
     });
   });
 

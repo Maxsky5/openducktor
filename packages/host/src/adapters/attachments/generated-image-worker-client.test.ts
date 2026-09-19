@@ -338,12 +338,12 @@ test("termination failures remain visible at shutdown", async () => {
   );
   const original = Worker.prototype.terminate;
   const native = new Error("termination failed");
-  const terminate = spyOn(Worker.prototype, "terminate").mockImplementation(
-    async function (this: Worker) {
-      await original.call(this);
-      throw native;
-    },
-  );
+  const terminate = spyOn(Worker.prototype, "terminate").mockImplementation(async function (
+    this: Worker,
+  ) {
+    await original.call(this);
+    throw native;
+  });
   try {
     const failures = failureOf(await Effect.runPromiseExit(failingWorkers.shutdown));
     expect(failures).toMatchObject([

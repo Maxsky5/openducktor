@@ -115,8 +115,8 @@ beforeEach(async () => {
             },
           ),
           spyOn(actualPierreDiffsReact, "FileDiff").mockImplementation(
-            <LAnnotation,>(
-              props: Parameters<typeof actualPierreDiffsReact.FileDiff<LAnnotation>>[0],
+            <LAnnotation, Caret>(
+              props: Parameters<typeof actualPierreDiffsReact.FileDiff<LAnnotation, Caret>>[0],
             ) => {
               const { options } = props;
               const [mountId] = useState(() => {

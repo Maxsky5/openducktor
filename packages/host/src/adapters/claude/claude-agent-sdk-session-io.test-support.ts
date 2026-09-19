@@ -117,6 +117,7 @@ type ClaudeQueryControlMethods = Pick<
   | "readFile"
   | "reconnectMcpServer"
   | "reinitialize"
+  | "reloadOutputStyles"
   | "reloadPlugins"
   | "reloadSkills"
   | "rewindFiles"
@@ -132,6 +133,7 @@ type ClaudeQueryControlMethods = Pick<
   | "supportedCommands"
   | "supportedModels"
   | "toggleMcpServer"
+  | "updateSettings"
   | "usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET"
 >;
 
@@ -151,6 +153,7 @@ const defaultQueryControls = (): ClaudeQueryControlMethods => ({
   readFile: mock(unusedQueryControl),
   reconnectMcpServer: mock(unusedQueryControl),
   reinitialize: mock(unusedQueryControl),
+  reloadOutputStyles: mock(unusedQueryControl),
   reloadPlugins: mock(unusedQueryControl),
   reloadSkills: mock(unusedQueryControl),
   rewindFiles: mock(unusedQueryControl),
@@ -166,6 +169,7 @@ const defaultQueryControls = (): ClaudeQueryControlMethods => ({
   supportedCommands: mock(unusedQueryControl),
   supportedModels: mock(unusedQueryControl),
   toggleMcpServer: mock(unusedQueryControl),
+  updateSettings: mock(async () => {}),
   usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: mock(unusedQueryControl),
 });
 

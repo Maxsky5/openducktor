@@ -5,7 +5,7 @@ import {
   type FileContents,
   getFiletypeFromFileName,
 } from "@pierre/diffs";
-import { Editor, type EditorOptions } from "@pierre/diffs/edit";
+import { Editor, type EditorFactory, type EditorType } from "@pierre/diffs/edit";
 import { useQuery } from "@tanstack/react-query";
 import { FileCode2, LoaderCircle, Save, X } from "lucide-react";
 import {
@@ -38,7 +38,12 @@ import {
   type TaskExecutionSelectedFile,
   taskExecutionSelectedFileKey,
 } from "./task-execution-file-explorer-model";
-import { CodeView, EditProvider, useWorkerPool } from "./task-execution-file-preview-pierre";
+import {
+  CodeView,
+  EditProvider,
+  type TaskExecutionEditorOptions,
+  useWorkerPool,
+} from "./task-execution-file-preview-pierre";
 import { useTaskExecutionFileEditor } from "./use-task-execution-file-editor";
 
 export type TaskExecutionSelectedFilePreviewModel = {
@@ -63,6 +68,8 @@ const CODE_VIEW_LINE_HEIGHT = 18;
 const CODE_VIEW_CONTENT_PADDING = 8;
 const CODE_VIEW_NUMBER_COLUMN_PADDING = 1.25;
 const CODE_VIEW_CLASS_NAME = "h-full min-h-0 overflow-auto";
+const createEditor: EditorFactory<undefined, undefined> = (editorType, options, editStateKey) =>
+  new Editor(editorType, options, editStateKey);
 type CodeViewCssProperties = CSSProperties & Record<`--diffs-${string}`, string | number>;
 const CODE_VIEW_ROOT_BASE_STYLE: CodeViewCssProperties = {
   "--diffs-light-bg": CODE_VIEW_THEME_BACKGROUND.light,
@@ -494,7 +501,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
   );
-  const attachedEditorRef = useRef<Editor<undefined> | null>(null);
+  const attachedEditorRef = useRef<Editor<EditorType, undefined, undefined> | null>(null);
   const {
     data: fileData,
     error: fileError,
@@ -571,7 +578,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       isFileLoading,
       fileError,
     });
-  const codeViewOptions = useMemo<CodeViewOptions<undefined>>(
+  const codeViewOptions = useMemo<CodeViewOptions<undefined, undefined>>(
     () => ({
       theme: CODE_VIEW_THEME,
       themeType: theme,
@@ -622,13 +629,9 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       },
     ];
   }, [codeViewFileId, editor.session, hasActiveEditorSession, visibleSnapshot]);
-  const createEditor = useCallback(
-    (options: EditorOptions<undefined>) => new Editor<undefined>(options),
-    [],
-  );
-  const editorOptions = useMemo<EditorOptions<undefined>>(() => {
+  const editorOptions = useMemo<TaskExecutionEditorOptions>(() => {
     const clipboard = getShellBridge().editorClipboard;
-    const options: EditorOptions<undefined> = {
+    const options: TaskExecutionEditorOptions = {
       onAttach(attachedEditor) {
         attachedEditorRef.current = attachedEditor;
         attachedEditor.focus({ lineNumber: "first-visible", preventScroll: true });

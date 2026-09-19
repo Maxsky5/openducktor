@@ -9,7 +9,7 @@ import type {
 } from "@openducktor/contracts";
 import { HostInvokeError, type HostClient } from "@openducktor/host-client";
 import { File, type CodeViewFileItem } from "@pierre/diffs";
-import type { Editor, EditorOptions } from "@pierre/diffs/edit";
+import type { Editor, EditorType } from "@pierre/diffs/edit";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
@@ -43,6 +43,8 @@ let codeViewMountCount = 0;
 let codeViewUnmountCount = 0;
 const actualPreviewPierre = await import("./task-execution-file-preview-pierre");
 type PreviewCodeViewProps = Parameters<typeof actualPreviewPierre.CodeView>[0];
+type PreviewEditorOptions = NonNullable<PreviewCodeViewProps["editorOptions"]>;
+type PreviewEditor = Editor<EditorType, undefined, undefined>;
 type PreviewEditorFactory = Parameters<typeof actualPreviewPierre.EditProvider>[0]["createEditor"];
 
 let latestCodeViewProps: PreviewCodeViewProps | null = null;
@@ -56,19 +58,19 @@ const firstCodeViewItem = (): CodeViewFileItem => {
   return item;
 };
 
-const createAttachedEditor = (options: EditorOptions<undefined> | undefined): Editor<undefined> => {
+const createAttachedEditor = (
+  options: PreviewEditorOptions | undefined,
+  editorType: EditorType = "file",
+): PreviewEditor => {
   const createEditor = editProviderFactories.at(-1);
   if (!options || !createEditor) {
     throw new Error("Expected an editor factory and options.");
   }
 
-  return createEditor(options);
+  return createEditor<EditorType>(editorType, options);
 };
 
-const attachEditor = (
-  options: EditorOptions<undefined> | undefined,
-  editor: Editor<undefined>,
-): void => {
+const attachEditor = (options: PreviewEditorOptions | undefined, editor: PreviewEditor): void => {
   if (!options) {
     throw new Error("Expected editor options.");
   }

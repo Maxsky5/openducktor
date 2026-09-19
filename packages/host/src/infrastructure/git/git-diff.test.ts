@@ -271,6 +271,7 @@ test("matches the recorded patches with real Git, including directory expansion"
       const { createDefaultGitRunner } = await import("./git-command-runner");
       const runner = createDefaultGitRunner(process.env, { command: "git" });
       await Effect.runPromise(runner(root, ["init", "--quiet"]));
+      await Effect.runPromise(runner(root, ["config", "core.autocrlf", "false"]));
       for (const fixture of supported)
         await writeFile(path.join(root, fixture.file), fixture.content);
       const result = await Effect.runPromise(buildFileDiffs(runner, root, [status(".")], "", ""));
