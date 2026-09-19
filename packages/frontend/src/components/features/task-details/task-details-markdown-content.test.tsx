@@ -14,6 +14,7 @@ import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures
 import { TaskDetailsMarkdownContent } from "./task-details-markdown-content";
 
 const mermaidRenderModule = await import("@/components/ui/markdown-mermaid-render");
+await import("@/components/ui/markdown-renderer-mermaid-candidate");
 
 enableReactActEnvironment();
 
