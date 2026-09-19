@@ -15,6 +15,10 @@ const READ_ONLY_COMMANDS = wordSet("cat echo grep head ls pwd readlink stat tail
 const MUTATING_COMMANDS = wordSet(
   "bash chmod chown cp mkdir mv nc ncat netcat rm rmdir sh tee touch truncate zsh",
 );
+const BASH_NON_EXECUTING_LONG_OPTIONS = wordSet(
+  "--dump-po-strings --dump-strings --help --version",
+);
+const ZSH_NON_EXECUTING_LONG_OPTIONS = wordSet("--help --version");
 
 const READ_ONLY_GIT_SUBCOMMANDS = wordSet("diff log show status");
 const MUTATING_GIT_SUBCOMMANDS = wordSet(
@@ -275,8 +279,11 @@ const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation =>
   if (subcommand === "clean") {
     for (let index = 2; index < tokens.length; index += 1) {
       const option = tokens[index];
-      if (!option) {
+      if (option === undefined) {
         break;
+      }
+      if (option === "") {
+        continue;
       }
       if (option === "--" || !option.startsWith("-")) {
         break;
@@ -316,7 +323,7 @@ const classifyGitCommand = (tokens: readonly string[]): AgentApprovalMutation =>
   let hasUnknownOption = false;
   for (let index = 2; index < tokens.length; index += 1) {
     const option = tokens[index];
-    if (!option || option === "--") {
+    if (option === undefined || option === "--") {
       break;
     }
     if (!option.startsWith("-")) {
@@ -355,7 +362,7 @@ const classifyFindCommand = (tokens: readonly string[]): AgentApprovalMutation =
   let hasUnknownOption = false;
   for (let index = 1; index < tokens.length; index += 1) {
     const token = tokens[index];
-    if (!token || token === "--") {
+    if (token === undefined || token === "--") {
       break;
     }
     if (MUTATING_FIND_OPTIONS.has(token)) {
@@ -501,18 +508,41 @@ const classifyPrintfCommand = (tokens: readonly string[]): AgentApprovalMutation
   return firstArgument === "-v" || /^-v.+/.test(firstArgument) ? "mutating" : "unknown";
 };
 
-const hasActiveShellNoExecOption = (tokens: readonly string[]): boolean => {
+const hasActiveShellNoExecOption = (
+  command: "bash" | "sh" | "zsh",
+  tokens: readonly string[],
+): boolean => {
   let noExec = false;
   let interactive = false;
   for (let index = 1; index < tokens.length; index += 1) {
     const option = tokens[index];
     if (
-      !option ||
+      option === undefined ||
       option === "-" ||
       option === "--" ||
       (!option.startsWith("-") && !option.startsWith("+"))
     ) {
       break;
+    }
+    if (command === "bash" && BASH_NON_EXECUTING_LONG_OPTIONS.has(option)) {
+      return true;
+    }
+    if (command === "zsh") {
+      if (ZSH_NON_EXECUTING_LONG_OPTIONS.has(option)) {
+        return true;
+      }
+      if (option.startsWith("--") || option.startsWith("+-")) {
+        const enabled = option.startsWith("--");
+        const optionName = option.slice(2).replace(/[-_]/g, "").toLowerCase();
+        if (optionName === "noexec") {
+          noExec = enabled;
+          continue;
+        }
+        if (optionName === "exec") {
+          noExec = !enabled;
+          continue;
+        }
+      }
     }
     if (option === "--init-file" || option === "--rcfile") {
       index += 1;
@@ -525,8 +555,15 @@ const hasActiveShellNoExecOption = (tokens: readonly string[]): boolean => {
     const enabled = option.startsWith("-");
     const shortOptions = option.slice(1);
     if (shortOptions === "o") {
-      if (tokens[index + 1] === "noexec") {
-        noExec = enabled;
+      const optionName = tokens[index + 1];
+      if (optionName !== undefined) {
+        const normalizedOptionName =
+          command === "zsh" ? optionName.replace(/[-_]/g, "").toLowerCase() : optionName;
+        if (normalizedOptionName === "noexec") {
+          noExec = enabled;
+        } else if (command === "zsh" && normalizedOptionName === "exec") {
+          noExec = !enabled;
+        }
       }
       index += 1;
       continue;
@@ -534,6 +571,9 @@ const hasActiveShellNoExecOption = (tokens: readonly string[]): boolean => {
     if (shortOptions === "O") {
       index += 1;
       continue;
+    }
+    if (command === "bash" && shortOptions.includes("D")) {
+      return true;
     }
     if (shortOptions.includes("n")) {
       noExec = enabled;
@@ -545,7 +585,7 @@ const hasActiveShellNoExecOption = (tokens: readonly string[]): boolean => {
       break;
     }
   }
-  return noExec && !interactive;
+  return noExec && (command === "zsh" || !interactive);
 };
 
 const classifyCommandTokens = (tokens: readonly string[]): AgentApprovalMutation => {
@@ -556,7 +596,10 @@ const classifyCommandTokens = (tokens: readonly string[]): AgentApprovalMutation
   if (command.includes("/") || command.includes("\\")) {
     return "unknown";
   }
-  if ((command === "bash" || command === "sh") && hasActiveShellNoExecOption(tokens)) {
+  if (
+    (command === "bash" || command === "sh" || command === "zsh") &&
+    hasActiveShellNoExecOption(command, tokens)
+  ) {
     return "unknown";
   }
   if (MUTATING_COMMANDS.has(command)) {
@@ -596,7 +639,7 @@ const classifyCommandTokens = (tokens: readonly string[]): AgentApprovalMutation
     let hasUnknownOption = false;
     for (let index = 1; index < tokens.length; index += 1) {
       const option = tokens[index];
-      if (!option || option === "--") {
+      if (option === undefined || option === "--") {
         break;
       }
       if (!option.startsWith("-")) {

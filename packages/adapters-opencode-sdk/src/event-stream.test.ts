@@ -335,6 +335,51 @@ test.each([
   );
 });
 
+test.each([
+  {
+    name: "find delete after an empty operand",
+    command: `find . "" -delete`,
+    expected: "mutating",
+  },
+  {
+    name: "sort output after an empty operand",
+    command: `sort input.txt "" -o output.txt`,
+    expected: "mutating",
+  },
+  {
+    name: "git output after an empty operand",
+    command: `git log "" --output=log.txt`,
+    expected: "mutating",
+  },
+  { name: "Bash dump mode", command: "bash -D -c 'exit 42'", expected: "unknown" },
+  {
+    name: "Bash terminal help",
+    command: "bash --help -c 'exit 42'",
+    expected: "unknown",
+  },
+  { name: "Zsh no-exec", command: "zsh -n -c 'exit 42'", expected: "unknown" },
+  {
+    name: "Zsh long no-exec",
+    command: "zsh --no-exec -c 'exit 42'",
+    expected: "unknown",
+  },
+] as const)("classifies a native V2 bash resource for $name", async ({ command, expected }) => {
+  const emitted = await runEventStream([
+    permissionV2AskedEvent({
+      requestId: "permission-v2-bash-classification",
+      action: "bash",
+      resources: [command],
+    }),
+  ]);
+
+  expect(emitted).toContainEqual(
+    expect.objectContaining({
+      type: "approval_required",
+      mutation: expected,
+    }),
+  );
+});
+
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
   const parts: AgentUserMessagePart[] = [{ kind: "text", text: message }];
   return buildQueuedRequestSignature(parts, model ?? undefined);

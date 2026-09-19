@@ -73,8 +73,14 @@ describe("OpenCode approval translation", () => {
     "bash -n script.sh",
     "bash -nv script.sh",
     "bash --norc -n script.sh",
+    "bash -D -c 'exit 42'",
+    "bash --dump-strings -c 'exit 42'",
+    "bash --help -c 'exit 42'",
+    "bash --version -c 'exit 42'",
     "sh -n script.sh",
     "sh -nv script.sh",
+    "zsh -n -c 'exit 42'",
+    "zsh --no-exec -c 'exit 42'",
     "git stash list",
     "git clean -dfn",
     "git clean -nd",
@@ -88,5 +94,20 @@ describe("OpenCode approval translation", () => {
     });
 
     expect(request.mutation).toBe("unknown");
+  });
+
+  test.each([
+    `find . "" -delete`,
+    `sort input.txt "" -o output.txt`,
+    `git log "" --output=log.txt`,
+  ])("classifies a V1 mutation after an empty operand: %s", (command) => {
+    const request = normalizeOpenCodeApprovalRequest({
+      requestId: "req-empty-operand-mutation",
+      permission: "bash",
+      patterns: [command],
+      metadata: { command },
+    });
+
+    expect(request.mutation).toBe("mutating");
   });
 });
