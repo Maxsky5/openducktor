@@ -247,7 +247,7 @@ describe("TaskDetailsMarkdownContent", () => {
         );
 
         try {
-          const diagramLabel = await rendered.findByText("Diagram");
+          const diagramLabel = await rendered.findByText("Diagram", {}, { timeout: 3_000 });
           const diagram = diagramLabel.closest("svg");
           expect(diagram).not.toBeNull();
           expect(renderSpy).toHaveBeenCalledTimes(1);
@@ -270,5 +270,5 @@ describe("TaskDetailsMarkdownContent", () => {
       renderSpy.mockRestore();
     }
     // CI runs this render-heavy flow beside the host suite on 3-4 vCPUs.
-  }, 2_500);
+  }, 5_000);
 });
