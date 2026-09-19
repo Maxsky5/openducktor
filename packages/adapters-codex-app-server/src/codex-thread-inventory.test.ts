@@ -629,6 +629,8 @@ describe("CodexThreadInventoryReader", () => {
       reader.readThreadHistory(client, {
         externalSessionId: "thread-restored",
         workingDirectory: "/repo",
+        allowUnmaterialized: true,
+        getFreshThreadCwd: () => undefined,
       }),
     ).rejects.toBe(failure);
   });
