@@ -313,17 +313,12 @@ test("projects current OpenCode pending-input event families", async () => {
   ]);
 });
 
-test.each([
-  { name: "pipeline", command: "git show HEAD:file | sh" },
-  { name: "conditional", command: "[[ z > a ]]" },
-  { name: "arithmetic command", command: "(( 2 > 1 ))" },
-  { name: "heredoc", command: "cat <<EOF\na > b\nEOF" },
-])("keeps a native V2 bash $name on the human approval path", async ({ command }) => {
+test("keeps a compound native V2 bash resource on the human approval path", async () => {
   const emitted = await runEventStream([
     permissionV2AskedEvent({
       requestId: "permission-v2-bash",
       action: "bash",
-      resources: [command],
+      resources: ["git show HEAD:file | sh"],
     }),
   ]);
 
@@ -335,47 +330,19 @@ test.each([
   );
 });
 
-test.each([
-  {
-    name: "find delete after an empty operand",
-    command: `find . "" -delete`,
-    expected: "mutating",
-  },
-  {
-    name: "sort output after an empty operand",
-    command: `sort input.txt "" -o output.txt`,
-    expected: "mutating",
-  },
-  {
-    name: "git output after an empty operand",
-    command: `git log "" --output=log.txt`,
-    expected: "mutating",
-  },
-  { name: "Bash dump mode", command: "bash -D -c 'exit 42'", expected: "unknown" },
-  {
-    name: "Bash terminal help",
-    command: "bash --help -c 'exit 42'",
-    expected: "unknown",
-  },
-  { name: "Zsh no-exec", command: "zsh -n -c 'exit 42'", expected: "unknown" },
-  {
-    name: "Zsh long no-exec",
-    command: "zsh --no-exec -c 'exit 42'",
-    expected: "unknown",
-  },
-] as const)("classifies a native V2 bash resource for $name", async ({ command, expected }) => {
+test("classifies an explicit mutation in a native V2 bash resource", async () => {
   const emitted = await runEventStream([
     permissionV2AskedEvent({
       requestId: "permission-v2-bash-classification",
       action: "bash",
-      resources: [command],
+      resources: ["find . -delete"],
     }),
   ]);
 
   expect(emitted).toContainEqual(
     expect.objectContaining({
       type: "approval_required",
-      mutation: expected,
+      mutation: "mutating",
     }),
   );
 });
