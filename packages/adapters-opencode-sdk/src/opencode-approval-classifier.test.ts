@@ -58,7 +58,7 @@ describe("OpenCode approval classifier", () => {
     },
     {
       name: "safe reads",
-      patterns: ["ls -la", "git log --oneline -5", "git -C /repo log --oneline"],
+      patterns: ["ls -la", "git log --oneline -5", "git -C /repo log --oneline", "cat < input.txt"],
       expected: "read_only",
     },
   ] as const)("classifies every native V1 pattern for $name", ({ patterns, expected }) => {
@@ -74,6 +74,7 @@ describe("OpenCode approval classifier", () => {
     "[[ z > a ]]",
     "(( 2 > 1 ))",
     "cat <<EOF\na > b\nEOF",
+    "cat <&0 > output.txt",
   ])("keeps one compound V2 resource unknown: %s", (command) => {
     expect(classifyShell([command], command)).toBe("unknown");
   });
@@ -100,7 +101,11 @@ describe("OpenCode approval classifier", () => {
     "curl --trace-ascii trace.txt https://example.test",
     "curl --trace-ascii=trace.txt https://example.test",
     "curl --etag-save etag.txt https://example.test",
+    "curl --libcurl generated.c file:///etc/hosts",
     "dd if=input.img of=output.img",
+    "cat < input.txt > output.txt",
+    "rm output.txt",
+    "rm --help output.txt",
   ])("finds explicit mutation syntax: %s", (command) => {
     expect(classifyShell([command], command)).toBe("mutating");
   });
@@ -119,6 +124,8 @@ describe("OpenCode approval classifier", () => {
     "zsh --no-exec -c 'exit 42'",
     "git stash list",
     "git clean --dry-run",
+    "rm --help",
+    "rm --version",
   ])("keeps a non-executing command mode unknown: %s", (command) => {
     expect(classifyShell([command], command)).toBe("unknown");
   });
@@ -139,6 +146,7 @@ describe("OpenCode approval classifier", () => {
     "curl -o- https://example.test",
     "curl --trace-ascii=- https://example.test",
     "curl --etag-save - https://example.test",
+    "curl --libcurl - file:///etc/hosts",
     "dd if=input.img",
     "echo >",
   ])("keeps an unproved command unknown: %s", (command) => {

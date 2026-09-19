@@ -59,7 +59,7 @@ const MUTATING_CURL_OPTIONS = words(
   "-F -O -T -d --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --remote-name --upload-file",
 );
 const CURL_FILE_OUTPUT_OPTIONS = words(
-  "-D -c -o --cookie-jar --dump-header --etag-save --output --trace --trace-ascii",
+  "-D -c -o --cookie-jar --dump-header --etag-save --libcurl --output --trace --trace-ascii",
 );
 const CURL_OPTIONS_WITH_VALUE = words("-H -K --config --header");
 const MUTATING_HTTP_METHODS = words("DELETE PATCH POST PUT");
@@ -153,6 +153,20 @@ const readSimpleCommand = (value: string): SimpleCommandScan | null => {
       }
       readingRedirectTarget = true;
       outputRedirect = true;
+      continue;
+    }
+    if (character === "<") {
+      if (
+        (readingRedirectTarget && !tokenStarted) ||
+        input[index + 1] === "<" ||
+        input[index + 1] === "(" ||
+        input[index + 1] === "&" ||
+        input[index + 1] === ">"
+      ) {
+        return null;
+      }
+      pushToken();
+      readingRedirectTarget = true;
       continue;
     }
     if (UNSUPPORTED_SHELL_SYNTAX.includes(character)) {
@@ -374,6 +388,13 @@ const classifySimpleCommand = (tokens: SimpleCommand): AgentApprovalMutation => 
     return hasNonExecutingShellMode(tokens) ? "unknown" : "mutating";
   }
   if (MUTATING_COMMANDS.has(command)) {
+    if (
+      command === "rm" &&
+      tokens.length === 2 &&
+      (tokens[1] === "--help" || tokens[1] === "--version")
+    ) {
+      return "unknown";
+    }
     return "mutating";
   }
   if (READ_ONLY_COMMANDS.has(command)) {
