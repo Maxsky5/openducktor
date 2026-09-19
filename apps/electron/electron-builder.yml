@@ -5,6 +5,10 @@ npmRebuild: false
 asarUnpack:
   - node_modules/node-pty/**/*
   - node_modules/node-mac-permissions/**/*
+  - node_modules/@ff-labs/fff-node/**/*
+  - node_modules/@ff-labs/fff-bin-*/**/*
+  - node_modules/ffi-rs/**/*
+  - node_modules/@yuuang/**/*
 
 publish:
   provider: github
@@ -22,6 +26,10 @@ files:
   - node_modules/file-uri-to-path/**/*
   - node_modules/node-mac-permissions/**/*
   - node_modules/node-pty/**/*
+  - node_modules/@ff-labs/fff-node/**/*
+  - node_modules/@ff-labs/fff-bin-*/**/*
+  - node_modules/ffi-rs/**/*
+  - node_modules/@yuuang/**/*
   - "!node_modules/node-pty/scripts/**/*"
 
 extraResources:

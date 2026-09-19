@@ -31,8 +31,12 @@ import {
   listClaudeSlashCommands,
   listClaudeSubagents,
   loadClaudeHistory,
-  searchClaudeWorkspaceFiles,
 } from "./claude-agent-sdk-catalog";
+import {
+  type ClaudeWorkspaceFileSearch,
+  createClaudeWorkspaceFileSearch,
+  trackClaudeFileSearchSessions,
+} from "./claude-agent-sdk-file-search";
 import {
   type ClaudeContextUsageDependencies,
   flushClaudeLiveContextUsageRefresh,
@@ -89,6 +93,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   private readonly now: () => string;
   private readonly randomId: () => string;
   private readonly sessionStore: ClaudeSessionStore;
+  private readonly fileSearch: ClaudeWorkspaceFileSearch;
 
   constructor(
     private readonly input: CreateClaudeAgentSdkServiceInput,
@@ -103,6 +108,8 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       sessionStoreInput.emit = input.emit;
     }
     this.sessionStore = input.sessionStore ?? createClaudeAgentSdkSessionStore(sessionStoreInput);
+    this.fileSearch = input.fileSearch ?? createClaudeWorkspaceFileSearch();
+    trackClaudeFileSearchSessions({ fileSearch: this.fileSearch, sessionStore: this.sessionStore });
   }
 
   startSession(input: StartAgentSessionInput, runtimeId: string) {
@@ -235,7 +242,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   searchFiles(input: SearchAgentFilesInput) {
-    return fromPromise("claudeRuntime.searchFiles", () => searchClaudeWorkspaceFiles(input));
+    return fromPromise("claudeRuntime.searchFiles", () => this.fileSearch.search(input));
   }
 
   resolveSessionParent(input: SessionRef) {
@@ -415,6 +422,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         ),
       );
       const mcpBridgeConnection = yield* this.input.resolveMcpBridgeConnection(input.repoPath);
+      yield* fromPromise("claudeRuntime.prewarmFileSearch", async () => {
+        this.fileSearch.prewarm(input.workingDirectory);
+      });
       return yield* fromPromise("claudeRuntime.createSession", () =>
         createClaudeAgentSdkSession({
           emit: this.emit.bind(this),

@@ -31,6 +31,7 @@ import {
 } from "./electron-release-targets";
 import { electronSidecarDisplayName } from "./electron-sidecar-manifest";
 import { prepareElectronSidecarsEffect } from "./prepare-electron-sidecars";
+import { verifyPackagedFffFileSearchEffect } from "./verify-electron-fff-package";
 import { verifyPackagedElectronSidecarsEffect } from "./verify-electron-sidecar-package";
 
 export { isInstallableReleaseArtifact, isReleaseArtifact, isUpdateMetadataArtifact };
@@ -414,6 +415,15 @@ export const buildElectronPackageEffect = ({
         }`,
       );
     }
+
+    const verifiedFffFileSearch = yield* verifyPackagedFffFileSearchEffect({
+      arch,
+      platform,
+      releaseDirectory,
+    });
+    console.log(
+      `Verified packaged Claude file search payload: ${verifiedFffFileSearch.modulePath}`,
+    );
 
     if (!stageReleaseArtifacts) {
       return [];

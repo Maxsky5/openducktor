@@ -1,5 +1,5 @@
 export default {
   entry: ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
   project: ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
-  ignoreDependencies: ["@anthropic-ai/claude-agent-sdk", "undici"],
+  ignoreDependencies: ["@anthropic-ai/claude-agent-sdk", "undici", "@ff-labs/fff-node"],
 };
