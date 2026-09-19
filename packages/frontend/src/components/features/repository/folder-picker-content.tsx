@@ -10,7 +10,8 @@ import { cn } from "@/lib/utils";
 import type { FolderPickerController } from "./use-folder-picker-controller";
 
 function FolderPickerDirectoryBrowser({
-  confirmedListing,
+  requestedPath,
+  listing,
   filteredEntries,
   filterText,
   selectedFilePath,
@@ -19,7 +20,8 @@ function FolderPickerDirectoryBrowser({
   onLoadDirectory,
   onSelectFile,
 }: {
-  confirmedListing: DirectoryListing | null;
+  requestedPath: string | undefined;
+  listing: DirectoryListing | null;
   filteredEntries: DirectoryListing["entries"];
   filterText: string;
   selectedFilePath: string | null;
@@ -47,7 +49,7 @@ function FolderPickerDirectoryBrowser({
             value={filterText}
             placeholder="Search this folder"
             className="pl-9"
-            disabled={isBusy || !confirmedListing}
+            disabled={isBusy || !listing}
             onChange={(event) => onFilterTextChange(event.currentTarget.value)}
           />
         </div>
@@ -60,8 +62,8 @@ function FolderPickerDirectoryBrowser({
           size="icon"
           aria-label="Go to parent folder"
           title="Parent"
-          disabled={!confirmedListing?.parentPath || isBusy}
-          onClick={() => onLoadDirectory(confirmedListing?.parentPath ?? null)}
+          disabled={!listing?.parentPath || isBusy}
+          onClick={() => onLoadDirectory(listing?.parentPath ?? null)}
         >
           <ChevronUp className="size-4" />
         </Button>
@@ -71,15 +73,15 @@ function FolderPickerDirectoryBrowser({
           size="icon"
           aria-label="Go to home folder"
           title="Home"
-          disabled={!confirmedListing?.homePath || isBusy}
-          onClick={() => onLoadDirectory(confirmedListing?.homePath ?? null)}
+          disabled={!listing?.homePath || isBusy}
+          onClick={() => onLoadDirectory(listing?.homePath ?? null)}
         >
           <Home className="size-4" />
         </Button>
 
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md border border-input bg-muted/40 px-3 py-2">
           <span className="min-w-0 truncate font-mono text-sm text-foreground">
-            {confirmedListing?.currentPath ?? "Loading…"}
+            {listing?.currentPath ?? requestedPath ?? "Loading…"}
           </span>
           <div className="flex shrink-0 items-center gap-2">
             {isRefreshing ? (
@@ -88,13 +90,13 @@ function FolderPickerDirectoryBrowser({
                 Loading…
               </span>
             ) : null}
-            {confirmedListing?.currentPathIsGitRepo ? (
+            {listing?.currentPathIsGitRepo ? (
               <Badge variant="success" className="gap-1 whitespace-nowrap">
                 <GitBranch className="size-3" />
                 Git repo
               </Badge>
             ) : null}
-            {confirmedListing ? (
+            {listing ? (
               <p className="text-xs whitespace-nowrap text-muted-foreground">
                 {filteredEntries.length} visible
               </p>
@@ -112,7 +114,7 @@ function FolderPickerDirectoryBrowser({
             </div>
           ) : null}
 
-          {!isInitialLoad && confirmedListing && filteredEntries.length === 0 ? (
+          {!isInitialLoad && listing && filteredEntries.length === 0 ? (
             <div className="px-3 py-6 text-sm text-muted-foreground">
               No entries match this view.
             </div>
@@ -162,9 +164,10 @@ export function FolderPickerContent({
   controller: FolderPickerController;
 }): ReactElement {
   const {
+    requestedPath,
     manualPath,
     filterText,
-    confirmedListing,
+    listing,
     selectedFilePath,
     filteredEntries,
     activeError,
@@ -206,7 +209,8 @@ export function FolderPickerContent({
       </form>
 
       <FolderPickerDirectoryBrowser
-        confirmedListing={confirmedListing}
+        requestedPath={requestedPath}
+        listing={listing}
         filteredEntries={filteredEntries}
         filterText={filterText}
         selectedFilePath={selectedFilePath}

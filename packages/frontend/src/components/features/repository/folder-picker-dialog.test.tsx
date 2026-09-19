@@ -220,7 +220,11 @@ describe("FolderPickerDialog", () => {
     try {
       fireEvent.click(await screen.findByRole("button", { name: "old-cli" }));
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "next" }));
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "old-cli" }));
+
+      expect(screen.queryByRole("button", { name: "old-cli" })).toBeNull();
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }).disabled,
+      ).toBe(true);
 
       await act(async () => {
         resolveNextDirectory(
@@ -279,15 +283,21 @@ describe("FolderPickerDialog", () => {
       });
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
-      await waitFor(() => expect(requestCount).toBe(2));
       const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
         name: "Select Folder",
       });
-      expect(confirmButton.disabled).toBe(true);
+      await waitFor(() => {
+        expect(requestCount).toBe(2);
+        expect(confirmButton.disabled).toBe(true);
+      });
       fireEvent.click(confirmButton);
       expect(onConfirm).not.toHaveBeenCalled();
 
-      await act(async () => resolveRefresh(createListing()));
+      resolveRefresh(createListing());
+      await act(async () => {
+        await refreshListing;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
 
       await waitFor(() => {
         expect(screen.queryByRole("button", { name: "codex" })).toBeNull();
@@ -391,26 +401,22 @@ describe("FolderPickerDialog", () => {
     }
   });
 
-  test("does not restore a superseded directory after its refresh completes", async () => {
-    const onConfirm = mock(async (_path: string) => {});
-    let rootRequestCount = 0;
-    let resolveRefresh = (_listing: DirectoryListing): void => undefined;
-    let rejectNextDirectory = (_error: Error): void => undefined;
-    const refreshListing = new Promise<DirectoryListing>((resolve) => {
-      resolveRefresh = resolve;
-    });
-    const nextDirectory = new Promise<DirectoryListing>((_resolve, reject) => {
-      rejectNextDirectory = reject;
+  test("removes the previous directory entries as soon as navigation starts", async () => {
+    let resolveNextDirectory = (_listing: DirectoryListing): void => undefined;
+    const nextDirectory = new Promise<DirectoryListing>((resolve) => {
+      resolveNextDirectory = resolve;
     });
     filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
       const path = pathFromInput(input);
       if (path === "/Users/dev/next") return nextDirectory;
-      if (path !== "/Users/dev") throw new Error(`Unexpected path: ${String(path)}`);
-
-      rootRequestCount += 1;
-      if (rootRequestCount > 1) return refreshListing;
       return createListing({
         entries: [
+          {
+            name: "old-entry",
+            path: "/Users/dev/old-entry",
+            isDirectory: true,
+            isGitRepo: false,
+          },
           {
             name: "next",
             path: "/Users/dev/next",
@@ -420,28 +426,39 @@ describe("FolderPickerDialog", () => {
         ],
       });
     });
-    const rendered = renderDialog({ onConfirm, initialPath: "/Users/dev" });
+    const rendered = renderDialog({ initialPath: "/Users/dev" });
 
     try {
       const nextButton = await screen.findByRole("button", { name: "next" });
-      fireEvent.change(screen.getByLabelText<HTMLInputElement>("Open path"), {
-        target: { value: "/Users/dev" },
-      });
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
-      await waitFor(() => expect(rootRequestCount).toBe(2));
-
       fireEvent.click(nextButton);
-      await act(async () => rejectNextDirectory(new Error("Failed to load next directory")));
-      await screen.findByText("Failed to load next directory");
 
-      await act(async () => resolveRefresh(createListing({ currentPathIsGitRepo: true })));
+      expect(screen.getByText("/Users/dev/next")).toBeTruthy();
+      expect(screen.getByText("Loading directories…")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "old-entry" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "next" })).toBeNull();
 
       const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
         name: "Select Folder",
       });
       expect(confirmButton.disabled).toBe(true);
-      fireEvent.click(confirmButton);
-      expect(onConfirm).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveNextDirectory(
+          createListing({
+            currentPath: "/Users/dev/next",
+            parentPath: "/Users/dev",
+            entries: [
+              {
+                name: "new-entry",
+                path: "/Users/dev/next/new-entry",
+                isDirectory: true,
+                isGitRepo: false,
+              },
+            ],
+          }),
+        );
+      });
+      expect(await screen.findByRole("button", { name: "new-entry" })).toBeTruthy();
     } finally {
       rendered.unmount();
     }
@@ -600,6 +617,10 @@ describe("FolderPickerDialog", () => {
 
   test("retries the same manual path after an error and restores confirmation when it resolves", async () => {
     let missingPathAttempts = 0;
+    let resolveRetry = (_listing: DirectoryListing): void => undefined;
+    const retryListing = new Promise<DirectoryListing>((resolve) => {
+      resolveRetry = resolve;
+    });
     filesystemListDirectoryMock.mockImplementation(async (input?: ListDirectoryInput) => {
       const path = pathFromInput(input);
       if (path === "/missing") {
@@ -607,7 +628,7 @@ describe("FolderPickerDialog", () => {
         if (missingPathAttempts === 1) {
           throw new Error("Directory does not exist: /missing");
         }
-        return createListing({ currentPath: "/missing" });
+        return retryListing;
       }
 
       return createListing();
@@ -629,7 +650,8 @@ describe("FolderPickerDialog", () => {
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /load path/i }));
 
       await screen.findByText("Directory does not exist: /missing");
-      expect(screen.getByText("/Users/dev")).toBeTruthy();
+      expect(screen.getByText("/missing")).toBeTruthy();
+      expect(screen.queryByText("/Users/dev")).toBeNull();
       expect(
         screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
       ).toBe(true);
@@ -641,7 +663,21 @@ describe("FolderPickerDialog", () => {
 
       await waitFor(() => {
         expect(missingPathAttempts).toBe(2);
+        expect(
+          screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
+        ).toBe(true);
         expect(screen.getByText("/missing")).toBeTruthy();
+        expect(screen.getByText("Loading directories…")).toBeTruthy();
+      });
+
+      resolveRetry(createListing({ currentPath: "/missing" }));
+      await act(async () => {
+        await retryListing;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByText("Loading directories…")).toBeNull();
         expect(
           screen.getByRole<HTMLButtonElement>("button", { name: /select folder/i }).disabled,
         ).toBe(false);
