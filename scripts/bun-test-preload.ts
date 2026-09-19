@@ -11,22 +11,39 @@ const testRoot = path.resolve(process.cwd());
 const usesWorkerTempDirectory =
   testRoot === repoRoot || testRoot === frontendRoot || testRoot === hostRoot;
 
-const removeWorkerDirectory = (directory: string): void => {
+const removeDirectory = (directory: string): Error | null => {
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       rmSync(directory, { force: true, recursive: true });
-      return;
+      return null;
     } catch (cause) {
       lastError = cause;
       Bun.sleepSync(50);
     }
   }
-  const message = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new Error(
-    `Failed to remove the test temp directory '${directory}': ${message}. Close the process that holds it and rerun the tests.`,
-    { cause: lastError },
-  );
+  return lastError instanceof Error ? lastError : new Error(String(lastError));
+};
+
+const clearStaleWorkerDirectory = (directory: string): void => {
+  const failure = removeDirectory(directory);
+  if (failure !== null) {
+    throw new Error(
+      `Cannot start the test worker because '${directory}' is still locked: ${failure.message}. Close the process that holds it and rerun the tests.`,
+      { cause: failure },
+    );
+  }
+};
+
+let warnedAboutCleanup = false;
+const removeWorkerDirectoryAfterFile = (directory: string): void => {
+  const failure = removeDirectory(directory);
+  if (failure !== null && !warnedAboutCleanup) {
+    warnedAboutCleanup = true;
+    console.warn(
+      `Left the test temp directory '${directory}' behind because a process still holds it: ${failure.message}`,
+    );
+  }
 };
 
 const systemTmpDir = tmpdir();
@@ -35,7 +52,7 @@ let configDir: string;
 if (usesWorkerTempDirectory) {
   workerTmpDir = path.join(systemTmpDir, `openducktor-worker-tmp-${process.pid}`);
   // A reused PID must not inherit the temp tree of an earlier worker.
-  removeWorkerDirectory(workerTmpDir);
+  clearStaleWorkerDirectory(workerTmpDir);
   mkdirSync(workerTmpDir, { recursive: true });
   process.env.TMPDIR = workerTmpDir;
   process.env.TMP = workerTmpDir;
@@ -57,9 +74,10 @@ if (usesWorkerTempDirectory) {
   });
 }
 afterAll((): void => {
-  removeWorkerDirectory(configDir);
+  // Windows keeps handles on the temp tree while the worker runs, so a failure here is a leak, not a defect.
+  removeWorkerDirectoryAfterFile(configDir);
   if (workerTmpDir !== null) {
-    removeWorkerDirectory(workerTmpDir);
+    removeWorkerDirectoryAfterFile(workerTmpDir);
   }
   if (globalThis.document !== undefined) {
     globalThis.document.documentElement.classList.remove("light", "dark");
