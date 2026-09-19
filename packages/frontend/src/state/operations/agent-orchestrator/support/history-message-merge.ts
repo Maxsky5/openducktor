@@ -1,4 +1,4 @@
-import { mergeAgentImageGeneration } from "@openducktor/core";
+import { mergeAgentImageGeneration, type AgentUserMessageDisplayPart } from "@openducktor/core";
 import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import { matchesLoadedTool, mergeToolMessages } from "./history-tool-message-merge";
 import { applyPreferredMessageTimestamp } from "./message-timestamp";
@@ -81,6 +81,73 @@ const isUserMessage = (
 
 const LOCAL_ACCEPTED_USER_CONFIRMATION_WINDOW_MS = 10_000;
 
+const isCodexAcceptedUserMessageId = (messageId: string): boolean =>
+  messageId.startsWith("codex-user-");
+
+// Codex history includes local image paths in message text, but the accepted UI message does not.
+// Match those sends by ordered display parts so hydration can absorb the runtime history item.
+const haveSameUserDisplayPartIdentity = (
+  loadedPart: AgentUserMessageDisplayPart,
+  currentPart: AgentUserMessageDisplayPart,
+): boolean => {
+  if (loadedPart.kind !== currentPart.kind) {
+    return false;
+  }
+
+  switch (loadedPart.kind) {
+    case "text":
+      return currentPart.kind === "text" && loadedPart.text === currentPart.text;
+    case "file_reference":
+      return (
+        currentPart.kind === "file_reference" && loadedPart.file.path === currentPart.file.path
+      );
+    case "skill_mention":
+      return (
+        currentPart.kind === "skill_mention" && loadedPart.skill.path === currentPart.skill.path
+      );
+    case "subagent_reference":
+      return (
+        currentPart.kind === "subagent_reference" &&
+        loadedPart.subagent.id === currentPart.subagent.id
+      );
+    case "attachment":
+      return (
+        currentPart.kind === "attachment" &&
+        loadedPart.attachment.kind === currentPart.attachment.kind &&
+        loadedPart.attachment.path === currentPart.attachment.path
+      );
+  }
+};
+
+const hasEquivalentCodexAttachmentParts = (
+  loadedMessage: AgentChatMessage,
+  currentMessage: AgentChatMessage,
+): boolean => {
+  if (!isUserMessage(loadedMessage) || !isUserMessage(currentMessage)) {
+    return false;
+  }
+  if (!isCodexAcceptedUserMessageId(currentMessage.id)) {
+    return false;
+  }
+
+  const loadedParts = loadedMessage.meta.parts;
+  const currentParts = currentMessage.meta.parts;
+  if (!loadedParts || !currentParts || loadedParts.length !== currentParts.length) {
+    return false;
+  }
+  if (
+    !loadedParts.some((part) => part.kind === "attachment") ||
+    !currentParts.some((part) => part.kind === "attachment")
+  ) {
+    return false;
+  }
+
+  return loadedParts.every((part, index) => {
+    const currentPart = currentParts[index];
+    return currentPart !== undefined && haveSameUserDisplayPartIdentity(part, currentPart);
+  });
+};
+
 const userMessageTimestampMs = (timestamp: string): number | null => {
   const parsed = Date.parse(timestamp);
   return Number.isNaN(parsed) ? null : parsed;
@@ -103,7 +170,8 @@ const confirmsLocalAcceptedUserMessage = (
     !isUserMessage(currentMessage) ||
     loadedMessage.meta.state !== "read" ||
     currentMessage.meta.state !== "read" ||
-    loadedMessage.content !== currentMessage.content
+    (loadedMessage.content !== currentMessage.content &&
+      !hasEquivalentCodexAttachmentParts(loadedMessage, currentMessage))
   ) {
     return null;
   }
