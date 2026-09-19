@@ -93,7 +93,7 @@ export const createClaudeWorkspaceRuntimeStarter = ({
           }),
       });
 
-      const preparedLiveSession = yield* prepareLiveSessionAdapter(runtime).pipe(
+      const preparedLiveSession = yield* prepareLiveSessionAdapter(runtime, executablePath).pipe(
         Effect.mapError((cause) =>
           toHostOperationError(cause, "claudeWorkspaceRuntime.prepareLiveSessionAdapter", {
             runtimeId: nextRuntimeId,

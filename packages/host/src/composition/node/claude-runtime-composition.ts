@@ -9,30 +9,22 @@ import type { ClaudeMcpBridgeConnectionResolver } from "../../adapters/claude/cl
 import { createClaudeWorkspaceRuntimeStarter } from "../../adapters/claude/claude-workspace-runtime-starter";
 import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import type { ClaudeRuntimeSessionOperationsPort } from "../../adapters/runtimes/runtime-session-operations";
-import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-agent-sdk-service";
 import type { RuntimeWorkingDirectoryDependencies } from "../../application/runtimes/runtime-working-directory";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { RuntimeExecutableProbePort } from "../../ports/runtime-executable-probe-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 type ClaudeRuntimeSessionOperations = Exclude<ClaudeRuntimeSessionOperationsPort, undefined>;
 
 export type ClaudeRuntimeComposition = {
-  agentSdkService: ClaudeAgentSdkService;
   sessionOperations: ClaudeRuntimeSessionOperations;
   workspaceStarter: RuntimeWorkspaceStarterPort;
 };
 
 export type CreateClaudeRuntimeCompositionInput = {
-  /**
-   * Turns Claude interrupted-turn resume on or off. The node composition passes the
-   * same value to the runtime descriptor gate, so the UI and the adapter agree.
-   */
-  interruptedTurnResumeEnabled: boolean;
   liveSessionLifecycle: RuntimeLiveSessionLifecyclePort;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
@@ -40,13 +32,11 @@ export type CreateClaudeRuntimeCompositionInput = {
   runtimeExecutableProbe: RuntimeExecutableProbePort;
   runtimeDistribution: HostRuntimeDistribution;
   settingsConfig: SettingsConfigPort;
-  systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
   workingDirectoryDependencies: RuntimeWorkingDirectoryDependencies;
 };
 
 export const createClaudeRuntimeComposition = ({
-  interruptedTurnResumeEnabled,
   liveSessionLifecycle,
   onBackgroundFailure,
   processEnv,
@@ -54,37 +44,36 @@ export const createClaudeRuntimeComposition = ({
   runtimeExecutableProbe,
   runtimeDistribution,
   settingsConfig,
-  systemCommands,
   toolDiscovery,
   workingDirectoryDependencies,
 }: CreateClaudeRuntimeCompositionInput): ClaudeRuntimeComposition => {
   const eventHub = createClaudeAgentSdkEventHub();
   const sessionStore = createClaudeAgentSdkSessionStore({ emit: eventHub.emit });
-  const agentSdkServiceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
-    emit: eventHub.emit,
-    onBackgroundFailure,
-    resolveMcpBridgeConnection,
-    runtimeDistribution,
-    settingsConfig,
-    sessionStore,
-    systemCommands,
-    toolDiscovery,
+  const prepareLiveSessionAdapter: Parameters<
+    typeof createClaudeWorkspaceRuntimeStarter
+  >[0]["prepareLiveSessionAdapter"] = (runtime, claudeExecutablePath) => {
+    const agentSdkServiceInput: Parameters<typeof createClaudeAgentSdkService>[0] = {
+      claudeExecutablePath,
+      emit: eventHub.emit,
+      onBackgroundFailure,
+      resolveMcpBridgeConnection,
+      runtimeDistribution,
+      sessionStore,
+      toolDiscovery,
+    };
+    if (processEnv) {
+      agentSdkServiceInput.processEnv = processEnv;
+    }
+    return createClaudeLiveSessionAdapterPreparer({
+      eventHub,
+      liveSessionLifecycle,
+      service: createClaudeAgentSdkService(agentSdkServiceInput),
+      sessionStore,
+      workingDirectoryDependencies,
+    })(runtime);
   };
-  if (processEnv) {
-    agentSdkServiceInput.processEnv = processEnv;
-  }
-  const agentSdkService = createClaudeAgentSdkService(agentSdkServiceInput);
-  const prepareLiveSessionAdapter = createClaudeLiveSessionAdapterPreparer({
-    eventHub,
-    liveSessionLifecycle,
-    resumeInterruptedTurnEnabled: interruptedTurnResumeEnabled,
-    service: agentSdkService,
-    sessionStore,
-    workingDirectoryDependencies,
-  });
 
   return {
-    agentSdkService,
     sessionOperations: {
       stopSession: sessionStore.stopSession,
       probeSessionStatus: sessionStore.probeSessionStatus,

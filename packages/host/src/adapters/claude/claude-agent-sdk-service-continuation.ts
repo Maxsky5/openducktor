@@ -1,9 +1,4 @@
-import type { AgentSessionLiveRef } from "@openducktor/contracts";
-import type {
-  AgentSessionHistoryMessage,
-  ContinueInterruptedAgentTurnInput,
-  ResumeAgentSessionInput,
-} from "@openducktor/core";
+import type { AgentSessionHistoryMessage, ResumeAgentSessionInput } from "@openducktor/core";
 import {
   AgentRuntimeQueryError,
   interruptedTurnResumeError,
@@ -17,9 +12,7 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
-import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { loadClaudeHistory } from "./claude-agent-sdk-catalog";
-import { assertClaudeInterruptedTurnResumeCompatible } from "./claude-continuation-compatibility";
 import {
   type ClaudeContinuationDecision,
   decideClaudeContinuation,
@@ -29,14 +22,9 @@ import {
   claudeLiveHistoryContext,
   type ClaudeLiveHistoryContext,
 } from "./claude-agent-sdk-history-loader";
-import { resolveClaudeExecutable } from "./claude-agent-sdk-runtime";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import { isClaudeSessionStopped } from "./claude-agent-sdk-session-store";
-import type {
-  ClaudeSession,
-  ClaudeSessionStore,
-  CreateClaudeAgentSdkServiceInput,
-} from "./claude-agent-sdk-types";
+import type { ClaudeSession, ClaudeSessionStore } from "./claude-agent-sdk-types";
 import { fromPromise } from "./claude-agent-sdk-utils";
 
 const continuationOperation = "claudeRuntime.continueInterruptedTurn";
@@ -176,38 +164,3 @@ export const checkPersistedClaudeContinuationEligibility = (
       input.externalSessionId,
     ),
   ).pipe(Effect.flatMap(finishClaudeContinuationDecision));
-
-/**
- * Binds the interrupted-turn continuation to the executable the runtime will run.
- * The executable must report the verified version that owns the continuation contract.
- */
-export const assertClaudeContinuationExecutableCompatible = (
-  serviceInput: CreateClaudeAgentSdkServiceInput,
-  input: ContinueInterruptedAgentTurnInput,
-) => {
-  const sessionRef = {
-    repoPath: input.repoPath,
-    runtimeKind: input.runtimeKind,
-    workingDirectory: input.workingDirectory,
-    externalSessionId: input.externalSessionId,
-  } satisfies AgentSessionLiveRef;
-  return resolveClaudeExecutable(serviceInput, continuationOperation).pipe(
-    Effect.mapError(
-      (cause) =>
-        new AgentSessionResumeError({
-          reason: "runtime_unavailable",
-          sessionRef,
-          operation: continuationOperation,
-          message: `Cannot resolve the Claude executable for interrupted-turn resume: ${cause.message}`,
-          cause,
-        }),
-    ),
-    Effect.flatMap((executablePath) =>
-      assertClaudeInterruptedTurnResumeCompatible({
-        executablePath,
-        sessionRef,
-        systemCommands: serviceInput.systemCommands,
-      }),
-    ),
-  );
-};

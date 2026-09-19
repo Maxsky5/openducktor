@@ -25,6 +25,7 @@ export type PreparedClaudeLiveSessionAdapter = Omit<
 
 export type ClaudeLiveSessionAdapterPreparer = (
   runtime: RuntimeInstanceSummary,
+  executablePath: string,
 ) => Effect.Effect<PreparedRuntimeLiveSessionAdapter, HostError>;
 
 export type ClaudeRuntimeSessionAdapterPreparer = (
@@ -34,7 +35,6 @@ export type ClaudeRuntimeSessionAdapterPreparer = (
 export type CreateClaudeLiveSessionAdapterPreparerInput = {
   readonly eventHub: ClaudeAgentSdkEventHub;
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "createRuntimeRegistration">;
-  readonly resumeInterruptedTurnEnabled?: boolean;
   readonly service: Pick<
     ClaudeAgentSdkService,
     | "resolveSessionParent"

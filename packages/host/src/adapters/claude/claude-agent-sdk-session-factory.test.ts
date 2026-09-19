@@ -2,12 +2,10 @@ import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
-import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
 import { createClaudeQueryFixture } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
-import { createClaudeSystemCommands } from "./claude-agent-sdk-system-commands.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 import type { CreateClaudeAgentSdkServiceInput } from "./claude-agent-sdk-types";
 
@@ -57,14 +55,13 @@ describe("createClaudeAgentSdkSession", () => {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        claudeExecutablePath: process.execPath,
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-        systemCommands: createClaudeSystemCommands(),
         toolDiscovery: createToolDiscovery(),
       };
 
@@ -137,14 +134,13 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        claudeExecutablePath: process.execPath,
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-        systemCommands: createClaudeSystemCommands(),
         toolDiscovery: createToolDiscovery(),
       };
 
@@ -226,14 +222,13 @@ describe("createClaudeAgentSdkSession", () => {
       const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        claudeExecutablePath: process.execPath,
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-        systemCommands: createClaudeSystemCommands(),
         toolDiscovery: createToolDiscovery(),
       };
 
@@ -324,14 +319,13 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        claudeExecutablePath: process.execPath,
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-        systemCommands: createClaudeSystemCommands(),
         toolDiscovery: createToolDiscovery(),
       };
       const createPromise = createClaudeAgentSdkSession({
@@ -419,14 +413,13 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        claudeExecutablePath: process.execPath,
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-        systemCommands: createClaudeSystemCommands(),
         toolDiscovery: createToolDiscovery(),
       };
 
@@ -519,14 +512,13 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        claudeExecutablePath: process.execPath,
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-        systemCommands: createClaudeSystemCommands(),
         toolDiscovery: createToolDiscovery(),
       };
 
@@ -618,14 +610,13 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        claudeExecutablePath: process.execPath,
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-        systemCommands: createClaudeSystemCommands(),
         toolDiscovery: createToolDiscovery(),
       };
 
@@ -710,14 +701,13 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        claudeExecutablePath: process.execPath,
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-        systemCommands: createClaudeSystemCommands(),
         toolDiscovery: createToolDiscovery(),
       };
 
@@ -784,7 +774,11 @@ describe("createClaudeAgentSdkSession", () => {
       operation: "claudeRuntime.createSession",
       message:
         "Claude session 'session-continuation' did not start the interrupted-turn continuation within 5 ms.",
-      cause: expect.objectContaining({ reason: "compatibility_rejected" }),
+      cause: expect.objectContaining({
+        reason: "continuation_failed",
+        message:
+          "Claude Code did not start the continuation for session 'session-continuation'. Send a new message to continue.",
+      }),
     });
   });
 
@@ -803,14 +797,13 @@ describe("createClaudeAgentSdkSession", () => {
       const events: AgentEvent[] = [];
       const sessionStore = createClaudeAgentSdkSessionStore();
       const serviceInput: CreateClaudeAgentSdkServiceInput = {
+        claudeExecutablePath: process.execPath,
         onBackgroundFailure: () => Effect.void,
         resolveMcpBridgeConnection: () => Effect.die("unused"),
         runtimeDistribution: createArtifactRuntimeDistribution({
           mcpLauncher: { kind: "executable", executablePath: process.execPath },
         }),
         sessionStore,
-        settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-        systemCommands: createClaudeSystemCommands(),
         toolDiscovery: createToolDiscovery(),
       };
 

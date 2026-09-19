@@ -2,7 +2,6 @@ import type { LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { Effect } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
-import { resolveClaudeExecutable } from "./claude-agent-sdk-runtime";
 import { requireClaudeOpenDucktorMcpForScope } from "./claude-agent-sdk-session-policy";
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import type {
@@ -245,14 +244,10 @@ export const loadClaudeSessionContextUsage = ({
         return usage ? { totalTokens: usage.usedTokens, contextWindow: usage.maxTokens } : null;
       });
     }
-    const claudeExecutablePath = yield* resolveClaudeExecutable(
-      serviceInput,
-      "claudeRuntime.loadSessionContextUsage",
-    );
     const detachedUsageInput: Parameters<
       ClaudeContextUsageDependencies["loadDetachedSessionContextUsage"]
     >[0] = {
-      claudeExecutablePath,
+      claudeExecutablePath: serviceInput.claudeExecutablePath,
       externalSessionId: target.sessionId,
       workingDirectory: input.workingDirectory,
     };

@@ -15,8 +15,6 @@ const agentSessionResumeNextActions = {
   identity_mismatch:
     "Reopen the session from the session list so the stored identity matches, then retry Resume.",
   probe_failed: "Fix the reported runtime connection or protocol error, then retry Resume.",
-  compatibility_rejected:
-    "Use a runtime version that supports interrupted-turn resume, or send a new message to start new work.",
   continuation_failed: "Resolve the reported runtime failure, then retry Resume.",
 } as const satisfies Record<AgentSessionResumeFailureReason, string>;
 

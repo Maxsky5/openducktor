@@ -53,9 +53,6 @@ export const createRuntimeDefinitionsService = () => ({
   listRuntimeDefinitions(): RuntimeDescriptor[] {
     return Object.values(RUNTIME_DESCRIPTORS_BY_KIND);
   },
-  listEffectiveRuntimeDefinitions() {
-    return Effect.succeed(Object.values(RUNTIME_DESCRIPTORS_BY_KIND));
-  },
 });
 
 export const createTaskStore = (

@@ -1,5 +1,4 @@
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
-import { Effect } from "effect";
 import type { RuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
 import {
   type CreateHostCommandRouterInput,
@@ -18,9 +17,6 @@ describe("createRuntimeDefinitionsCommandHandlers", () => {
       listRuntimeDefinitions() {
         return [RUNTIME_DESCRIPTORS_BY_KIND.opencode];
       },
-      listEffectiveRuntimeDefinitions() {
-        return Effect.succeed([RUNTIME_DESCRIPTORS_BY_KIND.opencode]);
-      },
     };
     const router = createHostCommandRouter({
       handlers: createRuntimeDefinitionsCommandHandlers(service),
@@ -32,9 +28,6 @@ describe("createRuntimeDefinitionsCommandHandlers", () => {
   test("rejects malformed runtime definitions args", async () => {
     const service: RuntimeDefinitionsService = {
       listRuntimeDefinitions() {
-        throw new Error("should not call runtime definitions service");
-      },
-      listEffectiveRuntimeDefinitions() {
         throw new Error("should not call runtime definitions service");
       },
     };

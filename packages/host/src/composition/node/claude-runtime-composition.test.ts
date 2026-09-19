@@ -1,6 +1,5 @@
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
-import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND, repoConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -11,7 +10,6 @@ import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-s
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
-import { createClaudeSystemCommands } from "../../adapters/claude/claude-agent-sdk-system-commands.test-support";
 
 const runtimeExecutableProbe: RuntimeExecutableProbePort = {
   probeExecutable: () => Effect.void,
@@ -95,10 +93,8 @@ const createLiveSessionLifecycle = (calls: {
 
 const createComposition = (options: {
   calls: { registered: number; released: number; adapters: AgentSessionLiveAdapterPort[] };
-  interruptedTurnResumeEnabled?: boolean;
 }) => {
   const input: Parameters<typeof createClaudeRuntimeComposition>[0] = {
-    interruptedTurnResumeEnabled: options.interruptedTurnResumeEnabled ?? true,
     liveSessionLifecycle: createLiveSessionLifecycle(options.calls),
     onBackgroundFailure: () => Effect.void,
     resolveMcpBridgeConnection: () =>
@@ -112,7 +108,6 @@ const createComposition = (options: {
       mcpLauncher: { kind: "executable", executablePath: process.execPath },
     }),
     settingsConfig: createFixedRuntimeSettingsConfig("claude", process.execPath),
-    systemCommands: createClaudeSystemCommands(),
     toolDiscovery: createToolDiscovery(),
     workingDirectoryDependencies,
   };
@@ -148,37 +143,5 @@ describe("createClaudeRuntimeComposition", () => {
 
     await Effect.runPromise(handle.stop());
     expect(calls.released).toBe(1);
-  });
-
-  test("disables the adapter continuation when the host gate is off", async () => {
-    // SAFETY: The lifecycle stub records the adapters the composition registers.
-    const calls = { registered: 0, released: 0, adapters: [] as AgentSessionLiveAdapterPort[] };
-    const composition = createComposition({
-      calls,
-      interruptedTurnResumeEnabled: false,
-    });
-    const handle = await startClaudeRuntime(composition);
-    const adapter = calls.adapters[0];
-    if (!adapter || !adapter.supportsSessionControl) {
-      throw new Error("Expected a Claude live-session adapter with session control.");
-    }
-
-    const failure = await Effect.runPromise(
-      adapter
-        .continueInterruptedTurn({
-          repoPath: "/repo",
-          runtimeKind: "claude",
-          workingDirectory: "/repo",
-          externalSessionId: "session-1",
-          sessionScope: { kind: "repository" },
-        })
-        .pipe(Effect.flip),
-    );
-
-    expect(failure).toBeInstanceOf(AgentSessionResumeError);
-    // SAFETY: The instanceof check above proves the assertion holds.
-    expect((failure as AgentSessionResumeError).reason).toBe("unsupported");
-
-    await Effect.runPromise(handle.stop());
   });
 });

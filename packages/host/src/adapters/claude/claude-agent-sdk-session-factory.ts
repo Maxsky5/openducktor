@@ -40,10 +40,7 @@ export type CreateClaudeAgentSdkSessionInput = {
   sessionStore: ClaudeSessionStore;
 };
 
-/**
- * Distinguishes a stream that ended before admission from one that never admitted
- * inside the timeout. The first cause is a runtime failure, the second a version mismatch.
- */
+/** Distinguishes a stream that ended before admission from an admission timeout. */
 class ClaudeContinuationStreamEndedError extends Error {
   constructor(externalSessionId: string) {
     super(`Claude session '${externalSessionId}' ended before it admitted the continuation.`);
@@ -74,10 +71,10 @@ export const awaitClaudeContinuationAdmission = async (input: {
         ? `Claude session '${input.externalSessionId}' ended before it admitted the interrupted-turn continuation.`
         : `Claude session '${input.externalSessionId}' did not start the interrupted-turn continuation within ${input.timeoutMs} ms.`,
       cause: interruptedTurnResumeError({
-        reason: streamEnded ? "continuation_failed" : "compatibility_rejected",
+        reason: "continuation_failed",
         message: streamEnded
-          ? `Claude Code ended the session before it admitted the interrupted-turn continuation for session '${input.externalSessionId}'. Resolve the reported cause, then retry Resume.`
-          : `Claude Code did not admit the interrupted-turn continuation for session '${input.externalSessionId}'. Update Claude Code, then retry Resume.`,
+          ? `Claude Code ended session '${input.externalSessionId}' before it started the continuation. Send a new message to continue.`
+          : `Claude Code did not start the continuation for session '${input.externalSessionId}'. Send a new message to continue.`,
         cause: error,
       }),
       details: {

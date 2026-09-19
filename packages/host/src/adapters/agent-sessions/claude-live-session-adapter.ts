@@ -12,7 +12,7 @@ import {
 } from "@openducktor/contracts";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { AgentSessionMessageAcceptedError } from "../../ports/agent-session-send-error";
-import { type AgentSessionSummary, interruptedTurnResumeError } from "@openducktor/core";
+import type { AgentSessionSummary } from "@openducktor/core";
 import { Effect } from "effect";
 import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
@@ -67,7 +67,6 @@ export const createClaudeLiveSessionAdapterPreparer =
   ({
     eventHub,
     liveSessionLifecycle,
-    resumeInterruptedTurnEnabled = true,
     service,
     sessionStore,
     workingDirectoryDependencies,
@@ -328,24 +327,11 @@ export const createClaudeLiveSessionAdapterPreparer =
           ),
         continueInterruptedTurn: (input) =>
           requireSessionWorkingDirectory(input, "continue-interrupted-turn").pipe(
-            Effect.flatMap(() => {
-              if (!resumeInterruptedTurnEnabled) {
-                return Effect.fail(
-                  toAgentSessionResumeError(
-                    interruptedTurnResumeError({
-                      reason: "unsupported",
-                      message:
-                        "Interrupted-turn resume is disabled for this Claude runtime configuration.",
-                    }),
-                    toClaudeLiveSessionRef(input),
-                    "claude-live-session.continue-interrupted-turn",
-                  ),
-                );
-              }
-              return runSummary("claude-live-session.continue-interrupted-turn", () =>
+            Effect.flatMap(() =>
+              runSummary("claude-live-session.continue-interrupted-turn", () =>
                 service.continueInterruptedTurn(toClaudeContinueInput(input), runtime.runtimeId),
-              );
-            }),
+              ),
+            ),
             Effect.mapError((cause) =>
               toAgentSessionResumeError(
                 cause,
