@@ -1,5 +1,9 @@
 import { z } from "zod";
 import {
+  azureDevOpsRemoteMappingSchema,
+  azureDevOpsRepositorySchema,
+} from "./azure-devops-schemas";
+import {
   workspaceAbbreviationValueSchema,
   workspaceTileColorValueSchema,
 } from "./workspace-identity-schemas";
@@ -40,7 +44,7 @@ export const gitWorktreeSummarySchema = z.object({
 });
 export type GitWorktreeSummary = z.infer<typeof gitWorktreeSummarySchema>;
 
-export const knownGitProviderIdValues = ["github"] as const;
+export const knownGitProviderIdValues = ["github", "azure_devops"] as const;
 export const knownGitProviderIdSchema = z.enum(knownGitProviderIdValues);
 export type KnownGitProviderId = z.infer<typeof knownGitProviderIdSchema>;
 
@@ -86,11 +90,17 @@ export const gitConflictOperationSchema = z.enum([
 ]);
 export type GitConflictOperation = z.infer<typeof gitConflictOperationSchema>;
 
-export const gitProviderRepositorySchema = z.object({
+export const githubGitProviderRepositorySchema = z.object({
   host: z.string().trim().min(1).default("github.com"),
   owner: z.string().trim().min(1),
   name: z.string().trim().min(1),
 });
+export type GithubGitProviderRepository = z.infer<typeof githubGitProviderRepositorySchema>;
+
+export const gitProviderRepositorySchema = z.union([
+  azureDevOpsRepositorySchema,
+  githubGitProviderRepositorySchema,
+]);
 export type GitProviderRepository = z.infer<typeof gitProviderRepositorySchema>;
 
 export const gitTargetBranchSchema = z.object({
@@ -111,9 +121,60 @@ export const gitProviderConfigSchema = z
       gitProviderRepositorySchema.optional(),
     ),
     autoDetected: z.boolean().default(false),
+    remoteMappings: z.array(azureDevOpsRemoteMappingSchema).optional(),
+    httpConsentCollectionUrl: z.string().url().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((config, context) => {
+    const azureRepository =
+      config.repository && "providerId" in config.repository ? config.repository : undefined;
+    const issue = (path: (string | number)[], message: string): void => {
+      context.addIssue({ code: z.ZodIssueCode.custom, message, path });
+    };
+    if (config.id === "azure_devops") {
+      if (config.repository && !azureRepository) {
+        issue(["repository"], "Azure DevOps provider settings require an Azure DevOps repository.");
+      }
+      if (!config.repository && config.remoteMappings?.length) {
+        issue(["remoteMappings"], "Azure DevOps remote mappings require a repository.");
+      }
+      if (azureRepository) {
+        for (const [index, mapping] of (config.remoteMappings ?? []).entries()) {
+          if (!sameAzureRepository(mapping.repository, azureRepository)) {
+            issue(
+              ["remoteMappings", index, "repository"],
+              "The remote mapping must use the configured Azure DevOps repository.",
+            );
+          }
+        }
+      }
+      return;
+    }
+
+    if (azureRepository) {
+      issue(["repository"], "Only the Azure DevOps provider can use an Azure DevOps repository.");
+    }
+    if (config.remoteMappings !== undefined) {
+      issue(["remoteMappings"], "Only the Azure DevOps provider can use remote mappings.");
+    }
+    if (config.httpConsentCollectionUrl !== undefined) {
+      issue(
+        ["httpConsentCollectionUrl"],
+        "Only the Azure DevOps provider can record HTTP consent.",
+      );
+    }
+  });
 export type GitProviderConfig = z.infer<typeof gitProviderConfigSchema>;
+
+const sameAzureRepository = (
+  left: z.infer<typeof azureDevOpsRepositorySchema>,
+  right: z.infer<typeof azureDevOpsRepositorySchema>,
+): boolean =>
+  left.deployment === right.deployment &&
+  left.serviceUrl === right.serviceUrl &&
+  left.organization === right.organization &&
+  left.project === right.project &&
+  left.name === right.name;
 
 export const repoGitConfigSchema = z
   .object({
@@ -132,6 +193,7 @@ export type GitPullRequestState = z.infer<typeof gitPullRequestStateSchema>;
 
 export const pullRequestSchema = z.object({
   providerId: gitProviderIdSchema,
+  repositoryIdentity: z.string().trim().min(1).optional(),
   number: z.number().int().positive(),
   url: z.string().url(),
   state: gitPullRequestStateSchema,

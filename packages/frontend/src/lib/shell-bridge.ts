@@ -19,6 +19,9 @@ import { createHostClient, type HostClient } from "@openducktor/host-client";
 import type { BrowserLiveControlEvent } from "@/types";
 
 export type RunEventListener = (payload: HostEventPayload<"openducktor://run-event">) => void;
+export type AzureDevOpsConnectionUpdateListener = (
+  payload: HostEventPayload<"openducktor://azure-devops-connection-updated">,
+) => void;
 export type WorkspaceSessionUpdateListener = (
   payload: HostEventPayload<"openducktor://workspace-session-updated"> | BrowserLiveControlEvent,
 ) => void;
@@ -45,6 +48,9 @@ export type HostBridge = {
     listener: WorkspaceSessionUpdateListener,
   ) => Promise<() => void>;
   subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
+  subscribeAzureDevOpsConnectionUpdates: (
+    listener: AzureDevOpsConnectionUpdateListener,
+  ) => Promise<() => void>;
   subscribeDevServerEvents: (
     listener: DevServerEventListener,
   ) => Promise<DevServerEventSubscription>;
@@ -178,6 +184,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   client: createHostClient(unavailable),
   subscribeWorkspaceSessionUpdates: failUnavailable,
   subscribeRunEvents: failUnavailable,
+  subscribeAzureDevOpsConnectionUpdates: failUnavailable,
   subscribeDevServerEvents: failUnavailable,
   observeAgentSessionLive: failUnavailable,
   subscribeTaskStream: failUnavailable,

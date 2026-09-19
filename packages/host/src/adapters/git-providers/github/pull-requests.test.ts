@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   repoConfigSchema,
+  type GithubGitProviderRepository,
   type PullRequest,
   type TaskApprovalContext,
 } from "@openducktor/contracts";
@@ -58,7 +59,7 @@ const repoConfig = repoConfigSchema.parse({
   },
 });
 
-const repositoryPort: GitProviderRepositoryPort = {
+const repositoryPort: GitProviderRepositoryPort<GithubGitProviderRepository> = {
   detectRepository: () => Effect.dieMessage("unexpected repository detection"),
   getRepository: () => Effect.succeed({ host: "github.com", owner: "openai", name: "openducktor" }),
   getMapping: () =>
@@ -68,7 +69,7 @@ const repositoryPort: GitProviderRepositoryPort = {
     }),
 };
 
-const mappedRepositoryPort: GitProviderRepositoryPort = {
+const mappedRepositoryPort: GitProviderRepositoryPort<GithubGitProviderRepository> = {
   ...repositoryPort,
   getRepository: () => Effect.die("Expected Pull Request operation to check repository mapping"),
 };

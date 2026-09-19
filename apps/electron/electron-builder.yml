@@ -3,6 +3,8 @@ productName: OpenDucktor
 asar: true
 npmRebuild: false
 asarUnpack:
+  - node_modules/@azure/msal-node-runtime/**/*
+  - node_modules/keytar/**/*
   - node_modules/node-pty/**/*
   - node_modules/node-mac-permissions/**/*
   - node_modules/@ff-labs/fff-node/**/*
@@ -23,6 +25,7 @@ afterAllArtifactBuild: scripts/print-package-artifacts.cjs
 
 files:
   - dist/**/*
+  - node_modules/keytar/**/*
   - node_modules/bindings/**/*
   - node_modules/file-uri-to-path/**/*
   - node_modules/node-mac-permissions/**/*
@@ -46,6 +49,7 @@ extraResources:
 extraMetadata:
   main: dist/main.js
   dependencies:
+    "@azure/msal-node-extensions": 5.5.1
     node-pty: 1.2.0-beta.14
 
 mac:

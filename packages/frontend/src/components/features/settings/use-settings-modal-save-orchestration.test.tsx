@@ -38,6 +38,7 @@ const createSnapshot = (): SettingsSnapshot =>
 const createValidation = (
   overrides: Partial<SettingsSaveValidation> = {},
 ): SettingsSaveValidation => ({
+  azureDevOps: { hasErrors: false, errorCount: 0 },
   prompt: { hasErrors: false, errorCount: 0 },
   customAgentRoles: { hasErrors: false, errorCount: 0 },
   reusablePrompts: { hasErrors: false, errorCount: 0 },
@@ -487,6 +488,32 @@ describe("useSettingsModalSaveOrchestration", () => {
 
     expect(firstResult).toBe(true);
     expect(harness.getLatest().isSaving).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("keeps modal interactions enabled during a section save", async () => {
+    const deferredSave = createDeferred<void>();
+    const saveSettingsSnapshot = mock(async () => {
+      await deferredSave.promise;
+    });
+    const harness = createHookHarness(
+      createArgs({ saveSettingsSnapshot }, { ...EMPTY_DIRTY_SECTIONS, repoSettings: true }),
+    );
+
+    await harness.mount();
+
+    let submit: Promise<boolean> | undefined;
+    await harness.run((state) => {
+      submit = state.submitSection();
+    });
+
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
+    expect(harness.getLatest().isSaving).toBe(false);
+
+    deferredSave.resolve();
+    if (!submit) throw new Error("Expected section save promise");
+    expect(await submit).toBe(true);
 
     await harness.unmount();
   });

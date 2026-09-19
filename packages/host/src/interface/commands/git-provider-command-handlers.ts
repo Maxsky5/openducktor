@@ -1,4 +1,7 @@
-import { GITHUB_PROVIDER_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
+  GITHUB_PROVIDER_DESCRIPTOR,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { GitProviderService } from "../../application/git/git-provider-service";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
@@ -17,6 +20,11 @@ const parseRepoPath = (args: HostCommandArgs, command: string): string => {
 
 export const createGitProviderCommandHandlers = ({ service }: { service: GitProviderService }) =>
   ({
+    workspace_detect_azure_devops_repository: (args) =>
+      service.detectRepository({
+        repoPath: parseRepoPath(args, "workspace_detect_azure_devops_repository"),
+        providerId: AZURE_DEVOPS_PROVIDER_DESCRIPTOR.id,
+      }),
     workspace_detect_github_repository: (args) =>
       Effect.gen(function* () {
         const repoPath = parseRepoPath(args, "workspace_detect_github_repository");

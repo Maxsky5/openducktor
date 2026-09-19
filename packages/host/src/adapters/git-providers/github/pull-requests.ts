@@ -1,6 +1,6 @@
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
-  type GitProviderRepository,
+  type GithubGitProviderRepository,
   type PullRequest,
   type TaskApprovalContext,
 } from "@openducktor/contracts";
@@ -29,7 +29,7 @@ export const createGithubPullRequestProviderPort = ({
   repositoryPort,
 }: {
   githubCli: GithubCli;
-  repositoryPort: GitProviderRepositoryPort;
+  repositoryPort: GitProviderRepositoryPort<GithubGitProviderRepository>;
 }): PullRequestProviderPort => {
   const getByNumber: PullRequestProviderPort["getByNumber"] = (input) =>
     Effect.gen(function* () {
@@ -160,7 +160,7 @@ const selectLatestMergedPullRequest = (
 const listPullRequests = (
   githubCli: GithubCli,
   repoPath: string,
-  repository: GitProviderRepository,
+  repository: GithubGitProviderRepository,
   sourceBranch: string,
   state: "open" | "all",
 ) =>
@@ -187,7 +187,7 @@ const listPullRequests = (
 const getPullRequest = (
   githubCli: GithubCli,
   repoPath: string,
-  repository: GitProviderRepository,
+  repository: GithubGitProviderRepository,
   number: number,
 ) =>
   Effect.gen(function* () {
@@ -205,7 +205,7 @@ const getPullRequest = (
 const upsertPullRequest = (
   githubCli: GithubCli,
   repoPath: string,
-  repository: GitProviderRepository,
+  repository: GithubGitProviderRepository,
   approval: TaskApprovalContext,
   title: string,
   body: string,

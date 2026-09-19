@@ -2,10 +2,15 @@ import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type GitProviderConfig,
   type GitProviderRepository,
+  type GithubGitProviderRepository,
   type RepositoryGitProviderContext,
   type SettingsRepoConfig,
 } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+
+const isGithubRepository = (
+  repository: GitProviderRepository,
+): repository is GithubGitProviderRepository => "host" in repository;
 
 type UseRepositoryGitSectionModelArgs = {
   selectedRepoPath: string | null;
@@ -79,7 +84,7 @@ type RepositoryGitSectionAction =
   | {
       type: "detection_succeeded";
       closeManualConfig: boolean;
-      repository: GitProviderRepository;
+      repository: GithubRepositoryDraft;
     }
   | {
       type: "manual_toggled";
@@ -156,13 +161,13 @@ const trimRepositoryDraft = (draft: GithubRepositoryDraft): GithubRepositoryDraf
 const buildRepositoryDraft = (
   repository: GitProviderRepository | undefined,
 ): GithubRepositoryDraft => ({
-  host: repository?.host ?? "github.com",
-  owner: repository?.owner ?? "",
-  name: repository?.name ?? "",
+  host: repository && isGithubRepository(repository) ? repository.host : "github.com",
+  owner: repository && isGithubRepository(repository) ? repository.owner : "",
+  name: repository && isGithubRepository(repository) ? repository.name : "",
 });
 
 const toRepositoryKey = (repository: GitProviderRepository | undefined): string => {
-  if (!repository?.host || !repository.owner || !repository.name) {
+  if (!repository || !isGithubRepository(repository)) {
     return "";
   }
   return `${repository.host}:${repository.owner}:${repository.name}`;
@@ -282,7 +287,13 @@ const getGithubView = ({
   const configuredProvider = selectedRepoConfig?.git.provider;
   const github =
     configuredProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id
-      ? configuredProvider
+      ? {
+          ...configuredProvider,
+          repository:
+            configuredProvider.repository && isGithubRepository(configuredProvider.repository)
+              ? configuredProvider.repository
+              : undefined,
+        }
       : EMPTY_GITHUB_CONFIG;
   const hasConfiguredNonGithubProvider = hasNonGithubProvider(selectedRepoConfig);
   const configuredProviderId = configuredProvider?.id;
@@ -395,7 +406,11 @@ export function useRepositoryGitSectionModel({
 }: UseRepositoryGitSectionModelArgs): UseRepositoryGitSectionModelResult {
   const initialProvider = selectedRepoConfig?.git.provider;
   const initialGithubRepository =
-    initialProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id ? initialProvider.repository : undefined;
+    initialProvider?.id === GITHUB_PROVIDER_DESCRIPTOR.id &&
+    initialProvider.repository &&
+    isGithubRepository(initialProvider.repository)
+      ? initialProvider.repository
+      : undefined;
   const initialHasRepositoryCoordinates = Boolean(
     initialGithubRepository?.host && initialGithubRepository.owner && initialGithubRepository.name,
   );
@@ -541,7 +556,12 @@ export function useRepositoryGitSectionModel({
 
   const runDetection = useCallback(
     async (manual: boolean): Promise<void> => {
-      if (!selectedRepoConfig || hasConfiguredNonGithubProvider || isDetecting) {
+      if (
+        !selectedRepoConfig ||
+        configuredProviderId !== GITHUB_PROVIDER_DESCRIPTOR.id ||
+        hasConfiguredNonGithubProvider ||
+        isDetecting
+      ) {
         return;
       }
 
@@ -559,7 +579,7 @@ export function useRepositoryGitSectionModel({
       try {
         const detected = await onDetectGithubRepository();
         if (isActiveDetection()) {
-          if (!detected) {
+          if (!detected || !isGithubRepository(detected)) {
             dispatchSectionState({
               type: "detection_missing",
               manual,
@@ -601,6 +621,7 @@ export function useRepositoryGitSectionModel({
       !selectedRepoPath ||
       !selectedRepoConfig ||
       disabled ||
+      configuredProviderId !== GITHUB_PROVIDER_DESCRIPTOR.id ||
       hasConfiguredNonGithubProvider ||
       hasRepositoryCoordinates ||
       isDetecting
@@ -615,6 +636,7 @@ export function useRepositoryGitSectionModel({
     void runDetection(false);
   }, [
     attemptedAutoDetectByRepo,
+    configuredProviderId,
     disabled,
     hasConfiguredNonGithubProvider,
     hasRepositoryCoordinates,

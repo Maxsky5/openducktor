@@ -84,6 +84,7 @@ describe("settings-modal-save-policy", () => {
 
   test("selects the first settings save blocker and its required UI action", () => {
     const blocker = getSettingsSaveBlocker({
+      azureDevOps: { hasErrors: false, errorCount: 0 },
       prompt: { hasErrors: true, errorCount: 2 },
       customAgentRoles: { hasErrors: false, errorCount: 0 },
       reusablePrompts: { hasErrors: true, errorCount: 3 },
@@ -105,8 +106,29 @@ describe("settings-modal-save-policy", () => {
     });
   });
 
+  test("blocks save when Azure DevOps fields are invalid", () => {
+    const blocker = getSettingsSaveBlocker({
+      azureDevOps: { hasErrors: true, errorCount: 2 },
+      prompt: { hasErrors: false, errorCount: 0 },
+      customAgentRoles: { hasErrors: false, errorCount: 0 },
+      reusablePrompts: { hasErrors: false, errorCount: 0 },
+      runtimeRequest: { isPending: false, error: null },
+      runtimeAvailability: { hasErrors: false, errorCount: 0, invalidKind: null },
+      hasUnacknowledgedCodexDangerousSettings: false,
+      repoScripts: {
+        hasErrors: false,
+        errorCount: 0,
+        invalidRepoPaths: [],
+        selectedWorkspaceId: "repo",
+      },
+    });
+
+    expect(blocker?.reason).toBe("Fix 2 Azure DevOps field errors before saving.");
+  });
+
   test("returns runtime focus metadata for an executable blocker", () => {
     const blocker = getSettingsSaveBlocker({
+      azureDevOps: { hasErrors: false, errorCount: 0 },
       prompt: { hasErrors: false, errorCount: 0 },
       customAgentRoles: { hasErrors: false, errorCount: 0 },
       reusablePrompts: { hasErrors: false, errorCount: 0 },
@@ -131,6 +153,7 @@ describe("settings-modal-save-policy", () => {
   test("returns no blocker for valid settings", () => {
     expect(
       getSettingsSaveBlocker({
+        azureDevOps: { hasErrors: false, errorCount: 0 },
         prompt: { hasErrors: false, errorCount: 0 },
         customAgentRoles: { hasErrors: false, errorCount: 0 },
         reusablePrompts: { hasErrors: false, errorCount: 0 },

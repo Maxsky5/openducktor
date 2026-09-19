@@ -245,7 +245,9 @@ describe("TaskExecutionCiChecksPanel", () => {
       });
       fireEvent.click(view.getByRole("button", { name: "Retry" }));
 
-      await waitFor(() => expect(reviewContextGet).toHaveBeenCalledTimes(2), { timeout: 1_000 });
+      await waitFor(() => expect(reviewContextGet).toHaveBeenCalledTimes(2), {
+        timeout: 1_000,
+      });
       await waitFor(() => expect(view.getByText("No pull request found")).toBeTruthy(), {
         timeout: 1_000,
       });
@@ -354,6 +356,39 @@ describe("TaskExecutionCiChecksPanel", () => {
     expect(html).toContain("text-info-muted");
   });
 
+  test("renders Azure reviewer decisions", () => {
+    const html = renderToStaticMarkup(
+      <QueryProvider useIsolatedClient>
+        <ThemeProvider defaultTheme="light">
+          <TooltipProvider>
+            <TaskExecutionCiLoaded
+              context={{
+                ...loadedContext,
+                providerId: "azure_devops",
+                reviewers: [
+                  {
+                    id: "reviewer-1",
+                    displayName: "Ada Lovelace",
+                    avatarUrl: null,
+                    decision: "approved_with_suggestions",
+                    isRequired: true,
+                  },
+                ],
+              }}
+              refreshState="idle"
+              onRefresh={() => {}}
+            />
+          </TooltipProvider>
+        </ThemeProvider>
+      </QueryProvider>,
+    );
+
+    expect(html).toContain("Reviewers");
+    expect(html).toContain("Ada Lovelace");
+    expect(html).toContain("Approved with suggestions");
+    expect(html).toContain("Required");
+  });
+
   test("colors only queued and in-progress check rows as informational blue", () => {
     for (const status of ["queued", "in_progress"] as const) {
       const html = renderCheckCard(status);
@@ -413,7 +448,9 @@ describe("TaskExecutionCiChecksPanel", () => {
           </ThemeProvider>
         </QueryProvider>,
       );
-      const link = view.getByRole("link", { name: loadedContext.pullRequest.title });
+      const link = view.getByRole("link", {
+        name: loadedContext.pullRequest.title,
+      });
 
       expect(link.getAttribute("target")).toBeNull();
       expect(fireEvent.click(link)).toBe(false);

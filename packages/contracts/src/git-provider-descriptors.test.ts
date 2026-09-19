@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { azureDevOpsRepositorySchema } from "./azure-devops-schemas";
 import {
   gitProviderCapabilitiesSchema,
   gitProviderConfigSchema,
@@ -6,7 +7,10 @@ import {
   repositoryGitProviderContextSchema,
   repoGitConfigSchema,
 } from "./git-schemas";
-import { GITHUB_PROVIDER_DESCRIPTOR } from "./git-provider-descriptors";
+import {
+  AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
+  GITHUB_PROVIDER_DESCRIPTOR,
+} from "./git-provider-descriptors";
 
 const providerContext = () => ({
   descriptor: GITHUB_PROVIDER_DESCRIPTOR,
@@ -42,6 +46,16 @@ describe("Git provider descriptors", () => {
     expect(gitProviderDescriptorSchema.parse(GITHUB_PROVIDER_DESCRIPTOR)).toEqual(
       GITHUB_PROVIDER_DESCRIPTOR,
     );
+  });
+
+  test("exports the Azure DevOps Pull Request capability contract", () => {
+    expect(gitProviderDescriptorSchema.parse(AZURE_DEVOPS_PROVIDER_DESCRIPTOR)).toEqual(
+      AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
+    );
+    expect(AZURE_DEVOPS_PROVIDER_DESCRIPTOR.capabilities).toEqual({
+      supportsPullRequests: true,
+      supportsPullRequestReview: true,
+    });
   });
 
   test("rejects Pull Request review support without Pull Request support", () => {
@@ -86,6 +100,88 @@ describe("Git provider descriptors", () => {
       }).success,
     ).toBe(false);
     expect(repoGitConfigSchema.safeParse({ providers: {} }).success).toBe(false);
+  });
+
+  test("rejects provider-specific repository and remote mapping combinations", () => {
+    const azureRepository = {
+      providerId: "azure_devops" as const,
+      deployment: "services" as const,
+      serviceUrl: "https://dev.azure.com",
+      organization: "OpenDucktor",
+      project: "Desktop",
+      name: "app",
+    };
+    const otherAzureRepository = { ...azureRepository, name: "other" };
+
+    expect(
+      gitProviderConfigSchema.safeParse({
+        id: "github",
+        enabled: true,
+        autoDetected: false,
+        repository: azureRepository,
+      }).success,
+    ).toBe(false);
+    expect(
+      gitProviderConfigSchema.safeParse({
+        id: "azure_devops",
+        enabled: true,
+        autoDetected: false,
+        repository: { host: "github.com", owner: "openai", name: "openducktor" },
+      }).success,
+    ).toBe(false);
+    expect(
+      gitProviderConfigSchema.safeParse({
+        id: "azure_devops",
+        enabled: true,
+        autoDetected: false,
+        repository: azureRepository,
+        remoteMappings: [
+          {
+            remoteName: "origin",
+            fetchUrl: "https://dev.azure.com/OpenDucktor/Desktop/_git/other",
+            pushUrls: ["https://dev.azure.com/OpenDucktor/Desktop/_git/other"],
+            repository: otherAzureRepository,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("canonicalizes an Azure DevOps Server service address", () => {
+    expect(
+      azureDevOpsRepositorySchema.parse({
+        providerId: "azure_devops",
+        deployment: "server",
+        serviceUrl: "HTTP://ADO.Example/tfs/",
+        organization: "DefaultCollection",
+        project: "OpenDucktor",
+        name: "Desktop",
+      }).serviceUrl,
+    ).toBe("http://ado.example/tfs");
+  });
+
+  test("reports an invalid Azure DevOps Server address without throwing", () => {
+    expect(() =>
+      azureDevOpsRepositorySchema.safeParse({
+        providerId: "azure_devops",
+        deployment: "server",
+        serviceUrl: "",
+        organization: "DefaultCollection",
+        project: "OpenDucktor",
+        name: "Desktop",
+      }),
+    ).not.toThrow();
+
+    expect(
+      azureDevOpsRepositorySchema.safeParse({
+        providerId: "azure_devops",
+        deployment: "server",
+        serviceUrl: "",
+        organization: "DefaultCollection",
+        project: "OpenDucktor",
+        name: "Desktop",
+      }).success,
+    ).toBe(false);
   });
 
   test("keeps provider support, configuration, and health as separate context fields", () => {

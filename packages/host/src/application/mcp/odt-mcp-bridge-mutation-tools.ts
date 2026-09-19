@@ -246,7 +246,6 @@ const executeSetPullRequest: OdtMcpMutationHandler = (context, input) =>
     const pullRequest = yield* taskService.linkPullRequest({
       repoPath,
       taskId: task.id,
-      providerId: parsed.providerId,
       number: parsed.number,
     });
     const updated = yield* taskForWorkspace(parsed.workspaceId ?? "", task.id);

@@ -18,6 +18,8 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
       "vite",
       "--external",
       "@ff-labs/fff-node",
+      "--external",
+      "@azure/msal-node-extensions",
       "--outdir",
       dirname(outputPath),
       "--entry-naming",

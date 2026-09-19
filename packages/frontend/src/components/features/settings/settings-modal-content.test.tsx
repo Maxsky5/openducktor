@@ -123,6 +123,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   retryRuntimeDefinitions: async () => [],
   checkRuntimeExecutablesAgain: async () => {},
   detectSelectedRepoGithubRepository: async () => null,
+  setAzureDevOpsValidationErrorCount: () => {},
   updateSelectedRepoConfig: () => {},
   updateGlobalGitConfig: () => {},
   updateGlobalSystemSettings: () => {},
@@ -142,6 +143,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   updateSelectedRepoDefaultModel: () => {},
   clearSelectedRepoDefaultModel: () => {},
   submit: async () => true,
+  submitSection: async () => true,
 });
 
 describe("settings modal content", () => {

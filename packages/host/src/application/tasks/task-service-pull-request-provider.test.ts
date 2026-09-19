@@ -258,7 +258,6 @@ describe("createTaskService Pull Request provider ports", () => {
       service.linkPullRequest({
         repoPath: "/repo",
         taskId: "task-1",
-        providerId: "gitlab",
         number: 42,
       }),
     );
@@ -301,7 +300,6 @@ describe("createTaskService Pull Request provider ports", () => {
         .linkPullRequest({
           repoPath: "/repo",
           taskId: "task-1",
-          providerId: "gitlab",
           number: 42,
         })
         .pipe(Effect.flip),

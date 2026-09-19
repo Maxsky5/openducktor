@@ -1,4 +1,5 @@
 export {
+  type AzureDevOpsConnectionUpdateListener,
   type AppUpdateBridge,
   createDisabledAppUpdateBridge,
   type DevServerEventListener,

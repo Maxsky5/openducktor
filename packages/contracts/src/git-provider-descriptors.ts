@@ -9,3 +9,13 @@ export const GITHUB_PROVIDER_DESCRIPTOR = {
     supportsPullRequestReview: true,
   },
 } as const satisfies GitProviderDescriptor;
+
+export const AZURE_DEVOPS_PROVIDER_DESCRIPTOR = {
+  id: "azure_devops",
+  label: "Azure DevOps",
+  description: "Azure Repos pull request and review integration.",
+  capabilities: {
+    supportsPullRequests: true,
+    supportsPullRequestReview: true,
+  },
+} as const satisfies GitProviderDescriptor;

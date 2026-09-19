@@ -120,6 +120,7 @@ export type SettingsModalController = {
   retryRuntimeDefinitions: () => Promise<RuntimeDescriptor[]>;
   checkRuntimeExecutablesAgain: () => Promise<void>;
   detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
+  setAzureDevOpsValidationErrorCount: (errorCount: number) => void;
   updateSelectedRepoConfig: (updater: (current: SettingsRepoConfig) => SettingsRepoConfig) => void;
   updateGlobalGitConfig: (
     updater: (current: SettingsSnapshot["git"]) => SettingsSnapshot["git"],
@@ -166,6 +167,7 @@ export type SettingsModalController = {
   ) => void;
   clearSelectedRepoDefaultModel: () => void;
   submit: () => Promise<boolean>;
+  submitSection: () => Promise<boolean>;
 };
 
 type UseSettingsModalControllerArgs = {
@@ -227,6 +229,8 @@ export const useSettingsModalController = ({
     workspaceSelectionPolicy: workspacePolicy,
     loadSettingsSnapshot,
   });
+  const { azureDevOpsValidationErrorCount, setAzureDevOpsValidationErrorCount } =
+    useAzureDevOpsValidation({ loadedSnapshot, selectedRepoConfig, selectedWorkspaceId });
 
   const selectedWorkspace = useMemo(
     () =>
@@ -404,13 +408,15 @@ export const useSettingsModalController = ({
         settingsSectionErrorCountById.repositories +
         runtimeAvailabilityValidationState.totalErrorCount -
         runtimeAvailabilityValidationState.runtimeExecutableErrors.length +
-        repoScriptValidationErrorCount,
+        repoScriptValidationErrorCount +
+        azureDevOpsValidationErrorCount,
       runtimes: runtimeAvailabilityValidationState.runtimeExecutableErrors.length,
       "reusable-prompts": reusablePromptValidationState.totalErrorCount,
       "custom-agent-roles": customAgentRoleValidationState.totalErrorCount,
     }),
     [
       repoScriptValidationErrorCount,
+      azureDevOpsValidationErrorCount,
       reusablePromptValidationState.totalErrorCount,
       customAgentRoleValidationState.totalErrorCount,
       runtimeAvailabilityValidationState.totalErrorCount,
@@ -426,12 +432,17 @@ export const useSettingsModalController = ({
     clearSaveError,
     markRepoScriptSaveAttempt,
     submit,
+    submitSection,
   } = useSettingsModalSaveOrchestration({
     open,
     loadedSnapshot,
     snapshotDraft,
     dirtySections,
     validation: {
+      azureDevOps: {
+        hasErrors: azureDevOpsValidationErrorCount > 0,
+        errorCount: azureDevOpsValidationErrorCount,
+      },
       customAgentRoles: {
         hasErrors: customAgentRoleValidationState.totalErrorCount > 0,
         errorCount: customAgentRoleValidationState.totalErrorCount,
@@ -614,6 +625,7 @@ export const useSettingsModalController = ({
     retryRuntimeDefinitions: refreshRuntimeDefinitions,
     checkRuntimeExecutablesAgain,
     detectSelectedRepoGithubRepository,
+    setAzureDevOpsValidationErrorCount,
     updateSelectedRepoConfig,
     updateGlobalGitConfig,
     updateGlobalChatSettings,
@@ -633,6 +645,44 @@ export const useSettingsModalController = ({
     updateSelectedRepoDefaultModel,
     clearSelectedRepoDefaultModel,
     submit,
+    submitSection,
+  };
+};
+
+const useAzureDevOpsValidation = ({
+  loadedSnapshot,
+  selectedRepoConfig,
+  selectedWorkspaceId,
+}: {
+  loadedSnapshot: SettingsSnapshot | null;
+  selectedRepoConfig: SettingsRepoConfig | null;
+  selectedWorkspaceId: string | null;
+}) => {
+  const [reported, setReported] = useState<{
+    snapshot: SettingsSnapshot | null;
+    workspaceId: string | null;
+    errorCount: number;
+  }>({ snapshot: null, workspaceId: null, errorCount: 0 });
+  const setAzureDevOpsValidationErrorCount = useCallback(
+    (errorCount: number): void => {
+      setReported({ snapshot: loadedSnapshot, workspaceId: selectedWorkspaceId, errorCount });
+    },
+    [loadedSnapshot, selectedWorkspaceId],
+  );
+  const provider = selectedRepoConfig?.git.provider;
+  if (provider?.id !== "azure_devops" || !provider.enabled) {
+    return { azureDevOpsValidationErrorCount: 0, setAzureDevOpsValidationErrorCount };
+  }
+  const reportedErrorCount =
+    reported.snapshot === loadedSnapshot && reported.workspaceId === selectedWorkspaceId
+      ? reported.errorCount
+      : 0;
+  return {
+    azureDevOpsValidationErrorCount: Math.max(
+      !provider.repository || !("providerId" in provider.repository) ? 1 : 0,
+      reportedErrorCount,
+    ),
+    setAzureDevOpsValidationErrorCount,
   };
 };
 

@@ -40,7 +40,6 @@ export type AgentSessionDeleteInput = TaskIdInput & {
 };
 
 export type PullRequestNumberInput = TaskIdInput & {
-  providerId: string;
   number: number;
 };
 

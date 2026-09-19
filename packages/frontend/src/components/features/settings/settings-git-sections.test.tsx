@@ -1,4 +1,5 @@
 import {
+  AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
   GITHUB_PROVIDER_DESCRIPTOR,
   type GitProviderConfig,
   type GitProviderHealth,
@@ -8,6 +9,8 @@ import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryProvider } from "@/lib/query-provider";
+import { host } from "@/state/operations/shared/host";
 import { SettingsGitSection } from "./settings-git-section";
 import { RepositoryGitSection } from "./settings-repository-git-section";
 import type { GitProviderState } from "./use-repository-git-section-model";
@@ -115,7 +118,7 @@ describe("settings git sections", () => {
       }),
     );
 
-    expect(html).toContain("GitHub Pull Requests");
+    expect(html).toContain(">GitHub<");
     expect(html).toContain("Not ready");
     expect(html).toContain("Run `gh auth login` to connect GitHub.");
     expect(html).toContain("openai/openducktor");
@@ -461,6 +464,9 @@ describe("settings git sections", () => {
       });
 
       expect(screen.getByTestId("configured-provider-id").textContent).toBe("none");
+      expect(screen.queryByRole("switch")).toBeNull();
+      fireEvent.click(screen.getByRole("radio", { name: /GitHub/ }));
+      expect(screen.getByTestId("configured-provider-id").textContent).toBe("github");
       expect(screen.getByRole("switch")).toBeTruthy();
     } finally {
       rendered.unmount();
@@ -506,7 +512,11 @@ describe("settings git sections", () => {
       rendered.rerender(createElement(RepositoryGitSection, props()));
 
       await act(async () => {
-        pendingDetection.resolve({ host: "github.com", owner: "detected", name: "repo" });
+        pendingDetection.resolve({
+          host: "github.com",
+          owner: "detected",
+          name: "repo",
+        });
         await pendingDetection.promise;
         await Promise.resolve();
       });
@@ -638,7 +648,9 @@ describe("settings git sections", () => {
       await waitFor(() => {
         expect(rendered?.container.textContent).toContain(detectedMessage);
       });
-      const detectButton = screen.getByRole("button", { name: /detect from origin/i });
+      const detectButton = screen.getByRole("button", {
+        name: /detect from origin/i,
+      });
       expect(detectButton).toBeInstanceOf(HTMLButtonElement);
       if (!(detectButton instanceof HTMLButtonElement)) throw new TypeError("Expected a button");
       expect(detectButton.disabled).toBe(false);
@@ -716,6 +728,410 @@ describe("settings git sections", () => {
       });
     } finally {
       rendered?.unmount();
+    }
+  });
+
+  test("keeps the Git provider optional and does not probe GitHub when none is configured", async () => {
+    const onDetectGithubRepository = mock(async () => null);
+    const repoConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {},
+    };
+    const rendered = render(
+      createElement(RepositoryGitSection, {
+        selectedRepoPath: "/repo",
+        selectedRepoConfig: repoConfig,
+        providerState: { status: "idle" },
+        disabled: false,
+        onDetectGithubRepository,
+        onUpdateSelectedRepoConfig: () => repoConfig,
+      }),
+    );
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(screen.getByRole("radiogroup", { name: "Git provider" })).toBeTruthy();
+      expect(screen.getByRole("radio", { name: /No provider/ }).getAttribute("aria-checked")).toBe(
+        "true",
+      );
+      expect(rendered.container.textContent).not.toContain("GitHub Pull Requests");
+      expect(rendered.container.textContent).not.toContain("Azure DevOps setup");
+      expect(onDetectGithubRepository).toHaveBeenCalledTimes(0);
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("does not read an Azure connection for unsaved provider settings", async () => {
+    const repoConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: {
+          id: "azure_devops",
+          enabled: true,
+          autoDetected: false,
+          repository: {
+            providerId: "azure_devops",
+            deployment: "services",
+            serviceUrl: "https://dev.azure.com",
+            organization: "OpenDucktor",
+            project: "Desktop",
+            name: "app",
+          },
+        },
+      },
+    };
+    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
+    const getConnection = mock(async () => ({ status: "disconnected" as const }));
+    const saveSettings = mock(async () => true);
+    host.workspaceGetAzureDevOpsConnection = getConnection;
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          providerState: { status: "draft" },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onSaveSettings: saveSettings,
+          onUpdateSelectedRepoConfig: () => repoConfig,
+        }),
+      ),
+    );
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(getConnection).toHaveBeenCalledTimes(0);
+      expect(screen.getByRole("navigation", { name: "Azure DevOps setup" })).toBeTruthy();
+      expect(screen.getByRole("switch", { name: "Enable Azure DevOps provider" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: /Connection/ }));
+      expect(screen.queryByRole("button", { name: "Sign in with Microsoft" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+      await waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(1));
+    } finally {
+      rendered.unmount();
+      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
+    }
+  });
+
+  test("shows explicit provider choices and defers Azure field errors until interaction", () => {
+    const azureRepoConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: {
+          id: "azure_devops",
+          enabled: true,
+          autoDetected: false,
+        },
+      },
+    };
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: azureRepoConfig,
+          providerState: { status: "draft" },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: () => azureRepoConfig,
+        }),
+      ),
+    );
+
+    try {
+      expect(screen.getByRole("radiogroup", { name: "Git provider" })).toBeTruthy();
+      expect(screen.getByRole("radio", { name: /GitHub/ })).toBeTruthy();
+      const azureChoice = screen.getByRole("radio", { name: "Azure DevOps" });
+      expect(azureChoice.getAttribute("aria-checked")).toBe("true");
+      expect(azureChoice.closest("label")?.className).toContain("border-primary");
+      expect(azureChoice.closest("label")?.className).not.toContain("bg-primary");
+      expect(rendered.container.textContent).not.toContain("Use Azure Repos for pull requests");
+      expect(rendered.container.textContent).toContain("/repo");
+      expect(rendered.container.textContent).not.toContain(
+        "Too small: expected string to have >=1 characters",
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Enter manually" }));
+      const organizationInput = screen.getByLabelText("Organization");
+      fireEvent.blur(organizationInput);
+      expect(rendered.container.textContent).toContain("Organization is required.");
+
+      fireEvent.click(screen.getByRole("radio", { name: /Azure DevOps Server/ }));
+      expect(screen.getByLabelText("Server address")).toBeTruthy();
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("keeps invalid Azure edits and saves an explicit remote mapping draft", async () => {
+    const onAzureDevOpsValidationChange = mock((_errorCount: number) => {});
+    const initialRepoConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: {
+          id: "azure_devops",
+          enabled: false,
+          autoDetected: false,
+          repository: {
+            providerId: "azure_devops",
+            deployment: "server",
+            serviceUrl: "https://azure.example.test/tfs",
+            organization: "DefaultCollection",
+            project: "Desktop",
+            name: "OpenDucktor",
+          },
+        },
+      },
+    };
+    const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
+      const [repoConfig, setRepoConfig] = useState(initialRepoConfig);
+      return createElement(
+        "div",
+        null,
+        createElement("output", { "data-testid": "azure-config" }, JSON.stringify(repoConfig)),
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          providerState: { status: "draft" },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onAzureDevOpsValidationChange,
+          onUpdateSelectedRepoConfig: setRepoConfig,
+        }),
+      );
+    };
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(ControlledRepositoryGitSection),
+      ),
+    );
+
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Enter manually" }));
+      const projectInput = rendered.container.querySelector("#repo-azure-project");
+      if (!(projectInput instanceof HTMLInputElement)) throw new Error("Expected project input");
+      fireEvent.change(projectInput, { target: { value: "" } });
+
+      expect(projectInput.value).toBe("");
+      expect(rendered.container.textContent).not.toContain(
+        "expected string to have >=1 characters",
+      );
+      fireEvent.blur(projectInput);
+      expect(rendered.container.textContent).toContain("Project is required.");
+      expect(screen.getByTestId("azure-config").textContent).toContain(
+        '"project":"Desktop","name":"OpenDucktor"',
+      );
+
+      fireEvent.change(projectInput, { target: { value: "Desktop" } });
+      fireEvent.click(screen.getByRole("button", { name: /Advanced remote mappings/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Add mapping" }));
+      const remoteName = rendered.container.querySelector("#repo-azure-mapping-0-remoteName");
+      const fetchUrl = rendered.container.querySelector("#repo-azure-mapping-0-fetchUrl");
+      const pushUrls = rendered.container.querySelector("#repo-azure-mapping-0-pushUrls");
+      if (
+        !(remoteName instanceof HTMLInputElement) ||
+        !(fetchUrl instanceof HTMLInputElement) ||
+        !(pushUrls instanceof HTMLTextAreaElement)
+      ) {
+        throw new Error("Expected explicit remote mapping fields");
+      }
+      fireEvent.change(remoteName, { target: { value: "azure" } });
+      fireEvent.change(fetchUrl, { target: { value: "git@work:team/repo" } });
+      fireEvent.change(pushUrls, {
+        target: { value: "git@work:team/repo\nssh://work/team/repo" },
+      });
+
+      expect(screen.getByTestId("azure-config").textContent).toContain('"remoteName":"azure"');
+      expect(screen.getByTestId("azure-config").textContent).toContain(
+        '"pushUrls":["git@work:team/repo","ssh://work/team/repo"]',
+      );
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("clears Azure mappings and HTTP consent when detection changes repository", async () => {
+    const oldRepository = {
+      providerId: "azure_devops" as const,
+      deployment: "server" as const,
+      serviceUrl: "http://azure.example.test/tfs",
+      organization: "DefaultCollection",
+      project: "Desktop",
+      name: "OpenDucktor",
+    };
+    const initialRepoConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: {
+          id: "azure_devops",
+          enabled: false,
+          autoDetected: false,
+          repository: oldRepository,
+          remoteMappings: [
+            {
+              remoteName: "origin",
+              fetchUrl: "http://azure.example.test/tfs/DefaultCollection/Desktop/_git/OpenDucktor",
+              pushUrls: [
+                "http://azure.example.test/tfs/DefaultCollection/Desktop/_git/OpenDucktor",
+              ],
+              repository: oldRepository,
+            },
+          ],
+          httpConsentCollectionUrl: "http://azure.example.test/tfs/DefaultCollection",
+        },
+      },
+    };
+    const originalDetect = host.workspaceDetectAzureDevOpsRepository;
+    host.workspaceDetectAzureDevOpsRepository = mock(async () => ({
+      providerId: "azure_devops" as const,
+      deployment: "services" as const,
+      serviceUrl: "https://dev.azure.com",
+      organization: "OpenDucktor",
+      project: "Desktop",
+      name: "app",
+    }));
+
+    const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
+      const [repoConfig, setRepoConfig] = useState(initialRepoConfig);
+      return createElement(
+        "div",
+        null,
+        createElement("output", { "data-testid": "azure-config" }, JSON.stringify(repoConfig)),
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: repoConfig,
+          providerState: { status: "draft" },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: setRepoConfig,
+        }),
+      );
+    };
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(ControlledRepositoryGitSection),
+      ),
+    );
+
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Detect remote" }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("azure-config").textContent).toContain(
+          '"organization":"OpenDucktor"',
+        );
+      });
+      expect(screen.getByTestId("azure-config").textContent).not.toContain("remoteMappings");
+      expect(screen.getByTestId("azure-config").textContent).not.toContain(
+        "httpConsentCollectionUrl",
+      );
+    } finally {
+      rendered.unmount();
+      host.workspaceDetectAzureDevOpsRepository = originalDetect;
+    }
+  });
+
+  test("keeps the entered PAT when Azure DevOps rejects its validation", async () => {
+    const azureRepoConfig: SettingsRepoConfig = {
+      ...baseRepoConfig,
+      git: {
+        provider: {
+          id: "azure_devops",
+          enabled: true,
+          autoDetected: false,
+          repository: {
+            providerId: "azure_devops",
+            deployment: "server",
+            serviceUrl: "https://azure.example.test/tfs",
+            organization: "DefaultCollection",
+            project: "Desktop",
+            name: "OpenDucktor",
+          },
+        },
+      },
+    };
+    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
+    const originalReplacePat = host.workspaceReplaceAzureDevOpsPat;
+    const replacePat = mock(async () => {
+      throw new Error("Azure DevOps rejected the PAT.");
+    });
+    host.workspaceGetAzureDevOpsConnection = async () => ({
+      status: "disconnected",
+    });
+    host.workspaceReplaceAzureDevOpsPat = replacePat;
+    const rendered = render(
+      createElement(
+        QueryProvider,
+        { useIsolatedClient: true },
+        createElement(RepositoryGitSection, {
+          selectedRepoPath: "/repo",
+          selectedRepoConfig: azureRepoConfig,
+          providerState: {
+            status: "loaded",
+            context: {
+              descriptor: AZURE_DEVOPS_PROVIDER_DESCRIPTOR,
+              config: azureRepoConfig.git.provider!,
+              health: {
+                providerId: "azure_devops",
+                enabled: true,
+                available: false,
+                reason: "Not connected.",
+                executablePath: null,
+                version: null,
+                authenticated: false,
+                account: null,
+                repositoryMappingValid: true,
+              },
+            },
+          },
+          disabled: false,
+          onDetectGithubRepository: async () => null,
+          onUpdateSelectedRepoConfig: () => azureRepoConfig,
+        }),
+      ),
+    );
+
+    try {
+      const patInput = screen.getByLabelText("Personal access token");
+      if (!(patInput instanceof HTMLInputElement)) throw new Error("Expected PAT input");
+      const savePatButton = screen.getByRole("button", {
+        name: "Save and validate PAT",
+      });
+      if (!(savePatButton instanceof HTMLButtonElement)) throw new Error("Expected PAT button");
+      fireEvent.change(patInput, { target: { value: "rejected-pat" } });
+      expect(patInput.value).toBe("rejected-pat");
+      await waitFor(() => {
+        const currentButton = screen.getByRole("button", {
+          name: "Save and validate PAT",
+        });
+        if (!(currentButton instanceof HTMLButtonElement)) throw new Error("Expected PAT button");
+        expect(currentButton.disabled).toBe(false);
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save and validate PAT" }));
+
+      await waitFor(() => expect(replacePat).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("rejected"));
+      expect(patInput.value).toBe("rejected-pat");
+    } finally {
+      rendered.unmount();
+      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
+      host.workspaceReplaceAzureDevOpsPat = originalReplacePat;
     }
   });
 });

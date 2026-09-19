@@ -6,6 +6,7 @@ import type { createDevServerCommandHandlers } from "../commands/dev-server-comm
 import type { createFilesystemCommandHandlers } from "../commands/filesystem-command-handlers";
 import type { createGitCommandHandlers } from "../commands/git-command-handlers";
 import type { createGitProviderCommandHandlers } from "../commands/git-provider-command-handlers";
+import type { createAzureDevOpsConnectionCommandHandlers } from "../commands/azure-devops-connection-command-handlers";
 import type { createLocalAttachmentCommandHandlers } from "../commands/local-attachment-command-handlers";
 import type { createOpenInToolsCommandHandlers } from "../commands/open-in-tools-command-handlers";
 import type { createPullRequestReviewCommandHandlers } from "../commands/pull-request-review-command-handlers";
@@ -32,6 +33,7 @@ type AllHostCommandHandlers = ReturnType<typeof createGeneratedImageCommandHandl
   ReturnType<typeof createFilesystemCommandHandlers> &
   ReturnType<typeof createGitCommandHandlers> &
   ReturnType<typeof createGitProviderCommandHandlers> &
+  ReturnType<typeof createAzureDevOpsConnectionCommandHandlers> &
   ReturnType<typeof createLocalAttachmentCommandHandlers> &
   ReturnType<typeof createOpenInToolsCommandHandlers> &
   ReturnType<typeof createPullRequestReviewCommandHandlers> &

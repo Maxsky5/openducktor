@@ -39,6 +39,11 @@ export type GitRemote = {
   name: string;
   url: string;
 };
+export type GitRemoteEndpoint = {
+  name: string;
+  fetchUrls: string[];
+  pushUrls: string[];
+};
 export type GitChangedFile = {
   path: string;
   originalPath?: string;
@@ -115,6 +120,7 @@ export type GitPort = {
   listWorktrees(repoPath: string): Effect.Effect<GitWorktreeSummary[], GitPortError>;
   referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;
+  listRemoteEndpoints(workingDir: string): Effect.Effect<GitRemoteEndpoint[], GitPortError>;
   listBranches(workingDir: string): Effect.Effect<GitBranch[], GitPortError>;
   listFiles(
     workingDir: string,

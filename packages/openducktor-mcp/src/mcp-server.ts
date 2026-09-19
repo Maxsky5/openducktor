@@ -282,7 +282,7 @@ const ODT_TOOL_DEFINITIONS = [
   }),
   defineOdtTool("odt_set_pull_request", ODT_TOOL_SCHEMAS.odt_set_pull_request, {
     description:
-      "Persist the canonical pull request metadata for a task after Builder creates or updates the pull request with provider-native tools. The tool resolves authoritative metadata from providerId and pull request number.",
+      "Persist the canonical pull request metadata for a task after Builder creates or updates the pull request with provider-native tools. The tool resolves authoritative metadata from the configured repository provider and pull request number.",
     execute: (store, input) => store.setPullRequest(input),
   }),
   defineOdtTool("odt_qa_approved", ODT_TOOL_SCHEMAS.odt_qa_approved, {

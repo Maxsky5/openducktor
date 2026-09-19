@@ -39,6 +39,7 @@ type SettingsModalSaveOrchestration = {
   clearSaveError: () => void;
   markRepoScriptSaveAttempt: () => void;
   submit: () => Promise<boolean>;
+  submitSection: () => Promise<boolean>;
 };
 
 export const useSettingsModalSaveOrchestration = ({
@@ -64,6 +65,7 @@ export const useSettingsModalSaveOrchestration = ({
     open,
   });
   const saveInFlightRef = useRef(false);
+  const showModalBusyRef = useRef(true);
 
   const clearSaveError = useCallback((): void => {
     setSaveError(null);
@@ -151,7 +153,9 @@ export const useSettingsModalSaveOrchestration = ({
     }
 
     saveInFlightRef.current = true;
-    setIsSaving(true);
+    if (showModalBusyRef.current) {
+      setIsSaving(true);
+    }
 
     try {
       if (saveReadyGit) {
@@ -198,6 +202,15 @@ export const useSettingsModalSaveOrchestration = ({
     wasKanbanTaskCardViewEdited,
   ]);
 
+  const submitSection = useCallback(async (): Promise<boolean> => {
+    showModalBusyRef.current = false;
+    try {
+      return await submit();
+    } finally {
+      showModalBusyRef.current = true;
+    }
+  }, [submit]);
+
   return {
     isSaving,
     saveError,
@@ -206,5 +219,6 @@ export const useSettingsModalSaveOrchestration = ({
     clearSaveError,
     markRepoScriptSaveAttempt,
     submit,
+    submitSection,
   };
 };

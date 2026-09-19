@@ -100,7 +100,7 @@ Managed and external MCP clients use the same bridge. The host alone owns SQLite
 2. The launch uses `reuse` or `fork` from an existing Builder session.
 3. Builder uses provider Git or GitHub tools to create or update the pull request.
 4. Builder calls `odt_set_pull_request`.
-5. The host resolves `providerId` and pull request number, then stores the canonical metadata.
+5. The host resolves the configured provider and pull request number, then stores the canonical metadata.
 
 The page does not parse chat text to create a pull request.
 

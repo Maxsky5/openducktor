@@ -544,7 +544,6 @@ describe("createTaskService pull requests", () => {
         service.linkPullRequest({
           repoPath: "/repo",
           taskId: "task-1",
-          providerId: "github",
           number: 77,
         }),
       ),
@@ -982,6 +981,29 @@ describe("createTaskService pull requests", () => {
   });
   test("creates a pull request from a clean task worktree", async () => {
     const calls: unknown[] = [];
+    const taskLinkFailure = new HostOperationError({
+      operation: "task-store.set-pull-request",
+      message: "task store unavailable",
+    });
+    let rejectTaskLink = false;
+    let rejectProviderWrite = false;
+    const successfulSystemCommands = createPullRequestUpsertSystemCommands({
+      calls,
+      payload: githubPullResponsePayload({ number: 77 }),
+    });
+    const systemCommands: SystemCommandPort = {
+      ...successfulSystemCommands,
+      runCommandAllowFailure(command, args, options) {
+        if (
+          rejectProviderWrite &&
+          args.includes("--method") &&
+          (args.includes("POST") || args.includes("PATCH"))
+        ) {
+          return Effect.succeed({ ok: true, stdout: "{}", stderr: "" });
+        }
+        return successfulSystemCommands.runCommandAllowFailure(command, args, options);
+      },
+    };
     const taskStore: TaskStorePort = {
       getTask() {
         return Effect.tryPromise({
@@ -1014,6 +1036,7 @@ describe("createTaskService pull requests", () => {
         });
       },
       setPullRequest(input) {
+        if (rejectTaskLink) return Effect.fail(taskLinkFailure);
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "setPullRequest", input });
@@ -1227,10 +1250,7 @@ describe("createTaskService pull requests", () => {
           },
         },
       ),
-      systemCommands: createPullRequestUpsertSystemCommands({
-        calls,
-        payload: githubPullResponsePayload({ number: 77 }),
-      }),
+      systemCommands,
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
       workspaceSettingsService: createBuildWorkspaceSettingsService({
@@ -1292,6 +1312,54 @@ describe("createTaskService pull requests", () => {
         pullRequest: expect.objectContaining({ number: 77, state: "open" }),
       },
     });
+
+    rejectTaskLink = true;
+    const failure = await Effect.runPromise(
+      service
+        .upsertPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          content: { title: "Create PR", body: "Body" },
+        })
+        .pipe(Effect.flip),
+    );
+    expect(failure).toBeInstanceOf(HostOperationError);
+    expect(failure).toMatchObject({
+      operation: "record pull request",
+      details: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        remote: "origin",
+        branch: "odt/task-1",
+        pullRequestWrite: "succeeded",
+        pullRequestNumber: 77,
+      },
+    });
+    expect(failure.message).toContain("The branch was pushed and pull request 77 was written");
+
+    rejectTaskLink = false;
+    rejectProviderWrite = true;
+    const providerFailure = await Effect.runPromise(
+      service
+        .upsertPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          content: { title: "Create PR", body: "Body" },
+        })
+        .pipe(Effect.flip),
+    );
+    expect(providerFailure).toBeInstanceOf(HostOperationError);
+    expect(providerFailure).toMatchObject({
+      operation: "publish pull request",
+      details: {
+        repoPath: "/repo",
+        taskId: "task-1",
+        remote: "origin",
+        branch: "odt/task-1",
+        pullRequestWrite: "unknown",
+      },
+    });
+    expect(providerFailure.message).toContain("The branch was pushed to origin");
   });
   test("updates an existing editable pull request", async () => {
     const calls: unknown[] = [];

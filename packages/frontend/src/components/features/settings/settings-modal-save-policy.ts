@@ -70,6 +70,7 @@ export const buildRepoScriptValidationSaveError = ({
 };
 
 export type SettingsSaveValidation = {
+  azureDevOps: { hasErrors: boolean; errorCount: number };
   customAgentRoles: { hasErrors: boolean; errorCount: number };
   prompt: { hasErrors: boolean; errorCount: number };
   reusablePrompts: { hasErrors: boolean; errorCount: number };
@@ -105,6 +106,12 @@ const saveBlocker = (
 export const getSettingsSaveBlocker = (
   validation: SettingsSaveValidation,
 ): SettingsSaveBlocker | null => {
+  if (validation.azureDevOps.hasErrors) {
+    const count = validation.azureDevOps.errorCount;
+    return saveBlocker(
+      `Fix ${count} Azure DevOps field error${count > 1 ? "s" : ""} before saving.`,
+    );
+  }
   if (validation.customAgentRoles.hasErrors) {
     const count = validation.customAgentRoles.errorCount;
     return saveBlocker(

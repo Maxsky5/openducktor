@@ -4,6 +4,10 @@ import { HostValidationError } from "../../../effect/host-errors";
 import { requirePullRequestProviderMatch } from "../../pull-requests/pull-request-provider-match";
 import { loadOpenApprovalContext } from "../support/approval-readiness";
 import {
+  pullRequestLinkFailure,
+  pullRequestWriteFailure,
+} from "../support/pull-request-publication-errors";
+import {
   requireDependencies,
   requirePullRequestLinkDependencies,
   requirePullRequestUpsertDependencies,
@@ -23,7 +27,7 @@ export const createTaskPullRequestManagementUseCases = ({
 }: CreateTaskServiceInput): Cases => ({
   linkPullRequest(input) {
     return Effect.gen(function* () {
-      const { repoPath, taskId, providerId, number } = input;
+      const { repoPath, taskId, number } = input;
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestLinkDependencies({
           gitProviderResolver,
@@ -56,11 +60,6 @@ export const createTaskPullRequestManagementUseCases = ({
       const effectiveRepoPath = repoConfig.repoPath;
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
       const selectedProviderId = provider.getDescriptor().id;
-      yield* requirePullRequestProviderMatch({
-        configuredProviderId: selectedProviderId,
-        linkedProviderId: providerId,
-        field: "providerId",
-      });
       const pullRequests = yield* provider.pullRequests();
       const pullRequest = yield* pullRequests.getByNumber({ repoConfig, number });
       yield* requirePullRequestProviderMatch({
@@ -152,17 +151,27 @@ export const createTaskPullRequestManagementUseCases = ({
           }),
         );
       }
-      const pullRequest = yield* pullRequests.upsert({
-        repoConfig,
-        approval,
-        title: content.title,
-        body: content.body,
-      });
+      const pushDetails = {
+        repoPath: effectiveRepoPath,
+        taskId,
+        remote,
+        branch: approval.sourceBranch,
+      };
+      const pullRequest = yield* pullRequests
+        .upsert({
+          repoConfig,
+          approval,
+          title: content.title,
+          body: content.body,
+        })
+        .pipe(Effect.mapError(pullRequestWriteFailure(pushDetails)));
       yield* requirePullRequestProviderMatch({
         configuredProviderId: provider.getDescriptor().id,
         linkedProviderId: pullRequest.providerId,
-      });
-      yield* taskStore.setPullRequest({ repoPath: effectiveRepoPath, taskId, pullRequest });
+      }).pipe(Effect.mapError(pullRequestLinkFailure(pushDetails, pullRequest)));
+      yield* taskStore
+        .setPullRequest({ repoPath: effectiveRepoPath, taskId, pullRequest })
+        .pipe(Effect.mapError(pullRequestLinkFailure(pushDetails, pullRequest)));
       return pullRequest;
     });
   },

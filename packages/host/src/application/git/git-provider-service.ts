@@ -5,7 +5,7 @@ import type {
   RepositoryGitProviderContext,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { type HostError, HostValidationError } from "../../effect/host-errors";
+import type { HostError } from "../../effect/host-errors";
 import type {
   GitProviderRepositoryError,
   GitProviderResolutionError,
@@ -42,7 +42,7 @@ export const createGitProviderService = ({
   detectRepository({ repoPath, providerId }) {
     return Effect.gen(function* () {
       const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const provider = yield* resolver.resolve(yield* detectionConfig(repoConfig, providerId));
+      const provider = yield* resolver.resolve(detectionConfig(repoConfig, providerId));
       return yield* provider.repository().detectRepository(repoConfig.repoPath);
     });
   },
@@ -64,28 +64,18 @@ export const createGitProviderService = ({
   },
 });
 
-const detectionConfig = (repoConfig: RepoConfig, providerId: GitProviderId) =>
-  Effect.gen(function* () {
-    const configuredProvider = repoConfig.git.provider;
-    if (configuredProvider !== undefined && configuredProvider.id !== providerId) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "git.provider.id",
-          message: `Cannot detect provider '${providerId}' while provider '${configuredProvider.id}' is configured.`,
-          details: { repoPath: repoConfig.repoPath },
-        }),
-      );
-    }
-
-    return {
-      ...repoConfig,
-      git: {
-        provider: {
-          ...configuredProvider,
-          id: providerId,
-          enabled: true,
-          autoDetected: configuredProvider?.autoDetected ?? false,
-        },
+const detectionConfig = (repoConfig: RepoConfig, providerId: GitProviderId): RepoConfig => {
+  const configuredProvider = repoConfig.git.provider;
+  const matchingProvider = configuredProvider?.id === providerId ? configuredProvider : undefined;
+  return {
+    ...repoConfig,
+    git: {
+      provider: {
+        ...matchingProvider,
+        id: providerId,
+        enabled: true,
+        autoDetected: matchingProvider?.autoDetected ?? false,
       },
-    };
-  });
+    },
+  };
+};

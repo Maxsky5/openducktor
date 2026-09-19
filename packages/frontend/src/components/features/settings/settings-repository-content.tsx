@@ -1,10 +1,19 @@
-import type { RepositoryGitProviderContext, SettingsSnapshot } from "@openducktor/contracts";
+import {
+  gitRepositoryKey,
+  type GitProviderRepository,
+  type RepositoryGitProviderContext,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
+import {
+  azureDevOpsRepositoryKey,
+  isAzureDevOpsRepository,
+} from "./azure-devops-git-provider-form-model";
 import type { PromptRoleTabId, RepositorySectionId } from "./settings-modal-constants";
 import { RepositorySidebar } from "./settings-modal-sidebars";
 import { buildInheritedPromptPreview } from "./settings-prompt-inheritance";
@@ -111,6 +120,11 @@ const shouldLoadProvider = ({
   repoPath: string;
 }): boolean => !providerDirty && repositorySection === "git" && repoPath.length > 0;
 
+const providerRepositoryKey = (repository: GitProviderRepository): string =>
+  isAzureDevOpsRepository(repository)
+    ? azureDevOpsRepositoryKey(repository)
+    : gitRepositoryKey(repository);
+
 const hasProviderEdits = (
   draft: SettingsSnapshot | null,
   saved: SettingsSnapshot | undefined,
@@ -124,9 +138,11 @@ const hasProviderEdits = (
   return (
     draftProvider?.id !== savedProvider?.id ||
     draftProvider?.enabled !== savedProvider?.enabled ||
-    draftProvider?.repository?.host !== savedProvider?.repository?.host ||
-    draftProvider?.repository?.owner !== savedProvider?.repository?.owner ||
-    draftProvider?.repository?.name !== savedProvider?.repository?.name
+    (draftProvider?.repository ? providerRepositoryKey(draftProvider.repository) : null) !==
+      (savedProvider?.repository ? providerRepositoryKey(savedProvider.repository) : null) ||
+    JSON.stringify(draftProvider?.remoteMappings ?? []) !==
+      JSON.stringify(savedProvider?.remoteMappings ?? []) ||
+    draftProvider?.httpConsentCollectionUrl !== savedProvider?.httpConsentCollectionUrl
   );
 };
 
@@ -273,6 +289,8 @@ export function SettingsRepositoryContent({
             providerState={providerState}
             disabled={isInteractionDisabled}
             onDetectGithubRepository={controller.detectSelectedRepoGithubRepository}
+            onSaveSettings={controller.submitSection}
+            onAzureDevOpsValidationChange={controller.setAzureDevOpsValidationErrorCount}
             onUpdateSelectedRepoConfig={updateSelectedRepoConfig}
           />
         ) : null}
