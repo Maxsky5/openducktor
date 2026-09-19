@@ -107,6 +107,21 @@ const prepareIdleSessionForSend = async ({
   }
 };
 
+const rejectSendWhileWaitingForInput = (
+  session: AgentSessionState,
+  dependencies: Pick<SendAgentMessageDependencies, "readSessionSnapshot" | "updateSession">,
+): never => {
+  settleStartingSession(
+    session,
+    "idle",
+    dependencies.readSessionSnapshot,
+    dependencies.updateSession,
+  );
+  throw new Error(
+    "Cannot send a message while the session is waiting for a blocking request. Answer or reject the blocking request first.",
+  );
+};
+
 const markSessionRunningForSend = (
   session: AgentSessionState,
   dependencies: Pick<
@@ -236,13 +251,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       }
     }
     if (isAgentSessionWaitingInput(currentSession)) {
-      settleStartingSession(
-        currentSession,
-        "idle",
-        dependencies.readSessionSnapshot,
-        dependencies.updateSession,
-      );
-      return;
+      rejectSendWhileWaitingForInput(currentSession, dependencies);
     }
 
     const sessionWasBusy = currentSession.status === "running";
@@ -257,13 +266,16 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
 
     const readySession = dependencies.readSessionSnapshot(currentSession);
     if (!readySession || isAgentSessionWaitingInput(readySession)) {
-      settleStartingSession(
-        currentSession,
-        "idle",
-        dependencies.readSessionSnapshot,
-        dependencies.updateSession,
-      );
-      return;
+      if (!readySession) {
+        settleStartingSession(
+          currentSession,
+          "idle",
+          dependencies.readSessionSnapshot,
+          dependencies.updateSession,
+        );
+        return;
+      }
+      rejectSendWhileWaitingForInput(readySession, dependencies);
     }
 
     const isBusyQueuedSend = readySession.status === "running";

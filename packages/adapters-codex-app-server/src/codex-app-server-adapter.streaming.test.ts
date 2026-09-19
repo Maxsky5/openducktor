@@ -206,6 +206,64 @@ describe("CodexAppServerAdapter streaming", () => {
     }
   });
 
+  test("skips all pending questions after an ordinary message receives native acceptance", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
+    await adapter.startSession(codexStartSessionInput());
+    const unsubscribe = await observeSessionState(adapter, "thread/start-runtime-live");
+
+    try {
+      const emitQuestion = (id: string) =>
+        emitNotification({
+          method: "item/completed",
+          params: {
+            threadId: "thread/start-runtime-live",
+            turnId: "turn-live",
+            completedAtMs: 1_777_766_419_650,
+            item: {
+              type: "agentMessage",
+              id,
+              phase: "commentary",
+              text: `Question ${id}`,
+              memoryCitation: null,
+              delivery: "async",
+              questions: [{ title: `Question ${id}`, options: null }],
+            },
+          },
+        });
+
+      emitQuestion("async-question-before-send");
+      await flushCodexAdapterWork();
+
+      const send = adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-live",
+          parts: [{ kind: "text", text: "Use the safest option" }],
+        }),
+      );
+      await flushCodexAdapterWork();
+
+      emitQuestion("async-question-during-admission");
+      await flushCodexAdapterWork();
+      const transport = transports.get("runtime-live");
+      if (!transport) throw new Error("Expected the runtime transport.");
+      transport.turnStartDeferred.resolve({
+        turn: codexTurnFixture({
+          id: "turn-accepted",
+          items: [],
+          status: "inProgress",
+        }),
+      });
+
+      await send;
+      await expect(
+        adapter.readSessionRuntimeSnapshot(codexSessionRuntimeRef("thread/start-runtime-live")),
+      ).resolves.toMatchObject({ pendingAsyncQuestions: [] });
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test.each(["image", "localImage"] as const)(
     "delivers streamed %s user messages with null detail without session errors",
     async (imageType) => {

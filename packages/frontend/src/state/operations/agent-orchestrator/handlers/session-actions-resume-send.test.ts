@@ -161,7 +161,9 @@ test("does not overwrite a newer question that arrives during resume", async () 
     return acceptedUserMessage(input);
   };
   const actions = createSessionActions({ adapter, sessionsRef });
-  await actions.sendAgentMessage(session, [{ kind: "text", text: "Continue" }]);
+  await expect(
+    actions.sendAgentMessage(session, [{ kind: "text", text: "Continue" }]),
+  ).rejects.toThrow("Answer or reject the blocking request first");
   expect(sends).toBe(0);
   expect(getSession(sessionsRef)).toMatchObject({
     status: "running",

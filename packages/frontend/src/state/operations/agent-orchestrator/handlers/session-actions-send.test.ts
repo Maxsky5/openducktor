@@ -549,7 +549,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     });
 
     try {
-      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
+      await expect(
+        actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
+      ).rejects.toThrow("Answer or reject the blocking request first");
 
       expect(sendCalls).toBe(0);
       expect(getSession(sessionsRef)?.status).toBe("idle");
@@ -632,42 +634,91 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     }
   });
 
-  test("does not send free-form messages while waiting for pending input", async () => {
-    const adapter = new OpencodeSdkAdapter();
-    const originalSendUserMessage = adapter.sendUserMessage;
-    let sendCalls = 0;
-    adapter.sendUserMessage = async (input) => {
-      sendCalls += 1;
-      return acceptedUserMessage(input);
-    };
-
-    const sessionsRef = createSessionsRef([
-      buildSession({
-        status: "idle",
+  const blockingInputCases: Array<{
+    label: string;
+    pendingInput: Partial<Pick<AgentSessionState, "pendingApprovals" | "pendingQuestions">>;
+  }> = [
+    {
+      label: "approval",
+      pendingInput: {
+        pendingApprovals: [
+          {
+            requestId: "approval-1",
+            requestType: "permission_grant",
+            title: "Approve permission: read",
+            summary: "Approval request for read.",
+            action: { name: "read" },
+            mutation: "read_only",
+            supportedReplyOutcomes: ["approve_once", "reject"],
+          },
+        ],
+      },
+    },
+    {
+      label: "question",
+      pendingInput: {
         pendingQuestions: [
           {
             requestId: "question-1",
             questions: [{ header: "Confirm", question: "Confirm", options: [] }],
           },
         ],
-      }),
-    ]);
+      },
+    },
+  ];
 
-    const actions = createSessionActions({
-      adapter,
-      sessionsRef,
-      ensureExistingSessionRuntime: async () => {},
-    });
+  test.each(blockingInputCases)(
+    "rejects an async question answer while waiting for a blocking $label",
+    async ({ pendingInput }) => {
+      const adapter = new OpencodeSdkAdapter();
+      const originalSendUserMessage = adapter.sendUserMessage;
+      let sendCalls = 0;
+      adapter.sendUserMessage = async (input) => {
+        sendCalls += 1;
+        return acceptedUserMessage(input);
+      };
 
-    try {
-      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: " hello " }]);
-      expect(sendCalls).toBe(0);
-      expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
-      expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(1);
-    } finally {
-      adapter.sendUserMessage = originalSendUserMessage;
-    }
-  });
+      const sessionsRef = createSessionsRef([
+        buildSession({
+          status: "idle",
+          pendingAsyncQuestions: [
+            {
+              questionItemId: '["request_user_input_async","async-question-1",0]',
+              sourceMessageId: "async-question-1",
+              questionIndex: 0,
+              title: "Which environment should I use?",
+              options: ["Staging", "Production"],
+            },
+          ],
+          ...pendingInput,
+        }),
+      ]);
+
+      const actions = createSessionActions({
+        adapter,
+        sessionsRef,
+        ensureExistingSessionRuntime: async () => {},
+      });
+
+      try {
+        await expect(
+          actions.sendAgentMessage(getSession(sessionsRef), [
+            {
+              kind: "async_question_reply",
+              questionItemId: '["request_user_input_async","async-question-1",0]',
+              question: "Which environment should I use?",
+              answer: "Staging",
+            },
+          ]),
+        ).rejects.toThrow("Answer or reject the blocking request first");
+        expect(sendCalls).toBe(0);
+        expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
+        expect(getSession(sessionsRef)?.pendingAsyncQuestions).toHaveLength(1);
+      } finally {
+        adapter.sendUserMessage = originalSendUserMessage;
+      }
+    },
+  );
 
   test("sends to an existing QA session after the task status changes", async () => {
     const adapter = new OpencodeSdkAdapter();

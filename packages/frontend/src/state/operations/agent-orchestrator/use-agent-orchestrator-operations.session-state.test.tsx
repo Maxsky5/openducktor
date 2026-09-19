@@ -237,9 +237,11 @@ describe("use-agent-orchestrator-operations session state", () => {
       );
 
       await harness.run(async () => {
-        await harness
-          .getLatest()
-          .operations.sendAgentMessage(session, [{ kind: "text", text: "blocked" }]);
+        await expect(
+          harness
+            .getLatest()
+            .operations.sendAgentMessage(session, [{ kind: "text", text: "blocked" }]),
+        ).rejects.toThrow("Answer or reject the blocking request first");
       });
 
       expect(stopCalls).toBe(0);

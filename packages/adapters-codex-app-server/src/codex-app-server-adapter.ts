@@ -735,22 +735,22 @@ export class CodexAppServerAdapter
       return acceptedUserMessage;
     }
     const replyParts = input.parts.filter((part) => part.kind === "async_question_reply");
-    const pendingQuestionItemIds =
-      replyParts.length > 0
-        ? replyParts.map((part) => part.questionItemId)
-        : this.asyncQuestions
-            .pendingForSession(session.runtimeId, session.threadId)
-            .map((question) => question.questionItemId);
+    const pendingQuestionItemIds = replyParts.map((part) => part.questionItemId);
+    const hasPendingAsyncQuestions =
+      replyParts.length === 0 &&
+      this.asyncQuestions.pendingForSession(session.runtimeId, session.threadId).length > 0;
     const accepted = await startCodexTurnForSession(
       this.turnLifecycleContext(),
       input.externalSessionId,
       input.parts,
       acceptedUserMessage,
       input.model,
-      pendingQuestionItemIds.length > 0,
+      pendingQuestionItemIds.length > 0 || hasPendingAsyncQuestions,
     );
-    if (pendingQuestionItemIds.length > 0) {
+    if (replyParts.length > 0) {
       this.asyncQuestions.resolve(session.runtimeId, session.threadId, pendingQuestionItemIds);
+    } else {
+      this.asyncQuestions.skipPending(session.runtimeId, session.threadId);
     }
     return accepted;
   }
