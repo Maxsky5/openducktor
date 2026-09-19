@@ -739,6 +739,15 @@ describe("AppShell", () => {
     expect(shellRoot?.getAttribute("data-sidebar-state")).toBe("collapsed");
   });
 
+  test("hides the scrollbar on the open sidebar scroll region", () => {
+    renderAppShellForTest();
+
+    const sidebarContent = document.querySelector(".electron-sidebar-content-open");
+
+    expect(sidebarContent?.className).toContain("hide-scrollbar");
+    expect(sidebarContent?.className).toContain("overflow-y-auto");
+  });
+
   test("keeps the settings trigger available when the sidebar is collapsed", async () => {
     renderAppShellForTest();
 
