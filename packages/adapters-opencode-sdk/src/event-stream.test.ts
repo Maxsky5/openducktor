@@ -313,6 +313,40 @@ test("projects current OpenCode pending-input event families", async () => {
   ]);
 });
 
+test("keeps a compound native V2 bash resource on the human approval path", async () => {
+  const emitted = await runEventStream([
+    permissionV2AskedEvent({
+      requestId: "permission-v2-bash",
+      action: "bash",
+      resources: ["git show HEAD:file | sh"],
+    }),
+  ]);
+
+  expect(emitted).toContainEqual(
+    expect.objectContaining({
+      type: "approval_required",
+      mutation: "unknown",
+    }),
+  );
+});
+
+test("classifies an explicit mutation in a native V2 bash resource", async () => {
+  const emitted = await runEventStream([
+    permissionV2AskedEvent({
+      requestId: "permission-v2-bash-classification",
+      action: "bash",
+      resources: ["find . -delete"],
+    }),
+  ]);
+
+  expect(emitted).toContainEqual(
+    expect.objectContaining({
+      type: "approval_required",
+      mutation: "mutating",
+    }),
+  );
+});
+
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
   const parts: AgentUserMessagePart[] = [{ kind: "text", text: message }];
   return buildQueuedRequestSignature(parts, model ?? undefined);
