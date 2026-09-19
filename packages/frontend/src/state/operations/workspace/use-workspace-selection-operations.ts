@@ -15,6 +15,7 @@ import {
   dropWorkspaceQueries,
   loadWorkspaceListFromQuery,
   markWorkspaceCachesChanged,
+  markWorkspaceSettingsSnapshotChanged,
   workspaceCatalogQueryOptions,
   workspaceListQueryOptions,
   writeWorkspaceCatalogToQuery,
@@ -145,8 +146,10 @@ export function useWorkspaceSelectionOperations({
     : null;
   const workspacesRef = useRef(workspaces);
 
-  activeWorkspaceRef.current = activeWorkspace;
-  workspacesRef.current = workspaces;
+  useLayoutEffect(() => {
+    activeWorkspaceRef.current = activeWorkspace;
+    workspacesRef.current = workspaceListQuery.data ?? [];
+  }, [activeWorkspace, workspaceListQuery.data]);
 
   const writeWorkspaceRecords = useCallback(
     (
@@ -171,30 +174,6 @@ export function useWorkspaceSelectionOperations({
       }
     },
     [clearActiveTaskStoreCheck, clearBranchData, clearTaskData],
-  );
-
-  const markWorkspaceActiveLocally = useCallback(
-    (workspaceId: string): void => {
-      writeWorkspaceRecords((current = []) => {
-        let hasMatch = false;
-        const next = current.map((workspace) => {
-          const isActive = workspace.workspaceId === workspaceId;
-          hasMatch ||= isActive;
-
-          if (workspace.isActive === isActive) {
-            return workspace;
-          }
-
-          return {
-            ...workspace,
-            isActive,
-          };
-        });
-
-        return hasMatch ? next : current;
-      });
-    },
-    [writeWorkspaceRecords],
   );
 
   const applyActiveWorkspaceFromRecords = useCallback(
@@ -330,8 +309,8 @@ export function useWorkspaceSelectionOperations({
     applyWorkspaceRecords(data);
   }, [applyWorkspaceRecords, hostClient, queryClient]);
 
-  const refreshWorkspaceCachesAfterMutation = useCallback(async (): Promise<void> => {
-    await markWorkspaceCachesChanged(queryClient);
+  const refreshWorkspaceSettingsAfterMutation = useCallback(async (): Promise<void> => {
+    await markWorkspaceSettingsSnapshotChanged(queryClient);
   }, [queryClient]);
 
   const addWorkspace = useCallback(
@@ -354,12 +333,12 @@ export function useWorkspaceSelectionOperations({
       }
       const workspace = await hostClient.workspaceAdd(workspaceInput);
       applyWorkspaceRecord(workspace);
-      await refreshWorkspaceCachesAfterMutation();
+      await refreshWorkspaceSettingsAfterMutation();
       toast.success("Repository added", {
         description: workspace.repoPath,
       });
     },
-    [applyWorkspaceRecord, hostClient, refreshWorkspaceCachesAfterMutation],
+    [applyWorkspaceRecord, hostClient, refreshWorkspaceSettingsAfterMutation],
   );
 
   const selectWorkspace = useCallback(
@@ -371,22 +350,9 @@ export function useWorkspaceSelectionOperations({
 
       try {
         const selectedWorkspace = await hostClient.workspaceSelect(workspaceId);
-        await refreshWorkspaceCachesAfterMutation();
 
         if (workspaceSwitchVersionRef.current === switchVersion) {
-          clearStateForWorkspaceTransition(selectedWorkspace);
-          setActiveWorkspace(selectedWorkspace);
-
-          try {
-            await refreshWorkspaces();
-          } catch (error) {
-            if (workspaceSwitchVersionRef.current === switchVersion) {
-              markWorkspaceActiveLocally(selectedWorkspace.workspaceId);
-              toast.error("Repository switched, but workspace refresh failed", {
-                description: errorMessage(error),
-              });
-            }
-          }
+          applyWorkspaceRecord(selectedWorkspace);
         }
       } catch (error) {
         if (workspaceSwitchVersionRef.current === switchVersion) {
@@ -402,14 +368,7 @@ export function useWorkspaceSelectionOperations({
         }
       }
     },
-    [
-      clearStateForWorkspaceTransition,
-      hostClient,
-      markWorkspaceActiveLocally,
-      refreshWorkspaceCachesAfterMutation,
-      refreshWorkspaces,
-      setActiveWorkspace,
-    ],
+    [applyWorkspaceRecord, hostClient],
   );
 
   const runLifecycleAction = useCallback(
@@ -424,9 +383,9 @@ export function useWorkspaceSelectionOperations({
       try {
         const success = await run();
         try {
-          await refreshWorkspaceCachesAfterMutation();
+          await refreshWorkspaceSettingsAfterMutation();
         } catch (error) {
-          toast.error("Workspace changed, but workspace refresh failed", {
+          toast.error("Workspace changed, but settings refresh failed", {
             description: errorMessage(error),
           });
         }
@@ -436,7 +395,7 @@ export function useWorkspaceSelectionOperations({
         setIsSwitchingWorkspace(false);
       }
     },
-    [refreshWorkspaceCachesAfterMutation],
+    [refreshWorkspaceSettingsAfterMutation],
   );
 
   const closeWorkspace = useCallback(
