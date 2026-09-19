@@ -1,4 +1,6 @@
 {
+  "$schema": "https://react.doctor/schema/config.json",
+  "projects": ["@openducktor/frontend", "@openducktor/electron"],
   "ignore": {
     "overrides": [
       {
