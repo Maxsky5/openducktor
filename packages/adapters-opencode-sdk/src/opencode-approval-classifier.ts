@@ -47,10 +47,12 @@ const READ_ONLY_FIND_OPTIONS_WITH_ARGUMENT = wordSet(
 const UNKNOWN_FIND_OPTIONS_WITH_ARGUMENT = wordSet("-regex -regextype");
 
 const MUTATING_CURL_OPTIONS = wordSet(
-  "-F -O -T -d -o --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --output --remote-name --upload-file",
+  "-F -O -T -d --data --data-ascii --data-binary --data-raw --data-urlencode --form --json --remote-name --upload-file",
 );
 const MUTATING_HTTP_METHODS = wordSet("DELETE PATCH POST PUT");
-const MUTATING_CURL_SHORT_OPTIONS = wordSet("F O T d o");
+const MUTATING_CURL_SHORT_OPTIONS = wordSet("F O T d");
+const CURL_FILE_OUTPUT_SHORT_OPTIONS = wordSet("D c o");
+const CURL_FILE_OUTPUT_LONG_OPTIONS = wordSet("--cookie-jar --dump-header --output --trace");
 const CURL_SHORT_OPTIONS_WITH_ARGUMENT = wordSet("H K");
 const CURL_SHORT_OPTIONS_WITHOUT_ARGUMENT = wordSet(
   "# 0 1 2 3 4 6 : B G I J L M N R S V Z a f g i j k l n p q s v",
@@ -193,6 +195,13 @@ const tokenizeNativeCommandPattern = (pattern: string): TokenizationResult => {
     if (character === "#" && (token.length === 0 || "|&;()<>".includes(pattern[index - 1] ?? ""))) {
       hasUnknownSyntax = true;
       break;
+    }
+    if (
+      (character === "[" && pattern[index + 1] === "[") ||
+      (character === "(" && pattern[index + 1] === "(") ||
+      (character === "<" && pattern[index + 1] === "<")
+    ) {
+      return { kind: "unknown_syntax" };
     }
     if (character === ">") {
       if (hasOutputProcessSubstitutionTarget(pattern, index)) {
@@ -343,6 +352,25 @@ const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation =
       index += 1;
       continue;
     }
+    const fileOutputOption = [...CURL_FILE_OUTPUT_LONG_OPTIONS].find(
+      (option) => token === option || token.startsWith(`${option}=`),
+    );
+    if (fileOutputOption) {
+      const attachedTarget = token.startsWith(`${fileOutputOption}=`)
+        ? token.slice(fileOutputOption.length + 1)
+        : undefined;
+      const target = attachedTarget ?? tokens[index + 1];
+      if (!target) {
+        return "unknown";
+      }
+      if (target !== "-" && !(fileOutputOption === "--trace" && target === "%")) {
+        return "mutating";
+      }
+      if (attachedTarget === undefined) {
+        index += 1;
+      }
+      continue;
+    }
     if (CURL_LONG_OPTIONS_WITH_ARGUMENT.has(token)) {
       index += 1;
       continue;
@@ -366,9 +394,6 @@ const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation =
     if (token.startsWith("-X") && MUTATING_HTTP_METHODS.has(token.slice(2).toUpperCase())) {
       return "mutating";
     }
-    if (/^-(?:F|O|T|d|o).+/.test(token)) {
-      return "mutating";
-    }
     for (const option of MUTATING_CURL_OPTIONS) {
       if (option.startsWith("--") && token.startsWith(`${option}=`)) {
         return "mutating";
@@ -386,6 +411,20 @@ const classifyCurlCommand = (tokens: readonly string[]): AgentApprovalMutation =
       const option = shortOptions.charAt(optionIndex);
       if (MUTATING_CURL_SHORT_OPTIONS.has(option)) {
         return "mutating";
+      }
+      if (CURL_FILE_OUTPUT_SHORT_OPTIONS.has(option)) {
+        const attachedTarget = shortOptions.slice(optionIndex + 1);
+        const target = attachedTarget || tokens[index + 1];
+        if (!target) {
+          return "unknown";
+        }
+        if (target !== "-") {
+          return "mutating";
+        }
+        if (!attachedTarget) {
+          index += 1;
+        }
+        break;
       }
       if (option === "X") {
         const attachedMethod = shortOptions.slice(optionIndex + 1);

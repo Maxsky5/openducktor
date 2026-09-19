@@ -64,6 +64,24 @@ describe("OpenCode approval classifier", () => {
       expected: "mutating",
     },
     {
+      name: "conditional comparison",
+      patterns: ["[[ z > a ]]"],
+      command: "[[ z > a ]]",
+      expected: "unknown",
+    },
+    {
+      name: "arithmetic comparison",
+      patterns: ["(( 2 > 1 ))"],
+      command: "(( 2 > 1 ))",
+      expected: "unknown",
+    },
+    {
+      name: "heredoc data",
+      patterns: ["cat <<EOF\na > b\nEOF"],
+      command: "cat <<EOF\na > b\nEOF",
+      expected: "unknown",
+    },
+    {
       name: "find delete",
       patterns: ["find . -delete"],
       command: "find . -delete",
@@ -197,6 +215,8 @@ describe("OpenCode approval classifier", () => {
     "curl -LO https://example.test/file",
     "curl -qO https://example.test/file",
     "curl -fsSLo output.txt https://example.test/file",
+    "curl -o - -O https://example.test/file",
+    "curl --trace=% --output output.txt https://example.test/file",
     "git log --all --output=log.txt",
     "sort --compress-program=gzip -o out.txt",
   ])("finds a write option after an earlier non-mutating option: %s", (command) => {
@@ -207,6 +227,42 @@ describe("OpenCode approval classifier", () => {
         command,
       }),
     ).toBe("mutating");
+  });
+
+  test.each([
+    "curl -c cookies.txt https://example.test",
+    "curl -ccookies.txt https://example.test",
+    "curl -D headers.txt https://example.test",
+    "curl -Dheaders.txt https://example.test",
+    "curl --trace trace.txt https://example.test",
+    "curl --trace=trace.txt https://example.test",
+  ])("classifies a direct curl file output: %s", (command) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [command],
+        command,
+      }),
+    ).toBe("mutating");
+  });
+
+  test.each([
+    "curl -o - https://example.test",
+    "curl -o- https://example.test",
+    "curl --output - https://example.test",
+    "curl --output=- https://example.test",
+    "curl -c - https://example.test",
+    "curl -D - https://example.test",
+    "curl --trace - https://example.test",
+    "curl --trace=% https://example.test",
+  ])("keeps a curl stream output on the human approval path: %s", (command) => {
+    expect(
+      classifyOpenCodeApprovalMutation({
+        permission: "bash",
+        patterns: [command],
+        command,
+      }),
+    ).toBe("unknown");
   });
 
   test.each([

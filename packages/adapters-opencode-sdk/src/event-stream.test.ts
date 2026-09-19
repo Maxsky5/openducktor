@@ -313,20 +313,24 @@ test("projects current OpenCode pending-input event families", async () => {
   ]);
 });
 
-test("classifies every native V2 bash resource", async () => {
+test.each([
+  { name: "pipeline", command: "git show HEAD:file | sh" },
+  { name: "conditional", command: "[[ z > a ]]" },
+  { name: "arithmetic command", command: "(( 2 > 1 ))" },
+  { name: "heredoc", command: "cat <<EOF\na > b\nEOF" },
+])("keeps a native V2 bash $name on the human approval path", async ({ command }) => {
   const emitted = await runEventStream([
     permissionV2AskedEvent({
-      requestId: "permission-v2-pipeline",
+      requestId: "permission-v2-bash",
       action: "bash",
-      resources: ["git show HEAD:file", "sh"],
-      metadata: { command: "git show HEAD:file | sh" },
+      resources: [command],
     }),
   ]);
 
   expect(emitted).toContainEqual(
     expect.objectContaining({
       type: "approval_required",
-      mutation: "mutating",
+      mutation: "unknown",
     }),
   );
 });
