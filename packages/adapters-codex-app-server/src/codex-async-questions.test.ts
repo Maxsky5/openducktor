@@ -81,6 +81,27 @@ describe("Codex asynchronous questions", () => {
     expect(state.pendingForSession("runtime", "thread")).toEqual([]);
   });
 
+  test("reports authority only after the tracker knows the full pending baseline", () => {
+    const state = new CodexAsyncQuestionState();
+    const question = {
+      questionItemId: codexAsyncQuestionItemId("call-live", 0),
+      sourceMessageId: "call-live",
+      questionIndex: 0,
+      title: "Which region?",
+      options: null,
+    };
+
+    state.add("runtime", "resumed-thread", [question]);
+    expect(state.isAuthoritative("runtime", "resumed-thread")).toBe(false);
+
+    state.skipPending("runtime", "resumed-thread");
+    expect(state.isAuthoritative("runtime", "resumed-thread")).toBe(true);
+
+    state.initializeFreshSession("runtime", "fresh-thread");
+    state.add("runtime", "fresh-thread", [question]);
+    expect(state.isAuthoritative("runtime", "fresh-thread")).toBe(true);
+  });
+
   test("encodes an accepted answer through normal Codex user input", () => {
     const part = {
       kind: "async_question_reply" as const,

@@ -270,6 +270,44 @@ describe("agent session live projection", () => {
     expect(refreshedSession?.handledAsyncQuestionIds).toEqual(new Set());
   });
 
+  test("merges a new live question into questions restored from history", () => {
+    const historyQuestion = {
+      questionItemId: '["request_user_input_async","question-history",0]',
+      sourceMessageId: "question-history",
+      questionIndex: 0,
+      title: "Which environment?",
+      options: ["Staging", "Production"],
+    };
+    const liveQuestion = {
+      questionItemId: '["request_user_input_async","question-live",0]',
+      sourceMessageId: "question-live",
+      questionIndex: 0,
+      title: "Which region?",
+      options: ["Europe", "US"],
+    };
+    const emptySnapshot = snapshot("thread-1");
+    const initial = build({ snapshots: [emptySnapshot] });
+    const session = getAgentSession(initial, identity("thread-1"));
+    if (!session) {
+      throw new Error("Expected the live session before restoring history state.");
+    }
+    const restored = replaceAgentSession(initial, {
+      ...session,
+      pendingAsyncQuestions: [historyQuestion],
+    });
+    const partialLiveSnapshot = snapshot("thread-1", {
+      pendingAsyncQuestions: [liveQuestion],
+      asyncQuestionsAuthoritative: false,
+    });
+
+    const refreshed = build({ current: restored, snapshots: [partialLiveSnapshot] });
+
+    expect(getAgentSession(refreshed, identity("thread-1"))?.pendingAsyncQuestions).toEqual([
+      historyQuestion,
+      liveQuestion,
+    ]);
+  });
+
   test("clears a pending async question from an authoritative empty snapshot", () => {
     const question = {
       questionItemId: '["request_user_input_async","question-remote",0]',

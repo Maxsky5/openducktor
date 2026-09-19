@@ -368,6 +368,56 @@ describe("CodexAppServerAdapter streaming", () => {
     }
   });
 
+  test("keeps the first live async question on a resumed session non-authoritative", async () => {
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const mutations: CodexLiveSessionMutation[] = [];
+    const { adapter } = createHarness({
+      subscribeEvents,
+      onLiveSessionMutation: (mutation) => {
+        mutations.push(mutation);
+      },
+    });
+    await adapter.resumeSession(codexSessionRuntimeRef("thread-saved"));
+    const unsubscribe = await observeSessionState(adapter, "thread-saved");
+
+    try {
+      emitNotification({
+        method: "item/completed",
+        params: {
+          threadId: "thread-saved",
+          turnId: "turn-live",
+          completedAtMs: 1_777_766_419_650,
+          item: {
+            type: "agentMessage",
+            id: "async-question-after-history",
+            phase: "commentary",
+            text: "Which region should I use?",
+            memoryCitation: null,
+            delivery: "async",
+            questions: [{ title: "Which region should I use?", options: ["Europe", "US"] }],
+          },
+        },
+      });
+      await flushCodexAdapterWork();
+
+      const mutation = mutations.findLast((candidate) =>
+        candidate.transcriptEvents.some((event) => event.type === "assistant_message"),
+      );
+      expect(mutation?.snapshots).toMatchObject([
+        {
+          asyncQuestionsAuthoritative: false,
+          pendingAsyncQuestions: [
+            {
+              questionItemId: '["request_user_input_async","async-question-after-history",0]',
+            },
+          ],
+        },
+      ]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("skips all pending questions after an ordinary message receives native acceptance", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });

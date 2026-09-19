@@ -96,6 +96,7 @@ export const codexAsyncQuestionReplyText = (replies: AgentAsyncQuestionReply[]):
   replies.map((reply) => `> ${reply.question}\n\n${reply.answer}`).join("\n\n");
 
 type AsyncQuestionSessionState = {
+  baselineComplete: boolean;
   pending: Map<string, AgentAsyncQuestion>;
   handled: Set<string>;
   seenSourceMessages: Set<string>;
@@ -114,12 +115,17 @@ export class CodexAsyncQuestionState {
       return existing;
     }
     const created: AsyncQuestionSessionState = {
+      baselineComplete: false,
       pending: new Map(),
       handled: new Set(),
       seenSourceMessages: new Set(),
     };
     this.sessions.set(key, created);
     return created;
+  }
+
+  initializeFreshSession(runtimeId: string, threadId: string): void {
+    this.state(runtimeId, threadId).baselineComplete = true;
   }
 
   add(runtimeId: string, threadId: string, questions: AgentAsyncQuestion[]): void {
@@ -150,6 +156,7 @@ export class CodexAsyncQuestionState {
       state.handled.add(questionItemId);
     }
     state.pending.clear();
+    state.baselineComplete = true;
   }
 
   pendingForSession(runtimeId: string, threadId: string): AgentAsyncQuestion[] {
@@ -157,7 +164,7 @@ export class CodexAsyncQuestionState {
   }
 
   isAuthoritative(runtimeId: string, threadId: string): boolean {
-    return this.sessions.has(sessionKey(runtimeId, threadId));
+    return this.sessions.get(sessionKey(runtimeId, threadId))?.baselineComplete ?? false;
   }
 
   clearSession(runtimeId: string, threadId: string): void {

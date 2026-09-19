@@ -425,6 +425,7 @@ export class CodexAppServerAdapter
     const { summary } = session;
     this.localSessions.remember(session);
     this.freshSessions.add(session);
+    this.asyncQuestions.initializeFreshSession(runtimeId, session.threadId);
     this.runtimeEvents.initializeFreshThreadContextUsage(runtimeId, session.threadId);
     await client.threadSetName({
       threadId: session.threadId,
