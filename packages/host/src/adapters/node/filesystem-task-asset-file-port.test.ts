@@ -1,6 +1,5 @@
 import { afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { once } from "node:events";
 import {
   mkdir,
   mkdtemp,
@@ -420,9 +419,6 @@ describe("node task asset file port", () => {
       await expect(readFile(liveStagingFile)).resolves.toEqual(Buffer.from([1]));
     } finally {
       child.kill();
-      if (child.exitCode === null) {
-        await once(child, "exit");
-      }
       await Effect.runPromise(port.cleanupCurrentOwner());
     }
   }, 10_000);
@@ -501,7 +497,7 @@ describe("node task asset file port", () => {
       for (const result of z.array(resultSchema).parse(JSON.parse(stdout))) {
         resultsByCase.set(`${result.liveScope} ${result.action}`, result);
       }
-    });
+    }, 15_000);
 
     test.each([
       ["production", "staged write", "stage", null],

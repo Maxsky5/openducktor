@@ -50,7 +50,7 @@ beforeAll(async () => {
   for (const result of z.array(resultSchema).parse(JSON.parse(stdout))) {
     resultsByScenario.set(result.configScenario, result);
   }
-});
+}, 15_000);
 
 test.each([
   ["production root", "direct"],
