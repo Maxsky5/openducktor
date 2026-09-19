@@ -65,7 +65,7 @@ export function AgentAsyncQuestionCard({
                 await onSubmit(question, answer);
                 clearAnswer();
               } catch {
-                return;
+                // The action keeps the draft and shows the send error.
               }
             }
           }}

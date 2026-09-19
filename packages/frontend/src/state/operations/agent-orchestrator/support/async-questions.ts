@@ -175,12 +175,11 @@ export const projectAsyncQuestionsFromHistory = (
 ): AgentAsyncQuestionProjection => {
   let projected = emptyAgentAsyncQuestionProjection();
   for (const message of history) {
-    projected =
-      message.role === "assistant"
-        ? applyAsyncQuestionAnnotation(projected, message.asyncQuestion)
-        : message.role === "user"
-          ? applyAsyncQuestionUserMessage(projected, message.asyncQuestionReplies, message)
-          : projected;
+    if (message.role === "assistant") {
+      projected = applyAsyncQuestionAnnotation(projected, message.asyncQuestion);
+    } else if (message.role === "user") {
+      projected = applyAsyncQuestionUserMessage(projected, message.asyncQuestionReplies, message);
+    }
   }
   return projected;
 };
