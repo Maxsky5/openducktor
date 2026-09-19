@@ -14,6 +14,7 @@ export const withViteTestServer = async (
       root: directory,
       configFile: false,
       ...options,
+      // Vite denies every file under a Windows short-name path, and Windows CI temp paths look like C:\Users\RUNNER~1\AppData\Local\Temp. This test server serves only directories that the helper created.
       server: { fs: { strict: false }, ...options.server },
       cacheDir: path.join(directory, ".vite"),
     });

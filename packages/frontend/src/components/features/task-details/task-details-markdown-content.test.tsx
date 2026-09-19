@@ -246,7 +246,7 @@ describe("TaskDetailsMarkdownContent", () => {
         );
 
         try {
-          const diagramLabel = await rendered.findByText("Diagram", {}, { timeout: 8000 });
+          const diagramLabel = await rendered.findByText("Diagram");
           const diagram = diagramLabel.closest("svg");
           expect(diagram).not.toBeNull();
           expect(renderSpy).toHaveBeenCalledTimes(1);
