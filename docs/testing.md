@@ -40,8 +40,9 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 ## Parallel runs
 
 - `packages/frontend` and `packages/host` run with `bun test --parallel --no-isolate`.
-- Other workspaces run serially.
-- The preload gives each frontend and host worker its own temp directory and config directory.
+- `packages/openducktor-mcp` runs with `bun test --parallel`, so each test file gets an isolated worker process.
+- The other workspaces run serially in one process.
+- The preload gives every parallel worker its own temp directory and config directory.
 - The preload removes the document theme class after each frontend test file.
 - Keep the workspace test timeouts: the host suite uses 5000 ms and the other workspaces use 1000 ms.
 - Fix a slow test at the source. Do not raise a timeout to hide it.

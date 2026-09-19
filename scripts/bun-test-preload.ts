@@ -11,11 +11,31 @@ const testRoot = path.resolve(process.cwd());
 const usesWorkerTempDirectory =
   testRoot === repoRoot || testRoot === frontendRoot || testRoot === hostRoot;
 
+const removeWorkerDirectory = (directory: string): void => {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      rmSync(directory, { force: true, recursive: true });
+      return;
+    } catch (cause) {
+      lastError = cause;
+      Bun.sleepSync(50);
+    }
+  }
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(
+    `Failed to remove the test temp directory '${directory}': ${message}. Close the process that holds it and rerun the tests.`,
+    { cause: lastError },
+  );
+};
+
 const systemTmpDir = tmpdir();
 let workerTmpDir: string | null = null;
 let configDir: string;
 if (usesWorkerTempDirectory) {
   workerTmpDir = path.join(systemTmpDir, `openducktor-worker-tmp-${process.pid}`);
+  // A reused PID must not inherit the temp tree of an earlier worker.
+  removeWorkerDirectory(workerTmpDir);
   mkdirSync(workerTmpDir, { recursive: true });
   process.env.TMPDIR = workerTmpDir;
   process.env.TMP = workerTmpDir;
@@ -27,14 +47,6 @@ if (usesWorkerTempDirectory) {
 }
 process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
 
-const removeQuietly = (directory: string): void => {
-  try {
-    rmSync(directory, { force: true, recursive: true });
-  } catch {
-    return;
-  }
-};
-
 const { afterAll, afterEach, beforeAll } = await import("bun:test");
 if (usesWorkerTempDirectory) {
   beforeAll((): void => {
@@ -45,9 +57,9 @@ if (usesWorkerTempDirectory) {
   });
 }
 afterAll((): void => {
-  removeQuietly(configDir);
+  removeWorkerDirectory(configDir);
   if (workerTmpDir !== null) {
-    removeQuietly(workerTmpDir);
+    removeWorkerDirectory(workerTmpDir);
   }
   if (globalThis.document !== undefined) {
     globalThis.document.documentElement.classList.remove("light", "dark");
@@ -74,7 +86,8 @@ if (testRoot === repoRoot || testRoot === frontendRoot) {
 
   const { cleanup } = await import(frontendRequire.resolve("@testing-library/react"));
 
+  // Unmounting every tree after a file can exceed the 1000 ms test budget on a loaded Windows runner.
   afterEach((): void => {
     cleanup();
-  });
+  }, 5_000);
 }

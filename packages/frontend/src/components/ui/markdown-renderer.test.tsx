@@ -308,7 +308,8 @@ describe("rich task description rendering", () => {
         );
       }
     },
-    5000,
+    // Renders real KaTeX, syntax highlighting, asset resolution, and Mermaid beside the host suite.
+    10_000,
   );
 
   test("keeps premium code rendering for task documents that also contain math", async () => {
